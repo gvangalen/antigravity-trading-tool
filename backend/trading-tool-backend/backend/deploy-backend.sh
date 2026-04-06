@@ -7,14 +7,11 @@ echo "🚀 Starting backend deploy..."
 # PATH FIX
 # =====================================================
 export PATH="$HOME/.local/bin:$PATH"
-export NVM_DIR="$HOME/.nvm"
-source "$NVM_DIR/nvm.sh"
-export PATH="$NVM_DIR/versions/node/$(nvm current)/bin:$PATH"
 
 # =====================================================
-# DIRECTORIES
+# DIRECTORIES (FIXED)
 # =====================================================
-BACKEND_DIR="$HOME/trading-tool-backend"
+BACKEND_DIR="$HOME/antigravity-trading-tool/backend/trading-tool-backend"
 ENV_FILE="$HOME/.secrets/trading.env"
 LOG_DIR="/var/log/pm2"
 
@@ -30,26 +27,6 @@ fi
 
 echo "✅ Using ENV file:"
 echo "➡ $ENV_FILE"
-
-# =====================================================
-# CLEAN CACHE
-# =====================================================
-echo "🧹 Cleaning __pycache__..."
-find "$BACKEND_DIR" -type d -name '__pycache__' -exec rm -rf {} +
-
-# =====================================================
-# UPDATE CODE
-# =====================================================
-# echo "📥 Updating code..."
-# cd "$BACKEND_DIR"
-# git fetch origin main
-# git reset --hard origin/main
-
-# =====================================================
-# INSTALL DEPENDENCIES
-# =====================================================
-echo "📦 Installing Python dependencies..."
-pip install -r backend/requirements.txt
 
 # =====================================================
 # LOAD ENV
@@ -74,13 +51,24 @@ echo "✅ Environment loaded"
 echo "➡ FRONTEND_URL=$FRONTEND_URL"
 
 # =====================================================
-# RESTART BACKEND SERVICES ONLY
+# CLEAN CACHE
 # =====================================================
-echo "♻️ Restarting backend services..."
+echo "🧹 Cleaning __pycache__..."
+find "$BACKEND_DIR" -type d -name '__pycache__' -exec rm -rf {} +
+
+# =====================================================
+# INSTALL DEPENDENCIES
+# =====================================================
+echo "📦 Installing Python dependencies..."
+cd "$BACKEND_DIR"
+pip install -r backend/requirements.txt
+
+# =====================================================
+# RESTART BACKEND ONLY (NO CELERY)
+# =====================================================
+echo "♻️ Restarting backend service..."
 
 pm2 delete backend || true
-pm2 delete celery || true
-pm2 delete celery-beat || true
 
 sleep 2
 
@@ -99,45 +87,15 @@ pm2 start uvicorn \
   backend.main:app --host 0.0.0.0 --port 8000
 
 # =====================================================
-# START CELERY WORKER
-# =====================================================
-echo "🚀 Starting Celery worker..."
-
-pm2 start "$(which celery)" \
-  --name celery \
-  --interpreter none \
-  --cwd "$BACKEND_DIR" \
-  --output "$LOG_DIR/celery.log" \
-  --error "$LOG_DIR/celery.err.log" \
-  -- \
-  -A backend.celery_task.celery_app worker --loglevel=info
-
-# =====================================================
-# START CELERY BEAT
-# =====================================================
-echo "⏰ Starting Celery Beat..."
-
-pm2 start "$(which celery)" \
-  --name celery-beat \
-  --interpreter none \
-  --cwd "$BACKEND_DIR" \
-  --output "$LOG_DIR/celery-beat.log" \
-  --error "$LOG_DIR/celery-beat.err.log" \
-  -- \
-  -A backend.celery_task.celery_app beat --loglevel=info
-
-# =====================================================
 # SAVE PM2 STATE
 # =====================================================
 pm2 save
 
 echo ""
-echo "✅ DEPLOY SUCCESSFUL"
+echo "✅ BACKEND DEPLOY SUCCESSFUL"
 echo "-----------------------------------"
 pm2 status
 echo ""
 echo "🌐 Backend: http://localhost:8000"
 echo "📄 Logs backend: $LOG_DIR/backend.log"
-echo "📄 Logs celery:  $LOG_DIR/celery.log"
-echo "📄 Logs beat:    $LOG_DIR/celery-beat.log"
 echo ""
