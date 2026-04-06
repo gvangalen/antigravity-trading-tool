@@ -94,5 +94,5 @@ echo "✅ FRONTEND DEPLOY SUCCESSFUL"
 echo "-----------------------------------"
 pm2 status
 echo ""
-echo "🌐 Frontend: http://localhost:3000"
+echo "🌐 Frontend: http://localhost:5002"
 echo ""
