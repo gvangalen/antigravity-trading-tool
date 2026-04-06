@@ -1,61 +1,69 @@
 #!/bin/bash
 set -e
 
-echo "📦 Start frontend deploy op $(date)"
+echo "📦 Start frontend deploy..."
 
 # -------------------------
-# 1. Load NVM
+# PATH / NODE
 # -------------------------
 export NVM_DIR="$HOME/.nvm"
 source "$NVM_DIR/nvm.sh"
 
-nvm use 20 || { echo "❌ Node 20 niet beschikbaar"; exit 1; }
-echo "Node: $(node -v)"
+nvm use 20
 
 # -------------------------
-# 2. Ga naar project
+# DIRECTORIES (FIX)
 # -------------------------
-cd ~/trading-tool-frontend || { echo "❌ Map niet gevonden"; exit 1; }
+FRONTEND_DIR="$HOME/antigravity-trading-tool/frontend/trading-tool-frontend"
+ENV_FILE="$HOME/.secrets/trading.env"
+
+cd "$FRONTEND_DIR" || { echo "❌ Frontend map niet gevonden"; exit 1; }
 
 # -------------------------
-# 3. Stop frontend (safe)
+# LOAD ENV (BELANGRIJK)
 # -------------------------
-if pm2 list | grep -q frontend; then
-  echo "🧹 Stop frontend..."
-  pm2 stop frontend
-  pm2 delete frontend
-fi
+set -o allexport
+source "$ENV_FILE"
+set +o allexport
+
+echo "✅ ENV loaded"
 
 # -------------------------
-# 4. Pull exact GitHub state
+# STOP OLD
 # -------------------------
-echo "⬇️ Sync met GitHub..."
+pm2 delete frontend || true
+
+# -------------------------
+# SYNC CODE
+# -------------------------
+echo "⬇️ Sync GitHub..."
 git fetch origin main
 git reset --hard origin/main
 
 # -------------------------
-# 5. Opschonen build artifacts
+# CLEAN BUILD
 # -------------------------
-echo "🧨 Verwijder .next build"
 rm -rf .next
 
 # -------------------------
-# 6. Install EXACT dependencies
+# INSTALL
 # -------------------------
-echo "📦 Install dependencies (lockfile leidend)"
 npm ci --legacy-peer-deps
 
 # -------------------------
-# 7. Build
+# BUILD
 # -------------------------
-echo "🏗️ Build frontend..."
 npm run build
 
 # -------------------------
-# 8. Start via PM2
+# START (FIXED)
 # -------------------------
-echo "🚀 Start frontend via PM2..."
-pm2 start npm --name frontend -- run start
+pm2 start npm \
+  --name frontend \
+  --cwd "$FRONTEND_DIR" \
+  -- run start
+
 pm2 save
 
-echo "✅ Frontend deploy klaar op $(date)"
+echo "✅ Frontend running"
+pm2 status
