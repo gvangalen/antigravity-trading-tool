@@ -88,7 +88,7 @@ pm2 start uvicorn \
   --output "$LOG_DIR/backend.log" \
   --error "$LOG_DIR/backend.err.log" \
   -- \
-  backend.main:app --host 0.0.0.0 --port 8000
+  backend.main:app --host 0.0.0.0 --port 5002
 
 # =====================================================
 # SAVE PM2 STATE
@@ -100,5 +100,5 @@ echo "✅ BACKEND DEPLOY SUCCESSFUL"
 echo "-----------------------------------"
 pm2 status
 echo ""
-echo "🌐 Backend: http://localhost:8000"
+echo "🌐 Backend: http://localhost:5002"
 echo ""
