@@ -57,14 +57,14 @@ echo "🧹 Cleaning __pycache__..."
 find "$BACKEND_DIR" -type d -name '__pycache__' -exec rm -rf {} +
 
 # =====================================================
-# INSTALL DEPENDENCIES
+# INSTALL DEPENDENCIES (FIXED)
 # =====================================================
 echo "📦 Installing Python dependencies..."
-cd "$BACKEND_DIR"
-pip install -r backend/requirements.txt
+cd "$BACKEND_DIR/backend"
+pip install -r requirements.txt
 
 # =====================================================
-# RESTART BACKEND ONLY (NO CELERY)
+# RESTART BACKEND ONLY
 # =====================================================
 echo "♻️ Restarting backend service..."
 
