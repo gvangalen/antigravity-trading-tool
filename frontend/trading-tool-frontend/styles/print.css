@@ -1,0 +1,86 @@
+@page {
+  size: A4;
+  margin: 16mm;
+}
+
+html, body {
+  padding: 0;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* ROOT */
+.print-root {
+  background: #ffffff;
+}
+
+/* CANVAS */
+.print-wrapper {
+  width: 794px;
+  max-width: 794px;
+  margin: 0 auto;
+  background: white;
+  font-family: Inter, Arial, sans-serif;
+  color: #111;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* BREAK CONTROL */
+.card,
+.section,
+.report-block {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+h1, h2, h3 {
+  break-after: avoid;
+}
+
+.page-break {
+  break-before: page;
+}
+
+/* UI kill */
+nav,
+aside,
+header,
+footer {
+  display: none !important;
+}
+
+/* MEDIA */
+img,
+canvas,
+svg {
+  max-width: 100%;
+  break-inside: avoid;
+}
+
+canvas {
+  image-rendering: -webkit-optimize-contrast;
+}
+
+@media print {
+  body {
+    background: white;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-wrapper {
+    width: 100%;
+    margin: 0;
+  }
+}

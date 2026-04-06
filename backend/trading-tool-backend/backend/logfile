@@ -1,0 +1,197 @@
+2026-03-30 21:39:48.737 CEST [92792] LOG:  starting PostgreSQL 14.17 (Homebrew) on aarch64-apple-darwin24.2.0, compiled by Apple clang version 16.0.0 (clang-1600.0.26.6), 64-bit
+2026-03-30 21:39:48.739 CEST [92792] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-30 21:39:48.739 CEST [92792] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-30 21:39:48.739 CEST [92792] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2026-03-30 21:39:48.743 CEST [92793] LOG:  database system was shut down at 2026-03-30 21:38:37 CEST
+2026-03-30 21:39:48.746 CEST [92792] LOG:  database system is ready to accept connections
+2026-03-30 21:41:55.580 CEST [92949] FATAL:  database "gvangalen" does not exist
+2026-03-30 21:48:59.521 CEST [93379] ERROR:  relation "indicators" does not exist at character 57
+2026-03-30 21:48:59.521 CEST [93379] STATEMENT:  
+	                SELECT name, link
+	                FROM indicators
+	                WHERE category = 'market_raw'
+	            
+2026-03-31 19:34:34.738 CEST [17473] ERROR:  role "postgres" does not exist
+2026-03-31 19:34:34.738 CEST [17473] STATEMENT:  ALTER FUNCTION public.enforce_lowercase_macro_name() OWNER TO postgres;
+2026-03-31 19:34:34.739 CEST [17473] ERROR:  role "postgres" does not exist
+2026-03-31 19:34:34.739 CEST [17473] STATEMENT:  ALTER FUNCTION public.enforce_lowercase_market_name() OWNER TO postgres;
+2026-03-31 19:34:34.739 CEST [17473] ERROR:  role "postgres" does not exist
+2026-03-31 19:34:34.739 CEST [17473] STATEMENT:  ALTER FUNCTION public.normalize_market_symbol() OWNER TO postgres;
+2026-03-31 19:34:34.739 CEST [17473] ERROR:  role "postgres" does not exist
+2026-03-31 19:34:34.739 CEST [17473] STATEMENT:  ALTER FUNCTION public.normalize_technical_indicator() OWNER TO postgres;
+2026-03-31 19:34:34.748 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.748 CEST [17473] STATEMENT:  ALTER TABLE public.active_strategy_snapshot OWNER TO dashboard_user;
+2026-03-31 19:34:34.749 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.749 CEST [17473] STATEMENT:  ALTER TABLE public.active_strategy_snapshot_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.750 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.750 CEST [17473] STATEMENT:  ALTER TABLE public.ai_category_insights OWNER TO dashboard_user;
+2026-03-31 19:34:34.750 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.750 CEST [17473] STATEMENT:  ALTER TABLE public.ai_category_insights_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.754 CEST [17473] ERROR:  role "postgres" does not exist
+2026-03-31 19:34:34.754 CEST [17473] STATEMENT:  ALTER TABLE public.ai_master_score_view OWNER TO postgres;
+2026-03-31 19:34:34.757 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.757 CEST [17473] STATEMENT:  ALTER TABLE public.ai_reflections OWNER TO dashboard_user;
+2026-03-31 19:34:34.757 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.757 CEST [17473] STATEMENT:  ALTER TABLE public.ai_reflections_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.761 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.761 CEST [17473] STATEMENT:  ALTER TABLE public.bot_configs OWNER TO dashboard_user;
+2026-03-31 19:34:34.762 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.762 CEST [17473] STATEMENT:  ALTER TABLE public.bot_configs_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.763 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.763 CEST [17473] STATEMENT:  ALTER TABLE public.bot_decisions OWNER TO dashboard_user;
+2026-03-31 19:34:34.763 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.763 CEST [17473] STATEMENT:  ALTER TABLE public.bot_decisions_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.765 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.765 CEST [17473] STATEMENT:  ALTER TABLE public.bot_executions OWNER TO dashboard_user;
+2026-03-31 19:34:34.766 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.766 CEST [17473] STATEMENT:  ALTER TABLE public.bot_executions_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.767 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.767 CEST [17473] STATEMENT:  ALTER TABLE public.bot_ledger OWNER TO dashboard_user;
+2026-03-31 19:34:34.767 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.767 CEST [17473] STATEMENT:  ALTER TABLE public.bot_ledger_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.769 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.769 CEST [17473] STATEMENT:  ALTER TABLE public.bot_orders OWNER TO dashboard_user;
+2026-03-31 19:34:34.769 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.769 CEST [17473] STATEMENT:  ALTER TABLE public.bot_orders_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.770 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.770 CEST [17473] STATEMENT:  ALTER TABLE public.bot_portfolio_snapshots OWNER TO dashboard_user;
+2026-03-31 19:34:34.770 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.770 CEST [17473] STATEMENT:  ALTER TABLE public.bot_portfolio_snapshots_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.771 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.771 CEST [17473] STATEMENT:  ALTER TABLE public.bot_portfolios OWNER TO dashboard_user;
+2026-03-31 19:34:34.772 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.772 CEST [17473] STATEMENT:  ALTER TABLE public.bot_portfolios_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.772 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.772 CEST [17473] STATEMENT:  ALTER TABLE public.bot_trade_plans OWNER TO dashboard_user;
+2026-03-31 19:34:34.773 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.773 CEST [17473] STATEMENT:  ALTER TABLE public.bot_trade_plans_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.773 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.773 CEST [17473] STATEMENT:  ALTER TABLE public.btc_price_history OWNER TO dashboard_user;
+2026-03-31 19:34:34.773 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.773 CEST [17473] STATEMENT:  ALTER TABLE public.btc_price_history_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.774 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.774 CEST [17473] STATEMENT:  ALTER TABLE public.daily_reports OWNER TO dashboard_user;
+2026-03-31 19:34:34.775 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.775 CEST [17473] STATEMENT:  ALTER TABLE public.daily_scores OWNER TO dashboard_user;
+2026-03-31 19:34:34.776 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.776 CEST [17473] STATEMENT:  ALTER TABLE public.daily_scores_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.777 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.777 CEST [17473] STATEMENT:  ALTER TABLE public.daily_setup_scores OWNER TO dashboard_user;
+2026-03-31 19:34:34.777 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.777 CEST [17473] STATEMENT:  ALTER TABLE public.daily_setup_scores_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.778 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.778 CEST [17473] STATEMENT:  ALTER TABLE public.indicator_curves OWNER TO dashboard_user;
+2026-03-31 19:34:34.779 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.779 CEST [17473] STATEMENT:  ALTER TABLE public.indicator_curves_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.779 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.779 CEST [17473] STATEMENT:  ALTER TABLE public.indicators OWNER TO dashboard_user;
+2026-03-31 19:34:34.780 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.780 CEST [17473] STATEMENT:  ALTER TABLE public.indicators_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.780 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.780 CEST [17473] STATEMENT:  ALTER TABLE public.macro_data OWNER TO dashboard_user;
+2026-03-31 19:34:34.780 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.780 CEST [17473] STATEMENT:  ALTER TABLE public.macro_data_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.781 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.781 CEST [17473] STATEMENT:  ALTER TABLE public.macro_indicator_rules OWNER TO dashboard_user;
+2026-03-31 19:34:34.782 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.782 CEST [17473] STATEMENT:  ALTER TABLE public.macro_indicator_rules_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.783 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.783 CEST [17473] STATEMENT:  ALTER TABLE public.market_data OWNER TO dashboard_user;
+2026-03-31 19:34:34.784 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.784 CEST [17473] STATEMENT:  ALTER TABLE public.market_data_7d OWNER TO dashboard_user;
+2026-03-31 19:34:34.784 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.784 CEST [17473] STATEMENT:  ALTER TABLE public.market_data_7d_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.785 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.785 CEST [17473] STATEMENT:  ALTER TABLE public.market_data_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.785 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.785 CEST [17473] STATEMENT:  ALTER TABLE public.market_data_indicators OWNER TO dashboard_user;
+2026-03-31 19:34:34.786 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.786 CEST [17473] STATEMENT:  ALTER TABLE public.market_data_indicators_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.786 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.786 CEST [17473] STATEMENT:  ALTER TABLE public.market_forward_returns OWNER TO dashboard_user;
+2026-03-31 19:34:34.787 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.787 CEST [17473] STATEMENT:  ALTER TABLE public.market_forward_returns_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.787 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.787 CEST [17473] STATEMENT:  ALTER TABLE public.market_indicator_rules OWNER TO dashboard_user;
+2026-03-31 19:34:34.788 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.788 CEST [17473] STATEMENT:  ALTER TABLE public.market_indicator_rules_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.789 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.789 CEST [17473] STATEMENT:  ALTER TABLE public.market_indicator_scores OWNER TO dashboard_user;
+2026-03-31 19:34:34.789 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.789 CEST [17473] STATEMENT:  ALTER TABLE public.market_indicator_scores_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.790 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.790 CEST [17473] STATEMENT:  ALTER TABLE public.monthly_reports OWNER TO dashboard_user;
+2026-03-31 19:34:34.790 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.790 CEST [17473] STATEMENT:  ALTER TABLE public.monthly_reports_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.791 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.791 CEST [17473] STATEMENT:  ALTER TABLE public.onboarding_steps OWNER TO dashboard_user;
+2026-03-31 19:34:34.791 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.791 CEST [17473] STATEMENT:  ALTER TABLE public.onboarding_steps_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.794 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.794 CEST [17473] STATEMENT:  ALTER TABLE public.portfolio_balance_snapshots OWNER TO dashboard_user;
+2026-03-31 19:34:34.794 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.794 CEST [17473] STATEMENT:  ALTER TABLE public.portfolio_balance_snapshots_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.795 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.795 CEST [17473] STATEMENT:  ALTER TABLE public.quarterly_reports OWNER TO dashboard_user;
+2026-03-31 19:34:34.795 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.795 CEST [17473] STATEMENT:  ALTER TABLE public.quarterly_reports_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.796 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.796 CEST [17473] STATEMENT:  ALTER TABLE public.regime_memory OWNER TO dashboard_user;
+2026-03-31 19:34:34.796 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.796 CEST [17473] STATEMENT:  ALTER TABLE public.regime_memory_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.797 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.797 CEST [17473] STATEMENT:  ALTER TABLE public.report_snapshots OWNER TO dashboard_user;
+2026-03-31 19:34:34.797 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.797 CEST [17473] STATEMENT:  ALTER TABLE public.report_snapshots_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.798 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.798 CEST [17473] STATEMENT:  ALTER TABLE public.setups OWNER TO dashboard_user;
+2026-03-31 19:34:34.798 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.798 CEST [17473] STATEMENT:  ALTER TABLE public.setups_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.799 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.799 CEST [17473] STATEMENT:  ALTER TABLE public.strategies OWNER TO dashboard_user;
+2026-03-31 19:34:34.800 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.800 CEST [17473] STATEMENT:  ALTER TABLE public.strategies_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.801 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.801 CEST [17473] STATEMENT:  ALTER TABLE public.technical_indicator_rules OWNER TO dashboard_user;
+2026-03-31 19:34:34.802 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.802 CEST [17473] STATEMENT:  ALTER TABLE public.technical_indicator_rules_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.802 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.802 CEST [17473] STATEMENT:  ALTER TABLE public.technical_indicators OWNER TO dashboard_user;
+2026-03-31 19:34:34.803 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.803 CEST [17473] STATEMENT:  ALTER TABLE public.technical_indicators_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.804 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.804 CEST [17473] STATEMENT:  ALTER TABLE public.trading_advice OWNER TO dashboard_user;
+2026-03-31 19:34:34.805 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.805 CEST [17473] STATEMENT:  ALTER TABLE public.trading_advice_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.805 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.805 CEST [17473] STATEMENT:  ALTER TABLE public.users OWNER TO dashboard_user;
+2026-03-31 19:34:34.806 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.806 CEST [17473] STATEMENT:  ALTER TABLE public.users_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.806 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.806 CEST [17473] STATEMENT:  ALTER TABLE public.weekly_reports OWNER TO dashboard_user;
+2026-03-31 19:34:34.807 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.807 CEST [17473] STATEMENT:  ALTER TABLE public.weekly_reports_id_seq OWNER TO dashboard_user;
+2026-03-31 19:34:34.968 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.968 CEST [17473] STATEMENT:  GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ai_master_score_view TO dashboard_user;
+2026-03-31 19:34:34.968 CEST [17473] ERROR:  role "dashboard_user" does not exist
+2026-03-31 19:34:34.968 CEST [17473] STATEMENT:  ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT,INSERT,DELETE,UPDATE ON TABLES  TO dashboard_user;
+2026-03-31 20:18:31.247 CEST [20674] ERROR:  column "is_admin" does not exist at character 19
+2026-03-31 20:18:31.247 CEST [20674] STATEMENT:  SELECT id, email, is_admin FROM users;
+2026-03-31 20:22:33.590 CEST [22262] FATAL:  role "dashboard_user" does not exist
+2026-03-31 20:23:43.235 CEST [21642] LOG:  unexpected EOF on client connection with an open transaction
+2026-03-31 20:23:43.235 CEST [21638] LOG:  unexpected EOF on client connection with an open transaction
+2026-03-31 20:23:43.235 CEST [21230] LOG:  unexpected EOF on client connection with an open transaction
+2026-03-31 21:43:22.745 CEST [28577] ERROR:  operator does not exist: integer = character varying at character 356
+2026-03-31 21:43:22.745 CEST [28577] HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+2026-03-31 21:43:22.745 CEST [28577] STATEMENT:  SELECT market_data_indicators.id, market_data_indicators.name, market_data_indicators.value, market_data_indicators.trend, market_data_indicators.interpretation, market_data_indicators.action, market_data_indicators.score, market_data_indicators.user_id, market_data_indicators.timestamp 
+	FROM market_data_indicators 
+	WHERE market_data_indicators.user_id = $1::VARCHAR ORDER BY market_data_indicators.timestamp DESC
+2026-03-31 21:46:37.100 CEST [29392] ERROR:  operator does not exist: integer = character varying at character 356
+2026-03-31 21:46:37.100 CEST [29392] HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+2026-03-31 21:46:37.100 CEST [29392] STATEMENT:  SELECT market_data_indicators.id, market_data_indicators.name, market_data_indicators.value, market_data_indicators.trend, market_data_indicators.interpretation, market_data_indicators.action, market_data_indicators.score, market_data_indicators.user_id, market_data_indicators.timestamp 
+	FROM market_data_indicators 
+	WHERE market_data_indicators.user_id = $1::VARCHAR ORDER BY market_data_indicators.timestamp DESC
+2026-04-03 21:07:51.210 CEST [92792] LOG:  received smart shutdown request
+2026-04-03 21:07:51.215 CEST [92792] LOG:  background worker "logical replication launcher" (PID 92799) exited with exit code 1
+2026-04-03 21:07:51.215 CEST [92794] LOG:  shutting down
+2026-04-03 21:07:51.238 CEST [92792] LOG:  database system is shut down

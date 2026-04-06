@@ -1,0 +1,237 @@
+from typing import Optional, List, Dict, Any
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException
+from datetime import datetime
+import asyncio
+
+from backend.infrastructure.repositories.setup_repository import SetupRepository
+from backend.schemas.trading_schema import SetupCreateSchema
+
+# =========================================================
+# SYNCHRONOUS WRAPPERS FOR LEGACY COMPONENTS
+# =========================================================
+
+def sync_generate_setup_explanation(setup_id: int, user_id: int) -> str:
+    from backend.ai_agents.setup_ai_agent import generate_setup_explanation
+    return generate_setup_explanation(setup_id, user_id)
+
+class SetupService:
+    def __init__(self, db_session: AsyncSession):
+        self.session = db_session
+        self.repository = SetupRepository(db_session)
+
+    def _format_setup(self, item: dict) -> dict:
+        if not item:
+            return None
+            
+        created_at = item.get("created_at")
+        if hasattr(created_at, "isoformat"):
+            created_at = created_at.isoformat()
+
+        return {
+            "id": item.get("id"),
+            "name": item.get("name"),
+            "symbol": item.get("symbol"),
+            "timeframe": item.get("timeframe"),
+            "setup_type": item.get("setup_type"),
+            
+            "dca_frequency": item.get("dca_frequency"),
+            "dca_day": item.get("dca_day"),
+            "dca_month_day": item.get("dca_month_day"),
+            
+            "account_type": item.get("account_type"),
+            "min_investment": item.get("min_investment"),
+            "tags": item.get("tags") or [],
+            "trend": item.get("trend"),
+            "score_logic": item.get("score_logic"),
+            "favorite": bool(item.get("favorite")),
+            "explanation": item.get("explanation"),
+            "description": item.get("description"),
+            "action": item.get("action"),
+            "category": item.get("category"),
+            
+            "min_macro_score": item.get("min_macro_score"),
+            "max_macro_score": item.get("max_macro_score"),
+            "min_technical_score": item.get("min_technical_score"),
+            "max_technical_score": item.get("max_technical_score"),
+            "min_market_score": item.get("min_market_score"),
+            "max_market_score": item.get("max_market_score"),
+            
+            "created_at": created_at,
+            "user_id": item.get("user_id"),
+        }
+
+    async def save_setup(self, payload: SetupCreateSchema, raw_payload: dict, user_id: int) -> dict:
+        setup_type = payload.setup_type.lower()
+        if setup_type not in ["dca", "trade"]:
+            raise HTTPException(400, "Ongeldig setup_type. Moet 'dca' of 'trade' zijn.")
+
+        if setup_type == "dca" and not raw_payload.get("dca_frequency"):
+            raise HTTPException(400, "dca_frequency is verplicht voor DCA setup")
+
+        # Trade cleanup
+        if setup_type == "trade":
+            raw_payload["dca_frequency"] = None
+            raw_payload["dca_day"] = None
+            raw_payload["dca_month_day"] = None
+
+        # Score validation
+        for cat in ["macro", "technical", "market"]:
+            mn = raw_payload.get(f"min_{cat}_score")
+            mx = raw_payload.get(f"max_{cat}_score")
+            if mn is not None and mx is not None and int(mn) > int(mx):
+                raise HTTPException(400, f"min_{cat}_score mag niet hoger zijn dan max_{cat}_score")
+
+        exists = await self.repository.check_name_exists(payload.name, payload.symbol, user_id)
+        if exists:
+            raise HTTPException(409, "Setup met deze naam en symbol bestaat al")
+
+        tags = raw_payload.get("tags", [])
+        if isinstance(tags, str):
+            tags = [t.strip() for t in tags.split(",") if t.strip()]
+
+        # Zorg dat de geparseerde velden zeker weten naar raw data overgeschreven worden
+        raw_payload["name"] = payload.name
+        raw_payload["symbol"] = payload.symbol
+        raw_payload["setup_type"] = setup_type
+
+        # Use the raw dict directly because of the hybrid strategy
+        setup_id = await self.repository.create_setup(raw_payload, user_id, tags)
+        await self.session.commit()
+        
+        # Async run of onboarding logic
+        from backend.services.onboarding_service import mark_step_completed
+        await mark_step_completed(user_id, "setup", self.session)
+
+        return {"status": "success", "setup_id": setup_id}
+
+    async def get_last_setup(self, user_id: int, setup_id: Optional[int] = None) -> dict:
+        if setup_id:
+            row = await self.repository.get_setup_by_id(setup_id, user_id)
+        else:
+            row = await self.repository.get_last_setup(user_id)
+        
+        return {"setup": self._format_setup(row) if row else None}
+
+    async def get_setups(self, user_id: int, setup_type: Optional[str] = None) -> List[dict]:
+        rows = await self.repository.get_all_setups(user_id, setup_type)
+        return [self._format_setup(r) for r in rows]
+
+    async def get_dca_setups(self, user_id: int) -> List[dict]:
+        rows = await self.repository.get_dca_setups(user_id)
+        return [self._format_setup(r) for r in rows]
+
+    async def get_daily_setup_scores(self, user_id: int) -> List[dict]:
+        rows = await self.repository.get_daily_scores(user_id)
+        return [
+            {
+                "setup_id": int(r.setup_id),
+                "score": int(r.score) if r.score is not None else None,
+                "is_best": bool(r.is_best),
+                "name": r.name,
+                "symbol": r.symbol,
+                "timeframe": r.timeframe,
+            }
+            for r in rows
+        ]
+
+    async def update_setup(self, setup_id: int, raw_payload: dict, user_id: int) -> dict:
+        for cat in ["macro", "technical", "market"]:
+            mn = raw_payload.get(f"min_{cat}_score")
+            mx = raw_payload.get(f"max_{cat}_score")
+            if mn is not None and mx is not None and int(mn) > int(mx):
+                raise HTTPException(400, f"min_{cat}_score mag niet hoger zijn dan max_{cat}_score")
+
+        row = await self.repository.get_setup_by_id(setup_id, user_id)
+        if not row:
+            raise HTTPException(403, "Geen toegang tot setup")
+
+        updates = {}
+        allowed_fields = [
+            "name", "symbol", "timeframe", "setup_type",
+            "dca_frequency", "dca_day", "dca_month_day",
+            "account_type", "min_investment", "trend", "score_logic",
+            "favorite", "description", "action", "category",
+            "min_macro_score", "max_macro_score",
+            "min_technical_score", "max_technical_score",
+            "min_market_score", "max_market_score", "explanation"
+        ]
+
+        for field in allowed_fields:
+            if field in raw_payload:
+                updates[field] = raw_payload[field]
+
+        if "tags" in raw_payload:
+            tags = raw_payload["tags"]
+            if isinstance(tags, str):
+                tags = [t.strip() for t in tags.split(",") if t.strip()]
+            updates["tags"] = tags
+
+        updates["last_validated"] = datetime.utcnow()
+
+        updated_count = await self.repository.update_setup_safe(setup_id, user_id, updates)
+        if updated_count == 0:
+            raise HTTPException(404, "Kon setup niet updaten")
+            
+        await self.session.commit()
+        from backend.services.onboarding_service import mark_step_completed
+        await mark_step_completed(user_id, "setup", self.session)
+        return {"message": "Setup bijgewerkt"}
+
+    async def delete_setup(self, setup_id: int, user_id: int) -> dict:
+        deleted = await self.repository.delete_setup(setup_id, user_id)
+        if deleted == 0:
+            raise HTTPException(404, "Niet gevonden of geen toegang")
+        await self.session.commit()
+        from backend.services.onboarding_service import mark_step_completed
+        await mark_step_completed(user_id, "setup", self.session)
+        return {"message": "Setup verwijderd"}
+
+    async def check_name(self, name: str, user_id: int) -> dict:
+        exists = await self.repository.simple_check_name(name, user_id)
+        return {"exists": exists}
+
+    async def ai_explanation(self, setup_id: int, user_id: int) -> dict:
+        explanation = await asyncio.to_thread(sync_generate_setup_explanation, setup_id, user_id)
+        if not explanation:
+            raise HTTPException(500, "AI uitleg kon niet worden gegenereerd")
+
+        updated = await self.repository.update_ai_explanation(setup_id, user_id, explanation)
+        if updated == 0:
+            raise HTTPException(404, "Setup niet gevonden")
+            
+        await self.session.commit()
+        return {"explanation": explanation}
+
+    async def get_top_setups(self, user_id: int, limit: int) -> List[dict]:
+        rows = await self.repository.get_top_setups(user_id, limit)
+        return [self._format_setup(r) for r in rows]
+
+    async def get_setup_by_id(self, setup_id: int, user_id: int) -> dict:
+        row = await self.repository.get_setup_by_id(setup_id, user_id)
+        if not row:
+            raise HTTPException(404, "Setup niet gevonden")
+        return self._format_setup(row)
+
+    async def get_active_setup(self, user_id: int) -> dict:
+        row = await self.repository.get_active_setup(user_id)
+        if not row:
+            return {"active": None}
+            
+        return {
+            "active": {
+                "setup_id": row.setup_id,
+                "score": row.score,
+                "ai_explanation": row.ai_explanation,
+                "name": row.name,
+                "symbol": row.symbol,
+                "timeframe": row.timeframe,
+                "trend": row.trend,
+                "setup_type": row.setup_type,
+                "min_investment": row.min_investment,
+                "tags": row.tags,
+                "favorite": row.favorite,
+                "action": row.action,
+                "setup_explanation": row.setup_explanation,
+            }
+        }

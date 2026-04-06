@@ -1,0 +1,34 @@
+# Node modules
+node_modules/
+
+# Build output
+.next/
+out/
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# MacOS
+.DS_Store
+
+# VSCode
+.vscode/
+
+# Miscellaneous
+*.log
+*.tsbuildinfo
+
+# Optional npm cache folder
+.npm
+
+# Optional eslint cache
+.eslintcache

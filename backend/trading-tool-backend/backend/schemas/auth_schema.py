@@ -1,0 +1,20 @@
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class RegisterRequest(BaseModel):
+    first_name: str
+    last_name: Optional[str] = None
+    email: EmailStr
+    password: str
+
+class UserOut(BaseModel):
+    id: int
+    email: EmailStr
+    role: str
+    is_active: bool
+    first_name: Optional[str]
+    last_name: Optional[str]

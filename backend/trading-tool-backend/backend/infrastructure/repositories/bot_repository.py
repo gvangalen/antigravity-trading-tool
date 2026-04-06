@@ -1,0 +1,362 @@
+from typing import List, Dict, Optional, Any
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from datetime import date
+import json
+
+class BotRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def check_table_exists(self, table_name: str) -> bool:
+        query = text("""
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema='public' AND table_name=:table_name
+        """)
+        result = await self.session.execute(query, {"table_name": table_name})
+        return result.fetchone() is not None
+
+    async def get_daily_scores_row(self, user_id: int, report_date: date) -> Optional[dict]:
+        if not await self.check_table_exists("daily_scores"):
+            return None
+        query = text("""
+            SELECT macro_score, technical_score, market_score, setup_score
+            FROM daily_scores
+            WHERE user_id=:user_id AND report_date=:report_date
+            LIMIT 1
+        """)
+        result = await self.session.execute(query, {"user_id": user_id, "report_date": report_date})
+        row = result.fetchone()
+        if not row:
+            return None
+        return {
+            "macro": float(row[0] or 10),
+            "technical": float(row[1] or 10),
+            "market": float(row[2] or 10),
+            "setup": float(row[3] or 10),
+        }
+
+    async def get_bot_configs(self, user_id: int) -> List[dict]:
+        query = text("""
+            SELECT
+              b.id, b.name, b.is_active, b.mode, b.cadence, b.risk_profile,
+              b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
+              b.budget_max_order_eur, b.max_asset_exposure_pct, b.last_run,
+              b.created_at, b.updated_at,
+              s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
+              st.id AS setup_id, st.name AS setup_name, st.symbol AS symbol, st.timeframe AS timeframe
+            FROM bot_configs b
+            LEFT JOIN strategies s ON s.id = b.strategy_id
+            LEFT JOIN setups st    ON st.id = s.setup_id
+            WHERE b.user_id = :user_id
+            ORDER BY b.id ASC
+        """)
+        result = await self.session.execute(query, {"user_id": user_id})
+        return [dict(r._mapping) for r in result.fetchall()]
+
+    async def get_active_bots_with_setups(self, user_id: int) -> List[dict]:
+        query = text("""
+            SELECT
+              b.id, b.name,
+              COALESCE(st.symbol,'BTC') AS symbol,
+              COALESCE(st.timeframe,'—') AS timeframe,
+              s.setup_type,
+              st.name AS setup_name
+            FROM bot_configs b
+            LEFT JOIN strategies s ON s.id = b.strategy_id
+            LEFT JOIN setups st    ON st.id = s.setup_id
+            WHERE b.user_id=:user_id AND b.is_active=TRUE
+            ORDER BY b.id ASC
+        """)
+        result = await self.session.execute(query, {"user_id": user_id})
+        return [dict(r._mapping) for r in result.fetchall()]
+
+    async def get_bot_decisions_by_date(self, user_id: int, decision_date: date) -> List[dict]:
+        query = text("""
+            SELECT
+              id, bot_id, symbol, decision_ts, action, confidence,
+              scores_json, reason_json, setup_id, strategy_id, status,
+              created_at, updated_at
+            FROM bot_decisions
+            WHERE user_id=:user_id AND decision_date=:decision_date
+            ORDER BY bot_id ASC, id DESC
+        """)
+        result = await self.session.execute(query, {"user_id": user_id, "decision_date": decision_date})
+        return [dict(r._mapping) for r in result.fetchall()]
+
+    async def get_bot_trade_plan(self, user_id: int, decision_id: int) -> Optional[dict]:
+        if not await self.check_table_exists("bot_trade_plans"):
+            return None
+        query = text("""
+            SELECT entry_plan, stop_loss, targets, risk_json
+            FROM bot_trade_plans
+            WHERE decision_id=:decision_id AND user_id=:user_id
+        """)
+        result = await self.session.execute(query, {"decision_id": decision_id, "user_id": user_id})
+        row = result.fetchone()
+        return dict(row._mapping) if row else None
+
+    async def get_bot_history(self, user_id: int, start_date: date, end_date: date) -> List[dict]:
+        if not await self.check_table_exists("bot_decisions"):
+            return []
+        query = text("""
+            SELECT
+              d.id, d.bot_id, b.name AS bot_name, d.symbol, d.decision_ts, d.decision_date,
+              d.action, d.confidence, d.scores_json, d.reason_json, d.status
+            FROM bot_decisions d
+            JOIN bot_configs b ON b.id = d.bot_id
+            WHERE d.user_id=:user_id AND d.decision_date BETWEEN :start AND :end
+            ORDER BY d.decision_date DESC, d.bot_id ASC, d.id DESC
+        """)
+        result = await self.session.execute(query, {"user_id": user_id, "start": start_date, "end": end_date})
+        return [dict(r._mapping) for r in result.fetchall()]
+
+    # ==========================
+    # MANUAL ORDER / LEDGER
+    # ==========================
+    async def create_manual_order(self, user_id: int, bot_id: int, symbol: str, side: str, quantity: float, price: float) -> int:
+        query = text("""
+            INSERT INTO bot_orders (
+                user_id, bot_id, decision_id, symbol, side, order_type,
+                quantity, limit_price, status, source, created_at, updated_at
+            )
+            VALUES (:user_id,:bot_id,NULL,:symbol,:side,'market',:quantity,:price,'filled','manual',NOW(),NOW())
+            RETURNING id
+        """)
+        result = await self.session.execute(query, {
+            "user_id": user_id, "bot_id": bot_id, "symbol": symbol, "side": side, "quantity": quantity, "price": price
+        })
+        return result.fetchone()[0]
+
+    async def create_bot_execution(self, user_id: int, order_id: int, quantity: float, price: float) -> int:
+        query = text("""
+            INSERT INTO bot_executions (
+                user_id, bot_order_id, filled_qty, avg_fill_price, status, created_at
+            )
+            VALUES (:user_id,:order_id,:quantity,:price,'filled',NOW())
+            RETURNING id
+        """)
+        result = await self.session.execute(query, {"user_id": user_id, "order_id": order_id, "quantity": quantity, "price": price})
+        return result.fetchone()[0]
+
+    async def insert_bot_ledger(self, user_id: int, bot_id: int, order_id: int, symbol: str, cash_delta: float, qty_delta: float):
+        query = text("""
+            INSERT INTO bot_ledger (
+                user_id, bot_id, order_id, symbol, entry_type,
+                cash_delta_eur, qty_delta, ts
+            )
+            VALUES (:user_id,:bot_id,:order_id,:symbol,'execute',:cash_delta,:qty_delta,NOW())
+        """)
+        await self.session.execute(query, {
+            "user_id": user_id, "bot_id": bot_id, "order_id": order_id, "symbol": symbol, 
+            "cash_delta": cash_delta, "qty_delta": qty_delta
+        })
+
+    # ==========================
+    # BOT CONFIG CRUD
+    # ==========================
+    async def create_bot_config(self, payload: dict) -> int:
+        query = text("""
+            INSERT INTO bot_configs (
+                user_id, name, strategy_id, mode, risk_profile, cadence,
+                budget_total_eur, budget_daily_limit_eur, budget_min_order_eur,
+                budget_max_order_eur, max_asset_exposure_pct, created_at, updated_at
+            )
+            VALUES (:user_id, :name, :strategy_id, :mode, :risk_profile, :cadence,
+                    :budget_total_eur, :budget_daily_limit_eur, :budget_min_order_eur,
+                    :budget_max_order_eur, :max_asset_exposure_pct, NOW(), NOW())
+            RETURNING id
+        """)
+        result = await self.session.execute(query, payload)
+        return result.fetchone()[0]
+
+    async def update_bot_config(self, user_id: int, bot_id: int, updates: dict) -> Optional[int]:
+        if not updates:
+            return None
+            
+        set_clauses = []
+        for key in updates.keys():
+            set_clauses.append(f"{key} = COALESCE(:{key}, {key})")
+            
+        set_clauses.append("updated_at = NOW()")
+        query_str = f"UPDATE bot_configs SET {', '.join(set_clauses)} WHERE id = :_id AND user_id = :_uid RETURNING id"
+        
+        params = updates.copy()
+        params["_id"] = bot_id
+        params["_uid"] = user_id
+        
+        query = text(query_str)
+        result = await self.session.execute(query, params)
+        row = result.fetchone()
+        return row[0] if row else None
+
+    async def delete_bot_config(self, user_id: int, bot_id: int) -> int:
+        query = text("DELETE FROM bot_configs WHERE id = :id AND user_id = :user_id RETURNING id")
+        result = await self.session.execute(query, {"id": bot_id, "user_id": user_id})
+        row = result.fetchone()
+        return row[0] if row else None
+
+    # ==========================
+    # DECISION SKIPPING
+    # ==========================
+    async def mark_decision_skipped(self, user_id: int, bot_id: int, report_date: date) -> Optional[int]:
+        query = text("""
+            UPDATE bot_decisions
+            SET status='skipped', updated_at=NOW()
+            WHERE user_id=:user_id AND bot_id=:bot_id AND decision_date=:report_date AND status='planned'
+            RETURNING id
+        """)
+        result = await self.session.execute(query, {"user_id": user_id, "bot_id": bot_id, "report_date": report_date})
+        row = result.fetchone()
+        return row[0] if row else None
+
+    async def cancel_orders_for_decision(self, user_id: int, bot_id: int, decision_id: int):
+        if not await self.check_table_exists("bot_orders"):
+            return
+        query = text("""
+            UPDATE bot_orders
+            SET status='cancelled', updated_at=NOW()
+            WHERE user_id=:user_id AND bot_id=:bot_id AND decision_id=:decision_id
+        """)
+        await self.session.execute(query, {"user_id": user_id, "bot_id": bot_id, "decision_id": decision_id})
+
+    # ==========================
+    # BOT PORTFOLIOS
+    # ==========================
+    async def get_bot_portfolios_base(self, user_id: int) -> List[dict]:
+        query = text("""
+            SELECT
+              id, name, is_active, mode, COALESCE(risk_profile,'balanced') as risk_profile,
+              COALESCE(budget_total_eur,0) as budget_total_eur, COALESCE(budget_daily_limit_eur,0) as budget_daily_limit_eur,
+              COALESCE(budget_min_order_eur,0) as budget_min_order_eur, COALESCE(budget_max_order_eur,0) as budget_max_order_eur
+            FROM bot_configs
+            WHERE user_id=:user_id
+            ORDER BY id ASC
+        """)
+        result = await self.session.execute(query, {"user_id": user_id})
+        return [dict(r._mapping) for r in result.fetchall()]
+
+    async def get_bot_ledger_stats(self, user_id: int, bot_id: int, today: date) -> dict:
+        query = text("""
+            SELECT
+              COALESCE(SUM(cash_delta_eur),0) as net_cash,
+              COALESCE(SUM(qty_delta),0) as net_qty
+            FROM bot_ledger
+            WHERE user_id=:user_id AND bot_id=:bot_id
+        """)
+        res = await self.session.execute(query, {"user_id": user_id, "bot_id": bot_id})
+        row1 = res.fetchone()
+
+        query_exec = text("""
+            SELECT COALESCE(SUM(cash_delta_eur),0)
+            FROM bot_ledger
+            WHERE user_id=:user_id AND bot_id=:bot_id AND entry_type='execute'
+        """)
+        res_exec = await self.session.execute(query_exec, {"user_id": user_id, "bot_id": bot_id})
+        row2 = res_exec.fetchone()
+
+        query_spent = text("""
+            SELECT COALESCE(SUM(ABS(cash_delta_eur)),0)
+            FROM bot_ledger
+            WHERE user_id=:user_id AND bot_id=:bot_id AND entry_type='execute' AND cash_delta_eur < 0 AND DATE(ts)=:today
+        """)
+        res_spent = await self.session.execute(query_spent, {"user_id": user_id, "bot_id": bot_id, "today": today})
+        row3 = res_spent.fetchone()
+
+        query_res = text("""
+            SELECT COALESCE(SUM(ABS(cash_delta_eur)),0)
+            FROM bot_ledger
+            WHERE user_id=:user_id AND bot_id=:bot_id AND entry_type='reserve' AND cash_delta_eur < 0 AND DATE(ts)=:today
+        """)
+        res_res = await self.session.execute(query_res, {"user_id": user_id, "bot_id": bot_id, "today": today})
+        row4 = res_res.fetchone()
+
+        return {
+            "net_cash": float(row1[0] or 0),
+            "net_qty": float(row1[1] or 0),
+            "executed_cash": float(row2[0] or 0),
+            "today_spent": float(row3[0] or 0),
+            "today_reserved": float(row4[0] or 0)
+        }
+
+    async def get_market_price(self, symbol: str) -> Optional[float]:
+        query = text("""
+            SELECT price FROM market_data WHERE symbol=:symbol ORDER BY timestamp DESC LIMIT 1
+        """)
+        result = await self.session.execute(query, {"symbol": symbol})
+        row = result.fetchone()
+        return float(row[0]) if row and row[0] else None
+
+    # ==========================
+    # BOT TRADES
+    # ==========================
+    async def get_bot_trades(self, user_id: int, bot_id: int, limit: int) -> List[dict]:
+        if not await self.check_table_exists("bot_executions") or not await self.check_table_exists("bot_orders"):
+            return []
+        query = text("""
+            SELECT
+              e.id AS execution_id, o.id AS order_id, o.symbol, o.side,
+              e.filled_qty, e.avg_fill_price, o.quote_amount_eur, e.status, e.created_at
+            FROM bot_executions e
+            JOIN bot_orders o ON o.id = e.bot_order_id
+            WHERE e.user_id = :user_id AND o.bot_id = :bot_id AND e.status IN ('filled', 'partial')
+            ORDER BY e.created_at DESC
+            LIMIT :limit
+        """)
+        result = await self.session.execute(query, {"user_id": user_id, "bot_id": bot_id, "limit": limit})
+        return [dict(r._mapping) for r in result.fetchall()]
+
+    async def get_bot_decision(self, user_id: int, decision_id: int) -> bool:
+        query = text("""
+            SELECT 1 FROM bot_decisions WHERE id=:id AND user_id=:user_id
+        """)
+        result = await self.session.execute(query, {"id": decision_id, "user_id": user_id})
+        return result.fetchone() is not None
+
+    async def upsert_bot_trade_plan(self, user_id: int, decision_id: int, entry_plan: list, stop_loss: dict, targets: list, risk: dict):
+        query = text("""
+            INSERT INTO bot_trade_plans (
+                user_id, decision_id, entry_plan, stop_loss, targets, risk_json, created_at, updated_at
+            )
+            VALUES (:user_id,:decision_id,:entry_plan,:stop_loss,:targets,:risk,NOW(),NOW())
+            ON CONFLICT (decision_id) DO UPDATE SET
+                entry_plan = EXCLUDED.entry_plan,
+                stop_loss  = EXCLUDED.stop_loss,
+                targets    = EXCLUDED.targets,
+                risk_json  = EXCLUDED.risk_json,
+                updated_at = NOW()
+            RETURNING decision_id
+        """)
+        await self.session.execute(query, {
+            "user_id": user_id, "decision_id": decision_id,
+            "entry_plan": json.dumps(entry_plan), "stop_loss": json.dumps(stop_loss),
+            "targets": json.dumps(targets), "risk": json.dumps(risk)
+        })
+
+    # ==========================
+    # BOT BALANCE HISTORY
+    # ==========================
+    async def get_portfolio_balance_history(self, user_id: int, bucket: str, limit: int) -> List[dict]:
+        if not await self.check_table_exists("portfolio_balance_snapshots"):
+            return []
+        query = text("""
+            SELECT ts, equity_eur, cash_eur, btc_qty, btc_value_eur, invested_eur, unrealized_pnl_eur
+            FROM portfolio_balance_snapshots
+            WHERE user_id = :user_id AND bucket = :bucket
+            ORDER BY ts ASC LIMIT :limit
+        """)
+        result = await self.session.execute(query, {"user_id": user_id, "bucket": bucket, "limit": limit})
+        return [dict(r._mapping) for r in result.fetchall()]
+
+    async def get_bot_balance_history(self, user_id: int, bot_id: int, bucket: str, limit: int) -> List[dict]:
+        if not await self.check_table_exists("bot_portfolio_snapshots"):
+            return []
+        query = text("""
+            SELECT ts, equity_eur, cash_eur, net_qty, price_eur, invested_eur
+            FROM bot_portfolio_snapshots
+            WHERE user_id = :user_id AND bot_id = :bot_id AND bucket = :bucket
+            ORDER BY ts ASC LIMIT :limit
+        """)
+        result = await self.session.execute(query, {"user_id": user_id, "bot_id": bot_id, "bucket": bucket, "limit": limit})
+        return [dict(r._mapping) for r in result.fetchall()]

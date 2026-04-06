@@ -1,0 +1,368 @@
+"use client";
+
+import { useMemo, useState, useEffect } from "react";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from "recharts";
+
+import usePortfolioBalance from "@/hooks/usePortfolioBalance";
+
+/* =====================================================
+   RANGE CONFIG
+===================================================== */
+const RANGES = [
+  { key: "1D", label: "1D", bucket: "1h", limit: 24 },
+  { key: "1W", label: "1W", bucket: "1h", limit: 24 * 7 },
+  { key: "1M", label: "1M", bucket: "1d", limit: 30 },
+  { key: "1Y", label: "1Y", bucket: "1d", limit: 365 },
+  { key: "ALL", label: "ALL", bucket: "1d", limit: 2000 },
+];
+
+/* =====================================================
+   MODES
+===================================================== */
+const MODES = [
+  { key: "equity", label: "Equity" },
+  { key: "cash", label: "Cash" },
+  { key: "btc_value", label: "BTC Value" },
+  { key: "btc_qty", label: "BTC Qty" },
+  { key: "invested", label: "Invested" },
+  { key: "unrealized_pnl", label: "Unrealized PnL" },
+];
+
+/* =====================================================
+   FORMATTERS
+===================================================== */
+const fmtEur = (n) =>
+  new Intl.NumberFormat("nl-NL", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(Number(n || 0));
+
+const fmtBtc = (n) => `${Number(n || 0).toFixed(4)} BTC`;
+const fmtPct = (n) => `${Number(n || 0).toFixed(1)}%`;
+
+function shortDate(ts, rangeKey) {
+  const d = new Date(ts);
+
+  if (rangeKey === "1D") {
+    return d.toLocaleTimeString("nl-NL", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  return d.toLocaleDateString("nl-NL", {
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+/* =====================================================
+   DELTA CALC
+===================================================== */
+function calcDelta(series, mode) {
+  if (!Array.isArray(series) || series.length < 2) {
+    return { last: 0, delta: 0, pct: null };
+  }
+
+  const first = Number(series[0]?.[mode] ?? 0);
+  const last = Number(series[series.length - 1]?.[mode] ?? 0);
+
+  const delta = last - first;
+
+  const pct =
+    first > 0 && Math.abs(first) > 1
+      ? (delta / first) * 100
+      : null;
+
+  return { last, delta, pct };
+}
+
+/* =====================================================
+   COMPONENT
+===================================================== */
+
+export default function PortfolioBalanceCard({
+  defaultRange = "1W",
+  title = "Portfolio balance",
+}) {
+  const [range, setRange] = useState(defaultRange);
+  const [mode, setMode] = useState("equity");
+
+  const rangeConfig =
+    RANGES.find((r) => r.key === range) || RANGES[1];
+
+  const { data, loading, reload } = usePortfolioBalance({
+    bucket: rangeConfig.bucket,
+    limit: rangeConfig.limit,
+  });
+
+  /* =====================================================
+     LIVE PORTFOLIO REFRESH
+  ===================================================== */
+
+  useEffect(() => {
+    const handler = () => reload();
+
+    window.addEventListener("portfolio:updated", handler);
+
+    return () =>
+      window.removeEventListener(
+        "portfolio:updated",
+        handler
+      );
+  }, [reload]);
+
+  /* =====================================================
+     SERIES
+  ===================================================== */
+
+  const series = useMemo(() => {
+    if (Array.isArray(data) && data.length > 0) return data;
+
+    const now = new Date();
+    const points = [];
+
+    for (let i = rangeConfig.limit - 1; i >= 0; i--) {
+      const d = new Date(now);
+
+      if (rangeConfig.bucket === "1h") {
+        d.setHours(now.getHours() - i);
+      } else {
+        d.setDate(now.getDate() - i);
+      }
+
+      points.push({
+        ts: d.toISOString(),
+        equity: 0,
+        cash: 0,
+        btc_value: 0,
+        btc_qty: 0,
+        invested: 0,
+        unrealized_pnl: 0,
+      });
+    }
+
+    return points;
+  }, [data, rangeConfig.bucket, rangeConfig.limit]);
+
+  const { last, delta, pct } = useMemo(
+    () => calcDelta(series, mode),
+    [series, mode]
+  );
+
+  const isDown = delta < 0;
+
+  /* =====================================================
+     CHART DATA
+  ===================================================== */
+
+  const chartData = useMemo(() => {
+    return series.map((p) => ({
+      ts: p.ts,
+      value: Number(p?.[mode] ?? 0),
+      label: shortDate(p.ts, range),
+    }));
+  }, [series, range, mode]);
+
+  /* =====================================================
+     Y DOMAIN
+  ===================================================== */
+
+  const yDomain = useMemo(() => {
+    if (!chartData.length) return ["auto", "auto"];
+
+    const values = chartData.map((d) => d.value);
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+
+    if (min === max) {
+      const padding =
+        min === 0
+          ? 100
+          : Math.max(Math.abs(min) * 0.05, 1);
+
+      return [min - padding, max + padding];
+    }
+
+    const span = max - min;
+    const padding = Math.max(span * 0.1, 5);
+
+    return [min - padding, max + padding];
+  }, [chartData]);
+
+  /* =====================================================
+     COLOR LOGIC
+  ===================================================== */
+
+  const strokeColor =
+    mode === "unrealized_pnl"
+      ? isDown
+        ? "#ef4444"
+        : "#22c55e"
+      : "var(--primary)";
+
+  const gradientId = `balanceFill-${mode}`;
+
+  const formatValue = (v) =>
+    mode === "btc_qty" ? fmtBtc(v) : fmtEur(v);
+
+  /* =====================================================
+     UI
+  ===================================================== */
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-[2rem] p-8 shadow-sm w-full min-w-0 font-sans">
+      <div className="flex items-start justify-between gap-6 flex-wrap pb-6 border-b border-slate-100">
+
+        <div className="space-y-1">
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+            Global Equity Performance
+          </div>
+
+          <div className="text-4xl font-black tracking-tighter text-slate-800 font-mono">
+            {formatValue(last)}
+          </div>
+
+          <div
+            className={`flex items-center gap-2 text-xs font-black uppercase tracking-tight ${
+              isDown
+                ? "text-red-500"
+                : "text-green-500"
+            }`}
+          >
+            <div className={`px-2 py-0.5 rounded-lg border ${isDown ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
+              {isDown ? "↘" : "↗"}{" "}
+              {pct !== null ? fmtPct(pct) : ""}
+            </div>
+            <span className="font-mono tabular-nums opacity-80">({formatValue(delta)})</span>
+          </div>
+        </div>
+
+        {/* 🛠 INSTRUMENT CONTROLS */}
+        <div className="flex flex-col gap-3 items-end">
+          <div className="flex gap-1 p-1 bg-slate-100/50 rounded-xl border border-slate-100">
+            {RANGES.map((r) => (
+              <button
+                key={r.key}
+                onClick={() => setRange(r.key)}
+                className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-widest transition-all ${
+                  range === r.key 
+                    ? "bg-white text-[var(--primary)] shadow-sm border border-slate-200" 
+                    : "text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-1 p-1 bg-slate-50 rounded-xl border border-slate-100">
+            {MODES.map((m) => (
+              <button
+                key={m.key}
+                onClick={() => setMode(m.key)}
+                className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all ${
+                  mode === m.key 
+                    ? "bg-[var(--primary)] text-white shadow-md" 
+                    : "text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 🚀 TELEMETRY CHART */}
+      <div className="mt-8 h-[260px] w-full min-w-0 relative">
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-[1px] z-10 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] animate-pulse">
+            Syncing Terminal Data...
+          </div>
+        )}
+
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart
+            data={chartData}
+            margin={{ left: 0, right: 0, top: 10, bottom: 0 }}
+          >
+            <defs>
+              <linearGradient
+                id={gradientId}
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop
+                  offset="0%"
+                  stopColor={strokeColor}
+                  stopOpacity={0.2}
+                />
+                <stop
+                  offset="100%"
+                  stopColor={strokeColor}
+                  stopOpacity={0}
+                />
+              </linearGradient>
+            </defs>
+
+            <XAxis
+              dataKey="label"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fontSize: 9, fontWeight: 900, fill: '#94a3b8' }}
+              interval="preserveStartEnd"
+              dy={10}
+            />
+
+            <YAxis
+              domain={yDomain}
+              axisLine={false}
+              tickLine={false}
+              width={50}
+              tick={{ fontSize: 9, fontWeight: 700, fill: '#94a3b8', fontFamily: 'monospace' }}
+              tickFormatter={(v) => `€${(v/1000).toFixed(0)}k`}
+              dx={-5}
+            />
+
+            <Tooltip
+              content={({ active, payload }) => {
+                if (active && payload && payload.length) {
+                  return (
+                    <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl shadow-2xl">
+                      <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Entry Log</div>
+                      <div className="text-sm font-black text-white font-mono">{formatValue(payload[0].value)}</div>
+                      <div className="text-[9px] font-bold text-slate-400 mt-1">{payload[0].payload.label}</div>
+                    </div>
+                  );
+                }
+                return null;
+              }}
+            />
+
+            <Area
+              type="monotone"
+              dataKey="value"
+              stroke={strokeColor}
+              strokeWidth={3}
+              fill={`url(#${gradientId})`}
+              dot={false}
+              activeDot={{ r: 5, fill: strokeColor, stroke: '#fff', strokeWidth: 2 }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}

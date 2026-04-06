@@ -1,0 +1,37 @@
+{
+  "name": "trading-tool-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@radix-ui/react-tooltip": "^1.0.6",
+    "autoprefixer": "^10.4.15",
+    "chart.js": "^4.4.9",
+    "clsx": "^2.1.1",
+    "date-fns": "^3.0.0",
+    "dayjs": "^1.11.18",
+    "framer-motion": "^12.30.0",
+    "lucide-react": "^0.284.0",
+    "next": "13.4.12",
+    "next-transpile-modules": "^10.0.1",
+    "postcss": "^8.4.24",
+    "rc-slider": "^11.1.9",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-hot-toast": "^2.5.2",
+    "recharts": "^3.7.0",
+    "tailwindcss": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "24.2.0",
+    "@types/react": "19.1.9",
+    "css-loader": "^7.1.2",
+    "postcss-loader": "^8.2.0",
+    "style-loader": "^4.0.0",
+    "typescript": "5.9.2"
+  }
+}

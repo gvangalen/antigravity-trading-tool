@@ -1,0 +1,42 @@
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Virtual environments
+venv/
+env/
+
+# Database files
+*.db
+
+# Celery and Redis
+celerybeat-schedule
+*.pid
+
+# MacOS system files
+.DS_Store
+
+# IDE/editor settings
+.vscode/
+.idea/
+
+# Environment variables
+.env
+*.local
+
+# Docker override files (optioneel)
+docker-compose.override.yml
+
+# Backup & temp files
+*.bak
+*.swp
+*.tmp
+
+# Jupyter Notebooks checkpoints (voor als je ooit Jupyter gebruikt)
+.ipynb_checkpoints/
+
+# Node.js artifacts (voor het geval je later frontend dingen toevoegt)
+node_modules/

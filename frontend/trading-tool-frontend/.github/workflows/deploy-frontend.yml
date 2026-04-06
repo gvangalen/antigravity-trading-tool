@@ -1,0 +1,36 @@
+name: Auto Deploy Frontend to Oracle
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.json'
+      - '**/styles/**'
+      - 'next.config.js'
+      - 'deploy-frontend.sh'
+      - '.github/workflows/deploy-frontend.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repo
+        uses: actions/checkout@v3
+
+      - name: 🔐 SSH + Deploy frontend
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            cd ~/trading-tool-frontend
+            chmod +x deploy-frontend.sh
+            ./deploy-frontend.sh
+          command_timeout: 1800s  # ⏱️ Verhoog naar 30 minuten

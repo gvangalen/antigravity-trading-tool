@@ -1,0 +1,239 @@
+import logging
+from typing import List
+from fastapi import APIRouter, HTTPException, Depends, Request
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from backend.infrastructure.database import get_db
+from backend.utils.auth_utils import get_current_user
+
+from backend.schemas.technical_data_schema import (
+    TechnicalDataResponse,
+    TechnicalIndicatorConfig,
+    TechnicalIndicatorRuleResponse,
+    TechnicalIndicatorHistoryResponse
+)
+from backend.services.technical_data_service import TechnicalDataService
+from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+logger.info("🚀 technical_data_api.py geladen — asynchrone Clean Architecture.")
+
+
+# ===============================================================
+# 📄 GET — ALLE TECHNISCHE DATA
+# ===============================================================
+@router.get("/technical_data", response_model=List[TechnicalDataResponse])
+async def get_technical_data(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db)
+):
+    user_id = current_user["id"]
+    repo = TechnicalDataRepository(session)
+    rows = await repo.get_latest_for_user(user_id)
+    return [
+        TechnicalDataResponse(
+            indicator=r.indicator,
+            waarde=float(r.value),
+            score=float(r.score),
+            advies=r.advies,
+            uitleg=r.uitleg,
+            timestamp=r.timestamp
+        )
+        for r in rows
+    ]
+
+
+# ===============================================================
+# ➕ POST — Technische indicator toevoegen (ONBOARDING)
+# ===============================================================
+@router.post("/technical_data")
+async def add_technical_indicator(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db)
+):
+    logger.info("📐 [add] Technische indicator toevoegen via Service...")
+    data = await request.json()
+    user_id = current_user["id"]
+    name_raw = data.get("indicator")
+
+    if not name_raw:
+        raise HTTPException(400, "❌ 'indicator' is verplicht.")
+
+    service = TechnicalDataService(session)
+    try:
+        # Dit voert validation, external call, duplicate checking en scoring uit
+        result = await service.add_technical_indicator(name_raw, user_id)
+        # Commit manually if auto-commit not configured in router middleware properly
+        await session.commit()
+        return result
+
+    except ValueError as ve:
+        # Expected business logic errors
+        if "al toegevoegd" in str(ve):
+            raise HTTPException(409, str(ve))
+        elif "niet gevonden" in str(ve):
+            raise HTTPException(404, str(ve))
+        else:
+            raise HTTPException(500, str(ve))
+    except Exception as e:
+        logger.error(f"❌ [add_technical_indicator] {e}", exc_info=True)
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Fout bij toevoegen indicator: {e}")
+
+
+# ===============================================================
+# 📅 DAY — fallback
+# ===============================================================
+@router.get("/technical_data/day", response_model=List[TechnicalDataResponse])
+async def get_latest_day_data(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db)
+):
+    user_id = current_user["id"]
+    repo = TechnicalDataRepository(session)
+    rows = await repo.get_day_data(user_id)
+    return [
+        TechnicalDataResponse(
+            indicator=r.indicator,
+            waarde=float(r.value),
+            score=float(r.score),
+            advies=r.advies,
+            uitleg=r.uitleg,
+            timestamp=r.timestamp
+        )
+        for r in rows
+    ]
+
+
+# ===============================================================
+# WEEK / MONTH / QUARTER
+# ===============================================================
+@router.get("/technical_data/week", response_model=List[TechnicalDataResponse])
+async def get_technical_week_data(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db)
+):
+    user_id = current_user["id"]
+    repo = TechnicalDataRepository(session)
+    rows = await repo.get_week_data(user_id)
+    return [
+        TechnicalDataResponse(
+            indicator=r.indicator,
+            waarde=float(r.value),
+            score=float(r.score),
+            advies=r.advies,
+            uitleg=r.uitleg,
+            timestamp=r.timestamp
+        )
+        for r in rows
+    ]
+
+
+@router.get("/technical_data/month", response_model=List[TechnicalDataResponse])
+async def get_technical_month_data(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db)
+):
+    user_id = current_user["id"]
+    repo = TechnicalDataRepository(session)
+    rows = await repo.get_month_data(user_id)
+    return [
+        TechnicalDataResponse(
+            indicator=r.indicator,
+            waarde=float(r.value),
+            score=float(r.score),
+            advies=r.advies,
+            uitleg=r.uitleg,
+            timestamp=r.timestamp
+        )
+        for r in rows
+    ]
+
+
+@router.get("/technical_data/quarter", response_model=List[TechnicalDataResponse])
+async def get_technical_quarter_data(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db)
+):
+    user_id = current_user["id"]
+    repo = TechnicalDataRepository(session)
+    rows = await repo.get_quarter_data(user_id)
+    return [
+        TechnicalDataResponse(
+            indicator=r.indicator,
+            waarde=float(r.value),
+            score=float(r.score),
+            advies=r.advies,
+            uitleg=r.uitleg,
+            timestamp=r.timestamp
+        )
+        for r in rows
+    ]
+
+
+# ===============================================================
+# DELETE
+# ===============================================================
+@router.delete("/technical_data/{indicator}")
+async def delete_technical_indicator(
+    indicator: str,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db)
+):
+    user_id = current_user["id"]
+    repo = TechnicalDataRepository(session)
+    deleted = await repo.delete_indicator(indicator, user_id)
+    await session.commit()
+
+    return {
+        "message": f"Indicator '{indicator}' verwijderd.",
+        "deleted_rows": deleted
+    }
+
+
+# ===============================================================
+# DROPDOWN LIST
+# ===============================================================
+@router.get("/technical/indicators", response_model=List[TechnicalIndicatorConfig])
+async def get_all_indicators(session: AsyncSession = Depends(get_db)):
+    repo = TechnicalDataRepository(session)
+    return await repo.get_all_indicators()
+
+
+# ===============================================================
+# SCORING RULES OPHALEN
+# ===============================================================
+@router.get("/technical_indicator_rules/{indicator_name}", response_model=List[TechnicalIndicatorRuleResponse])
+async def get_rules_for_indicator(
+    indicator_name: str,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db)
+):
+    user_id = current_user["id"]
+    repo = TechnicalDataRepository(session)
+    rows = await repo.get_rules_for_indicator(indicator_name, user_id)
+    return rows
+
+# ===============================================================
+# 📈 HISTORY OPHALEN (Sparklines)
+# ===============================================================
+@router.get("/technical/history/{indicator_name}", response_model=List[TechnicalIndicatorHistoryResponse])
+async def get_indicator_history(
+    indicator_name: str,
+    limit: int = 30,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db)
+):
+    user_id = current_user["id"]
+    repo = TechnicalDataRepository(session)
+    rows = await repo.get_indicator_history(indicator_name, user_id, limit)
+    return [
+        TechnicalIndicatorHistoryResponse(
+            value=float(r.value),
+            timestamp=r.timestamp
+        )
+        for r in rows
+    ]
