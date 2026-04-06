@@ -9,7 +9,7 @@ echo "🚀 Starting backend deploy..."
 export PATH="$HOME/.local/bin:$PATH"
 
 # =====================================================
-# DIRECTORIES (FIXED)
+# DIRECTORIES
 # =====================================================
 BACKEND_DIR="$HOME/antigravity-trading-tool/backend/trading-tool-backend"
 ENV_FILE="$HOME/.secrets/trading.env"
@@ -29,6 +29,14 @@ echo "✅ Using ENV file:"
 echo "➡ $ENV_FILE"
 
 # =====================================================
+# UPDATE CODE (CRUCIAAL)
+# =====================================================
+echo "⬇️ Pull latest code..."
+cd "$BACKEND_DIR"
+git fetch origin main
+git reset --hard origin/main
+
+# =====================================================
 # LOAD ENV
 # =====================================================
 echo "🔐 Loading environment variables..."
@@ -36,7 +44,6 @@ set -o allexport
 source "$ENV_FILE"
 set +o allexport
 
-# sanity checks
 if [ -z "$OPENAI_API_KEY" ]; then
   echo "❌ OPENAI_API_KEY ontbreekt"
   exit 1
@@ -48,7 +55,6 @@ if [ -z "$FRONTEND_URL" ]; then
 fi
 
 echo "✅ Environment loaded"
-echo "➡ FRONTEND_URL=$FRONTEND_URL"
 
 # =====================================================
 # CLEAN CACHE
@@ -64,12 +70,10 @@ cd "$BACKEND_DIR/backend"
 pip install -r requirements.txt
 
 # =====================================================
-# RESTART BACKEND ONLY
+# RESTART BACKEND
 # =====================================================
 echo "♻️ Restarting backend service..."
-
 pm2 delete backend || true
-
 sleep 2
 
 # =====================================================
@@ -97,5 +101,4 @@ echo "-----------------------------------"
 pm2 status
 echo ""
 echo "🌐 Backend: http://localhost:8000"
-echo "📄 Logs backend: $LOG_DIR/backend.log"
 echo ""
