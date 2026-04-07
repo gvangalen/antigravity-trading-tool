@@ -18,4 +18,6 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd ~/antigravity-trading-tool
+            chmod +x deploy.sh
             ./deploy.sh
+          command_timeout: 60m
