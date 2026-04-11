@@ -1,8 +1,10 @@
 from celery import shared_task, current_app
 import logging
+import time
 from backend.utils.db import get_db_connection
 
 logger = logging.getLogger(__name__)
+
 
 @shared_task(name="backend.celery_task.dispatcher.dispatch_for_all_users")
 def dispatch_for_all_users(task_name: str, *, active_only: bool = True):
@@ -31,8 +33,17 @@ def dispatch_for_all_users(task_name: str, *, active_only: bool = True):
             logger.error(f"❌ Task niet gevonden: {task_name}")
             return
 
-        for user_id in user_ids:
-            task.delay(user_id=user_id)
+        for i, user_id in enumerate(user_ids):
+
+            # 🔥 BELANGRIJK: stagger jobs (voorkomt pieken)
+            countdown_seconds = i * 2  # 2 sec tussen users
+
+            task.apply_async(
+                kwargs={"user_id": user_id},
+                countdown=countdown_seconds
+            )
+
+            logger.info(f"➡️ Task gepland voor user {user_id} over {countdown_seconds}s")
 
     except Exception as e:
         logger.error(f"❌ Dispatcher fout: {e}", exc_info=True)
