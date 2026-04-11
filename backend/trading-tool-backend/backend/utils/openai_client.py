@@ -4,6 +4,7 @@ import logging
 import time
 import re
 from typing import Any, Dict, Optional
+from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -11,52 +12,40 @@ from openai import OpenAI
 # ============================================================
 # ⚙️ Setup
 # ============================================================
-load_dotenv()
+# Probeer .env te vinden in CWD of in /backend map
+env_path = Path(".") / ".env"
+if not env_path.exists():
+    env_path = Path(__file__).parent.parent / ".env"
+
+load_dotenv(dotenv_path=env_path)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 api_key = os.getenv("OPENAI_API_KEY")
-
-# 🔧 FIX: goedkopere default
 model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 if not api_key:
-    raise RuntimeError("OPENAI_API_KEY ontbreekt.")
+    logger.warning("⚠️ OPENAI_API_KEY ontbreekt in de omgeving. AI functionaliteit is beperkt.")
 
-client = OpenAI(api_key=api_key)
-
-LOG_FILE = os.getenv("OPENAI_LOG_FILE", "/tmp/ai_agent_debug.log")
-
-if not logger.handlers:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()],
-    )
-
-logger.info(f"🤖 OpenAI model: {model}")
+client = None
+if api_key:
+    try:
+        client = OpenAI(api_key=api_key)
+        logger.info(f"🤖 OpenAI Client geïnitialiseerd (Model: {model})")
+    except Exception as e:
+        logger.error(f"❌ Fout bij initialiseren OpenAI Client: {e}")
 
 # ============================================================
 # 🔥 AI DEFAULTS
 # ============================================================
-
 TEXT_TEMP = float(os.getenv("OPENAI_TEXT_TEMP", "0.4"))
 JSON_TEMP = float(os.getenv("OPENAI_JSON_TEMP", "0.2"))
-
-# 🔧 realistischer limits
-TEXT_MAX_TOKENS = int(os.getenv("OPENAI_TEXT_MAX_TOKENS", "800"))
-JSON_MAX_TOKENS = int(os.getenv("OPENAI_JSON_MAX_TOKENS", "600"))
-
-TIMEOUT = int(os.getenv("OPENAI_TIMEOUT", "45"))
+MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "500"))
 
 # ============================================================
-# 🧰 JSON parsing helpers
+# 🧰 JSON parsing helper
 # ============================================================
-
-_JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
-
-
 def _strip_fences(s: str) -> str:
     if not s:
         return ""
@@ -65,250 +54,123 @@ def _strip_fences(s: str) -> str:
     s = re.sub(r"\s*```\s*$", "", s)
     return s.strip()
 
-
 def sanitize_json_output(raw_text: str) -> Dict[str, Any]:
-
     if not raw_text:
         return {}
-
     text = _strip_fences(raw_text)
-
     try:
         obj = json.loads(text)
         return obj if isinstance(obj, dict) else {}
     except Exception:
-        pass
-
-    m = _JSON_BLOCK_RE.search(text)
-
-    if not m:
-        return {}
-
-    candidate = m.group(0)
-
-    candidate = candidate.replace("True", "true").replace("False", "false")
-
-    try:
-        obj = json.loads(candidate)
-        return obj if isinstance(obj, dict) else {}
-    except Exception:
-        return {}
-
-
-def _validate_schema_minimal(data: Dict[str, Any], schema: Optional[Dict[str, Any]]) -> bool:
-
-    if not schema:
-        return True
-
-    s = schema.get("schema") if isinstance(schema, dict) and "schema" in schema else schema
-
-    if not isinstance(s, dict):
-        return True
-
-    required = s.get("required", [])
-
-    for k in required:
-        if k not in data:
-            return False
-
-    props = s.get("properties", {})
-
-    for k, spec in props.items():
-
-        if k not in data:
-            continue
-
-        if isinstance(spec, dict) and spec.get("type") == "number":
-
-            v = data.get(k)
-
-            if isinstance(v, (int, float)):
-                continue
-
-            if isinstance(v, str):
-
-                try:
-                    float(v.replace(",", "."))
-                    continue
-                except:
-                    return False
-
-    return True
-
-
-# ============================================================
-# 🧠 JSON prompt helpers
-# ============================================================
-
-def _make_json_guard_prompt(user_prompt: str, schema: Optional[Dict[str, Any]] = None) -> str:
-
-    schema_hint = ""
-
-    if schema:
-        s = schema.get("schema") if isinstance(schema, dict) else schema
-
-        if isinstance(s, dict):
-            req = s.get("required", [])
-
-            if isinstance(req, list) and req:
-                schema_hint = "\nREQUIRED KEYS: " + ", ".join(req)
-
-    return (
-        "CRITICAL:\n"
-        "Return ONLY valid JSON.\n"
-        "No markdown.\n"
-        "No explanations.\n"
-        "No text outside JSON.\n"
-        f"{schema_hint}\n\n"
-        f"{user_prompt}"
-    )
-
-
-def _repair_prompt(bad_output: str, base_prompt: str) -> str:
-
-    bad = (bad_output or "")[:2000]
-
-    return (
-        "CRITICAL:\n"
-        "Return ONLY valid JSON.\n"
-        "No markdown.\n"
-        "No explanations.\n\n"
-        "BASE INSTRUCTIONS:\n"
-        f"{base_prompt}\n\n"
-        "YOUR PREVIOUS OUTPUT:\n"
-        f"{bad}\n"
-    )
-
+        m = re.search(r"\{.*\}", text, re.DOTALL)
+        if m:
+            try:
+                candidate = m.group(0).replace("True", "true").replace("False", "false")
+                return json.loads(candidate)
+            except:
+                pass
+    return {}
 
 # ============================================================
 # ✅ GPT JSON CALL
 # ============================================================
-
 def ask_gpt_json(
     *,
     prompt: str,
     system_role: str,
     schema: Optional[Dict[str, Any]] = None,
-    retries: int = 2,   # 🔧 lager
-    delay: float = 2.0,
+    retries: int = 2
 ) -> Dict[str, Any]:
+    """Genereert een gestructureerde JSON response."""
+    
+    if not client:
+        logger.error("❌ GPT JSON Call gefaald: Geen OpenAI Client (Missing API Key)")
+        return {"error": "AI is offline"}
 
-    base_prompt = _make_json_guard_prompt(prompt, schema=schema)
-
-    last_raw = ""
+    messages = [
+        {"role": "system", "content": system_role},
+        {"role": "user", "content": prompt + "\n\nRETURN ONLY VALID JSON."}
+    ]
 
     for attempt in range(1, retries + 1):
-
         try:
-
-            logger.info(f"🧠 JSON attempt {attempt}")
-
-            response = client.responses.create(
+            logger.info(f"🧠 GPT JSON Call (Attempt {attempt})")
+            
+            response = client.chat.completions.create(
                 model=model,
+                messages=messages,
                 temperature=JSON_TEMP,
-                top_p=0.8,
-                max_output_tokens=JSON_MAX_TOKENS,
-                timeout=TIMEOUT,
-                input=[
-                    {"role": "system", "content": system_role},
-                    {"role": "user", "content": base_prompt},
-                ],
+                max_tokens=MAX_TOKENS,
+                response_format={"type": "json_object"}
             )
 
-            content = (response.output_text or "").strip()
-
-            last_raw = content
-
+            content = response.choices[0].message.content
             parsed = sanitize_json_output(content)
 
-            if parsed and _validate_schema_minimal(parsed, schema):
+            if parsed:
                 return parsed
-
-            # 🔧 repair 1x
-            repair_prompt = _repair_prompt(content, base_prompt)
-
-            response2 = client.responses.create(
-                model=model,
-                temperature=0,
-                max_output_tokens=JSON_MAX_TOKENS,
-                timeout=TIMEOUT,
-                input=[
-                    {"role": "system", "content": system_role},
-                    {"role": "user", "content": repair_prompt},
-                ],
-            )
-
-            parsed2 = sanitize_json_output(response2.output_text)
-
-            if parsed2:
-                return parsed2
-
+            
         except Exception as e:
+            logger.error(f"❌ OpenAI JSON API Error (Attempt {attempt}): {e}")
 
-            logger.warning(f"⚠️ JSON error attempt {attempt}: {e}")
+            # 🔥 STOP bij quota errors
+            if "insufficient_quota" in str(e):
+                logger.error("❌ QUOTA bereikt → stop retries")
+                return {"error": "quota"}
 
-            if attempt < retries:
-                time.sleep(delay)
+            if attempt == retries:
+                return {"error": str(e)}
 
-    logger.error("❌ JSON call failed")
+            time.sleep(1)
 
-    return {}
-
-
-# ============================================================
-# Backwards compatible alias
-# ============================================================
-
-def ask_gpt(prompt: str, system_role: str) -> Dict[str, Any]:
-
-    return ask_gpt_json(prompt=prompt, system_role=system_role)
-
+    return {"error": "Failed to generate valid JSON"}
 
 # ============================================================
 # 🧠 GPT TEXT CALL
 # ============================================================
-
 def ask_gpt_text(
     *,
     prompt: str,
     system_role: str,
-    retries: int = 2,
-    delay: float = 2.0,
+    retries: int = 2
 ) -> str:
+    """Genereert een platte tekst response."""
+    
+    if not client:
+        logger.error("❌ GPT Text Call gefaald: Geen OpenAI Client (Missing API Key)")
+        return "De AI assistent is momenteel offline omdat de OpenAI API sleutel ontbreekt. Controleer je .env bestand."
 
-    last = ""
+    messages = [
+        {"role": "system", "content": system_role},
+        {"role": "user", "content": prompt}
+    ]
 
     for attempt in range(1, retries + 1):
-
         try:
-
-            logger.info(f"🧠 Text attempt {attempt}")
-
-            response = client.responses.create(
+            logger.info(f"🧠 GPT Text Call (Attempt {attempt})")
+            
+            response = client.chat.completions.create(
                 model=model,
+                messages=messages,
                 temperature=TEXT_TEMP,
-                top_p=0.9,
-                max_output_tokens=TEXT_MAX_TOKENS,
-                timeout=TIMEOUT,
-                input=[
-                    {"role": "system", "content": system_role},
-                    {"role": "user", "content": prompt},
-                ],
+                max_tokens=MAX_TOKENS
             )
 
-            content = (response.output_text or "").strip()
-
-            last = content
-
-            return content
+            content = response.choices[0].message.content
+            if content:
+                return content.strip()
 
         except Exception as e:
+            logger.error(f"❌ OpenAI Text API Error (Attempt {attempt}): {e}")
 
-            logger.warning(f"⚠️ Text error attempt {attempt}: {e}")
+            # 🔥 STOP bij quota errors
+            if "insufficient_quota" in str(e):
+                logger.error("❌ QUOTA bereikt → stop retries")
+                return "AI quota bereikt"
 
-            if attempt < retries:
-                time.sleep(delay)
+            if attempt == retries:
+                return f"⚠️ Er is een fout opgetreden bij de AI aanvraag: {str(e)}"
 
-    logger.error("❌ Text call failed")
+            time.sleep(1)
 
-    return last or "AI-error"
+    return "Fout bij het genereren van de analyse."
