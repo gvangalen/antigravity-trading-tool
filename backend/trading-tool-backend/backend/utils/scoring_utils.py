@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from backend.utils.db import get_db_connection
 from backend.utils.scoring_engine import score_indicator
@@ -40,7 +40,7 @@ def normalize_indicator_name(name: str) -> str:
 # =========================================================
 # 🔢 SCORE ENGINE (USER-AWARE)
 # =========================================================
-def generate_scores_db(category: str, user_id: int) -> Dict[str, Any]:
+def generate_scores_db(category: str, user_id: Optional[int] = None) -> Dict[str, Any]:
     """
     Universele score-engine voor:
     - macro
@@ -48,6 +48,7 @@ def generate_scores_db(category: str, user_id: int) -> Dict[str, Any]:
     - market
 
     ✅ User-based rules supported
+    ✅ Global mode (user_id=None) supported
     """
 
     table_map = {
@@ -67,12 +68,22 @@ def generate_scores_db(category: str, user_id: int) -> Dict[str, Any]:
 
     try:
         with conn.cursor() as cur:
-            cur.execute(f"""
-                SELECT DISTINCT ON ({name_col}) {name_col}, value
-                FROM {data_table}
-                WHERE user_id = %s
-                ORDER BY {name_col}, timestamp DESC
-            """, (user_id,))
+            # ✅ GLOBAL vs USER mode
+            if user_id is not None:
+                cur.execute(f"""
+                    SELECT DISTINCT ON ({name_col}) {name_col}, value
+                    FROM {data_table}
+                    WHERE user_id = %s
+                    ORDER BY {name_col}, timestamp DESC
+                """, (user_id,))
+            else:
+                # 🌍 GLOBAL: Pak de allerlaatste waarde van elke indicator in het systeem
+                cur.execute(f"""
+                    SELECT DISTINCT ON ({name_col}) {name_col}, value
+                    FROM {data_table}
+                    ORDER BY {name_col}, timestamp DESC
+                """)
+            
             rows = cur.fetchall()
 
         data = {

@@ -88,21 +88,21 @@ export default function BotPortfolioOverview({ bots = [] }) {
       {/* HEADER WITH BLUE ACCENT */}
       <div className="flex items-start justify-between gap-4 pb-8 border-b-2 border-slate-100">
         <div className="border-l-4 border-blue-600 pl-6">
-           <div className="text-[10px] font-black text-slate-400 gap-2 flex items-center uppercase tracking-[0.3em] mb-1">
+           <div className="text-[10px] font-black text-secondary gap-2 flex items-center uppercase tracking-[0.3em] mb-1">
               <Wallet size={10} className="text-blue-600" />
               Systeem Overzicht
            </div>
-           <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">
+           <h3 className="text-3xl font-black text-foreground tracking-tighter uppercase leading-none">
              Portfolio <span className="text-blue-600/30">—</span> Alle bots
            </h3>
-           <p className="text-[13px] font-medium text-slate-400 mt-2">
+           <p className="text-[13px] font-medium text-secondary mt-2">
              Geaggregeerd overzicht van budget en posities over al je actieve bots.
            </p>
         </div>
 
-        <div className="bg-slate-100 px-4 py-2 rounded-xl border-2 border-slate-200/50">
-           <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Actieve Bots</div>
-           <span className="text-xl font-black text-slate-900 tracking-tighter tabular-nums">
+        <div className="bg-[var(--color-border-subtle)] px-4 py-2 rounded-xl border-2 border-slate-200/50">
+           <div className="text-[9px] font-black text-secondary uppercase tracking-widest">Actieve Bots</div>
+           <span className="text-xl font-black text-foreground tracking-tighter tabular-nums">
              {list.length}
            </span>
         </div>
@@ -117,7 +117,7 @@ export default function BotPortfolioOverview({ bots = [] }) {
              <Wallet size={16} />
           </div>
           <div>
-             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gebruik van Totaal Budget</div>
+             <div className="text-[10px] font-black text-secondary uppercase tracking-widest">Gebruik van Totaal Budget</div>
              <div className="text-[11px] font-bold text-blue-600/60 uppercase">Single Source of Truth: Backend</div>
           </div>
         </div>
@@ -132,25 +132,25 @@ export default function BotPortfolioOverview({ bots = [] }) {
 
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-6 border-t border-blue-600/5">
                <div className="flex flex-col">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Vandaag besteed</span>
+                  <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">Vandaag besteed</span>
                   <span className="text-sm font-black text-slate-800">€{Number(todaySpent ?? 0).toFixed(0)}</span>
                </div>
                {totalDailyLimitEur && (
                   <div className="flex flex-col">
-                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Daglimiet</span>
+                     <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">Daglimiet</span>
                      <span className="text-sm font-black text-slate-800">€{Number(totalDailyLimitEur).toFixed(0)}</span>
                   </div>
                )}
                {totalMaxOrderEur && (
                   <div className="flex flex-col">
-                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Som Max/Trade</span>
+                     <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">Som Max/Trade</span>
                      <span className="text-sm font-black text-slate-800">€{Number(totalMaxOrderEur).toFixed(0)}</span>
                   </div>
                )}
             </div>
           </div>
         ) : (
-          <div className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 py-4">
+          <div className="text-sm font-black text-secondary uppercase tracking-widest flex items-center gap-2 py-4">
              <Info size={16} /> Geen budget ingesteld
           </div>
         )}
@@ -180,7 +180,7 @@ export default function BotPortfolioOverview({ bots = [] }) {
       ============================= */}
       {symbolRows.length > 0 && (
         <div className="space-y-6">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em]">
+          <div className="text-[10px] font-black text-secondary uppercase tracking-[0.25em]">
             Breakdown per asset
           </div>
 
@@ -201,13 +201,13 @@ export default function BotPortfolioOverview({ bots = [] }) {
                     <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1 leading-none">
                       {row.symbol}
                     </div>
-                    <div className="text-sm font-black text-slate-800 tracking-tighter">
+                    <div className="text-sm font-black text-foreground tracking-tighter">
                       {Number(row.netQty).toFixed(6)} <span className="opacity-40 text-[9px] uppercase tracking-normal">{row.symbol}</span>
                     </div>
                   </div>
 
                   <div className="text-right">
-                    <div className="text-sm font-black text-slate-900 tracking-tight">
+                    <div className="text-sm font-black text-foreground tracking-tight">
                       €{Number(row.positionValue).toFixed(0)}
                     </div>
                     <div className="mt-1">
@@ -230,8 +230,8 @@ export default function BotPortfolioOverview({ bots = [] }) {
 function Stat({ label, children }) {
   return (
     <div className="flex flex-col">
-      <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">{label}</div>
-      <div className="text-3xl font-black text-slate-900 tracking-tighter leading-none">{children}</div>
+      <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-3">{label}</div>
+      <div className="text-3xl font-black text-foreground tracking-tighter leading-none">{children}</div>
     </div>
   );
 }

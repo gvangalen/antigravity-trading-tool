@@ -19,7 +19,7 @@ class DashboardRepository:
 
     async def get_latest_technical_data(self, user_id: int) -> List[dict]:
         query = text("""
-            SELECT symbol, LOWER(indicator) AS indicator, value, score, timestamp
+            SELECT LOWER(indicator) AS indicator, value, score, timestamp
             FROM technical_indicators
             WHERE user_id = :user_id
             ORDER BY indicator, timestamp DESC

@@ -137,6 +137,16 @@ function GaugeCard({ title, icon, data, emptyText, showTopSetups = false }) {
         <h2 className="text-sm font-semibold text-[var(--text-dark)] tracking-tight">
           {title}
         </h2>
+        {score !== null && (
+          <button 
+            onClick={() => window.dispatchEvent(new CustomEvent("open-ai-assistant", { 
+              detail: { query: `Leg uit: waarom is de ${title} score ${displayScore}?` } 
+            }))}
+            className="ml-auto text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-[var(--color-border-subtle)] border border-slate-100 text-secondary hover:text-[var(--primary)] hover:border-[var(--primary)] hover:bg-white transition-all shadow-sm"
+          >
+            Explain
+          </button>
+        )}
       </div>
 
       {/* GAUGE */}

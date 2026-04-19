@@ -182,7 +182,10 @@ def _build_action_decision(
     live_price: Optional[float],
     final_amount: float,
 ) -> Dict[str, Any]:
-    confidence_score = _safe_float(snapshot.get("confidence_score"), 0.0) or 0.0
+    confidence_score = _safe_float(
+        snapshot.get("confidence_score") or snapshot.get("confidence"),
+        0.0
+    ) or 0.0
     market_score = _safe_float(normalized_scores.get("market_score"), 10.0) or 10.0
     technical_score = _safe_float(normalized_scores.get("technical_score"), 10.0) or 10.0
 
@@ -324,6 +327,7 @@ def run_bot_brain(
     scores: Dict[str, float],
     action_rules: Optional[Dict[str, float]] = None,
     portfolio_context: Optional[Dict[str, Any]] = None,
+    backtest_mode: bool = False,
 ) -> Dict[str, Any]:
     portfolio_context = portfolio_context or {}
     setup = setup or {}
@@ -495,6 +499,7 @@ def run_bot_brain(
             daily_allocation_eur=_safe_float(portfolio_context.get("daily_allocation_eur"), None),
             max_asset_exposure_pct=_safe_float(portfolio_context.get("max_asset_exposure_pct"), None),
             total_budget_eur=_safe_float(portfolio_context.get("total_budget_eur"), None),
+            backtest_mode=backtest_mode,
         )
 
     except Exception as e:

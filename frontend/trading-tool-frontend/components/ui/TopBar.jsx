@@ -5,72 +5,80 @@ import { useState } from "react";
 import AvatarMenu from "@/components/ui/AvatarMenu";
 import { Search, ChevronRight } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function TopBar() {
+  const { t } = useTranslation();
   const pathname = usePathname();
   const [query, setQuery] = useState("");
   const { user } = useAuth();
 
-  /* ======== Dynamische begroeting ======== */
+  /* ======== Dynamic Greeting (Localized) ======== */
   const hour = new Date().getHours();
-  const greeting =
+  const greetingKey =
     hour < 12
-      ? "Goedemorgen"
+      ? t.greetings.morning
       : hour < 18
-      ? "Goedemiddag"
-      : "Goedenavond";
+      ? t.greetings.afternoon
+      : t.greetings.evening;
 
   const firstName = user?.first_name || "";
-  const greetingText = firstName ? `${greeting}, ${firstName}` : greeting;
+  const greetingText = firstName ? `${greetingKey}, ${firstName}` : greetingKey;
 
-  /* ======== Breadcrumb Label ======== */
+  /* ======== Breadcrumb Label (Localized) ======== */
   const labels = {
-    "/": "Scores",
-    "/market": "Markt",
-    "/macro": "Macro",
-    "/technical": "Techniek",
-    "/setup": "Setups",
-    "/strategy": "Strategieën",
-    "/bot": "Bots",
-    "/report": "Rapporten",
+    "/": t.nav.dashboard,
+    "/dashboard": t.nav.dashboard,
+    "/market": t.nav.market,
+    "/macro": t.nav.macro,
+    "/technical": t.nav.technical,
+    "/setup": t.nav.setups,
+    "/strategy": t.nav.strategies,
+    "/bot": t.nav.bots,
+    "/report": t.nav.reports,
   };
 
-  const currentLabel = labels[pathname] || "Antigravity";
+  const currentLabel = labels[pathname] || "Tradamind";
 
   return (
-    <header className="h-full w-full flex items-center justify-between px-10">
+    <header className="h-full w-full flex items-center justify-between px-10 bg-card dark:bg-[#020617] transition-colors border-b-2 border-slate-100 dark:border-slate-800">
       
       {/* LEFT — Breadcrumb (Deep V2 Pro Style) */}
-      <div className="flex items-center gap-2 text-slate-400">
-        <span className="text-[11px] font-black uppercase tracking-[0.2em] opacity-60">Antigravity</span>
-        <ChevronRight size={12} className="opacity-40" />
-        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-600">{currentLabel}</span>
+        <div className="flex items-center gap-4">
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            {/* Branding removed for a cleaner look */}
+          </div>
+          <h2 className="text-xl font-bold text-foreground dark:text-slate-100 tracking-tight leading-none mt-1.5">
+            {currentLabel}
+          </h2>
+        </div>
       </div>
 
       {/* CENTER — Greeting (High Clarity) */}
       <div className="hidden lg:flex flex-1 justify-center">
-        <p className="text-sm font-extrabold text-slate-800 tracking-tight">
+        <p className="text-sm font-extrabold text-foreground dark:text-slate-200 tracking-tight transition-colors">
           {greetingText}
         </p>
       </div>
 
-      {/* RIGHT — Search + Avatar */}
-      <div className="flex items-center gap-6">
-        
+        {/* RIGHT — Search + Avatar */}
+        <div className="flex items-center gap-6">
+
         {/* Minimal High-Depth Search */}
-        <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus-within:ring-4 focus-within:ring-blue-600/5 transition-all shadow-inner">
-          <Search size={14} className="text-slate-400" />
+        <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus-within:ring-4 focus-within:ring-blue-600/5 transition-all shadow-inner">
+          <Search size={14} className="text-secondary" />
           <input
-            className="bg-transparent outline-none w-48 text-xs font-bold text-slate-900 placeholder-slate-400"
-            placeholder="Zoeken..."
+            className="bg-transparent outline-none w-48 text-xs font-bold text-foreground dark:text-slate-100 placeholder-slate-400"
+            placeholder={t.common.search}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
 
         {/* 👤 AVATAR MENU (Restored) */}
-        <div className="pl-6 border-l-2 border-slate-100 flex items-center">
-          <div className="p-0.5 rounded-full border-2 border-slate-100 shadow-sm hover:border-blue-600/20 transition-all">
+        <div className="pl-6 border-l-2 border-slate-100 dark:border-slate-800 flex items-center">
+          <div className="p-0.5 rounded-full border-2 border-slate-100 dark:border-slate-800 shadow-sm hover:border-blue-600/20 transition-all">
             <AvatarMenu />
           </div>
         </div>

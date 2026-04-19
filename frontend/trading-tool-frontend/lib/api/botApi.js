@@ -336,3 +336,17 @@ export const fetchBotBalanceHistory = async ({
 
   return ensureArray(data);
 };
+
+/* =====================================================
+   🔁 13. BOT BACKTEST
+===================================================== */
+
+export const runBotBacktest = async (bot_id, scenario = "default") => {
+  if (!bot_id) throw new Error("bot_id is verplicht");
+
+  return handleApi(
+    fetchAuth(`/api/backtest/bot/${bot_id}?scenario=${scenario}`, {
+      method: "POST",
+    })
+  );
+};

@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useModal } from "@/components/modal/ModalProvider";
-
 import {
   Settings,
   Search,
@@ -20,10 +18,10 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 // ⭐ Onboarding component
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
+import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 
 export default function SetupPage() {
   const [search, setSearch] = useState("");
-  const { showSnackbar } = useModal();
 
   // ===============================
   // 🧭 ONBOARDING
@@ -77,43 +75,49 @@ export default function SetupPage() {
      RENDER
   ===================================================== */
   return (
-    <div className="page-container">
+    <div className="page-container bg-white dark:bg-[#020617] transition-colors min-h-screen">
       <OnboardingBanner step="setup" />
 
       {/* 🟢 STANDARD PAGE HEADER */}
-      <header className="page-header">
-        <div className="page-label">
+      <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
+        <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Settings size={12} />
-           Configuratie
+           Configuration
         </div>
-        <h1 className="page-title">Setups</h1>
-        <p className="page-subtitle">Beheer je trading-strategieën en marktmodellen</p>
+        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Setups</h1>
+        <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">
+          Manage your trading strategies and market models
+        </p>
       </header>
 
       {/* 🧠 AI INSIGHT + SETUP MATCH */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        <AgentInsightPanel category="setup" />
-        <SetupMatchCard />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch py-8">
+        <DashboardErrorBoundary>
+          <AgentInsightPanel category="setup" />
+        </DashboardErrorBoundary>
+        <DashboardErrorBoundary>
+          <SetupMatchCard />
+        </DashboardErrorBoundary>
       </div>
 
-      <div className="grid grid-cols-1 gap-10">
+      <div className="grid grid-cols-1 gap-10 pb-24">
         
         {/* 📋 SETUP LIST */}
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">
+        <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+          <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6 flex items-center justify-between">
+            <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
               <ClipboardList className="text-blue-600" size={16} />
-              <span>Huidige Setups</span>
+              <span>Active Setups</span>
             </div>
             
-            <div className="flex items-center px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg gap-2 focus-within:ring-2 focus-within:ring-blue-600/10 transition-all">
-              <Search size={14} className="text-slate-400" />
+            <div className="flex items-center px-4 py-2 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl gap-2 focus-within:ring-4 focus-within:ring-blue-600/5 transition-all">
+              <Search size={14} className="text-slate-400 dark:text-slate-500" />
               <input
                 type="text"
-                placeholder="Zoek setup..."
+                placeholder="Search setups..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="bg-transparent outline-none text-[11px] font-semibold w-32"
+                className="bg-transparent outline-none text-[11px] font-bold text-slate-700 dark:text-slate-300 w-40"
               />
             </div>
           </div>
@@ -131,17 +135,17 @@ export default function SetupPage() {
           </div>
         </div>
 
-        {/* ➕ NIEUWE SETUP */}
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">
+        {/* ➕ NEW SETUP */}
+        <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+          <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
+            <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
               <PlusCircle className="text-blue-600" size={16} />
-              <span>Nieuwe Setup</span>
+              <span>New Setup</span>
             </div>
           </div>
-          <div className="card-p">
-            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6">
-              Voeg een nieuw handelsmodel toe
+          <div className="card-p p-8">
+            <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6 border-b border-slate-50 dark:border-slate-800/50 pb-4">
+              Add a new trading model to the system
             </p>
             <SetupForm onSaved={reloadSetups} />
           </div>

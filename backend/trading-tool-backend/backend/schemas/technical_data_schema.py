@@ -4,8 +4,8 @@ from datetime import datetime
 
 class TechnicalDataResponse(BaseModel):
     indicator: str
-    waarde: float
-    score: float
+    waarde: float = 0.0
+    score: float = 0.0
     advies: str
     uitleg: str
     timestamp: datetime

@@ -11,19 +11,14 @@ import {
 
 import { useActiveStrategyToday } from "@/hooks/useAgentData";
 import { useMarketData } from "@/hooks/useMarketData";
+import { ScoreCardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
 export default function ActiveStrategyTodayCard({ className = "" }) {
   const { strategy, loading } = useActiveStrategyToday();
   const { btcLive } = useMarketData();
 
   if (loading) {
-    return (
-      <CardWrapper className={className}>
-        <p className="text-sm text-[var(--text-light)]">
-          Actieve strategie laden…
-        </p>
-      </CardWrapper>
-    );
+    return <ScoreCardSkeleton className={className} />;
   }
 
   if (!strategy) {

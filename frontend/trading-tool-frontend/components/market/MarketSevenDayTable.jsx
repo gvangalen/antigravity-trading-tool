@@ -4,8 +4,12 @@ import CardWrapper from "@/components/ui/CardWrapper";
 import { CalendarDays } from "lucide-react";
 import { formatChange, formatNumber } from "@/components/market/utils";
 import { useMemo } from "react";
+import SkeletonTable from "@/components/ui/SkeletonTable";
 
-export default function MarketSevenDayTable({ history }) {
+export default function MarketSevenDayTable({ history, loading = false }) {
+  if (loading) {
+    return <SkeletonTable rows={7} columns={7} />;
+  }
   const MAX_ROWS = 7;
 
   const rows = useMemo(() => {
@@ -50,19 +54,19 @@ export default function MarketSevenDayTable({ history }) {
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden">
+    <div className="bg-card border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden">
       {/* TERMINAL HEADER */}
       <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-[var(--primary)] shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-card border border-slate-200 flex items-center justify-center text-[var(--primary)] shadow-sm">
              <CalendarDays className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Historical Log</div>
-            <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase leading-none mt-1">7-Day Market Telemetry</h2>
+            <div className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">Historical Log</div>
+            <h2 className="text-xl font-black text-foreground tracking-tight uppercase leading-none mt-1">7-Day Market Telemetry</h2>
           </div>
         </div>
-        <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
+        <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] bg-card px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
            ARCHIVAL_SYNC: OK
         </div>
       </div>
@@ -70,7 +74,7 @@ export default function MarketSevenDayTable({ history }) {
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            <tr className="border-b border-slate-100 text-[10px] font-black text-secondary uppercase tracking-widest">
               <th className="px-8 py-5">Node_Date</th>
               <th className="px-8 py-5 text-right">Price_Open</th>
               <th className="px-8 py-5 text-right">Price_High</th>
@@ -85,7 +89,7 @@ export default function MarketSevenDayTable({ history }) {
             {rows.map((day, idx) => (
               <tr key={idx} className="group hover:bg-slate-50/50 transition-colors">
                 <td className="px-8 py-5">
-                   <div className="font-black text-slate-800 tracking-tight text-xs uppercase">{day.date}</div>
+                   <div className="font-black text-foreground tracking-tight text-xs uppercase">{day.date}</div>
                 </td>
 
                 <td className="px-8 py-5 text-right font-mono text-[10px] font-bold text-slate-500">

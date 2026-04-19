@@ -15,7 +15,7 @@ export default function ScoreBar({
 
   return (
     <div className="space-y-1">
-      <div className={`w-full bg-gray-100 rounded-full overflow-hidden ${height}`}>
+      <div className={`w-full bg-[var(--color-border-subtle)] rounded-full overflow-hidden ${height}`}>
         <div
           className={`${getScoreBarClass(safeScore)} h-full transition-all duration-300`}
           style={{ width: `${safeScore}%` }}

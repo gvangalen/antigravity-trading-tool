@@ -18,3 +18,6 @@ class UserOut(BaseModel):
     is_active: bool
     first_name: Optional[str]
     last_name: Optional[str]
+    ai_plan: Optional[str]
+    ai_requests_limit_day: Optional[int]
+    ai_requests_used_day: Optional[int]

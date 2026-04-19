@@ -3,6 +3,7 @@
 import CardWrapper from "@/components/ui/CardWrapper";
 import { CheckCircle2, Layers } from "lucide-react";
 import { useDailySetupScores } from "@/hooks/useDailySetupScores";
+import { ScoreCardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
 /* -------------------------------------------------------
    Kleine helper voor score visualisatie
@@ -34,13 +35,7 @@ export default function SetupMatchCard() {
      Loading
   ------------------------------- */
   if (loading) {
-    return (
-      <CardWrapper>
-        <p className="text-sm text-[var(--text-light)]">
-          Setup matching laden…
-        </p>
-      </CardWrapper>
-    );
+    return <ScoreCardSkeleton />;
   }
 
   /* -------------------------------

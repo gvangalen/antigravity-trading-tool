@@ -46,3 +46,18 @@ class ScoreRepository:
         
         result = await self.db.execute(stmt)
         return result.scalars().first()
+
+    async def get_global_insight(self, category: str) -> Optional[Dict[str, Any]]:
+        """
+        Haalt de meest recente globale AI-conclusie op voor een categorie.
+        """
+        stmt = text("""
+            SELECT category, avg_score, trend, bias, risk, summary, top_signals, date
+            FROM global_market_insights
+            WHERE category = :category
+            ORDER BY date DESC, created_at DESC
+            LIMIT 1
+        """)
+        result = await self.db.execute(stmt, {"category": category})
+        row = result.mappings().first()
+        return dict(row) if row else None

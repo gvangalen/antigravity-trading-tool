@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 import {
   fetchMacroInsight,
@@ -37,14 +38,15 @@ const reflectionMap = {
   setup: fetchSetupReflections,
   strategy: fetchStrategyReflections,
 };
-
 export function useAgentData(category) {
   const [insight, setInsight] = useState(null);
   const [reflections, setReflections] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const { isAuthenticated } = useAuth();
+
   const load = async () => {
-    if (!category) return;
+    if (!category || !isAuthenticated) return;
 
     console.log(`🧠 [useAgentData] load voor categorie: ${category}`);
 
@@ -80,13 +82,17 @@ export function useAgentData(category) {
     setLoading(true);
     load();
 
-    // 🔥 FIX: auto refresh elke 10 sec
+    // 🔥 FIX: auto refresh elke 10 sec (alleen indien ingelogd)
     const interval = setInterval(() => {
-      load();
+      if (isAuthenticated) {
+        load();
+      } else {
+        clearInterval(interval);
+      }
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [category]);
+  }, [category, isAuthenticated]);
 
   return {
     insight,

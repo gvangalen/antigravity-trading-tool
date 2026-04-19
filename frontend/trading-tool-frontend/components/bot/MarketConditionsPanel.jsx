@@ -105,12 +105,12 @@ function Bar({ icon, label, value, color, getLabel }) {
     <div className="flex items-center gap-6 text-[10px] w-full group py-2.5 transition-all">
 
       {/* icon */}
-      <span className="w-6 flex items-center justify-center text-slate-400 group-hover:text-blue-600 transition-colors">
+      <span className="w-6 flex items-center justify-center text-secondary group-hover:text-blue-600 transition-colors">
         {icon}
       </span>
 
       {/* label */}
-      <span className="w-48 font-black uppercase tracking-widest text-slate-500 group-hover:text-slate-900 transition-colors leading-none">
+      <span className="w-48 font-black uppercase tracking-widest text-muted group-hover:text-slate-900 transition-colors leading-none">
         {label}
       </span>
 
@@ -130,13 +130,13 @@ function Bar({ icon, label, value, color, getLabel }) {
 
       {/* score */}
       <div className="w-24 text-right font-mono font-black tabular-nums">
-        <span className="text-slate-900 text-sm">{safeValue.toString().padStart(2, '0')}</span>
+        <span className="text-foreground text-sm">{safeValue.toString().padStart(2, '0')}</span>
         <span className="text-slate-300 text-[10px] ml-1.5 opacity-40">/ 100</span>
       </div>
 
       {/* status badge */}
       <div className="w-48 flex justify-end">
-        <span className="px-3 py-1 rounded-lg bg-white border-2 border-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-500 shadow-sm group-hover:border-blue-600/10 group-hover:text-blue-600 transition-all">
+        <span className="px-3 py-1 rounded-lg bg-card border-2 border-slate-100 text-[9px] font-black uppercase tracking-widest text-muted shadow-sm group-hover:border-blue-600/10 group-hover:text-blue-600 transition-all">
           {status}
         </span>
       </div>

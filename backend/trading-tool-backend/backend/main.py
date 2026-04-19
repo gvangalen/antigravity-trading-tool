@@ -36,29 +36,21 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------
 app = FastAPI(title="Market Dashboard API", version="1.0")
 
-# ------------------------------------------------------------
-# 🌍 CORS — correct voor COOKIE-AUTH met Next.js + FastAPI
-# ------------------------------------------------------------
-
-# ⭐ BELANGRIJK:
-# - allow_origins mag NIET "*" zijn met cookies
-# - origins moeten exact overeenkomen
-# - credentials=True verplicht
-# - secure cookies werken NIET op HTTP → secure=False in cookies is correct
-
+# 🌍 CORS — Dynamic Configuration
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 allow_origins = [
-    # Local dev
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-
-    # Production frontend
-    "http://143.47.186.148",
-    "http://143.47.186.148:3000",
-
-    # Indien HTTPS wordt geactiveerd later
-    "https://143.47.186.148",
-    "https://143.47.186.148:3000",
+    frontend_url,
 ]
+
+# Ensure both www and non-www versions are allowed for production
+if "://" in frontend_url:
+    proto, domain = frontend_url.split("://")
+    if domain.startswith("www."):
+        allow_origins.append(f"{proto}://{domain[4:]}")
+    else:
+        allow_origins.append(f"{proto}://www.{domain}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -111,11 +103,37 @@ safe_include("backend.api.dashboard_api", "dashboard_api")
 safe_include("backend.api.sidebar_api", "sidebar_api")
 safe_include("backend.api.agents_api", "agents_api")
 safe_include("backend.api.bot_api", "bot_api")
+safe_include("backend.api.backtest_api", "backtest_api")
 safe_include("backend.api.market_intelligence_api", "market_intelligence_api")
 safe_include("backend.api.system_api", "system_api")
 safe_include("backend.api.report_api", "report_api")
 
 safe_include("backend.api.report_public_api", "report_public_api")
+safe_include("backend.api.ai_assistant_api", "ai_assistant_api")
+safe_include("backend.api.admin_api", "admin_api")
+
+# ==================================================================
+# 🧠 Phase 3: Semantic Cache Initialization
+# ==================================================================
+@app.on_event("startup")
+async def startup_event():
+    logger.info("🚀 System Startup: Initializing Vector Intelligence...")
+    from backend.infrastructure.vector_store import get_vector_store
+    from backend.infrastructure.database import async_session_factory
+    
+    # Zorg dat de static folder bestaat
+    os.makedirs("backend/static/ai", exist_ok=True)
+    
+    # Initialiseer Vector Store
+    vs = get_vector_store()
+    
+    # Als de index leeg is, probeer te rebuilden vanuit DB
+    if vs.index.ntotal == 0:
+        logger.info("🔍 Vector index is leeg of ontbreekt. Rebuilding vanuit DB...")
+        async with async_session_factory() as session:
+            await vs.rebuild_from_db(session)
+    else:
+        logger.info(f"✅ Vector index geladen met {vs.index.ntotal} items.")
 
 # ==================================================================
 # 👨‍⚕️ Health check

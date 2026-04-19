@@ -156,7 +156,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
   // STYLES
   // ----------------------------------------------------
   const fieldClass =
-    "p-4 rounded-2xl bg-white border-2 border-slate-100 w-full text-sm font-bold text-slate-900 outline-none focus:border-blue-600 transition-all";
+    "p-4 rounded-2xl bg-card border-2 border-slate-100 w-full text-sm font-bold text-foreground outline-none focus:border-blue-600 transition-all";
 
   const sectionClass =
     "rounded-3xl p-8 bg-gradient-to-br from-white to-slate-50/50 border-2 border-slate-100 space-y-8";
@@ -173,9 +173,9 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
       <div className="flex justify-between items-end">
         <div>
           <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1.5">{title}</div>
-          <div className="text-sm font-black text-slate-900 tracking-tight">{description}</div>
+          <div className="text-sm font-black text-foreground tracking-tight">{description}</div>
         </div>
-        <div className="text-[11px] font-black text-blue-600 bg-white px-4 py-2 rounded-xl border-2 border-blue-600/20 font-mono shadow-sm">
+        <div className="text-[11px] font-black text-blue-600 bg-card px-4 py-2 rounded-xl border-2 border-blue-600/20 font-mono shadow-sm">
           [ {score[0].toString().padStart(2, '0')} — {score[1].toString().padStart(2, '0')} ]
         </div>
       </div>
@@ -250,7 +250,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
             </div>
             <div>
                <p className="font-black text-sm uppercase tracking-tight text-slate-900">DCA Blueprint</p>
-               <p className="text-[11px] font-medium text-slate-500 mt-1 leading-relaxed">Focus on long-term accumulation and market health.</p>
+               <p className="text-[11px] font-medium text-muted mt-1 leading-relaxed">Focus on long-term accumulation and market health.</p>
             </div>
           </button>
 
@@ -269,7 +269,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
             </div>
             <div>
                <p className="font-black text-sm uppercase tracking-tight text-slate-900">Trade Blueprint</p>
-               <p className="text-[11px] font-medium text-slate-500 mt-1 leading-relaxed">Focus on execution-ready setups and technical validation.</p>
+               <p className="text-[11px] font-medium text-muted mt-1 leading-relaxed">Focus on execution-ready setups and technical validation.</p>
             </div>
           </button>
         </div>

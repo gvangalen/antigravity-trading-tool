@@ -13,7 +13,7 @@ function ScoreBar({ score }) {
   else if (pct <= 40) color = "bg-red-500";
 
   return (
-    <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+    <div className="w-full h-1 bg-[var(--color-border-subtle)] rounded-full overflow-hidden">
       <div
         className={`h-full ${color} transition-all duration-1000 ease-out shadow-sm`}
         style={{ width: `${pct}%` }}
@@ -32,7 +32,7 @@ export default function SetupMatchReportCard({ report }) {
   if (!best) {
     return (
       <ReportCard title="Optimale Setup" icon={<Layers size={16} />}>
-        <p className="text-sm text-slate-400 italic">
+        <p className="text-sm text-secondary italic">
           Geen passende setups gevonden voor deze periode.
         </p>
       </ReportCard>
@@ -43,25 +43,25 @@ export default function SetupMatchReportCard({ report }) {
     <ReportCard title="Optimale Setup" icon={<Layers size={16} />}>
       
       {/* BESTE OPTIE */}
-      <div className="mb-8 p-5 rounded-2xl bg-white border border-slate-50 shadow-sm">
+      <div className="mb-8 p-5 rounded-2xl bg-card border border-slate-50 shadow-sm">
         <div className="flex items-center gap-2 mb-3">
           <CheckCircle2 className="w-4 h-4 text-green-600" />
-          <span className="text-[11px] font-bold text-slate-400 tracking-tight">
+          <span className="text-[11px] font-bold text-secondary tracking-tight">
             Beste match
           </span>
         </div>
 
         <div className="flex items-baseline gap-2 mb-4">
-          <span className="text-xl font-bold text-slate-900 tracking-tight">{best.name}</span>
-          <span className="text-xs font-medium text-slate-400 font-mono">
+          <span className="text-xl font-bold text-foreground tracking-tight">{best.name}</span>
+          <span className="text-xs font-medium text-secondary font-mono">
             · {best.symbol} · {best.timeframe}
           </span>
         </div>
 
         <div className="space-y-2">
            <div className="flex justify-between items-end">
-              <span className="text-[11px] font-bold text-slate-400 tracking-tight">Match score</span>
-              <span className="text-sm font-bold text-slate-900 font-mono tracking-tight">{best.score}%</span>
+              <span className="text-[11px] font-bold text-secondary tracking-tight">Match score</span>
+              <span className="text-sm font-bold text-foreground font-mono tracking-tight">{best.score}%</span>
            </div>
            <ScoreBar score={best.score} />
         </div>
@@ -70,7 +70,7 @@ export default function SetupMatchReportCard({ report }) {
       {/* VERGELIJKING (Top Setups) */}
       {topSetups.length > 0 && (
         <div className="space-y-6">
-          <h4 className="text-[11px] font-bold text-slate-400 tracking-tight mb-4">
+          <h4 className="text-[11px] font-bold text-secondary tracking-tight mb-4">
             Vergelijking
           </h4>
 
@@ -78,10 +78,10 @@ export default function SetupMatchReportCard({ report }) {
             {topSetups.map((s) => (
               <div key={s.id} className="group">
                 <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-[13px] font-bold text-slate-600 group-hover:text-slate-900 transition-colors">
+                  <span className="text-[13px] font-bold text-dim group-hover:text-slate-900 transition-colors">
                     {s.name}
                   </span>
-                  <span className="text-sm font-bold text-slate-900 font-mono tracking-tight">
+                  <span className="text-sm font-bold text-foreground font-mono tracking-tight">
                     {s.score}%
                   </span>
                 </div>
@@ -93,7 +93,7 @@ export default function SetupMatchReportCard({ report }) {
       )}
 
       {/* TOELICHTING */}
-      <div className="mt-8 pt-6 border-t border-slate-50 text-[12px] text-slate-500 leading-relaxed italic">
+      <div className="mt-8 pt-6 border-t border-slate-50 text-[12px] text-muted leading-relaxed italic">
         Toelichting: De beste setup is geselecteerd op basis van de huidige macro- en marktomstandigheden.
       </div>
     </ReportCard>

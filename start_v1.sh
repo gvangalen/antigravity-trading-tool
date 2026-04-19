@@ -5,7 +5,7 @@ PROJECT_ROOT="/Users/gvangalen/Antigravity-Trading-Tool"
 BACKEND_DIR="$PROJECT_ROOT/backend/trading-tool-backend"
 FRONTEND_DIR="$PROJECT_ROOT/frontend/trading-tool-frontend"
 
-echo "🚀 Starten van Antigravity Trading Tool V1..."
+echo "🚀 Starten van Tradamind Trading Tool V1..."
 
 # 1. Controleer PostgreSQL
 echo "🐘 Controleren van PostgreSQL..."

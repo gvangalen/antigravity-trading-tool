@@ -83,15 +83,7 @@ class TechnicalDataRepository:
         return list(result.scalars().all())
 
     async def get_week_data(self, user_id: int) -> List[TechnicalDataIndicator]:
-        # Voor V2 PRO houden we het simpel: ook hier de laatste per indicator, 
-        # maar in een echte implementatie zou dit een voortschrijdend gemiddelde of wekelijkse snapshot zijn.
-        return await self.get_day_data(user_id)
-
-    async def get_month_data(self, user_id: int) -> List[TechnicalDataIndicator]:
-        return await self.get_day_data(user_id)
-
-    async def get_quarter_data(self, user_id: int) -> List[TechnicalDataIndicator]:
-        return await self.get_day_data(user_id)
+        return await self._get_data_by_weeks(user_id, 1)
 
     async def _get_data_by_weeks(self, user_id: int, limit: int) -> List[TechnicalDataIndicator]:
         # 1. Get distinct weeks

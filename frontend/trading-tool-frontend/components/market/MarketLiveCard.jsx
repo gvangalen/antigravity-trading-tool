@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import CardWrapper from "@/components/ui/CardWrapper";
 import { formatChange, formatNumber } from "@/components/market/utils";
 import { fetchLatestBTC } from "@/lib/api/market";
+import { MarketCardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
 // Lucide icons
 import {
@@ -38,6 +39,12 @@ export default function MarketLiveCard({ data = null, loading: propLoading = fal
       const resp = await fetchLatestBTC();
       setInternalBtc(resp);
       setInternalError("");
+      
+      // 📳 Haptic feedback on success
+      import("@/lib/haptics").then(({ hapticFeedback }) => {
+        hapticFeedback.impact();
+      });
+
     } catch (err) {
       console.error("❌ Fout bij ophalen BTC:", err);
       setInternalError("Fout bij ophalen BTC-data");
@@ -50,12 +57,7 @@ export default function MarketLiveCard({ data = null, loading: propLoading = fal
   // LOADING
   // -------------------------
   if (loading && !btc) {
-    return (
-      <div className="w-full h-32 bg-white rounded-2xl border border-[var(--card-border)] animate-pulse flex items-center justify-center text-[var(--text-light)]">
-          <Loader2 className="w-5 h-5 animate-spin mr-2" />
-          <span>BTC-data laden…</span>
-      </div>
-    );
+    return <MarketCardSkeleton />;
   }
 
   // -------------------------
@@ -103,11 +105,11 @@ export default function MarketLiveCard({ data = null, loading: propLoading = fal
              <h2 className="metric-value text-5xl font-mono !tracking-tighter">
                 ${Number(btc.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
              </h2>
-             <div className={`flex items-center gap-2 mt-4 font-black ${changeColor}`}>
+              <div className={`flex items-center gap-2 mt-4 font-black ${changeColor}`}>
                 <ChangeIcon size={18} />
-                <span className="text-lg">{positive ? "+" : ""}{priceChange}%</span>
-                <span className="text-[10px] uppercase tracking-widest text-slate-400 opacity-60 ml-2">24u Verandering</span>
-             </div>
+                <span className="text-lg">{positive ? "+" : ""}{Number(priceChange).toFixed(2)}%</span>
+                <span className="text-[10px] uppercase tracking-widest text-secondary opacity-60 ml-1 sm:ml-2">24u Change</span>
+              </div>
           </div>
 
           <div className="flex items-center gap-8 border-t md:border-t-0 md:border-l-2 border-slate-100 pt-6 md:pt-0 md:pl-8">

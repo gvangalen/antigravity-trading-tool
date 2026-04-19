@@ -48,8 +48,8 @@ export default function BotDecisionReportCard({ snapshot }) {
       
       {/* BOT IDENTITY */}
       <div className="mb-6">
-        <div className="text-[11px] font-bold text-slate-400 tracking-tight mb-1">Bot</div>
-        <div className="text-xl font-bold text-slate-900 tracking-tight">{bot_name}</div>
+        <div className="text-[11px] font-bold text-secondary tracking-tight mb-1">Bot</div>
+        <div className="text-xl font-bold text-foreground tracking-tight">{bot_name}</div>
       </div>
 
       <div className="space-y-6">
@@ -58,13 +58,13 @@ export default function BotDecisionReportCard({ snapshot }) {
         <div className={`p-5 rounded-2xl border flex items-center justify-between transition-all duration-500 ${
           isBuy ? "bg-green-500/5 border-green-500/10 text-green-700" :
           isSell ? "bg-red-500/5 border-red-500/10 text-red-700" :
-          "bg-slate-50 border-slate-100 text-slate-600"
+          "bg-[var(--color-border-subtle)] border-slate-100 text-slate-600"
         }`}>
             <div className="flex items-center gap-3">
                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${
                  isBuy ? "bg-green-600 text-white" :
                  isSell ? "bg-red-600 text-white" :
-                 "bg-white border border-slate-200 text-slate-400"
+                 "bg-card border border-slate-200 text-slate-400"
                }`}>
                   {isBuy && <ArrowUpRight size={20} />}
                   {isSell && <ArrowDownRight size={20} />}
@@ -90,15 +90,15 @@ export default function BotDecisionReportCard({ snapshot }) {
         <div className="grid grid-cols-2 gap-4">
            {amount_eur !== null && (
              <div className="p-4 rounded-xl border border-slate-50 bg-white/50 shadow-sm">
-                <span className="text-[10px] font-bold text-slate-400 tracking-tight mb-2 block">Ordergrootte</span>
-                <span className="text-sm font-bold text-slate-900 font-mono tracking-tight">€{amount_eur.toLocaleString()}</span>
+                <span className="text-[10px] font-bold text-secondary tracking-tight mb-2 block">Ordergrootte</span>
+                <span className="text-sm font-bold text-foreground font-mono tracking-tight">€{amount_eur.toLocaleString()}</span>
              </div>
            )}
 
            {setup_match !== null && (
              <div className="p-4 rounded-xl border border-slate-50 bg-white/50 shadow-sm">
-                <span className="text-[10px] font-bold text-slate-400 tracking-tight mb-2 block">Setup Match</span>
-                <span className="text-sm font-bold text-slate-900 font-mono tracking-tight">{setup_match}%</span>
+                <span className="text-[10px] font-bold text-secondary tracking-tight mb-2 block">Setup Match</span>
+                <span className="text-sm font-bold text-foreground font-mono tracking-tight">{setup_match}%</span>
              </div>
            )}
         </div>
@@ -106,10 +106,10 @@ export default function BotDecisionReportCard({ snapshot }) {
         {/* TOELICHTING */}
         <div className="pt-6 border-t border-slate-50">
            <div className="flex items-center gap-2 mb-3">
-              <AlertCircle size={14} className="text-slate-400" />
-              <span className="text-[11px] font-bold text-slate-400 tracking-tight">Toelichting</span>
+              <AlertCircle size={14} className="text-secondary" />
+              <span className="text-[11px] font-bold text-secondary tracking-tight">Toelichting</span>
            </div>
-           <div className="text-[14px] text-slate-600 leading-relaxed italic bg-white p-4 rounded-xl border border-slate-50 shadow-inner-light">
+           <div className="text-[14px] text-dim leading-relaxed italic bg-card p-4 rounded-xl border border-slate-50 shadow-inner-light">
              {reason}
            </div>
         </div>

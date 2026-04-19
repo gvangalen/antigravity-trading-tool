@@ -122,6 +122,12 @@ def normalize_technical_value(indicator: str, value: float) -> float:
         if "close" in indicator or "price" in indicator:
             return max(0, min(100, value))
 
+        # VIX -> schaal 10–40 (Paniek schaal)
+        if indicator == "vix":
+            low, high = 10, 40
+            normalized = ((value - low) / (high - low)) * 100
+            return max(0, min(100, normalized))
+
         return max(0, min(100, value))
 
     except Exception:

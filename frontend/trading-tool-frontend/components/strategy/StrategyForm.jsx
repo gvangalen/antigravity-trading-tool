@@ -304,9 +304,9 @@ export default function StrategyForm({
 
       {/* 🟢 STATUS TOGGLE (ONLY IN EDIT) */}
       {isEdit && (
-        <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl mb-6">
+        <div className="flex items-center justify-between p-4 bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl mb-6">
            <div>
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</div>
+              <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Status</div>
               <div className="text-sm font-bold text-slate-800">{form.is_active ? "Actief" : "Gepauzeerd"}</div>
            </div>
            <button
@@ -314,7 +314,7 @@ export default function StrategyForm({
              onClick={() => setForm(p => ({ ...p, is_active: !p.is_active }))}
              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${form.is_active ? "bg-green-500" : "bg-slate-300"}`}
            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.is_active ? "translate-x-6" : "translate-x-1"}`} />
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-card transition-transform ${form.is_active ? "translate-x-6" : "translate-x-1"}`} />
            </button>
         </div>
       )}

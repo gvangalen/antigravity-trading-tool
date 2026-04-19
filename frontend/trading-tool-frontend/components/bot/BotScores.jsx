@@ -12,14 +12,14 @@ export default function BotScores({
     scores && Object.keys(scores).length > 0;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm">
+    <div className="bg-card border border-[var(--color-border)] rounded-[2rem] p-6 shadow-sm transition-colors duration-300">
       <div className="flex items-center gap-3 mb-6">
         <div className="p-2 rounded-lg bg-blue-50 text-[var(--primary)]">
           <BarChart3 size={18} />
         </div>
         <div>
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Environment Analytics</div>
-          <div className="text-sm font-bold text-slate-800 tracking-tight">System Health & Market Scopes</div>
+          <div className="text-[10px] font-black text-muted uppercase tracking-widest">Environment Analytics</div>
+          <div className="text-sm font-bold text-foreground tracking-tight">System Health & Market Scopes</div>
         </div>
       </div>
 
@@ -28,8 +28,8 @@ export default function BotScores({
       )}
 
       {!loading && !hasScores && (
-        <div className="p-8 rounded-2xl bg-slate-50 border border-slate-100 border-dashed text-center">
-          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+        <div className="p-8 rounded-2xl bg-[var(--color-border-subtle)] border border-[var(--color-border)] border-dashed text-center">
+          <p className="text-xs font-black text-muted uppercase tracking-widest">
             NO TELEMETRY DATA AVAILABLE FOR CURRENT SESSION
           </p>
         </div>
@@ -40,15 +40,15 @@ export default function BotScores({
           {Object.entries(scores).map(([key, value]) => {
             const score = Number(value) || 0;
 
-            let colorClass = "text-slate-400";
-            let bgClass = "bg-slate-50 border-slate-100";
+            let colorClass = "text-secondary";
+            let bgClass = "bg-[var(--color-border-subtle)] border-[var(--color-border)]";
             
             if (score >= 70) {
-              colorClass = "text-green-600";
-              bgClass = "bg-green-50/50 border-green-100/50";
+              colorClass = "text-green-600 dark:text-green-400";
+              bgClass = "bg-green-50/50 dark:bg-green-900/10 border-green-100/50 dark:border-green-900/20";
             } else if (score <= 35) {
-              colorClass = "text-red-600";
-              bgClass = "bg-red-50/50 border-red-100/50";
+              colorClass = "text-red-600 dark:text-red-400";
+              bgClass = "bg-red-50/50 dark:bg-red-900/10 border-red-100/50 dark:border-red-900/20";
             }
 
             return (
@@ -61,7 +61,7 @@ export default function BotScores({
                   p-4 flex flex-col justify-between
                 `}
               >
-                <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter mb-1">
+                <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-1">
                   {key} INDEX
                 </div>
 

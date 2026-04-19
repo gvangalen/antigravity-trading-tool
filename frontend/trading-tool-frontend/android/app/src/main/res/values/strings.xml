@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TradaMind</string>
+    <string name="title_activity_main">TradaMind</string>
+    <string name="package_name">com.tradamind.app</string>
+    <string name="custom_url_scheme">com.tradamind.app</string>
+</resources>

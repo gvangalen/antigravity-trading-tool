@@ -1,0 +1,70 @@
+{
+  "common": {
+    "loading": "Laden...",
+    "error": "Er is een fout opgetreden",
+    "retry": "Opnieuw proberen",
+    "save": "Opslaan",
+    "cancel": "Annuleren",
+    "delete": "Verwijderen",
+    "settings": "Instellingen",
+    "explore": "Ontdekken",
+    "language": "Taal",
+    "switch_to": "English",
+    "search": "Zoeken..."
+  },
+  "greetings": {
+    "morning": "Goedemorgen",
+    "afternoon": "Goedemiddag",
+    "evening": "Goedenavond"
+  },
+  "nav": {
+    "dashboard": "Overzicht",
+    "market": "Markt",
+    "macro": "Macro",
+    "technical": "Technisch",
+    "setups": "Setups",
+    "strategies": "Strategieën",
+    "bots": "Bots",
+    "reports": "Rapporten",
+    "onboarding": "Onboarding"
+  },
+  "dashboard": {
+    "title": "Intelligentie",
+    "overview": "Overzicht",
+    "subtitle": "Je AI Trading Coach • Live Markt Intelligentie",
+    "system_status": "Systeem Status",
+    "market_data": "Marktgegevens",
+    "live_market": "Markt",
+    "brain": {
+      "execution": "Executie",
+      "signal": "Signaal",
+      "timeframe": "Tijdframe",
+      "entry": "Entry",
+      "targets": "Targets",
+      "stop_loss": "Stop Loss",
+      "risk_reward": "Risk/Reward",
+      "risk_level": "Risico Niveau",
+      "market_health": "Markt Gezondheid",
+      "setup_strength": "Setup Sterkte",
+      "ai_confidence": "AI Vertrouwen",
+      "score": "Score",
+      "master_snippet": "Hoofd Snippet",
+      "explore_report": "Bekijk Volledig Dagverslag",
+      "bot_active": "Bot Actief"
+    },
+    "gauges": {
+      "macro": "Macro",
+      "technical": "Technisch",
+      "market": "Markt",
+      "setup": "Setup"
+    },
+    "tabs": {
+      "technical": "Technisch",
+      "macro": "Macro",
+      "market": "Markt",
+      "analysis_mode": "Diepe Analyse Modus",
+      "source": "Bron: Real-Time API",
+      "export": "Exporteer Systeemlog"
+    }
+  }
+}

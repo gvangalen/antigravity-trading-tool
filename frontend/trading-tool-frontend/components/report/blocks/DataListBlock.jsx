@@ -30,7 +30,7 @@ function getIconForIndicator(name = '') {
     return <TrendingUp size={16} className="text-green-600" />;
   if (n.includes('volume'))
     return <BarChart3 size={16} className="text-blue-600" />;
-  return <Activity size={16} className="text-gray-500" />;
+  return <Activity size={16} className="text-muted" />;
 }
 
 /* =====================================================
@@ -65,7 +65,7 @@ export default function DataListBlock({
         /* =========================
            EMPTY STATE
         ========================= */
-        <div className="text-sm text-gray-500 italic">
+        <div className="text-sm text-muted italic">
           Nog geen indicator-data beschikbaar voor dit onderdeel.
         </div>
       ) : (
@@ -98,25 +98,25 @@ export default function DataListBlock({
                   group
                 "
               >
-                <div className="mt-1 flex items-center justify-center w-8 h-8 bg-white rounded-lg border border-slate-100 group-hover:border-slate-200 transition-colors">
+                <div className="mt-1 flex items-center justify-center w-8 h-8 bg-card rounded-lg border border-slate-100 group-hover:border-slate-200 transition-colors">
                   {getIconForIndicator(name)}
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
-                    <div className="text-[12px] font-bold text-slate-500 tracking-tight truncate">
+                    <div className="text-[12px] font-bold text-muted tracking-tight truncate">
                       {name}
                     </div>
 
                     {typeof score === 'number' && (
-                      <div className="text-sm font-bold text-slate-900 font-mono tracking-tight">
+                      <div className="text-sm font-bold text-foreground font-mono tracking-tight">
                         {score}
                       </div>
                     )}
                   </div>
 
                   {interp && (
-                    <div className="text-[14px] text-slate-600 leading-relaxed">
+                    <div className="text-[14px] text-dim leading-relaxed">
                       {interp}
                     </div>
                   )}

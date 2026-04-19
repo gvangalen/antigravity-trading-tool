@@ -101,4 +101,7 @@ async def get_current_user(access_token: str = Cookie(default=None)):
             detail="Token missing subject",
         )
 
-    return {"id": int(user_id)}
+    return {
+        "id": int(user_id),
+        "role": payload.get("role")
+    }

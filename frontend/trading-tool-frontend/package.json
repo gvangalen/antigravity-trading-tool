@@ -8,6 +8,12 @@
     "start": "next start"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.3.0",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "@radix-ui/react-tooltip": "^1.0.6",
     "autoprefixer": "^10.4.15",
     "chart.js": "^4.4.9",
@@ -15,8 +21,10 @@
     "date-fns": "^3.0.0",
     "dayjs": "^1.11.18",
     "framer-motion": "^12.30.0",
+    "lightweight-charts": "^5.1.0",
     "lucide-react": "^0.284.0",
     "next": "13.4.12",
+    "next-pwa": "^5.6.0",
     "next-transpile-modules": "^10.0.1",
     "postcss": "^8.4.24",
     "rc-slider": "^11.1.9",
@@ -27,6 +35,7 @@
     "tailwindcss": "^3.3.2"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.3.0",
     "@types/node": "24.2.0",
     "@types/react": "19.1.9",
     "css-loader": "^7.1.2",

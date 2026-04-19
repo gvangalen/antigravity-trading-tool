@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import {
   BarChart3,
   LineChart,
-  ChevronsUp,
 } from "lucide-react";
 
 import TradingViewChart from "@/components/charts/TradingViewChart";
@@ -13,7 +12,7 @@ import TradingViewChart from "@/components/charts/TradingViewChart";
 import CompactGauges from "@/components/dashboard/CompactGauges";
 import TradingBrain from "@/components/dashboard/TradingBrain";
 import TableTabs from "@/components/dashboard/TableTabs";
-import CardWrapper from "@/components/ui/CardWrapper";
+import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 
 // Table Components
 import TechnicalDayTableForDashboard from "@/components/technical/TechnicalDayTableForDashboard";
@@ -26,14 +25,20 @@ import { useTechnicalData } from "@/hooks/useTechnicalData";
 import { useMacroData } from "@/hooks/useMacroData";
 import { useMarketData } from "@/hooks/useMarketData";
 
+import { useTranslation } from "@/app/providers/I18nProvider";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
+import { mapTechnicalToStudies } from "@/config/indicator_mapping";
+import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
+import BotCard from "@/components/bot/BotCard";
+import useBotData from "@/hooks/useBotData";
 
 export default function DashboardPage() {
-  const [showScroll, setShowScroll] = useState(false);
-  const { activeSetup } = useActiveSetup();
+  const { t } = useTranslation();
+  const { activeSetup, focusedBotId, setFocusedBotId } = useActiveSetup();
+  const { configs: botConfigs } = useBotData();
 
   /* --------------------------------------------------------
-     📊 GEGEVENS
+     📊 DATA FETCHING
   -------------------------------------------------------- */
   const {
     technicalData,
@@ -41,17 +46,15 @@ export default function DashboardPage() {
     loading: technicalLoading,
     error: technicalError,
     reload: technicalReload,
-  } = useTechnicalData("Dag");
+  } = useTechnicalData("Day");
 
   const { macroData, loading: macroLoading, error: macroError, reload: macroReload } =
     useMacroData();
-
-  const { sevenDayData, btcLive } = useMarketData();
-
-
-
-  /* --------------------------------------------------------
-     🔁 MAPPING
+  
+   const { sevenDayData, btcLive, loading: marketLoading } = useMarketData();
+ 
+   /* --------------------------------------------------------
+     🔁 MAPPING & SYNC
   -------------------------------------------------------- */
   function mapSetupToTradingView(setup) {
     if (!setup) {
@@ -80,123 +83,134 @@ export default function DashboardPage() {
   }
 
   const tvConfig = mapSetupToTradingView(activeSetup);
+  
+  // 🔥 INDICATOR SYNC: Extract names and map to TV studies
+  const activeIndicatorNames = technicalData.map(i => i.name);
+  const chartStudies = mapTechnicalToStudies(activeIndicatorNames);
 
-  /* --------------------------------------------------------
-     ⬆️ Scroll-to-top
-  -------------------------------------------------------- */
-  useEffect(() => {
-    const handler = () => setShowScroll(window.scrollY > 300);
-    window.addEventListener("scroll", handler);
-    return () => window.removeEventListener("scroll", handler);
-  }, []);
-
-  const scrollToTop = () =>
-    window.scrollTo({ top: 0, behavior: "smooth" });
 
   return (
-    <div className="page-container">
+    <div className="page-container bg-white dark:bg-[#020617] transition-colors min-h-screen">
       
       {/* 🟢 STANDARD PAGE HEADER */}
-      <header className="page-header">
-        <div className="page-label">
+      <header className="page-header border-l-4 border-blue-600 pl-4 sm:pl-8 mb-8 sm:mb-16">
+        <div className="page-label text-[10px] sm:text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <BarChart3 size={12} />
-           Dashboard
+           {t.dashboard.title}
         </div>
-        <h1 className="page-title">Overzicht</h1>
-        <p className="page-subtitle">Data-analyse & Marktsentiment</p>
+        <h1 className="page-title text-3xl sm:text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3 truncate">{t.dashboard.overview}</h1>
+        <p className="page-subtitle text-sm sm:text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">{t.dashboard.subtitle}</p>
       </header>
 
       {/* 🚀 QUICK STATS & GAUGES */}
-      <div className="card">
-        <div className="card-p">
-           <div className="flex items-center gap-4 mb-8">
-              <div className="w-1.5 h-6 bg-blue-600 rounded-full" />
-              <span className="text-[12px] font-black text-slate-900 uppercase tracking-widest">Systeemstatus</span>
+      <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl transition-all duration-300">
+        <div className="card-p p-4 sm:p-10">
+           <div className="flex items-center gap-4 mb-6 sm:mb-8">
+              <div className="w-1.5 h-4 sm:h-6 bg-blue-600 rounded-full" />
+              <span className="text-[10px] sm:text-[12px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest">{t.dashboard.system_status}</span>
            </div>
-           <CompactGauges />
+           <DashboardErrorBoundary>
+             <CompactGauges />
+           </DashboardErrorBoundary>
         </div>
       </div>
 
-      <div className="flex flex-col xl:flex-row gap-20">
+      <div className="flex flex-col xl:flex-row gap-20 py-12">
         {/* 📈 MAIN: CHARTS & ANALYSIS */}
         <main className="flex-1 space-y-24">
           
           <div className="flex flex-col lg:flex-row gap-20">
              {/* LEFT: MARKET VIEW */}
              <div className="flex-1 space-y-6">
-                <MarketLiveCard data={btcLive} loading={!btcLive} />
+                <DashboardErrorBoundary>
+                  <MarketLiveCard data={btcLive} loading={!btcLive} />
+                </DashboardErrorBoundary>
 
-                <div className="card">
-                  <div className="card-header">
-                    <div className="card-title">
+                <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden">
+                  <div className="card-header border-b border-slate-100 dark:border-slate-800 p-4 sm:p-6">
+                    <div className="card-title text-slate-900 dark:text-white">
                       <LineChart size={16} className="text-blue-600" />
-                      Markt
+                      {t.dashboard.live_market}
                     </div>
                   </div>
-                  <div className="card-p">
-                    <TradingViewChart
-                      key={`${tvConfig.symbol}-${tvConfig.interval}`}
-                      symbol={tvConfig.symbol}
-                      interval={tvConfig.interval}
-                      theme="light"
-                      height={580}
-                    />
+                  <div className="card-p p-4 sm:p-8">
+                    <DashboardErrorBoundary>
+                      <TradingViewSmartChart
+                        key={`${tvConfig.symbol}-${tvConfig.interval}-${chartStudies.join(',')}-${focusedBotId}`}
+                        symbol={tvConfig.symbol}
+                        interval={tvConfig.interval}
+                        indicators={chartStudies}
+                        focusedBotId={focusedBotId}
+                        setFocusedBotId={setFocusedBotId}
+                        theme="light"
+                        height={typeof window !== 'undefined' && window.innerWidth < 640 ? 300 : 580}
+                      />
+                    </DashboardErrorBoundary>
                   </div>
                 </div>
              </div>
 
              {/* RIGHT: THE BRAIN */}
              <div className="w-full lg:w-[340px] shrink-0">
-                <TradingBrain />
+                <DashboardErrorBoundary>
+                  <TradingBrain />
+                </DashboardErrorBoundary>
              </div>
           </div>
 
           {/* 📑 BOTTOM: DEEP ANALYSIS TABS */}
-          <TableTabs 
-             technicalTable={
-               <TechnicalDayTableForDashboard
-                 data={technicalData}
-                 loading={technicalLoading}
-                 error={technicalError}
-                 onRetry={technicalReload}
-                 onRemove={handleRemove}
-               />
-             }
-             macroTable={
-               <MacroSummaryTableForDashboard
-                 data={macroData}
-                 loading={macroLoading}
-                 error={macroError}
-                 onRetry={macroReload}
-               />
-             }
-             marketTable={
-               <div className="card">
-                  <div className="card-header">
-                    <h3 className="card-title">Markt Gegevens</h3>
-                  </div>
-                  <div className="card-p">
-                    <MarketSummaryForDashboard
-                      sevenDayData={sevenDayData}
-                      btcLive={btcLive}
-                    />
-                  </div>
-               </div>
-             }
-          />
+          <DashboardErrorBoundary>
+            <TableTabs 
+               technicalTable={
+                 <TechnicalDayTableForDashboard
+                   data={technicalData}
+                   loading={technicalLoading}
+                   error={technicalError}
+                   onRetry={technicalReload}
+                   onRemove={handleRemove}
+                 />
+               }
+               macroTable={
+                 <MacroSummaryTableForDashboard
+                   data={macroData}
+                   loading={macroLoading}
+                   error={macroError}
+                   onRetry={macroReload}
+                 />
+               }
+               marketTable={
+                 <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden">
+                    <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
+                      <h3 className="card-title text-slate-900 dark:text-white uppercase tracking-widest text-[12px] font-black">{t.dashboard.market_data}</h3>
+                    </div>
+                    <div className="card-p p-8">
+                      <MarketSummaryForDashboard
+                        sevenDayData={sevenDayData}
+                        btcLive={btcLive}
+                        loading={marketLoading}
+                      />
+                    </div>
+                 </div>
+               }
+               botsTable={
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {botConfigs.map(bot => (
+                      <BotCard 
+                        key={bot.id} 
+                        bot={bot} 
+                        showActions={false}
+                        onSelect={(id) => setFocusedBotId(id)}
+                      />
+                    ))}
+                 </div>
+               }
+            />
+          </DashboardErrorBoundary>
 
         </main>
       </div>
 
 
-      {showScroll && (
-        <button
-          onClick={scrollToTop}
-          className="fixed bottom-6 right-6 bg-blue-600 text-white p-3 rounded-full shadow-lg hover:bg-blue-700 transition-all z-50"
-        >
-          <ChevronsUp className="w-5 h-5" />
-        </button>
-      )}
     </div>
   );
 }

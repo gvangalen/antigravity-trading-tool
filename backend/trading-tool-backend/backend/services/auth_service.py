@@ -37,7 +37,10 @@ class AuthService:
             role=new_user.role,
             is_active=new_user.is_active,
             first_name=new_user.first_name,
-            last_name=new_user.last_name
+            last_name=new_user.last_name,
+            ai_plan=new_user.ai_plan,
+            ai_requests_limit_day=new_user.ai_requests_limit_day,
+            ai_requests_used_day=new_user.ai_requests_used_day
         )
 
     async def login_user(self, data: LoginRequest):
@@ -64,7 +67,10 @@ class AuthService:
                 role=user.role,
                 is_active=user.is_active,
                 first_name=user.first_name,
-                last_name=user.last_name
+                last_name=user.last_name,
+                ai_plan=user.ai_plan,
+                ai_requests_limit_day=user.ai_requests_limit_day,
+                ai_requests_used_day=user.ai_requests_used_day
             )
         }
 
@@ -78,7 +84,10 @@ class AuthService:
             role=user.role,
             is_active=user.is_active,
             first_name=user.first_name,
-            last_name=user.last_name
+            last_name=user.last_name,
+            ai_plan=user.ai_plan,
+            ai_requests_limit_day=user.ai_requests_limit_day,
+            ai_requests_used_day=user.ai_requests_used_day
         )
 
     async def refresh_access_token(self, refresh_token: str) -> str:

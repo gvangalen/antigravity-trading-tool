@@ -160,10 +160,13 @@ async def fetch_interpreted_data(
 # 7D DATA (COINGECKO SYNC & GET)
 # =========================================================
 @router.post("/market_data/btc/7d/fill")
-async def fill_btc_7day_data(db: AsyncSession = Depends(get_db)):
+async def fill_btc_7day_data(
+    overwrite: bool = Query(False),
+    db: AsyncSession = Depends(get_db)
+):
     try:
         service = MarketDataService(db)
-        return await service.fill_btc_7day_data(MARKET_RAW_ENDPOINTS)
+        return await service.fill_btc_7day_data(MARKET_RAW_ENDPOINTS, overwrite=overwrite)
     except Exception as e:
         logger.error(f"❌ Fout bij ophalen en opslaan BTC market data: {e}")
         return {"error": f"❌ {str(e)}"}

@@ -43,7 +43,7 @@ function ScoreRow({ label, value }) {
 }
 
 function ScoreDivider() {
-  return <div className="h-px bg-gray-100 my-1" />;
+  return <div className="h-px bg-[var(--color-border-subtle)] my-1" />;
 }
 
 /* =====================================================

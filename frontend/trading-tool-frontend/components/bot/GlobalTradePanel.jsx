@@ -14,7 +14,7 @@ export default function GlobalTradePanel({
   if (!activeBot) {
     return (
       <div className="card card-p text-center">
-        <p className="text-xs font-black text-slate-400 uppercase tracking-widest opacity-60">
+        <p className="text-xs font-black text-secondary uppercase tracking-widest opacity-60">
            Selecteer een bot om te handelen
         </p>
       </div>
@@ -31,18 +31,18 @@ export default function GlobalTradePanel({
       <div className="card">
         <div className="card-p">
            <div className="flex items-center gap-4 mb-4 pb-4 border-b border-slate-50">
-              <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-blue-600 shadow-inner">
+              <div className="w-10 h-10 rounded-xl bg-[var(--color-border-subtle)] border border-slate-100 flex items-center justify-center text-blue-600 shadow-inner">
                  <Target size={20} />
               </div>
               <div>
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Handelen met</p>
-                 <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">{activeBot?.name || "Bot"}</h2>
+                 <p className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none mb-1">Handelen met</p>
+                 <h2 className="text-sm font-extrabold text-foreground tracking-tight">{activeBot?.name || "Bot"}</h2>
               </div>
            </div>
            
            <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-slate-500">
-              <span className="bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">{symbol}</span>
-              <span className="bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">{timeframe}</span>
+              <span className="bg-[var(--color-border-subtle)] px-2 py-1 rounded-lg border border-slate-100">{symbol}</span>
+              <span className="bg-[var(--color-border-subtle)] px-2 py-1 rounded-lg border border-slate-100">{timeframe}</span>
            </div>
         </div>
       </div>

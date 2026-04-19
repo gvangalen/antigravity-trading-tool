@@ -87,7 +87,7 @@ export default function ReportCard({
           <div className="flex items-center gap-2.5">
              {icon && <div className="text-slate-400/80">{icon}</div>}
              {title && (
-               <h2 className="text-[11px] font-bold text-slate-500 tracking-tight">
+               <h2 className="text-[11px] font-bold text-muted tracking-tight">
                  {title}
                </h2>
              )}
@@ -105,7 +105,7 @@ export default function ReportCard({
       >
         {isDataMode ? (
           pre ? (
-            <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-dim bg-[var(--color-border-subtle)] p-4 rounded-xl border border-slate-100">
               {formatContent(content)}
             </pre>
           ) : (

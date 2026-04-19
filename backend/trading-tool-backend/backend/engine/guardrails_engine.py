@@ -64,7 +64,8 @@ def apply_guardrails(
     max_trade_risk_eur: Optional[float] = None,
     daily_allocation_eur: Optional[float] = None,
     max_asset_exposure_pct: Optional[float] = None,
-    total_budget_eur: Optional[float] = None,  # 🔥 NIEUW
+    total_budget_eur: Optional[float] = None,
+    backtest_mode: bool = False,
 ) -> Dict[str, Any]:
 
     original_amount = max(_safe_float(proposed_amount_eur, 0.0), 0.0)
@@ -137,7 +138,7 @@ def apply_guardrails(
     # 🔥 2. TOTAL BUDGET (NIEUW - HARD LIMIT)
     # -----------------------------------------------------
     
-    if total_budget and total_budget > 0:
+    if not backtest_mode and total_budget and total_budget > 0:
     
         remaining_budget = max(total_budget - portfolio_value, 0.0)
     

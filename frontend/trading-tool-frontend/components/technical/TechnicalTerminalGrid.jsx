@@ -1,8 +1,7 @@
-"use client";
-
 import { Info, Activity, AlertTriangle, RefreshCcw, Trash2 } from "lucide-react";
 import dayjs from "dayjs";
 import TrendSparkline from "@/components/dashboard/TrendSparkline";
+import SkeletonTable from "@/components/ui/SkeletonTable";
 
 export default function TechnicalTerminalGrid({
   title = null,
@@ -11,7 +10,16 @@ export default function TechnicalTerminalGrid({
   error = null,
   onRetry = null,
   onRemove = null,
+  onViewChart = null,
+  loading = false,
 }) {
+  if (loading) {
+    return (
+      <div className="card card-p">
+        <SkeletonTable rows={5} columns={6} />
+      </div>
+    );
+  }
   const safeData = Array.isArray(data) ? data : [];
 
   const getDayLabel = () => {
@@ -24,8 +32,8 @@ export default function TechnicalTerminalGrid({
     return (
       <div className="card card-p flex flex-col items-center justify-center text-center py-12">
         <AlertTriangle className="w-10 h-10 mb-4 text-red-500" />
-        <h3 className="text-lg font-semibold text-slate-900 mb-2">Geen verbinding</h3>
-        <p className="text-sm text-slate-500 mb-6 max-w-xs">{error}</p>
+        <h3 className="text-lg font-semibold text-foreground mb-2">Geen verbinding</h3>
+        <p className="text-sm text-muted mb-6 max-w-xs">{error}</p>
         {onRetry && (
           <button onClick={onRetry} className="btn-primary flex items-center gap-2">
             <RefreshCcw className="w-4 h-4" /> Herstellen
@@ -40,12 +48,12 @@ export default function TechnicalTerminalGrid({
       {/* 🟢 CARD HEADER */}
       <div className="card-header">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-blue-600">
+          <div className="w-8 h-8 rounded-lg bg-[var(--color-border-subtle)] border border-slate-200 flex items-center justify-center text-blue-600">
              {icon || <Activity size={16} />}
           </div>
           <div>
             <h2 className="text-sm font-semibold text-slate-900">{title || "Overzicht"}</h2>
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{getDayLabel()}</div>
+            <div className="text-[10px] font-bold text-secondary uppercase tracking-widest">{getDayLabel()}</div>
           </div>
         </div>
       </div>
@@ -53,7 +61,7 @@ export default function TechnicalTerminalGrid({
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse table-auto">
           <thead>
-            <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            <tr className="border-b border-slate-100 text-[10px] font-bold text-secondary uppercase tracking-widest">
               <th className="px-6 py-4">Indicator</th>
               <th className="px-6 py-4 text-center">Waarde</th>
               <th className="px-6 py-4 text-center">Trend</th>
@@ -72,7 +80,12 @@ export default function TechnicalTerminalGrid({
               </tr>
             ) : (
               safeData.map((item, idx) => (
-                <TerminalRow key={idx} item={item} onRemove={onRemove} />
+                <TerminalRow 
+                  key={idx} 
+                  item={item} 
+                  onRemove={onRemove} 
+                  onViewChart={onViewChart} 
+                />
               ))
             )}
           </tbody>
@@ -82,7 +95,7 @@ export default function TechnicalTerminalGrid({
   );
 }
 
-function TerminalRow({ item, onRemove }) {
+function TerminalRow({ item, onRemove, onViewChart }) {
   const { name, indicator, value, score, action, interpretation } = item;
   const displayName = name || indicator || "—";
   const scoreNum = Number(score ?? 0);
@@ -117,11 +130,14 @@ function TerminalRow({ item, onRemove }) {
   return (
     <tr className="group hover:bg-slate-50/50 transition-colors">
       <td className="px-6 py-5">
-        <div className="flex items-center gap-3">
-           <div className="w-7 h-7 rounded-md bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-blue-600 transition-colors">
+        <div 
+          className="flex items-center gap-3 cursor-pointer group/item"
+          onClick={() => onViewChart && onViewChart(displayName)}
+        >
+           <div className="w-7 h-7 rounded-md bg-[var(--color-border-subtle)] border border-slate-100 flex items-center justify-center text-secondary group-hover/item:text-blue-600 group-hover/item:bg-blue-50 transition-colors">
               <Info size={12} />
            </div>
-           <div className="font-semibold text-slate-900 text-xs truncate max-w-[140px]" title={displayName}>
+           <div className="font-semibold text-foreground text-xs truncate max-w-[140px] group-hover/item:text-blue-600 transition-colors" title={displayName}>
               {displayName}
            </div>
         </div>
@@ -138,7 +154,7 @@ function TerminalRow({ item, onRemove }) {
       </td>
 
       <td className={`px-6 py-5 text-center font-semibold text-base ${
-        scoreNum >= 75 ? "text-green-600" : scoreNum <= 25 ? "text-red-600" : "text-slate-400"
+        scoreNum >= 75 ? "text-green-600" : scoreNum <= 25 ? "text-red-600" : "text-secondary"
       }`}>
         {score ?? "—"}
       </td>
@@ -150,7 +166,7 @@ function TerminalRow({ item, onRemove }) {
       </td>
 
       <td className="px-6 py-5">
-        <p className="text-[10px] text-slate-500 leading-normal max-w-[240px] font-medium italic">
+        <p className="text-[10px] text-muted leading-normal max-w-[240px] font-medium italic">
           {interpretation || "Analyse in afwachting..."}
         </p>
       </td>

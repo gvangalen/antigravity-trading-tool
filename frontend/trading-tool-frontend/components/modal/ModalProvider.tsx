@@ -8,7 +8,7 @@ import {
   useState,
   ReactNode,
 } from "react";
-
+import { toast } from "react-hot-toast";
 import { X, CheckCircle2, Info, AlertTriangle } from "lucide-react";
 
 /* ===========================================================
@@ -45,7 +45,7 @@ const ModalContext = createContext<ModalContextValue | null>(null);
 export function useModal(): ModalContextValue {
   const ctx = useContext(ModalContext);
   if (!ctx) {
-    throw new Error("❌ useModal moet binnen ModalProvider gebruikt worden");
+    throw new Error("❌ useModal must be used within a ModalProvider");
   }
   return ctx;
 }
@@ -57,13 +57,6 @@ export function useModal(): ModalContextValue {
 export function ModalProvider({ children }: { children: ReactNode }) {
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [busy, setBusy] = useState(false);
-
-  // Snackbar state
-  const [snackbar, setSnackbar] = useState<{
-    msg: string;
-    tone: SnackbarTone;
-    visible: boolean;
-  }>({ msg: "", tone: "success", visible: false });
 
   /* --- CLOSE MODAL --- */
   const close = useCallback(() => {
@@ -78,16 +71,15 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     setModal(config);
   }, []);
 
-  /* --- SNACKBAR --- */
+  /* --- SNACKBAR (UNIFIED WITH TOAST) --- */
   const showSnackbar = useCallback(
     (msg: string, tone: SnackbarTone = "success") => {
-      setSnackbar({ msg, tone, visible: true });
-
-      const timer = setTimeout(() => {
-        setSnackbar((s) => ({ ...s, visible: false }));
-      }, 2500);
-
-      return () => clearTimeout(timer);
+      const options = {
+        id: msg, // Prevent duplicates
+      };
+      if (tone === "success") toast.success(msg, options);
+      else if (tone === "danger") toast.error(msg, options);
+      else toast(msg, options);
     },
     []
   );
@@ -113,13 +105,12 @@ export function ModalProvider({ children }: { children: ReactNode }) {
       {children}
 
       <ModalRoot modal={modal} busy={busy} setBusy={setBusy} onClose={close} />
-      <Snackbar snackbar={snackbar} />
     </ModalContext.Provider>
   );
 }
 
 /* ===========================================================
-   MODAL ROOT — UI (SCROLL SAFE)
+   MODAL ROOT — UI
 =========================================================== */
 
 function ModalRoot({
@@ -136,12 +127,12 @@ function ModalRoot({
   if (!modal) return null;
 
   const {
-    title = "Bevestigen",
+    title = "Confirm",
     description,
     icon,
     tone = "primary",
-    confirmText = "Bevestigen",
-    cancelText = "Annuleren",
+    confirmText = "Confirm",
+    cancelText = "Cancel",
     onConfirm,
   } = modal;
 
@@ -149,25 +140,25 @@ function ModalRoot({
     tone === "danger"
       ? {
           iconBg: "bg-red-100 dark:bg-red-900/40",
-          iconText: "text-red-600",
-          confirm: "bg-red-600 hover:bg-red-700",
+          iconText: "text-red-600 dark:text-red-400",
+          confirm: "bg-red-600 hover:bg-red-700 shadow-red-600/20",
         }
       : tone === "info"
       ? {
           iconBg: "bg-blue-100 dark:bg-blue-900/40",
-          iconText: "text-blue-600",
-          confirm: "bg-blue-600 hover:bg-blue-700",
+          iconText: "text-blue-600 dark:text-blue-400",
+          confirm: "bg-blue-600 hover:bg-blue-700 shadow-blue-600/20",
         }
       : tone === "success"
       ? {
           iconBg: "bg-green-100 dark:bg-green-900/40",
-          iconText: "text-green-600",
-          confirm: "bg-green-600 hover:bg-green-700",
+          iconText: "text-green-600 dark:text-green-400",
+          confirm: "bg-green-600 hover:bg-green-700 shadow-green-600/20",
         }
       : {
-          iconBg: "bg-[var(--primary-soft)]",
-          iconText: "text-[var(--primary)]",
-          confirm: "bg-[var(--primary)] hover:brightness-90",
+          iconBg: "bg-blue-100 dark:bg-blue-900/40",
+          iconText: "text-blue-600 dark:text-blue-400",
+          confirm: "bg-blue-600 hover:bg-blue-700 shadow-blue-600/20",
         };
 
   const handleConfirm = async () => {
@@ -188,40 +179,36 @@ function ModalRoot({
   };
 
   return (
-    <div className="fixed inset-0 z-[210] bg-black/55 backdrop-blur-sm flex items-center justify-center px-4 animate-fade-in">
-      <div className="w-full max-w-md bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl shadow-2xl animate-fade-slide flex flex-col max-h-[85vh] relative">
+    <div className="fixed inset-0 z-[210] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4 animate-fade-in">
+      <div className="w-full max-w-md bg-card dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl shadow-2xl animate-fade-slide flex flex-col max-h-[85vh] relative overflow-hidden transition-colors">
 
-        {/* Close */}
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 p-2 rounded-lg text-gray-500 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-black/10 dark:hover:bg-white/10 transition"
+          className="absolute top-4 right-4 p-2 rounded-xl text-secondary hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all z-10"
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
 
-        {/* HEADER */}
-        <div className="px-6 pt-6 pb-4 border-b flex items-center gap-3">
+        <div className="px-8 pt-8 pb-6 flex items-center gap-4">
           {icon && (
-            <div className={`rounded-full p-2 ${toneClasses.iconBg}`}>
+            <div className={`rounded-2xl p-3 ${toneClasses.iconBg}`}>
               <div className={toneClasses.iconText}>{icon}</div>
             </div>
           )}
-          <h2 className="text-xl font-semibold">{title}</h2>
+          <h2 className="text-2xl font-black text-foreground dark:text-white tracking-tight">{title}</h2>
         </div>
 
-        {/* SCROLLABLE CONTENT */}
         {description && (
-          <div className="flex-1 overflow-y-auto px-6 py-4 text-sm text-gray-700 dark:text-gray-200">
+          <div className="flex-1 overflow-y-auto px-8 py-2 text-[15px] font-medium text-muted dark:text-slate-400 leading-relaxed">
             {description}
           </div>
         )}
 
-        {/* FOOTER (ALTIJD ZICHTBAAR) */}
-        <div className="border-t px-6 py-4 flex justify-end gap-3 bg-[var(--card-bg)] sticky bottom-0">
+        <div className="px-8 py-8 flex justify-end gap-4 mt-4">
           <button
             onClick={onClose}
             disabled={busy}
-            className="px-4 py-2 rounded-xl text-sm border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+            className="px-6 py-3 rounded-xl text-[12px] font-black uppercase tracking-widest border border-slate-200 dark:border-slate-800 bg-card dark:bg-slate-900 text-muted dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
           >
             {cancelText}
           </button>
@@ -229,52 +216,12 @@ function ModalRoot({
           <button
             onClick={handleConfirm}
             disabled={busy}
-            className={`px-4 py-2 rounded-xl text-sm text-white shadow-md ${toneClasses.confirm}`}
+            className={`px-6 py-3 rounded-xl text-[12px] font-black uppercase tracking-widest text-white shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2 ${toneClasses.confirm}`}
           >
-            {busy ? "Bezig…" : confirmText}
+            {busy && <div className="w-4 h-4 border-2 border-white/30 border-t-white animate-spin rounded-full" />}
+            {busy ? "Processing…" : confirmText}
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/* ===========================================================
-   SNACKBAR — UI
-=========================================================== */
-
-function Snackbar({
-  snackbar,
-}: {
-  snackbar: { msg: string; tone: SnackbarTone; visible: boolean };
-}) {
-  if (!snackbar.visible) return null;
-
-  const toneStyles = {
-    success: "bg-green-600",
-    danger: "bg-red-600",
-    info: "bg-blue-600",
-    primary: "bg-[var(--primary)]",
-  };
-
-  const Icon =
-    snackbar.tone === "danger"
-      ? AlertTriangle
-      : snackbar.tone === "info"
-      ? Info
-      : CheckCircle2;
-
-  return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[220] animate-snackbar-fade">
-      <div
-        className={`
-          px-5 py-3 rounded-full shadow-xl backdrop-blur-lg
-          text-white flex items-center gap-2
-          ${toneStyles[snackbar.tone]}
-        `}
-      >
-        <Icon className="w-4 h-4" />
-        <span className="font-medium text-sm">{snackbar.msg}</span>
       </div>
     </div>
   );

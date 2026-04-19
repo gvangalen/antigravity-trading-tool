@@ -238,7 +238,7 @@ export default function SetupList({
                 onClick={() =>
                   openEditModal({ ...setup, favorite: !setup.favorite })
                 }
-                className="absolute top-4 right-4 text-gray-400 hover:text-yellow-500 z-10"
+                className="absolute top-4 right-4 text-secondary hover:text-yellow-500 z-10"
               >
                 {setup.favorite ? (
                   <Star size={18} className="text-yellow-500 fill-yellow-500" />
@@ -253,7 +253,7 @@ export default function SetupList({
                     <div className="bg-[var(--primary-soft)] text-[var(--primary-dark)] px-3 py-1 rounded-lg text-sm font-black tracking-tighter">
                        {setup.symbol}
                     </div>
-                    <div className="bg-slate-100 text-slate-500 px-2 py-1 rounded-lg text-[10px] font-bold">
+                    <div className="bg-[var(--color-border-subtle)] text-muted px-2 py-1 rounded-lg text-[10px] font-bold">
                        {setup.timeframe}
                     </div>
                  </div>
@@ -275,7 +275,7 @@ export default function SetupList({
                         <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[9px] font-black tracking-widest border ${
                           status.active 
                             ? 'bg-green-50 text-green-600 border-green-200' 
-                            : 'bg-slate-50 text-slate-400 border-slate-200'
+                            : 'bg-slate-50 text-secondary border-slate-200'
                         }`}>
                            <Activity size={10} className={status.active ? "animate-pulse" : ""} />
                            {status.label}
@@ -288,7 +288,7 @@ export default function SetupList({
                            ) : (
                               <div className="flex flex-col gap-0.5 items-end opacity-60">
                                  {gaps.map((gap, i) => (
-                                    <span key={i} className="text-slate-400">Waiting for {gap}</span>
+                                    <span key={i} className="text-secondary">Waiting for {gap}</span>
                                  ))}
                               </div>
                            )}
@@ -308,7 +308,7 @@ export default function SetupList({
               </div>
 
               {/* SCORE RANGES */}
-              <div className="space-y-3 bg-white p-5 rounded-2xl border-2 border-slate-50">
+              <div className="space-y-3 bg-card p-5 rounded-2xl border-2 border-slate-50">
                 <div>
                   <strong>Macro:</strong>{" "}
                   {setup.min_macro_score}–{setup.max_macro_score}
@@ -344,7 +344,7 @@ export default function SetupList({
               </div>
 
               {/* UITLEG */}
-              <div className="mt-4 text-xs font-medium text-slate-600 leading-relaxed bg-slate-50/50 p-5 rounded-2xl border-2 border-slate-50">
+              <div className="mt-4 text-xs font-medium text-dim leading-relaxed bg-slate-50/50 p-5 rounded-2xl border-2 border-slate-50">
                 {setup.explanation || "Geen uitleg beschikbaar."}
               </div>
 
@@ -364,10 +364,10 @@ export default function SetupList({
 
               {/* ⛓️ LINEAGE VIEW */}
               <div className="mt-6 pt-4 border-t border-slate-100 italic">
-                 <div className="flex items-center justify-between gap-1 text-[9px] uppercase font-black text-slate-400 tracking-tighter">
+                 <div className="flex items-center justify-between gap-1 text-[9px] uppercase font-black text-secondary tracking-tighter">
                     <div className="flex flex-col items-center gap-1 flex-1">
                        <span className="text-[var(--primary)]">Setup</span>
-                       <span className="text-slate-600 truncate max-w-[60px]">{setup.symbol}</span>
+                       <span className="text-dim truncate max-w-[60px]">{setup.symbol}</span>
                     </div>
                     <ChevronRight size={12} className="opacity-30 mt-3" />
                     <div className="flex flex-col items-center gap-1 flex-1">

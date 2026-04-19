@@ -163,21 +163,25 @@ class MarketDataService:
     # =========================================================
     # 7D Data Fill & Fetch
     # =========================================================
-    async def fill_btc_7day_data(self, fallback_endpoints: dict) -> dict:
-        logger.info("📥 Handmatig ophalen BTC 7d market data gestart")
+    async def fill_btc_7day_data(self, fallback_endpoints: dict, overwrite: bool = False) -> dict:
+        logger.info(f"📥 Handmatig ophalen BTC 7d market data gestart (overwrite={overwrite})")
         coingecko_id = "bitcoin"
-        url_ohlc = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/ohlc?vs_currency=usd&days=7"
+        url_ohlc = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/ohlc?vs_currency=usd&days=180"
         url_volume = fallback_endpoints.get(
             "btc_volume",
-            f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/market_chart?vs_currency=usd&days=7"
+            f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/market_chart?vs_currency=usd&days=180"
         )
         
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             res_ohlc = await client.get(url_ohlc)
             res_vol = await client.get(url_volume)
 
             ohlc_data = res_ohlc.json()
             volume_data = res_vol.json().get("total_volumes", [])
+            
+        if not isinstance(ohlc_data, list):
+            logger.error(f"❌ Ongeldige OHLC data van CoinGecko: {ohlc_data}")
+            return {"error": "Ongeldige data bron"}
 
         volume_by_date = {
             datetime.utcfromtimestamp(ts / 1000).date(): vol
@@ -185,14 +189,15 @@ class MarketDataService:
         }
 
         inserted = 0
+        updated = 0
         for entry in ohlc_data:
             ts, open_p, high_p, low_p, close_p = entry
             d = datetime.utcfromtimestamp(ts / 1000).date()
             change = round((close_p - open_p) / open_p * 100, 2)
             volume = volume_by_date.get(d)
 
-            exists = await self.repository.check_7d_data_exists("BTC", d)
-            if not exists:
+            existing = await self.repository.get_7d_record("BTC", d)
+            if not existing:
                 new_7d = MarketData7D(
                     symbol="BTC",
                     date=d,
@@ -206,9 +211,23 @@ class MarketDataService:
                 )
                 await self.repository.add_market_data_7d(new_7d)
                 inserted += 1
+            elif overwrite:
+                # Update bestaand record
+                existing.open = open_p
+                existing.high = high_p
+                existing.low = low_p
+                existing.close = close_p
+                existing.change = change
+                existing.volume = volume or existing.volume
+                existing.created_at = datetime.utcnow() # Markeer als bijgewerkt
+                updated += 1
 
         await self.session.commit()
-        return {"status": f"✅ Gegevens opgeslagen voor {inserted} dagen."}
+        return {
+            "status": "✅ Sync voltooid", 
+            "inserted": inserted, 
+            "updated": updated
+        }
 
     async def get_market_data_7d(self) -> List[MarketData7DResponse]:
         records = await self.repository.get_market_data_7d("BTC")

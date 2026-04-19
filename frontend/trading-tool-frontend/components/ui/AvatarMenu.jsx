@@ -1,16 +1,16 @@
-
 "use client";
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useModal } from "@/components/modal/ModalProvider";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
-import { User, Globe, Brain, LineChart, LogOut, Loader2 } from "lucide-react";
+import { User, Brain, LogOut, Loader2, Moon, Sun, Languages } from "lucide-react";
 
 export default function AvatarMenu() {
+  const { t, locale, setLocale } = useTranslation();
   const [showDropdown, setShowDropdown] = useState(false);
   const [loadingLogout, setLoadingLogout] = useState(false);
   const dropdownRef = useRef(null);
@@ -18,8 +18,43 @@ export default function AvatarMenu() {
   const router = useRouter();
   const { logout, user } = useAuth();
   const { showSnackbar } = useModal();
+  
+  const [isDark, setIsDark] = useState(false);
 
-  /* Klik buiten = sluiten */
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
+      document.documentElement.classList.add('dark');
+      setIsDark(true);
+    }
+  }, []);
+
+  function toggleTheme() {
+    const newTheme = isDark ? 'light' : 'dark';
+    localStorage.setItem('theme', newTheme);
+
+    if (newTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    setIsDark(!isDark);
+    
+    const msg = locale === 'nl' 
+      ? `Thema gewijzigd naar ${newTheme === 'dark' ? 'Donker' : 'Licht'}` 
+      : `Theme changed to ${newTheme === 'dark' ? 'Dark' : 'Light'}`;
+    showSnackbar(msg, "success");
+  }
+
+  function toggleLanguage() {
+    const newLocale = locale === 'en' ? 'nl' : 'en';
+    setLocale(newLocale);
+    showSnackbar(newLocale === 'nl' ? "Taal gewijzigd naar Nederlands" : "Language changed to English", "success");
+  }
+
+  /* Close on click outside */
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -31,21 +66,22 @@ export default function AvatarMenu() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  /* LOGOUT MET LOADER */
+  /* LOGOUT WITH LOADER */
   const handleLogout = async () => {
     setLoadingLogout(true);
     setShowDropdown(false);
 
     await logout();
 
-    showSnackbar("Je bent veilig uitgelogd ✔", "success");
+    showSnackbar(locale === 'nl' ? "Je bent veilig uitgelogd ✔" : "You have been safely logged out ✔", "success");
 
-    router.push("/login");
+    // 🔥 HARD RESET: Forceerde herlaad naar de landing page
+    window.location.href = "/";
   };
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* AVATAR KNOP */}
+      {/* AVATAR BUTTON */}
       <button
         onClick={() => setShowDropdown(!showDropdown)}
         className="
@@ -59,7 +95,7 @@ export default function AvatarMenu() {
           shadow-lg shadow-blue-900/20
           relative overflow-hidden
         "
-        title="Open profielmenu"
+        title={locale === 'nl' ? "Profiel menu openen" : "Open profile menu"}
       >
         {/* Subtle Inner Glow */}
         <div className="absolute inset-x-0 top-0 h-1/2 bg-white/10" />
@@ -76,26 +112,27 @@ export default function AvatarMenu() {
         <div
           className="
             absolute right-0 mt-4 w-64
-            bg-white
-            border-2 border-slate-100
+            bg-card dark:bg-[#0f172a]
+            border-2 border-slate-100 dark:border-slate-800
             rounded-[1.5rem]
             shadow-2xl shadow-blue-900/10
             py-2 z-50 animate-fade-slide
             overflow-hidden
+            transition-colors
           "
         >
-          <ul className="text-sm text-[var(--text-dark)]">
+          <ul className="text-sm text-foreground dark:text-slate-200">
             {/* User info (Industrial Header) */}
             {user && (
-              <li className="px-5 py-4 bg-slate-50 border-b border-slate-100">
-                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Geïdentificeerd als</p>
-                <p className="text-sm font-black text-slate-800 tracking-tight">
+              <li className="px-5 py-4 bg-[var(--color-border-subtle)] dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
+                <p className="text-[10px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-widest mb-1">{locale === 'nl' ? "Geindentificeerd als" : "Identified as"}</p>
+                <p className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">
                   {user.first_name
                     ? `${user.first_name} ${user.last_name || ""}`
                     : user.email}
                 </p>
                 <div className="flex items-center gap-2 mt-2">
-                   <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 text-[9px] font-black uppercase tracking-tighter">
+                   <span className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[9px] font-black uppercase tracking-tighter border border-blue-200 dark:border-blue-800">
                      Level: {user.role || 'PRO'}
                    </span>
                 </div>
@@ -103,26 +140,45 @@ export default function AvatarMenu() {
             )}
 
             <DropdownItem href="/profile" icon={<User size={16} />}>
-              Profiel
+              {locale === 'nl' ? "Profiel" : "Profile"}
             </DropdownItem>
 
-            <DropdownButton icon={<Globe size={16} />}>
-              Taal &amp; Regio
+            {user?.role === 'admin' ? (
+              <DropdownItem href="/admin/ai" icon={<Brain size={16} />}>
+                {locale === 'nl' ? "AI Instellingen" : "AI Settings"}
+              </DropdownItem>
+            ) : (
+              <DropdownButton icon={<Brain size={16} />}>
+                 {locale === 'nl' ? "AI Instellingen" : "AI Settings"}
+              </DropdownButton>
+            )}
+
+            <div className="h-px bg-[var(--color-border-subtle)] dark:bg-slate-800 my-1 mx-4" />
+
+            {/* LANGUAGE TOGGLE */}
+            <DropdownButton 
+              icon={<Languages size={16} />}
+              onClick={toggleLanguage}
+            >
+              <div className="flex flex-col items-start leading-none">
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">{t.common.language}</span>
+                <span className="font-bold">{t.common.switch_to}</span>
+              </div>
             </DropdownButton>
 
-            <DropdownButton icon={<Brain size={16} />}>
-              AI Instellingen
-            </DropdownButton>
-
-            <DropdownButton icon={<LineChart size={16} />}>
-              Tradingstijl
+            {/* THEME TOGGLE (V2 ALIVE STYLE) */}
+            <DropdownButton 
+              icon={isDark ? <Sun size={16} /> : <Moon size={16} />}
+              onClick={toggleTheme}
+            >
+              {isDark ? (locale === 'nl' ? "Lichte Modus" : "Light Mode") : (locale === 'nl' ? "Donkere Modus" : "Dark Mode")}
             </DropdownButton>
 
             {/* LOGOUT */}
             <DropdownButton
               icon={
                 loadingLogout ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
                 ) : (
                   <LogOut size={16} />
                 )
@@ -130,7 +186,7 @@ export default function AvatarMenu() {
               danger
               onClick={loadingLogout ? undefined : handleLogout}
             >
-              {loadingLogout ? "Uitloggen…" : "Uitloggen"}
+              {loadingLogout ? (locale === 'nl' ? "Uitloggen…" : "Signing out…") : (locale === 'nl' ? "Uitloggen" : "Sign Out")}
             </DropdownButton>
           </ul>
         </div>
@@ -147,12 +203,13 @@ function DropdownItem({ href, icon, children }) {
         href={href}
         className="
           flex items-center gap-3 px-4 py-2.5
-          hover:bg-[var(--bg-soft)]
-          rounded-lg transition
+          hover:bg-slate-50 dark:hover:bg-slate-900
+          rounded-lg transition-all
+          mx-2 my-1
         "
       >
-        <span className="text-[var(--text-light)]">{icon}</span>
-        <span>{children}</span>
+        <span className="text-secondary dark:text-slate-500">{icon}</span>
+        <span className="font-semibold text-[13px]">{children}</span>
       </Link>
     </li>
   );
@@ -166,23 +223,24 @@ function DropdownButton({ icon, children, danger = false, onClick }) {
         onClick={onClick}
         className={`
           w-full text-left flex items-center gap-3 px-4 py-2.5
-          rounded-lg transition
-          hover:bg-[var(--bg-soft)]
+          rounded-lg transition-all
+          mx-2 my-1
+          hover:bg-slate-50 dark:hover:bg-slate-900
           ${
             danger
-              ? "text-red-500 hover:text-red-600"
-              : "text-[var(--text-dark)]"
+              ? "text-rose-600 dark:text-rose-400 font-bold"
+              : "text-dim dark:text-slate-300 font-semibold"
           }
         `}
       >
         <span
           className={`${
-            danger ? "text-red-400" : "text-[var(--text-light)]"
+            danger ? "text-rose-500 dark:text-rose-400 outline-rose-500" : "text-secondary dark:text-slate-500"
           }`}
         >
           {icon}
         </span>
-        <span>{children}</span>
+        <span className="text-[13px]">{children}</span>
       </button>
     </li>
   );

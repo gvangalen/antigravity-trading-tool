@@ -3,6 +3,8 @@ from datetime import datetime
 
 from backend.infrastructure.database import Base
 
+from sqlalchemy.dialects.postgresql import JSONB
+
 class User(Base):
     __tablename__ = 'users'
 
@@ -14,6 +16,57 @@ class User(Base):
     first_name = Column(String)
     last_name = Column(String)
     last_login_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # --- Phase 2: AI Quotas & Usage ---
+    ai_plan = Column(String, default="basis") # 'free', 'basis', 'pro'
+    ai_requests_limit_day = Column(Integer, default=25)
+    ai_requests_used_day = Column(Integer, default=0)
+    ai_tokens_used_month = Column(Integer, default=0)
+    ai_usage_current = Column(Numeric, default=0.00) # Estimated cost in EUR
+    ai_monthly_budget = Column(Numeric, default=10.00)
+    last_usage_reset = Column(DateTime)
+
+    ai_preferences = Column(JSONB, default=lambda: {
+        "report_style": "professional",
+        "tone": "balanced",
+        "detail_level": "medium",
+        "coaching_style": "constructive"
+    })
+
+class AiUsageLog(Base):
+    __tablename__ = 'ai_usage_logs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    model = Column(String)
+    prompt_tokens = Column(Integer)
+    completion_tokens = Column(Integer)
+    cost = Column(Numeric(10, 6))
+    purpose = Column(String)
+    symbol = Column(String)
+    status = Column(String) # 'normal', 'short', 'fallback', 'cache'
+    response_time_ms = Column(Integer, default=0)
+    similarity_score = Column(Numeric(5, 4))
+    cache_age_seconds = Column(Integer)
+    rejected_reason = Column(String) # low_similarity, context_mismatch, expired, no_match
+    estimated_cost_if_full = Column(Numeric(10, 6), default=0.0)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+class AiResponseCache(Base):
+    __tablename__ = 'ai_response_cache'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    query_hash = Column(String, unique=True, nullable=False)
+    query_text = Column(String)
+    normalized_query = Column(String)
+    response_json = Column(JSONB)
+    original_cost = Column(Numeric(10, 6), default=0.0)
+    embedding = Column(JSONB) # Store the vector as JSON
+    symbol = Column(String)
+    timeframe = Column(String)
+    category = Column(String)
+    ttl_minutes = Column(Integer, default=60)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class OnboardingStep(Base):

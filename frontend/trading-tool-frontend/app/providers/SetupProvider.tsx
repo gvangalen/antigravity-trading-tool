@@ -7,6 +7,8 @@ type SetupContextType = {
   activeSetup: any;
   setActiveSetup: (setup: any) => void;
   setupLoading: boolean;
+  focusedBotId: number | null;
+  setFocusedBotId: (id: number | null) => void;
 };
 
 const SetupContext = createContext<SetupContextType | null>(null);
@@ -14,6 +16,7 @@ const SetupContext = createContext<SetupContextType | null>(null);
 export function SetupProvider({ children }: { children: React.ReactNode }) {
   const [activeSetup, setActiveSetup] = useState<any>(null);
   const [setupLoading, setSetupLoading] = useState(true);
+  const [focusedBotId, setFocusedBotId] = useState<number | null>(null);
 
   useEffect(() => {
     async function loadActiveSetup() {
@@ -30,7 +33,13 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <SetupContext.Provider value={{ activeSetup, setActiveSetup, setupLoading }}>
+    <SetupContext.Provider value={{ 
+      activeSetup, 
+      setActiveSetup, 
+      setupLoading,
+      focusedBotId,
+      setFocusedBotId
+    }}>
       {children}
     </SetupContext.Provider>
   );

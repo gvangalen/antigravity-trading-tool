@@ -9,31 +9,16 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // 🔷 Koppeling met CSS-variabelen uit globals.css
-        primary: "var(--primary)",
-        primaryLight: "var(--primary-light)",
-        primaryHover: "var(--primary-hover)",
-        primaryDark: "var(--primary-dark)",
+        card: "var(--color-card)",
+        foreground: "var(--color-text)",
+        primary: "var(--color-text-primary)",
+        secondary: "var(--color-text-secondary)",
+        muted: "var(--color-text-muted)",
+        dim: "var(--color-text-dim)",
 
-        background: "var(--bg)",
-        backgroundSoft: "var(--bg-soft)",
-
-        sidebarBg: "var(--primary-light)",
-        sidebarHover: "var(--primary-hover)",
-        sidebarActive: "var(--primary)",
-
-        cardBg: "var(--card-bg)",
-        cardBorder: "var(--card-border)",
-
-        textDark: "var(--text-dark)",
-        textLight: "var(--text-light)",
-
-        border: "var(--border)",
-
-        success: "var(--green)",
-        successLight: "var(--green-light)",
-        danger: "var(--red)",
-        dangerLight: "var(--red-light)",
+        success: "var(--color-success)",
+        danger: "var(--color-weak)",
+        neutral: "var(--color-neutral)",
       },
 
       borderRadius: {

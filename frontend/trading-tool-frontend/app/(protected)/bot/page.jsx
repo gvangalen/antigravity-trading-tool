@@ -30,8 +30,6 @@ function BotPageInner() {
 
   const [statusFilter, setStatusFilter] = useState("all");
   const [generatingBotId, setGeneratingBotId] = useState(null);
-  const [executingBotId, setExecutingBotId] = useState(null);
-  const [placingOrderBotId, setPlacingOrderBotId] = useState(null);
 
   const {
     configs: bots = [],
@@ -47,11 +45,7 @@ function BotPageInner() {
     deleteBot,
 
     generateDecisionForBot,
-    executeBotDecision, 
-    skipBot, 
-
-    saveTradePlanForDecision,
-    createManualOrder,
+    runBacktest,
   } = useBotData();
 
   const { strategies = [], loadStrategies } = useStrategyData();
@@ -128,20 +122,28 @@ function BotPageInner() {
   }, [today, totalPortfolioValueEur]);
 
   const handleGenerateDecision = async (bot) => {
-    try { setGeneratingBotId(bot.id); await generateDecisionForBot({ bot_id: bot.id }); showSnackbar(`Nieuw voorstel voor ${bot.name}`, "success"); }
-    catch { showSnackbar("Fout bij genereren voorstel", "danger"); }
-    finally { setGeneratingBotId(null); }
+    try { 
+      setGeneratingBotId(bot.id); 
+      await generateDecisionForBot({ bot_id: bot.id }); 
+      showSnackbar(`New proposal for ${bot.name}`, "success"); 
+    }
+    catch { 
+      showSnackbar("Error generating proposal", "danger"); 
+    }
+    finally { 
+      setGeneratingBotId(null); 
+    }
   };
 
   const handleAddBot = () => {
     formRef.current = {};
     openConfirm({
-      title: "➕ Nieuwe Bot",
+      title: "➕ New Bot",
       description: <BotForm strategies={strategies} onChange={(v) => (formRef.current = v)} />,
-      confirmText: "Bot aanmaken",
+      confirmText: "Create Bot",
       onConfirm: async () => {
-        if (!formRef.current?.name || !formRef.current?.strategy_id) { showSnackbar("Vul alle velden in", "danger"); return; }
-        await createBot(formRef.current); showSnackbar("Bot toegevoegd", "success");
+        if (!formRef.current?.name || !formRef.current?.strategy_id) { showSnackbar("Please fill in all fields", "danger"); return; }
+        await createBot(formRef.current); showSnackbar("Bot added", "success");
       },
     });
   };
@@ -151,10 +153,10 @@ function BotPageInner() {
     if (type === "general") {
       formRef.current = bot;
       openConfirm({
-        title: "⚙️ Instellingen",
+        title: "⚙️ Settings",
         description: <BotForm strategies={strategies} initialValues={bot} onChange={(v) => (formRef.current = v)} />,
-        confirmText: "Opslaan",
-        onConfirm: async () => { await updateBot(bot.id, formRef.current); showSnackbar("Bot bijgewerkt", "success"); },
+        confirmText: "Save",
+        onConfirm: async () => { await updateBot(bot.id, formRef.current); showSnackbar("Bot updated", "success"); },
       });
       return;
     }
@@ -164,41 +166,43 @@ function BotPageInner() {
       openConfirm({
         title: "💰 Portfolio & Budget",
         description: <BotBudgetForm initialBudget={budgetRef.current} onChange={(v) => (budgetRef.current = v)} />,
-        confirmText: "Opslaan",
-        onConfirm: async () => { await updateBot(bot.id, { budget_total_eur: budgetRef.current.total_eur, budget_daily_limit_eur: budgetRef.current.daily_limit_eur, budget_max_order_eur: budgetRef.current.max_order_eur, max_asset_exposure_pct: budgetRef.current.max_asset_exposure_pct }); showSnackbar("Budget bijgewerkt", "success"); },
+        confirmText: "Save",
+        onConfirm: async () => { await updateBot(bot.id, { budget_total_eur: budgetRef.current.total_eur, budget_daily_limit_eur: budgetRef.current.daily_limit_eur, budget_max_order_eur: budgetRef.current.max_order_eur, max_asset_exposure_pct: budgetRef.current.max_asset_exposure_pct }); showSnackbar("Budget updated", "success"); },
       });
       return;
     }
-    if (type === "pause") { await updateBot(bot.id, { is_active: false }); showSnackbar("Bot gepauzeerd", "info"); return; }
-    if (type === "resume") { await updateBot(bot.id, { is_active: true }); showSnackbar("Bot hervat", "success"); return; }
-    if (type === "delete") { openConfirm({ title: "🗑️ Verwijderen", tone: "danger", confirmText: "Verwijderen", onConfirm: async () => { await deleteBot(bot.id); showSnackbar("Bot verwijderd", "danger"); } }); }
+    if (type === "pause") { await updateBot(bot.id, { is_active: false }); showSnackbar("Bot paused", "info"); return; }
+    if (type === "resume") { await updateBot(bot.id, { is_active: true }); showSnackbar("Bot resumed", "success"); return; }
+    if (type === "delete") { openConfirm({ title: "🗑️ Delete", tone: "danger", confirmText: "Delete", onConfirm: async () => { await deleteBot(bot.id); showSnackbar("Bot deleted", "danger"); } }); }
   };
 
   return (
-    <div className="page-container !max-w-none !px-6">
+    <div className="page-container !max-w-none !px-6 bg-white dark:bg-[#020617] transition-colors min-h-screen">
       
       {/* 🟢 STANDARD PAGE HEADER */}
-      <header className="page-header">
-        <div className="page-label">
+      <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
+        <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Wallet size={12} />
-           Systeem-controle
+           System Control
         </div>
-        <h1 className="page-title">Bots</h1>
-        <p className="page-subtitle">Beheer je geautomatiseerde handelsstrategieën</p>
+        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Bots</h1>
+        <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">
+          Manage your automated trading strategies
+        </p>
       </header>
 
-      <div className="max-w-full grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-10 items-start">
+      <div className="max-w-full grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-10 items-start pb-24">
         
         {/* 🕋 LEFT: MAIN COMMAND CENTER */}
         <div className="space-y-12 min-w-0">
           <div className="space-y-6">
             <BotScores scores={dailyScores} loading={loading?.today} />
             
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title">Portfolio overzicht</div>
+            <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+              <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
+                <div className="card-title text-slate-900 dark:text-white flex items-center gap-3 font-black uppercase tracking-widest text-xs">Portfolio Overview</div>
               </div>
-              <div className="card-p">
+              <div className="card-p p-8">
                 <PortfolioBalanceCard
                   title="RECAP"
                   defaultRange="1W"
@@ -214,18 +218,18 @@ function BotPageInner() {
           <div className="space-y-8">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-6">
-                <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Mijn Bots</h2>
+                <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">My Bots</h2>
 
-                <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-                  <button onClick={() => setStatusFilter("all")} className={`px-4 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${statusFilter === "all" ? "bg-white text-slate-800 shadow-sm" : "text-slate-400"}`}>Alle ({bots.length})</button>
-                  <button onClick={() => setStatusFilter("active")} className={`px-4 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${statusFilter === "active" ? "bg-white text-green-600 shadow-sm" : "text-slate-400"}`}>Actief ({bots.filter(b => b.is_active).length})</button>
-                  <button onClick={() => setStatusFilter("paused")} className={`px-4 py-1 rounded-md text-[11px] font-bold uppercase tracking-widest transition-all ${statusFilter === "paused" ? "bg-white text-amber-600 shadow-sm" : "text-slate-400"}`}>Gepauzeerd ({bots.filter(b => !b.is_active).length})</button>
+                <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 transition-colors">
+                  <button onClick={() => setStatusFilter("all")} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "all" ? "bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-sm" : "text-slate-400 dark:text-slate-500 hover:text-slate-600"}`}>All ({bots.length})</button>
+                  <button onClick={() => setStatusFilter("active")} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "active" ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm" : "text-slate-400 dark:text-slate-500 hover:text-emerald-500"}`}>Active ({bots.filter(b => b.is_active).length})</button>
+                  <button onClick={() => setStatusFilter("paused")} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "paused" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-sm" : "text-slate-400 dark:text-slate-500 hover:text-amber-500"}`}>Paused ({bots.filter(b => !b.is_active).length})</button>
                 </div>
               </div>
 
-              <button onClick={handleAddBot} className="btn-primary flex items-center gap-2">
+              <button onClick={handleAddBot} className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-[12px] uppercase tracking-widest shadow-lg shadow-blue-600/20 transition-all active:scale-95">
                 <Plus size={16} />
-                Nieuwe Bot
+                New Bot
               </button>
             </div>
 
@@ -234,7 +238,7 @@ function BotPageInner() {
                 const isActive = activeBot?.id === bot.id;
                 return (
                   <div key={bot.id} onClick={(e) => { if (e.target.closest("button") || e.target.closest("input")) return; setActiveBot(bot); }} 
-                  className={`relative transition-all duration-300 ${isActive ? "ring-2 ring-blue-600 ring-offset-4 rounded-3xl" : "hover:scale-[1.002]"}`}>
+                  className={`relative transition-all duration-300 ${isActive ? "ring-4 ring-blue-600/20 ring-offset-4 dark:ring-offset-[#020617] rounded-3xl shadow-xl" : "hover:scale-[1.002]"}`}>
                     <BotAgentCard
                       bot={bot}
                       decision={decisionsByBot?.[bot.id]}
@@ -251,7 +255,11 @@ function BotPageInner() {
                       onOpenSettings={handleOpenBotSettings}
                       onSaveTradePlan={() => {}}
                       onPlaceManualOrder={() => {}}
+                      onBacktest={runBacktest}
                     />
+                    {isActive && (
+                      <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-12 bg-blue-600 rounded-full" />
+                    )}
                   </div>
                 );
               })}

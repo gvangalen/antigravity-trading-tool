@@ -27,14 +27,14 @@ export default function ReportTabs({ selected, onChange }) {
             className={`
               relative px-3.5 py-2.5 rounded-xl transition-all duration-300 flex items-center gap-2 group
               ${isSelected 
-                ? "bg-white text-slate-900 shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-slate-200" 
-                : "text-slate-500 hover:text-slate-800 hover:bg-white/50"
+                ? "bg-card text-foreground shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-slate-200" 
+                : "text-muted hover:text-slate-800 hover:bg-white/50"
               }
             `}
           >
             <span className={`
               font-mono text-[10px] font-black w-5 h-5 rounded-md flex items-center justify-center transition-colors
-              ${isSelected ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-500 group-hover:bg-slate-300"}
+              ${isSelected ? "bg-slate-900 text-white" : "bg-slate-200 text-muted group-hover:bg-slate-300"}
             `}>
               {id}
             </span>

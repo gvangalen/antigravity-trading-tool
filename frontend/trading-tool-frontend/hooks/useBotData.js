@@ -17,6 +17,7 @@ import {
   updateBotConfig,
   deleteBotConfig,
   createManualOrder as apiCreateManualOrder,
+  runBotBacktest,
 } from "@/lib/api/botApi";
 
 /**
@@ -54,6 +55,7 @@ export default function useBotData() {
     create: false,
     update: false,
     delete: false,
+    backtest: false,
   });
 
   const [error, setError] = useState(null);
@@ -523,6 +525,30 @@ const skipBot = useCallback(
   [loadToday, loadHistory, loadPortfolios, loadConfigs]
 );  
 
+/* =====================================================
+     🔁 Run Bot Backtest
+  ===================================================== */
+const runBacktest = useCallback(
+  async (bot_id, scenario = "default") => {
+    if (!bot_id) return;
+
+    setLoading((l) => ({ ...l, backtest: true }));
+    setError(null);
+
+    try {
+      const res = await runBotBacktest(bot_id, scenario);
+      return res;
+    } catch (err) {
+      console.error("Backtest failed", err);
+      setError(err.message || "Backtest mislukt");
+      throw err;
+    } finally {
+      setLoading((l) => ({ ...l, backtest: false }));
+    }
+  },
+  []
+);
+
   /* =====================================================
      🔁 INIT LOAD
   ===================================================== */
@@ -569,5 +595,6 @@ const skipBot = useCallback(
     loadTradePlan,
     saveTradePlanForDecision,
     createManualOrder: apiCreateManualOrder,
+    runBacktest,
   };
 }

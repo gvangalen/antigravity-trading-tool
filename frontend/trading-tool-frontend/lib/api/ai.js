@@ -38,3 +38,39 @@ export const fetchAIScore = (symbol = 'BTC') => {
     method: 'GET',
   });
 };
+
+// ========================================
+// 💬 4. AI Assistant Chat
+// ========================================
+export const assistantChat = (query, context = {}) => {
+  return fetchAuth(`/api/assistant/chat`, {
+    method: 'POST',
+    body: JSON.stringify({ query, context }),
+  });
+};
+
+// ========================================
+// ⚙️ 5. AI Assistant Preferences
+// ========================================
+export const getAssistantPreferences = () => {
+  return fetchAuth(`/api/assistant/preferences`, {
+    method: 'GET',
+  });
+};
+
+export const updateAssistantPreferences = (preferences) => {
+  return fetchAuth(`/api/assistant/preferences`, {
+    method: 'PATCH',
+    body: JSON.stringify(preferences),
+  });
+};
+
+// ========================================
+// 💡 6. AI Assistant Insight
+// ========================================
+export const fetchAssistantInsight = (context) => {
+  return fetchAuth(`/api/assistant/insight`, {
+    method: 'POST',
+    body: JSON.stringify(context),
+  });
+};

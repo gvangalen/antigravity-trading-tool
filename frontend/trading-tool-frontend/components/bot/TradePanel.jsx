@@ -312,12 +312,12 @@ export default function TradePanel({
     <div className="trade-panel animate-fade-in p-8 space-y-8">
       <div className="flex justify-between items-end border-b-2 border-slate-100 pb-6">
         <div>
-           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</div>
-           <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">Trade</h2>
+           <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Status</div>
+           <h2 className="text-2xl font-black text-foreground tracking-tighter uppercase leading-none">Trade</h2>
         </div>
 
         <div className="text-right">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Beschikbaar Saldo</div>
+          <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Beschikbaar Saldo</div>
           <div className="flex items-center gap-2 justify-end">
              {side === "buy"
                ? <div className="text-lg font-black text-blue-600 tracking-tighter">{fmt(availableQuote)} <span className="text-[10px] opacity-60 ml-0.5">{quoteSymbol}</span></div>
@@ -351,7 +351,7 @@ export default function TradePanel({
       {/* PRICE SECTION */}
       <div className="trade-surface">
         <div className="flex items-center justify-between mb-2">
-           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Order Prijs</label>
+           <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Order Prijs</label>
            <div className="text-[9px] font-bold text-blue-600/60 uppercase">Live: {fmt(price)}</div>
         </div>
         <input
@@ -368,7 +368,7 @@ export default function TradePanel({
       {/* AMOUNT SECTION */}
       <div className="trade-surface">
         <div className="flex items-center justify-between mb-2">
-           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aantal</label>
+           <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Aantal</label>
            <div className="flex gap-2">
               <button onClick={() => setSizeMode("quote")} className={`text-[9px] font-black uppercase tracking-tighter px-2 py-0.5 rounded ${sizeMode === 'quote' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{quoteSymbol}</button>
               <button onClick={() => setSizeMode("base")} className={`text-[9px] font-black uppercase tracking-tighter px-2 py-0.5 rounded ${sizeMode === 'base' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{baseSymbol}</button>
@@ -411,11 +411,11 @@ export default function TradePanel({
 
         <div className="flex justify-between items-center bg-white/50 p-3 rounded-xl border border-slate-100/50">
            <div className="flex flex-col">
-              <span className="text-[9px] font-black text-slate-400 uppercase">Verwacht</span>
+              <span className="text-[9px] font-black text-secondary uppercase">Verwacht</span>
               <span className="text-xs font-black text-slate-900">{fmt(qtyBase,6)} <span className="opacity-40">{baseSymbol}</span></span>
            </div>
            <div className="text-right">
-              <span className="text-[9px] font-black text-slate-400 uppercase">Max</span>
+              <span className="text-[9px] font-black text-secondary uppercase">Max</span>
               <div className="text-xs font-bold text-slate-600">{fmt(maxQtyBase,6)}</div>
            </div>
         </div>
@@ -432,7 +432,7 @@ export default function TradePanel({
         <div className="flex items-center gap-3">
            <div className="w-1.5 h-10 bg-blue-500 rounded-full" />
            <div>
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Totale Orderwaarde</div>
+              <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Totale Orderwaarde</div>
               <div className="text-2xl font-black text-white tracking-tighter">
                 {orderValueQuote == null ? "—" : `${fmt(orderValueQuote)} ${quoteSymbol}`}
               </div>

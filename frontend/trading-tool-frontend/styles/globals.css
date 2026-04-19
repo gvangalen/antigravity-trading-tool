@@ -22,13 +22,52 @@
   --color-muted: #64748b;
   
   /* Borders - High Definition Contrast */
-  --color-border: #e2e8f0;
+  --color-border: #cbd5e1; /* Slate 300 - Darker for more definition */
   --color-border-subtle: #f1f5f9;
   
   /* Status - Vibrant Pro */
   --color-success: #10b981;
   --color-weak: #ef4444;
   --color-neutral: #64748b;
+
+  /* Premium Backgrounds */
+  --bg-premium-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+  --bg-premium-glass: rgba(255, 255, 255, 0.03);
+
+  /* Legacy Compatibility Aliases (for older components) */
+  --primary: var(--color-primary);
+  --primary-dark: #1e3a8a;
+  --bg-soft: #f8fafc;
+  --card-bg: #ffffff;
+  --card-border: var(--color-border);
+  --text-dark: var(--color-text);
+  --text-light: var(--color-muted);
+  --border: var(--color-border);
+}
+
+.dark {
+  /* Dark Mode Palette - Deep Slate Pro */
+  --color-bg: #020617; /* Slate 950 */
+  --color-card: #0f172a; /* Slate 900 */
+  /* Text Contrast Tiers - BOOSTED FOR READABILITY */
+  --color-text-primary: #f8fafc; /* Slate 50 */
+  --color-text-secondary: #e2e8f0; /* Slate 200 - High Contrast Labels */
+  --color-text-muted: #cbd5e1; /* Slate 300 - Secondary Data */
+  --color-text-dim: #94a3b8; /* Slate 400 - Tertiary */
+  
+  --color-text: var(--color-text-primary);
+  --color-muted: var(--color-text-muted);
+  
+  --color-border: #1e293b; /* Slate 800 */
+  --color-border-subtle: #0f172a;
+  
+  /* Overrides for Legacy Aliases */
+  --bg-soft: #030712;
+  --card-bg: #0f172a;
+  --card-border: #1e293b;
+  --text-dark: var(--color-text-primary);
+  --text-light: var(--color-text-secondary);
+  --border: #1e293b;
 }
 
 @layer components {
@@ -55,7 +94,13 @@
 
   /* Cards (V2 PRO ALIVE STYLE - NO SHADOWS) */
   .card {
-    @apply bg-gradient-to-br from-white to-slate-50 border-2 border-slate-100 rounded-3xl transition-all duration-300;
+    background: var(--color-card);
+    @apply border-2 border-[var(--color-border)] rounded-3xl transition-all duration-300;
+  }
+  
+  .dark .card {
+    background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+    @apply border-[#1e293b];
   }
   
   .card:hover {
@@ -67,7 +112,7 @@
   }
 
   .card-header {
-    @apply px-10 py-6 border-b-2 border-slate-100 flex items-center justify-between;
+    @apply px-10 py-6 border-b-2 border-[var(--color-border-subtle)] flex items-center justify-between;
   }
 
   .card-title {
@@ -107,11 +152,13 @@
 
   /* Shell Components - FLAT HIGH CONTRAST */
   .nav-bar {
-    @apply fixed left-0 top-0 bottom-0 w-64 bg-white border-r-2 border-slate-100 z-50 transition-all;
+    @apply fixed left-0 top-0 bottom-0 w-64 bg-[var(--color-card)] border-r-[3px] border-[var(--color-border)] z-50 transition-all;
+    box-shadow: 10px 0 50px rgba(0,0,0,0.03);
   }
 
   .top-bar {
-    @apply fixed top-0 left-0 md:left-64 right-0 h-16 bg-white border-b-2 border-slate-100 z-40 flex items-center px-10;
+    @apply fixed top-0 left-0 md:left-64 right-0 h-16 bg-[var(--color-card)] border-b-[3px] border-[var(--color-border)] z-40 flex items-center px-10;
+    box-shadow: 0 10px 50px rgba(0,0,0,0.03);
   }
 
   /* Buttons - FLAT PRO */
@@ -130,8 +177,18 @@
   to { opacity: 1; transform: translateX(0); }
 }
 
+@keyframes pulse-soft {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
+
 .animate-fade-in {
   animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 3s ease-in-out infinite;
 }
 
 body {
@@ -143,15 +200,15 @@ body {
 
 /* 📊 Trade Utilities - V2 PRO ALIVE (UPGRADED) */
 .trade-panel {
-  @apply bg-white rounded-3xl border-2 border-slate-100 flex flex-col;
+  @apply bg-[var(--color-card)] rounded-3xl border-2 border-[var(--color-border)] flex flex-col;
 }
 
 .trade-input {
-  @apply w-full bg-slate-50/50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-base font-black text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all shadow-sm;
+  @apply w-full bg-[var(--color-border-subtle)] border-2 border-[var(--color-border)] rounded-2xl px-5 py-4 text-base font-black text-[var(--color-text)] outline-none focus:border-blue-600 focus:bg-[var(--color-card)] transition-all shadow-sm;
 }
 
 .trade-segment {
-  @apply flex bg-slate-100/50 p-1.5 rounded-2xl border-2 border-slate-100 gap-1.5;
+  @apply flex bg-[var(--color-border-subtle)] p-1.5 rounded-2xl border-2 border-[var(--color-border)] gap-1.5;
 }
 
 .trade-segment button {
@@ -167,7 +224,7 @@ body {
 }
 
 .trade-surface {
-  @apply bg-blue-50/20 border-2 border-blue-600/5 rounded-2xl p-5 space-y-4 transition-all hover:bg-blue-50/40;
+  @apply bg-blue-50/20 dark:bg-blue-600/5 border-2 border-blue-600/5 dark:border-blue-600/20 rounded-2xl p-5 space-y-4 transition-all hover:bg-blue-50/40;
 }
 
 .trade-badge-ok {

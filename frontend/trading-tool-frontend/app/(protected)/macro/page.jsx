@@ -16,9 +16,42 @@ import MacroIndicatorScoreView from "@/components/macro/MacroIndicatorScoreView"
 import MacroTerminalHUD from "@/components/macro/MacroTerminalHUD";
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import { useModal } from "@/components/modal/ModalProvider";
+import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 
 // Icons
-import { Globe, Brain, Activity } from "lucide-react";
+import { Globe, Brain, Activity, LineChart } from "lucide-react";
+import TradingViewChart from "@/components/charts/TradingViewChart";
+
+const SYMBOL_MAP = {
+  // Technicals (shared/fallback)
+  "vix": "TVC:VIX",
+  "volatility_index_(vix)": "TVC:VIX",
+  "rsi": "BINANCE:BTCUSDT",
+  "ma_200": "BINANCE:BTCUSDT",
+  "fear_&_greed_index": "GLOBAL:INDEX",
+  "fear_greed_index": "GLOBAL:INDEX",
+  
+  // Macro - Widget-Friendly Symbols (Bypasses "Only on TradingView" restrictions)
+  "gold_price": "CAPITALCOM:GOLD",
+  "us10y": "TVC:US10Y",
+  "us02y": "TVC:US02Y",
+  "sp500": "CAPITALCOM:US500",
+  "oil_price": "CAPITALCOM:UKOUSD",
+  "dxy": "CAPITALCOM:DXY",
+  "inflation_rate": "ECONOMICS:USCPI",
+  "interest_rate": "ECONOMICS:USINTR",
+  
+  // Fallbacks/Legacy
+  "gold": "OANDA:XAUUSD",
+  "s&p_500": "CAPITALCOM:US500",
+  "nasdaq": "CAPITALCOM:US100",
+  "us_dollar_index": "CAPITALCOM:DXY",
+  "oil": "OANDA:UK100GBP",
+  "wti_oil": "CAPITALCOM:USOIL",
+  "cpi": "ECONOMICS:USCPI",
+  "m2_money_supply": "FED:M2SL",
+  "btc_dominance": "CRYPTOCAP:BTC.D"
+};
 
 export default function MacroPage() {
   const [activeTab, setActiveTab] = useState("Dag");
@@ -46,11 +79,11 @@ export default function MacroPage() {
   // ===============================
   // 📈 SCORE DATA
   // ===============================
-  const { macro, loading: loadingScore } = useScoresData();
+  const { macro } = useScoresData();
   const { openConfirm, showSnackbar } = useModal();
 
   // ===============================
-  // 🔥 ONBOARDING TRIGGER (DE ESSENTIËLE FIX)
+  // 🔥 ONBOARDING TRIGGER
   // ===============================
   useEffect(() => {
     if (
@@ -68,57 +101,53 @@ export default function MacroPage() {
   // ===============================
   const safeMacro = {
     score: macro?.score ?? null,
-    trend: macro?.trend ?? "Onbekend",
-    bias: macro?.bias ?? "Neutraal",
-    risk: macro?.risk ?? "Onbekend",
+    trend: macro?.trend ?? "Unknown",
+    bias: macro?.bias ?? "Neutral",
+    risk: macro?.risk ?? "Unknown",
     summary:
       macro?.summary ??
-      "Nog geen macro-inzichten beschikbaar. Voeg indicatoren toe of wacht op de eerste AI-run.",
+      "No macro insights available. Add indicators or wait for the first AI analysis.",
   };
 
   // ===============================
-  // 🎨 SCORE KLEUR
+  // 📈 VIEW CHART
   // ===============================
-  const getScoreColor = (score) => {
-    const n = typeof score === "number" ? score : Number(score);
-    if (isNaN(n)) return "text-[var(--text-light)]";
+  const handleViewChart = (name) => {
+    const normalized = name.toLowerCase().replace(/ /g, "_");
+    const symbol = SYMBOL_MAP[normalized] || "BINANCE:BTCUSDT";
 
-    if (n >= 80) return "score-strong-buy";
-    if (n >= 60) return "score-buy";
-    if (n >= 40) return "score-neutral";
-    if (n >= 20) return "score-sell";
-    return "score-strong-sell";
+    openConfirm({
+      title: `Live Chart: ${name}`,
+      description: (
+        <div className="w-full h-[400px] mt-4">
+          <TradingViewChart symbol={symbol} height={400} />
+        </div>
+      ),
+      confirmText: "Close",
+      icon: <LineChart className="w-5 h-5 text-blue-500" />,
+      tone: "info"
+    });
   };
 
   // ===============================
-  // 📈 ADVIES
-  // ===============================
-  const adviesText =
-    (safeMacro.score ?? 0) >= 75
-      ? "Positief"
-      : (safeMacro.score ?? 0) <= 25
-      ? "Negatief"
-      : "Neutraal";
-
-  // ===============================
-  // 🗑️ DELETE MET MODAL & SNACKBAR
+  // 🗑️ DELETE WITH MODAL & SNACKBAR
   // ===============================
   const handleRemoveMacro = (name) => {
     if (!name) return;
 
     openConfirm({
-      title: "Indicator verwijderen",
-      description: `Weet je zeker dat je '${name}' wilt verwijderen uit je macro analyse?`,
-      confirmText: "Verwijderen",
-      cancelText: "Annuleren",
+      title: "Remove Indicator",
+      description: `Are you sure you want to remove '${name}' from your macro analysis?`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
       tone: "danger",
       onConfirm: async () => {
         try {
           await removeMacroIndicator(name);
-          showSnackbar(`'${name}' succesvol verwijderd`, "success");
+          showSnackbar(`'${name}' successfully removed`, "success");
         } catch (err) {
-          console.error("❌ Verwijderen mislukt:", err);
-          showSnackbar("Fout bij verwijderen", "danger");
+          console.error("❌ Removal failed:", err);
+          showSnackbar("Error removing indicator", "danger");
         }
       },
     });
@@ -128,43 +157,50 @@ export default function MacroPage() {
   // 🧱 RENDER
   // ===============================
   return (
-    <div className="page-container">
-
+    <div className="page-container bg-white dark:bg-[#020617] transition-colors min-h-screen">
+      
       {/* 📡 STANDARD PAGE HEADER */}
-      <header className="page-header">
-        <div className="page-label">
+      <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
+        <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Globe size={12} />
-           Systeem-status
+           System Status
         </div>
-        <h1 className="page-title">Macro Dashboard</h1>
-        <p className="page-subtitle">Analyse van wereldwijde economische trends en marktomstandigheden</p>
+        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Macro Dashboard</h1>
+        <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">
+          Analysis of global economic trends and market conditions
+        </p>
       </header>
 
       <div className="space-y-12">
         {/* 🛰️ MACRO HUD */}
-        <MacroTerminalHUD 
-          score={safeMacro.score} 
-          bias={safeMacro.bias} 
-          trend={safeMacro.trend} 
-          risk={safeMacro.risk} 
-        />
+        <DashboardErrorBoundary>
+          <MacroTerminalHUD 
+            score={safeMacro.score} 
+            bias={safeMacro.bias} 
+            trend={safeMacro.trend} 
+            risk={safeMacro.risk} 
+            loading={loadingIndicators || !macro}
+          />
+        </DashboardErrorBoundary>
       </div>
 
-      {/* 🧠 ANALYSE */}
-      <div className="space-y-4">
+      {/* 🧠 ANALYSIS */}
+      <div className="space-y-4 py-8">
         <div className="flex items-center gap-2 mb-2">
-           <Brain size={14} className="text-slate-400" />
-           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Analyse</span>
+           <Brain size={14} className="text-slate-400 dark:text-slate-500" />
+           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Analysis</span>
         </div>
-        <AgentInsightPanel category="macro" />
+        <DashboardErrorBoundary>
+          <AgentInsightPanel category="macro" />
+        </DashboardErrorBoundary>
       </div>
 
-      <div className="grid grid-cols-1 gap-12 pt-8">
-         {/* 🛠️ MODULE 2: SEARCH & CONFIGURATION */}
+      <div className="grid grid-cols-1 gap-12 pt-8 pb-24">
+         {/* 🛠️ CONFIGURATION */}
          <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
-               <Activity size={14} className="text-slate-400" />
-               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Instellingen</span>
+               <Activity size={14} className="text-slate-400 dark:text-slate-500" />
+               <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Configuration</span>
             </div>
             <MacroIndicatorScoreView
                addMacroIndicator={addMacroIndicator}
@@ -172,23 +208,26 @@ export default function MacroPage() {
             />
          </div>
 
-         {/* 📊 MODULE 3: GRID TERMINAL (TABS) */}
+         {/* 📊 SIGNALS */}
          <div className="space-y-4">
             <div className="flex items-center justify-between mb-2">
                <div className="flex items-center gap-2">
-                  <Activity size={14} className="text-slate-400" />
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Signalen</span>
+                  <Activity size={14} className="text-slate-400 dark:text-slate-500" />
+                  <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Signals</span>
                </div>
-               <div className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Scroll voor andere periodes</div>
+               <div className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest">Scroll for other timeframes</div>
             </div>
-            <MacroTabs
-               activeTab={activeTab}
-               setActiveTab={setActiveTab}
-               macroData={macroData}
-               loading={loadingIndicators}
-               error={error}
-               handleRemove={handleRemoveMacro}
-            />
+            <DashboardErrorBoundary>
+              <MacroTabs
+                 activeTab={activeTab}
+                 setActiveTab={setActiveTab}
+                 macroData={macroData}
+                 loading={loadingIndicators}
+                 error={error}
+                 handleRemove={handleRemoveMacro}
+                 onViewChart={handleViewChart}
+              />
+            </DashboardErrorBoundary>
          </div>
       </div>
 

@@ -220,15 +220,15 @@ export default function PortfolioBalanceCard({
   ===================================================== */
 
   return (
-    <div className="bg-white border border-slate-200 rounded-[2rem] p-8 shadow-sm w-full min-w-0 font-sans">
+    <div className="bg-card border border-[var(--color-border)] rounded-[2rem] p-8 shadow-sm w-full min-w-0 font-sans transition-colors duration-300">
       <div className="flex items-start justify-between gap-6 flex-wrap pb-6 border-b border-slate-100">
 
         <div className="space-y-1">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+          <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">
             Global Equity Performance
           </div>
 
-          <div className="text-4xl font-black tracking-tighter text-slate-800 font-mono">
+          <div className="text-4xl font-black tracking-tighter text-foreground font-mono">
             {formatValue(last)}
           </div>
 
@@ -249,15 +249,15 @@ export default function PortfolioBalanceCard({
 
         {/* 🛠 INSTRUMENT CONTROLS */}
         <div className="flex flex-col gap-3 items-end">
-          <div className="flex gap-1 p-1 bg-slate-100/50 rounded-xl border border-slate-100">
+          <div className="flex gap-1 p-1 bg-[var(--color-border-subtle)] rounded-xl border border-[var(--color-border)]">
             {RANGES.map((r) => (
               <button
                 key={r.key}
                 onClick={() => setRange(r.key)}
                 className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-widest transition-all ${
                   range === r.key 
-                    ? "bg-white text-[var(--primary)] shadow-sm border border-slate-200" 
-                    : "text-slate-400 hover:text-slate-600"
+                    ? "bg-card text-blue-600 shadow-sm border border-[var(--color-border)]" 
+                    : "text-secondary hover:text-foreground"
                 }`}
               >
                 {r.label}
@@ -265,7 +265,7 @@ export default function PortfolioBalanceCard({
             ))}
           </div>
 
-          <div className="flex gap-1 p-1 bg-slate-50 rounded-xl border border-slate-100">
+          <div className="flex gap-1 p-1 bg-[var(--color-border-subtle)] rounded-xl border border-[var(--color-border)]">
             {MODES.map((m) => (
               <button
                 key={m.key}
@@ -273,7 +273,7 @@ export default function PortfolioBalanceCard({
                 className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all ${
                   mode === m.key 
                     ? "bg-[var(--primary)] text-white shadow-md" 
-                    : "text-slate-400 hover:text-slate-600"
+                    : "text-secondary hover:text-slate-600"
                 }`}
               >
                 {m.label}
@@ -286,7 +286,7 @@ export default function PortfolioBalanceCard({
       {/* 🚀 TELEMETRY CHART */}
       <div className="mt-8 h-[260px] w-full min-w-0 relative">
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-[1px] z-10 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] animate-pulse">
+          <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-[1px] z-10 text-[10px] font-black text-secondary uppercase tracking-[0.2em] animate-pulse">
             Syncing Terminal Data...
           </div>
         )}
@@ -321,7 +321,7 @@ export default function PortfolioBalanceCard({
               dataKey="label"
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 9, fontWeight: 900, fill: '#94a3b8' }}
+              tick={{ fontSize: 9, fontWeight: 900, fill: 'var(--color-text-muted)' }}
               interval="preserveStartEnd"
               dy={10}
             />
@@ -331,7 +331,7 @@ export default function PortfolioBalanceCard({
               axisLine={false}
               tickLine={false}
               width={50}
-              tick={{ fontSize: 9, fontWeight: 700, fill: '#94a3b8', fontFamily: 'monospace' }}
+              tick={{ fontSize: 9, fontWeight: 700, fill: 'var(--color-text-muted)', fontFamily: 'monospace' }}
               tickFormatter={(v) => `€${(v/1000).toFixed(0)}k`}
               dx={-5}
             />
@@ -341,9 +341,9 @@ export default function PortfolioBalanceCard({
                 if (active && payload && payload.length) {
                   return (
                     <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl shadow-2xl">
-                      <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Entry Log</div>
+                      <div className="text-[8px] font-black text-muted uppercase tracking-widest mb-1">Entry Log</div>
                       <div className="text-sm font-black text-white font-mono">{formatValue(payload[0].value)}</div>
-                      <div className="text-[9px] font-bold text-slate-400 mt-1">{payload[0].payload.label}</div>
+                      <div className="text-[9px] font-bold text-secondary mt-1">{payload[0].payload.label}</div>
                     </div>
                   );
                 }

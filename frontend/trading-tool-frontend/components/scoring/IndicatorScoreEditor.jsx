@@ -291,20 +291,20 @@ export default function IndicatorScoreEditor({
   ];
 
   return (
-    <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm space-y-10">
+    <div className="bg-card border border-slate-200 rounded-[2.5rem] p-8 shadow-sm space-y-10">
       {/* 🕋 MODULE HEADER */}
       <div className="flex items-start justify-between pb-6 border-b border-slate-100">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400">
+          <div className="w-12 h-12 rounded-2xl bg-[var(--color-border-subtle)] border border-slate-100 flex items-center justify-center text-slate-400">
             <Terminal size={24} />
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Signal Generation Logic</h3>
+              <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Signal Generation Logic</h3>
               <ScoreModeBadge mode={mode} />
             </div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
-              Node_ID: <span className="text-slate-600 font-mono">{normalizedIndicator || "—"}</span>
+            <p className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">
+              Node_ID: <span className="text-dim font-mono">{normalizedIndicator || "—"}</span>
               {meta?.label ? <span className="ml-2">• {meta.label}</span> : null}
               <span className="ml-2">• Telemetry_v2.5</span>
             </p>
@@ -312,10 +312,10 @@ export default function IndicatorScoreEditor({
         </div>
 
         {/* PARAMETER NODE (Weight) */}
-        <div className="flex flex-col items-end gap-1.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+        <div className="flex flex-col items-end gap-1.5 p-3 rounded-2xl bg-[var(--color-border-subtle)] border border-slate-100">
           <div className="flex items-center gap-3">
-             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Weight_Node</div>
-             <div className="text-sm font-black text-slate-800 tabular-nums bg-white px-3 py-0.5 rounded-lg border border-slate-200 shadow-sm">
+             <div className="text-[10px] font-black text-secondary uppercase tracking-widest">Weight_Node</div>
+             <div className="text-sm font-black text-foreground tabular-nums bg-card px-3 py-0.5 rounded-lg border border-slate-200 shadow-sm">
                 0{Number(localWeight).toFixed(1)}
              </div>
           </div>
@@ -329,16 +329,16 @@ export default function IndicatorScoreEditor({
         <div className="space-y-8">
            {/* 🔹 LOGIC MODE: SEGMENTED CONTROL */}
            <div className="space-y-3">
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] pl-1">Engine_Mode_Selector</div>
-              <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-100 w-fit">
+              <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">Engine_Mode_Selector</div>
+              <div className="flex bg-[var(--color-border-subtle)] p-1.5 rounded-2xl border border-slate-100 w-fit">
                 {modes.map((m) => (
                   <button
                     key={m.key}
                     onClick={() => setMode(m.key)}
                     className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
                       mode === m.key
-                        ? "bg-white text-slate-800 shadow-md border border-slate-100"
-                        : "text-slate-400 hover:text-slate-600"
+                        ? "bg-card text-foreground shadow-md border border-slate-100"
+                        : "text-secondary hover:text-slate-600"
                     }`}
                   >
                     {m.label}
@@ -354,7 +354,7 @@ export default function IndicatorScoreEditor({
                    <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center">
                       <Box size={16} />
                    </div>
-                   <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-relaxed">
+                   <p className="text-[10px] font-black text-muted uppercase tracking-widest leading-relaxed">
                       STANDARD_ARRAY: SYSTEM-WIDE TEMPLATE DEPLOYED. CONSISTENT SCORING SCALES.
                    </p>
                 </div>
@@ -385,12 +385,12 @@ export default function IndicatorScoreEditor({
            {isCustom && (
               <div className="space-y-4 pt-4">
                 <div className="flex items-center justify-between">
-                   <div className="text-[10px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                      <Sliders size={14} className="text-slate-400" /> Parameter Tuning
+                   <div className="text-[10px] font-black text-foreground uppercase tracking-widest flex items-center gap-2">
+                      <Sliders size={14} className="text-secondary" /> Parameter Tuning
                    </div>
-                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">W_VAL: 0{Number(localWeight).toFixed(1)}</div>
+                   <div className="text-[10px] font-black text-secondary uppercase tracking-widest">W_VAL: 0{Number(localWeight).toFixed(1)}</div>
                 </div>
-                <div className="p-6 bg-slate-50 border border-slate-100 rounded-[2rem]">
+                <div className="p-6 bg-[var(--color-border-subtle)] border border-slate-100 rounded-[2rem]">
                    <input
                      type="range"
                      min="0"
@@ -423,13 +423,13 @@ export default function IndicatorScoreEditor({
 
         {/* 🔹 LOGIC MANIFEST GRID */}
         <div className="space-y-4">
-           <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] pl-1">Logic_Manifest_Telemetry</div>
+           <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">Logic_Manifest_Telemetry</div>
            <div className="bg-slate-50/50 border border-slate-100 rounded-[2.5rem] overflow-hidden">
              {/* Grid Header */}
-             <div className="grid grid-cols-12 gap-2 px-8 py-4 bg-slate-50 border-b border-slate-100">
-               <div className="col-span-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Input_Range</div>
-               <div className="col-span-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Output_Signal</div>
-               <div className="col-span-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Trend</div>
+             <div className="grid grid-cols-12 gap-2 px-8 py-4 bg-[var(--color-border-subtle)] border-b border-slate-100">
+               <div className="col-span-5 text-[10px] font-black text-secondary uppercase tracking-widest">Input_Range</div>
+               <div className="col-span-4 text-[10px] font-black text-secondary uppercase tracking-widest text-center">Output_Signal</div>
+               <div className="col-span-3 text-[10px] font-black text-secondary uppercase tracking-widest text-right">Trend</div>
              </div>
 
              {/* Grid Content */}
@@ -441,13 +441,13 @@ export default function IndicatorScoreEditor({
                   const signal = (() => {
                      if (shownScore >= 70) return { bg: "bg-green-500", color: "text-green-600" };
                      if (shownScore <= 30) return { bg: "bg-red-500", color: "text-red-600" };
-                     return { bg: "bg-slate-400", color: "text-slate-400" };
+                     return { bg: "bg-slate-400", color: "text-secondary" };
                   })();
 
                   return (
                     <div key={idx} className="grid grid-cols-12 gap-4 items-center group">
                       <div className="col-span-5">
-                         <div className="text-xs font-black text-slate-800 font-mono tracking-tighter opacity-80">
+                         <div className="text-xs font-black text-foreground font-mono tracking-tighter opacity-80">
                             [{String(b.min).padStart(2, '0')}—{String(b.max).padStart(3, '0')}] {meta?.unit || "UNIT"}
                          </div>
                       </div>
@@ -462,15 +462,15 @@ export default function IndicatorScoreEditor({
                                step="5"
                                value={rawScore}
                                onChange={(e) => updateCustomScore(idx, e.target.value)}
-                               className="w-full bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-center text-xs font-black text-slate-800 font-mono focus:ring-2 focus:ring-blue-500 outline-none shadow-sm transition-all"
+                               className="w-full bg-card border border-slate-200 rounded-xl px-2 py-1.5 text-center text-xs font-black text-foreground font-mono focus:ring-2 focus:ring-blue-500 outline-none shadow-sm transition-all"
                              />
-                             <div className="mt-1.5 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                             <div className="mt-1.5 h-1.5 w-full bg-[var(--color-border-subtle)] rounded-full overflow-hidden border border-slate-200">
                                 <div className={`h-full rounded-full transition-all duration-500 ${signal.bg}`} style={{ width: `${shownScore}%` }} />
                              </div>
                           </div>
                         ) : (
                           <div className="space-y-1.5">
-                             <div className="h-4 w-full bg-slate-100 rounded-full p-0.5 border border-slate-200 overflow-hidden">
+                             <div className="h-4 w-full bg-[var(--color-border-subtle)] rounded-full p-0.5 border border-slate-200 overflow-hidden">
                                 <div className={`h-full rounded-full transition-all duration-700 ${signal.bg}`} style={{ width: `${shownScore}%` }} />
                              </div>
                              <div className={`text-[8px] font-black uppercase tracking-widest text-center ${signal.color}`}>
@@ -491,7 +491,7 @@ export default function IndicatorScoreEditor({
              </div>
 
              {!isCustom && (
-               <div className="px-8 py-4 bg-slate-50 border-t border-slate-100 text-[9px] font-black text-slate-300 uppercase tracking-widest text-center italic">
+               <div className="px-8 py-4 bg-[var(--color-border-subtle)] border-t border-slate-100 text-[9px] font-black text-slate-300 uppercase tracking-widest text-center italic">
                   READONLY_MODE — SWITCH_TO_CUSTOM_TO_EDIT
                </div>
              )}

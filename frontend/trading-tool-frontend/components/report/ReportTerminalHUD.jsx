@@ -2,6 +2,7 @@
 
 import { Calendar, FileText, Globe, Zap, Activity, Target, Clock, Info } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { HUDSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
 /**
  * 📄 ReportTerminalHUD (Clean Professional Edition)
@@ -9,8 +10,13 @@ import { useAuth } from "@/components/auth/AuthProvider";
  * - No industrial terminology
  * - Focused on readability and clean whitespace
  */
-export default function ReportTerminalHUD({ report, type = "daily" }) {
+export default function ReportTerminalHUD({ report, type = "daily", loading = false }) {
   const { user } = useAuth();
+
+  if (loading) {
+    return <HUDSkeleton />;
+  }
+
   if (!report) return null;
 
   const {
@@ -30,13 +36,13 @@ export default function ReportTerminalHUD({ report, type = "daily" }) {
   };
 
   const ScoreItem = ({ label, value, icon: Icon, colorClass }) => (
-    <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border border-blue-600/5 shadow-sm min-w-[120px] transition-all hover:scale-105">
+    <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-card border border-blue-600/5 shadow-sm min-w-[120px] transition-all hover:scale-105">
       <div className={`p-1.5 rounded-lg mb-2 ${colorClass} bg-opacity-10 flex items-center justify-center`}>
          <Icon size={14} className={colorClass.replace('bg-', 'text-')} />
       </div>
-      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</div>
+      <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1">{label}</div>
       <div className={`text-2xl font-black tracking-tighter tabular-nums ${
-        value >= 70 ? "text-green-600" : value <= 30 ? "text-red-500" : "text-slate-900"
+        value >= 70 ? "text-green-600" : value <= 30 ? "text-red-500" : "text-foreground"
       }`}>
         {value ?? "—"}
       </div>
@@ -53,13 +59,13 @@ export default function ReportTerminalHUD({ report, type = "daily" }) {
               <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
               Systeem Rapportage
            </div>
-           <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase leading-none">
+           <h1 className="text-4xl font-black text-foreground tracking-tighter uppercase leading-none">
              {labels[type] || "Rapport"} <span className="text-blue-600/20">—</span> 01
            </h1>
            <div className="flex items-center gap-3 mt-4 text-slate-400">
              <Calendar size={14} className="text-blue-600/40" />
              <span className="text-sm font-bold tracking-tight uppercase">
-               Periode: <span className="text-slate-900">{report_date || "—"}</span>
+               Periode: <span className="text-foreground">{report_date || "—"}</span>
              </span>
            </div>
         </div>

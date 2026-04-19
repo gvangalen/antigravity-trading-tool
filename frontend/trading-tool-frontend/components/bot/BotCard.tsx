@@ -5,7 +5,13 @@ import {
   Pencil,
   Trash2,
   Play,
+  Target,
+  Activity,
+  Layers,
+  Settings2,
 } from "lucide-react";
+
+import { useActiveSetup } from "@/app/providers/SetupProvider";
 
 export default function BotCard({
   bot,
@@ -14,10 +20,14 @@ export default function BotCard({
   onEdit,
   onDelete,
   onRun,
+  showActions = true,
 }) {
+  const { focusedBotId, setFocusedBotId } = useActiveSetup();
+  
   if (!bot) return null;
 
   const { id, name, is_active, strategy } = bot;
+  const isFocused = focusedBotId === id;
 
   // 🔧 FIX: backend gebruikt strategy_type
   const getStrategyType = (s) =>
@@ -28,102 +38,154 @@ export default function BotCard({
       data-bot-id={id}
       onClick={() => onSelect?.(id)}
       className={`
-        card-surface cursor-pointer p-4 space-y-4
-        transition
+        card cursor-pointer group relative overflow-hidden
         ${
           isActive
-            ? "ring-2 ring-[var(--primary)]"
-            : "hover:shadow-md"
+            ? "ring-4 ring-blue-600/20 border-blue-600 shadow-xl shadow-blue-600/10"
+            : "hover:border-blue-500/50"
         }
       `}
     >
-      {/* ================= HEADER ================= */}
-      <div className="flex justify-between items-start">
-        <div className="flex items-center gap-2">
-          <BotIcon className="icon icon-primary" />
+      {/* Premium Gradient Background Effect on Hover */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
-          <div>
-            <h3 className="font-semibold leading-tight text-[var(--text-dark)]">
-              {name}
-            </h3>
+      <div className="relative p-6 space-y-6">
+        {/* ================= HEADER ================= */}
+        <div className="flex justify-between items-start">
+          <div className="flex items-center gap-4">
+            <div className={`
+              w-12 h-12 rounded-2xl flex items-center justify-center transition-all
+              ${isActive ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600'}
+            `}>
+              <BotIcon size={24} />
+            </div>
 
-            {strategy ? (
-              <p className="text-xs text-[var(--text-muted)]">
-                {getStrategyType(strategy)} •{" "}
-                {strategy.symbol} • {strategy.timeframe}
-              </p>
-            ) : (
-              <p className="text-xs icon-danger">
-                ⚠️ Geen strategie gekoppeld
-              </p>
+            <div className="space-y-1">
+              <h3 className="text-lg font-black tracking-tight text-slate-900 dark:text-white leading-none">
+                {name}
+              </h3>
+
+              <div className="flex items-center gap-2">
+                <span className={`status ${is_active ? 'status-active' : 'status-neutral'} !py-1 !px-2 !text-[9px]`}>
+                  {is_active ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Actief
+                    </>
+                  ) : "Inactief"}
+                </span>
+                
+                {strategy && (
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {strategy.symbol || "NO SYMBOL"}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ACTION ICONS - Floating on right */}
+          <div className="flex gap-1">
+            <button
+              className={`p-2 rounded-xl transition-all ${isFocused ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:text-blue-600 hover:bg-blue-50'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setFocusedBotId(isFocused ? null : id);
+              }}
+              title={isFocused ? "Unfocus bot" : "Focus on chart"}
+            >
+              <Target size={16} className={isFocused ? "animate-pulse" : ""} />
+            </button>
+
+            {showActions && (
+              <>
+                <button
+                  className="p-2 rounded-xl text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-all"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit?.(id);
+                  }}
+                  title="Bewerken"
+                >
+                  <Pencil size={16} />
+                </button>
+
+                <button
+                  className="p-2 rounded-xl text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-all"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete?.(id);
+                  }}
+                  title="Verwijderen"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </>
             )}
           </div>
         </div>
 
-        {/* ACTION ICONS */}
-        <div className="flex gap-2">
-          <button
-            className="btn-ghost"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit?.(id);
-            }}
-            title="Bewerken"
-          >
-            <Pencil size={16} />
-          </button>
+        {/* ================= STRATEGY INFO ================= */}
+        {strategy ? (
+          <div className="trade-surface !p-4 group/strategy">
+            <div className="flex items-center gap-2 mb-3">
+              <Settings2 size={14} className="text-blue-600" />
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Strategy Config</span>
+            </div>
 
-          <button
-            className="btn-ghost icon-danger"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete?.(id);
-            }}
-            title="Verwijderen"
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
-      </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Name</p>
+                <p className="text-xs font-black text-slate-900 dark:text-slate-200 truncate">{strategy.name}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Type</p>
+                <p className="text-xs font-black text-blue-600">{getStrategyType(strategy)}</p>
+              </div>
+            </div>
 
-      {/* ================= STRATEGY INFO ================= */}
-      {strategy && (
-        <div className="rounded-md bg-[var(--surface-2)] p-3 text-sm space-y-1">
-          <div>
-            <b>Strategie:</b> {strategy.name}
+            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1">
+                   <Activity size={10} className="text-slate-400" />
+                   <span className="text-[10px] font-black text-slate-600 uppercase">{strategy.timeframe || "–"}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                   <Layers size={10} className="text-slate-400" />
+                   <span className="text-[10px] font-black text-slate-600 uppercase">V1</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="text-[var(--text-muted)]">
-            Type: {getStrategyType(strategy)}
+        ) : (
+          <div className="p-4 rounded-2xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-center">
+            <p className="text-xs font-bold text-slate-400">⚠️ Geen strategie gekoppeld</p>
           </div>
+        )}
+
+        {/* ================= FOOTER / ACTION ================= */}
+        <div className="flex items-center justify-between gap-4">
+           {showActions && (
+            <button
+              className={`
+                flex-1 flex items-center justify-center gap-2 py-3 rounded-xl 
+                text-[11px] font-black uppercase tracking-widest transition-all
+                active:scale-[0.98]
+                ${strategy 
+                  ? "bg-slate-900 hover:bg-black text-white shadow-lg hover:shadow-xl translate-y-[-2px] hover:translate-y-[-4px]" 
+                  : "bg-slate-100 text-slate-300 cursor-not-allowed"}
+              `}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRun?.(id);
+              }}
+              disabled={!strategy}
+            >
+              <Play size={14} fill="currentColor" />
+              Start Bot Execution
+            </button>
+          )}
         </div>
-      )}
-
-      {/* ================= STATUS + ACTION ================= */}
-      <div className="flex justify-between items-center pt-2">
-        <span
-          className={`text-xs font-medium ${
-            is_active ? "icon-success" : "text-[var(--text-muted)]"
-          }`}
-        >
-          {is_active ? "Actief" : "Inactief"}
-        </span>
-
-        <button
-          className="btn-primary flex items-center gap-1"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRun?.(id);
-          }}
-          disabled={!strategy}
-          title={
-            strategy
-              ? "Bot uitvoeren"
-              : "Koppel eerst een strategie"
-          }
-        >
-          <Play size={14} />
-          Run
-        </button>
       </div>
     </div>
   );

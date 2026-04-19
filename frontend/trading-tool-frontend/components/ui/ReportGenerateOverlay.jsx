@@ -66,7 +66,7 @@ export default function ReportGenerateOverlay({
     return (
       <div className="fixed inset-0 z-40 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/10 backdrop-blur-sm" />
-        <div className="relative z-50 bg-white rounded-2xl shadow-xl px-10 py-8 text-center">
+        <div className="relative z-50 bg-card rounded-2xl shadow-xl px-10 py-8 text-center">
           <div className="font-semibold text-red-600">
             Rapport genereren mislukt
           </div>
@@ -89,7 +89,7 @@ export default function ReportGenerateOverlay({
       <div className="absolute inset-0 bg-black/10 backdrop-blur-sm" />
 
       {/* card */}
-      <div className="relative z-50 bg-white rounded-2xl shadow-xl px-10 py-8 flex flex-col items-center gap-4">
+      <div className="relative z-50 bg-card rounded-2xl shadow-xl px-10 py-8 flex flex-col items-center gap-4">
 
         {/* progress circle */}
         <div className="relative w-20 h-20">

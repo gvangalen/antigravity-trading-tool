@@ -1,0 +1,70 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "settings": "Settings",
+    "explore": "Explore",
+    "language": "Language",
+    "switch_to": "Nederlands",
+    "search": "Search..."
+  },
+  "greetings": {
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening"
+  },
+  "nav": {
+    "dashboard": "Overview",
+    "market": "Market",
+    "macro": "Macro",
+    "technical": "Technical",
+    "setups": "Setups",
+    "strategies": "Strategies",
+    "bots": "Bots",
+    "reports": "Reports",
+    "onboarding": "Onboarding"
+  },
+  "dashboard": {
+    "title": "Intelligence",
+    "overview": "Overview",
+    "subtitle": "Your AI Trading Coach • Live Market Intelligence",
+    "system_status": "System Status",
+    "market_data": "Market Data",
+    "live_market": "Market",
+    "brain": {
+      "execution": "Execution",
+      "signal": "Signal",
+      "timeframe": "Timeframe",
+      "entry": "Entry",
+      "targets": "Targets",
+      "stop_loss": "Stop Loss",
+      "risk_reward": "Risk/Reward",
+      "risk_level": "Risk Level",
+      "market_health": "Market Health",
+      "setup_strength": "Setup Strength",
+      "ai_confidence": "AI Confidence",
+      "score": "Score",
+      "master_snippet": "Master Snippet",
+      "explore_report": "Explore Full Daily Report",
+      "bot_active": "Bot Active"
+    },
+    "gauges": {
+      "macro": "Macro",
+      "technical": "Technical",
+      "market": "Market",
+      "setup": "Setup"
+    },
+    "tabs": {
+      "technical": "Technical",
+      "macro": "Macro",
+      "market": "Market",
+      "analysis_mode": "Deep Analysis Mode",
+      "source": "Source: Real-Time API",
+      "export": "Export System Log"
+    }
+  }
+}

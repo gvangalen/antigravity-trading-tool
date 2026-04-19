@@ -38,9 +38,9 @@ export default function Drawer({
 
       <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10">
         <div className={`pointer-events-auto w-screen ${width} animate-drawer-slide`}>
-          <div className="flex h-full flex-col overflow-y-scroll bg-white shadow-2xl">
+          <div className="flex h-full flex-col overflow-y-scroll bg-card shadow-2xl">
             {/* Header */}
-            <div className="bg-slate-50 px-6 py-8 border-b border-slate-100">
+            <div className="bg-[var(--color-border-subtle)] px-6 py-8 border-b border-slate-100">
               <div className="flex items-start justify-between">
                 <div>
                    {subtitle && (
@@ -48,13 +48,13 @@ export default function Drawer({
                        {subtitle}
                      </div>
                    )}
-                   <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                   <h2 className="text-2xl font-black text-foreground tracking-tight">
                      {title}
                    </h2>
                 </div>
                 <button
                   type="button"
-                  className="rounded-xl p-2 text-slate-400 hover:text-slate-500 hover:bg-white hover:shadow-sm transition-all"
+                  className="rounded-xl p-2 text-secondary hover:text-slate-500 hover:bg-white hover:shadow-sm transition-all"
                   onClick={onClose}
                 >
                   <X size={20} />

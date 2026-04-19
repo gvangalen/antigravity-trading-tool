@@ -18,7 +18,7 @@ export default function ActiveStrategyReportCard({ report }) {
   if (!strategy) {
     return (
       <ReportCard title="Actieve Strategie" icon={<TrendingUp size={16} />}>
-        <p className="text-sm text-slate-400 italic">
+        <p className="text-sm text-secondary italic">
           Geen actieve strategie voor deze periode.
         </p>
       </ReportCard>
@@ -51,22 +51,22 @@ export default function ActiveStrategyReportCard({ report }) {
       
       {/* HEADER: IDENTITY */}
       <div className="mb-6">
-        <div className="text-[11px] font-bold text-slate-400 tracking-tight mb-1">Strategie</div>
+        <div className="text-[11px] font-bold text-secondary tracking-tight mb-1">Strategie</div>
         <div className="flex items-baseline gap-2">
-           <span className="text-xl font-bold text-slate-900 tracking-tight">{setup_name}</span>
-           <span className="text-xs font-medium text-slate-400 font-mono">· {symbol} · {timeframe}</span>
+           <span className="text-xl font-bold text-foreground tracking-tight">{setup_name}</span>
+           <span className="text-xs font-medium text-secondary font-mono">· {symbol} · {timeframe}</span>
         </div>
       </div>
 
       <div className="space-y-6">
         
         {/* ENTRY & PERFORMANCE */}
-        <div className="p-4 rounded-xl bg-white border border-slate-50 shadow-sm flex justify-between items-center">
+        <div className="p-4 rounded-xl bg-card border border-slate-50 shadow-sm flex justify-between items-center">
             <div className="flex flex-col">
-              <span className="text-[11px] font-bold text-slate-400 tracking-tight leading-none mb-2">
+              <span className="text-[11px] font-bold text-secondary tracking-tight leading-none mb-2">
                 {isDCA ? "Referentieprijs" : "Instapprijs"}
               </span>
-              <span className="text-xl font-bold text-slate-800 font-mono tracking-tight">
+              <span className="text-xl font-bold text-foreground font-mono tracking-tight">
                 ${referencePrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? "—"}
               </span>
             </div>
@@ -87,11 +87,11 @@ export default function ActiveStrategyReportCard({ report }) {
         {/* TARGETS */}
         {targets && (
           <div className="space-y-3">
-             <div className="text-[11px] font-bold text-slate-400 tracking-tight">Targets</div>
+             <div className="text-[11px] font-bold text-secondary tracking-tight">Targets</div>
              <div className="flex flex-wrap gap-2">
                 {targets.split(",").map((t, i) => (
                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-slate-50/50 border border-slate-100 rounded-lg">
-                    <Target size={12} className="text-slate-400" />
+                    <Target size={12} className="text-secondary" />
                     <span className="text-xs font-bold text-slate-700 font-mono">{t.trim()}</span>
                   </div>
                 ))}
@@ -102,10 +102,10 @@ export default function ActiveStrategyReportCard({ report }) {
         {/* RISK MANAGEMENT */}
         <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">
            <div className="flex flex-col">
-              <span className="text-[11px] font-bold text-slate-400 tracking-tight leading-none mb-2">Stop-loss</span>
+              <span className="text-[11px] font-bold text-secondary tracking-tight leading-none mb-2">Stop-loss</span>
               <div className="flex items-center gap-2">
                  <Shield size={14} className="text-red-500" />
-                 <span className="text-[15px] font-bold text-slate-900 font-mono">
+                 <span className="text-[15px] font-bold text-foreground font-mono">
                     ${stop_loss?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? "—"}
                  </span>
               </div>
@@ -113,8 +113,8 @@ export default function ActiveStrategyReportCard({ report }) {
 
            {confidence_score !== null && (
              <div className="flex flex-col items-end">
-                <span className="text-[11px] font-bold text-slate-400 tracking-tight leading-none mb-2">Vertrouwen</span>
-                <span className="text-[15px] font-bold text-slate-900 font-mono">{confidence_score}%</span>
+                <span className="text-[11px] font-bold text-secondary tracking-tight leading-none mb-2">Vertrouwen</span>
+                <span className="text-[15px] font-bold text-foreground font-mono">{confidence_score}%</span>
              </div>
            )}
         </div>

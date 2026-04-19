@@ -102,7 +102,7 @@ export default function UniversalSearchDropdown({
         onKeyDown={handleKeyDown}
         autoComplete="off"
         className="
-          w-full p-2 border rounded bg-white dark:bg-gray-800 dark:text-gray-100
+          w-full p-2 border rounded bg-card dark:bg-gray-800 dark:text-gray-100
           focus:outline-none focus:ring-2 focus:ring-blue-500
         "
       />
@@ -111,7 +111,7 @@ export default function UniversalSearchDropdown({
         <ul
           className="
             absolute left-0 right-0 top-full z-50 max-h-60 overflow-y-auto
-            bg-white dark:bg-gray-800 border rounded shadow animate-fade-slide
+            bg-card dark:bg-gray-800 border rounded shadow animate-fade-slide
           "
         >
           {results.map((item, idx) => (
@@ -126,7 +126,7 @@ export default function UniversalSearchDropdown({
               `}
             >
               <span>{item.display_name}</span>
-              <span className="text-xs text-gray-400 dark:text-gray-500">
+              <span className="text-xs text-secondary dark:text-gray-500">
                 ({item.name})
               </span>
             </li>

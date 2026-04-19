@@ -36,10 +36,11 @@ export async function middleware(req) {
   // =====================================================
   // Public auth pages
   // =====================================================
-  const publicRoutes = ["/login", "/register"];
+  const normalizedPath = path === "/" ? "/" : path.replace(/\/$/, "");
+  const publicRoutes = ["/", "/login", "/register"];
 
-  if (publicRoutes.includes(path)) {
-    if (isDev) console.log("➡️ Public route toegestaan:", path);
+  if (publicRoutes.includes(normalizedPath)) {
+    if (isDev) console.log("➡️ Public route toegestaan:", normalizedPath);
     return NextResponse.next();
   }
 
@@ -47,14 +48,6 @@ export async function middleware(req) {
   // Token check
   // =====================================================
   const token = req.cookies.get("access_token")?.value;
-
-  if (isDev) console.log("🍪 Token aanwezig?", token ? "JA" : "NEE");
-
-  // 🔥 ROOT FIX → voorkomt hydration errors
-  if (path === "/") {
-    url.pathname = token ? "/dashboard" : "/login";
-    return NextResponse.redirect(url);
-  }
 
   if (!token) {
     if (isDev) console.log("❌ GEEN token → redirect naar login");

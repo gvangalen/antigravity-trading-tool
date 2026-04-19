@@ -76,16 +76,16 @@ export default function TechnicalIndicatorScoreView({
     selected?.name;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm">
+    <div className="bg-card border border-slate-200 rounded-[2.5rem] p-8 shadow-sm">
       {/* 🕋 MODULE HEADER */}
       <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400">
+          <div className="w-10 h-10 rounded-xl bg-[var(--color-border-subtle)] border border-slate-100 flex items-center justify-center text-slate-400">
             <Terminal size={20} />
           </div>
           <div>
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logic Engine</div>
-            <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase">System Configuration</h2>
+            <div className="text-[10px] font-black text-secondary uppercase tracking-widest">Logic Engine</div>
+            <h2 className="text-xl font-black text-foreground tracking-tight uppercase">System Configuration</h2>
           </div>
         </div>
         <div className="text-[9px] font-black text-blue-500 bg-blue-50 px-3 py-1 rounded-lg uppercase tracking-widest border border-blue-100">
@@ -96,7 +96,7 @@ export default function TechnicalIndicatorScoreView({
       <div className="space-y-8">
         {/* 🔍 SEARCH NODES */}
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] pl-1">
+          <label className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">
              Alpha_Search_Terminal
           </label>
           <UniversalSearchDropdown
@@ -123,7 +123,7 @@ export default function TechnicalIndicatorScoreView({
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                  <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
-                 <span className="text-sm font-black text-slate-800 uppercase tracking-tight">Editing Node: {displayName}</span>
+                 <span className="text-sm font-black text-foreground uppercase tracking-tight">Editing Node: {displayName}</span>
               </div>
               
               <button

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import StrategyCard from "@/components/strategy/StrategyCard";
 import { fetchBotConfigs } from "@/lib/api/botApi";
+import { StrategySkeleton } from "@/components/dashboard/DashboardSkeleton";
 
 export default function StrategyList({
   strategies = [],
@@ -9,6 +10,7 @@ export default function StrategyList({
   onDelete,
   onUpdate,
   onEdit,
+  loading = false,
 }) {
   const [bots, setBots] = useState([]);
   const [filter, setFilter] = useState("all"); // 'all', 'active', 'inactive'
@@ -24,6 +26,10 @@ export default function StrategyList({
     }
     loadBots();
   }, []);
+
+  if (loading) {
+    return <StrategySkeleton />;
+  }
 
   const filtered = (Array.isArray(strategies) ? strategies : []).filter((s) => {
     if (!s || !s.id) return false;
@@ -65,7 +71,7 @@ export default function StrategyList({
   return (
     <div className="space-y-6">
       {/* 🟢 TABS */}
-      <div className="flex gap-2 p-1 bg-slate-50 border border-slate-100 rounded-xl w-fit">
+      <div className="flex gap-2 p-1 bg-[var(--color-border-subtle)] border border-slate-100 rounded-xl w-fit">
         {[
           { id: "all", label: "Alle" },
           { id: "active", label: "Actief" },
@@ -76,8 +82,8 @@ export default function StrategyList({
             onClick={() => setFilter(f.id)}
             className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
               filter === f.id
-                ? "bg-white text-[var(--primary)] shadow-sm border border-slate-100"
-                : "text-slate-400 hover:text-slate-600"
+                ? "bg-card text-[var(--primary)] shadow-sm border border-slate-100"
+                : "text-secondary hover:text-slate-600"
             }`}
           >
             {f.label}
@@ -86,7 +92,7 @@ export default function StrategyList({
       </div>
 
       {sortedStrategies.length === 0 ? (
-        <div className="text-center text-gray-500 py-12 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
+        <div className="text-center text-muted py-12 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
           <div className="text-2xl mb-2">📭</div>
           <div className="text-sm font-bold uppercase tracking-widest opacity-40">Geen strategieën gevonden</div>
         </div>

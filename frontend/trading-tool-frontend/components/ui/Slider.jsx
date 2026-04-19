@@ -134,7 +134,7 @@ export function TradingSlider({
               className={`absolute w-4 h-4 rounded-full border-2 cursor-pointer
                 ${active
                   ? "bg-green-500 border-green-500"
-                  : "bg-white border-gray-300"
+                  : "bg-card border-gray-300"
                 }`}
               style={{
                 left: `${s}%`,
@@ -150,7 +150,7 @@ export function TradingSlider({
             e.stopPropagation();
             startDrag();
           }}
-          className="absolute w-5 h-5 bg-white border-2 border-green-500 rounded-full shadow cursor-grab active:cursor-grabbing"
+          className="absolute w-5 h-5 bg-card border-2 border-green-500 rounded-full shadow cursor-grab active:cursor-grabbing"
           style={{
             left: `${percent}%`,
             transform: "translate(-50%, -7px)",

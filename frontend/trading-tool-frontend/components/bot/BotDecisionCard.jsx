@@ -168,13 +168,13 @@ export default function BotTodayProposal({
   ===================================================== */
 
   const systemHeader = (
-    <div className="flex items-center gap-3 border-b border-slate-100 pb-4 mb-4">
-      <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+    <div className="flex items-center gap-3 border-b border-[var(--color-border)] pb-4 mb-4">
+      <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-600/10 text-indigo-600">
         <ShoppingCart size={18} />
       </div>
       <div>
-        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bot Intelligence Pipeline</div>
-        <div className="text-sm font-bold text-slate-800 tracking-tight">Daily Execution Proposal</div>
+        <div className="text-[10px] font-black text-muted uppercase tracking-widest">Bot Intelligence Pipeline</div>
+        <div className="text-sm font-bold text-foreground tracking-tight">Daily Execution Proposal</div>
       </div>
     </div>
   );
@@ -199,7 +199,7 @@ export default function BotTodayProposal({
       {!isAuto && !isFinal && onSkip && (
         <button
           onClick={() => onSkip({ bot_id: botId })}
-          className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all"
+          className="bg-card border border-[var(--color-border)] text-foreground hover:bg-[var(--bg-soft)] px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all"
         >
           <SkipForward size={16} />
           {hasTrade ? "SKIP TRADE" : "SKIP ANALYZE"}
@@ -210,7 +210,7 @@ export default function BotTodayProposal({
         <button
           onClick={onGenerate}
           disabled={isGenerating}
-          className="ml-auto bg-slate-100/80 border border-slate-200 text-slate-500 hover:bg-slate-200/50 px-5 py-2.5 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center gap-2 transition-all disabled:opacity-50"
+          className="ml-auto bg-slate-100/80 border border-slate-200 text-muted hover:bg-slate-200/50 px-5 py-2.5 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center gap-2 transition-all disabled:opacity-50"
         >
           <RotateCcw size={14} />
           {isGenerating ? "RE-ANALYZING..." : "RE-SCAN MARKET"}
@@ -222,13 +222,13 @@ export default function BotTodayProposal({
   const proposalGrid = (
     <div className="grid gap-4 lg:grid-cols-2">
       {/* STRATEGY MATCH INSTRUMENT */}
-      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 space-y-4">
+      <div className="bg-[var(--color-border-subtle)] border border-[var(--color-border)] rounded-2xl p-5 space-y-4 transition-colors">
         <div className="flex justify-between items-start">
           <div>
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Logic Payload</div>
-            <div className="text-sm font-black text-slate-800 tracking-tight">{setupName}</div>
+            <div className="text-[10px] font-black text-muted uppercase tracking-widest mb-1">Logic Payload</div>
+            <div className="text-sm font-black text-foreground tracking-tight">{setupName}</div>
           </div>
-          <div className="text-[10px] font-black text-[var(--primary)] bg-blue-50 px-2 py-1 rounded border border-blue-100 font-mono">
+          <div className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/40 px-2 py-1 rounded border border-blue-100 dark:border-blue-800 font-mono">
             SCORE {score}/100
           </div>
         </div>
@@ -237,38 +237,38 @@ export default function BotTodayProposal({
 
         <div className="grid grid-cols-2 gap-3 pt-2">
           <div className="bg-white/80 p-2 rounded-lg border border-slate-200/50">
-             <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter mb-0.5">Discipline</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-0.5">Discipline</div>
              <div className="text-[11px] font-black text-slate-700 uppercase">{confidence}</div>
           </div>
           <div className="bg-white/80 p-2 rounded-lg border border-slate-200/50">
-             <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter mb-0.5">Telemetry</div>
-             <div className="text-[11px] font-black text-slate-500 font-mono">{formattedDecisionTime?.split(',')[1] || "READY"}</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-0.5">Telemetry</div>
+             <div className="text-[11px] font-black text-muted font-mono">{formattedDecisionTime?.split(',')[1] || "READY"}</div>
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-white/50 border border-slate-200/50 italic text-[11px] text-slate-500 leading-relaxed font-medium">
+        <div className="p-3 rounded-xl bg-card/50 border border-[var(--color-border)] italic text-[11px] text-muted leading-relaxed font-medium">
           "{summary}"
         </div>
       </div>
 
       {/* POSITION SIZING INSTRUMENT */}
-      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+      <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
         <div>
-           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Exposure Module</div>
-           <div className="text-sm font-black text-slate-800 tracking-tight">{executionLabel}</div>
+           <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Exposure Module</div>
+           <div className="text-sm font-black text-foreground tracking-tight">{executionLabel}</div>
         </div>
 
         <div className="space-y-2.5">
            <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-slate-200/40">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Market Sizing</span>
+              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">Market Sizing</span>
               <span className="text-xs font-black text-slate-700 font-mono">{safeMarketMultiplier.toFixed(2)}x</span>
            </div>
            <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-slate-200/40">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Logic Sizing</span>
+              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">Logic Sizing</span>
               <span className="text-xs font-black text-[var(--primary)] font-mono">{safeStrategyMultiplier.toFixed(2)}x</span>
            </div>
            <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-slate-200/40">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Variance Status</span>
+              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">Variance Status</span>
               <span className={`text-[10px] font-black uppercase ${deviationColor}`}>{deviationLabel} ({deviation >= 0 ? "+" : ""}{deviation.toFixed(2)})</span>
            </div>
         </div>
@@ -291,9 +291,9 @@ export default function BotTodayProposal({
     return (
       <div className="py-4">
         {systemHeader}
-        <div className="rounded-[1.5rem] border border-slate-100 bg-white p-6 shadow-sm">
-           <div className="flex items-center gap-2 text-slate-400 mb-6">
-              <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+        <div className="rounded-[1.5rem] border border-[var(--color-border)] bg-card p-6 shadow-sm transition-colors duration-300">
+           <div className="flex items-center gap-2 text-muted mb-6">
+              <div className="w-1.5 h-1.5 rounded-full bg-muted/30" />
               <div className="text-xs font-black uppercase tracking-widest">No Active Entry Conditions Found</div>
            </div>
            {proposalGrid}
@@ -306,11 +306,11 @@ export default function BotTodayProposal({
   return (
     <div className="py-4">
       {systemHeader}
-      <div className="rounded-[1.5rem] border border-[var(--primary-soft)] bg-white p-6 shadow-sm ring-1 ring-[var(--primary-soft)]">
+      <div className="rounded-[1.5rem] border border-blue-600/20 dark:border-blue-600/40 bg-card p-6 shadow-sm ring-1 ring-blue-600/10 dark:ring-blue-600/20 transition-colors duration-300">
          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_var(--primary-soft)]" />
-               <div className="text-2xl font-black text-slate-800 tracking-tighter uppercase">
+               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+               <div className="text-2xl font-black text-foreground tracking-tighter uppercase">
                   {(order?.side ?? decision.action ?? "buy")} {order?.symbol ?? decision.symbol ?? "—"}
                </div>
             </div>

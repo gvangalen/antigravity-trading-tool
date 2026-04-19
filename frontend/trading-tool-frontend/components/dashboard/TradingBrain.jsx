@@ -11,28 +11,32 @@ import {
   Rocket, 
   Target, 
   ShieldAlert, 
-  Bot, 
   BrainCircuit, 
   Zap, 
   ChevronRight
 } from "lucide-react";
+import { BrainSkeleton, TextSkeleton } from "./DashboardSkeleton";
+
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 /**
  * 🧠 TradingBrain — Unified Decision Panel (V2.1)
  * Combines Master Score, Active Setup, AI Advice, Bot Status, and Daily Snippet.
  */
 export default function TradingBrain() {
-  const { activeSetup } = useActiveSetup();
+  const { t } = useTranslation();
+  const { activeSetup, loading: setupLoading } = useActiveSetup();
   const { master, loading: scoresLoading } = useScoresData();
   const { summary, aiStatus, loading: sidebarLoading } = useSidebarData();
   const { strategy, loading: strategyLoading } = useSetupStrategy(activeSetup?.id);
+
+  const isLoading = setupLoading || scoresLoading || sidebarLoading || strategyLoading;
   
   // 1. DATA PREP
   const ticker = activeSetup?.symbol || "–";
   const timeframe = activeSetup?.timeframe || "–";
   const setupScore = Math.round(activeSetup?.score || 0);
   
-  // 🟢 AI Advice (Execution) - Now from REAL Strategy Layer
   const advice = {
     entry: strategy?.entry || "–",
     targets: Array.isArray(strategy?.targets) ? strategy.targets.join(" / ") : (strategy?.targets || "–"),
@@ -47,65 +51,69 @@ export default function TradingBrain() {
   // Minimal report snippet (1 sentence)
   const reportSnippet = summary?.split('.')[0] + '.';
 
+  if (isLoading && !activeSetup) {
+    return <BrainSkeleton />;
+  }
+
   return (
     <div className="flex flex-col gap-6 sticky top-28 h-fit">
       
       {/* 🚀 PRIMARY: TRADING ADVICE (EXECUTION) */}
       <CardWrapper 
-        title={<div className="flex items-center gap-2"><Rocket className="w-5 h-5 text-[var(--primary)]" /> Execution</div>}
+        title={<div className="flex items-center gap-2 text-foreground dark:text-white"><Rocket className="w-5 h-5 text-blue-600" /> {t.dashboard.brain.execution}</div>}
       >
         <div className="space-y-5">
-          <div className="bg-[var(--bg-soft)] p-4 rounded-xl border border-[var(--primary-soft)] relative overflow-hidden">
+          <div className="bg-[var(--color-border-subtle)] dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 relative overflow-hidden transition-colors">
              <div className="absolute top-0 right-0 p-2 opacity-10">
-                <Zap size={48} className="text-[var(--primary)]" />
+                <Zap size={48} className="text-blue-600" />
              </div>
              
              <div className="flex justify-between items-end mb-4">
                <div>
-                  <p className="text-[10px] uppercase tracking-widest text-[var(--text-light)] font-bold">Signal</p>
-                  <h4 className="text-xl font-bold text-[var(--text-dark)]">{ticker} {advice.trend}</h4>
+                  <p className="text-[10px] uppercase tracking-widest text-secondary dark:text-slate-500 font-bold">{t.dashboard.brain.signal}</p>
+                  <h4 className="text-xl font-black text-foreground dark:text-slate-100">{ticker} {advice.trend}</h4>
                </div>
                <div className="text-right">
-                  <p className="text-[10px] uppercase tracking-widest text-[var(--text-light)] font-bold">Timeframe</p>
-                  <p className="text-sm font-semibold">{timeframe}</p>
+                  <p className="text-[10px] uppercase tracking-widest text-secondary dark:text-slate-500 font-bold">{t.dashboard.brain.timeframe}</p>
+                  <p className="text-sm font-black text-foreground dark:text-slate-100">{timeframe}</p>
                </div>
              </div>
 
              <div className="grid grid-cols-1 gap-3">
-                <div className="flex items-center justify-between bg-white/50 px-3 py-2 rounded-lg border border-white">
+                <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 px-3 py-2 rounded-lg border border-white dark:border-slate-700 transition-colors">
                    <div className="flex items-center gap-2">
-                      <ChevronRight size={14} className="text-[var(--primary)]" />
-                      <span className="text-xs font-semibold text-[var(--text-light)]">ENTRY</span>
+                       <ChevronRight size={14} className="text-blue-600" />
+                       <span className="text-xs font-black text-secondary dark:text-slate-500 uppercase tracking-widest">{t.dashboard.brain.entry}</span>
                    </div>
-                   <span className="text-lg font-mono font-bold text-[var(--primary-dark)]">${advice.entry}</span>
+                   <span className="text-lg font-mono font-black text-blue-700 dark:text-blue-400">${advice.entry}</span>
                 </div>
 
-                <div className="flex items-center justify-between bg-white/50 px-3 py-2 rounded-lg border border-white">
+                <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 px-3 py-2 rounded-lg border border-white dark:border-slate-700 transition-colors">
                    <div className="flex items-center gap-2">
-                      <Target size={14} className="text-green-600" />
-                      <span className="text-xs font-semibold text-[var(--text-light)]">TARGETS</span>
+                       <Target size={14} className="text-emerald-600" />
+                       <span className="text-xs font-black text-secondary dark:text-slate-500 uppercase tracking-widest">{t.dashboard.brain.targets}</span>
                    </div>
-                   <span className="text-sm font-mono font-bold text-green-700">{advice.targets}</span>
+                   <span className="text-sm font-mono font-black text-emerald-700 dark:text-emerald-400">{advice.targets}</span>
                 </div>
 
-                <div className="flex items-center justify-between bg-white/50 px-3 py-2 rounded-lg border border-white">
+                <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 px-3 py-2 rounded-lg border border-white dark:border-slate-700 transition-colors">
                    <div className="flex items-center gap-2">
-                      <ShieldAlert size={14} className="text-red-500" />
-                      <span className="text-xs font-semibold text-[var(--text-light)]">STOP LOSS</span>
+                       <ShieldAlert size={14} className="text-rose-500" />
+                       <span className="text-xs font-black text-secondary dark:text-slate-500 uppercase tracking-widest">{t.dashboard.brain.stop_loss}</span>
                    </div>
-                   <span className="text-sm font-mono font-bold text-red-600">${advice.stopLoss}</span>
+                   <span className="text-sm font-mono font-black text-rose-600 dark:text-rose-400">${advice.stopLoss}</span>
                 </div>
              </div>
 
              {/* 📊 REAL EXECUTION METADATA */}
              <div className="mt-4 flex items-center justify-between px-1">
                 <div className="flex flex-col">
-                   <span className="text-[9px] uppercase font-bold text-[var(--text-light)] opacity-60">Risk/Reward</span>
-                   <span className="text-xs font-black text-[var(--text-dark)]">{advice.riskReward}</span>
+                   <span className="text-[9px] uppercase font-bold text-secondary dark:text-slate-500 opacity-60">{t.dashboard.brain.risk_reward}</span>
+                   <span className="text-xs font-black text-foreground dark:text-slate-100">{advice.riskReward}</span>
                 </div>
                 <div className="text-right flex flex-col">
-                   <span className="text-[9px] uppercase font-bold text-[var(--text-light)] opacity-60">Risk Level</span>
-                   <span className={`text-xs font-black ${advice.riskLevel?.toLowerCase() === 'high' ? 'text-orange-500' : 'text-[var(--primary)]'}`}>
+                   <span className="text-[9px] uppercase font-bold text-secondary dark:text-slate-500 opacity-60">{t.dashboard.brain.risk_level}</span>
+                   <span className={`text-xs font-black ${advice.riskLevel?.toLowerCase() === 'high' ? 'text-orange-500' : 'text-blue-600 dark:text-blue-400'}`}>
                       {advice.riskLevel}
                    </span>
                 </div>
@@ -119,39 +127,43 @@ export default function TradingBrain() {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             {/* Global Market Confidence */}
-            <div className="flex flex-col gap-1 p-3 bg-slate-50 rounded-xl border border-slate-100">
-               <span className="text-[9px] uppercase font-bold text-slate-400 tracking-widest leading-none">Market Health</span>
+            <div className="flex flex-col gap-1 p-3 bg-[var(--color-border-subtle)] dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800">
+               <span className="text-[9px] uppercase font-bold text-secondary dark:text-slate-500 tracking-widest leading-none">{t.dashboard.brain.market_health}</span>
                <div className="flex items-center gap-2 mt-1">
-                  <div className="w-8 h-8 rounded-full border-2 border-[var(--primary)] flex items-center justify-center bg-white shadow-sm">
-                     <span className="text-xs font-black text-[var(--primary-dark)]">{master.score}</span>
+                  <div className="w-8 h-8 rounded-full border-2 border-blue-600 flex items-center justify-center bg-card dark:bg-slate-800 shadow-sm">
+                     <span className="text-xs font-black text-foreground dark:text-slate-100">{master.score}</span>
                   </div>
-                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">AI Confidence</span>
+                  <span className="text-[10px] font-bold text-dim dark:text-slate-400 uppercase tracking-tighter">{t.dashboard.brain.ai_confidence}</span>
                </div>
             </div>
             
             {/* Specific Asset Strength */}
-            <div className="flex flex-col gap-1 p-3 bg-[var(--primary-soft)] rounded-xl border border-[var(--primary-soft)] bg-opacity-30">
-               <span className="text-[9px] uppercase font-bold text-[var(--primary-dark)] opacity-60 tracking-widest leading-none">Setup Strength</span>
+            <div className="flex flex-col gap-1 p-3 bg-blue-50/50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-900/30 transition-colors">
+               <span className="text-[9px] uppercase font-bold text-blue-600 dark:text-blue-400 opacity-60 tracking-widest leading-none">{t.dashboard.brain.setup_strength}</span>
                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-xl font-black text-[var(--primary-dark)]">{setupScore}%</span>
-                  <span className="text-[10px] font-bold text-[var(--primary-dark)] opacity-70 uppercase">Score</span>
+                  <span className="text-xl font-black text-blue-700 dark:text-blue-300">{setupScore}%</span>
+                  <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 opacity-70 uppercase">{t.dashboard.brain.score}</span>
                </div>
             </div>
           </div>
 
-          <div className="border-t border-[var(--card-border)] mt-4 pt-4 px-1">
+          <div className="border-t border-slate-100 dark:border-slate-800 mt-4 pt-4 px-1">
              <div className="flex items-center gap-2 mb-2">
-                <BrainCircuit size={14} className="text-[var(--primary)]" />
-                <span className="text-[10px] uppercase font-black text-slate-400 tracking-widest">Master Snippet</span>
+                <BrainCircuit size={14} className="text-blue-600" />
+                <span className="text-[10px] uppercase font-black text-secondary dark:text-slate-500 tracking-widest">{t.dashboard.brain.master_snippet}</span>
              </div>
-             <p className="text-[11px] leading-relaxed text-slate-700 font-medium italic">
-               "{reportSnippet}"
-             </p>
+             <div className="text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 font-medium italic">
+                {sidebarLoading ? (
+                  <TextSkeleton lines={2} className="mt-1" />
+                ) : (
+                  `"${reportSnippet}"`
+                )}
+             </div>
              <Link 
                href="/report"
-               className="mt-3 text-[10px] uppercase font-black text-[var(--primary)] tracking-widest hover:underline flex items-center gap-1 group"
+               className="mt-3 text-[10px] uppercase font-black text-blue-600 dark:text-blue-400 tracking-widest hover:underline flex items-center gap-1 group"
              >
-               Explore Full Daily Report <ChevronRight size={10} className="group-hover:translate-x-1 transition-transform" />
+               {t.dashboard.brain.explore_report} <ChevronRight size={10} className="group-hover:translate-x-1 transition-transform" />
              </Link>
           </div>
         </div>
@@ -159,12 +171,12 @@ export default function TradingBrain() {
 
       {/* 🤖 BOT STATUS (Conditional) */}
       {isBotActive && (
-        <div className="bg-green-50 border border-green-100 p-3 rounded-xl flex items-center justify-between animate-pulse-subtle">
+        <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 p-3 rounded-xl flex items-center justify-between">
            <div className="flex items-center gap-2">
-              <Bot size={16} className="text-green-600" />
-              <span className="text-xs font-bold text-green-800 uppercase tracking-tight">Bot Active</span>
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              <span className="text-xs font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-tight">{t.dashboard.brain.bot_active}</span>
            </div>
-           <span className="text-[10px] bg-green-200 text-green-800 px-2 py-0.5 rounded-full font-bold">
+           <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">
               {aiStatus.strategy}
            </span>
         </div>

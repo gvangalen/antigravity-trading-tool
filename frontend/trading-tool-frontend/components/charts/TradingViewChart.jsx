@@ -7,22 +7,22 @@ export default function TradingViewChart({
   interval = "D",
   theme = "light",
   height = 500,
+  indicators = [], // New prop for indicator sync
 }) {
   const containerRef = useRef(null);
-  const initializedRef = useRef(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    if (initializedRef.current) return; // 🔒 voorkomt dubbele injectie
-
-    initializedRef.current = true;
+    
+    // Clear previous widget
+    containerRef.current.innerHTML = "";
 
     const script = document.createElement("script");
     script.src =
       "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
     script.async = true;
 
-    script.innerHTML = JSON.stringify({
+    const config = {
       autosize: true,
       symbol,
       interval,
@@ -36,14 +36,16 @@ export default function TradingViewChart({
       save_image: false,
       calendar: false,
       support_host: "https://www.tradingview.com",
-    });
+      studies: indicators, // Inject the indicators
+    };
 
+    script.innerHTML = JSON.stringify(config);
     containerRef.current.appendChild(script);
-  }, []); // ⛔️ bewust GEEN dependencies
+  }, [symbol, interval, indicators, theme]); // Re-run when these change
 
   return (
     <div
-      className="rounded-xl border bg-white overflow-hidden"
+      className="rounded-xl border bg-card overflow-hidden"
       style={{ height }}
     >
       <div ref={containerRef} className="h-full w-full" />

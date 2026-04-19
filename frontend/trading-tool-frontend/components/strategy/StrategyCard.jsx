@@ -127,24 +127,24 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all overflow-hidden">
+    <div className="bg-card border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all overflow-hidden">
       {/* ⛓️ LINEAGE HEADER */}
       <div className="bg-slate-50/80 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
-          <span className="text-slate-500 hover:text-slate-700 cursor-default transition-colors">{strategy.setup_name || "Setup"}</span>
+          <span className="text-muted hover:text-slate-700 cursor-default transition-colors">{strategy.setup_name || "Setup"}</span>
           <ChevronRight size={12} className="opacity-30" />
           <span className="text-[var(--primary)]">{strategyName}</span>
           <ChevronRight size={12} className="opacity-30" />
           <div className="flex items-center gap-1.5 ml-1">
              <div className={`w-2 h-2 rounded-full ${isBotActive ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse" : "bg-slate-300"}`} />
-             <span className={`font-black ${isBotActive ? "text-green-600" : "text-slate-400"}`}>
+             <span className={`font-black ${isBotActive ? "text-green-600" : "text-secondary"}`}>
                 {linkedBot ? (isBotActive ? "Bot Actief" : "Bot Gepauzeerd") : "Geen Bot"}
              </span>
           </div>
 
           <div className="h-3 w-[1px] bg-slate-200 mx-1" />
 
-          <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${is_active ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-400"}`}>
+          <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${is_active ? "bg-blue-100 text-blue-600" : "bg-[var(--color-border-subtle)] text-slate-400"}`}>
              Status: {is_active ? "Live" : "Stand-by"}
           </div>
         </div>
@@ -162,15 +162,15 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
             <div>
               <h3 className="text-lg font-black uppercase tracking-tight text-slate-800">{strategyName}</h3>
               <div className="flex items-center gap-2 mt-1">
-                <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{symbol}</span>
-                <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{timeframe}</span>
+                <span className="bg-[var(--color-border-subtle)] text-muted px-2 py-0.5 rounded text-[10px] font-bold uppercase">{symbol}</span>
+                <span className="bg-[var(--color-border-subtle)] text-muted px-2 py-0.5 rounded text-[10px] font-bold uppercase">{timeframe}</span>
                 <span className="bg-[var(--primary-soft)] text-[var(--primary-dark)] px-2 py-0.5 rounded text-[10px] font-bold uppercase">{strategy_type}</span>
               </div>
             </div>
 
             <div className="text-right flex flex-col justify-center">
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Koers</div>
-              <div className="text-2xl font-black text-slate-800 tracking-tighter leading-none">
+              <div className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none mb-1">Koers</div>
+              <div className="text-2xl font-black text-foreground tracking-tighter leading-none">
                 {currentPrice ? formatCurrency(currentPrice) : <span className="text-slate-300 animate-pulse text-sm">Laden...</span>}
               </div>
               {distToEntry !== null && !isNaN(distToEntry) && (
@@ -183,17 +183,17 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
 
           {!isDCA && (
             <div className="grid grid-cols-3 gap-4 items-stretch">
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col justify-center">
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+              <div className="bg-[var(--color-border-subtle)] p-4 rounded-2xl border border-slate-100 flex flex-col justify-center">
+                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                   <ArrowRight size={12} className="text-blue-500" /> Instap
                 </div>
-                <div className="text-lg font-black text-slate-800 tracking-tight">{formatCurrency(entry)}</div>
+                <div className="text-lg font-black text-foreground tracking-tight">{formatCurrency(entry)}</div>
               </div>
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col justify-center">
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+              <div className="bg-[var(--color-border-subtle)] p-4 rounded-2xl border border-slate-100 flex flex-col justify-center">
+                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                   <Target size={12} className="text-green-500" /> Doelen
                 </div>
-                <div className="text-lg font-black text-slate-800 tracking-tight">{targets.length > 0 ? formatCurrency(targets[0]) : "-"}</div>
+                <div className="text-lg font-black text-foreground tracking-tight">{targets.length > 0 ? formatCurrency(targets[0]) : "-"}</div>
               </div>
               <div className="bg-red-50/50 p-4 rounded-2xl border border-red-100 flex flex-col justify-center">
                 <div className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
@@ -208,7 +208,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
             <div className="bg-slate-800 rounded-2xl p-4 text-white">
                <div className="flex justify-between items-end mb-4">
                   <div>
-                     <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Risico / Rendement</div>
+                     <div className="text-[9px] font-black text-secondary uppercase tracking-widest">Risico / Rendement</div>
                      <div className="text-xl font-black tracking-tighter">1 : {rrStats.rr.toFixed(2)}</div>
                   </div>
                   <div className="text-right">
@@ -231,7 +231,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
                   <Brain size={16} />
                   <span className="text-[10px] font-black uppercase tracking-widest">Toelichting</span>
                </div>
-               <p className="text-xs text-slate-600 leading-relaxed truncate-3-lines">{ai_explanation}</p>
+               <p className="text-xs text-dim leading-relaxed truncate-3-lines">{ai_explanation}</p>
             </div>
           )}
         </div>
@@ -239,7 +239,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
         {/* RIGHT: PRICE LADDER */}
         {!isDCA && (
           <div className="lg:col-span-4 bg-slate-50/50 rounded-2xl border border-slate-100 p-4">
-             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+             <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-4 flex items-center gap-2">
                 <Activity size={12} /> Uitvoering
              </div>
              
@@ -256,7 +256,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
                 <div className="relative py-2">
                    <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-slate-300 border-dashed border-t" />
                    <div className="relative z-10 flex justify-center">
-                      <div className="bg-white border border-slate-300 px-3 py-1 rounded-full shadow-sm flex items-center gap-2">
+                      <div className="bg-card border border-slate-300 px-3 py-1 rounded-full shadow-sm flex items-center gap-2">
                          <div className="w-1.5 h-1.5 bg-[var(--primary)] rounded-full animate-ping" />
                          <span className="text-[10px] font-black text-[var(--primary)]">LIVE {formatCurrency(currentPrice)}</span>
                       </div>
@@ -279,7 +279,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
 
       {/* FOOTER ACTIONS */}
       <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/30 flex justify-between items-center">
-         <button onClick={handleAnalyze} disabled={loading} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-purple-600 transition-colors disabled:opacity-50">
+         <button onClick={handleAnalyze} disabled={loading} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary hover:text-purple-600 transition-colors disabled:opacity-50">
             <Wand2 size={12} />
             {loading ? "Analyseren..." : "Nieuwe Analyse"}
          </button>

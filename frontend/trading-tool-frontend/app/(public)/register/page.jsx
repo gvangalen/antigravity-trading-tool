@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, UserPlus, LogIn, User } from "lucide-react";
+import { Mail, Lock, UserPlus, LogIn, User, ShieldCheck } from "lucide-react";
 
 import { API_BASE_URL } from "@/lib/config";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -11,7 +11,7 @@ import { useModal } from "@/components/modal/ModalProvider";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, loading: authLoading, sessionChecked } = useAuth();
   const { showSnackbar } = useModal();
 
   const [name, setName] = useState(""); 
@@ -22,13 +22,13 @@ export default function RegisterPage() {
   // voorkomt dubbele redirects zoals bij login
   const redirected = useRef(false);
 
-  // 🚀 Als user al ingelogd is → direct naar dashboard
+  // 🚀 Als user al ingelogd is EN de sessie is geverifieerd door backend → direct naar dashboard
   useEffect(() => {
-    if (isAuthenticated && !redirected.current) {
+    if (sessionChecked && isAuthenticated && !redirected.current) {
       redirected.current = true;
       router.replace("/dashboard");
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, sessionChecked, router]);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -79,32 +79,61 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--bg-soft)] px-4">
-      <div className="w-full max-w-md bg-[var(--card-bg)] border border-[var(--card-border)]
-                      rounded-2xl shadow-xl p-8 animate-fade-slide">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--bg-premium-gradient)] px-4">
+      <div className="w-full max-w-md card bg-white/95 backdrop-blur-sm p-10 animate-fade-in">
 
-        <h1 className="text-3xl font-bold text-center mb-2 text-[var(--text-dark)]">
-          Account aanmaken
-        </h1>
-        <p className="text-center text-[var(--text-light)] mb-8">
-          Maak een nieuw TradeLayer-account
-        </p>
+        <div className="text-center mb-10">
+          <div className="flex items-center justify-center gap-4 mb-10 scale-110 group">
+            <div className="relative">
+              <img 
+                src="/tradamind_icon_v2.png" 
+                alt="TM" 
+                className="h-20 w-20 object-contain rounded-2xl transition-all duration-500" 
+              />
+            </div>
+            <div className="flex flex-col items-start justify-center text-left">
+              <div className="text-3xl font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1.5 transition-colors duration-300 group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                Tradamind
+              </div>
+              <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-500 mb-2">
+                <div className="animate-pulse-soft">
+                  <ShieldCheck size={18} strokeWidth={2.5} />
+                </div>
+                <div className="text-[11px] font-black uppercase tracking-[0.3em]">
+                  Professional
+                </div>
+              </div>
+              <div className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] opacity-80 border-t border-slate-100 dark:border-slate-800 pt-2 w-full">
+                Trade Smarter. Follow your plan.<br/>Win consistently.
+              </div>
+            </div>
+          </div>
+          <div className="page-label mb-3">Welkom bij Tradamind</div>
+          <h1 className="text-3xl font-bold text-foreground dark:text-slate-100 tracking-tighter text-center">
+            Je AI Trading Coach
+          </h1>
+          <p className="page-subtitle mx-auto mt-4">
+            Maak je professionele Tradamind-account aan
+          </p>
+        </div>
 
         <form onSubmit={handleRegister} className="space-y-6">
 
           {/* Naam */}
-          <div>
-            <label className="text-sm text-[var(--text-light)] mb-1 block">
-              Naam
+          <div className="space-y-3">
+            <label className="metric-label ml-1">
+              Volledige Naam
             </label>
-            <div className="flex items-center gap-2 bg-[var(--bg-soft)] border border-[var(--border)]
-                            rounded-xl px-3 py-2 focus-within:ring-1 focus-within:ring-[var(--primary)]">
-              <User size={18} className="text-[var(--text-light)]" />
+            <div className="relative group">
+              <User 
+                size={18} 
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors z-10" 
+              />
               <input
                 type="text"
                 required
-                className="bg-transparent outline-none w-full"
-                placeholder="Jouw naam"
+                className="trade-input pr-14"
+                placeholder="Je naam"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -112,16 +141,20 @@ export default function RegisterPage() {
           </div>
 
           {/* E-mail */}
-          <div>
-            <label className="text-sm text-[var(--text-light)] mb-1 block">E-mail</label>
-            <div className="flex items-center gap-2 bg-[var(--bg-soft)] border border-[var(--border)]
-                            rounded-xl px-3 py-2 focus-within:ring-1 focus-within:ring-[var(--primary)]">
-              <Mail size={18} className="text-[var(--text-light)]" />
+          <div className="space-y-3">
+            <label className="metric-label ml-1">
+              E-mail Adres
+            </label>
+            <div className="relative group">
+              <Mail 
+                size={18} 
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors z-10" 
+              />
               <input
                 type="email"
                 required
-                className="bg-transparent outline-none w-full"
-                placeholder="jij@example.com"
+                className="trade-input pr-14"
+                placeholder="naam@voorraad.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -129,16 +162,20 @@ export default function RegisterPage() {
           </div>
 
           {/* Wachtwoord */}
-          <div>
-            <label className="text-sm text-[var(--text-light)] mb-1 block">Wachtwoord</label>
-            <div className="flex items-center gap-2 bg-[var(--bg-soft)] border border-[var(--border)]
-                            rounded-xl px-3 py-2 focus-within:ring-1 focus-within:ring-[var(--primary)]">
-              <Lock size={18} className="text-[var(--text-light)]" />
+          <div className="space-y-3">
+            <label className="metric-label ml-1">
+              Wachtwoord
+            </label>
+            <div className="relative group">
+              <Lock 
+                size={18} 
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors z-10" 
+              />
               <input
                 type="password"
                 required
                 minLength={6}
-                className="bg-transparent outline-none w-full"
+                className="trade-input pr-14"
                 placeholder="•••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -150,24 +187,30 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 bg-[var(--primary)]
-                       hover:bg-[var(--primary-dark)] text-white font-semibold py-3 rounded-xl
-                       shadow-sm hover:shadow-md transition disabled:bg-gray-400"
+            className="btn-primary w-full flex items-center justify-center gap-3 py-5 text-[13px] mt-4"
           >
-            <UserPlus size={18} />
-            {loading ? "Aanmaken…" : "Account aanmaken"}
+            {loading ? (
+              <>Aanmaken...</>
+            ) : (
+              <>
+                <UserPlus size={18} />
+                ACCOUNT AANMAKEN
+              </>
+            )}
           </button>
         </form>
 
-        <p className="text-center text-[var(--text-light)] mt-6">
-          Heb je al een account?{" "}
-          <Link
-            href="/login"
-            className="text-[var(--primary)] font-semibold hover:underline inline-flex items-center gap-1"
-          >
-            <LogIn size={14} /> Log in →
-          </Link>
-        </p>
+        <div className="text-center mt-10 pt-8 border-t-2 border-slate-50">
+          <p className="metric-label text-slate-400 mb-0 lowercase normal-case tracking-normal">
+            Heb je al een account? 
+            <Link
+              href="/login"
+              className="text-blue-600 font-bold hover:underline ml-2 uppercase tracking-widest text-[10px]"
+            >
+              Log in →
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

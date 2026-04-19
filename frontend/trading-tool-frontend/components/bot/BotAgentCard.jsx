@@ -18,6 +18,8 @@ import {
   Layers,
   Rocket,
   Activity,
+  RotateCcw,
+  Zap,
 } from "lucide-react";
 
 export default function BotAgentCard({
@@ -38,8 +40,14 @@ export default function BotAgentCard({
   onOpenSettings,
 
   onSaveTradePlan,
+  onBacktest,
 }) {
   if (!bot) return null;
+
+  const [backtestResult, setBacktestResult] = useState(null);
+  const [backtestLoading, setBacktestLoading] = useState(false);
+  const [scenarios, setScenarios] = useState({});
+  const [scenariosLoading, setScenariosLoading] = useState(false);
 
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -322,6 +330,54 @@ export default function BotAgentCard({
     }
   };
 
+  /* =====================================================
+     🔁 HANDLE BACKTEST
+  ===================================================== */
+  const handleBacktest = async (scenario = "default") => {
+    if (!onBacktest) return;
+    setBacktestLoading(true);
+    setBacktestResult(null);
+
+    try {
+      const res = await onBacktest(bot.id, scenario);
+      setBacktestResult(res);
+    } catch (e) {
+      console.error("Backtest failed", e);
+    } finally {
+      setBacktestLoading(false);
+    }
+  };
+
+  /* =====================================================
+     🚀 HANDLE RUN SCENARIOS (PARALLEL)
+  ===================================================== */
+  const handleRunScenarios = async () => {
+    if (!onBacktest) return;
+    
+    setScenariosLoading(true);
+    setScenarios({});
+
+    try {
+      const types = ["default", "aggressive", "conservative"];
+      const results = await Promise.all(
+        types.map(t => onBacktest(bot.id, t))
+      );
+      
+      const scenarioMap = {};
+      results.forEach((res, i) => {
+        if (res?.ok) {
+          scenarioMap[types[i]] = res;
+        }
+      });
+      
+      setScenarios(scenarioMap);
+    } catch (e) {
+      console.error("Scenario run failed", e);
+    } finally {
+      setScenariosLoading(false);
+    }
+  };
+
   /* ================= PLAN SOURCE ================= */
   const planSource = useMemo(() => {
     return normalizedDecision?.trade_plan || null;
@@ -341,24 +397,24 @@ export default function BotAgentCard({
   /* ================= RENDER ================= */
 
   return (
-    <div className="w-full rounded-[2.5rem] border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col transition-all hover:shadow-2xl">
+    <div className="w-full rounded-[2.5rem] border border-slate-200 bg-card shadow-xl overflow-hidden flex flex-col transition-all hover:shadow-2xl">
       
       {/* 🕋 MODULAR HEADER HUD */}
       <div className="p-8 pb-4 space-y-6">
         <div className="flex items-start justify-between gap-6">
           <div className="flex items-center gap-5">
-            <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 text-[var(--primary)] flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform">
+            <div className="w-14 h-14 rounded-2xl bg-[var(--color-border-subtle)] border border-slate-100 text-[var(--primary)] flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform">
                <Bot size={28} className="opacity-80" />
             </div>
 
             <div className="space-y-1">
               <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-black text-slate-800 tracking-tight">{bot?.name}</h2>
+                <h2 className="text-2xl font-black text-foreground tracking-tight">{bot?.name}</h2>
                 <div className={`w-2.5 h-2.5 rounded-full ${botState === 'live' ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)] animate-pulse' : botState === 'waiting' ? 'bg-yellow-400' : 'bg-slate-300'}`} />
               </div>
               
               <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
-                <span className="text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">{symbol}</span>
+                <span className="text-dim bg-[var(--color-border-subtle)] px-2 py-0.5 rounded-md">{symbol}</span>
                 <div className="w-1 h-1 rounded-full bg-slate-300" />
                 <span>{timeframe}</span>
                 {bot?.strategy && (
@@ -371,23 +427,52 @@ export default function BotAgentCard({
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center flex-wrap gap-4">
             {/* TACTICAL BADGES */}
-            <div className="hidden sm:flex items-center gap-3">
+            <div className="hidden sm:flex flex-wrap items-center gap-3">
               <div className={`px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-2 ${risk.className}`}>
                  {risk.icon}
                  {risk.label.replace('Risk: ', '')}
               </div>
               
-              <div className="px-4 py-2 rounded-xl border border-slate-200 bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-widest shadow-sm flex items-center gap-2">
+              <div className="px-4 py-2 rounded-xl border border-slate-200 bg-[var(--color-border-subtle)] text-[10px] font-black text-muted uppercase tracking-widest shadow-sm flex items-center gap-2">
                  <Activity size={12} />
                  {isAuto ? "AUTO-PILOT" : "MANUAL-LINK"}
               </div>
             </div>
 
+            {/* 🔁 BACKTEST BUTTONS */}
+            <div className="flex items-center flex-wrap gap-2">
+              <button
+                onClick={() => handleBacktest()}
+                disabled={backtestLoading || scenariosLoading}
+                className="h-10 px-4 rounded-xl border border-slate-200 bg-card text-muted hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all shadow-sm active:scale-95 flex items-center gap-2 text-xs font-black uppercase tracking-wider disabled:opacity-50"
+              >
+                {backtestLoading ? (
+                  <div className="w-3 h-3 border-2 border-slate-300 border-t-[var(--primary)] animate-spin rounded-full" />
+                ) : (
+                  <RotateCcw size={14} className="opacity-70" />
+                )}
+                {backtestLoading ? "ANALYZING..." : "RUN BACKTEST"}
+              </button>
+
+              <button
+                onClick={handleRunScenarios}
+                disabled={backtestLoading || scenariosLoading}
+                className="h-10 px-4 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all shadow-sm active:scale-95 flex items-center gap-2 text-xs font-black uppercase tracking-wider disabled:opacity-50"
+              >
+                {scenariosLoading ? (
+                  <div className="w-3 h-3 border-2 border-indigo-300 border-t-indigo-600 animate-spin rounded-full" />
+                ) : (
+                  <Activity size={14} className="opacity-70" />
+                )}
+                SCENARIOS
+              </button>
+            </div>
+
             <div className="relative" ref={settingsRef}>
               <button
-                className="w-10 h-10 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-slate-800 hover:border-slate-400 transition-all shadow-sm active:scale-95"
+                className="w-10 h-10 flex items-center justify-center rounded-xl border border-slate-200 bg-card text-secondary hover:text-slate-800 hover:border-slate-400 transition-all shadow-sm active:scale-95"
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowSettings((v) => !v);
@@ -411,36 +496,239 @@ export default function BotAgentCard({
         </div>
 
         {/* 📊 SYSTEM STATUS BAR (UPGRADED PADDING) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-2 bg-slate-50 border border-slate-100 rounded-[1.5rem]">
-          <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 opacity-60">Status Response</div>
-             <div className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-2 bg-[var(--color-border-subtle)] border border-slate-100 rounded-[1.5rem]">
+          <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Status Response</div>
+             <div className="text-xs font-black text-foreground uppercase tracking-tight flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${botState === 'live' ? 'bg-green-500' : 'bg-slate-400'}`} />
                 {botState} session
              </div>
           </div>
 
-          <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 opacity-60">Market Action</div>
+          <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Market Action</div>
              <div className="text-xs font-black text-[var(--primary)] uppercase tracking-tight flex items-center gap-2">
                 <Rocket size={12} strokeWidth={3} />
                 {statusLabel}
              </div>
           </div>
 
-          <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 opacity-60">Logic Confidence</div>
-             <div className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+          <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Logic Confidence</div>
+             <div className="text-xs font-black text-foreground uppercase tracking-tight flex items-center gap-2">
                 <Layers size={12} strokeWidth={3} />
                 {confidence}
              </div>
           </div>
 
-          <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 opacity-60">Telemetry Sync</div>
-             <div className="text-xs font-black text-slate-500 tracking-tight font-mono">{lastRun || "SYNCING..."}</div>
+          <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Telemetry Sync</div>
+             <div className="text-xs font-black text-muted tracking-tight font-mono">{lastRun || "SYNCING..."}</div>
           </div>
         </div>
+
+        {/* 📊 BACKTEST RESULTS SECTION */}
+        {/* ⏳ LOADING STATE */}
+        {(backtestLoading || scenariosLoading) && (
+          <div className="mt-4 p-6 bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl flex items-center justify-center gap-4 animate-pulse">
+            <div className="w-5 h-5 border-2 border-slate-300 border-t-[var(--primary)] animate-spin rounded-full" />
+            <div className="text-xs font-black text-secondary uppercase tracking-[0.2em]">
+              {scenariosLoading ? "Crunching parallel scenarios..." : "Analyzing last 30 days..."}
+            </div>
+          </div>
+        )}
+
+        {/* 📊 BACKTEST RESULTS SECTION (LIGHT MODE) */}
+        {backtestResult && !backtestLoading && (
+          <div className="mt-4 space-y-4 animate-fade-in">
+            <div className="bg-card rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden relative group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/50 blur-3xl rounded-full translate-x-1/2 -translate-y-1/2 opacity-50" />
+              
+              <div className="p-8 pb-4 flex items-center justify-between border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+                    <Activity size={16} strokeWidth={3} />
+                  </div>
+                  <h3 className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Live Performance Scan (V2)</h3>
+                </div>
+                <button 
+                  onClick={() => setBacktestResult(null)}
+                  className="w-8 h-8 rounded-lg bg-[var(--color-border-subtle)] text-secondary hover:text-slate-600 transition-colors flex items-center justify-center border border-slate-200"
+                >
+                  <RotateCcw size={14} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-slate-100">
+                <div className="p-8 hover:bg-slate-50/50 transition-colors">
+                  <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-2">Profit (€)</div>
+                  <div className={`text-2xl font-black tracking-tighter ${backtestResult.return_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {backtestResult.return_pct >= 0 ? '+' : ''}
+                    €{Math.round((backtestResult.return_pct / 100) * 10000).toLocaleString()}
+                  </div>
+                  <div className="text-[8px] font-bold text-secondary mt-1 italic">€10,000 model</div>
+                </div>
+
+                <div className="p-8 hover:bg-slate-50/50 transition-colors">
+                  <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-2">ROI (%)</div>
+                  <div className={`text-2xl font-black tracking-tighter ${backtestResult.return_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {backtestResult.return_pct >= 0 ? '+' : ''}{backtestResult.return_pct}%
+                  </div>
+                </div>
+
+                <div className="p-8 hover:bg-slate-50/50 transition-colors">
+                  <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-2">Win%</div>
+                  <div className="text-2xl font-black text-foreground tracking-tighter">
+                    {backtestResult.performance?.winrate}%
+                  </div>
+                  <div className="text-[8px] font-bold text-secondary mt-1 uppercase tracking-widest">
+                    {backtestResult.performance?.wins}W / {backtestResult.performance?.losses}L
+                  </div>
+                </div>
+
+                <div className="p-8 hover:bg-slate-50/50 transition-colors">
+                  <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-2">Total Capital</div>
+                  <div className="text-2xl font-black text-foreground tracking-tighter">
+                    €{Math.round(10000 + ((backtestResult.return_pct / 100) * 10000)).toLocaleString()}
+                  </div>
+                  <div className="text-[8px] font-bold text-indigo-400 mt-1 uppercase tracking-widest">€10K START</div>
+                </div>
+              </div>
+
+              <div className="p-6 bg-slate-50/80 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-bold text-secondary uppercase tracking-widest">Avg Trade</span>
+                  <span className={`text-xs font-black ${backtestResult.performance?.expectancy >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {backtestResult.performance?.expectancy >= 0 ? '+' : ''}{backtestResult.performance?.expectancy}%
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-bold text-secondary uppercase tracking-widest">Best Trade</span>
+                  <span className="text-xs font-black text-emerald-600">+{backtestResult.performance?.best_trade_pct}%</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-bold text-secondary uppercase tracking-widest">Worst Trade</span>
+                  <span className="text-xs font-black text-red-400">{backtestResult.performance?.worst_trade_pct}%</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-bold text-secondary uppercase tracking-widest">Executions</span>
+                  <span className="text-xs font-black text-slate-600">
+                    {backtestResult.total_trades} trades
+                  </span>
+                </div>
+                <div className="flex flex-col text-right">
+                  <span 
+                    className="text-[8px] font-bold text-secondary uppercase tracking-widest cursor-help underline decoration-slate-200 decoration-dotted"
+                    title="Expected average profit per trade based on historical performance"
+                   >
+                     Expectancy ?
+                   </span>
+                  <span className={`text-xs font-black ${backtestResult.performance?.expectancy >= 0 ? 'text-indigo-600' : 'text-red-500'}`}>
+                    {backtestResult.performance?.expectancy >= 0 ? '+' : ''}{backtestResult.performance?.expectancy}%
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="p-5 bg-card border border-slate-100 rounded-2xl shadow-sm">
+                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-3">AI_SUMMARY</div>
+                <div className="text-sm font-bold text-slate-700 leading-relaxed italic border-l-4 border-indigo-400 pl-4 py-1">
+                  "{backtestResult.summary?.message || 'Geen details beschikbaar.'}"
+                </div>
+              </div>
+
+              <div className="p-5 bg-slate-50/50 border border-slate-100 rounded-2xl shadow-sm">
+                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-3">RECENT_TRADES</div>
+                <div className="space-y-2">
+                  {backtestResult.trades?.length > 0 ? (
+                    backtestResult.trades.map((t, i) => (
+                      <div key={i} className="flex items-center justify-between bg-card px-3 py-2 rounded-xl border border-slate-100 shadow-xs">
+                        <div className="flex items-center gap-3">
+                           {t.type === 'buy' ? (
+                             <div className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">BUY</div>
+                           ) : (
+                             <div className="text-[10px] font-black text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">SELL</div>
+                           )}
+                           <span className="text-xs font-bold text-muted tracking-tighter">€{t.price.toLocaleString()}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                           {t.pnl_pct !== null && (
+                             <span className={`text-[10px] font-black ${t.pnl_pct >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                               {t.pnl_pct >= 0 ? '+' : ''}{t.pnl_pct}%
+                             </span>
+                           )}
+                           {t.status === 'open' ? (
+                             <div className="w-2 h-2 rounded-full bg-yellow-400" />
+                           ) : t.pnl_pct >= 0 ? (
+                             <span className="text-emerald-500 font-bold">✔</span>
+                           ) : (
+                             <span className="text-red-400 font-bold font-mono">❌</span>
+                           )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-[10px] font-bold text-secondary italic">No trades executed in last 30 days.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🚀 SCENARIO COMPARISON TABLE (LIGHT MODE) */}
+        {Object.keys(scenarios).length > 0 && !scenariosLoading && (
+          <div className="mt-4 p-6 bg-[var(--color-border-subtle)] rounded-3xl border border-slate-200 shadow-sm animate-fade-in relative overflow-hidden">
+             <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                   <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center border border-indigo-200">
+                      <Zap size={18} strokeWidth={3} />
+                   </div>
+                   <h3 className="text-sm font-black text-foreground uppercase tracking-widest">Scenario Comparison</h3>
+                </div>
+                <button onClick={() => setScenarios({})} className="text-secondary hover:text-slate-600 transition-colors">
+                   <RotateCcw size={14} />
+                </button>
+             </div>
+
+             <div className="grid grid-cols-3 gap-4">
+                {['default', 'aggressive', 'conservative'].map(type => {
+                   const res = scenarios[type];
+                   if (!res) return null;
+                   
+                   const allRes = Object.values(scenarios);
+                   const maxReturn = Math.max(...allRes.map(r => r.return_pct));
+                   const isBest = res.return_pct === maxReturn && allRes.length > 1;
+
+                   return (
+                      <div 
+                        key={type} 
+                        className={`p-5 rounded-2xl flex flex-col items-center text-center transition-all ${isBest ? 'bg-white border-2 border-indigo-500 shadow-lg shadow-indigo-100' : 'bg-white/50 border border-slate-200'}`}
+                      >
+                         <div className="flex items-center gap-2 mb-3">
+                           <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">{type}</div>
+                           {isBest && <span className="text-[10px]">🏆</span>}
+                         </div>
+
+                         <div className={`text-xl font-black tracking-tighter mb-1 ${res.return_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                            {res.return_pct >= 0 ? '+' : ''}{res.return_pct}%
+                         </div>
+                         
+                         <div className="space-y-1">
+                           <div className={`text-[12px] font-black ${isBest ? 'text-slate-900' : 'text-slate-600'}`}>
+                             €{Math.round(10000 + ((res.return_pct / 100) * 10000)).toLocaleString()}
+                           </div>
+                           <div className="text-[9px] font-bold text-secondary uppercase tracking-widest">
+                             {res.total_trades} trades
+                           </div>
+                         </div>
+                      </div>
+                   )
+                })}
+             </div>
+          </div>
+        )}
       </div>
 
       {/* 🚀 MAIN COCKPIT MODULES */}
@@ -463,9 +751,9 @@ export default function BotAgentCard({
         </div>
 
         {/* Module 2: Market Intelligence (THE BRAIN) */}
-        <div className="bg-white rounded-[2rem] border border-slate-200 p-6 lg:p-8 shadow-sm">
+        <div className="bg-card rounded-[2rem] border border-slate-200 p-6 lg:p-8 shadow-sm">
           {loadingMarketIntelligence ? (
-            <div className="flex items-center gap-3 text-xs font-black text-slate-400 uppercase tracking-widest p-10 justify-center">
+            <div className="flex items-center gap-3 text-xs font-black text-secondary uppercase tracking-widest p-10 justify-center">
               <div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-[var(--primary)] animate-spin" />
               Syncing Brain...
             </div>
@@ -475,7 +763,7 @@ export default function BotAgentCard({
         </div>
 
         {/* Module 3: Execution Engine & Price Ladder */}
-        <div className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-md">
+        <div className="bg-card rounded-[2rem] border border-slate-200 overflow-hidden shadow-md">
           <div className="flex flex-col">
             <div className="flex-1 p-6 lg:p-8">
               <BotDecisionCard
@@ -506,7 +794,7 @@ export default function BotAgentCard({
       </div>
 
       {/* 📜 TERMINAL LOGS / HISTORY (BOTTOM BAR) */}
-      <div className="mt-auto border-t border-slate-100 bg-slate-50 text-slate-500 overflow-hidden">
+      <div className="mt-auto border-t border-slate-100 bg-[var(--color-border-subtle)] text-muted overflow-hidden">
         <button
           onClick={() => setShowHistory((v) => !v)}
           className="w-full p-5 lg:p-6 text-xs font-black uppercase tracking-[0.2em] hover:bg-slate-100/80 hover:text-slate-800 transition-all flex items-center justify-between group"

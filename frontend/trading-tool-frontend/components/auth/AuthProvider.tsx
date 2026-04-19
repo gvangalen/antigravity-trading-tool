@@ -55,8 +55,8 @@ export function AuthProvider({ children }) {
 
   const [user, setUser] = useState(initialUser);
   const [loading, setLoading] = useState(true);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
-  const didInit = useRef(false);
   const sessionInFlight = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -64,7 +64,8 @@ export function AuthProvider({ children }) {
      SESSION CHECK (/me)
   ------------------------------------------------------- */
   const loadSession = useCallback(async () => {
-    if (sessionInFlight.current) return;
+    // We don't return early here anymore to allow Strict Mode double-invocation 
+    // to correctly abort the first and finish the second.
     sessionInFlight.current = true;
 
     if (abortRef.current) {
@@ -89,15 +90,23 @@ export function AuthProvider({ children }) {
         setUser(null);
         clearUserLocal();
       }
+      
+      // ✅ Definitive result from server
+      setSessionChecked(true);
+
     } catch (err: any) {
       if (err?.name !== "AbortError") {
         console.error("❌ Auth /me error:", err);
         setUser(null);
         clearUserLocal();
+        setSessionChecked(true); // Fout telt ook als 'gechecked'
       }
     } finally {
-      sessionInFlight.current = false;
-      setLoading(false);
+      // Alleen loading dichten als dit nog steeds de actieve check is
+      if (abortRef.current === controller) {
+        sessionInFlight.current = false;
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -105,9 +114,6 @@ export function AuthProvider({ children }) {
      INIT (1x)
   ------------------------------------------------------- */
   useEffect(() => {
-    if (didInit.current) return;
-    didInit.current = true;
-
     loadSession();
 
     return () => {
@@ -155,6 +161,11 @@ export function AuthProvider({ children }) {
       // laad server session opnieuw zodat cookies & context sync zijn
       await loadSession();
 
+      // 📳 Haptic Success
+      import("@/lib/haptics").then(({ hapticFeedback }) => {
+        hapticFeedback.notification();
+      });
+
       return { success: true };
     } catch (err) {
       console.error("❌ Login fout:", err);
@@ -176,6 +187,12 @@ export function AuthProvider({ children }) {
       await fetchWithAuth(`${API_BASE_URL}/api/auth/logout`, {
         method: "POST",
       });
+      
+      // 📳 Haptic Feedback
+      import("@/lib/haptics").then(({ hapticFeedback }) => {
+        hapticFeedback.impact();
+      });
+
     } catch {
       /* stil */
     }
@@ -187,6 +204,7 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     loading,
+    sessionChecked,
     isAuthenticated: !!user,
     login,
     logout,

@@ -50,13 +50,13 @@ export default function BotPortfolioSection({ bot }) {
   return (
     <div className="space-y-6">
       {/* 💳 BUDGET CONTROLS */}
-      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 shadow-inner">
+      <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl p-5 shadow-inner">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+          <div className="flex items-center gap-2 text-[10px] font-black text-secondary uppercase tracking-widest">
             <Wallet size={14} className="text-slate-300" />
             Capital Allocation
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white border border-slate-100 text-[10px] font-bold text-slate-500">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-card border border-slate-100 text-[10px] font-bold text-slate-500">
             <Info size={10} />
             SYNCED
           </div>
@@ -72,17 +72,17 @@ export default function BotPortfolioSection({ bot }) {
 
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/50">
               <div className="flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Daily Consumption</span>
+                <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">Daily Consumption</span>
                 <span className="text-xs font-black text-slate-700 font-mono tracking-tighter">€{(todaySpent ?? 0).toFixed(0)} / €{budget.daily_limit_eur || "∞"}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Max Order Payload</span>
+                <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">Max Order Payload</span>
                 <span className="text-xs font-black text-slate-700 font-mono tracking-tighter">€{budget.max_order_eur || "UNLIMITED"}</span>
               </div>
             </div>
           </div>
         ) : (
-          <div className="text-xs font-bold text-slate-400 italic py-2">
+          <div className="text-xs font-bold text-secondary italic py-2">
             NO BUDGET ALLOCATED
           </div>
         )}
@@ -92,7 +92,7 @@ export default function BotPortfolioSection({ bot }) {
       <div className="grid grid-cols-2 gap-4 pt-1">
         <Stat label="NET POSITION QTY">
           <span className="font-mono tracking-tighter text-slate-800">{netQty.toFixed(6)}</span>
-          <span className="ml-1.5 text-slate-400 font-black text-[10px]">{symbol}</span>
+          <span className="ml-1.5 text-secondary font-black text-[10px]">{symbol}</span>
         </Stat>
 
         <Stat label="CURRENT ASSET VALUE">
@@ -124,8 +124,8 @@ export default function BotPortfolioSection({ bot }) {
 
 function Stat({ label, children }) {
   return (
-    <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex flex-col justify-between hover:border-slate-200 transition-colors">
-      <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter mb-1.5">
+    <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-xl p-3 flex flex-col justify-between hover:border-slate-200 transition-colors">
+      <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-1.5">
         {label}
       </div>
       <div className="text-[13px] font-black leading-none">

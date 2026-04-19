@@ -29,20 +29,24 @@ async def get_technical_data(
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
-    user_id = current_user["id"]
-    repo = TechnicalDataRepository(session)
-    rows = await repo.get_latest_for_user(user_id)
-    return [
-        TechnicalDataResponse(
-            indicator=r.indicator,
-            waarde=float(r.value),
-            score=float(r.score),
-            advies=r.advies,
-            uitleg=r.uitleg,
-            timestamp=r.timestamp
-        )
-        for r in rows
-    ]
+    try:
+        user_id = current_user["id"]
+        repo = TechnicalDataRepository(session)
+        rows = await repo.get_latest_for_user(user_id)
+        return [
+            TechnicalDataResponse(
+                indicator=r.indicator,
+                waarde=float(r.value) if r.value is not None else 0.0,
+                score=float(r.score) if r.score is not None else 0.0,
+                advies=r.advies or "–",
+                uitleg=r.uitleg or "–",
+                timestamp=r.timestamp
+            )
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"❌ Technical API error (get_technical_data): {e}")
+        return []
 
 
 # ===============================================================
@@ -92,20 +96,24 @@ async def get_latest_day_data(
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
-    user_id = current_user["id"]
-    repo = TechnicalDataRepository(session)
-    rows = await repo.get_day_data(user_id)
-    return [
-        TechnicalDataResponse(
-            indicator=r.indicator,
-            waarde=float(r.value),
-            score=float(r.score),
-            advies=r.advies,
-            uitleg=r.uitleg,
-            timestamp=r.timestamp
-        )
-        for r in rows
-    ]
+    try:
+        user_id = current_user["id"]
+        repo = TechnicalDataRepository(session)
+        rows = await repo.get_day_data(user_id)
+        return [
+            TechnicalDataResponse(
+                indicator=r.indicator,
+                waarde=float(r.value) if r.value is not None else 0.0,
+                score=float(r.score) if r.score is not None else 0.0,
+                advies=r.advies or "–",
+                uitleg=r.uitleg or "–",
+                timestamp=r.timestamp
+            )
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"❌ Technical API error (get_latest_day_data): {e}")
+        return []
 
 
 # ===============================================================
@@ -116,20 +124,24 @@ async def get_technical_week_data(
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
-    user_id = current_user["id"]
-    repo = TechnicalDataRepository(session)
-    rows = await repo.get_week_data(user_id)
-    return [
-        TechnicalDataResponse(
-            indicator=r.indicator,
-            waarde=float(r.value),
-            score=float(r.score),
-            advies=r.advies,
-            uitleg=r.uitleg,
-            timestamp=r.timestamp
-        )
-        for r in rows
-    ]
+    try:
+        user_id = current_user["id"]
+        repo = TechnicalDataRepository(session)
+        rows = await repo.get_week_data(user_id)
+        return [
+            TechnicalDataResponse(
+                indicator=r.indicator,
+                waarde=float(r.value) if r.value is not None else 0.0,
+                score=float(r.score) if r.score is not None else 0.0,
+                advies=r.advies or "–",
+                uitleg=r.uitleg or "–",
+                timestamp=r.timestamp
+            )
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"❌ Technical API error (get_technical_week_data): {e}")
+        return []
 
 
 @router.get("/technical_data/month", response_model=List[TechnicalDataResponse])
@@ -137,20 +149,24 @@ async def get_technical_month_data(
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
-    user_id = current_user["id"]
-    repo = TechnicalDataRepository(session)
-    rows = await repo.get_month_data(user_id)
-    return [
-        TechnicalDataResponse(
-            indicator=r.indicator,
-            waarde=float(r.value),
-            score=float(r.score),
-            advies=r.advies,
-            uitleg=r.uitleg,
-            timestamp=r.timestamp
-        )
-        for r in rows
-    ]
+    try:
+        user_id = current_user["id"]
+        repo = TechnicalDataRepository(session)
+        rows = await repo.get_month_data(user_id)
+        return [
+            TechnicalDataResponse(
+                indicator=r.indicator,
+                waarde=float(r.value) if r.value is not None else 0.0,
+                score=float(r.score) if r.score is not None else 0.0,
+                advies=r.advies or "–",
+                uitleg=r.uitleg or "–",
+                timestamp=r.timestamp
+            )
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"❌ Technical API error (get_technical_month_data): {e}")
+        return []
 
 
 @router.get("/technical_data/quarter", response_model=List[TechnicalDataResponse])
@@ -158,20 +174,24 @@ async def get_technical_quarter_data(
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
-    user_id = current_user["id"]
-    repo = TechnicalDataRepository(session)
-    rows = await repo.get_quarter_data(user_id)
-    return [
-        TechnicalDataResponse(
-            indicator=r.indicator,
-            waarde=float(r.value),
-            score=float(r.score),
-            advies=r.advies,
-            uitleg=r.uitleg,
-            timestamp=r.timestamp
-        )
-        for r in rows
-    ]
+    try:
+        user_id = current_user["id"]
+        repo = TechnicalDataRepository(session)
+        rows = await repo.get_quarter_data(user_id)
+        return [
+            TechnicalDataResponse(
+                indicator=r.indicator,
+                waarde=float(r.value) if r.value is not None else 0.0,
+                score=float(r.score) if r.score is not None else 0.0,
+                advies=r.advies or "–",
+                uitleg=r.uitleg or "–",
+                timestamp=r.timestamp
+            )
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"❌ Technical API error (get_technical_quarter_data): {e}")
+        return []
 
 
 # ===============================================================

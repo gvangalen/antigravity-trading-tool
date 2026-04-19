@@ -87,16 +87,16 @@ export default function TechnicalTabs({
     <div className="space-y-8">
       {/* 🔹 TABS: SEGMENTED CONTROL */}
       <div className="flex items-center gap-4">
-         <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] pl-1">Tijdsinterval</div>
-         <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+         <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">Tijdsinterval</div>
+         <div className="flex bg-[var(--color-border-subtle)] p-1 rounded-xl border border-slate-200">
             {TABS.map((tab) => (
                <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
                      activeTab === tab.id
-                        ? "bg-white text-slate-800 shadow-sm"
-                        : "text-slate-400 hover:text-slate-600"
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-secondary hover:text-slate-600"
                   }`}
                >
                   {tab.label}

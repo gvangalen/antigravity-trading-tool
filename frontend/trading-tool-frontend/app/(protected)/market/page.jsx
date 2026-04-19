@@ -16,6 +16,7 @@ import MarketSevenDayTable from "@/components/market/MarketSevenDayTable";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
+import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 
 export default function MarketPage() {
   // ===============================
@@ -59,53 +60,57 @@ export default function MarketPage() {
   const safeSevenDay = Array.isArray(sevenDayData) ? sevenDayData : [];
   const safeForward = forwardReturns || {};
 
-  const adviesText = 
-    (safeMarketScore ?? 50) >= 75 ? "Positief" : 
-    (safeMarketScore ?? 50) <= 25 ? "Negatief" : "Neutraal";
+  const biasText = 
+    (safeMarketScore ?? 50) >= 75 ? "Positive" : 
+    (safeMarketScore ?? 50) <= 25 ? "Negative" : "Neutral";
 
   // ===============================
   // 🧱 RENDER
   // ===============================
   return (
-    <div className="page-container">
+    <div className="page-container bg-white dark:bg-[#020617] transition-colors min-h-screen">
       <OnboardingBanner step="market" />
 
       {/* 🟢 STANDARD PAGE HEADER */}
-      <header className="page-header">
-        <div className="page-label">
+      <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
+        <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Activity size={12} />
-           Status: Verbonden
+           Status: Connected
         </div>
-        <h1 className="page-title">Markt</h1>
-        <p className="page-subtitle">Analyse van marktsentiment en prijsactie</p>
+        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Market</h1>
+        <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">Analysis of market sentiment and price action</p>
       </header>
 
       {/* 🚀 MARKET HUD */}
-      <MarketTerminalHUD 
-        score={safeMarketScore} 
-        bias={adviesText}
-        loading={loading}
-      />
+      <DashboardErrorBoundary>
+        <MarketTerminalHUD 
+          score={safeMarketScore} 
+          bias={biasText}
+          loading={loading || !marketScore}
+        />
+      </DashboardErrorBoundary>
 
-      {/* 🧠 ANALYSE (HERO SECTION) */}
+      {/* 🧠 ANALYSIS (HERO SECTION) */}
       <div className="space-y-8 px-4">
          <div className="flex items-center gap-4 mb-2">
             <div className="w-8 h-0.5 bg-blue-600/30" />
-            <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em] opacity-90">Analyse</span>
+            <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] opacity-90">Analysis</span>
          </div>
-         <AgentInsightPanel category="market" />
+         <DashboardErrorBoundary>
+           <AgentInsightPanel category="market" />
+         </DashboardErrorBoundary>
       </div>
 
       <div className="grid grid-cols-1 gap-20 pt-16">
-        {/* 🛠️ INSTELLINGEN */}
-        <div className="card">
-          <div className="card-header">
-             <div className="card-title">
+        {/* 🛠️ CONFIG */}
+        <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+          <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
+             <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                <LayoutGrid size={16} className="text-blue-600" />
-               Instellingen
+               Configuration
              </div>
           </div>
-          <div className="card-p">
+          <div className="card-p p-8">
             <MarketIndicatorScoreView
               availableIndicators={availableIndicators || []}
               loading={loading}
@@ -113,45 +118,50 @@ export default function MarketPage() {
           </div>
         </div>
 
-        {/* 📊 SIGNALEN (DAGELIJKSE ANALYSE) */}
-        <div className="card">
-           <div className="card-header">
-              <div className="card-title">
+        {/* 📊 SIGNALS */}
+        <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
+              <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                 <Activity size={16} className="text-blue-600" />
-                Signalen
+                Signals
               </div>
            </div>
            <div className="card-p p-0">
-              <TechnicalTerminalGrid
-                title="Market Signal Monitor"
-                onRemoveIndicator={() => {}}
-              />
+              <DashboardErrorBoundary>
+                <TechnicalTerminalGrid
+                  title="Market Signal Monitor"
+                  onRemoveIndicator={() => {}}
+                  loading={loading}
+                />
+              </DashboardErrorBoundary>
            </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-12">
-          {/* 📅 GESCHIEDENIS */}
-          <div className="card">
-             <div className="card-header">
-                <div className="card-title">
+        <div className="grid grid-cols-1 gap-12 pb-24">
+          {/* 📅 HISTORY */}
+          <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+             <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
+                <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                   <History size={16} className="text-blue-600" />
-                  Geschiedenis
+                  History
                 </div>
              </div>
-             <div className="card-p">
-               <MarketSevenDayTable history={safeSevenDay} />
+             <div className="card-p p-8">
+               <DashboardErrorBoundary>
+                 <MarketSevenDayTable history={safeSevenDay} loading={loading} />
+               </DashboardErrorBoundary>
              </div>
           </div>
 
-          {/* 🔮 PROGNOSE */}
-          <div className="card">
-             <div className="card-header">
-                <div className="card-title">
+          {/* 🔮 FORECAST */}
+          <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+             <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
+                <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                   <TrendingUp size={16} className="text-blue-600" />
-                  Prognose
+                  Forecast
                 </div>
              </div>
-             <div className="card-p">
+             <div className="card-p p-8">
                <MarketForwardReturnTabs data={safeForward} />
              </div>
           </div>
@@ -159,9 +169,9 @@ export default function MarketPage() {
       </div>
 
       {loading && (
-        <div className="fixed bottom-8 right-8 bg-white border border-slate-200 px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-bounce z-50">
+        <div className="fixed bottom-8 right-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-bounce z-50 transition-colors">
            <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-           <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Gegevens laden...</span>
+           <span className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Loading Data...</span>
         </div>
       )}
     </div>

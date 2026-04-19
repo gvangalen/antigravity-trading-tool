@@ -25,7 +25,7 @@ export default function LandingPage() {
       <div className="flex items-center gap-3 mb-6">
         <LineChart size={40} className="text-[var(--primary)]" />
         <h1 className="text-4xl font-extrabold tracking-tight">
-          TradeLayer
+          Tradamind
         </h1>
       </div>
 

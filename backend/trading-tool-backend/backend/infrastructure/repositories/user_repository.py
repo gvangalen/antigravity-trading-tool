@@ -38,3 +38,28 @@ class UserRepository:
         if user:
             user.last_login_at = login_time
             await self.db.commit()
+
+    async def update_ai_preferences(self, user_id: int, preferences: dict) -> Optional[User]:
+        user = await self.get_by_id(user_id)
+        if user:
+            # Merge existing preferences with new ones
+            current_prefs = user.ai_preferences or {}
+            current_prefs.update(preferences)
+            user.ai_preferences = current_prefs
+            await self.db.commit()
+            await self.db.refresh(user)
+        return user
+
+    async def update_ai_usage(self, user_id: int, requests: int, cost: float, tokens: int) -> None:
+        """
+        Updates the AI usage metrics for a user.
+        - increments ai_requests_used_day
+        - adds cost to ai_usage_current
+        - adds tokens to ai_tokens_used_month
+        """
+        user = await self.get_by_id(user_id)
+        if user:
+            user.ai_requests_used_day = (user.ai_requests_used_day or 0) + requests
+            user.ai_usage_current = float(user.ai_usage_current or 0) + cost
+            user.ai_tokens_used_month = (user.ai_tokens_used_month or 0) + tokens
+            await self.db.commit()

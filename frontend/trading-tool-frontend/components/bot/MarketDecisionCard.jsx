@@ -93,18 +93,18 @@ export default function MarketDecisionCard({ data }) {
       {/* 🚀 MARKET INTELLIGENCE HEADER */}
       <div className="flex items-center justify-between pb-4 border-b border-slate-100">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-blue-50 text-[var(--primary)]">
+          <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-600/10 text-blue-600">
             <Activity size={18} />
           </div>
           <div>
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Terminal Intelligence</div>
-            <div className="text-sm font-bold text-slate-800 tracking-tight">Market Context & Global Analysis</div>
+            <div className="text-[10px] font-black text-muted uppercase tracking-widest mb-0.5">Terminal Intelligence</div>
+            <div className="text-sm font-bold text-foreground tracking-tight">Market Context & Global Analysis</div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
-          <Thermometer size={14} className="text-slate-400" />
-          <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Temp:</span>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-border-subtle)] shadow-sm">
+          <Thermometer size={14} className="text-muted" />
+          <span className="text-[9px] font-black text-muted uppercase tracking-tighter">Temp:</span>
           <span className={`text-[10px] font-black uppercase tracking-widest ${temperatureColor}`}>
             {temperature}
           </span>
@@ -114,7 +114,7 @@ export default function MarketDecisionCard({ data }) {
       {/* 🧩 MARKET CYCLE PROGRESSOR */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Structural Cycle Phase</div>
+          <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Structural Cycle Phase</div>
           <div className="text-[10px] font-black text-[var(--primary)] uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
              Active: {phase}
           </div>
@@ -133,11 +133,11 @@ export default function MarketDecisionCard({ data }) {
                       ? "bg-blue-600 shadow-[0_0_12px_rgba(37,99,235,0.4)] scale-y-125" 
                       : isCompleted 
                         ? "bg-slate-300" 
-                        : "bg-slate-100"
+                        : "bg-[var(--color-border-subtle)]"
                   }`} 
                 />
                 <div className={`mt-3 text-[9px] font-black uppercase tracking-[0.15em] transition-colors whitespace-nowrap ${
-                  isActive ? "text-blue-600" : isCompleted ? "text-slate-500" : "text-slate-300"
+                  isActive ? "text-blue-600" : isCompleted ? "text-muted" : "text-slate-300"
                 }`}>
                   {p}
                 </div>
@@ -159,8 +159,8 @@ export default function MarketDecisionCard({ data }) {
           const dotClass = val === 'bullish' ? 'bg-green-500' : val === 'bearish' ? 'bg-red-500' : 'bg-slate-400';
 
           return (
-            <div key={t.label} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-center">
-              <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 opacity-60">
+            <div key={t.label} className="p-4 rounded-2xl bg-[var(--color-border-subtle)] border border-slate-100 flex flex-col justify-center">
+              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">
                 {t.label} Trend
               </div>
               <div className={`text-xs font-black uppercase tracking-tight flex items-center gap-2 ${colorClass}`}>
@@ -173,7 +173,7 @@ export default function MarketDecisionCard({ data }) {
       </div>
 
       {/* 🛡️ SENSOR READOUTS */}
-      <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-inner">
+      <div className="bg-[var(--color-border-subtle)] dark:bg-slate-900/50 rounded-2xl border border-[var(--color-border)] p-6 shadow-inner">
         <MarketConditionsPanel
           health={health}
           transitionRisk={transitionRisk}

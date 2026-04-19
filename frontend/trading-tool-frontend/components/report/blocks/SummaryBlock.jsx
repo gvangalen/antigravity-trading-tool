@@ -50,7 +50,7 @@ export default function SummaryBlock({
   const inner = (
     <div className="flex flex-col gap-6">
       {/* NARRATIVE TEXT */}
-      <div className="text-[18px] leading-[1.8] text-slate-800 tracking-tight">
+      <div className="text-[18px] leading-[1.8] text-foreground tracking-tight">
         {content}
       </div>
     </div>

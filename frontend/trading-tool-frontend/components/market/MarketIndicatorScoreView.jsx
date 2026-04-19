@@ -63,19 +63,19 @@ export default function MarketIndicatorScoreView({
     indicator?.name;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden">
+    <div className="bg-card border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden">
       {/* TERMINAL HEADER */}
       <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-[var(--primary)] shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-card border border-slate-200 flex items-center justify-center text-[var(--primary)] shadow-sm">
              <Coins size={20} className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Logic Manifest</div>
-            <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase leading-none mt-1">Market Indicator Configuration</h2>
+            <div className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">Logic Manifest</div>
+            <h2 className="text-xl font-black text-foreground tracking-tight uppercase leading-none mt-1">Market Indicator Configuration</h2>
           </div>
         </div>
-        <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
+        <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] bg-card px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
            SYSTEM_ID: MARKET_CFG_V2.0
         </div>
       </div>
@@ -92,7 +92,7 @@ export default function MarketIndicatorScoreView({
           />
           
           {!indicator && (
-            <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest italic opacity-60">
+            <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-secondary uppercase tracking-widest italic opacity-60">
                <div className="w-1 h-1 rounded-full bg-slate-400 animate-pulse" />
                Awaiting node selection for signal configuration...
             </div>
@@ -107,7 +107,7 @@ export default function MarketIndicatorScoreView({
                 <span className="bg-[var(--primary)] text-white text-[10px] font-black px-4 py-1.5 rounded-lg uppercase tracking-widest shadow-sm">
                   {displayName}
                 </span>
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
+                <span className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">
                   Live_Parameter_Tuning
                 </span>
               </div>

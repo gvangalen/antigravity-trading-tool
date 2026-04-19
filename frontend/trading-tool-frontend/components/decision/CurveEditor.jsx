@@ -69,18 +69,18 @@ export default function CurveEditor({
   }, [points]);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xl">
+    <div className="bg-card border border-slate-200 rounded-3xl overflow-hidden shadow-xl">
       {/* 🛠️ CONSOLE HEADER */}
-      <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+      <div className="bg-[var(--color-border-subtle)] px-6 py-4 border-b border-slate-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="bg-[var(--primary)] text-white p-1.5 rounded-lg shadow-sm shadow-[var(--primary-soft)]">
              <Layers size={16} />
           </div>
           <div>
-            <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">
+            <h4 className="text-xs font-black text-foreground uppercase tracking-widest">
               Investment Scaling Console
             </h4>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+            <p className="text-[10px] text-secondary font-bold uppercase tracking-tight">
               Dynamic position sizing based on {xLabel}
             </p>
           </div>
@@ -90,7 +90,7 @@ export default function CurveEditor({
           <button
             type="button"
             onClick={addPoint}
-            className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest bg-white text-slate-500 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all shadow-sm"
+            className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest bg-card text-muted px-3 py-1.5 rounded-xl border border-slate-200 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all shadow-sm"
           >
             <Plus size={12} /> Add Point
           </button>
@@ -99,7 +99,7 @@ export default function CurveEditor({
 
       <div className="p-6 space-y-8">
         {/* AXIS LABELS */}
-        <div className="grid grid-cols-[80px_1fr_100px_40px] gap-6 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] px-2">
+        <div className="grid grid-cols-[80px_1fr_100px_40px] gap-6 text-[9px] font-black text-secondary uppercase tracking-[0.2em] px-2">
           <div>{xLabel}</div>
           <div className="text-center">Sizing Weights</div>
           <div className="text-right">{yLabel}</div>
@@ -124,9 +124,9 @@ export default function CurveEditor({
                   disabled={disabled}
                   value={p.x}
                   onChange={(e) => updatePoint(i, { x: Number(e.target.value) })}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-black text-center py-2.5 rounded-xl focus:ring-2 focus:ring-[var(--primary)] focus:bg-white transition-all outline-none"
+                  className="w-full bg-[var(--color-border-subtle)] border border-slate-200 text-foreground font-black text-center py-2.5 rounded-xl focus:ring-2 focus:ring-[var(--primary)] focus:bg-white transition-all outline-none"
                 />
-                <div className="absolute -top-1.5 -left-1.5 bg-slate-100 text-[8px] font-black text-slate-500 px-1.5 py-0.5 rounded border border-slate-200 uppercase">Score</div>
+                <div className="absolute -top-1.5 -left-1.5 bg-[var(--color-border-subtle)] text-[8px] font-black text-muted px-1.5 py-0.5 rounded border border-slate-200 uppercase">Score</div>
               </div>
 
               {/* SLIDER CONSOLE */}
@@ -160,7 +160,7 @@ export default function CurveEditor({
                   disabled={disabled}
                   value={p.y}
                   onChange={(e) => updatePoint(i, { y: Number(e.target.value) })}
-                  className="w-full bg-slate-50 border border-slate-200 text-[var(--primary-dark)] font-black text-right py-2.5 px-3 rounded-xl focus:ring-2 focus:ring-[var(--primary)] focus:bg-white transition-all outline-none"
+                  className="w-full bg-[var(--color-border-subtle)] border border-slate-200 text-[var(--primary-dark)] font-black text-right py-2.5 px-3 rounded-xl focus:ring-2 focus:ring-[var(--primary)] focus:bg-white transition-all outline-none"
                 />
                 <div className="absolute -top-1.5 -right-1.5 bg-[var(--primary-soft)] text-[8px] font-black text-[var(--primary-dark)] px-1.5 py-0.5 rounded border border-[var(--primary-soft)] uppercase tracking-tighter">x Size</div>
               </div>
@@ -188,10 +188,10 @@ export default function CurveEditor({
            
            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {points.map((p, i) => (
-                <div key={i} className="bg-white p-3 rounded-xl border border-slate-200 group hover:border-[var(--primary)] transition-all shadow-sm">
-                   <div className="text-[9px] font-black text-slate-400 uppercase mb-1">Score {p.x}</div>
+                <div key={i} className="bg-card p-3 rounded-xl border border-slate-200 group hover:border-[var(--primary)] transition-all shadow-sm">
+                   <div className="text-[9px] font-black text-secondary uppercase mb-1">Score {p.x}</div>
                    <div className="flex items-end gap-1.5">
-                      <div className="text-xl font-black text-slate-800 leading-none">{(p.y).toFixed(2)}x</div>
+                      <div className="text-xl font-black text-foreground leading-none">{(p.y).toFixed(2)}x</div>
                       <div className={`text-[9px] font-bold pb-0.5 ${p.y >= 1 ? "text-green-500" : "text-red-400"}`}>
                          {p.y > 1.2 ? "Aggressive" : p.y > 0.8 ? "Standard" : "Defensive"}
                       </div>
@@ -203,9 +203,9 @@ export default function CurveEditor({
       </div>
 
       {disabled && (
-        <div className="bg-slate-50 px-6 py-3 flex items-center gap-2 border-t border-slate-100">
-           <Info size={12} className="text-slate-400" />
-           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight italic">
+        <div className="bg-[var(--color-border-subtle)] px-6 py-3 flex items-center gap-2 border-t border-slate-100">
+           <Info size={12} className="text-secondary" />
+           <span className="text-[10px] font-bold text-secondary uppercase tracking-tight italic">
              Fixed amount deployment active — curve parameters bypassed
            </span>
         </div>

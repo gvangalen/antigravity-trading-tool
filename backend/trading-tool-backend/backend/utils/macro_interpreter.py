@@ -56,7 +56,7 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
         except Exception:
             return {"value": None}
 
-    # 🟨 Yahoo generic
+    # 🟨 Yahoo generic (Handles ^SPX, ^TNX, ^VIX, GC=F, CL=F, etc.)
     if source and "yahoo" in source.lower() and link:
         try:
             r = requests.get(link, timeout=10)
@@ -65,6 +65,14 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
             meta = data["chart"]["result"][0]["meta"]
             return {"value": float(meta["regularMarketPrice"])}
         except Exception:
+            # Fallback for Yahoo (sometimes prices are in result[0].indicators.quote[0].close[-1])
+            try:
+                data = r.json()
+                price = data["chart"]["result"][0]["indicators"]["quote"][0]["close"][-1]
+                if price is not None:
+                    return {"value": float(price)}
+            except:
+                pass
             return {"value": None}
 
     # 🟪 FRED
@@ -119,8 +127,31 @@ def normalize_macro_value(indicator: str, value: float) -> float:
 
         # DXY → schaal rond 80–120
         if indicator == "dxy":
-            low = 80
-            high = 120
+            low, high = 80, 120
+            normalized = ((value - low) / (high - low)) * 100
+            return max(0, min(100, normalized))
+
+        # S&P 500 → schaal rond 3000–6500
+        if indicator == "sp500":
+            low, high = 3000, 6500
+            normalized = ((value - low) / (high - low)) * 100
+            return max(0, min(100, normalized))
+
+        # 10Y Yield → schaal 0–6%
+        if indicator == "us10y":
+            low, high = 0, 6
+            normalized = ((value - low) / (high - low)) * 100
+            return max(0, min(100, normalized))
+
+        # Gold → schaal 1500–3000
+        if indicator == "gold_price":
+            low, high = 1500, 3000
+            normalized = ((value - low) / (high - low)) * 100
+            return max(0, min(100, normalized))
+
+        # ETF Inflow (BTC) → schaal -500M tot +1000M
+        if indicator == "etf_bitcoin_inflow":
+            low, high = -500, 1000
             normalized = ((value - low) / (high - low)) * 100
             return max(0, min(100, normalized))
 

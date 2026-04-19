@@ -16,15 +16,18 @@ class MarketDataRepository:
     # =========================================================
     # GLOBAAL: Market Data (BTC prijs etc)
     # =========================================================
-    async def get_latest_btc_snapshot(self) -> Optional[MarketData]:
+    async def get_latest_market_data(self, symbol: str) -> Optional[MarketData]:
         stmt = (
             select(MarketData)
-            .where(MarketData.symbol == 'BTC')
+            .where(MarketData.symbol == symbol)
             .order_by(desc(MarketData.timestamp))
             .limit(1)
         )
         result = await self.session.execute(stmt)
         return result.scalars().first()
+
+    async def get_latest_btc_snapshot(self) -> Optional[MarketData]:
+        return await self.get_latest_market_data('BTC')
 
     async def get_recent_market_data(self, min_timestamp) -> Sequence[MarketData]:
         stmt = (
@@ -140,20 +143,20 @@ class MarketDataRepository:
             select(MarketData7D)
             .where(MarketData7D.symbol == symbol)
             .order_by(desc(MarketData7D.date))
-            .limit(7)
+            .limit(200)
         )
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def check_7d_data_exists(self, symbol: str, date: datetime.date) -> bool:
+    async def get_7d_record(self, symbol: str, date: datetime.date) -> Optional[MarketData7D]:
         stmt = (
-            select(MarketData7D.id)
+            select(MarketData7D)
             .where(MarketData7D.symbol == symbol)
             .where(MarketData7D.date == date)
             .limit(1)
         )
         res = await self.session.execute(stmt)
-        return res.scalars().first() is not None
+        return res.scalars().first()
 
     async def add_market_data_7d(self, record: MarketData7D):
         self.session.add(record)
