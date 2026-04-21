@@ -2,8 +2,7 @@
 //  GLOBAL API CLIENT — COOKIE-BASED AUTH (CORRECT VERSION)
 //----------------------------------------------------------
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = "https://www.tradamind.com";
 
 //----------------------------------------------------------
 // 📡 GET

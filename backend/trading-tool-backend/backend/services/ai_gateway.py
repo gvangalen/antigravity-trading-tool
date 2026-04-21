@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Union, Tuple, List
 
-from backend.utils.openai_client import ask_gpt_text, ask_gpt_json_text, ask_gpt_json
+from backend.utils.openai_client import ask_gpt_text, ask_gpt_json, ask_gpt_json
 from backend.utils.ai_cost_calculator import calculate_cost
 from backend.utils.embedding_client import get_embedding
 from backend.infrastructure.vector_store import get_vector_store
