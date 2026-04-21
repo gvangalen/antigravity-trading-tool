@@ -24,10 +24,18 @@ logger = logging.getLogger(__name__)
 frontend_url = os.getenv("FRONTEND_URL", "")
 is_https = frontend_url.startswith("https")
 
+# Voor HTTPS gebruiken we 'none' voor maximale compatibiliteit cross-origin
+# Voor HTTP gebruiken we 'lax' omdat 'none' secure=True vereist
+samesite_val = "none" if is_https else "lax"
+
+# Optioneel: wildcard domain voor cookies op zowel www als root
+cookie_domain = "tradamind.com" if is_https and "tradamind.com" in frontend_url else None
+
 COOKIE_SETTINGS = dict(
     httponly=True,
     secure=is_https,    # ⭐ Verplicht op HTTPS
-    samesite="lax",     # Lax is veilig voor same-site cross-origin
+    samesite=samesite_val,
+    domain=cookie_domain,
     path="/",
 )
 

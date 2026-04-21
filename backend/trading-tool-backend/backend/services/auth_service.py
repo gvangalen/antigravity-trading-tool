@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from backend.infrastructure.repositories.user_repository import UserRepository
@@ -9,6 +10,8 @@ from backend.utils.auth_utils import (
     decode_token
 )
 from backend.schemas.auth_schema import RegisterRequest, LoginRequest, UserOut
+
+logger = logging.getLogger(__name__)
 
 class AuthService:
     def __init__(self, repository: UserRepository):
@@ -46,10 +49,16 @@ class AuthService:
     async def login_user(self, data: LoginRequest):
         user = await self.repository.get_by_email(data.email)
         
-        if not user or not user.is_active:
+        if not user:
+            logger.warning(f"❌ Login mislukt: Gebruiker {data.email} niet gevonden in de database.")
+            raise ValueError("Onjuiste inloggegevens")
+            
+        if not user.is_active:
+            logger.warning(f"❌ Login mislukt: Gebruiker {data.email} is niet actief.")
             raise ValueError("Onjuiste inloggegevens")
 
         if not verify_password(data.password, user.password_hash):
+            logger.warning(f"❌ Login mislukt: Wachtwoord matcht niet voor {data.email}.")
             raise ValueError("Onjuiste inloggegevens")
 
         payload = {"sub": str(user.id), "role": user.role}
