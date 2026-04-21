@@ -1,3 +1,4 @@
+import os
 import logging
 from typing import Optional
 
@@ -18,13 +19,15 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # =========================================================
-# 🍪 COOKIE SETTINGS (WERKT OP HTTP!)
+# 🍪 COOKIE SETTINGS (DYNAMISCH VOOR HTTP/HTTPS)
 # =========================================================
+frontend_url = os.getenv("FRONTEND_URL", "")
+is_https = frontend_url.startswith("https")
 
 COOKIE_SETTINGS = dict(
     httponly=True,
-    secure=False,        
-    samesite="lax",     # Must be lax for HTTP (localhost and IPs)
+    secure=is_https,    # ⭐ Verplicht op HTTPS
+    samesite="lax",     # Lax is veilig voor same-site cross-origin
     path="/",
 )
 
