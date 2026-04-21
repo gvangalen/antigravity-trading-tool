@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Union, Tuple, List
 
-from backend.utils.openai_client import ask_gpt_text_raw, ask_gpt_json
+from backend.utils.openai_client import ask_gpt_text, ask_gpt_json
 from backend.utils.ai_cost_calculator import calculate_cost
 from backend.utils.embedding_client import get_embedding
 from backend.infrastructure.vector_store import get_vector_store
@@ -176,9 +176,9 @@ class AiGateway:
             usage = result.pop("_usage", {}) if isinstance(result, dict) else {}
             content = result
         else:
-            raw_res = ask_gpt_text_raw(prompt=original_prompt, system_role=system_role)
-            content = raw_res.get("content", "Fout")
-            usage = raw_res.get("usage", {})
+            # ask_gpt_text returns a simple string, so we mock the usage to prevent crashes
+            content = ask_gpt_text(prompt=original_prompt, system_role=system_role)
+            usage = {} 
 
         p_tokens = usage.get("prompt_tokens", 0)
         c_tokens = usage.get("completion_tokens", 0)

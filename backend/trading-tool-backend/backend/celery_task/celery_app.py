@@ -122,7 +122,7 @@ celery_app.conf.beat_schedule = {
 
     "dispatch_setup_agent": {
         "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(minute="*/15", second=20),
+        "schedule": crontab(minute="*/15"),
         "kwargs": {
             "task_name": "backend.celery_task.setup_task.run_setup_agent_daily"
         },
@@ -130,7 +130,7 @@ celery_app.conf.beat_schedule = {
 
     "dispatch_trading_bot": {
         "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(minute="*/15", second=40),
+        "schedule": crontab(minute="*/15"),
         "kwargs": {
             "task_name": "backend.celery_task.trading_bot_task.run_daily_trading_bot"
         },
