@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from celery import shared_task
 
 from backend.utils.db import get_db_connection
-from backend.utils.openai_client import ask_gpt_json, ask_gpt_text
+from backend.utils.openai_client import ask_gpt_text, ask_gpt_json_json, ask_gpt_text
 from backend.ai_core.system_prompt_builder import build_system_prompt
 
 logger = logging.getLogger(__name__)
