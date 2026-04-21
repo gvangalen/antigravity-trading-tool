@@ -14,10 +14,25 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOST }}
-          username: ubuntu
+          username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd ~/antigravity-trading-tool
+            echo "=== START DEPLOY ==="
+            whoami
+            pwd
+
+            cd ~/antigravity-trading-tool || exit 1
+
+            echo "=== PULL CODE ==="
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "=== RUN DEPLOY.SH ==="
             chmod +x deploy.sh
             ./deploy.sh
+
+            echo "=== PM2 STATUS ==="
+            pm2 status
+
+            echo "=== DONE ==="
           command_timeout: 60m
