@@ -1,7 +1,10 @@
 import os
 import logging
 import json
-import faiss
+try:
+    import faiss
+except ImportError:
+    faiss = None
 import numpy as np
 from typing import List, Optional, Tuple, Dict
 from sqlalchemy import text
@@ -26,7 +29,12 @@ class VectorStore:
         if self._initialized:
             return
         
-        self.index = faiss.IndexFlatIP(DIMENSION) # Cosine similarity (normalized)
+        if faiss:
+            self.index = faiss.IndexFlatIP(DIMENSION) # Cosine similarity (normalized)
+        else:
+            self.index = None
+            logger.error("❌ FAISS is not installed. Vector store disabled.")
+
         self.mapping: Dict[int, str] = {} # FAISS ID -> query_hash
         self.db = db_session
         self._initialized = True
@@ -42,6 +50,9 @@ class VectorStore:
 
     def save(self):
         """Slaat de index en de mapping op naar schijf."""
+        if not faiss or not self.index:
+            return
+
         try:
             faiss.write_index(self.index, INDEX_PATH)
             with open(MAPPING_PATH, 'w') as f:
@@ -52,6 +63,9 @@ class VectorStore:
 
     def load(self):
         """Laadt de index en de mapping van schijf."""
+        if not faiss:
+            return
+
         try:
             self.index = faiss.read_index(INDEX_PATH)
             with open(MAPPING_PATH, 'r') as f:
@@ -62,12 +76,16 @@ class VectorStore:
 
     def add(self, query_hash: str, embedding: List[float]):
         """Voegt een embedding toe aan de index."""
+        if not faiss or not self.index:
+            return
+
         if not embedding or len(embedding) != DIMENSION:
             return
 
         # Normaliseer voor Cosine Similarity
         vector = np.array([embedding]).astype('float32')
-        faiss.normalize_L2(vector)
+        if faiss:
+            faiss.normalize_L2(vector)
         
         # Check of we al een mapping hebben
         if query_hash in self.mapping.values():
@@ -82,11 +100,12 @@ class VectorStore:
 
     def search(self, embedding: List[float], top_k: int = 1) -> List[Tuple[str, float]]:
         """Zoekt naar de meest vergelijkbare items."""
-        if self.index.ntotal == 0 or not embedding:
+        if not faiss or not self.index or self.index.ntotal == 0 or not embedding:
             return []
 
         vector = np.array([embedding]).astype('float32')
-        faiss.normalize_L2(vector)
+        if faiss:
+            faiss.normalize_L2(vector)
         
         scores, indices = self.index.search(vector, top_k)
         
@@ -107,7 +126,8 @@ class VectorStore:
         rows = res.mappings().all()
         
         # Reset index
-        self.index = faiss.IndexFlatIP(DIMENSION)
+        if faiss:
+            self.index = faiss.IndexFlatIP(DIMENSION)
         self.mapping = {}
         
         for row in rows:

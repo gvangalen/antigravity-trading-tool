@@ -4,7 +4,7 @@ from datetime import date
 from typing import Dict, List, Optional, Any
 
 from backend.utils.db import get_db_connection
-from backend.utils.openai_client import ask_gpt
+from backend.utils.openai_client import ask_gpt_json, ask_gpt_text
 from backend.ai_core.system_prompt_builder import build_system_prompt
 from backend.ai_core.agent_context import build_agent_context
 
@@ -132,7 +132,7 @@ REGELS:
         "strategies": strategies,
     }
 
-    response = ask_gpt(
+    response = ask_gpt_json(
         prompt=json.dumps(payload, ensure_ascii=False, indent=2),
         system_role=system_prompt
     )
@@ -222,7 +222,7 @@ OUTPUT JSON:
         "market_context": market_context,
     }
 
-    result = ask_gpt(
+    result = ask_gpt_json(
         prompt=json.dumps(payload, ensure_ascii=False, indent=2),
         system_role=system_prompt,
     )
@@ -342,7 +342,7 @@ Output JSON:
         }
     }
 
-    result = ask_gpt(
+    result = ask_gpt_json(
         prompt=json.dumps(payload, ensure_ascii=False, indent=2),
         system_role=system_prompt
     )

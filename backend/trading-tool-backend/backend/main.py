@@ -125,15 +125,20 @@ async def startup_event():
     os.makedirs("backend/static/ai", exist_ok=True)
     
     # Initialiseer Vector Store
-    vs = get_vector_store()
-    
-    # Als de index leeg is, probeer te rebuilden vanuit DB
-    if vs.index.ntotal == 0:
-        logger.info("🔍 Vector index is leeg of ontbreekt. Rebuilding vanuit DB...")
-        async with async_session_factory() as session:
-            await vs.rebuild_from_db(session)
-    else:
-        logger.info(f"✅ Vector index geladen met {vs.index.ntotal} items.")
+    try:
+        vs = get_vector_store()
+        
+        # Als de index leeg is, probeer te rebuilden vanuit DB
+        if vs.index and vs.index.ntotal == 0:
+            logger.info("🔍 Vector index is leeg of ontbreekt. Rebuilding vanuit DB...")
+            async with async_session_factory() as session:
+                await vs.rebuild_from_db(session)
+        elif vs.index:
+            logger.info(f"✅ Vector index geladen met {vs.index.ntotal} items.")
+        else:
+            logger.warning("⚠️ Vector store index is None (FAISS missing).")
+    except Exception as e:
+        logger.error(f"❌ Fout bij initialiseren Vector Store: {e}")
 
 # ==================================================================
 # 👨‍⚕️ Health check
