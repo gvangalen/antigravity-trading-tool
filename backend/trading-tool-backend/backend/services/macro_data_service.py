@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from typing import List, Optional
+from datetime import datetime, timedelta
+from typing import List, Optional, Dict, Any
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,10 @@ from backend.schemas.macro_data_schema import (
 logger = logging.getLogger(__name__)
 
 class MacroDataService:
+    # 🕒 Global cache for heavy aggregations
+    _cache = {}
+    _CACHE_TTL = 60
+
     def __init__(self, session: AsyncSession):
         self.session = session
         self.repository = MacroDataRepository(session)
@@ -130,9 +135,15 @@ class MacroDataService:
         return [MacroDataResponse.from_orm(r) for r in records]
 
     async def get_macro_week_data(self, user_id: int) -> List[MacroAggregateResponse]:
+        cache_key = f"week_{user_id}"
+        now = datetime.now()
+        if cache_key in self._cache:
+            data, expiry = self._cache[cache_key]
+            if now < expiry: return data
+
         records = await self.repository.get_macro_week_data(user_id)
          # Format needed for frontend: indicator, waarde, ...
-        return [
+        result = [
             MacroAggregateResponse(
                 indicator=r.name,
                 waarde=r.value,
@@ -143,6 +154,8 @@ class MacroDataService:
                 timestamp=r.timestamp
             ) for r in records
         ]
+        self._cache[cache_key] = (result, now + timedelta(seconds=self._CACHE_TTL))
+        return result
 
     async def get_macro_month_data(self, user_id: int) -> List[MacroAggregateResponse]:
         records = await self.repository.get_macro_aggregated_data(user_id, 4)

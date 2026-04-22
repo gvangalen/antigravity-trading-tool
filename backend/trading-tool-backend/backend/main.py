@@ -149,6 +149,18 @@ def health_check():
 
 
 # ==================================================================
+# 🧪 AnyIO Thread Pool Limit (Fix for 'can't start new thread')
+# ==================================================================
+@app.on_event("startup")
+async def set_thread_limit():
+    from anyio.lowlevel import checkpoint
+    from anyio import to_thread
+    # Set max threads to 25. Default is often 40+, which is too much for small VPS
+    limiter = to_thread.current_default_thread_limiter()
+    limiter.total_tokens = 25
+    logger.info(f"🛡️ Thread pool limiter set to {limiter.total_tokens} tokens.")
+
+# ==================================================================
 # 🧭 Debug: toon alle routes bij boot
 # ==================================================================
 print("\n--------------------------------------------------")

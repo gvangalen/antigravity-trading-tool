@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import re
+import asyncio
 from typing import Any, Dict, Optional
 from pathlib import Path
 
@@ -174,3 +175,11 @@ def ask_gpt_text(
             time.sleep(1)
 
     return "Fout bij het genereren van de analyse."
+# ============================================================
+# 🌏 ASYNC WRAPPERS (To prevent blocking the event loop)
+# ============================================================
+async def ask_gpt_json_async(*args, **kwargs):
+    return await asyncio.to_thread(ask_gpt_json, *args, **kwargs)
+
+async def ask_gpt_text_async(*args, **kwargs):
+    return await asyncio.to_thread(ask_gpt_text, *args, **kwargs)

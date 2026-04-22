@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Union, Tuple, List
 
-from backend.utils.openai_client import ask_gpt_text, ask_gpt_json, ask_gpt_json
+from backend.utils.openai_client import ask_gpt_text_async, ask_gpt_json_async
 from backend.utils.ai_cost_calculator import calculate_cost
 from backend.utils.embedding_client import get_embedding
 from backend.infrastructure.vector_store import get_vector_store
@@ -172,12 +172,12 @@ class AiGateway:
         purpose: str, symbol: str, timeframe: str, start_time: float
     ):
         if mode == "json":
-            result = ask_gpt_json(prompt=original_prompt, system_role=system_role, schema=schema)
+            result = await ask_gpt_json_async(prompt=original_prompt, system_role=system_role, schema=schema)
             usage = result.pop("_usage", {}) if isinstance(result, dict) else {}
             content = result
         else:
             # ask_gpt_text returns a simple string, so we mock the usage to prevent crashes
-            content = ask_gpt_text(prompt=original_prompt, system_role=system_role)
+            content = await ask_gpt_text_async(prompt=original_prompt, system_role=system_role)
             usage = {} 
 
         p_tokens = usage.get("prompt_tokens", 0)
