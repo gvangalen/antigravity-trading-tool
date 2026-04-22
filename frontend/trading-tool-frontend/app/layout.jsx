@@ -1,6 +1,7 @@
 import "@/styles/globals.css";
 import AppProviders from "@/app/providers/AppProviders";
 import AuthGuard from "@/components/auth/AuthGuard";
+import InstallPWA from "@/components/ui/InstallPWA";
 import { BRANDING } from "@/lib/branding";
 
 export const metadata = {
@@ -37,6 +38,7 @@ export default function RootLayout({ children }) {
           <AuthGuard>
             {children}
           </AuthGuard>
+          <InstallPWA />
         </AppProviders>
       </body>
     </html>
