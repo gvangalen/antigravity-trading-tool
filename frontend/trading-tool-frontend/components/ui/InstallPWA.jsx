@@ -85,7 +85,7 @@ export default function InstallPWA() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
-                  < स्मार्टफोन size={28} strokeWidth={2.5} />
+                  <Smartphone size={28} strokeWidth={2.5} />
                 </div>
                 <div>
                   <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1.5 uppercase">
