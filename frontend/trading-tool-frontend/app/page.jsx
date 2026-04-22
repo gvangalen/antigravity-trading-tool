@@ -14,10 +14,10 @@ export default function LandingPage() {
       {/* 1. HEADER */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-[var(--color-border-subtle)]">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/tradamind_icon_v2.png" alt="TM" className="h-12 w-12 object-contain rounded-xl" />
+          <Link href={isAuthenticated ? "/dashboard" : "/"} className="flex items-center gap-3 group">
+            <img src="/tradamind_icon_v2.png" alt="TM" className="h-12 w-12 object-contain rounded-xl group-hover:scale-105 transition-transform" />
             <div className="flex flex-col justify-center">
-              <div className="text-lg font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1">
+              <div className="text-lg font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1 group-hover:text-blue-600 transition-colors">
                 Tradamind
               </div>
               <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-500">
@@ -29,7 +29,7 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-          </div>
+          </Link>
             {!isAuthenticated ? (
               <Link 
                 href="/login" 

@@ -27,7 +27,7 @@ export default function NavBar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const NAV_LINKS = [
-    { href: "/", label: t.nav.dashboard, icon: <Gauge size={18} /> },
+    { href: "/dashboard", label: t.nav.dashboard, icon: <Gauge size={18} /> },
     { href: "/market", label: t.nav.market, icon: <DollarSign size={18} /> },
     { href: "/macro", label: t.nav.macro, icon: <Globe size={18} /> },
     { href: "/technical", label: t.nav.technical, icon: <LineChart size={18} /> },
@@ -49,10 +49,10 @@ export default function NavBar() {
           <button onClick={() => setMobileOpen(true)} className="text-muted hover:text-blue-600 transition-colors">
             <Menu size={24} />
           </button>
-          <div className="flex items-center gap-3">
-            <img src="/tradamind_icon_v2.png" alt="TM" className="h-10 w-10 object-contain rounded-xl" />
+          <Link href="/dashboard" className="flex items-center gap-3 group">
+            <img src="/tradamind_icon_v2.png" alt="TM" className="h-10 w-10 object-contain rounded-xl group-hover:scale-105 transition-transform" />
             <div className="flex flex-col justify-center">
-              <div className="text-sm font-black text-slate-900 dark:text-white tracking-tight leading-none mb-0.5">
+              <div className="text-sm font-black text-slate-900 dark:text-white tracking-tight leading-none mb-0.5 group-hover:text-blue-600 transition-colors">
                 {BRANDING.APP_NAME}
               </div>
               <div className="flex items-center gap-1 text-blue-600 dark:text-blue-500">
@@ -64,7 +64,7 @@ export default function NavBar() {
                 </div>
               </div>
             </div>
-          </div>
+          </Link>
           <div className="w-10" />
         </div>
       </div>
@@ -127,8 +127,10 @@ export default function NavBar() {
 function SidebarInner({ pathname, onNavigate, navLinks }) {
   return (
     <div className="flex flex-col h-full bg-card dark:bg-[#020617] transition-colors">
-      {/* BRANDING */}
-      <div className="p-8 pb-4 hidden md:block select-none group cursor-default">
+      <Link 
+        href="/dashboard"
+        className="p-8 pb-4 hidden md:block select-none group cursor-pointer"
+      >
         <div className="flex items-center gap-4 transition-transform duration-500 group-hover:scale-[1.03]">
           <div className="relative">
             <img 
@@ -151,7 +153,7 @@ function SidebarInner({ pathname, onNavigate, navLinks }) {
             </div>
           </div>
         </div>
-      </div>
+      </Link>
 
       {/* LINKS */}
       <nav className="flex-1 px-4 space-y-2 overflow-y-auto no-scrollbar py-4">
