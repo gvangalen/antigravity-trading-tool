@@ -91,6 +91,23 @@ pm2 start uvicorn \
   backend.main:app --host 0.0.0.0 --port 8000
 
 # =====================================================
+# START CELERY (BACKGROUND TASKS)
+# =====================================================
+echo "⚙️ Starting Celery background workers..."
+
+# RESTART CELERY WORKER (executes tasks)
+pm2 delete celery-worker || true
+pm2 start "celery -A backend.celery_task.celery_app worker --loglevel=info --concurrency=2" \
+  --name celery-worker \
+  --cwd "$BACKEND_DIR"
+
+# RESTART CELERY BEAT (schedules tasks)
+pm2 delete celery-beat || true
+pm2 start "celery -A backend.celery_task.celery_app beat --loglevel=info" \
+  --name celery-beat \
+  --cwd "$BACKEND_DIR"
+
+# =====================================================
 # SAVE PM2 STATE
 # =====================================================
 pm2 save
