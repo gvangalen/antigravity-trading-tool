@@ -25,7 +25,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (sessionChecked && isAuthenticated && !redirected.current) {
       redirected.current = true;
-      window.location.href = "/dashboard";
+      router.push("/dashboard");
     }
   }, [isAuthenticated, sessionChecked]);
 
@@ -50,7 +50,7 @@ export default function LoginPage() {
     showSnackbar("Welkom terug! ✔", "success");
 
     // 🔥 HARD REDIRECT: Zorgt dat middleware direct de nieuwe cookies ziet
-    window.location.href = "/dashboard";
+    router.push("/dashboard");
   };
 
   return (

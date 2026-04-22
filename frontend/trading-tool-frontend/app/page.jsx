@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Check, ShieldCheck, Zap, Brain, LineChart, Globe, DollarSign, ArrowUpRight } from "lucide-react";
+import { ArrowRight, Check, ShieldCheck, Zap, Brain, LineChart, Globe, DollarSign, ArrowUpRight, LayoutDashboard } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 export default function LandingPage() {
+  const { isAuthenticated, loading } = useAuth();
+
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300 font-sans selection:bg-blue-600/30">
       
@@ -27,12 +30,21 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
-          <Link 
-            href="/login" 
-            className="px-6 py-2.5 rounded-xl border-2 border-[var(--color-border)] hover:border-blue-600/30 text-[11px] font-black uppercase tracking-widest transition-all"
-          >
-            Login
-          </Link>
+            {!isAuthenticated ? (
+              <Link 
+                href="/login" 
+                className="px-6 py-2.5 rounded-xl border-2 border-[var(--color-border)] hover:border-blue-600/30 text-[11px] font-black uppercase tracking-widest transition-all"
+              >
+                Login
+              </Link>
+            ) : (
+              <Link 
+                href="/dashboard" 
+                className="px-6 py-2.5 rounded-xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20"
+              >
+                Dashboard
+              </Link>
+            )}
         </div>
       </header>
 
@@ -57,19 +69,32 @@ export default function LandingPage() {
               Stop guessing your trades. Know exactly <br className="hidden sm:block" /> what to do — every time.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link 
-                href="/login" 
-                className="w-full sm:w-auto bg-foreground text-card hover:bg-slate-800 dark:hover:bg-slate-200 px-10 py-5 rounded-2xl text-[12px] font-black uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 shadow-xl shadow-foreground/5 active:scale-95"
-              >
-                Start Free Trial
-                <ArrowRight size={16} />
-              </Link>
-              <Link 
-                href="/dashboard" 
-                className="w-full sm:w-auto px-10 py-5 rounded-2xl border-2 border-[var(--color-border)] hover:border-blue-600/30 text-[12px] font-black uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 active:scale-95"
-              >
-                View Dashboard
-              </Link>
+              {!isAuthenticated ? (
+                <>
+                  <Link 
+                    href="/login" 
+                    className="w-full sm:w-auto bg-foreground text-card hover:bg-slate-800 dark:hover:bg-slate-200 px-10 py-5 rounded-2xl text-[12px] font-black uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 shadow-xl shadow-foreground/5 active:scale-95"
+                  >
+                    Start Free Trial
+                    <ArrowRight size={16} />
+                  </Link>
+                  <Link 
+                    href="/dashboard" 
+                    className="w-full sm:w-auto px-10 py-5 rounded-2xl border-2 border-[var(--color-border)] hover:border-blue-600/30 text-[12px] font-black uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 active:scale-95"
+                  >
+                    View Dashboard
+                  </Link>
+                </>
+              ) : (
+                <Link 
+                  href="/dashboard" 
+                  className="w-full sm:w-auto bg-blue-600 text-white hover:bg-blue-700 px-14 py-6 rounded-[2rem] text-[14px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20 active:scale-95 animate-pulse-soft"
+                >
+                  <LayoutDashboard size={20} />
+                  Main Dashboard
+                  <ArrowRight size={18} />
+                </Link>
+              )}
             </div>
           </div>
         </section>
