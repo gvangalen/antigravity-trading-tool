@@ -5,7 +5,6 @@ venv/
 __pycache__/
 *.pyc
 .next/
-out/
 *.log
 .DS_Store
 *.sql
