@@ -207,3 +207,26 @@ def generate_daily_report(user_id: int):
             cursor.close()
         conn.close()
         logger.info("✅ Daily report task afgerond")
+
+        # -------------------------------------------------
+        # 4️⃣ PUSH NOTIFICATION
+        # -------------------------------------------------
+        try:
+            from backend.services.push_service import push_service
+            from backend.infrastructure.database import SessionLocal
+            
+            db = SessionLocal()
+            try:
+                msg = f"Je dagelijkse rapport voor {today} staat voor je klaar."
+                push_service.notify_user(
+                    db=db, 
+                    user_id=user_id, 
+                    title="Nieuw Rapport Beschikbaar", 
+                    message=msg,
+                    url="/reports"
+                )
+                logger.info(f"🔔 Push notification sent to user {user_id}")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"⚠️ Failed to send push notification: {e}")

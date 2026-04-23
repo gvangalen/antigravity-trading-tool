@@ -32,5 +32,9 @@ openai>=1.0
 # ✅ Logging & Utils
 loguru
 
+# ✅ Push Notifications
+pywebpush
+cryptography
+
 # ✅ Retry Logic
 tenacity>=8.2

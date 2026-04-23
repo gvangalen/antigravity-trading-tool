@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Check, ShieldCheck, Zap, Brain, LineChart, Globe, DollarSign, ArrowUpRight, LayoutDashboard } from "lucide-react";
@@ -7,6 +8,15 @@ import { useAuth } from "@/components/auth/AuthProvider";
 
 export default function LandingPage() {
   const { isAuthenticated, loading } = useAuth();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return <div className="min-h-screen bg-background" />;
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300 font-sans selection:bg-blue-600/30">
@@ -154,7 +164,7 @@ export default function LandingPage() {
               <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/20 to-transparent blur-2xl opacity-50 group-hover:opacity-100 transition duration-1000" />
               <div className="relative bg-card border-2 border-[var(--color-border)] rounded-[3rem] overflow-hidden shadow-2xl">
                 <Image 
-                  src="/trading_dashboard_v1_mockup_1776106890631.png"
+                  src="/dashboard_mockup.png"
                   alt="Tradamind Live Dashboard Preview"
                   width={1920}
                   height={1080}

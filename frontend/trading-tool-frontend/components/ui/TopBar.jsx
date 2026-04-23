@@ -1,8 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AvatarMenu from "@/components/ui/AvatarMenu";
+import NotificationToggle from "@/components/NotificationToggle";
 import { Search, ChevronRight } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
@@ -13,17 +14,21 @@ export default function TopBar() {
   const [query, setQuery] = useState("");
   const { user } = useAuth();
 
-  /* ======== Dynamic Greeting (Localized) ======== */
-  const hour = new Date().getHours();
-  const greetingKey =
-    hour < 12
-      ? t.greetings.morning
-      : hour < 18
-      ? t.greetings.afternoon
-      : t.greetings.evening;
+  /* ======== Dynamic Greeting (Localized & Safe) ======== */
+  const [greetingText, setGreetingText] = useState("");
 
-  const firstName = user?.first_name || "";
-  const greetingText = firstName ? `${greetingKey}, ${firstName}` : greetingKey;
+  useEffect(() => {
+    const hour = new Date().getHours();
+    const greetingKey =
+      hour < 12
+        ? t.greetings.morning
+        : hour < 18
+        ? t.greetings.afternoon
+        : t.greetings.evening;
+
+    const firstName = user?.first_name || "";
+    setGreetingText(firstName ? `${greetingKey}, ${firstName}` : greetingKey);
+  }, [t, user]);
 
   /* ======== Breadcrumb Label (Localized) ======== */
   const labels = {
@@ -75,6 +80,8 @@ export default function TopBar() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
+
+        <NotificationToggle />
 
         {/* 👤 AVATAR MENU (Restored) */}
         <div className="pl-6 border-l-2 border-slate-100 dark:border-slate-800 flex items-center">

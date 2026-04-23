@@ -37,6 +37,14 @@ async_session_factory = async_sessionmaker(
 # Declarative base voor alle SQLAlchemy ORM modellen
 Base = declarative_base()
 
+# --- Synchronous Connection for Celery & Utils ---
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+SYNC_DATABASE_URL = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+sync_engine = create_engine(SYNC_DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     FastAPI dependency. Levert per API-request een unieke, 

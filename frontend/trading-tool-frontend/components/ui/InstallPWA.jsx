@@ -24,7 +24,7 @@ export default function InstallPWA() {
     if (lastDismissed) {
       const now = new Date().getTime();
       const oneDay = 24 * 60 * 60 * 1000;
-      if (now - parseInt(lastDismissed) < oneDay * 3) return; // Wait 3 days between prompts
+      if (now - parseInt(lastDismissed) < oneDay * 14) return; // Wait 14 days between prompts
     }
 
     // 3. Detect Platform
