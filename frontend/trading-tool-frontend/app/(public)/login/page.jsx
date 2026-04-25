@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { Mail, Lock, LogIn, ShieldCheck } from "lucide-react";
+import { Mail, Lock, LogIn, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
 import Link from "next/link";
 
@@ -14,6 +14,7 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // voorkomt dubbele redirects
@@ -110,7 +111,7 @@ export default function LoginPage() {
                 type="email"
                 required
                 className="trade-input pr-14"
-                placeholder="naam@voorraad.com"
+                placeholder="user@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -123,12 +124,15 @@ export default function LoginPage() {
               Wachtwoord
             </label>
             <div className="relative group">
-              <Lock 
-                size={18} 
-                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors z-10" 
-              />
+              <button 
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600 transition-colors z-20"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 required
                 className="trade-input pr-14"
                 placeholder="•••••••••"
