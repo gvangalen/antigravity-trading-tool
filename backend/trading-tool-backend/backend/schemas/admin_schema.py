@@ -78,3 +78,29 @@ class AdminUserUpdate(BaseModel):
     is_active: Optional[bool] = None
     role: Optional[str] = None
     subscription_status: Optional[str] = None
+
+# =========================================================
+# 📝 SYSTEM LOGS SCHEMAS
+# =========================================================
+class AdminSystemLog(BaseModel):
+    id: int
+    level: str
+    message: str
+    source: str
+    endpoint: Optional[str] = None
+    user_id: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class AdminLogAnalysisResponse(BaseModel):
+    root_cause: str
+    what_is_broken: str
+    suggested_fix: str
+    severity: str # 'low', 'medium', 'high', 'critical'
+    category: str # 'AUTH', 'API', 'DATABASE', 'AI', 'EXTERNAL'
+    action_type: str # 'retry', 'validation_fix', 'schema_fix', 'rate_limit_fix', 'missing_data', 'unknown'
+    affected_system: str
+    explanation: str

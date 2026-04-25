@@ -278,3 +278,15 @@ class PushSubscription(Base):
     p256dh = Column(String, nullable=False)
     auth = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class SystemLog(Base):
+    __tablename__ = 'system_logs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    level = Column(String, nullable=False) # 'info', 'warning', 'error', 'critical'
+    message = Column(String, nullable=False)
+    source = Column(String, nullable=False) # 'backend', 'api', 'auth', 'market_data', 'ai', 'db'
+    endpoint = Column(String, nullable=True)
+    user_id = Column(Integer, nullable=True)
+    metadata_json = Column("metadata", JSON, nullable=True) # Context: payloads, stack traces, etc.
+    created_at = Column(DateTime, default=datetime.utcnow)

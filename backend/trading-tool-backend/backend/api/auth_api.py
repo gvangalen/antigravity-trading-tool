@@ -11,6 +11,7 @@ from backend.utils.auth_utils import get_current_user
 from backend.schemas.auth_schema import LoginRequest, RegisterRequest, UserOut
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.auth_service import AuthService
+from backend.utils.system_logger import sys_logger
 
 # =========================================================
 # ⚙️ Router
@@ -55,10 +56,13 @@ async def register_user(
 ):
     try:
         user = await service.register_user(body)
+        sys_logger.log_info(f"User registered: {body.email}", source="auth", endpoint="/auth/register")
         return user
     except ValueError as e:
+        sys_logger.log_warning(f"Registration failed: {str(e)}", source="auth", endpoint="/auth/register", metadata={"email": body.email})
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        sys_logger.log_error(f"Critical registration error: {str(e)}", source="auth", endpoint="/auth/register", metadata={"email": body.email})
         logger.exception("❌ Error opgetreden bij registratie")
         raise HTTPException(status_code=500, detail="Gebruiker kan niet worden aangemaakt")
 
@@ -90,14 +94,18 @@ async def login(
             **COOKIE_SETTINGS,
         )
 
+        sys_logger.log_info(f"User logged in: {body.email}", source="auth", endpoint="/auth/login", user_id=result["user"].id)
+
         return {
             "success": True,
             "user": result["user"].dict()
         }
 
     except ValueError as e:
+        sys_logger.log_warning(f"Login failed for {body.email}: {str(e)}", source="auth", endpoint="/auth/login")
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
+        sys_logger.log_error(f"Critical login error for {body.email}: {str(e)}", source="auth", endpoint="/auth/login")
         logger.exception("❌ Fout tijdens login")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 

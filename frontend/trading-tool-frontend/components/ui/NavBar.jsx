@@ -50,6 +50,7 @@ export default function NavBar() {
   const ADMIN_LINKS = isAdmin ? [
     { href: "/admin/ai", label: t.nav.admin_ai, icon: <ShieldCheck size={18} /> },
     { href: "/admin/users", label: t.nav.users, icon: <Users size={18} /> },
+    { href: "/admin/logs", label: t.nav.logs, icon: <FileText size={18} /> },
   ] : [];
 
   useEffect(() => {

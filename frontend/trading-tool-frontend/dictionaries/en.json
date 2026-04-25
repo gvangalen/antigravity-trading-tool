@@ -35,6 +35,7 @@
     "onboarding": "Onboarding",
     "admin_ai": "Admin AI",
     "users": "Users",
+    "logs": "System Logs",
     "command_center": "Command Center"
   },
   "dashboard": {

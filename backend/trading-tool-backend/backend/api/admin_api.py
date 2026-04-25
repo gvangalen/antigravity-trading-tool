@@ -1,7 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Optional, Any
 
 from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
@@ -10,8 +10,11 @@ from backend.services.admin_user_service import AdminUserService
 from backend.schemas.admin_schema import (
     AdminAiStatsResponse,
     AdminUserOverview,
-    AdminUserUpdate
+    AdminUserUpdate,
+    AdminSystemLog,
+    AdminLogAnalysisResponse
 )
+from backend.services.admin_log_service import AdminLogService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -84,3 +87,40 @@ async def update_admin_user(
     except Exception as e:
         logger.error(f"❌ Error updating Admin User {user_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij het updaten van de gebruiker.")
+
+# =========================================================
+# 📝 SYSTEM LOGS
+# =========================================================
+@router.get("/admin/logs", response_model=List[AdminSystemLog])
+async def get_admin_logs(
+    level: Optional[str] = None,
+    source: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 100,
+    current_user: dict = Depends(check_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Haalt systeemlogs op met filters.
+    """
+    try:
+        service = AdminLogService(db)
+        return await service.get_logs(limit=limit, level=level, source=source, search=search)
+    except Exception as e:
+        logger.error(f"❌ Error fetching Admin Logs: {e}")
+        raise HTTPException(status_code=500, detail="Fout bij ophalen van logs.")
+
+@router.post("/admin/logs/analyze", response_model=AdminLogAnalysisResponse)
+async def analyze_admin_logs(
+    current_user: dict = Depends(check_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Analyseert recente errors met AI.
+    """
+    try:
+        service = AdminLogService(db)
+        return await service.analyze_errors_with_ai()
+    except Exception as e:
+        logger.error(f"❌ Error analyzing Admin Logs: {e}")
+        raise HTTPException(status_code=500, detail="Fout bij AI analyse van logs.")

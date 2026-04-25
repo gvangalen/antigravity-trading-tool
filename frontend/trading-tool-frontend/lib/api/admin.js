@@ -29,3 +29,22 @@ export const updateAdminUser = (userId, updates) => {
     body: JSON.stringify(updates)
   });
 };
+
+/**
+ * Haalt systeemlogs op met filters.
+ */
+export const fetchAdminLogs = (filters = {}) => {
+  const query = new URLSearchParams(filters).toString();
+  return fetchAuth(`/api/admin/logs?${query}`, {
+    method: 'GET',
+  });
+};
+
+/**
+ * Analyseert recente logs met AI.
+ */
+export const analyzeAdminLogs = () => {
+  return fetchAuth(`/api/admin/logs/analyze`, {
+    method: 'POST',
+  });
+};
