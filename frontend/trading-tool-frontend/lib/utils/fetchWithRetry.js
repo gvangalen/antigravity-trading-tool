@@ -1,6 +1,8 @@
 // ✅ Universele fetch met retries + foutafhandeling + logging
 //    Nu ook mét cookies → credentials: "include"
 
+import { API_BASE_URL } from "../config";
+
 export async function fetchWithRetry(
   endpoint,
   method = "GET",
@@ -8,7 +10,7 @@ export async function fetchWithRetry(
   retries = 3,
   delay = 2000
 ) {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+  const baseUrl = API_BASE_URL;
 
   const url = endpoint.startsWith("http")
     ? endpoint

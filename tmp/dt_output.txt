@@ -1,0 +1,51 @@
+                    List of relations
+ Schema |            Name             | Type  |   Owner   
+--------+-----------------------------+-------+-----------
+ public | active_strategy_snapshot    | table | gvangalen
+ public | ai_category_insights        | table | gvangalen
+ public | ai_reflections              | table | gvangalen
+ public | ai_response_cache           | table | gvangalen
+ public | ai_usage_logs               | table | gvangalen
+ public | bot_configs                 | table | gvangalen
+ public | bot_decisions               | table | gvangalen
+ public | bot_executions              | table | gvangalen
+ public | bot_ledger                  | table | gvangalen
+ public | bot_orders                  | table | gvangalen
+ public | bot_portfolio_snapshots     | table | gvangalen
+ public | bot_portfolios              | table | gvangalen
+ public | bot_trade_plans             | table | gvangalen
+ public | btc_price_history           | table | gvangalen
+ public | daily_reports               | table | gvangalen
+ public | daily_scores                | table | gvangalen
+ public | daily_setup_scores          | table | gvangalen
+ public | global_macro_data           | table | gvangalen
+ public | global_market_indicators    | table | gvangalen
+ public | global_market_insights      | table | gvangalen
+ public | global_technical_indicators | table | gvangalen
+ public | indicator_curves            | table | gvangalen
+ public | indicators                  | table | gvangalen
+ public | macro_data                  | table | gvangalen
+ public | macro_indicator_rules       | table | gvangalen
+ public | market_data                 | table | gvangalen
+ public | market_data_7d              | table | gvangalen
+ public | market_data_indicators      | table | gvangalen
+ public | market_forward_returns      | table | gvangalen
+ public | market_indicator_rules      | table | gvangalen
+ public | market_indicator_scores     | table | gvangalen
+ public | monthly_reports             | table | gvangalen
+ public | onboarding_steps            | table | gvangalen
+ public | portfolio_balance_snapshots | table | gvangalen
+ public | push_subscriptions          | table | gvangalen
+ public | quarterly_reports           | table | gvangalen
+ public | regime_memory               | table | gvangalen
+ public | report_snapshots            | table | gvangalen
+ public | setups                      | table | gvangalen
+ public | strategies                  | table | gvangalen
+ public | system_logs                 | table | gvangalen
+ public | technical_indicator_rules   | table | gvangalen
+ public | technical_indicators        | table | gvangalen
+ public | trading_advice              | table | gvangalen
+ public | users                       | table | gvangalen
+ public | weekly_reports              | table | gvangalen
+(46 rows)
+

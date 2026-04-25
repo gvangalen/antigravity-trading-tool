@@ -1,8 +1,4 @@
-//----------------------------------------------------------
-//  GLOBAL API CLIENT — COOKIE-BASED AUTH (CORRECT VERSION)
-//----------------------------------------------------------
-
-const API_BASE_URL = "https://www.tradamind.com";
+import { API_BASE_URL } from "@/lib/config";
 
 //----------------------------------------------------------
 // 📡 GET
