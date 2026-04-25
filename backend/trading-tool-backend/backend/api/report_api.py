@@ -10,7 +10,7 @@ from backend.services.report_service import ReportService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-def get_report_service(db: AsyncSession = Depends(get_db)):
+async def get_report_service(db: AsyncSession = Depends(get_db)):
     repo = ReportRepository(db)
     return ReportService(repo)
 

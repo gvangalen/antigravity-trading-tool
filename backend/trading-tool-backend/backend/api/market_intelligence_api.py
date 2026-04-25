@@ -11,7 +11,7 @@ from backend.services.intelligence_service import IntelligenceService
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-def get_intelligence_service(db: AsyncSession = Depends(get_db)):
+async def get_intelligence_service(db: AsyncSession = Depends(get_db)):
     repo = IntelligenceRepository(db)
     return IntelligenceService(repo)
 

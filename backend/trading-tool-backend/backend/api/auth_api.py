@@ -42,7 +42,7 @@ COOKIE_SETTINGS = dict(
     path="/",
 )
 
-def get_auth_service(db: AsyncSession = Depends(get_db)):
+async def get_auth_service(db: AsyncSession = Depends(get_db)):
     repo = UserRepository(db)
     return AuthService(repo)
 

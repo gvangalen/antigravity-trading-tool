@@ -12,12 +12,14 @@ from backend.schemas.dashboard_schema import (
     SetupSummarySchema
 )
 from backend.services.dashboard_service import DashboardService
+from backend.infrastructure.repositories.dashboard_repository import DashboardRepository
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-def get_dashboard_service(db: AsyncSession = Depends(get_db)):
-    return DashboardService(db)
+async def get_dashboard_service(db: AsyncSession = Depends(get_db)):
+    repo = DashboardRepository(db)
+    return DashboardService(repo)
 
 # =========================================================
 # 🔥 DASHBOARD DATA (USER-SPECIFIEK)

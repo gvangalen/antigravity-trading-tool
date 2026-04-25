@@ -11,7 +11,7 @@ from backend.schemas.sidebar_schema import ActiveTradeResponse, BotStatusRespons
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-def get_sidebar_service(db: AsyncSession = Depends(get_db)) -> SidebarService:
+async def get_sidebar_service(db: AsyncSession = Depends(get_db)) -> SidebarService:
     repository = SidebarRepository(db)
     return SidebarService(repository)
 

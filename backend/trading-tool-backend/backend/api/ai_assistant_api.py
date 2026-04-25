@@ -18,7 +18,7 @@ from backend.infrastructure.repositories.strategy_repository import StrategyRepo
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-def get_assistant_service(db: AsyncSession = Depends(get_db)):
+async def get_assistant_service(db: AsyncSession = Depends(get_db)):
     score_repo = ScoreRepository(db)
     setup_repo = SetupRepository(db)
     report_repo = ReportRepository(db)

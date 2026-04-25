@@ -15,17 +15,36 @@ export default function NotificationToggle() {
   const [registration, setRegistration] = useState(null);
 
   useEffect(() => {
+    // Veiligheidstimer: Stop sowieso met laden na 3 seconden
+    const timer = setTimeout(() => {
+      setLoading(prev => {
+        if (prev) {
+          console.warn("Notification check timed out");
+          return false;
+        }
+        return false;
+      });
+    }, 3000);
+
     if (typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window) {
       navigator.serviceWorker.ready.then((reg) => {
         setRegistration(reg);
         reg.pushManager.getSubscription().then((sub) => {
           setIsSubscribed(!!sub);
           setLoading(false);
+          clearTimeout(timer);
         });
+      }).catch(err => {
+        console.error("SW Ready Error:", err);
+        setLoading(false);
+        clearTimeout(timer);
       });
     } else {
       setLoading(false);
+      clearTimeout(timer);
     }
+    
+    return () => clearTimeout(timer);
   }, []);
 
   const urlBase64ToUint8Array = (base64String) => {

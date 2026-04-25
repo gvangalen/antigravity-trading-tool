@@ -14,6 +14,9 @@ class IntelligenceService:
     # user_id -> { "data": dict, "expires_at": datetime }
     _cache = {}
     _CACHE_TTL_SECONDS = 30 # Kortere TTL voor live gevoel, maar lang genoeg om bursts te stoppen
+    
+    # 🛡️ Semaphore om te voorkomen dat er teveel 'heavy' threads tegelijk draaien
+    _semaphore = asyncio.Semaphore(5)
 
     def __init__(self, repository: IntelligenceRepository):
         self.repository = repository
@@ -44,13 +47,14 @@ class IntelligenceService:
                 "setup": float(daily_score.setup_score or 10.0),
             }
 
-        # 3. Execute heavy engine in threadpool
+        # 3. Execute heavy engine in threadpool with Semaphore protection
         # logger.info(f"⚙️ Cache MISS: Berekenen Market Intelligence in nieuwe thread (user: {user_id})")
-        result = await asyncio.to_thread(
-            get_market_intelligence,
-            user_id=user_id,
-            scores=scores
-        )
+        async with self._semaphore:
+            result = await asyncio.to_thread(
+                get_market_intelligence,
+                user_id=user_id,
+                scores=scores
+            )
 
         # 4. Save to Cache
         self._cache[user_id] = {
