@@ -151,8 +151,19 @@ async def refresh_token(
 @router.post("/auth/logout")
 async def logout(response: Response):
     resp = JSONResponse({"success": True})
-    resp.delete_cookie("access_token", path="/")
-    resp.delete_cookie("refresh_token", path="/")
+    
+    # We moeten exact dezelfde attributen gebruiken (domain, path, samesite)
+    # om de cookie succesvol te laten verwijderen door de browser.
+    resp.delete_cookie(
+        "access_token", 
+        path=COOKIE_SETTINGS["path"],
+        domain=COOKIE_SETTINGS["domain"]
+    )
+    resp.delete_cookie(
+        "refresh_token", 
+        path=COOKIE_SETTINGS["path"],
+        domain=COOKIE_SETTINGS["domain"]
+    )
     return resp
 
 
