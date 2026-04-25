@@ -143,16 +143,6 @@ export default function AvatarMenu() {
               {locale === 'nl' ? "Profiel" : "Profile"}
             </DropdownItem>
 
-            {user?.role === 'admin' ? (
-              <DropdownItem href="/admin/ai" icon={<Brain size={16} />}>
-                {locale === 'nl' ? "AI Instellingen" : "AI Settings"}
-              </DropdownItem>
-            ) : (
-              <DropdownButton icon={<Brain size={16} />}>
-                 {locale === 'nl' ? "AI Instellingen" : "AI Settings"}
-              </DropdownButton>
-            )}
-
             <div className="h-px bg-[var(--color-border-subtle)] dark:bg-slate-800 my-1 mx-4" />
 
             {/* LANGUAGE TOGGLE */}

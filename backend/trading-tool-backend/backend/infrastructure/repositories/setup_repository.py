@@ -109,6 +109,10 @@ class SetupRepository:
         result = await self.session.execute(query, params)
         return result.mappings().all()
 
+    async def get_user_setups(self, user_id: int) -> List[dict]:
+        """Alias for compatibility with context builders"""
+        return await self.get_all_setups(user_id)
+
     async def get_dca_setups(self, user_id: int) -> List[dict]:
         query = text("SELECT * FROM setups WHERE setup_type = 'dca' AND user_id = :user_id ORDER BY created_at DESC")
         result = await self.session.execute(query, {"user_id": user_id})

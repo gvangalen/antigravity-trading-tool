@@ -7,8 +7,10 @@ import CardWrapper from "@/components/ui/CardWrapper";
 import CardLoader from "@/components/ui/CardLoader";        // ✅ Uniforme loader
 import AIInsightBlock from "@/components/ui/AIInsightBlock"; // Dashboard variant
 import { fetchLastStrategy } from "@/lib/api/strategy";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function TradingBotCard() {
+  const { t } = useTranslation();
   const [strategy, setStrategy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -34,13 +36,13 @@ export default function TradingBotCard() {
 
   return (
     <CardWrapper
-      title="AI TradingBot"
+      title={t.dashboard.cards.bot}
       icon={<Bot className="w-4 h-4 text-[var(--primary)]" />}
     >
       <div className="flex flex-col gap-4 min-h-[220px]">
 
         {/* 🔄 Nieuwe uniforme loader */}
-        {loading && <CardLoader text="AI Strategy laden…" />}
+        {loading && <CardLoader text={t.dashboard.cards.loading_bot} />}
 
         {/* ❌ ERROR STATE */}
         {!loading && error && (
@@ -50,7 +52,7 @@ export default function TradingBotCard() {
         {/* ✔️ EMPTY STATE */}
         {!loading && !error && !strategy && (
           <p className="text-sm italic text-[var(--text-light)]">
-            Nog geen strategie beschikbaar.
+            {t.dashboard.cards.no_strategy}
           </p>
         )}
 
@@ -61,8 +63,8 @@ export default function TradingBotCard() {
             {/* BASIS FIELDS */}
             <div className="space-y-[2px] text-sm text-[var(--text-dark)]">
               <p><strong>Setup:</strong> {strategy.setup_name}</p>
-              <p><strong>Type:</strong> {strategy.strategy_type}</p>
-              <p><strong>Asset:</strong> {strategy.symbol}</p>
+              <p><strong>{t.common.type}:</strong> {strategy.strategy_type}</p>
+              <p><strong>{t.common.asset}:</strong> {strategy.symbol}</p>
               <p><strong>Timeframe:</strong> {strategy.timeframe}</p>
 
               {strategy.entry && (

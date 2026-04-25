@@ -16,6 +16,7 @@ class User(Base):
     first_name = Column(String)
     last_name = Column(String)
     last_login_at = Column(DateTime)
+    subscription_status = Column(String, default="active") # 'active', 'inactive', 'canceled'
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # --- Phase 2: AI Quotas & Usage ---

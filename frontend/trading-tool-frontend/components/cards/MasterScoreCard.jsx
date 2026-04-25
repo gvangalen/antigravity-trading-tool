@@ -2,12 +2,14 @@
 
 import { Brain } from "lucide-react";
 import { useScoresData } from "@/hooks/useScoresData";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 import CardWrapper from "@/components/ui/CardWrapper";
 import CardLoader from "@/components/ui/CardLoader";     // ✅ Nieuwe loader
 import AIInsightBlock from "@/components/ui/AIInsightBlock";
 
 export default function MasterScoreCard() {
+  const { t } = useTranslation();
   const { master, loading, error } = useScoresData();
 
   const getScoreColor = (score) => {
@@ -20,18 +22,18 @@ export default function MasterScoreCard() {
 
   return (
     <CardWrapper
-      title="AI Master Score"
+      title={t.dashboard.cards.master_score}
       icon={<Brain className="w-4 h-4 text-[var(--primary)]" />}
     >
       <div className="flex flex-col gap-4 min-h-[220px]">
 
         {/* 🔄 UNIFORME LOADER */}
-        {loading && <CardLoader text="Master score laden…" />}
+        {loading && <CardLoader text={t.dashboard.cards.loading_score} />}
 
         {/* ❌ ERROR */}
         {!loading && (error || !master) && (
           <p className="text-red-500 text-center text-sm">
-            ❌ Fout bij laden van Master Score
+            ❌ {t.dashboard.cards.error_score}
           </p>
         )}
 
@@ -45,9 +47,9 @@ export default function MasterScoreCard() {
 
             {/* DETAILS */}
             <div className="space-y-[3px] text-sm text-[var(--text-dark)]">
-              <p><strong>Trend:</strong> {master.trend}</p>
-              <p><strong>Bias:</strong> {master.bias}</p>
-              <p><strong>Risico:</strong> {master.risk}</p>
+              <p><strong>{t.common.trend}:</strong> {master.trend}</p>
+              <p><strong>{t.common.bias}:</strong> {master.bias}</p>
+              <p><strong>{t.common.risk}:</strong> {master.risk}</p>
             </div>
 
             {/* AI INSIGHT BLOCK */}

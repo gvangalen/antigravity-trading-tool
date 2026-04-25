@@ -29,26 +29,24 @@ export default function ReportCard() {
 
   return (
     <CardWrapper
-      title="Daily Rapport"
+      title={t.dashboard.cards.report}
       icon={<MessageSquare className="w-4 h-4 text-[var(--primary)]" />}
     >
       <div className="flex flex-col gap-4 min-h-[220px]">
 
         {/* ⏳ LOADING */}
-        {loading && <CardLoader text="Rapport laden…" />}
+        {loading && <CardLoader text={t.dashboard.cards.loading_report} />}
 
         {/* 🟦 EERSTE KEER (404) */}
         {!loading && isFirstTime && (
           <div className="text-sm text-[var(--text-light)] leading-relaxed">
-            ✨ Je eerste dagelijkse rapport wordt
-            <span className="font-semibold"> morgen vroeg automatisch</span>{" "}
-            gegenereerd door de AI.
+            ✨ {t.dashboard.cards.first_report_hint}
             <div className="mt-3">
               <Link
                 href="/report"
                 className="text-[var(--primary-dark)] hover:underline font-medium"
               >
-                Bekijk voorbeeldrapport →
+                {t.dashboard.cards.view_example} →
               </Link>
             </div>
           </div>
@@ -57,7 +55,7 @@ export default function ReportCard() {
         {/* 🔴 ECHTE ERROR */}
         {!loading && error === 'error' && (
           <p className="text-sm text-red-500 italic">
-            Rapport kon niet geladen worden.
+            {t.dashboard.cards.error_report}
           </p>
         )}
 
@@ -74,7 +72,7 @@ export default function ReportCard() {
                 hover:underline flex items-center gap-1
               "
             >
-              Bekijk laatste rapport
+              {t.dashboard.cards.view_last}
               <ChevronRight className="w-3 h-3" />
             </Link>
           </>

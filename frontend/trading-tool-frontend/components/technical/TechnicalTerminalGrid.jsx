@@ -137,8 +137,15 @@ function TerminalRow({ item, onRemove, onViewChart }) {
            <div className="w-7 h-7 rounded-md bg-[var(--color-border-subtle)] border border-slate-100 flex items-center justify-center text-secondary group-hover/item:text-blue-600 group-hover/item:bg-blue-50 transition-colors">
               <Info size={12} />
            </div>
-           <div className="font-semibold text-foreground text-xs truncate max-w-[140px] group-hover/item:text-blue-600 transition-colors" title={displayName}>
-              {displayName}
+           <div className="flex flex-col">
+              <div className="font-semibold text-foreground text-xs truncate max-w-[140px] group-hover/item:text-blue-600 transition-colors" title={displayName}>
+                 {displayName}
+              </div>
+              {item.timestamp && !dayjs(item.timestamp).isSame(dayjs(), 'day') && (
+                <div className="text-[8px] font-bold text-orange-500 uppercase tracking-tighter">
+                  {dayjs(item.timestamp).format("DD MMM")}
+                </div>
+              )}
            </div>
         </div>
       </td>

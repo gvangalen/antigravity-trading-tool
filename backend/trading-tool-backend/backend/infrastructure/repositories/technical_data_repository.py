@@ -70,7 +70,14 @@ class TechnicalDataRepository:
     async def get_day_data(self, user_id: int) -> List[TechnicalDataIndicator]:
         """
         Haalt de meest recente record op per indicator voor deze gebruiker.
-        Maakt gebruik van PostgreSQL DISTINCT ON voor maximale betrouwbaarheid en performance.
+        Dit is de 'Cockpit' view: we willen altijd iets zien, ook als de task van vandaag faalde.
+        """
+        return await self.get_latest_data_fallback(user_id)
+
+    async def get_latest_data_fallback(self, user_id: int) -> List[TechnicalDataIndicator]:
+        """
+        Helper die per indicator simpelweg het allerlaatste record pakt.
+        Voorkomt 'Geen verbinding' errors op het dashboard.
         """
         stmt = (
             select(TechnicalDataIndicator)
@@ -78,7 +85,6 @@ class TechnicalDataRepository:
             .where(TechnicalDataIndicator.user_id == user_id)
             .order_by(TechnicalDataIndicator.indicator, TechnicalDataIndicator.timestamp.desc())
         )
-
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 

@@ -17,14 +17,23 @@ import {
   Menu,
   X,
   ShieldCheck,
+  ShieldAlert,
+  Users
 } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { BRANDING } from "@/lib/branding";
+import { useAuth } from "@/components/auth/AuthGuard"; // useAuth is actually in AuthProvider usually but AuthGuard re-exports sometimes, or use direct
+// Actually AuthGuard.jsx has useAuth. Let's check imports.
+// Ah, AuthGuard.jsx uses useAuth from AuthProvider. Wait.
+import { useAuth as useAuthHook } from "@/components/auth/AuthProvider"; 
 
 export default function NavBar() {
   const { t } = useTranslation();
+  const { user } = useAuthHook();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const isAdmin = user?.role === 'admin';
 
   const NAV_LINKS = [
     { href: "/dashboard", label: t.nav.dashboard, icon: <Gauge size={18} /> },
@@ -36,6 +45,12 @@ export default function NavBar() {
     { href: "/bot", label: t.nav.bots, icon: <Bot size={18} /> },
     { href: "/report", label: t.nav.reports, icon: <FileText size={18} /> },
   ];
+
+  // Admin Specific Links
+  const ADMIN_LINKS = isAdmin ? [
+    { href: "/admin/ai", label: t.nav.admin_ai, icon: <ShieldCheck size={18} /> },
+    { href: "/admin/users", label: t.nav.users, icon: <Users size={18} /> },
+  ] : [];
 
   useEffect(() => {
     setMobileOpen(false);
@@ -71,7 +86,7 @@ export default function NavBar() {
 
       {/* 💻 DESKTOP BAR */}
       <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 bg-card dark:bg-[#020617] border-r border-slate-200 dark:border-slate-800 flex-col z-50 transition-colors">
-        <SidebarInner pathname={pathname} onNavigate={() => {}} navLinks={NAV_LINKS} />
+        <SidebarInner pathname={pathname} onNavigate={() => {}} navLinks={NAV_LINKS} adminLinks={ADMIN_LINKS} />
       </aside>
 
       {/* 🛸 MOBILE DRAWER */}
@@ -115,7 +130,7 @@ export default function NavBar() {
                   <X size={20} />
                 </button>
               </div>
-              <SidebarInner pathname={pathname} onNavigate={() => setMobileOpen(false)} navLinks={NAV_LINKS} />
+              <SidebarInner pathname={pathname} onNavigate={() => setMobileOpen(false)} navLinks={NAV_LINKS} adminLinks={ADMIN_LINKS} />
             </motion.aside>
           </>
         )}
@@ -124,7 +139,7 @@ export default function NavBar() {
   );
 }
 
-function SidebarInner({ pathname, onNavigate, navLinks }) {
+function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
   return (
     <div className="flex flex-col h-full bg-card dark:bg-[#020617] transition-colors">
       <Link 
@@ -182,6 +197,35 @@ function SidebarInner({ pathname, onNavigate, navLinks }) {
             </Link>
           );
         })}
+
+        {/* ADMIN SECTION */}
+        {adminLinks.length > 0 && (
+          <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800">
+            <p className="px-5 text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-3 italic">{t.nav.command_center}</p>
+            {adminLinks.map((link) => {
+              const isActive = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={onNavigate}
+                  className={`
+                    flex items-center gap-4 px-5 py-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all group mb-1
+                    ${isActive 
+                      ? "bg-slate-900 text-white shadow-lg" 
+                      : "text-muted hover:bg-slate-50 dark:hover:bg-slate-900/50 hover:text-slate-900 dark:hover:text-white"
+                    }
+                  `}
+                >
+                  <span className={`${isActive ? "text-white" : "text-secondary group-hover:text-slate-600 dark:group-hover:text-slate-200"}`}>
+                    {link.icon}
+                  </span>
+                  {link.label}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       {/* FOOTER - MISSION STATEMENT */}

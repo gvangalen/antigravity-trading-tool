@@ -6,7 +6,12 @@ from typing import List
 from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
 from backend.services.admin_ai_service import AdminAiService
-from backend.schemas.admin_schema import AdminAiStatsResponse
+from backend.services.admin_user_service import AdminUserService
+from backend.schemas.admin_schema import (
+    AdminAiStatsResponse,
+    AdminUserOverview,
+    AdminUserUpdate
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -35,3 +40,47 @@ async def get_admin_ai_stats(
     except Exception as e:
         logger.error(f"❌ Error fetching Admin AI Stats: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij het ophalen van AI statistieken.")
+
+# =========================================================
+# 👤 USER MANAGEMENT
+# =========================================================
+@router.get("/admin/users", response_model=List[AdminUserOverview])
+async def get_admin_users(
+    current_user: dict = Depends(check_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Haalt alle gebruikers op voor het admin dashboard.
+    """
+    try:
+        service = AdminUserService(db)
+        return await service.get_all_users_overview()
+    except Exception as e:
+        logger.error(f"❌ Error fetching Admin Users: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Fout bij het ophalen van gebruikers.")
+
+@router.patch("/admin/users/{user_id}", response_model=AdminUserOverview)
+async def update_admin_user(
+    user_id: int,
+    updates: AdminUserUpdate,
+    current_user: dict = Depends(check_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update een gebruiker (plan, limiet, status) door een admin.
+    """
+    try:
+        service = AdminUserService(db)
+        updated = await service.update_user_admin(user_id, updates.dict(exclude_unset=True))
+        if not updated:
+            raise HTTPException(status_code=404, detail="Gebruiker niet gevonden.")
+        
+        # We halen het volledige overview op om aan het response model te voldoen
+        all_users = await service.get_all_users_overview()
+        user_data = next((u for u in all_users if u["id"] == user_id), None)
+        return user_data
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error updating Admin User {user_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Fout bij het updaten van de gebruiker.")

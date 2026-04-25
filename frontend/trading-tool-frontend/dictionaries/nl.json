@@ -10,7 +10,13 @@
     "explore": "Ontdekken",
     "language": "Taal",
     "switch_to": "English",
-    "search": "Zoeken..."
+    "search": "Zoeken...",
+    "status": "Systeemstatus",
+    "updated": "Laatste update",
+    "name": "Naam",
+    "type": "Type",
+    "asset": "Asset",
+    "action": "Actie"
   },
   "greetings": {
     "morning": "Goedemorgen",
@@ -26,7 +32,10 @@
     "strategies": "Strategieën",
     "bots": "Bots",
     "reports": "Rapporten",
-    "onboarding": "Onboarding"
+    "onboarding": "Onboarding",
+    "admin_ai": "Admin AI",
+    "users": "Gebruikers",
+    "command_center": "Command Center"
   },
   "dashboard": {
     "title": "Intelligentie",
@@ -62,9 +71,43 @@
       "technical": "Technisch",
       "macro": "Macro",
       "market": "Markt",
+      "bots": "Bots",
       "analysis_mode": "Diepe Analyse Modus",
       "source": "Bron: Real-Time API",
       "export": "Exporteer Systeemlog"
+    },
+    "cards": {
+      "report": "Dagelijks Rapport",
+      "setup": "Actieve Setup",
+      "master_score": "AI Master Score",
+      "bot": "AI Trading Bot",
+      "no_setup": "Geen actieve setup gevonden.",
+      "no_strategy": "Nog geen strategie beschikbaar.",
+      "loading_report": "Rapport laden...",
+      "loading_setup": "Setup laden...",
+      "loading_score": "Master score laden...",
+      "loading_bot": "AI Strategie laden...",
+      "first_report_hint": "Je eerste dagelijkse rapport wordt morgen vroeg automatisch gegenereerd door de AI.",
+      "view_example": "Bekijk voorbeeldrapport",
+      "view_last": "Bekijk laatste rapport",
+      "error_report": "Rapport kon niet geladen worden.",
+      "error_score": "Fout bij laden van Master Score"
+    },
+    "assistant": {
+      "title": "Tradamind AI",
+      "pulse": "Intelligence Layer Pulse",
+      "context": "Actieve Context",
+      "live_intel": "Live Intelligentie",
+      "setup_guide": "Installatie Gids",
+      "quick_glance": "Snel Overzicht",
+      "deep_analysis": "Diepe Analyse",
+      "ask_question": "Stel een vraag...",
+      "error_chat": "Analyse ophalen mislukt. Probeer het opnieuw."
+    },
+    "notifications": {
+      "push_on": "Push Actief",
+      "push_off": "Push Uit",
+      "login_required": "Log in om notificaties in te schakelen"
     }
   }
 }
