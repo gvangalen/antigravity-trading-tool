@@ -81,7 +81,7 @@ export default function TopBar() {
           />
         </div>
 
-        <NotificationToggle />
+        {/* Avatar Menu (contains Notification setting) */}
 
         {/* 👤 AVATAR MENU (Restored) */}
         <div className="pl-6 border-l-2 border-slate-100 dark:border-slate-800 flex items-center">

@@ -8,7 +8,7 @@ import { API_BASE_URL } from "@/lib/config";
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
-export default function NotificationToggle() {
+export default function NotificationToggle({ variant = "default" }) {
   const { user } = useAuth();
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -71,16 +71,16 @@ export default function NotificationToggle() {
         return;
       }
 
-      if (!VAPID_PUBLIC_KEY) {
-        console.error("VAPID_PUBLIC_KEY missing in environment");
-        toast.error("Notificatie configuratie ontbreekt (VAPID)");
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        toast.error("Notificatie toestemming geweigerd");
         setLoading(false);
         return;
       }
 
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        toast.error("Notificatie toestemming geweigerd");
+      if (!VAPID_PUBLIC_KEY) {
+        console.error("VAPID_PUBLIC_KEY missing in environment");
+        toast.error("VAPID Key missing");
         setLoading(false);
         return;
       }
@@ -92,37 +92,28 @@ export default function NotificationToggle() {
 
       const subscription = await registration.pushManager.subscribe(subscribeOptions);
       
-      // Convert ArrayBuffer to base64
       const p256dh = btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey("p256dh"))));
       const auth = btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey("auth"))));
 
-      // Send to backend
       const response = await fetch(`${API_BASE_URL}/api/notifications/subscribe`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: user.id || user.user_id || 1, // Handle different ID fields
+          user_id: user.id || 1,
           subscription: {
             endpoint: subscription.endpoint,
-            keys: {
-              p256dh: p256dh,
-              auth: auth,
-            }
+            keys: { p256dh, auth }
           }
         }),
       });
 
       if (response.ok) {
         setIsSubscribed(true);
-        toast.success("Notificaties ingeschakeld!");
-      } else {
-        throw new Error("Backend save failed");
+        toast.success("Notificaties actief!");
       }
     } catch (error) {
       console.error("Subscription error:", error);
-      toast.error("Fout bij inschakelen notificaties");
+      toast.error("Fout bij inschakelen");
     } finally {
       setLoading(false);
     }
@@ -134,21 +125,43 @@ export default function NotificationToggle() {
       const sub = await registration.pushManager.getSubscription();
       if (sub) {
         await sub.unsubscribe();
-        
-        // Remove from backend
         await fetch(`${API_BASE_URL}/api/notifications/unsubscribe?endpoint=${encodeURIComponent(sub.endpoint)}`, {
           method: "POST",
         });
       }
       setIsSubscribed(false);
-      toast.success("Notificaties uitgeschakeld");
+      toast.success("Notificaties uit");
     } catch (error) {
       console.error("Unsubscribe error:", error);
-      toast.error("Fout bij uitschakelen notificaties");
+      toast.error("Fout bij uitschakelen");
     } finally {
       setLoading(false);
     }
   };
+
+  if (variant === "menuItem") {
+    return (
+      <button
+        onClick={isSubscribed ? unsubscribe : subscribe}
+        disabled={loading}
+        className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 transition-all text-secondary dark:text-slate-400 group"
+      >
+        {loading ? (
+          <Loader2 size={16} className="animate-spin text-blue-500" />
+        ) : isSubscribed ? (
+          <Bell size={16} className="text-blue-500 animate-pulse" />
+        ) : (
+          <BellOff size={16} />
+        )}
+        <div className="flex flex-col items-start leading-none">
+          <span className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Notificaties</span>
+          <span className="font-bold text-[13px] text-foreground dark:text-slate-200">
+            {isSubscribed ? "Push Ingeschakeld" : "Push Uitgeschakeld"}
+          </span>
+        </div>
+      </button>
+    );
+  }
 
   if (loading) return (
     <div className="flex items-center justify-center w-32 h-10 border border-gray-700/50 rounded-lg bg-gray-800/20">
@@ -165,14 +178,11 @@ export default function NotificationToggle() {
           : "bg-slate-900/50 text-slate-400 border-slate-700/50 hover:text-white hover:bg-slate-800 hover:border-slate-600 shadow-sm"
       }`}
     >
-      {isSubscribed ? (
-        <Bell className="animate-pulse" size={18} />
-      ) : (
-        <BellOff size={18} />
-      )}
-      <span className="text-[10px] font-bold uppercase tracking-widest">
+      {isSubscribed ? <Bell size={18} className="animate-pulse" /> : <BellOff size={18} />}
+      <span className="text-[10px] font-black uppercase tracking-widest">
         {isSubscribed ? "Push Actief" : "Push Uit"}
       </span>
     </button>
   );
 }
+

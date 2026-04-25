@@ -7,7 +7,8 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
-import { User, Brain, LogOut, Loader2, Moon, Sun, Languages } from "lucide-react";
+import { User, Brain, LogOut, Loader2, Moon, Sun, Languages, Bell, BellOff } from "lucide-react";
+import NotificationToggle from "@/components/NotificationToggle";
 
 export default function AvatarMenu() {
   const { t, locale, setLocale } = useTranslation();
@@ -163,6 +164,15 @@ export default function AvatarMenu() {
             >
               {isDark ? (locale === 'nl' ? "Lichte Modus" : "Light Mode") : (locale === 'nl' ? "Donkere Modus" : "Dark Mode")}
             </DropdownButton>
+
+            <div className="h-px bg-[var(--color-border-subtle)] dark:bg-slate-800 my-1 mx-4" />
+
+            {/* PUSH NOTIFICATIONS TOGGLE (Integrated) */}
+            <li className="px-2 py-1">
+              <NotificationToggle variant="menuItem" />
+            </li>
+
+            <div className="h-px bg-[var(--color-border-subtle)] dark:bg-slate-800 my-1 mx-4" />
 
             {/* LOGOUT */}
             <DropdownButton
