@@ -145,41 +145,39 @@ export default function TechnicalPage() {
         </DashboardErrorBoundary>
       </div>
 
-      <div className="grid grid-cols-1 gap-12 pt-8 pb-24">
-         {/* 🛠️ CONFIGURATION */}
-         <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-2">
-               <Activity size={14} className="text-slate-400 dark:text-slate-500" />
-               <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Configuration</span>
+      <div className="space-y-12 pb-24">
+         {/* 📊 INDICATORS TERMINAL (Main Focus) */}
+         <div className="space-y-6">
+            <div className="flex items-center justify-between px-2">
+               <div className="flex items-center gap-3">
+                  <LayoutGrid size={18} className="text-blue-600" />
+                  <span className="text-[12px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Indicator Dashboard</span>
+               </div>
+               <TechnicalTabs activeTab={activeTab} setActiveTab={setActiveTab} />
             </div>
-            <TechnicalIndicatorScoreView
-               addTechnicalIndicator={addTechnicalIndicator}
-               activeTechnicalIndicatorNames={technicalData.map(i => i.name)}
-            />
-         </div>
 
-         {/* 📊 INDICATORS & TAB TERMINAL */}
-         <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
-            <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
-              <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
-                <LayoutGrid size={16} className="text-blue-600" />
-                Indicators
-              </div>
-            </div>
-            <div className="card-p p-8">
-              <TechnicalTabs activeTab={activeTab} setActiveTab={setActiveTab} />
-            </div>
-            <div className="border-t border-slate-100 dark:border-slate-800">
-              <DashboardErrorBoundary>
-                <TechnicalTerminalGrid
+            <DashboardErrorBoundary>
+               <TechnicalTerminalGrid
                   data={technicalData}
                   loading={loadingIndicators}
                   error={error}
                   onRemove={handleRemoveIndicator}
                   onViewChart={handleViewChart}
-                />
-              </DashboardErrorBoundary>
+               />
+            </DashboardErrorBoundary>
+         </div>
+
+         {/* 🧱 CONFIGURATION & LOGIC ENGINE (Subordinate) */}
+         <div className="pt-8 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-3 mb-8 px-2">
+               <Brain size={18} className="text-slate-400" />
+               <span className="text-[12px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Logic Engine Configuration</span>
             </div>
+            
+            <TechnicalIndicatorScoreView
+               addTechnicalIndicator={addTechnicalIndicator}
+               activeTechnicalIndicatorNames={technicalData.map(i => i.name)}
+            />
          </div>
       </div>
 

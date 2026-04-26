@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func, delete
-from datetime import datetime
+from sqlalchemy import select, and_, func, delete, Date
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from backend.infrastructure.models import TechnicalDataIndicator, TechnicalIndicatorRule, Indicator
@@ -92,12 +92,17 @@ class TechnicalDataRepository:
         return await self._get_data_by_weeks(user_id, 1)
 
     async def _get_data_by_weeks(self, user_id: int, limit: int) -> List[TechnicalDataIndicator]:
+        """
+        Helper om data over X weken op te halen. 
+        Eerst de meest recente week-startdatums bepalen en dan de data pff.
+        """
         # 1. Get distinct weeks
+        week_trunc = func.date_trunc('week', TechnicalDataIndicator.timestamp)
         weeks_result = await self.session.execute(
-            select(func.cast(func.date_trunc('week', TechnicalDataIndicator.timestamp), func.Date()))
+            select(func.cast(week_trunc, Date))
             .where(TechnicalDataIndicator.user_id == user_id)
             .distinct()
-            .order_by(func.cast(func.date_trunc('week', TechnicalDataIndicator.timestamp), func.Date()).desc())
+            .order_by(func.cast(week_trunc, Date).desc())
             .limit(limit)
         )
         weeks = [r[0] for r in weeks_result.all()]
@@ -111,7 +116,7 @@ class TechnicalDataRepository:
             .where(
                 and_(
                     TechnicalDataIndicator.user_id == user_id,
-                    func.cast(func.date_trunc('week', TechnicalDataIndicator.timestamp), func.Date()).in_(weeks)
+                    func.cast(func.date_trunc('week', TechnicalDataIndicator.timestamp), Date).in_(weeks)
                 )
             )
             .order_by(TechnicalDataIndicator.timestamp.desc())
