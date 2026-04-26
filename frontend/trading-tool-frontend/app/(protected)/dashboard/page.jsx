@@ -38,6 +38,14 @@ export default function DashboardPage() {
   const { configs: botConfigs } = useBotData();
 
   /* --------------------------------------------------------
+     🔹 Afgeleide helpers (BELANGRIJK)
+     GEFIXED: Altijd Array.isArray checken
+  -------------------------------------------------------- */
+  const activeTechnicalIndicatorNames = Array.isArray(technicalData) 
+    ? technicalData.map((i) => i.name)
+    : [];
+
+  /* --------------------------------------------------------
      📊 DATA FETCHING
   -------------------------------------------------------- */
   const {
@@ -85,7 +93,9 @@ export default function DashboardPage() {
   const tvConfig = mapSetupToTradingView(activeSetup);
   
   // 🔥 INDICATOR SYNC: Extract names and map to TV studies
-  const activeIndicatorNames = technicalData.map(i => i.name);
+  const activeIndicatorNames = Array.isArray(technicalData) 
+    ? technicalData.map(i => i.name) 
+    : [];
   const chartStudies = mapTechnicalToStudies(activeIndicatorNames);
 
 

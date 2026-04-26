@@ -41,9 +41,9 @@ export function useTechnicalData(activeTab = "Dag") {
   /* --------------------------------------------------------
      🔹 Afgeleide helpers (BELANGRIJK)
   -------------------------------------------------------- */
-  const activeTechnicalIndicatorNames = technicalData.map(
-    (i) => i.name
-  );
+  const activeTechnicalIndicatorNames = Array.isArray(technicalData)
+    ? technicalData.map((i) => i.name)
+    : [];
 
   /* --------------------------------------------------------
      INIT
