@@ -32,7 +32,7 @@ is_localhost = "localhost" in frontend_url or "127.0.0.1" in frontend_url
 is_prod_https = is_https and not is_localhost
 
 samesite_val = "none" if is_prod_https else "lax"
-cookie_domain = "tradamind.com" if is_prod_https and "tradamind.com" in frontend_url else None
+cookie_domain = ".tradamind.com" if is_prod_https and "tradamind.com" in frontend_url else None
 
 COOKIE_SETTINGS = dict(
     httponly=True,
