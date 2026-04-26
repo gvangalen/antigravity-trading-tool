@@ -97,7 +97,7 @@ echo "⚙️ Starting Celery background workers..."
 
 # RESTART CELERY WORKER (executes tasks)
 pm2 delete celery-worker || true
-pm2 start "celery -A backend.celery_task.celery_app worker --loglevel=info --concurrency=2" \
+pm2 start "celery -A backend.celery_task.celery_app worker --loglevel=info --concurrency=1" \
   --name celery-worker \
   --cwd "$BACKEND_DIR" \
   --output "$LOG_DIR/celery-worker.log" \
