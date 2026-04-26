@@ -10,12 +10,12 @@ from backend.ai_core.system_prompt_builder import build_system_prompt
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-def run_market_agent():
+def run_market_agent(user_id: int):
     """
     Genereert Market AI insights op basis van de GLOBALE OBJECTIEVE bron.
-    Analyseert Sentiment, Dominantie en Volume voor het hele platform.
+    Analyseert Sentiment, Dominantie en Volume voor een specifieke user.
     """
-    logger.info("🌍 [Market-Agent] Start Global AI Analysis")
+    logger.info(f"🧠 [Market-Agent] Start Analysis for user_id={user_id}")
 
     conn = get_db_connection()
     if not conn:
@@ -23,9 +23,9 @@ def run_market_agent():
         return
 
     try:
-        # 1️⃣ HAAL GLOBALE MARKET DATA OP
+        # 1️⃣ HAAL GLOBALE MARKET DATA OP (die voor iedereen hetzelfde is)
         with conn.cursor() as cur:
-            # A. Market Indicators (BTC Dom, Fear & Greed, etc.)
+            # A. Global Market Indicators
             cur.execute("""
                 SELECT DISTINCT ON (name)
                     name, value, timestamp
@@ -34,7 +34,7 @@ def run_market_agent():
             """)
             indicator_rows = cur.fetchall()
 
-            # B. Raw Market Data (Price, Volume, Change)
+            # B. Raw Market Data
             cur.execute("""
                 SELECT symbol, price, volume, change_24h, timestamp
                 FROM market_data
@@ -72,6 +72,14 @@ Je bent een specialist in crypto-marktsentiment en on-chain data.
 Analyseer de huidige marktdynamiek op basis van prijzen, volume en sentiment-indicatoren.
 Geef een heldere conclusie over het huidige momentum.
 
+GEEF JE ANTWOORD IN JSON FORMAT MET DE VOLGENDE VELDEN:
+- score: (0-100)
+- trend: (bullish, bearish, neutraal)
+- bias: (afwachtend, agressief, defensief)
+- risk: (laag, gemiddeld, hoog)
+- summary: (korte samenvatting)
+- top_signals: (lijst van strings met belangrijkste signalen)
+
 WAARSCHUWING: Geef GEEN financieel advies.
 """)
 
@@ -81,14 +89,15 @@ WAARSCHUWING: Geef GEEN financieel advies.
             system_role=system_prompt
         )
 
-        # 4️⃣ OPSLAAN IN GLOBAL MARKET INSIGHTS
+        # 4️⃣ OPSLAAN IN AI_CATEGORY_INSIGHTS (waar dashboard naar kijkt)
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO global_market_insights
-                    (category, avg_score, trend, bias, risk, summary, top_signals)
-                VALUES ('market', %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (category, date)
+                INSERT INTO ai_category_insights
+                    (user_id, category, avg_score, trend, bias, risk, summary, top_signals, date)
+                VALUES (%s, 'market', %s, %s, %s, %s, %s, %s, CURRENT_DATE)
+                ON CONFLICT (user_id, category, date)
                 DO UPDATE SET
+                    avg_score = EXCLUDED.avg_score,
                     trend = EXCLUDED.trend,
                     bias = EXCLUDED.bias,
                     risk = EXCLUDED.risk,
@@ -96,7 +105,8 @@ WAARSCHUWING: Geef GEEN financieel advies.
                     top_signals = EXCLUDED.top_signals,
                     created_at = NOW();
             """, (
-                50,
+                user_id,
+                raw_ai_response.get("score", 50),
                 raw_ai_response.get("trend", "neutraal"),
                 raw_ai_response.get("bias", "afwachtend"),
                 raw_ai_response.get("risk", "gemiddeld"),
@@ -105,10 +115,10 @@ WAARSCHUWING: Geef GEEN financieel advies.
             ))
 
         conn.commit()
-        logger.info("✅ [Market-Agent] Global Analysis voltooid")
+        logger.info(f"✅ [Market-Agent] Analysis voltooid voor user_id={user_id}")
 
     except Exception:
-        conn.rollback()
-        logger.error("❌ [Market-Agent] Fout tijdens global run", exc_info=True)
+        if conn: conn.rollback()
+        logger.error(f"❌ [Market-Agent] Fout tijdens run voor user_id={user_id}", exc_info=True)
     finally:
-        conn.close()
+        if conn: conn.close()
