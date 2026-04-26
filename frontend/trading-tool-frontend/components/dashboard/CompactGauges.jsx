@@ -22,7 +22,7 @@ export default function CompactGauges() {
 
   if (loading) {
      return (
-       <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-4 w-full">
+       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
          {[1, 2, 3, 4].map(i => (
            <GaugeSkeleton key={i} />
          ))}
@@ -31,7 +31,7 @@ export default function CompactGauges() {
   }
 
   return (
-    <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-4 w-full">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
       {items.map((item, idx) => {
         const score = Math.round(item.score || 0);
         

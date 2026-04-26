@@ -68,7 +68,7 @@ export default function NavBar() {
   return (
     <>
       {/* 📱 MOBILE HEADER */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-[60] bg-card dark:bg-[#020617] border-b border-slate-200 dark:border-slate-800 transition-colors">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-[60] bg-card dark:bg-[#020617] border-b border-slate-200 dark:border-slate-800 transition-colors">
         <div className="h-16 px-6 flex items-center justify-between">
           <button onClick={() => setMobileOpen(true)} className="text-muted hover:text-blue-600 transition-colors">
             <Menu size={24} />
@@ -94,7 +94,7 @@ export default function NavBar() {
       </div>
 
       {/* 💻 DESKTOP BAR */}
-      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 bg-card dark:bg-[#020617] border-r border-slate-200 dark:border-slate-800 flex-col z-50 transition-colors">
+      <aside className="hidden lg:flex fixed top-0 left-0 bottom-0 w-64 bg-card dark:bg-[#020617] border-r border-slate-200 dark:border-slate-800 flex-col z-50 transition-colors">
         <SidebarInner pathname={pathname} onNavigate={() => {}} navLinks={NAV_LINKS} adminLinks={ADMIN_LINKS} />
       </aside>
 
@@ -104,7 +104,7 @@ export default function NavBar() {
           <>
             <motion.div
               key="overlay"
-              className="md:hidden inset-0 z-[70] bg-slate-900/40 backdrop-blur-sm"
+              className="lg:hidden fixed inset-0 z-[70] bg-slate-900/40 backdrop-blur-sm"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -112,7 +112,7 @@ export default function NavBar() {
             />
             <motion.aside
               key="drawer"
-              className="md:hidden fixed top-0 left-0 bottom-0 w-72 bg-card dark:bg-[#020617] z-[80] flex flex-col shadow-2xl transition-colors"
+              className="lg:hidden fixed top-0 left-0 bottom-0 w-72 bg-card dark:bg-[#020617] z-[80] flex flex-col shadow-2xl transition-colors"
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}

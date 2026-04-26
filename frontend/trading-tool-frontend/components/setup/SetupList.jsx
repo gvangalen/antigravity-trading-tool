@@ -212,13 +212,13 @@ export default function SetupList({
       {loading && <p className="text-sm text-gray-500">Setups laden…</p>}
       {error && <p className="text-sm text-red-500">{error}</p>}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {filteredSetups.length > 0 ? (
           filteredSetups.map((setup) => (
             <div
               key={setup.id}
               className={`
-                relative rounded-3xl p-8
+                relative rounded-3xl p-6 sm:p-8
                 border-2 border-slate-100
                 bg-gradient-to-br from-white to-slate-50/50
                 transition-all duration-300

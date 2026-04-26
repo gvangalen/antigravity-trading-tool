@@ -20,20 +20,19 @@ export default function ProtectedLayout({ children }) {
 
         {/* 🕋 MAIN CONTENT SHELL */}
         <div 
-          className="md:pl-64 min-h-screen bg-white transition-all duration-200"
+          className="lg:pl-64 min-h-screen bg-white transition-all duration-200"
           style={{ 
-            paddingRight: isAIOpen ? (typeof window !== 'undefined' && window.innerWidth < 768 ? "0px" : "400px") : "0px",
-            paddingLeft: typeof window !== 'undefined' && window.innerWidth < 768 ? "0px" : ""
+            paddingRight: isAIOpen ? (typeof window !== 'undefined' && window.innerWidth < 1024 ? "0px" : "400px") : "0px",
           }}
         >
           
           {/* 🛰️ TOPBAR (HIDDEN ON MOBILE to favor NavBar mobile header) */}
-          <div className="top-bar hidden md:block">
+          <div className="top-bar hidden lg:block">
             <TopBar />
           </div>
 
           {/* 📄 PAGE CONTENT */}
-          <main className="pt-16 md:pt-16 min-h-screen px-4 md:px-10">
+          <main className="pt-16 lg:pt-16 min-h-screen px-4 lg:px-10">
             {children}
           </main>
           
