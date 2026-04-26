@@ -36,6 +36,13 @@ export default function DashboardPage() {
   const { t } = useTranslation();
   const { activeSetup, focusedBotId, setFocusedBotId } = useActiveSetup();
   const { configs: botConfigs } = useBotData();
+  const {
+    technicalData,
+    removeTechnicalIndicator: handleRemove,
+    loading: technicalLoading,
+    error: technicalError,
+    reload: technicalReload,
+  } = useTechnicalData("Day");
 
   /* --------------------------------------------------------
      🔹 Afgeleide helpers (BELANGRIJK)
@@ -45,16 +52,6 @@ export default function DashboardPage() {
     ? technicalData.map((i) => i.name)
     : [];
 
-  /* --------------------------------------------------------
-     📊 DATA FETCHING
-  -------------------------------------------------------- */
-  const {
-    technicalData,
-    removeTechnicalIndicator: handleRemove,
-    loading: technicalLoading,
-    error: technicalError,
-    reload: technicalReload,
-  } = useTechnicalData("Day");
 
   const { macroData, loading: macroLoading, error: macroError, reload: macroReload } =
     useMacroData();
