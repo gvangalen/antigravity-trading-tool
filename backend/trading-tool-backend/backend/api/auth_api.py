@@ -152,18 +152,30 @@ async def refresh_token(
 async def logout(response: Response):
     resp = JSONResponse({"success": True})
     
-    # We moeten exact dezelfde attributen gebruiken (domain, path, samesite)
-    # om de cookie succesvol te laten verwijderen door de browser.
-    resp.delete_cookie(
-        "access_token", 
-        path=COOKIE_SETTINGS["path"],
-        domain=COOKIE_SETTINGS["domain"]
-    )
-    resp.delete_cookie(
-        "refresh_token", 
-        path=COOKIE_SETTINGS["path"],
-        domain=COOKIE_SETTINGS["domain"]
-    )
+    # We proberen de cookies op meerdere manieren te wissen om 'sticky sessions'
+    # op verschillende (sub)domeinen te voorkomen.
+    
+    # 1. Voor het geconfigureerde domein (.tradamind.com)
+    for cookie_name in ["access_token", "refresh_token"]:
+        resp.delete_cookie(
+            cookie_name, 
+            path="/",
+            domain=COOKIE_SETTINGS.get("domain")
+        )
+        
+        # 2. Voor het naked domain (zonder punt) als extra backup
+        resp.delete_cookie(
+            cookie_name, 
+            path="/",
+            domain="tradamind.com"
+        )
+
+        # 3. Zonder specifiek domein (host-only)
+        resp.delete_cookie(
+            cookie_name, 
+            path="/"
+        )
+        
     return resp
 
 

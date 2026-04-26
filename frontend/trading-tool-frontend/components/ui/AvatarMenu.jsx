@@ -76,8 +76,8 @@ export default function AvatarMenu() {
 
     showSnackbar(locale === 'nl' ? "Je bent veilig uitgelogd ✔" : "You have been safely logged out ✔", "success");
 
-    // 🔥 HARD RESET: Forceerde herlaad naar de landing page
-    window.location.href = "/";
+    // 🔥 HARD RESET: Forceer herlaad naar de login page
+    window.location.href = "/login";
   };
 
   return (
