@@ -92,22 +92,21 @@ export default function MacroTabs({
   // ---------------------------------------------------------
   return (
     <div className="space-y-8">
-      {/* 🛠️ TERMINAL CONTROL CONSOLE */}
-      <div className="flex items-center justify-between bg-[var(--color-border-subtle)] border border-slate-200 p-2 rounded-2xl max-w-2xl">
-         <div className="flex items-center gap-1 w-full">
+      {/* 🔹 TABS: SEGMENTED CONTROL (Matching Technical Style) */}
+      <div className="flex items-center gap-4">
+         <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">Tijdsinterval</div>
+         <div className="flex bg-[var(--color-border-subtle)] p-1 rounded-xl border border-slate-200">
             {TABS.map((tab) => (
                <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`
-                     flex-1 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all duration-300
-                     ${activeTab === tab 
-                        ? "bg-card text-[var(--primary)] shadow-sm border border-slate-200 translate-y-[-1px]" 
-                        : "text-secondary hover:text-slate-600 hover:bg-slate-100/50"
-                     }
-                  `}
+                  className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                     activeTab === tab
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-secondary hover:text-slate-600"
+                  }`}
                >
-                  {tab === "Dag" ? "Session_Live" : tab.toUpperCase()}
+                  {tab}
                </button>
             ))}
          </div>
