@@ -1179,6 +1179,17 @@ def _persist_decision_and_order(
                 'planned',
                 NOW(), NOW()
             )
+            ON CONFLICT (user_id, bot_id, decision_date) DO UPDATE SET
+                strategy_id = EXCLUDED.strategy_id,
+                setup_id = EXCLUDED.setup_id,
+                symbol = EXCLUDED.symbol,
+                decision_ts = EXCLUDED.decision_ts,
+                action = EXCLUDED.action,
+                confidence = EXCLUDED.confidence,
+                amount_eur = EXCLUDED.amount_eur,
+                scores_json = EXCLUDED.scores_json,
+                status = EXCLUDED.status,
+                updated_at = NOW()
             RETURNING id
             """,
             (
