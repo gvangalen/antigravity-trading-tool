@@ -11,7 +11,7 @@ from backend.services.score_service import ScoreService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-def get_score_service(db: AsyncSession = Depends(get_db)):
+async def get_score_service(db: AsyncSession = Depends(get_db)):
     repo = ScoreRepository(db)
     return ScoreService(repo)
 

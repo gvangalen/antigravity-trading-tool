@@ -11,7 +11,7 @@ from backend.services.setup_service import SetupService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-def get_setup_service(db: AsyncSession = Depends(get_db)):
+async def get_setup_service(db: AsyncSession = Depends(get_db)):
     return SetupService(db)
 
 # ============================================================

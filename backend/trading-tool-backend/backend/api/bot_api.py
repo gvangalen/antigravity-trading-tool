@@ -19,7 +19,7 @@ from backend.schemas.bot_schema import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-def get_bot_service(db: AsyncSession = Depends(get_db)):
+async def get_bot_service(db: AsyncSession = Depends(get_db)):
     return BotService(db)
 
 # ==========================================================

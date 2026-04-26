@@ -17,7 +17,7 @@ from backend.services.indicator_config_service import IndicatorConfigService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-def get_indicator_config_service(db: AsyncSession = Depends(get_db)):
+async def get_indicator_config_service(db: AsyncSession = Depends(get_db)):
     repo = IndicatorConfigRepository(db)
     return IndicatorConfigService(repo)
 

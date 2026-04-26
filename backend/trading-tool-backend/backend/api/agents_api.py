@@ -12,7 +12,7 @@ from backend.schemas.agent_schema import AgentInsightResponse, AgentReflectionRe
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-def get_agent_service(db: AsyncSession = Depends(get_db)):
+async def get_agent_service(db: AsyncSession = Depends(get_db)):
     return AgentService(db)
 
 # ============================================================
