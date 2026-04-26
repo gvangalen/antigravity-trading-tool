@@ -112,6 +112,39 @@ pm2 start "celery -A backend.celery_task.celery_app beat --loglevel=info" \
 # =====================================================
 pm2 save
 
+# =====================================================
+# 🧠 AI AGENT ACTIVATION (DASHBOARD REFRESH)
+# =====================================================
+echo ""
+echo "🧠 Triggering AI Agents to refresh dashboard content..."
+
+cd "$BACKEND_DIR/backend"
+export PYTHONPATH="$BACKEND_DIR:$PYTHONPATH"
+
+python3 -c "
+from ai_agents.market_ai_agent import run_market_agent
+from ai_agents.macro_ai_agent import run_macro_agent
+from ai_agents.technical_ai_agent import run_technical_agent
+from ai_agents.setup_ai_agent import run_setup_agent
+
+UID = 30
+print('➡️ Market AI Agent...')
+try: run_market_agent(user_id=UID); print('✅ Market OK')
+except Exception as e: print(f'❌ Market Error: {e}')
+
+print('➡️ Macro AI Agent...')
+try: run_macro_agent(user_id=UID); print('✅ Macro OK')
+except Exception as e: print(f'❌ Macro Error: {e}')
+
+print('➡️ Technical AI Agent...')
+try: run_technical_agent(user_id=UID); print('✅ Technical OK')
+except Exception as e: print(f'❌ Technical Error: {e}')
+
+print('➡️ Setup AI Agent...')
+try: run_setup_agent(user_id=UID); print('✅ Setup OK')
+except Exception as e: print(f'❌ Setup Error: {e}')
+"
+
 echo ""
 echo "✅ BACKEND DEPLOY SUCCESSFUL"
 echo "-----------------------------------"
