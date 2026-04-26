@@ -68,10 +68,9 @@ export function useTechnicalData(activeTab = "Dag") {
       else if (activeTab === "Maand") raw = await technicalDataMonth();
       else if (activeTab === "Kwartaal") raw = await technicalDataQuarter();
 
-      if (!Array.isArray(raw))
-        throw new Error("Technische data is geen lijst");
+      const dataList = Array.isArray(raw) ? raw : [];
 
-      const normalized = raw.map((item) => ({
+      const normalized = dataList.map((item) => ({
         name: item.indicator ?? item.name ?? "–",
         value: item.waarde ?? item.value ?? "–",
         score: item.score ?? null,
