@@ -125,59 +125,60 @@ export default function TechnicalPage() {
       </header>
 
       {/* 🚀 TECHNICAL HUD */}
-      <DashboardErrorBoundary>
-        <TechnicalTerminalHUD 
-          score={technicalScore?.score} 
-          bias={technicalScore?.bias} 
-          trend={technicalScore?.trend} 
-          loading={loadingIndicators || !technicalScore}
-        />
-      </DashboardErrorBoundary>
-
+      <div className="space-y-12">
+        <DashboardErrorBoundary>
+          <TechnicalTerminalHUD 
+            score={technicalScore?.score} 
+            bias={technicalScore?.bias} 
+            trend={technicalScore?.trend} 
+            loading={loadingIndicators || !technicalScore}
+          />
+        </DashboardErrorBoundary>
+      </div>
+ 
       {/* 🧠 ANALYSIS */}
-      <div className="space-y-6 py-8">
-        <div className="flex items-center gap-3 mb-2">
-           <div className="w-6 h-0.5 bg-blue-600/20" />
-           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] opacity-80">Analysis</span>
+      <div className="space-y-4 py-8">
+        <div className="flex items-center gap-2 mb-2">
+           <Brain size={14} className="text-slate-400 dark:text-slate-500" />
+           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Analysis</span>
         </div>
         <DashboardErrorBoundary>
           <AgentInsightPanel category="technical" />
         </DashboardErrorBoundary>
       </div>
-
-      <div className="space-y-12 pb-24">
-         {/* 📊 INDICATORS TERMINAL (Main Focus) */}
-         <div className="space-y-6">
-            <div className="flex items-center justify-between px-2">
-               <div className="flex items-center gap-3">
-                  <LayoutGrid size={18} className="text-blue-600" />
-                  <span className="text-[12px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Indicator Dashboard</span>
-               </div>
-               <TechnicalTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+ 
+      <div className="grid grid-cols-1 gap-12 pt-8 pb-24">
+         {/* 🛠️ CONFIGURATION */}
+         <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+               <Activity size={14} className="text-slate-400 dark:text-slate-500" />
+               <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Configuration</span>
             </div>
-
-            <DashboardErrorBoundary>
-               <TechnicalTerminalGrid
-                  data={technicalData}
-                  loading={loadingIndicators}
-                  error={error}
-                  onRemove={handleRemoveIndicator}
-                  onViewChart={handleViewChart}
-               />
-            </DashboardErrorBoundary>
-         </div>
-
-         {/* 🧱 CONFIGURATION & LOGIC ENGINE (Subordinate) */}
-         <div className="pt-8 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-3 mb-8 px-2">
-               <Brain size={18} className="text-slate-400" />
-               <span className="text-[12px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Logic Engine Configuration</span>
-            </div>
-            
             <TechnicalIndicatorScoreView
                addTechnicalIndicator={addTechnicalIndicator}
                activeTechnicalIndicatorNames={technicalData.map(i => i.name)}
             />
+         </div>
+ 
+         {/* 📊 SIGNALS */}
+         <div className="space-y-4">
+            <div className="flex items-center justify-between mb-2">
+               <div className="flex items-center gap-2">
+                  <Activity size={14} className="text-slate-400 dark:text-slate-500" />
+                  <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Signals</span>
+               </div>
+               <div className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest">Scroll for other timeframes</div>
+            </div>
+            <DashboardErrorBoundary>
+              <TechnicalTabs 
+                activeTab={activeTab} 
+                setActiveTab={setActiveTab} 
+                technicalData={technicalData}
+                loading={loadingIndicators}
+                error={error}
+                handleRemove={handleRemoveIndicator}
+              />
+            </DashboardErrorBoundary>
          </div>
       </div>
 
