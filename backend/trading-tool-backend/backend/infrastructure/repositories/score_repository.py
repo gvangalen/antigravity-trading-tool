@@ -61,3 +61,21 @@ class ScoreRepository:
         result = await self.db.execute(stmt, {"category": category})
         row = result.mappings().first()
         return dict(row) if row else None
+
+    async def fetch_daily_scores(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Native async fetch of daily scores for the dashboard.
+        """
+        stmt = text("""
+            SELECT 
+                macro_score, macro_interpretation, macro_top_contributors,
+                technical_score, technical_interpretation, technical_top_contributors,
+                market_score, market_interpretation, market_top_contributors,
+                setup_score, report_date
+            FROM daily_scores
+            WHERE user_id = :user_id AND report_date = CURRENT_DATE
+            LIMIT 1
+        """)
+        result = await self.db.execute(stmt, {"user_id": user_id})
+        row = result.mappings().first()
+        return dict(row) if row else None

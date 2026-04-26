@@ -30,14 +30,9 @@ class ScoreService:
         return await asyncio.to_thread(generate_scores_db, "market", user_id=user_id)
 
     async def get_daily_scores(self, user_id: int) -> DailyCombinedScoreResponse:
-        try:
-            scores = await asyncio.to_thread(get_scores_for_symbol, user_id=user_id, include_metadata=True)
-            if not scores:
-                scores = {}
-        except TypeError:
-            scores = await asyncio.to_thread(get_scores_for_symbol, include_metadata=True)
-            if not scores:
-                scores = {}
+        scores = await self.repository.fetch_daily_scores(user_id)
+        if not scores:
+            scores = {}
 
         def _safe_list(val):
             if isinstance(val, list):
