@@ -46,19 +46,16 @@ export default function NavBar() {
     { href: "/report", label: t.nav.reports, icon: <FileText size={18} /> },
   ];
 
-  // Voeg Admin links toe direct na Reports als de gebruiker admin is
+  const ADMIN_LINKS = [];
+
+  // Voeg Admin links toe aan de aparte adminNav array voor visual separation
   if (isAdmin) {
-    NAV_LINKS.push(
+    ADMIN_LINKS.push(
       { href: "/admin/ai", label: t.nav.admin_ai, icon: <ShieldCheck size={18} /> },
       { href: "/admin/users", label: t.nav.users, icon: <Users size={18} /> },
       { href: "/admin/logs", label: t.nav.logs, icon: <FileText size={18} /> }
     );
   }
-
-  // We houden ADMIN_LINKS leeg voor de SidebarInner compatibiliteit beneden, 
-  // of we kunnen de SidebarInner aanpassen. 
-  // De SidebarInner blokkeert nu zelf de admin sectie als adminLinks leeg is.
-  const ADMIN_LINKS = []; 
 
 
   useEffect(() => {
