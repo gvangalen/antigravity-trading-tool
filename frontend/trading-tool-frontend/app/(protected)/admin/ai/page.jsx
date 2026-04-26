@@ -136,7 +136,8 @@ export default function AdminAiDashboard() {
       </div>
 
       {/* 📊 SUMMARY RIBBON */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-10">
+      {/* 📊 SUMMARY RIBBON */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-6 mb-10">
         <MetricCard 
           title="MTD Profit" 
           value={`€${overview.total_profit_month_eur.toFixed(2)}`} 
@@ -326,8 +327,8 @@ export default function AdminAiDashboard() {
               <tbody className="divide-y divide-slate-50">
                 {top_users.map((user, idx) => (
                   <tr key={idx} className="group hover:bg-slate-50/50 transition-colors">
-                    <td className="py-5">
-                       <p className="text-sm font-black text-slate-900 italic tracking-tight">{user.email}</p>
+                    <td className="py-5 pr-4">
+                       <p className="text-sm font-black text-slate-900 italic tracking-tight truncate max-w-[180px]" title={user.email}>{user.email}</p>
                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{user.plan} asset tier</p>
                     </td>
                     <td className="py-5">
@@ -366,7 +367,7 @@ export default function AdminAiDashboard() {
 
 function MetricCard({ title, value, icon, subtitle, trend, isHighlight }) {
   return (
-    <div className={`p-8 border rounded-[32px] transition-all relative overflow-hidden group ${
+    <div className={`p-5 lg:p-6 border rounded-[32px] transition-all relative overflow-hidden group ${
       isHighlight 
         ? 'bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-600/30' 
         : 'bg-white border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 text-slate-900'
@@ -382,8 +383,8 @@ function MetricCard({ title, value, icon, subtitle, trend, isHighlight }) {
         </div>
       </div>
       <div className="flex items-end justify-between">
-        <div className="relative z-10">
-          <h2 className={`text-3xl font-black tracking-tight italic ${isHighlight ? 'text-white' : 'text-slate-900'}`}>{value}</h2>
+        <div className="relative z-10 w-full overflow-hidden">
+          <h2 className={`text-xl lg:text-2xl xl:text-3xl font-black tracking-tight italic truncate ${isHighlight ? 'text-white' : 'text-slate-900'}`} title={value}>{value}</h2>
           <p className={`text-[10px] font-bold mt-2 uppercase tracking-widest ${
             isHighlight ? 'text-blue-200' : 'text-slate-400'
           }`}>{subtitle}</p>
