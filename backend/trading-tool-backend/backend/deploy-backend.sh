@@ -13,7 +13,7 @@ export PATH="$HOME/.local/bin:$PATH"
 # =====================================================
 BACKEND_DIR="$HOME/antigravity-trading-tool/backend/trading-tool-backend"
 ENV_FILE="$HOME/.secrets/trading.env"
-LOG_DIR="/var/log/pm2"
+LOG_DIR="$HOME/.pm2/logs"
 
 mkdir -p "$LOG_DIR"
 
@@ -99,13 +99,17 @@ echo "⚙️ Starting Celery background workers..."
 pm2 delete celery-worker || true
 pm2 start "celery -A backend.celery_task.celery_app worker --loglevel=info --concurrency=2" \
   --name celery-worker \
-  --cwd "$BACKEND_DIR"
+  --cwd "$BACKEND_DIR" \
+  --output "$LOG_DIR/celery-worker.log" \
+  --error "$LOG_DIR/celery-worker.err.log"
 
 # RESTART CELERY BEAT (schedules tasks)
 pm2 delete celery-beat || true
 pm2 start "celery -A backend.celery_task.celery_app beat --loglevel=info" \
   --name celery-beat \
-  --cwd "$BACKEND_DIR"
+  --cwd "$BACKEND_DIR" \
+  --output "$LOG_DIR/celery-beat.log" \
+  --error "$LOG_DIR/celery-beat.err.log"
 
 # =====================================================
 # SAVE PM2 STATE
