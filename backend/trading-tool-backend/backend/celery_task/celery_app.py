@@ -140,18 +140,27 @@ celery_app.conf.beat_schedule = {
     # 5️⃣ AI AGENTS (DIRECT - NIET VIA DISPATCHER)
     # =====================================================
     "macro_ai": {
-        "task": "backend.celery_task.macro_task.run_macro_agent_daily",
+        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
         "schedule": crontab(hour=4, minute=5),
+        "kwargs": {
+            "task_name": "backend.celery_task.macro_task.run_macro_agent_daily"
+        },
     },
 
     "market_ai": {
-        "task": "backend.celery_task.market_task.run_market_agent_daily",
+        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
         "schedule": crontab(hour=4, minute=20),
+        "kwargs": {
+            "task_name": "backend.celery_task.market_task.run_market_agent_daily"
+        },
     },
 
     "technical_ai": {
-        "task": "backend.celery_task.technical_task.run_technical_agent_daily",
+        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
         "schedule": crontab(hour=4, minute=35),
+        "kwargs": {
+            "task_name": "backend.celery_task.technical_task.run_technical_agent_daily"
+        },
     },
 
     # =====================================================

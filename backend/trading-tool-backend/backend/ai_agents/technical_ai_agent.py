@@ -10,12 +10,12 @@ from backend.ai_core.system_prompt_builder import build_system_prompt
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-def run_technical_agent():
+def run_technical_agent(user_id: int):
     """
     Genereert Technical AI insights op basis van de GLOBALE OBJECTIEVE bron.
-    Analyseert RSI, MACD, Moving Averages etc. voor het hele platform.
+    Analyseert RSI, MACD, Moving Averages etc. voor een specifieke user.
     """
-    logger.info("🌍 [Technical-Agent] Start Global AI Analysis")
+    logger.info(f"🌍 [Technical-Agent] Start Analysis for user_id={user_id}")
 
     conn = get_db_connection()
     if not conn:
@@ -23,18 +23,19 @@ def run_technical_agent():
         return
 
     try:
-        # 1️⃣ HAAL GLOBALE TECHNICAL DATA OP
+        # 1️⃣ HAAL TECHNICAL DATA OP VOOR DEZE USER
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT DISTINCT ON (indicator)
                     indicator, value, timestamp
-                FROM global_technical_indicators
+                FROM technical_indicators
+                WHERE user_id = %s
                 ORDER BY indicator, timestamp DESC;
-            """)
+            """, (user_id,))
             rows = cur.fetchall()
 
         if not rows:
-            logger.warning("⚠️ [Technical-Agent] Geen technische data beschikbaar voor analyse.")
+            logger.warning(f"⚠️ [Technical-Agent] Geen technische data beschikbaar voor user_id={user_id}.")
             return
 
         tech_snapshot = [
@@ -50,6 +51,14 @@ Je bent een technisch analist gespecialiseerd in prijsactie, indicatoren en mark
 Analyseer de technische staat van de markt (focus op BTC).
 Vat samen of we in een overbought/oversold conditie zitten en wat de meest waarschijnlijke richting is op korte termijn.
 
+GEEF JE ANTWOORD IN JSON FORMAT MET DE VOLGENDE VELDEN:
+- score: (0-100)
+- trend: (bullish, bearish, neutraal)
+- bias: (afwachtend, agressief, defensief)
+- risk: (laag, gemiddeld, hoog)
+- summary: (korte samenvatting)
+- top_signals: (lijst van strings met belangrijkste signalen)
+
 WAARSCHUWING: Geef GEEN financieel advies.
 """)
 
@@ -59,14 +68,15 @@ WAARSCHUWING: Geef GEEN financieel advies.
             system_role=system_prompt
         )
 
-        # 4️⃣ OPSLAAN IN GLOBAL MARKET INSIGHTS
+        # 4️⃣ OPSLAAN IN AI_CATEGORY_INSIGHTS (waar dashboard naar kijkt)
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO global_market_insights
-                    (category, avg_score, trend, bias, risk, summary, top_signals)
-                VALUES ('technical', %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (category, date)
+                INSERT INTO ai_category_insights
+                    (user_id, category, avg_score, trend, bias, risk, summary, top_signals, date)
+                VALUES (%s, 'technical', %s, %s, %s, %s, %s, %s, CURRENT_DATE)
+                ON CONFLICT (user_id, category, date)
                 DO UPDATE SET
+                    avg_score = EXCLUDED.avg_score,
                     trend = EXCLUDED.trend,
                     bias = EXCLUDED.bias,
                     risk = EXCLUDED.risk,
@@ -74,7 +84,8 @@ WAARSCHUWING: Geef GEEN financieel advies.
                     top_signals = EXCLUDED.top_signals,
                     created_at = NOW();
             """, (
-                50,
+                user_id,
+                raw_ai_response.get("score", 50),
                 raw_ai_response.get("trend", "neutraal"),
                 raw_ai_response.get("bias", "afwachtend"),
                 raw_ai_response.get("risk", "gemiddeld"),
@@ -83,10 +94,10 @@ WAARSCHUWING: Geef GEEN financieel advies.
             ))
 
         conn.commit()
-        logger.info("✅ [Technical-Agent] Global Analysis voltooid")
+        logger.info(f"✅ [Technical-Agent] Analysis voltooid voor user_id={user_id}")
 
     except Exception:
-        conn.rollback()
-        logger.error("❌ [Technical-Agent] Fout tijdens global run", exc_info=True)
+        if conn: conn.rollback()
+        logger.error(f"❌ [Technical-Agent] Fout tijdens run voor user_id={user_id}", exc_info=True)
     finally:
-        conn.close()
+        if conn: conn.close()
