@@ -30,8 +30,11 @@ class ScoreService:
         return await asyncio.to_thread(generate_scores_db, "market", user_id=user_id)
 
     async def get_daily_scores(self, user_id: int) -> DailyCombinedScoreResponse:
+        logger.info(f"🔍 Fetching daily scores for user_id={user_id}")
         scores = await self.repository.fetch_daily_scores(user_id)
+        logger.info(f"📊 Raw scores from DB: {scores}")
         if not scores:
+            logger.warning(f"⚠️ No daily scores found for user_id={user_id} today")
             scores = {}
 
         def _safe_list(val):
