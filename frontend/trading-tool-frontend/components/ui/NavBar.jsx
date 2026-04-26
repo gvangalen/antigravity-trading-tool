@@ -146,6 +146,7 @@ export default function NavBar() {
 }
 
 function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
+  const { t } = require("@/app/providers/I18nProvider").useTranslation();
   return (
     <div className="flex flex-col h-full bg-card dark:bg-[#020617] transition-colors">
       <Link 
