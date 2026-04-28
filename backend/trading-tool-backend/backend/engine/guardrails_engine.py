@@ -16,6 +16,8 @@ BLOCK_REASON_LABELS = {
     "asset_exposure": "Asset exposure limit reached",
     "no_allocatable_size": "No valid trade setup",
     "total_budget": "Total budget reached",  # ✅ FIX
+    "insufficient_funds": "Insufficient cash balance",
+    "below_min_order": "Order below minimum size",
 }
 
 
@@ -61,11 +63,13 @@ def apply_guardrails(
     current_asset_value_eur: float = 0.0,
     invested_eur: float = 0.0,
     today_allocated_eur: float = 0.0,
+    cash_balance_eur: float = 0.0,
     kill_switch: bool = True,
     max_trade_risk_eur: Optional[float] = None,
     daily_allocation_eur: Optional[float] = None,
     max_asset_exposure_pct: Optional[float] = None,
     total_budget_eur: Optional[float] = None,
+    min_order_eur: Optional[float] = None,
     backtest_mode: bool = False,
 ) -> Dict[str, Any]:
 
@@ -77,6 +81,7 @@ def apply_guardrails(
     portfolio_value = max(_safe_float(portfolio_value_eur, 0.0), 0.0)
     current_asset_value = max(_safe_float(current_asset_value_eur, 0.0), 0.0)
     today_allocated = max(_safe_float(today_allocated_eur, 0.0), 0.0)
+    cash_balance = max(_safe_float(cash_balance_eur, 0.0), 0.0)
 
     kill_switch = _safe_bool(kill_switch, True)
 
@@ -84,6 +89,7 @@ def apply_guardrails(
     daily_allocation = _safe_float(daily_allocation_eur, 0.0)
     max_asset_exposure = _safe_float(max_asset_exposure_pct, 100.0)
     total_budget = _safe_float(total_budget_eur, 0.0)  # 🔥 NIEUW
+    min_order = _safe_float(min_order_eur, 0.0)
 
 
     # ✅ FIX: total_budget correct behandelen
@@ -133,6 +139,29 @@ def apply_guardrails(
                 ),
             },
         }
+
+    # -----------------------------------------------------
+    # 1B. Cash Balance Constraint (KEIHARD)
+    # -----------------------------------------------------
+    if not backtest_mode:
+        if cash_balance <= 0:
+            blocked_by = "insufficient_funds"
+            return {
+                "allowed": False,
+                "adjusted_amount_eur": 0.0,
+                "original_amount_eur": _round_money(original_amount),
+                "warnings": ["insufficient_funds"],
+                "blocked_by": blocked_by,
+                "reason": BLOCK_REASON_LABELS.get(blocked_by),
+                "debug_code": blocked_by,
+                "guardrails": {
+                    "cash_balance_eur": _round_money(cash_balance),
+                },
+            }
+        
+        if adjusted_amount > cash_balance:
+            adjusted_amount = cash_balance
+            warnings.append("cash_balance_trimmed")
 
 
     # -----------------------------------------------------
@@ -287,6 +316,12 @@ def apply_guardrails(
 
     adjusted_amount = max(adjusted_amount, 0.0)
     adjusted_amount = _round_money(adjusted_amount)
+
+    # 🔥 Min Order Size check
+    if not backtest_mode and min_order > 0 and adjusted_amount > 0 and adjusted_amount < min_order:
+        blocked_by = "below_min_order"
+        adjusted_amount = 0.0
+        warnings.append("below_min_order_size")
 
     allowed = adjusted_amount > 0
 

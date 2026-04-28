@@ -491,6 +491,7 @@ def run_bot_brain(
             current_asset_value_eur=_safe_float(portfolio_context.get("current_asset_value_eur"), 0.0) or 0.0,
             invested_eur=_safe_float(portfolio_context.get("invested_eur"), 0.0) or 0.0,
             today_allocated_eur=_safe_float(portfolio_context.get("today_allocated_eur"), 0.0) or 0.0,
+            cash_balance_eur=_safe_float(portfolio_context.get("cash_balance_eur"), 0.0) or 0.0,
             kill_switch=portfolio_context.get("kill_switch", True),
             max_trade_risk_eur=_safe_float(
                 portfolio_context.get("max_trade_risk_eur")
@@ -500,6 +501,7 @@ def run_bot_brain(
             daily_allocation_eur=_safe_float(portfolio_context.get("daily_allocation_eur"), None),
             max_asset_exposure_pct=_safe_float(portfolio_context.get("max_asset_exposure_pct"), None),
             total_budget_eur=_safe_float(portfolio_context.get("total_budget_eur"), None),
+            min_order_eur=_safe_float(portfolio_context.get("min_order_eur"), None),
             backtest_mode=backtest_mode,
         )
 
