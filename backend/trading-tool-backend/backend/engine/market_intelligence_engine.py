@@ -4,6 +4,7 @@ import logging
 from datetime import date
 from typing import Any, Dict, Optional
 
+from backend.utils.db import get_db_connection
 from backend.engine.transition_detector import compute_transition_detector
 from backend.engine.market_pressure_engine import get_market_pressure
 
@@ -41,13 +42,14 @@ def _to_score_100(value: float) -> int:
     return round(_clamp(value, 0.0, 1.0) * 100)
 
 
-def _map_volatility_state_to_score(volatility_state: str) -> int:
-    mapping = {
-        "compressed": 20,
-        "normal": 50,
-        "expanding": 80,
-    }
-    return mapping.get((volatility_state or "").lower(), 50)
+def _calculate_true_volatility_score(vol_of_vol: Optional[float]) -> int:
+    if vol_of_vol is None:
+        return 50  # Fallback
+    
+    # Typical vol_of_vol (std dev of daily % change) range in crypto is 0.5 (calm) to 3.0+ (wild).
+    # We map this mathematically to 0-100 score, using 3.0 as the ceiling for normalized visual distribution.
+    score = (vol_of_vol / 3.0) * 100.0
+    return round(_clamp(score, 0.0, 100.0))
 
 
 # =========================================================
@@ -75,16 +77,29 @@ def _determine_market_cycle(
     market_pressure: float,
     transition_risk: float,
 ) -> str:
-    if trend_strength < 0.35 and market_pressure < 0.45:
-        return "accumulation"
-
-    if trend_strength >= 0.35 and market_pressure >= 0.45 and transition_risk < 0.6:
+    """
+    Strakke cycle bepaling zonder overlap of gaten.
+    """
+    # High trend + High pressure -> Expansion (tenzij hoog risico -> Distribution)
+    if trend_strength >= 0.5 and market_pressure >= 0.5:
+        if transition_risk >= 0.6:
+            return "distribution"
         return "expansion"
-
-    if trend_strength >= 0.55 and transition_risk > 0.5:
-        return "distribution"
-
-    if trend_strength < 0.35 and transition_risk > 0.6:
+    
+    # Low trend + High pressure -> Accumulation (momentum is er, trend nog niet)
+    if trend_strength < 0.5 and market_pressure >= 0.5:
+        return "accumulation"
+    
+    # Low trend + Low pressure -> Accumulation of Correction
+    if trend_strength < 0.5 and market_pressure < 0.5:
+        if transition_risk >= 0.6:
+            return "correction"
+        return "accumulation"
+        
+    # High trend + Low pressure -> Distribution (trend nog hoog, maar momentum valt weg)
+    if trend_strength >= 0.5 and market_pressure < 0.5:
+        if transition_risk >= 0.6:
+            return "distribution"
         return "correction"
 
     return "neutral"
@@ -125,6 +140,46 @@ def _classify_risk_state(
         return "risk_on"
     return "neutral"
 
+
+# =========================================================
+# Historical logic
+# =========================================================
+
+def get_historical_trend_strengths(user_id: int) -> Dict[str, float]:
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT report_date, technical_score, market_score
+                FROM daily_scores
+                WHERE user_id = %s
+                ORDER BY report_date DESC
+                LIMIT 30;
+            """, (user_id,))
+            rows = cur.fetchall()
+
+            if not rows:
+                return {"short": 0.5, "mid": 0.5, "long": 0.5, "smooth_7d": 0.5}
+
+            strengths = []
+            for r in rows:
+                tech = _safe_float(r[1], 10.0) or 10.0
+                mkt = _safe_float(r[2], 10.0) or 10.0
+                s = (tech * 0.6 + mkt * 0.4) / 100.0
+                strengths.append(s)
+
+            def avg_list(lst):
+                if not lst: return 0.5
+                return sum(lst) / len(lst)
+
+            return {
+                "short": avg_list(strengths[:3]),
+                "smooth_7d": avg_list(strengths[:7]),
+                "mid": avg_list(strengths[:14]),
+                "long": avg_list(strengths[:30]),
+            }
+    finally:
+        conn.close()
 
 # =========================================================
 # Core engine
@@ -192,14 +247,24 @@ def compute_market_intelligence(
         market_pressure = 0.5
 
     # -------------------------------------------------
-    # Trend strength
+    # Trend strength (Smoothed + Historical)
     # -------------------------------------------------
 
-    trend_strength = (
+    historical_strengths = {"short": 0.5, "mid": 0.5, "long": 0.5, "smooth_7d": 0.5}
+    try:
+        historical_strengths = get_historical_trend_strengths(user_id)
+    except Exception as e:
+        logger.warning("Historical trends fallback: %s", e)
+
+    today_trend_strength = (
         float(scores.get("technical_score", 10)) * 0.6
         + float(scores.get("market_score", 10)) * 0.4
     ) / 100.0
 
+    today_trend_strength = _clamp(today_trend_strength, 0.0, 1.0)
+    
+    # Smooth the trend strength for the dashboard
+    trend_strength = (today_trend_strength * 0.5) + (historical_strengths["smooth_7d"] * 0.5)
     trend_strength = _clamp(trend_strength, 0.0, 1.0)
 
     # -------------------------------------------------
@@ -221,17 +286,11 @@ def compute_market_intelligence(
         market_pressure=market_pressure,
     )
 
-    short_trend = _determine_trend(trend_strength)
+    short_trend = _determine_trend(historical_strengths["short"])
 
-    mid_trend = _determine_trend(
-        (trend_strength * 0.7) + (market_pressure * 0.3)
-    )
+    mid_trend = _determine_trend(historical_strengths["mid"])
 
-    long_trend = _determine_trend(
-        (trend_strength * 0.5)
-        + (market_pressure * 0.3)
-        + ((1 - transition_risk) * 0.2)
-    )
+    long_trend = _determine_trend(historical_strengths["long"])
 
     risk_environment = (
         ((1.0 - transition_risk) * 0.5) + (market_pressure * 0.5)
@@ -250,7 +309,13 @@ def compute_market_intelligence(
     market_pressure_score = _to_score_100(market_pressure)
     transition_risk_score = _to_score_100(transition_risk)
     trend_strength_score = _to_score_100(trend_strength)
-    volatility_score = _map_volatility_state_to_score(volatility_state)
+    
+    # 🔥 FIX: Echte wiskundige volatiliteit
+    raw_vol_proxy = None
+    if transition_snapshot and isinstance(transition_snapshot.get("signals"), dict):
+        raw_vol_proxy = transition_snapshot["signals"].get("volatility_proxy")
+        
+    volatility_score = _calculate_true_volatility_score(raw_vol_proxy)
 
     setup_score = round(
         _clamp(
