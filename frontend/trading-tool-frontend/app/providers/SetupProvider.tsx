@@ -21,8 +21,14 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function loadActiveSetup() {
       try {
-        const setup = await fetchLastSetup();
-        setActiveSetup(setup || null);
+        const { fetchActiveSetup } = await import("@/lib/api/setups");
+        const active = await fetchActiveSetup();
+        if (active) {
+          setActiveSetup(active);
+        } else {
+          const last = await fetchLastSetup();
+          setActiveSetup(last || null);
+        }
       } catch (err) {
         console.error("❌ SetupProvider initial setup error:", err);
       } finally {

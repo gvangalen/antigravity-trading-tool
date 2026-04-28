@@ -168,8 +168,8 @@ def adjust_strategy_for_today(
 
     # 🔥 NIEUW MODEL
     setup_type = (setup.get("setup_type") or "").lower()
-    is_dca = setup_type == "dca"
-    is_trade = setup_type == "trade"
+    is_dca = "dca" in setup_type
+    is_trade = "trade" in setup_type
 
     # ======================================================
     # CONTEXT
@@ -291,7 +291,7 @@ def generate_strategy_from_setup(setup: Dict[str, Any]) -> Dict[str, Any]:
     symbol = setup.get("symbol", "BTC")
 
     # 🔥 DCA = GEEN LEVELS MAAR WEL BASE_AMOUNT VERPLICHT
-    if setup_type == "dca":
+    if "dca" in setup_type:
         return {
             "entry": None,
             "targets": [],
@@ -368,22 +368,22 @@ Output JSON:
         if tv is not None:
             targets.append(tv)
 
-    # 🔥 GEEN FALLBACK → HARD FAIL + LOG
+    # 🔥 WISKUNDIGE FALLBACK (VEILIG)
     if entry is None:
-        logger.error("❌ Strategy mist entry: %s", result)
-        raise RuntimeError("Strategy invalid: entry missing")
+        logger.warning("⚠️ Strategy mist entry, fallback naar live_price: %s", result)
+        entry = live_price
 
     if stop is None:
-        logger.error("❌ Strategy mist stop_loss: %s", result)
-        raise RuntimeError("Strategy invalid: stop_loss missing")
+        logger.warning("⚠️ Strategy mist stop_loss, fallback naar 10%% drop: %s", result)
+        stop = entry * 0.90
 
     if not targets:
-        logger.error("❌ Strategy mist targets: %s", result)
-        raise RuntimeError("Strategy invalid: targets missing")
+        logger.warning("⚠️ Strategy mist targets, fallback naar 10%% profit: %s", result)
+        targets = [entry * 1.10]
 
     if base_amount is None:
-        logger.error("❌ Strategy mist base_amount: %s", result)
-        raise RuntimeError("Strategy invalid: base_amount missing")
+        logger.warning("⚠️ Strategy mist base_amount, fallback naar 50: %s", result)
+        base_amount = 50.0
 
     return {
         "entry": entry,

@@ -259,7 +259,7 @@ class BotService:
         )
         
         await self.repository.create_bot_execution(user_id, order_id, payload.quantity, payload.price)
-        await self.repository.insert_bot_ledger(user_id, payload.bot_id, order_id, payload.symbol, cash_delta, qty_delta)
+        await self.repository.insert_bot_ledger(user_id, payload.bot_id, order_id, payload.symbol, cash_delta, qty_delta, payload.price)
         
         await self.session.commit()
         await asyncio.to_thread(sync_snapshot_all_for_user, user_id)

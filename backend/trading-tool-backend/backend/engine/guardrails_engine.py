@@ -59,6 +59,7 @@ def apply_guardrails(
     proposed_amount_eur: float,
     portfolio_value_eur: float = 0.0,
     current_asset_value_eur: float = 0.0,
+    invested_eur: float = 0.0,
     today_allocated_eur: float = 0.0,
     kill_switch: bool = True,
     max_trade_risk_eur: Optional[float] = None,
@@ -135,16 +136,18 @@ def apply_guardrails(
 
 
     # -----------------------------------------------------
-    # 🔥 2. TOTAL BUDGET (NIEUW - HARD LIMIT)
+    # 🔥 2. TOTAL BUDGET (REFINED: Cost Basis check)
     # -----------------------------------------------------
     
     if not backtest_mode and total_budget and total_budget > 0:
     
-        remaining_budget = max(total_budget - portfolio_value, 0.0)
+        # We check against 'invested_eur' (Cost Basis), NOT total equity.
+        # This prevents blocking the bot when the asset value grows (profit).
+        remaining_budget = max(total_budget - invested_eur, 0.0)
     
         logger.info(
-            "Budget check | portfolio=%s total_budget=%s remaining=%s",
-            portfolio_value,
+            "Budget check | invested=%s total_budget=%s remaining=%s",
+            invested_eur,
             total_budget,
             remaining_budget,
         )
@@ -165,22 +168,13 @@ def apply_guardrails(
                     "kill_switch": True,
                     "max_trade_risk_eur": _round_money(max_trade_risk),
                     "daily_allocation_eur": _round_money(daily_allocation),
-                    "remaining_daily_eur": _round_money(
-                        max(daily_allocation - today_allocated, 0.0)
-                    ) if daily_allocation > 0 else None,
                     "max_asset_exposure_pct": max_asset_exposure,
                     "current_asset_exposure_pct": _calculate_exposure_pct(
                         current_asset_value_eur=current_asset_value,
                         portfolio_value_eur=portfolio_value,
                     ),
-                    "remaining_asset_capacity_eur": _round_money(
-                        _calculate_remaining_asset_capacity(
-                            portfolio_value_eur=portfolio_value,
-                            current_asset_value_eur=current_asset_value,
-                            max_asset_exposure_pct=max_asset_exposure,
-                        )
-                    ) if max_asset_exposure > 0 and portfolio_value > 0 else None,
                     "total_budget_eur": _round_money(total_budget),
+                    "invested_eur": _round_money(invested_eur),
                     "remaining_budget_eur": 0.0,
                 },
             }

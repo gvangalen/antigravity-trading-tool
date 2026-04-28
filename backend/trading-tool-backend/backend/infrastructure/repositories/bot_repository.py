@@ -140,16 +140,66 @@ class BotRepository:
         result = await self.session.execute(query, {"user_id": user_id, "order_id": order_id, "quantity": quantity, "price": price})
         return result.fetchone()[0]
 
-    async def insert_bot_ledger(self, user_id: int, bot_id: int, order_id: int, symbol: str, cash_delta: float, qty_delta: float):
-        query = text("""
+    async def insert_bot_ledger(self, user_id: int, bot_id: int, order_id: int, symbol: str, cash_delta: float, qty_delta: float, price_eur: Optional[float] = None):
+        # 1. Insert into ledger (record everything)
+        query_ledger = text("""
             INSERT INTO bot_ledger (
                 user_id, bot_id, order_id, symbol, entry_type,
-                cash_delta_eur, qty_delta, ts
+                cash_delta_eur, qty_delta, price_eur, ts
             )
-            VALUES (:user_id,:bot_id,:order_id,:symbol,'execute',:cash_delta,:qty_delta,NOW())
+            VALUES (:user_id,:bot_id,:order_id,:symbol,'execute',:cash_delta,:qty_delta,:price_eur,NOW())
         """)
-        await self.session.execute(query, {
+        await self.session.execute(query_ledger, {
             "user_id": user_id, "bot_id": bot_id, "order_id": order_id, "symbol": symbol, 
+            "cash_delta": cash_delta, "qty_delta": qty_delta, "price_eur": price_eur
+        })
+
+        # 2. Atomic Portfolio Update (WAC Logic)
+        # We gebruiken een UPSERT om de staat bij te werken.
+        # Bij een BUY (qty_delta > 0): invested_eur stijgt, avg_entry wordt herberekend.
+        # Bij een SELL (qty_delta < 0): realized_pnl wordt geboekt, invested_eur daalt proportioneel.
+        query_portfolio = text("""
+            INSERT INTO bot_portfolios (user_id, bot_id, symbol, cash_eur, position_qty, invested_eur, avg_entry, realized_pnl_eur, updated_at)
+            SELECT 
+                :user_id, :bot_id, :symbol, :cash_delta, :qty_delta,
+                CASE WHEN :qty_delta > 0 THEN ABS(:cash_delta) ELSE 0 END,
+                CASE WHEN :qty_delta > 0 THEN ABS(:cash_delta) / :qty_delta ELSE 0 END,
+                0, NOW()
+            ON CONFLICT (bot_id) DO UPDATE SET
+                cash_eur = bot_portfolios.cash_eur + EXCLUDED.cash_eur,
+                realized_pnl_eur = bot_portfolios.realized_pnl_eur + (
+                    CASE 
+                        WHEN EXCLUDED.position_qty < 0 AND bot_portfolios.position_qty > 0 THEN
+                            ABS(EXCLUDED.cash_eur) - (ABS(EXCLUDED.position_qty) / bot_portfolios.position_qty * bot_portfolios.invested_eur)
+                        ELSE 0 
+                    END
+                ),
+                invested_eur = (
+                    CASE 
+                        WHEN EXCLUDED.position_qty > 0 THEN bot_portfolios.invested_eur + ABS(EXCLUDED.cash_eur)
+                        WHEN EXCLUDED.position_qty < 0 AND bot_portfolios.position_qty > 0 THEN
+                            bot_portfolios.invested_eur - (ABS(EXCLUDED.position_qty) / bot_portfolios.position_qty * bot_portfolios.invested_eur)
+                        ELSE bot_portfolios.invested_eur
+                    END
+                ),
+                position_qty = bot_portfolios.position_qty + EXCLUDED.position_qty,
+                avg_entry = (
+                    CASE 
+                        WHEN (bot_portfolios.position_qty + EXCLUDED.position_qty) > 0 THEN
+                            (
+                                CASE 
+                                    WHEN EXCLUDED.position_qty > 0 THEN bot_portfolios.invested_eur + ABS(EXCLUDED.cash_eur)
+                                    ELSE bot_portfolios.invested_eur - (ABS(EXCLUDED.position_qty) / bot_portfolios.position_qty * bot_portfolios.invested_eur)
+                                END
+                            ) / (bot_portfolios.position_qty + EXCLUDED.position_qty)
+                        ELSE 0
+                    END
+                ),
+                updated_at = NOW();
+        """)
+        
+        await self.session.execute(query_portfolio, {
+            "user_id": user_id, "bot_id": bot_id, "symbol": symbol,
             "cash_delta": cash_delta, "qty_delta": qty_delta
         })
 

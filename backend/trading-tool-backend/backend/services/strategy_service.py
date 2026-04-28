@@ -246,11 +246,11 @@ class StrategyService:
         await self.session.commit()
         return {"message": "🗑 Verwijderd"}
 
-    async def get_strategy_by_setup(self, setup_id: int, user_id: int) -> dict:
+    async def get_strategy_by_setup(self, setup_id: int, user_id: int) -> Optional[dict]:
         row = await self.repository.get_strategy_by_setup(setup_id, user_id)
         if not row:
-            return {"exists": False}
-        return {"exists": True, "strategy": self._format_strategy_row(row)}
+            return None
+        return self._format_strategy_row(row)
 
     async def get_last_strategy(self, user_id: int) -> Optional[dict]:
         row = await self.repository.get_last_strategy(user_id)

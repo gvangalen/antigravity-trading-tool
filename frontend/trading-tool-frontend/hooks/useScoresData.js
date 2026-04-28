@@ -22,7 +22,7 @@ export function useScoresData() {
     technical: { score: 0, uitleg: '', advies: '⚖️ Neutraal', top_contributors: [] },
     market: { score: 0, uitleg: '', advies: '⚖️ Neutraal', top_contributors: [] },
     setup: { score: 0, uitleg: '', advies: '⚖️ Neutraal', top_contributors: [] },
-    master: { score: 0, trend: '–', bias: '–', risk: '–', outlook: '–' },
+    master: { score: 0, trend: '–', bias: '–', risk: '–', outlook: '–', summary: 'Geen samenvatting beschikbaar' },
   });
 
   const [loading, setLoading] = useState(true);
@@ -74,6 +74,7 @@ export function useScoresData() {
         bias: master?.master_bias ?? '–',
         risk: master?.master_risk ?? '–',
         outlook: master?.outlook ?? 'Geen outlook',
+        summary: master?.summary ?? 'Geen samenvatting beschikbaar',
       },
     });
 

@@ -63,10 +63,12 @@ export function useTechnicalData(activeTab = "Dag") {
     try {
       let raw;
 
-      if (activeTab === "Dag") raw = await technicalDataDay();
-      else if (activeTab === "Week") raw = await technicalDataWeek();
-      else if (activeTab === "Maand") raw = await technicalDataMonth();
-      else if (activeTab === "Kwartaal") raw = await technicalDataQuarter();
+      const tab = activeTab.toLowerCase();
+
+      if (tab === "dag" || tab === "day") raw = await technicalDataDay();
+      else if (tab === "week") raw = await technicalDataWeek();
+      else if (tab === "maand" || tab === "month") raw = await technicalDataMonth();
+      else if (tab === "kwartaal" || tab === "quarter") raw = await technicalDataQuarter();
 
       const dataList = Array.isArray(raw) ? raw : [];
 
@@ -89,7 +91,7 @@ export function useTechnicalData(activeTab = "Dag") {
          DAGELIJKSE TECHNICAL SCORE
       -------------------------------------------------- */
       const scores = await getDailyScores();
-      const backendScore = scores?.technical_score ?? null;
+      const backendScore = scores?.technical?.score ?? null;
 
       if (backendScore !== null) {
         const rounded = parseFloat(backendScore).toFixed(1);

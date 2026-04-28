@@ -294,9 +294,12 @@ def get_bot_daily_snapshot(user_id: int) -> Dict[str, Any]:
                   d.confidence,
                   d.amount_eur,
                   d.scores_json,
-                  d.reason_json
+                  d.reason_json,
+                  o.status AS order_status,
+                  o.estimated_price_eur AS executed_price
                 FROM bot_decisions d
                 JOIN bot_configs b ON b.id = d.bot_id
+                LEFT JOIN bot_orders o ON o.decision_id = d.id
                 WHERE d.user_id = %s
                   AND d.decision_date = CURRENT_DATE
                 ORDER BY d.updated_at DESC
@@ -317,9 +320,11 @@ def get_bot_daily_snapshot(user_id: int) -> Dict[str, Any]:
                 "amount_eur": None,
                 "setup_match": None,
                 "reason": "Geen botbeslissing vandaag — drempels of voorwaarden niet gehaald.",
+                "order_status": None,
+                "executed_price": None,
             }
 
-        bot_name, action, confidence, amount_eur, scores_json, reason_json = row
+        bot_name, action, confidence, amount_eur, scores_json, reason_json, order_status, executed_price = row
 
         # ─────────────────────────────────────────────
         # Action normaliseren
@@ -405,6 +410,8 @@ def get_bot_daily_snapshot(user_id: int) -> Dict[str, Any]:
             "amount_eur": amount_val,
             "setup_match": setup_match,
             "reason": reason_text,
+            "order_status": order_status,
+            "executed_price": to_float(executed_price),
         }
 
     finally:
@@ -1103,49 +1110,56 @@ def generate_daily_report_sections(user_id: int) -> Dict[str, Any]:
     base_context = "CONTEXT:\n" + context_blob + "\n\n"
 
     # -------------------------------------------------
-    # Generate sections
+    # BATCHED AI GENERATION
     # -------------------------------------------------
+    
+    batched_prompt = f"""
+{base_context}
+
+Je bent een Bitcoin market strategist. Retourneer ALLEEN een geldig JSON object met EXACT deze 8 keys, elk met jouw bijbehorende tekstsectie.
+Formatvereisten:
+- Geen markdown block (geen ```json)
+- Geen inleidende tekst
+- Elke sectie volgt de specifieke instructies
+
+Keys:
+1. "executive_summary": {p_exec()}
+2. "market_analysis": {p_market()}
+3. "macro_context": {p_macro()}
+4. "technical_analysis": {p_technical()}
+5. "setup_validation": {p_setup(best_setup)}
+6. "strategy_implication": {p_strategy(active_strategy)}
+7. "bot_strategy": {p_bot_strategy(bot_snapshot)}
+8. "outlook": {p_outlook()}
+"""
+
+    batched_result = {}
+    try:
+        raw_json = ask_gpt_json(
+            prompt=batched_prompt,
+            system_role=SYSTEM_PROMPT,
+        )
+        if isinstance(raw_json, dict):
+            batched_result = raw_json
+    except Exception as e:
+        logger.exception("❌ Batched AI generation failed")
+
+    def get_section(key: str, default: str) -> str:
+        text = batched_result.get(key)
+        if not text or not isinstance(text, str):
+            return default
+        return reduce_repetition(text.strip(), seen_sentences)
+
     seen_sentences: List[str] = []
 
-    executive_summary = reduce_repetition(
-        generate_text(base_context + p_exec(), "Regime intact."),
-        seen_sentences,
-    )
-
-    market_analysis = reduce_repetition(
-        generate_text(base_context + p_market(), "Market steady."),
-        seen_sentences,
-    )
-
-    macro_context = reduce_repetition(
-        generate_text(base_context + p_macro(), "Macro unchanged."),
-        seen_sentences,
-    )
-
-    technical_analysis = reduce_repetition(
-        generate_text(base_context + p_technical(), "Technicals neutral."),
-        seen_sentences,
-    )
-
-    setup_validation = reduce_repetition(
-        generate_text(base_context + p_setup(best_setup), "Setups selective."),
-        seen_sentences,
-    )
-
-    strategy_implication = reduce_repetition(
-        generate_text(base_context + p_strategy(active_strategy), "Strategy stable."),
-        seen_sentences,
-    )
-
-    bot_strategy = reduce_repetition(
-        generate_text(base_context + p_bot_strategy(bot_snapshot), "Bot inactive."),
-        seen_sentences,
-    )
-
-    outlook = reduce_repetition(
-        generate_text(base_context + p_outlook(), "Await confirmation."),
-        seen_sentences,
-    )
+    executive_summary = get_section("executive_summary", "Regime intact.")
+    market_analysis = get_section("market_analysis", "Market steady.")
+    macro_context = get_section("macro_context", "Macro unchanged.")
+    technical_analysis = get_section("technical_analysis", "Technicals neutral.")
+    setup_validation = get_section("setup_validation", "Setups selective.")
+    strategy_implication = get_section("strategy_implication", "Strategy stable.")
+    bot_strategy = get_section("bot_strategy", "Bot inactive.")
+    outlook = get_section("outlook", "Await confirmation.")
 
     # -------------------------------------------------
     # RESULT

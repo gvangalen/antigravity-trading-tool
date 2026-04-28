@@ -145,6 +145,17 @@ async def get_top_setups(
     return await service.get_top_setups(user_id, limit)
 
 # ============================================================
+# 🔥 Active setup
+# ============================================================
+@router.get("/setups/active")
+async def get_active_setup(
+    current_user: dict = Depends(get_current_user),
+    service: SetupService = Depends(get_setup_service)
+):
+    user_id = current_user["id"]
+    return await service.get_active_setup(user_id)
+
+# ============================================================
 # 9️⃣ Eén setup ophalen
 # ============================================================
 @router.get("/setups/{setup_id}")
@@ -155,14 +166,3 @@ async def get_setup_by_id(
 ):
     user_id = current_user["id"]
     return await service.get_setup_by_id(setup_id, user_id)
-
-# ============================================================
-# 🔥 Active setup
-# ============================================================
-@router.get("/setups/active")
-async def get_active_setup(
-    current_user: dict = Depends(get_current_user),
-    service: SetupService = Depends(get_setup_service)
-):
-    user_id = current_user["id"]
-    return await service.get_active_setup(user_id)

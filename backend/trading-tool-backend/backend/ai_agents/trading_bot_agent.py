@@ -624,11 +624,11 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
 # =====================================================
 def build_order_proposal(
     *,
-    conn,
     bot: dict,
     decision: dict,
     today_spent_eur: float,
     total_balance_eur: float,
+    live_price: Optional[float],
 ) -> Optional[dict]:
     """
     Builds a concrete order preview for today.
@@ -642,27 +642,13 @@ def build_order_proposal(
     if amount_eur <= 0:
         return None
 
-    symbol = decision.get("symbol", DEFAULT_SYMBOL)
-
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT price
-            FROM market_data
-            WHERE symbol = %s
-              AND price IS NOT NULL
-            ORDER BY timestamp DESC
-            LIMIT 1
-            """,
-            (symbol,),
-        )
-        row = cur.fetchone()
-
-    if not row or row[0] is None:
-        logger.warning("⚠️ Geen marktprijs gevonden voor %s", symbol)
+    if not live_price:
+        logger.warning("⚠️ Geen marktprijs beschikbaar voor berekening order proposal.")
         return None
 
-    price_eur = float(row[0])
+    symbol = decision.get("symbol", DEFAULT_SYMBOL)
+
+    price_eur = float(live_price)
     estimated_qty = round(amount_eur / price_eur, 8)
 
     budget = bot.get("budget", {})
@@ -861,6 +847,7 @@ def record_bot_ledger_entry(
     entry_type: str,
     cash_delta_eur: float = 0.0,
     qty_delta: float = 0.0,
+    price_eur: Optional[float] = None,
     symbol: str = DEFAULT_SYMBOL,
     decision_id: Optional[int] = None,
     order_id: Optional[int] = None,
@@ -868,22 +855,14 @@ def record_bot_ledger_entry(
     meta: Optional[dict] = None,
 ):
     with conn.cursor() as cur:
+        # 1. Insert Ledger
         cur.execute(
             """
             INSERT INTO bot_ledger (
-                user_id,
-                bot_id,
-                decision_id,
-                order_id,
-                entry_type,
-                symbol,
-                cash_delta_eur,
-                qty_delta,
-                note,
-                meta,
-                ts
+                user_id, bot_id, decision_id, order_id, entry_type,
+                symbol, cash_delta_eur, qty_delta, price_eur, note, meta, ts
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
             """,
             (
                 user_id,
@@ -894,10 +873,57 @@ def record_bot_ledger_entry(
                 symbol,
                 cash_delta_eur,
                 qty_delta,
+                price_eur,
                 note,
                 json.dumps(meta or {}),
             ),
         )
+
+        # 2. Update Portfolio State (only for 'execute' type)
+        if entry_type == "execute":
+            cur.execute("""
+                INSERT INTO bot_portfolios (user_id, bot_id, symbol, cash_eur, position_qty, invested_eur, avg_entry, realized_pnl_eur, updated_at)
+                SELECT 
+                    %s, %s, %s, %s, %s,
+                    CASE WHEN %s > 0 THEN ABS(%s) ELSE 0 END,
+                    CASE WHEN %s > 0 THEN ABS(%s) / %s ELSE 0 END,
+                    0, NOW()
+                ON CONFLICT (bot_id) DO UPDATE SET
+                    cash_eur = bot_portfolios.cash_eur + EXCLUDED.cash_eur,
+                    realized_pnl_eur = bot_portfolios.realized_pnl_eur + (
+                        CASE 
+                            WHEN EXCLUDED.position_qty < 0 AND bot_portfolios.position_qty > 0 THEN
+                                ABS(EXCLUDED.cash_eur) - (ABS(EXCLUDED.position_qty) / bot_portfolios.position_qty * bot_portfolios.invested_eur)
+                            ELSE 0 
+                        END
+                    ),
+                    invested_eur = (
+                        CASE 
+                            WHEN EXCLUDED.position_qty > 0 THEN bot_portfolios.invested_eur + ABS(EXCLUDED.cash_eur)
+                            WHEN EXCLUDED.position_qty < 0 AND bot_portfolios.position_qty > 0 THEN
+                                bot_portfolios.invested_eur - (ABS(EXCLUDED.position_qty) / bot_portfolios.position_qty * bot_portfolios.invested_eur)
+                            ELSE bot_portfolios.invested_eur
+                        END
+                    ),
+                    position_qty = bot_portfolios.position_qty + EXCLUDED.position_qty,
+                    avg_entry = (
+                        CASE 
+                            WHEN (bot_portfolios.position_qty + EXCLUDED.position_qty) > 0 THEN
+                                (
+                                    CASE 
+                                        WHEN EXCLUDED.position_qty > 0 THEN bot_portfolios.invested_eur + ABS(EXCLUDED.cash_eur)
+                                        ELSE bot_portfolios.invested_eur - (ABS(EXCLUDED.position_qty) / bot_portfolios.position_qty * bot_portfolios.invested_eur)
+                                    END
+                                ) / (bot_portfolios.position_qty + EXCLUDED.position_qty)
+                            ELSE 0
+                        END
+                    ),
+                    updated_at = NOW();
+            """, (
+                user_id, bot_id, symbol, cash_delta_eur, qty_delta,
+                qty_delta, cash_delta_eur,
+                qty_delta, cash_delta_eur, qty_delta
+            ))
 
 
 # =====================================================
@@ -915,6 +941,26 @@ def get_bot_balance(conn, user_id: int, bot_id: int) -> float:
             (user_id, bot_id),
         )
         return float(cur.fetchone()[0] or 0.0)
+
+def get_bot_portfolio_state(conn, user_id: int, bot_id: int) -> Dict[str, Any]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT cash_eur, position_qty, invested_eur, realized_pnl_eur
+            FROM bot_portfolios
+            WHERE user_id = %s AND bot_id = %s
+            """,
+            (user_id, bot_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"cash": 0.0, "qty": 0.0, "invested": 0.0, "realized": 0.0}
+        return {
+            "cash": float(row[0] or 0.0),
+            "qty": float(row[1] or 0.0),
+            "invested": float(row[2] or 0.0),
+            "realized": float(row[3] or 0.0),
+        }
 
 
 # =====================================================
@@ -1254,6 +1300,7 @@ def run_trading_bot_agent(
 
         results = []
         touched_bot_ids = []
+        price_cache = {}
 
         for bot in bots:
 
@@ -1263,9 +1310,11 @@ def run_trading_bot_agent(
             symbol = (bot.get("symbol") or DEFAULT_SYMBOL).upper()
 
             # =========================
-            # LIVE PRICE
+            # LIVE PRICE (CACHED)
             # =========================
-            live_price = _get_live_price(conn, symbol)
+            if symbol not in price_cache:
+                price_cache[symbol] = _get_live_price(conn, symbol)
+            live_price = price_cache[symbol]
 
             # =========================
             # SNAPSHOT
@@ -1300,8 +1349,10 @@ def run_trading_bot_agent(
                 })
 
             # =========================
-            # PORTFOLIO CONTEXT
+            # PORTFOLIO CONTEXT (ACCURATE)
             # =========================
+            portfolio_state = get_bot_portfolio_state(conn, user_id, bot["bot_id"])
+            
             today_spent_eur = get_today_spent_eur(
                 conn,
                 user_id,
@@ -1309,30 +1360,22 @@ def run_trading_bot_agent(
                 report_date,
             )
 
-            cash_balance_eur = get_bot_balance(
-                conn,
-                user_id,
-                bot["bot_id"],
-            )
+            # Use values from bot_portfolios (the new source of truth)
+            cash_balance_eur = portfolio_state["cash"]
+            current_qty = portfolio_state["qty"]
+            invested_eur = portfolio_state["invested"]
 
-            current_asset_value_eur = get_asset_position_value(
-                conn,
-                user_id,
-                bot["bot_id"],
-                symbol,
-            )
+            current_asset_value_eur = current_qty * (live_price or 0)
 
-            cash_available = max(0.0, cash_balance_eur)
-
-            portfolio_value_eur = max(
-                current_asset_value_eur + cash_available,
-                1.0,
-            )
+            # True equity = Cash + Assets
+            portfolio_value_eur = cash_balance_eur + current_asset_value_eur
 
             portfolio_context = {
                 "today_allocated_eur": today_spent_eur,
                 "portfolio_value_eur": portfolio_value_eur,
                 "current_asset_value_eur": current_asset_value_eur,
+                "cash_balance_eur": cash_balance_eur,
+                "invested_eur": invested_eur,
                 "max_trade_risk_eur": bot["budget"].get("max_order_eur"),
                 "daily_allocation_eur": bot["budget"].get("daily_limit_eur"),
                 "max_asset_exposure_pct": bot["budget"].get("max_asset_exposure_pct"),
@@ -1473,11 +1516,11 @@ def run_trading_bot_agent(
             execution_status = None
 
             order = build_order_proposal(
-                conn=conn,
                 bot=bot,
                 decision=decision,
                 today_spent_eur=today_spent_eur,
                 total_balance_eur=cash_balance_eur,
+                live_price=live_price,
             )
 
             if order:
@@ -1643,6 +1686,7 @@ def _auto_execute_decision(
             entry_type="execute",
             cash_delta_eur=cash_delta,
             qty_delta=qty_delta,
+            price_eur=price,
             symbol=symbol,
             decision_id=decision_id,
             order_id=bot_order_id,
@@ -1749,6 +1793,7 @@ def execute_manual_decision(
             entry_type="execute",
             cash_delta_eur=cash_delta,
             qty_delta=qty_delta,
+            price_eur=price,
             symbol=symbol,
             decision_id=decision_id,
             order_id=bot_order_id,

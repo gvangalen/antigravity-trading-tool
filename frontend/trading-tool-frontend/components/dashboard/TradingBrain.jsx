@@ -13,7 +13,8 @@ import {
   ShieldAlert, 
   BrainCircuit, 
   Zap, 
-  ChevronRight
+  ChevronRight,
+  Layers
 } from "lucide-react";
 import { BrainSkeleton, TextSkeleton } from "./DashboardSkeleton";
 
@@ -26,7 +27,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 export default function TradingBrain() {
   const { t } = useTranslation();
   const { activeSetup, loading: setupLoading } = useActiveSetup();
-  const { master, loading: scoresLoading } = useScoresData();
+  const { setup: dailySetup, master, loading: scoresLoading } = useScoresData();
   const { summary, aiStatus, loading: sidebarLoading } = useSidebarData();
   const { strategy, loading: strategyLoading } = useSetupStrategy(activeSetup?.id);
 
@@ -35,7 +36,7 @@ export default function TradingBrain() {
   // 1. DATA PREP
   const ticker = activeSetup?.symbol || "–";
   const timeframe = activeSetup?.timeframe || "–";
-  const setupScore = Math.round(activeSetup?.score || 0);
+  const setupScore = Math.round(dailySetup?.score || activeSetup?.score || 0);
   
   const advice = {
     entry: strategy?.entry || "–",
@@ -48,8 +49,12 @@ export default function TradingBrain() {
 
   const isBotActive = aiStatus?.state === "active" || aiStatus?.state === "running";
   
+  const isDCA = activeSetup?.setup_type?.toLowerCase() === "dca" || 
+                strategy?.strategy_type?.toLowerCase() === "dca" || 
+                activeSetup?.name?.toLowerCase().includes("dca");
+  
   // Minimal report snippet (1 sentence)
-  const reportSnippet = summary?.split('.')[0] + '.';
+  const reportSnippet = (master?.summary || summary)?.split('.')[0] + '.';
 
   if (isLoading && !activeSetup) {
     return <BrainSkeleton />;
@@ -79,42 +84,63 @@ export default function TradingBrain() {
                </div>
              </div>
 
-             <div className="grid grid-cols-1 gap-3">
-                <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 px-3 py-2 rounded-lg border border-white dark:border-slate-700 transition-colors">
-                   <div className="flex items-center gap-2">
-                       <ChevronRight size={14} className="text-blue-600" />
-                       <span className="text-xs font-black text-secondary dark:text-slate-500 uppercase tracking-widest">{t.dashboard.brain.entry}</span>
-                   </div>
-                   <span className="text-lg font-mono font-black text-blue-700 dark:text-blue-400">${advice.entry}</span>
-                </div>
+             {isDCA ? (
+               <div className="bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 p-4 rounded-xl mt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                     <Layers className="w-4 h-4 text-blue-600" />
+                     <span className="text-xs font-black text-blue-800 dark:text-blue-300 uppercase tracking-widest">DCA Accumulation</span>
+                  </div>
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 leading-relaxed">
+                     Actieve Dollar Cost Averaging strategie. Instapmomenten en targets worden dynamisch door de bot bepaald op basis van de deviatie logica, in plaats van vaste levels.
+                  </p>
+               </div>
+             ) : (
+               <div className="grid grid-cols-1 gap-3">
+                  <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 px-3 py-2 rounded-lg border border-white dark:border-slate-700 transition-colors">
+                     <div className="flex items-center gap-2">
+                         <ChevronRight size={14} className="text-blue-600" />
+                         <span className="text-xs font-black text-secondary dark:text-slate-500 uppercase tracking-widest">{t.dashboard.brain.entry}</span>
+                     </div>
+                     <span className="text-lg font-mono font-black text-blue-700 dark:text-blue-400">
+                       {advice.entry !== "–" ? `$${Number(advice.entry).toLocaleString()}` : "–"}
+                     </span>
+                  </div>
 
-                <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 px-3 py-2 rounded-lg border border-white dark:border-slate-700 transition-colors">
-                   <div className="flex items-center gap-2">
-                       <Target size={14} className="text-emerald-600" />
-                       <span className="text-xs font-black text-secondary dark:text-slate-500 uppercase tracking-widest">{t.dashboard.brain.targets}</span>
-                   </div>
-                   <span className="text-sm font-mono font-black text-emerald-700 dark:text-emerald-400">{advice.targets}</span>
-                </div>
+                  <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 px-3 py-2 rounded-lg border border-white dark:border-slate-700 transition-colors">
+                     <div className="flex items-center gap-2">
+                         <Target size={14} className="text-emerald-600" />
+                         <span className="text-xs font-black text-secondary dark:text-slate-500 uppercase tracking-widest">{t.dashboard.brain.targets}</span>
+                     </div>
+                     <span className="text-sm font-mono font-black text-emerald-700 dark:text-emerald-400">
+                       {Array.isArray(strategy?.targets) 
+                         ? strategy.targets.map(t => `$${Number(t).toLocaleString()}`).join(" / ")
+                         : advice.targets
+                       }
+                     </span>
+                  </div>
 
-                <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 px-3 py-2 rounded-lg border border-white dark:border-slate-700 transition-colors">
-                   <div className="flex items-center gap-2">
-                       <ShieldAlert size={14} className="text-rose-500" />
-                       <span className="text-xs font-black text-secondary dark:text-slate-500 uppercase tracking-widest">{t.dashboard.brain.stop_loss}</span>
-                   </div>
-                   <span className="text-sm font-mono font-black text-rose-600 dark:text-rose-400">${advice.stopLoss}</span>
-                </div>
-             </div>
+                  <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 px-3 py-2 rounded-lg border border-white dark:border-slate-700 transition-colors">
+                     <div className="flex items-center gap-2">
+                         <ShieldAlert size={14} className="text-rose-500" />
+                         <span className="text-xs font-black text-secondary dark:text-slate-500 uppercase tracking-widest">{t.dashboard.brain.stop_loss}</span>
+                     </div>
+                     <span className="text-sm font-mono font-black text-rose-600 dark:text-rose-400">
+                       {advice.stopLoss !== "–" ? `$${Number(advice.stopLoss).toLocaleString()}` : "–"}
+                     </span>
+                  </div>
+               </div>
+             )}
 
              {/* 📊 REAL EXECUTION METADATA */}
              <div className="mt-4 flex items-center justify-between px-1">
                 <div className="flex flex-col">
                    <span className="text-[9px] uppercase font-bold text-secondary dark:text-slate-500 opacity-60">{t.dashboard.brain.risk_reward}</span>
-                   <span className="text-xs font-black text-foreground dark:text-slate-100">{advice.riskReward}</span>
+                   <span className="text-xs font-black text-foreground dark:text-slate-100">{isDCA ? "Dynamic" : advice.riskReward}</span>
                 </div>
                 <div className="text-right flex flex-col">
                    <span className="text-[9px] uppercase font-bold text-secondary dark:text-slate-500 opacity-60">{t.dashboard.brain.risk_level}</span>
                    <span className={`text-xs font-black ${advice.riskLevel?.toLowerCase() === 'high' ? 'text-orange-500' : 'text-blue-600 dark:text-blue-400'}`}>
-                      {advice.riskLevel}
+                      {isDCA ? "Scale-In" : advice.riskLevel}
                    </span>
                 </div>
              </div>
@@ -153,10 +179,10 @@ export default function TradingBrain() {
                 <span className="text-[10px] uppercase font-black text-secondary dark:text-slate-500 tracking-widest">{t.dashboard.brain.master_snippet}</span>
              </div>
              <div className="text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 font-medium italic">
-                {sidebarLoading ? (
+                {sidebarLoading && !reportSnippet ? (
                   <TextSkeleton lines={2} className="mt-1" />
                 ) : (
-                  `"${reportSnippet}"`
+                  reportSnippet && reportSnippet !== "undefined." ? `"${reportSnippet}"` : "Nog geen samenvatting beschikbaar."
                 )}
              </div>
              <Link 

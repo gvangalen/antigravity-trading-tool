@@ -489,6 +489,7 @@ def run_bot_brain(
             proposed_amount_eur=proposed_amount,
             portfolio_value_eur=_safe_float(portfolio_context.get("portfolio_value_eur"), 0.0) or 0.0,
             current_asset_value_eur=_safe_float(portfolio_context.get("current_asset_value_eur"), 0.0) or 0.0,
+            invested_eur=_safe_float(portfolio_context.get("invested_eur"), 0.0) or 0.0,
             today_allocated_eur=_safe_float(portfolio_context.get("today_allocated_eur"), 0.0) or 0.0,
             kill_switch=portfolio_context.get("kill_switch", True),
             max_trade_risk_eur=_safe_float(

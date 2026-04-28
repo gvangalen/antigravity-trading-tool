@@ -167,12 +167,41 @@ class StrategyRepository:
         return result.rowcount
 
     async def get_strategy_by_setup(self, setup_id: int, user_id: int) -> Optional[dict]:
+        # We prioritiseren de 'active_strategy_snapshot' van vandaag voor het dashboard.
+        # Als die er niet is, vallen we terug op de laatst gemaakte strategie.
         query = text("""
-            SELECT *
-            FROM strategies
-            WHERE setup_id = :setup_id AND user_id = :user_id
-            ORDER BY created_at DESC
+            SELECT 
+                s.id,
+                s.setup_id,
+                s.name,
+                s.user_id,
+                COALESCE(sn.entry::text, s.entry::text) as entry,
+                COALESCE(sn.targets, array_to_string(s.targets, ',')) as targets,
+                COALESCE(sn.stop_loss::text, s.stop_loss::text) as stop_loss,
+                s.risk_profile,
+                s.explanation,
+                s.setup_type,
+                s.execution_mode,
+                s.base_amount,
+                s.data,
+                s.created_at
+            FROM strategies s
+            LEFT JOIN active_strategy_snapshot sn ON s.id = sn.strategy_id 
+                AND sn.snapshot_date = CURRENT_DATE
+            WHERE s.setup_id = :setup_id AND s.user_id = :user_id
+            ORDER BY s.created_at DESC
             LIMIT 1
+        """)
+        result = await self.session.execute(query, {"setup_id": setup_id, "user_id": user_id})
+        row = result.fetchone()
+        return dict(row._mapping) if row else None
+        
+    async def get_latest_snapshot_for_setup(self, setup_id: int, user_id: int) -> Optional[dict]:
+        # Directe toegang tot de snapshot (backup)
+        query = text("""
+            SELECT * FROM active_strategy_snapshot 
+            WHERE setup_id = :setup_id AND user_id = :user_id 
+            ORDER BY snapshot_date DESC LIMIT 1
         """)
         result = await self.session.execute(query, {"setup_id": setup_id, "user_id": user_id})
         row = result.fetchone()

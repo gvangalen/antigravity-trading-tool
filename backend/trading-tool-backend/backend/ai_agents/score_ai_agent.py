@@ -80,25 +80,40 @@ def stringify_top_signals(top_signals: Any) -> List[str]:
 
 def calculate_strategy_score(
     *,
+    macro: float,
     market: float,
     technical: float,
     setup: float,
+    has_macro: bool = True,
+    has_market: bool = True,
+    has_tech: bool = True,
 ) -> float:
     """
-    Strategy score = gewogen verhouding van market + technical + setup
-    GEEN Decimal-logica hier.
+    Strategy score = gewogen verhouding op basis van ACTIEVE componenten in user setups.
+    Setup telt ALTIJD mee. Macro/Market/Technical tellen alleen mee als deze in een setup geconfigureerd zijn.
     """
 
+    macro = float(macro) if macro is not None else 0.0
     market = float(market) if market is not None else 0.0
     technical = float(technical) if technical is not None else 0.0
     setup = float(setup) if setup is not None else 0.0
 
-    score = (
-        0.33 * market +
-        0.33 * technical +
-        0.34 * setup
-    )
+    active_components = 1  # setup is altijd actief
+    total_score = setup
 
+    if has_macro:
+        active_components += 1
+        total_score += macro
+    
+    if has_market:
+        active_components += 1
+        total_score += market
+
+    if has_tech:
+        active_components += 1
+        total_score += technical
+
+    score = total_score / active_components
     return round(score, 1)
 
 
@@ -164,6 +179,24 @@ def fetch_numeric_scores(conn, user_id: int, insights: Dict[str, dict]) -> Dict[
     numeric: Dict[str, Any] = {"daily_scores": {}, "ai_reflections": {}}
 
     with conn.cursor() as cur:
+        # Check welke domeinen actief zijn in de setups van deze user
+        cur.execute("""
+            SELECT min_macro_score, max_macro_score,
+                   min_market_score, max_market_score,
+                   min_technical_score, max_technical_score
+            FROM setups
+            WHERE user_id = %s
+        """, (user_id,))
+        setup_rows = cur.fetchall()
+
+        if not setup_rows:
+            # Fallback als er geen setups zijn: neem alles mee
+            has_macro = has_market = has_tech = True
+        else:
+            has_macro = any(r[0] is not None or r[1] is not None for r in setup_rows)
+            has_market = any(r[2] is not None or r[3] is not None for r in setup_rows)
+            has_tech = any(r[4] is not None or r[5] is not None for r in setup_rows)
+
         # daily_scores (macro / market / technical / setup)
         cur.execute(
             """
@@ -179,11 +212,15 @@ def fetch_numeric_scores(conn, user_id: int, insights: Dict[str, dict]) -> Dict[
         if row:
             macro, market, technical, setup_score = row
 
-            # ✅ STRATEGY SCORE = market + technical + setup
+            # ✅ STRATEGY SCORE = Slim gemiddelde op basis van actieve setup domeinen
             strategy_score = calculate_strategy_score(
+                macro=macro,
                 market=market,
                 technical=technical,
                 setup=setup_score,
+                has_macro=has_macro,
+                has_market=has_market,
+                has_tech=has_tech,
             )
 
             numeric["daily_scores"] = {
@@ -451,11 +488,31 @@ def store_daily_scores(conn, insights: Dict[str, dict], user_id: int):
         )
         return
 
-    # ✅ STRATEGY SCORE = market + technical + setup
+    # Vraag de actieve domeinen op voor deze berekening
+    has_macro = has_market = has_tech = True
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT min_macro_score, max_macro_score,
+                   min_market_score, max_market_score,
+                   min_technical_score, max_technical_score
+            FROM setups
+            WHERE user_id = %s
+        """, (user_id,))
+        setup_rows = cur.fetchall()
+        if setup_rows:
+            has_macro = any(r[0] is not None or r[1] is not None for r in setup_rows)
+            has_market = any(r[2] is not None or r[3] is not None for r in setup_rows)
+            has_tech = any(r[4] is not None or r[5] is not None for r in setup_rows)
+
+    # ✅ STRATEGY SCORE = Slim gemiddelde op basis van actieve setup domeinen
     strategy_score = calculate_strategy_score(
+        macro=macro,
         market=market,
         technical=technical,
         setup=setup_score,
+        has_macro=has_macro,
+        has_market=has_market,
+        has_tech=has_tech,
     )
 
     with conn.cursor() as cur:

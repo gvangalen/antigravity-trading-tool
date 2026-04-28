@@ -56,19 +56,9 @@ export async function getMacroSummary() {
 // =====================================================
 function fallbackScores() {
   return {
-    macro_score: 50,
-    technical_score: 50,
-    market_score: 50,
-    setup_score: 50,
-
-    macro_interpretation: "Licht neutraal",
-    technical_interpretation: "Licht neutraal",
-    market_interpretation: "Licht neutraal",
-    setup_interpretation: "Licht neutraal",
-
-    macro_top_contributors: [],
-    technical_top_contributors: [],
-    market_top_contributors: [],
-    setup_top_contributors: []
+    macro: { score: 50, interpretation: "Licht neutraal", top_contributors: [] },
+    technical: { score: 50, interpretation: "Licht neutraal", top_contributors: [] },
+    market: { score: 50, interpretation: "Licht neutraal", top_contributors: [] },
+    setup: { score: 50, interpretation: "Licht neutraal", top_contributors: [], active_setups: [] }
   };
 }

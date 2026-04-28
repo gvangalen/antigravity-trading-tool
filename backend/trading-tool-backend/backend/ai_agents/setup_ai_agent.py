@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Optional
 
 from backend.utils.db import get_db_connection
-from backend.utils.openai_client import ask_gpt_text, ask_gpt_json, ask_gpt_text
+from backend.utils.openai_client import ask_gpt_text, ask_gpt_json
 from backend.ai_core.system_prompt_builder import build_system_prompt
 from backend.ai_core.agent_context import build_agent_context  # ✅ gedeelde context
 
@@ -29,7 +29,7 @@ def to_float(v) -> Optional[float]:
 
 def score_overlap(value, min_v, max_v) -> int:
     """
-    Overlap-score (0–100)
+    Overlap-score (0–100) met soft decay: -2 punten per 1 punt afwijking.
     """
     value = to_float(value)
     min_v = to_float(min_v)
@@ -40,10 +40,18 @@ def score_overlap(value, min_v, max_v) -> int:
 
     if min_v is None and max_v is None:
         return 100
+
+    # Soft decay penalty logica
+    penalty = 0
     if min_v is not None and value < min_v:
-        return 0
-    if max_v is not None and value > max_v:
-        return 0
+        penalty = (min_v - value) * 2
+    elif max_v is not None and value > max_v:
+        penalty = (value - max_v) * 2
+
+    if penalty > 0:
+        return max(0, round(100 - penalty))
+
+    # Binnen de range
     if min_v is None or max_v is None:
         return 100
 
@@ -91,7 +99,7 @@ def run_setup_agent(*, user_id: int, asset: str = "BTC"):
         macro, technical, market = map(to_float, row)
 
         # ==================================================
-        # 2️⃣ SETUPS OPHALEN (🔥 NIEUWE STRUCTUUR)
+        # 2️⃣ SETUPS OPHALEN
         # ==================================================
         with conn.cursor() as cur:
             cur.execute("""
@@ -133,7 +141,68 @@ def run_setup_agent(*, user_id: int, asset: str = "BTC"):
         evaluations = []
 
         # ==================================================
-        # 4️⃣ AI TASK
+        # 4️⃣ LOKALE OVERLAP BEREKENING (SNEL)
+        # ==================================================
+        for row_setup in setups:
+            (
+                setup_id,
+                name,
+                setup_type,
+                dca_frequency,
+                dca_day,
+                dca_month_day,
+                min_macro,
+                max_macro,
+                min_tech,
+                max_tech,
+                min_market,
+                max_market
+            ) = row_setup
+
+            m  = score_overlap(macro, min_macro, max_macro)
+            t  = score_overlap(technical, min_tech, max_tech)
+            mk = score_overlap(market, min_market, max_market)
+
+            # Slimme weging: negeer niet-geconfigureerde domeinen in het gemiddelde
+            active_components = 0
+            total_score = 0
+            
+            if min_macro is not None or max_macro is not None:
+                active_components += 1
+                total_score += m
+            if min_tech is not None or max_tech is not None:
+                active_components += 1
+                total_score += t
+            if min_market is not None or max_market is not None:
+                active_components += 1
+                total_score += mk
+                
+            if active_components == 0:
+                raw_score = round((m + t + mk) / 3) # Fallback
+            else:
+                raw_score = round(total_score / active_components)
+
+            score = max(25, raw_score)
+
+            evaluations.append({
+                "setup_id": setup_id,
+                "name": name,
+                "setup_type": setup_type,
+                "dca_config": {
+                    "frequency": dca_frequency,
+                    "day": dca_day,
+                    "month_day": dca_month_day
+                },
+                "score": score,
+                "components": {"m": m, "t": t, "mk": mk}
+            })
+
+        # Sorteer om de winnaar te bepalen
+        ranked = sorted(evaluations, key=lambda x: x["score"], reverse=True)
+        best = ranked[0]
+
+        # ==================================================
+        # 5️⃣ AI TASK (EENMALIG VOOR DE BESTE SETUP)
         # ==================================================
         SETUP_TASK = """
 Je bent een trading decision agent.
@@ -155,63 +224,28 @@ GEEN:
 
 Output: 2–3 zinnen.
 """
-
         system_prompt = build_system_prompt(agent="setup", task=SETUP_TASK)
 
+        explanation = ask_gpt_text(
+            prompt=json.dumps({
+                "setup": best["name"],
+                "setup_type": best["setup_type"],
+                "dca_config": best["dca_config"],
+                "macro_score": macro,
+                "technical_score": technical,
+                "market_score": market,
+                "component_overlap": best["components"]
+            }, ensure_ascii=False, indent=2),
+            system_role=system_prompt
+        )
+
         # ==================================================
-        # 5️⃣ PER SETUP
+        # 6️⃣ OPSLAAN VOOR ALLE SETUPS
         # ==================================================
-        for row in setups:
-            (
-                setup_id,
-                name,
-                setup_type,
-                dca_frequency,
-                dca_day,
-                dca_month_day,
-                min_macro,
-                max_macro,
-                min_tech,
-                max_tech,
-                min_market,
-                max_market
-            ) = row
-
-            m  = score_overlap(macro, min_macro, max_macro)
-            t  = score_overlap(technical, min_tech, max_tech)
-            mk = score_overlap(market, min_market, max_market)
-
-            raw_score = round((m + t + mk) / 3)
-            score = max(25, raw_score)
-
-            explanation = ask_gpt_text(
-                prompt=json.dumps({
-                    "setup": name,
-                    "setup_type": setup_type,
-                    "dca_config": {
-                        "frequency": dca_frequency,
-                        "day": dca_day,
-                        "month_day": dca_month_day
-                    },
-                    "macro_score": macro,
-                    "technical_score": technical,
-                    "market_score": market,
-                    "component_overlap": {
-                        "macro": m,
-                        "technical": t,
-                        "market": mk
-                    }
-                }, ensure_ascii=False, indent=2),
-                system_role=system_prompt
-            )
-
-            evaluations.append({
-                "setup_id": setup_id,
-                "name": name,
-                "setup_type": setup_type,
-                "score": score,
-            })
-
+        for eval_obj in ranked:
+            is_best_setup = (eval_obj["setup_id"] == best["setup_id"])
+            current_explanation = explanation if is_best_setup else "Berekend via mechanische overlap."
+            
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO daily_setup_scores
@@ -223,14 +257,12 @@ Output: 2–3 zinnen.
                         is_active = TRUE,
                         explanation = EXCLUDED.explanation,
                         created_at = NOW()
-                """, (setup_id, user_id, score, explanation))
+                """, (eval_obj["setup_id"], user_id, eval_obj["score"], current_explanation))
+
 
         # ==================================================
-        # 6️⃣ BESTE SETUP
+        # 7️⃣ BESTE SETUP MARKEREN & SCORE OPSLAAN
         # ==================================================
-        ranked = sorted(evaluations, key=lambda x: x["score"], reverse=True)
-        best = ranked[0]
-
         agent_context = build_agent_context(
             user_id=user_id,
             category="setup",
@@ -248,10 +280,6 @@ Output: 2–3 zinnen.
                   AND report_date = CURRENT_DATE
             """, (best["setup_id"], user_id))
 
-        # ==================================================
-        # 7️⃣ SCORE OPSLAAN
-        # ==================================================
-        with conn.cursor() as cur:
             cur.execute("""
                 UPDATE daily_scores
                 SET setup_score = %s
@@ -259,8 +287,9 @@ Output: 2–3 zinnen.
                   AND report_date = CURRENT_DATE
             """, (best["score"], user_id))
 
+
         # ==================================================
-        # 8️⃣ INSIGHT
+        # 8️⃣ INSIGHT (VOOR DASHBOARD)
         # ==================================================
         summary = f"Beste {asset}-setup: {best['name']} ({best['setup_type']})"
 
@@ -291,11 +320,11 @@ Output: 2–3 zinnen.
         logger.info("✅ Setup agent klaar")
 
     except Exception:
-        conn.rollback()
+        if conn: conn.rollback()
         logger.error("❌ Setup agent crash", exc_info=True)
 
     finally:
-        conn.close()
+        if conn: conn.close()
 
 # ======================================================
 # 🧠 UITLEG PER SETUP (API)
@@ -366,4 +395,4 @@ Geen educatie of voorspellingen.
         return ""
 
     finally:
-        conn.close()
+        if conn: conn.close()

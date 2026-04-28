@@ -76,55 +76,43 @@ def snapshot_all_for_user(
             bots: List[Tuple[int, float]] = cur.fetchall()
 
             # =====================================================
-            # 🔁 PER BOT
+            # 🔁 PER BOT (FROM BOT_PORTFOLIOS)
             # =====================================================
 
             global_cash = 0.0
             global_qty = 0.0
             global_invested = 0.0
+            global_realized_pnl = 0.0
 
-            for bot_id, budget_total in bots:
+            cur.execute("""
+                SELECT 
+                    bot_id, cash_eur, position_qty, invested_eur, avg_entry, realized_pnl_eur
+                FROM bot_portfolios
+                WHERE user_id=%s
+            """, (user_id,))
 
-                cur.execute("""
-                    SELECT
-                        COALESCE(SUM(qty_delta),0),
-                        COALESCE(SUM(cash_delta_eur),0),
-                        COALESCE(SUM(
-                            CASE
-                                WHEN entry_type='execute'
-                                     AND cash_delta_eur < 0
-                                THEN ABS(cash_delta_eur)
-                                ELSE 0
-                            END
-                        ),0)
-                    FROM bot_ledger
-                    WHERE user_id=%s
-                      AND bot_id=%s
-                """, (user_id, bot_id))
+            portfolio_rows = cur.fetchall()
 
-                net_qty, net_cash_delta, invested_eur = cur.fetchone() or (0,0,0)
+            for bot_id, b_cash, b_qty, b_invested, b_avg, b_realized in portfolio_rows:
+                b_cash = float(b_cash or 0)
+                b_qty = float(b_qty or 0)
+                b_invested = float(b_invested or 0)
+                b_realized = float(b_realized or 0)
 
-                net_qty = float(net_qty or 0)
-                net_cash_delta = float(net_cash_delta or 0)
-                invested_eur = float(invested_eur or 0)
-                budget_total = float(budget_total or 0)
+                # Position value at current market price
+                position_value = b_qty * price
 
-                # Cash = start budget + ledger delta
-                cash_eur = budget_total + net_cash_delta
+                # Equity = Cash + Current Asset Value
+                bot_equity = b_cash + position_value
 
-                # Position value
-                position_value = net_qty * price
-
-                # Equity
-                bot_equity = cash_eur + position_value
-
-                # Unrealized PnL
-                unrealized_pnl = position_value - invested_eur
+                # Unrealized PnL = Current Value - Cost Basis
+                unrealized_pnl = position_value - b_invested
 
                 # Accumulate globals
-                global_cash += cash_eur
-                global_qty += net_qty
-                global_invested += invested_eur
+                global_cash += b_cash
+                global_qty += b_qty
+                global_invested += b_invested
+                global_realized_pnl += b_realized
 
                 # =====================================================
                 # 🤖 BOT SNAPSHOT
@@ -132,16 +120,8 @@ def snapshot_all_for_user(
                 cur.execute("""
                     INSERT INTO bot_portfolio_snapshots
                     (
-                        user_id,
-                        bot_id,
-                        bucket,
-                        ts,
-                        symbol,
-                        net_qty,
-                        cash_eur,
-                        price_eur,
-                        equity_eur,
-                        invested_eur
+                        user_id, bot_id, bucket, ts, symbol,
+                        net_qty, cash_eur, price_eur, equity_eur, invested_eur
                     )
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (user_id, bot_id, bucket, ts)
@@ -152,21 +132,13 @@ def snapshot_all_for_user(
                         equity_eur   = EXCLUDED.equity_eur,
                         invested_eur = EXCLUDED.invested_eur
                 """, (
-                    user_id,
-                    bot_id,
-                    bucket,
-                    ts,
-                    "BTC",
-                    net_qty,
-                    cash_eur,
-                    price,
-                    bot_equity,
-                    invested_eur
+                    user_id, bot_id, bucket, ts, "BTC",
+                    b_qty, b_cash, price, bot_equity, b_invested
                 ))
 
                 logger.info(
-                    f"📊 Bot snapshot | bot={bot_id} | equity={round(bot_equity,2)} "
-                    f"| invested={round(invested_eur,2)}"
+                    f"📊 Bot accurate snapshot | bot={bot_id} | equity={round(bot_equity,2)} "
+                    f"| realized={round(b_realized,2)}"
                 )
 
             # =====================================================
