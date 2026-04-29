@@ -27,7 +27,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 export default function TradingBrain() {
   const { t } = useTranslation();
   const { activeSetup, loading: setupLoading } = useActiveSetup();
-  const { setup: dailySetup, master, loading: scoresLoading } = useScoresData();
+  const { macro, technical, market, setup: dailySetup, master, loading: scoresLoading } = useScoresData();
   const { summary, aiStatus, loading: sidebarLoading } = useSidebarData();
   const { strategy, loading: strategyLoading } = useSetupStrategy(activeSetup?.id);
 
@@ -174,30 +174,19 @@ export default function TradingBrain() {
           </div>
 
           <div className="border-t border-slate-100 dark:border-slate-800 mt-4 pt-4 px-1">
-             <div className="flex items-center gap-2 mb-2">
-                <BrainCircuit size={14} className="text-blue-600" />
-                <span className="text-[10px] uppercase font-black text-secondary dark:text-slate-500 tracking-widest">{t.dashboard.brain.master_snippet}</span>
-             </div>
-             <div className="text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 font-medium italic">
-                {sidebarLoading && !reportSnippet ? (
-                  <TextSkeleton lines={2} className="mt-1" />
-                ) : (
-                  reportSnippet && reportSnippet !== "undefined." ? `"${reportSnippet}"` : "Nog geen samenvatting beschikbaar."
-                )}
-             </div>
-
+             
              {/* 🔍 DEEP DIVE SECTION */}
-             <div className="mt-5 pt-4 border-t border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+             <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-1">
                    <div className="w-1 h-3 bg-blue-500 rounded-full" />
                    <span className="text-[9px] uppercase font-black text-foreground dark:text-slate-300 tracking-widest">Intelligence Deep-Dive</span>
                 </div>
                 
-                <div className="space-y-2">
+                <div className="space-y-3">
                    {[
-                      { label: "Macro", data: dailySetup?.macro?.top_contributors },
-                      { label: "Technical", data: dailySetup?.technical?.top_contributors },
-                      { label: "Market", data: dailySetup?.market?.top_contributors }
+                      { label: "Macro", data: macro?.top_contributors },
+                      { label: "Technical", data: technical?.top_contributors },
+                      { label: "Market", data: market?.top_contributors }
                    ].map((item, idx) => (
                       <div key={idx} className="flex flex-col gap-1">
                          <span className="text-[8px] uppercase font-black text-secondary dark:text-slate-500 tracking-wider">{item.label} Drivers</span>
@@ -213,6 +202,21 @@ export default function TradingBrain() {
                          </div>
                       </div>
                    ))}
+                </div>
+             </div>
+
+             {/* 🧠 MASTER SNIPPET (Moved below Deep-Dive) */}
+             <div className="mt-6 pt-5 border-t border-dashed border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2 mb-2">
+                    <BrainCircuit size={14} className="text-blue-600" />
+                    <span className="text-[10px] uppercase font-black text-secondary dark:text-slate-500 tracking-widest">{t.dashboard.brain.master_snippet}</span>
+                </div>
+                <div className="text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 font-medium italic">
+                    {sidebarLoading && !reportSnippet ? (
+                      <TextSkeleton lines={2} className="mt-1" />
+                    ) : (
+                      reportSnippet && reportSnippet !== "undefined." ? `"${reportSnippet}"` : "Nog geen samenvatting beschikbaar."
+                    )}
                 </div>
              </div>
 
