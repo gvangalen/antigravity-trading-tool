@@ -132,13 +132,16 @@ export default function CompactGauges() {
                )}
 
                {!isEditing && item.weight !== undefined && (
-                  <div className="px-4">
-                     <div className="h-0.5 w-full bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden">
+                  <div className="px-3 flex items-center gap-2">
+                     <div className="h-0.5 flex-1 bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden">
                         <div 
                            className="h-full bg-blue-500/40" 
                            style={{ width: `${item.weight * 100}%` }}
                         />
                      </div>
+                     <span className="text-[8px] font-black text-secondary/40 uppercase tracking-tighter whitespace-nowrap">
+                        W: {Math.round(item.weight * 100)}%
+                     </span>
                   </div>
                )}
             </div>
