@@ -228,6 +228,7 @@ GENERATE
       setError('Failed to generate report.');
     } finally {
       setGenerating(false);
+      setLoading(false);
     }
   };
 
