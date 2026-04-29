@@ -740,6 +740,37 @@ def get_setup_snapshot(user_id: int) -> Dict[str, Any]:
 
 
 # =====================================================
+# PORTFOLIO HEALTH SNAPSHOT
+# =====================================================
+def get_portfolio_health_snapshot(user_id: int) -> Optional[Dict[str, Any]]:
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT equity_eur, cash_eur, invested_eur, unrealized_pnl_eur
+                FROM portfolio_balance_snapshots
+                WHERE user_id = %s
+                ORDER BY ts DESC
+                LIMIT 1;
+            """, (user_id,))
+            row = cur.fetchone()
+        
+        if not row:
+            return None
+            
+        equity, cash, invested, unrealized = row
+        return {
+            "equity_eur": to_float(equity),
+            "cash_eur": to_float(cash),
+            "invested_eur": to_float(invested),
+            "unrealized_pnl_eur": to_float(unrealized)
+        }
+    finally:
+        conn.close()
+
+# =====================================================
 # STRATEGY SNAPSHOT
 # =====================================================
 def get_active_strategy_snapshot(user_id: int) -> Optional[Dict[str, Any]]:
@@ -908,8 +939,8 @@ BELANGRIJK:
 
 Verplicht:
 - Geef context waarom de beslissing logisch is binnen de scorecombinatie
-- Benadruk discipline/drempels als reden, niet emotie of aannames
-- Koppel aan marktkader (zonder prijsniveaus)
+- Koppel de beslissing expliciet aan de persoonlijke portfolio-balans (equity vs invested). Bijv: als er sprake is van een drawdown, benadruk waarom risicobeheer cruciaal was
+- Koppel aan het bredere marktkader (zonder prijsniveaus)
 
 Schrijf een gedetailleerde alinea van minimaal 4 tot 6 zinnen. Gebruik uitsluitend de aangeleverde botdata. Geen aannames. Geen nieuwe beslissingen.
 """.strip()
@@ -940,6 +971,7 @@ def build_compact_context(
     best_setup,
     active_strategy,
     bot_snapshot,
+    portfolio_health,
     ai_insights,
     ai_reflections,
 ) -> str:
@@ -1007,6 +1039,7 @@ def build_compact_context(
             "best_setup": best_setup.get("name") if best_setup else None,
             "strategy": active_strategy.get("setup_name") if active_strategy else None,
             "bot_action": bot_snapshot.get("action"),
+            "portfolio_health": portfolio_health
         },
 
         "memory": {
@@ -1040,6 +1073,7 @@ def generate_daily_report_sections(user_id: int) -> Dict[str, Any]:
     best_setup = setup_snapshot.get("best_setup")
     active_strategy = get_active_strategy_snapshot(user_id)
     bot_snapshot = get_bot_daily_snapshot(user_id)
+    portfolio_health = get_portfolio_health_snapshot(user_id)
 
     deltas = get_daily_deltas(user_id)
 
@@ -1123,6 +1157,7 @@ def generate_daily_report_sections(user_id: int) -> Dict[str, Any]:
         best_setup,
         active_strategy,
         bot_snapshot,
+        portfolio_health,
         ai_insights,
         ai_reflections,
     )

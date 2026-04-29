@@ -173,6 +173,7 @@ def reduce_repetition(text: str, seen: list[str]) -> str:
     for s in sentences:
         norm = _normalize_sentence(s)
         if not norm or len(norm) < 20:
+            output.append(s)
             continue
         if any(_is_too_similar(norm, prev) for prev in seen):
             continue
@@ -459,7 +460,7 @@ Focus:
 - hoe de scoremix (macro/market/technical/setup) verschoof
 - of de week uitnodigde tot actie of juist terughoudendheid
 
-Blijf compact, beslissingsgericht en zonder prijsniveaus.
+Blijf compact, beslissingsgericht en zonder prijsniveaus. Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -474,6 +475,8 @@ Doel:
 - beschrijf het regime (trend vs range, rust vs volatiliteit, overtuiging vs twijfel)
 - benoem verschuivingen door de week heen
 - koppel aan handelbaarheid en betrouwbaarheid van signalen
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -489,6 +492,8 @@ Doel:
 - beschrijf welke macro-invloeden de toon zetten
 - benoem of de rugwind/tegenwind toenam of afnam
 - link dit aan risk-on/risk-off gedrag, zonder basics uit te leggen
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -504,6 +509,8 @@ Doel:
 - beschrijf de technische structuur als geheel (momentum, trendkwaliteit, betrouwbaarheid)
 - benoem of signalen consistenter werden of juist rommeliger
 - koppel aan timing (wachten vs meedoen), zonder prijsniveaus
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -518,6 +525,8 @@ Doel:
 - welke setup-types het beste aansloten op de marktconditie
 - of ‘best setups’ consistent waren of steeds wisselden
 - wat dat zegt over selectiviteit en filtering
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -532,6 +541,8 @@ Doel:
 - duid of de bot actief of terughoudend was, en waarom dat logisch was in deze weekcontext
 - benadruk discipline (geen trade is ook een keuze)
 - geen herhaling van exacte bedragen of losse dagregels, wel evaluatie van gedrag
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -544,7 +555,7 @@ Doel:
 - wat werkte, wat niet werkte, en wat dat vraagt van selectiviteit/risk management
 - koppel aan de scoremix en regime
 
-Geen lijstjes; één doorlopend stuk tekst.
+Geen lijstjes; één doorlopend stuk tekst. Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -559,6 +570,8 @@ Doel:
 - schets 2 scenario’s (voortzetting vs omslag/vertraging) zonder prijsniveaus
 - benoem welke bevestiging je wil zien in scores/structuur
 - eindig met een professioneel handelsoordeel (actief vs geduldig)
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 

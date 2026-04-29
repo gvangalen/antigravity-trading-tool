@@ -70,6 +70,7 @@ def reduce_repetition(text: str, seen: list[str]) -> str:
     for s in sentences:
         norm = _normalize_sentence(s)
         if not norm or len(norm) < 40:
+            output.append(s)
             continue
         if any(_is_too_similar(norm, prev) for prev in seen):
             continue
@@ -149,6 +150,8 @@ Focus:
 - het dominante marktregime
 - de belangrijkste structurele verschuiving
 - of het kwartaal vroeg om geduld of juist exposure
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -160,6 +163,8 @@ Analyseer:
 - of het kwartaal trendmatig, range-gebonden of transitioneel was
 - of marktgedrag consistenter werd
 - hoe robuust richting en volatiliteit waren
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -171,6 +176,8 @@ Ga in op:
 - of macro structureel steunend of remmend was
 - of risico-omgeving verschoof
 - hoe dominant macro was t.o.v. andere factoren
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -182,6 +189,8 @@ Beschrijf:
 - of technische signalen betrouwbaarder werden
 - of momentum structureel werd opgebouwd of afgebroken
 - hoe dit de handelbaarheid beïnvloedde
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -193,6 +202,8 @@ Benoem:
 - of setups consistent werkten
 - of filtering en selectiviteit doorslaggevend waren
 - wat dit zegt over marktfase
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -204,6 +215,8 @@ Analyseer:
 - of de bot vooral actief of terughoudend was
 - of dit gedrag logisch was binnen het kwartaalregime
 - hoe discipline en risicodrempels bijdroegen
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -215,6 +228,8 @@ Formuleer:
 - de belangrijkste structurele lessen
 - waar aannames standhielden of faalden
 - welke inzichten ook in volgende kwartalen relevant blijven
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -226,6 +241,8 @@ Zonder voorspellingen:
 - benoem welke bevestiging nodig is
 - benoem welke risico’s latent blijven
 - schets welk type marktgedrag doorslaggevend wordt
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 

@@ -71,6 +71,7 @@ def reduce_repetition(text: str, seen: list[str]) -> str:
     for s in sentences:
         norm = _normalize_sentence(s)
         if not norm or len(norm) < 30:
+            output.append(s)
             continue
         if any(_is_too_similar(norm, prev) for prev in seen):
             continue
@@ -150,6 +151,8 @@ Focus:
 - het dominante marktregime
 - de belangrijkste verschuiving t.o.v. begin van de maand
 - of de maand uitnodigde tot actie of juist tot terughoudendheid
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -161,6 +164,8 @@ Beschrijf:
 - het overkoepelende marktregime (trend, range, overgang)
 - of volatiliteit en richting betrouwbaarder werden
 - hoe consistent het marktgedrag was
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -172,6 +177,8 @@ Ga in op:
 - of macro structureel steunend of remmend was
 - of er een verschuiving zichtbaar was in risk-on / risk-off
 - hoe dominant macro was t.o.v. andere factoren
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -183,6 +190,8 @@ Analyseer:
 - of technische signalen betrouwbaarder werden
 - of momentum werd opgebouwd of juist afgebroken
 - hoe dit de handelbaarheid beïnvloedde
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -194,6 +203,8 @@ Benoem:
 - of setups consistent werkten of vaak wisselden
 - of filtering belangrijker werd
 - wat dit zegt over marktfase en selectiviteit
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -205,6 +216,8 @@ Analyseer:
 - of de bot vooral actief of terughoudend was
 - of dit gedrag logisch was binnen het maandregime
 - hoe discipline en drempels hebben bijgedragen
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -216,6 +229,8 @@ Formuleer:
 - de belangrijkste structurele lessen
 - wat deze maand duidelijk maakte over risico, timing en geduld
 - welke inzichten ook in toekomstige maanden relevant blijven
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
@@ -227,6 +242,8 @@ Zonder voorspellingen:
 - benoem welke bevestiging nodig is
 - benoem waar voorzichtigheid blijft
 - schets welk type marktgedrag doorslaggevend wordt
+
+Schrijf een analytisch en diepgaand verhaal van minimaal 4 tot 6 zinnen.
 """
 
 
