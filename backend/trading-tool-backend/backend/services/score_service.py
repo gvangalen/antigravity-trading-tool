@@ -1,7 +1,7 @@
 import logging
 import json
 import asyncio
-from typing import Dict, Any
+from typing import List, Dict, Any, Optional
 
 from backend.utils.scoring_utils import generate_scores_db, get_scores_for_symbol
 from backend.infrastructure.repositories.score_repository import ScoreRepository
