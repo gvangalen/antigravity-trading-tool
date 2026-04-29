@@ -399,6 +399,32 @@ def store_master_result(conn, result: dict, user_id: int):
     # 3️⃣ HARD FAILSAFE DEFAULTS (UX belangrijk)
     # =====================================================
     if master_score is None:
+        master_score = 0.0
+
+    # 💡 Fallback: Als de AI 0 teruggeeft maar wel domein-scores heeft, bereken dan zelf het gewogen gemiddelde
+    if master_score <= 0.0:
+        domains = result.get("domains") or {}
+        weights = result.get("weights") or {
+            "macro": 0.25, "market": 0.25, "technical": 0.25, "setup": 0.15, "strategy": 0.10
+        }
+        
+        calculated_score = 0.0
+        total_weight = 0.0
+        
+        for domain, w in weights.items():
+            d_data = domains.get(domain)
+            if isinstance(d_data, dict):
+                d_score = to_float_or_none(d_data.get("score"))
+                if d_score is not None:
+                    calculated_score += d_score * float(w)
+                    total_weight += float(w)
+        
+        if total_weight > 0:
+            master_score = round(calculated_score / total_weight, 1)
+            logger.info(f"🔄 Calculated master_score fallback: {master_score} (total_weight={total_weight})")
+
+    # Als het nog steeds 0 of None is, pak dan 50 als absolute bodem (als er echt niks is)
+    if master_score <= 0.0:
         master_score = 50.0
 
     if alignment_score is None:
