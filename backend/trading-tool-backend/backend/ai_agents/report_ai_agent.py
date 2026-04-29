@@ -531,6 +531,8 @@ def reduce_repetition(text: str, seen: List[str]) -> str:
 # =====================================================
 def get_daily_scores(user_id: int) -> Dict[str, Any]:
     conn = get_db_connection()
+    if not conn:
+        return {}
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -557,6 +559,8 @@ def get_daily_scores(user_id: int) -> Dict[str, Any]:
 
 def get_market_snapshot() -> Dict[str, Any]:
     conn = get_db_connection()
+    if not conn:
+        return {}
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -597,6 +601,8 @@ def _indicator_list(cur, sql, user_id):
 # =====================================================
 def get_market_indicator_highlights(user_id: int) -> List[dict]:
     conn = get_db_connection()
+    if not conn:
+        return []
     try:
         with conn.cursor() as cur:
             return _indicator_list(
@@ -625,6 +631,8 @@ def get_market_indicator_highlights(user_id: int) -> List[dict]:
 # =====================================================
 def get_macro_indicator_highlights(user_id: int) -> List[dict]:
     conn = get_db_connection()
+    if not conn:
+        return []
     try:
         with conn.cursor() as cur:
             return _indicator_list(
@@ -653,6 +661,8 @@ def get_macro_indicator_highlights(user_id: int) -> List[dict]:
 # =====================================================
 def get_technical_indicator_highlights(user_id: int) -> List[dict]:
     conn = get_db_connection()
+    if not conn:
+        return []
     try:
         with conn.cursor() as cur:
             return _indicator_list(
@@ -681,6 +691,8 @@ def get_technical_indicator_highlights(user_id: int) -> List[dict]:
 # =====================================================
 def get_setup_snapshot(user_id: int) -> Dict[str, Any]:
     conn = get_db_connection()
+    if not conn:
+        return {}
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -731,6 +743,8 @@ def get_setup_snapshot(user_id: int) -> Dict[str, Any]:
 # =====================================================
 def get_active_strategy_snapshot(user_id: int) -> Optional[Dict[str, Any]]:
     conn = get_db_connection()
+    if not conn:
+        return None
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -1044,8 +1058,13 @@ def generate_daily_report_sections(user_id: int) -> Dict[str, Any]:
     # Extra context uit DB
     # -------------------------------------------------
     conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
+    prev_report = None
+    ai_insights = []
+    ai_reflections = []
+    
+    if conn:
+        try:
+            with conn.cursor() as cur:
 
             cur.execute(
                 """
@@ -1084,8 +1103,8 @@ def generate_daily_report_sections(user_id: int) -> Dict[str, Any]:
             )
             ai_reflections = cur.fetchall()
 
-    finally:
-        conn.close()
+        finally:
+            conn.close()
 
     # -------------------------------------------------
     # COMPACT CONTEXT (🔥 NIEUW)
@@ -1138,6 +1157,7 @@ Keys:
         raw_json = ask_gpt_json(
             prompt=batched_prompt,
             system_role=SYSTEM_PROMPT,
+            max_tokens=2500,
         )
         if isinstance(raw_json, dict):
             batched_result = raw_json

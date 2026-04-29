@@ -80,7 +80,8 @@ def ask_gpt_json(
     prompt: str,
     system_role: str,
     schema: Optional[Dict[str, Any]] = None,
-    retries: int = 2
+    retries: int = 2,
+    max_tokens: Optional[int] = None
 ) -> Dict[str, Any]:
     """Genereert een gestructureerde JSON response."""
     
@@ -101,7 +102,7 @@ def ask_gpt_json(
                 model=model,
                 messages=messages,
                 temperature=JSON_TEMP,
-                max_tokens=MAX_TOKENS,
+                max_tokens=max_tokens or MAX_TOKENS,
                 response_format={"type": "json_object"}
             )
 
@@ -133,7 +134,8 @@ def ask_gpt_text(
     *,
     prompt: str,
     system_role: str,
-    retries: int = 2
+    retries: int = 2,
+    max_tokens: Optional[int] = None
 ) -> str:
     """Genereert een platte tekst response."""
     
@@ -154,7 +156,7 @@ def ask_gpt_text(
                 model=model,
                 messages=messages,
                 temperature=TEXT_TEMP,
-                max_tokens=MAX_TOKENS
+                max_tokens=max_tokens or MAX_TOKENS
             )
 
             content = response.choices[0].message.content
