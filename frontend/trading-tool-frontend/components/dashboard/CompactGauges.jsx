@@ -28,7 +28,45 @@ export default function CompactGauges() {
   }, [master.weights]);
 
   const handleWeightChange = (key, val) => {
-     setLocalWeights(prev => ({ ...prev, [key]: parseFloat(val) }));
+     const newValue = parseFloat(val);
+     const oldValue = localWeights[key];
+     const delta = newValue - oldValue;
+     
+     const keys = Object.keys(localWeights);
+     const otherKeys = keys.filter(k => k !== key);
+     
+     // Als we de enige zijn, kunnen we niet balansen (zou niet moeten gebeuren bij 4)
+     if (otherKeys.length === 0) return;
+
+     const newWeights = { ...localWeights, [key]: newValue };
+     
+     // Bereken hoeveel we van de anderen moeten afhalen/toevoegen
+     // We doen dit proportioneel aan hun huidige waarde om de ratio's te behouden
+     const currentOthersSum = otherKeys.reduce((sum, k) => sum + localWeights[k], 0);
+     
+     if (currentOthersSum > 0) {
+        otherKeys.forEach(k => {
+           const share = localWeights[k] / currentOthersSum;
+           let adjusted = localWeights[k] - (delta * share);
+           newWeights[k] = Math.max(0, Math.min(1, adjusted));
+        });
+     } else {
+        // Als de anderen 0 zijn, verdeel het dan gelijkmatig
+        otherKeys.forEach(k => {
+           newWeights[k] = Math.max(0, (1 - newValue) / otherKeys.length);
+        });
+     }
+
+     // Final normalization to exactly 1.0 due to floating point errors
+     const finalSum = Object.values(newWeights).reduce((a, b) => a + b, 0);
+     if (finalSum > 0) {
+        const factor = 1.0 / finalSum;
+        Object.keys(newWeights).forEach(k => {
+           newWeights[k] = newWeights[k] * factor;
+        });
+     }
+
+     setLocalWeights(newWeights);
   };
 
   const onSave = async () => {
