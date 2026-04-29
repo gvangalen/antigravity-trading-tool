@@ -362,6 +362,8 @@ def store_master_result(conn, result: dict, user_id: int):
     # =====================================================
     # 1️⃣ AI RESULT VALIDATIE
     # =====================================================
+    logger.info(f"AI RAW RESULT: {result}")
+    
     if not result or not isinstance(result, dict):
         logger.warning("⚠️ Master AI gaf lege of ongeldige output → fallback")
         result = {}

@@ -50,7 +50,7 @@ export default function TradingBrain() {
   const isBotActive = aiStatus?.state === "active" || aiStatus?.state === "running";
   
   const isDCA = activeSetup?.setup_type?.toLowerCase() === "dca" || 
-                strategy?.strategy_type?.toLowerCase() === "dca" || 
+                strategy?.setup_type?.toLowerCase() === "dca" || 
                 activeSetup?.name?.toLowerCase().includes("dca");
   
   // Minimal report snippet (1 sentence)
