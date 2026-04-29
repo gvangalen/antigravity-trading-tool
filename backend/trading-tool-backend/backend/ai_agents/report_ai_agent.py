@@ -515,6 +515,7 @@ def reduce_repetition(text: str, seen: List[str]) -> str:
         norm = _normalize_sentence(s)
 
         if not norm or len(norm) < 20:
+            output.append(s)
             continue
 
         if any(_is_too_similar(norm, prev) for prev in seen):
@@ -792,7 +793,7 @@ Verplicht:
 - Geef de belangrijkste oorzaak/driver die uit de data volgt
 - Maak duidelijk of dit een structurele verschuiving lijkt of een reactieve beweging
 
-Schrijf als één analytisch openingsverhaal.
+Schrijf als één analytisch en diepgaand openingsverhaal van minimaal 4 tot 6 zinnen.
 Geen opsommingen, geen labels, geen herhaling van dezelfde zinstructuren.
 """.strip()
 
@@ -807,7 +808,7 @@ Verplicht:
 - Leg uit wat volume zegt over de kwaliteit van de beweging
 - Eindig met een kort oordeel over duurzaamheid (zonder prijsniveaus)
 
-Geen lijstjes, geen herhaling van cijfers zonder causaliteit.
+Schrijf een gedetailleerde alinea van minimaal 4 tot 6 zinnen. Geen lijstjes, geen herhaling van cijfers zonder causaliteit.
 """.strip()
 
 
@@ -820,7 +821,7 @@ Verplicht:
 - Leg uit waarom macro-indicatoren meebewegen of juist NIET meebewegen met de koers
 - Maak de spanning concreet tussen veiligheid (Bitcoin) en risicobereidheid (market context)
 
-Geen macro-boekjesuitleg, alleen interpretatie van de aangeleverde data.
+Schrijf een gedetailleerde alinea van minimaal 4 tot 6 zinnen. Geen macro-boekjesuitleg, alleen interpretatie van de aangeleverde data.
 """.strip()
 
 
@@ -833,7 +834,7 @@ Verplicht:
 - Noem welke signalen betrouwbaarheid ONDERMIJNEN of juist VERSTERKEN (alleen uit data)
 - Beschrijf of dit herstel, consolidatie of ruis is, en waarom
 
-Geen klassieke TA-uitleg, geen indicator-definities, geen prijsniveaus.
+Schrijf een gedetailleerde alinea van minimaal 4 tot 6 zinnen. Geen klassieke TA-uitleg, geen indicator-definities, geen prijsniveaus.
 """.strip()
 
 
@@ -857,7 +858,7 @@ Verplicht:
 - Beoordeel of de omstandigheden deze setup ondersteunen of slechts tolereren
 - Maak duidelijk of dit iets is om actief te gebruiken of vooral te monitoren (zonder trade-instructies)
 
-Geen herhaling van de setup-naam in elke zin.
+Schrijf een gedetailleerde alinea van minimaal 4 tot 6 zinnen. Geen herhaling van de setup-naam in elke zin.
 """.strip()
 
 
@@ -881,7 +882,7 @@ Verplicht:
 - Benoem de belangrijkste aannames die vandaag waar moeten blijven
 - Beoordeel of de strategie robuust blijft of fragieler wordt (zonder aanpassingen voor te schrijven)
 
-Geen herhaling van entries/targets/stop; die staan elders.
+Schrijf een gedetailleerde alinea van minimaal 4 tot 6 zinnen. Geen herhaling van entries/targets/stop; die staan elders.
 """.strip()
 
 
@@ -910,7 +911,7 @@ Verplicht:
 - Benadruk discipline/drempels als reden, niet emotie of aannames
 - Koppel aan marktkader (zonder prijsniveaus)
 
-Gebruik uitsluitend de aangeleverde botdata. Geen aannames. Geen nieuwe beslissingen.
+Schrijf een gedetailleerde alinea van minimaal 4 tot 6 zinnen. Gebruik uitsluitend de aangeleverde botdata. Geen aannames. Geen nieuwe beslissingen.
 """.strip()
 
 
@@ -923,7 +924,7 @@ Verplicht:
 - Benoem welke signalen een regime-shift zouden aangeven
 - Houd het conditioneel (als/dan), zonder prijsniveaus
 
-Geen opsommingen, één doorlopend stuk tekst.
+Schrijf een gedetailleerde alinea van minimaal 4 tot 6 zinnen. Geen opsommingen, één doorlopend stuk tekst.
 """.strip()
 
 def build_compact_context(
