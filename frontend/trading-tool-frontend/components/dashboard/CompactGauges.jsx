@@ -1,7 +1,6 @@
 "use client";
 
 import { useScoresData } from "@/hooks/useScoresData";
-import { useScoresData } from "@/hooks/useScoresData";
 import { Globe2, LineChart, DollarSign, Settings2, Sliders, Save, X } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { GaugeSkeleton } from "./DashboardSkeleton";

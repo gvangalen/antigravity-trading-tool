@@ -168,7 +168,7 @@ export default function DashboardPage() {
              <ScoreHistoryChart />
           </DashboardErrorBoundary>
 
-          {/* 📑 BOTTOM: DEEP ANALYSIS TABS */}EEP ANALYSIS TABS */}
+          {/* 📑 BOTTOM: DEEP ANALYSIS TABS */}
           <DashboardErrorBoundary>
             <TableTabs 
                technicalTable={
