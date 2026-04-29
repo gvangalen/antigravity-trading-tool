@@ -1066,42 +1066,42 @@ def generate_daily_report_sections(user_id: int) -> Dict[str, Any]:
         try:
             with conn.cursor() as cur:
 
-            cur.execute(
-                """
-                SELECT report_date, executive_summary
-                FROM daily_reports
-                WHERE user_id = %s
-                  AND report_date < CURRENT_DATE
-                ORDER BY report_date DESC
-                LIMIT 1;
-                """,
-                (user_id,),
-            )
-            prev_report = cur.fetchone()
+                cur.execute(
+                    """
+                    SELECT report_date, executive_summary
+                    FROM daily_reports
+                    WHERE user_id = %s
+                      AND report_date < CURRENT_DATE
+                    ORDER BY report_date DESC
+                    LIMIT 1;
+                    """,
+                    (user_id,),
+                )
+                prev_report = cur.fetchone()
 
-            cur.execute(
-                """
-                SELECT category, avg_score, trend, bias, risk, summary
-                FROM ai_category_insights
-                WHERE user_id = %s
-                ORDER BY date DESC
-                LIMIT 5;
-                """,
-                (user_id,),
-            )
-            ai_insights = cur.fetchall()
+                cur.execute(
+                    """
+                    SELECT category, avg_score, trend, bias, risk, summary
+                    FROM ai_category_insights
+                    WHERE user_id = %s
+                    ORDER BY date DESC
+                    LIMIT 5;
+                    """,
+                    (user_id,),
+                )
+                ai_insights = cur.fetchall()
 
-            cur.execute(
-                """
-                SELECT category, indicator, ai_score, comment, recommendation
-                FROM ai_reflections
-                WHERE user_id = %s
-                ORDER BY date DESC
-                LIMIT 5;
-                """,
-                (user_id,),
-            )
-            ai_reflections = cur.fetchall()
+                cur.execute(
+                    """
+                    SELECT category, indicator, ai_score, comment, recommendation
+                    FROM ai_reflections
+                    WHERE user_id = %s
+                    ORDER BY date DESC
+                    LIMIT 5;
+                    """,
+                    (user_id,),
+                )
+                ai_reflections = cur.fetchall()
 
         finally:
             conn.close()
