@@ -52,6 +52,37 @@ export async function getMacroSummary() {
 
 //
 // =====================================================
+// 🔹 4. Score History ophalen (Analytics)
+// =====================================================
+export async function getScoreHistory(days = 30) {
+  try {
+    const data = await fetchAuth(`/api/scores/history?days=${days}`);
+    return data || [];
+  } catch (err) {
+    console.error('❌ getScoreHistory ERROR:', err);
+    return [];
+  }
+}
+
+//
+// =====================================================
+// 🔹 5. Intelligence Weights bijwerken
+// =====================================================
+export async function updateIntelligenceWeights(weights) {
+  try {
+    const data = await fetchAuth(`/api/user/intelligence-weights`, {
+      method: 'POST',
+      body: JSON.stringify({ weights }),
+    });
+    return data;
+  } catch (err) {
+    console.error('❌ updateIntelligenceWeights ERROR:', err);
+    return { status: 'error' };
+  }
+}
+
+//
+// =====================================================
 // 🔹 Fallback scores (gebruikt bij errors)
 // =====================================================
 function fallbackScores() {

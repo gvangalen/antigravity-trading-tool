@@ -250,6 +250,15 @@ def fetch_numeric_scores(conn, user_id: int, insights: Dict[str, dict]) -> Dict[
                 "avg_compliance": float(comp),
             }
 
+        # user weights from preferences
+        cur.execute("SELECT ai_preferences FROM users WHERE id = %s", (user_id,))
+        user_row = cur.fetchone()
+        user_weights = {}
+        if user_row and user_row[0]:
+            user_weights = user_row[0].get("intelligence_weights", {})
+        
+        numeric["user_weights"] = user_weights
+
     return convert_decimal(numeric)
 
 # ============================================================
@@ -313,6 +322,9 @@ Antwoord ALLEEN met geldige JSON in dit format:
     "strategy": {{}}
   }}
 }}
+
+=== USER CONSTRAINTS ===
+{f"The user has defined EXPLICIT weights for the domains: {json.dumps(numeric.get('user_weights'))}. You MUST use these weights in your calculation." if numeric.get('user_weights') else "Use standard balanced weights (Macro 25%, Market 25%, Technical 25%, Setup 15%, Strategy 10%) unless domain data quality suggests otherwise."}
 
 === INPUT DATA ===
 {text}

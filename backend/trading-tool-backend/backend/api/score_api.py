@@ -4,8 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
-from backend.schemas.score_schema import DailyCombinedScoreResponse, MasterScoreResponse
+from backend.schemas.score_schema import DailyCombinedScoreResponse, MasterScoreResponse, IntelligenceWeightsRequest
 from backend.infrastructure.repositories.score_repository import ScoreRepository
+from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.score_service import ScoreService
 
 router = APIRouter()
@@ -13,7 +14,8 @@ logger = logging.getLogger(__name__)
 
 async def get_score_service(db: AsyncSession = Depends(get_db)):
     repo = ScoreRepository(db)
-    return ScoreService(repo)
+    user_repo = UserRepository(db)
+    return ScoreService(repo, user_repo)
 
 
 # =========================================================
@@ -78,6 +80,42 @@ async def get_daily_scores(
     except Exception as e:
         logger.error(f"❌ Fout bij /scores/daily: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij ophalen daily scores")
+
+
+# =========================================================
+# Score History (Analytics)
+# =========================================================
+@router.get("/scores/history")
+async def get_score_history(
+    days: int = 30,
+    current_user: dict = Depends(get_current_user),
+    service: ScoreService = Depends(get_score_service)
+):
+    try:
+        user_id = current_user["id"]
+        return await service.get_score_history(user_id=user_id, days=days)
+    except Exception as e:
+        logger.error(f"❌ Fout bij /scores/history: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Fout bij ophalen score historie")
+
+
+# =========================================================
+# Update Intelligence Weights
+# =========================================================
+@router.post("/user/intelligence-weights")
+async def update_intelligence_weights(
+    req: IntelligenceWeightsRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        user_id = current_user["id"]
+        user_repo = UserRepository(db)
+        await user_repo.update_ai_preferences(user_id, {"intelligence_weights": req.weights})
+        return {"status": "success", "message": "Wegingen bijgewerkt"}
+    except Exception as e:
+        logger.error(f"❌ Fout bij update_intelligence_weights: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Fout bij opslaan wegingen")
 
 
 # =========================================================

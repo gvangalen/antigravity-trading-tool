@@ -13,11 +13,14 @@ from backend.schemas.score_schema import (
     ActiveSetupResponse
 )
 
+from backend.infrastructure.repositories.user_repository import UserRepository
+
 logger = logging.getLogger(__name__)
 
 class ScoreService:
-    def __init__(self, repository: ScoreRepository):
+    def __init__(self, repository: ScoreRepository, user_repository: Optional[UserRepository] = None):
         self.repository = repository
+        self.user_repository = user_repository
 
     async def get_macro_score(self, user_id: int):
         # We invoke the legacy synchronous generation utilities via thread worker
@@ -88,6 +91,13 @@ class ScoreService:
     async def get_master_score(self, user_id: int) -> MasterScoreResponse:
         insight = await self.repository.get_master_score(user_id)
         
+        # --- NEW: User Weights Logic ---
+        user_weights = {}
+        if self.user_repository:
+            user = await self.user_repository.get_by_id(user_id)
+            if user and user.ai_preferences:
+                user_weights = user.ai_preferences.get("intelligence_weights", {})
+
         if not insight:
             return MasterScoreResponse(
                 master_score=50.0,
@@ -96,7 +106,7 @@ class ScoreService:
                 master_risk="–",
                 alignment_score=0.0,
                 outlook="Nog geen master-outlook",
-                weights={},
+                weights=user_weights or {},
                 data_warnings=[],
                 domains={},
                 summary="Nog geen master score beschikbaar",
@@ -110,6 +120,10 @@ class ScoreService:
             except Exception:
                 meta = {}
 
+        # If user has custom weights, we might need to re-calculate or just pass them
+        # For now, we prioritize user_weights in the response so the UI shows them.
+        final_weights = user_weights if user_weights else meta.get("weights", {})
+
         return MasterScoreResponse(
             master_score=float(insight.avg_score or 0),
             master_trend=insight.trend or "–",
@@ -117,9 +131,27 @@ class ScoreService:
             master_risk=insight.risk or "–",
             alignment_score=float(meta.get("alignment_score", 0)),
             outlook=meta.get("outlook", "Geen outlook"),
-            weights=meta.get("weights", {}),
+            weights=final_weights,
             data_warnings=meta.get("data_warnings", []),
             domains=meta.get("domains", {}),
             summary=insight.summary or "",
             date=str(insight.date) if insight.date else None
         )
+
+    async def get_score_history(self, user_id: int, days: int = 30) -> List[Dict[str, Any]]:
+        """
+        Retrieves historical score data for charting.
+        """
+        history = await self.repository.fetch_historical_scores(user_id, days)
+        # Format for frontend (e.g. ensure floats, handle nulls)
+        formatted = []
+        for h in history:
+            formatted.append({
+                "date": str(h["date"]),
+                "macro": float(h["macro_score"] or 0),
+                "technical": float(h["technical_score"] or 0),
+                "market": float(h["market_score"] or 0),
+                "setup": float(h["setup_score"] or 0),
+                "btc_price": float(h["btc_price"]) if h["btc_price"] else None
+            })
+        return formatted

@@ -131,6 +131,7 @@ export default function TechnicalPage() {
             score={technicalScore?.score} 
             bias={technicalScore?.bias} 
             trend={technicalScore?.trend} 
+            risk={technicalScore?.risk} 
             loading={loadingIndicators || !technicalScore}
           />
         </DashboardErrorBoundary>

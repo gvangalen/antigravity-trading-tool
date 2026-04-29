@@ -27,26 +27,28 @@ export default function TableTabs({
   return (
     <div className="w-full space-y-4">
       {/* Tab Navigation (Pill Container Style) */}
-      <div className="inline-flex p-1 bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-[1.5rem] shadow-inner mb-6 transition-colors">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`
-              flex items-center gap-2.5 px-6 py-2 rounded-2xl 
-              text-[11px] font-black uppercase tracking-widest transition-all
-              ${activeTab === tab.id 
-                ? "bg-card dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-700" 
-                : "text-secondary dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"}
-            `}
-          >
-            {React.cloneElement(tab.icon || <div />, { 
-              size: 13, 
-              className: activeTab === tab.id ? "text-blue-600 dark:text-blue-400" : "text-secondary dark:text-slate-500" 
-            })}
-            {tab.label}
-          </button>
-        ))}
+      <div className="w-full overflow-x-auto no-scrollbar pb-2">
+        <div className="inline-flex p-1 bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-[1.5rem] shadow-inner mb-2 transition-colors min-w-max">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`
+                flex items-center gap-2.5 px-6 py-2 rounded-2xl 
+                text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap
+                ${activeTab === tab.id 
+                  ? "bg-card dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-700" 
+                  : "text-secondary dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"}
+              `}
+            >
+              {React.cloneElement(tab.icon || <div />, { 
+                size: 13, 
+                className: activeTab === tab.id ? "text-blue-600 dark:text-blue-400" : "text-secondary dark:text-slate-500" 
+              })}
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tab Content */}

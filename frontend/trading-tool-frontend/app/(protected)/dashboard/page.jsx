@@ -32,6 +32,8 @@ import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
 import BotCard from "@/components/bot/BotCard";
 import useBotData from "@/hooks/useBotData";
 
+import ScoreHistoryChart from "@/components/dashboard/ScoreHistoryChart";
+
 export default function DashboardPage() {
   const { t } = useTranslation();
   const { activeSetup, focusedBotId, setFocusedBotId } = useActiveSetup();
@@ -60,7 +62,7 @@ export default function DashboardPage() {
  
    /* --------------------------------------------------------
      🔁 MAPPING & SYNC
-  -------------------------------------------------------- */
+   -------------------------------------------------------- */
   function mapSetupToTradingView(setup) {
     if (!setup) {
       return {
@@ -112,10 +114,6 @@ export default function DashboardPage() {
       {/* 🚀 QUICK STATS & GAUGES */}
       <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl transition-all duration-300">
         <div className="card-p p-4 sm:p-10">
-           <div className="flex items-center gap-4 mb-6 sm:mb-8">
-              <div className="w-1.5 h-4 sm:h-6 bg-blue-600 rounded-full" />
-              <span className="text-[10px] sm:text-[12px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest">{t.dashboard.system_status}</span>
-           </div>
            <DashboardErrorBoundary>
              <CompactGauges />
            </DashboardErrorBoundary>
@@ -130,7 +128,7 @@ export default function DashboardPage() {
              {/* LEFT: MARKET VIEW */}
              <div className="flex-1 space-y-6">
                 <DashboardErrorBoundary>
-                  <MarketLiveCard data={btcLive} loading={!btcLive} />
+                   <MarketLiveCard data={btcLive} loading={!btcLive} />
                 </DashboardErrorBoundary>
 
                 <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden">
@@ -160,12 +158,17 @@ export default function DashboardPage() {
              {/* RIGHT: THE BRAIN */}
              <div className="w-full lg:w-[340px] shrink-0">
                 <DashboardErrorBoundary>
-                  <TradingBrain />
+                   <TradingBrain />
                 </DashboardErrorBoundary>
              </div>
           </div>
 
-          {/* 📑 BOTTOM: DEEP ANALYSIS TABS */}
+          {/* 📊 ANALYTICS: SCORE HISTORY */}
+          <DashboardErrorBoundary>
+             <ScoreHistoryChart />
+          </DashboardErrorBoundary>
+
+          {/* 📑 BOTTOM: DEEP ANALYSIS TABS */}EEP ANALYSIS TABS */}
           <DashboardErrorBoundary>
             <TableTabs 
                technicalTable={

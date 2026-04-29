@@ -185,9 +185,40 @@ export default function TradingBrain() {
                   reportSnippet && reportSnippet !== "undefined." ? `"${reportSnippet}"` : "Nog geen samenvatting beschikbaar."
                 )}
              </div>
+
+             {/* 🔍 DEEP DIVE SECTION */}
+             <div className="mt-5 pt-4 border-t border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                   <div className="w-1 h-3 bg-blue-500 rounded-full" />
+                   <span className="text-[9px] uppercase font-black text-foreground dark:text-slate-300 tracking-widest">Intelligence Deep-Dive</span>
+                </div>
+                
+                <div className="space-y-2">
+                   {[
+                      { label: "Macro", data: dailySetup?.macro?.top_contributors },
+                      { label: "Technical", data: dailySetup?.technical?.top_contributors },
+                      { label: "Market", data: dailySetup?.market?.top_contributors }
+                   ].map((item, idx) => (
+                      <div key={idx} className="flex flex-col gap-1">
+                         <span className="text-[8px] uppercase font-black text-secondary dark:text-slate-500 tracking-wider">{item.label} Drivers</span>
+                         <div className="flex flex-wrap gap-1">
+                            {(Array.isArray(item.data) ? item.data : []).slice(0, 3).map((tag, tIdx) => (
+                               <span key={tIdx} className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded text-slate-600 dark:text-slate-400">
+                                  {tag}
+                               </span>
+                            ))}
+                            {(!item.data || item.data.length === 0) && (
+                               <span className="text-[9px] font-bold text-secondary/30 italic">No specific signals</span>
+                            )}
+                         </div>
+                      </div>
+                   ))}
+                </div>
+             </div>
+
              <Link 
                href="/report"
-               className="mt-3 text-[10px] uppercase font-black text-blue-600 dark:text-blue-400 tracking-widest hover:underline flex items-center gap-1 group"
+               className="mt-5 text-[10px] uppercase font-black text-blue-600 dark:text-blue-400 tracking-widest hover:underline flex items-center gap-1 group"
              >
                {t.dashboard.brain.explore_report} <ChevronRight size={10} className="group-hover:translate-x-1 transition-transform" />
              </Link>

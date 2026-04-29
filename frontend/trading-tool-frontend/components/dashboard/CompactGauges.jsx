@@ -1,9 +1,11 @@
 "use client";
 
 import { useScoresData } from "@/hooks/useScoresData";
-import { Globe2, LineChart, DollarSign, Settings2 } from "lucide-react";
+import { useScoresData } from "@/hooks/useScoresData";
+import { Globe2, LineChart, DollarSign, Settings2, Sliders, Save, X } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { GaugeSkeleton } from "./DashboardSkeleton";
+import { useState, useEffect } from "react";
 
 /**
  * 📏 CompactGauges — Minimalist Status Bar (V2.1)
@@ -11,16 +13,38 @@ import { GaugeSkeleton } from "./DashboardSkeleton";
  */
 export default function CompactGauges() {
   const { t } = useTranslation();
-  const { macro, technical, market, setup, loading } = useScoresData();
+  const { macro, technical, market, setup, master, loading, saveWeights } = useScoresData();
+  const [isEditing, setIsEditing] = useState(false);
+  const [localWeights, setLocalWeights] = useState({
+     macro: 0.25,
+     market: 0.25,
+     technical: 0.25,
+     setup: 0.25
+  });
+
+  useEffect(() => {
+    if (master.weights) {
+      setLocalWeights(master.weights);
+    }
+  }, [master.weights]);
+
+  const handleWeightChange = (key, val) => {
+     setLocalWeights(prev => ({ ...prev, [key]: parseFloat(val) }));
+  };
+
+  const onSave = async () => {
+     await saveWeights(localWeights);
+     setIsEditing(false);
+  };
 
   const items = [
-    { title: t.dashboard.gauges.macro, icon: <Globe2 size={14} />, score: macro.score },
-    { title: t.dashboard.gauges.technical, icon: <LineChart size={14} />, score: technical.score },
-    { title: t.dashboard.gauges.market, icon: <DollarSign size={14} />, score: market.score },
-    { title: t.dashboard.gauges.setup, icon: <Settings2 size={14} />, score: setup.score },
+    { id: 'macro', title: t.dashboard.gauges.macro, icon: <Globe2 size={14} />, score: macro.score, weight: localWeights.macro },
+    { id: 'technical', title: t.dashboard.gauges.technical, icon: <LineChart size={14} />, score: technical.score, weight: localWeights.technical },
+    { id: 'market', title: t.dashboard.gauges.market, icon: <DollarSign size={14} />, score: market.score, weight: localWeights.market },
+    { id: 'setup', title: t.dashboard.gauges.setup, icon: <Settings2 size={14} />, score: setup.score, weight: localWeights.setup },
   ];
 
-  if (loading) {
+  if (loading && !isEditing) {
      return (
        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
          {[1, 2, 3, 4].map(i => (
@@ -30,57 +54,122 @@ export default function CompactGauges() {
      );
   }
 
+  const totalWeight = Object.values(localWeights).reduce((a, b) => a + b, 0);
+  const isBalanced = Math.abs(totalWeight - 1.0) < 0.01 || Math.abs(totalWeight - 100) < 1;
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
-      {items.map((item, idx) => {
-        const score = Math.round(item.score || 0);
-        
-        // Color logic
-        let colorClass = "text-secondary dark:text-slate-500";
-        let bgClass = "bg-[var(--color-border-subtle)] dark:bg-slate-900";
-        let borderClass = "border-slate-100 dark:border-slate-800";
+    <div className="space-y-4 w-full">
+      <div className="flex items-center justify-between px-2">
+         <div className="flex items-center gap-2">
+            <div className="w-1 h-4 bg-blue-600 rounded-full" />
+            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-secondary">System Status</h3>
+         </div>
+         <button 
+            onClick={() => setIsEditing(!isEditing)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${isEditing ? 'bg-rose-500 text-white' : 'bg-slate-100 dark:bg-slate-900 text-secondary hover:bg-slate-200'}`}
+         >
+            {isEditing ? <X size={12} /> : <Sliders size={12} />}
+            {isEditing ? 'Cancel Tuning' : 'Tune Engine'}
+         </button>
+      </div>
 
-        if (score >= 75) {
-          colorClass = "text-emerald-600 dark:text-emerald-400";
-          bgClass = "bg-emerald-50 dark:bg-emerald-950/30";
-          borderClass = "border-emerald-100 dark:border-emerald-900/50";
-        } else if (score >= 50) {
-          colorClass = "text-blue-600 dark:text-blue-400";
-          bgClass = "bg-blue-50 dark:bg-blue-950/30";
-          borderClass = "border-blue-100 dark:border-blue-900/50";
-        } else if (score < 40) {
-          colorClass = "text-rose-500 dark:text-rose-400";
-          bgClass = "bg-rose-50 dark:bg-rose-950/30";
-          borderClass = "border-rose-100 dark:border-rose-900/50";
-        }
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+        {items.map((item, idx) => {
+          const score = Math.round(item.score || 0);
+          
+          let colorClass = "text-secondary dark:text-slate-500";
+          let bgClass = "bg-[var(--color-border-subtle)] dark:bg-slate-900";
+          let borderClass = "border-slate-100 dark:border-slate-800";
 
-        return (
-          <div 
-            key={idx} 
-            className={`
-              flex items-center justify-between px-3 sm:px-4 py-2.5 
-              rounded-xl border ${borderClass} ${bgClass}
-              shadow-sm transition-all hover:shadow-md dark:hover:border-blue-500/30
-            `}
-          >
-            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-              <div className={`shrink-0 p-1.5 rounded-lg bg-card dark:bg-slate-800 shadow-sm ${colorClass} border border-slate-50 dark:border-slate-700`}>
-                {item.icon}
-              </div>
-              <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-secondary dark:text-slate-500 truncate">
-                {item.title}
-              </span>
+          if (score >= 75) {
+            colorClass = "text-emerald-600 dark:text-emerald-400";
+            bgClass = "bg-emerald-50 dark:bg-emerald-950/30";
+            borderClass = "border-emerald-100 dark:border-emerald-900/50";
+          } else if (score >= 50) {
+            colorClass = "text-blue-600 dark:text-blue-400";
+            bgClass = "bg-blue-50 dark:bg-blue-950/30";
+            borderClass = "border-blue-100 dark:border-blue-900/50";
+          } else if (score < 40) {
+            colorClass = "text-rose-500 dark:text-rose-400";
+            bgClass = "bg-rose-50 dark:bg-rose-950/30";
+            borderClass = "border-rose-100 dark:border-rose-900/50";
+          }
+
+          return (
+            <div key={idx} className="space-y-2">
+               <div className={`flex items-center justify-between px-3 sm:px-4 py-2.5 rounded-xl border ${borderClass} ${bgClass} shadow-sm transition-all hover:shadow-md ${isEditing ? 'ring-2 ring-blue-500/20 border-blue-500/40' : ''}`}>
+                  <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                  <div className={`shrink-0 p-1.5 rounded-lg bg-card dark:bg-slate-800 shadow-sm ${colorClass} border border-slate-50 dark:border-slate-700`}>
+                     {item.icon}
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-secondary dark:text-slate-500 truncate">
+                     {item.title}
+                  </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  <span className={`text-xs sm:text-sm font-black font-mono ${colorClass}`}>
+                     {score}%
+                  </span>
+                  </div>
+               </div>
+
+               {isEditing && (
+                  <div className="px-2 space-y-1 animate-in slide-in-from-top-2 duration-300">
+                     <div className="flex justify-between text-[9px] font-bold text-secondary uppercase tracking-widest px-1">
+                        <span>Weight</span>
+                        <span>{Math.round(item.weight * 100)}%</span>
+                     </div>
+                     <input 
+                        type="range" 
+                        min="0" 
+                        max="1" 
+                        step="0.05" 
+                        value={item.weight}
+                        onChange={(e) => handleWeightChange(item.id, e.target.value)}
+                        className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                     />
+                  </div>
+               )}
+
+               {!isEditing && item.weight !== undefined && (
+                  <div className="px-4">
+                     <div className="h-0.5 w-full bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden">
+                        <div 
+                           className="h-full bg-blue-500/40" 
+                           style={{ width: `${item.weight * 100}%` }}
+                        />
+                     </div>
+                  </div>
+               )}
             </div>
-            
-            <div className="flex items-center gap-1.5 shrink-0 ml-2">
-              <span className={`text-xs sm:text-sm font-black font-mono ${colorClass}`}>
-                {score}%
-              </span>
-              <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-current opacity-60" />
+          );
+        })}
+      </div>
+
+      {isEditing && (
+         <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 p-4 rounded-2xl animate-in fade-in zoom-in duration-300">
+            <div className="flex items-center gap-3">
+               <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${isBalanced ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' : 'border-amber-500 text-amber-500 bg-amber-500/10'}`}>
+                  <span className="text-xs font-black">{Math.round(totalWeight * 100)}%</span>
+               </div>
+               <div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-secondary">Configuration Status</div>
+                  <div className="text-[11px] font-bold text-foreground">
+                     {isBalanced ? 'Balanced mixing board detected. Ready to optimize.' : 'Weights should ideally total 100% for optimal AI alignment.'}
+                  </div>
+               </div>
             </div>
-          </div>
-        );
-      })}
+            <button 
+               onClick={onSave}
+               disabled={loading}
+               className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-blue-500/20 active:scale-95 transition-all disabled:opacity-50"
+            >
+               <Save size={14} />
+               Apply Changes
+            </button>
+         </div>
+      )}
     </div>
   );
 }

@@ -31,6 +31,7 @@ export default function MarketPage() {
     sevenDayData, 
     forwardReturns, 
     availableIndicators,
+    btcLive,
     loading 
   } = useMarketData();
 
@@ -86,6 +87,7 @@ export default function MarketPage() {
         <MarketTerminalHUD 
           score={safeMarketScore} 
           bias={biasText}
+          btc={btcLive}
           loading={loading || !marketScore}
         />
       </DashboardErrorBoundary>

@@ -29,87 +29,91 @@ export default function MarketTerminalHUD({ score, bias, btc = {} }) {
     <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
       
       {/* 🔮 MODULE 1: GLOBAL MARKET SENTIMENT */}
-      <div className="lg:col-span-2 bg-card rounded-[2rem] border border-[var(--color-border)] p-8 shadow-sm flex flex-col justify-between relative overflow-hidden group">
-         <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:20px_20px]" />
+      <div className="lg:col-span-2 bg-card rounded-[2.5rem] border border-[var(--color-border)] p-6 sm:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col justify-between relative overflow-hidden group transition-all hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)]">
+         <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:24px_24px]" />
          
-         <div className="flex items-center justify-between mb-8 relative z-10">
-            <div className="flex items-center gap-3">
-               <div className="w-10 h-10 rounded-xl bg-[var(--color-border-subtle)] border border-[var(--color-border)] flex items-center justify-center text-secondary">
-                  <Gauge size={20} />
+         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10 relative z-10">
+            <div className="flex items-center gap-4">
+               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-[var(--color-border-subtle)] to-[var(--color-border)] border border-[var(--color-border)] flex items-center justify-center text-foreground shadow-inner">
+                  <Gauge size={20} className="sm:size-6" strokeWidth={1.5} />
                </div>
                <div>
-                  <div className="text-[10px] font-black text-secondary uppercase tracking-widest">Aggregate Market Sentiment</div>
-                  <div className="text-xl font-black text-foreground tracking-tight uppercase leading-none mt-1">Market Sentiment Terminal</div>
+                  <div className="text-[10px] sm:text-[11px] font-bold text-secondary/60 uppercase tracking-[0.2em] mb-0.5">Intelligence Consensus</div>
+                  <div className="text-xl sm:text-2xl font-black text-foreground tracking-tight uppercase leading-none">Sentiment Terminal</div>
                </div>
             </div>
             
-            <div className={`px-4 py-1.5 rounded-lg border ${config.border} ${config.color} bg-[var(--color-border-subtle)] text-[10px] font-black uppercase tracking-widest shadow-sm`}>
-               System Status: {config.label}
+            <div className={`w-fit px-4 sm:px-5 py-1.5 sm:py-2 rounded-xl border-2 ${config.border} ${config.color} bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm text-[10px] sm:text-[11px] font-black uppercase tracking-widest shadow-sm transition-all group-hover:scale-105`}>
+               {config.label}
             </div>
          </div>
 
-         <div className="space-y-6 relative z-10">
-            <div className="flex items-end justify-between">
-               <div className="text-6xl font-black text-foreground tracking-tighter leading-none">
+         <div className="space-y-8 relative z-10">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+               <div className="text-5xl sm:text-7xl font-black text-foreground tracking-tighter leading-none flex items-baseline">
                   {score !== null && score !== undefined ? score : "—"}
-                  <span className="text-2xl text-secondary ml-1 font-normal opacity-40">/100</span>
+                  <span className="text-xl sm:text-2xl text-secondary ml-2 font-medium opacity-30 tracking-tight">/ 100</span>
                </div>
-               <div className="text-right">
-                  <div className="text-[10px] font-bold text-secondary uppercase tracking-widest mb-1 italic leading-none">Sentiment_Bias</div>
-                  <div className={`text-2xl font-black ${config.color} tracking-tighter uppercase leading-none`}>{bias || "NEUTRAL"}</div>
+               <div className="text-left sm:text-right">
+                  <div className="text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em] mb-1 sm:mb-2 leading-none">Market Bias</div>
+                  <div className={`text-2xl sm:text-3xl font-black ${config.color} tracking-tighter uppercase leading-none drop-shadow-sm`}>{bias || "NEUTRAL"}</div>
                </div>
             </div>
 
-            <div className="h-6 w-full bg-[var(--color-border-subtle)] rounded-lg p-1 border border-[var(--color-border)] overflow-hidden">
+            <div className="h-8 w-full bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-1.5 border border-[var(--color-border)] overflow-hidden shadow-inner">
                <div 
-                  className={`h-full rounded-md transition-all duration-1000 ease-out shadow-[0_0_15px_-5px] ${config.bg}`}
+                  className={`h-full rounded-xl transition-all duration-1000 ease-out shadow-[0_0_20px_-2px] ${config.bg} relative overflow-hidden`}
                   style={{ width: `${scoreNum > 0 ? scoreNum : 0.1}%` }}
-               />
+               >
+                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+               </div>
             </div>
          </div>
       </div>
 
       {/* 📡 MODULE 2: LIVE BTC PRICE NODE */}
-      <div className="bg-card rounded-[2rem] border border-[var(--color-border)] p-8 flex flex-col justify-between shadow-sm relative overflow-hidden group h-full">
-         <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 blur-3xl rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-1000" />
+      <div className="bg-card rounded-[2.5rem] border border-[var(--color-border)] p-6 sm:p-10 flex flex-col justify-between shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group h-full transition-all hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)]">
+         <div className="absolute top-0 right-0 w-40 h-40 bg-orange-500/10 blur-[80px] rounded-full -mr-20 -mt-20 group-hover:bg-orange-500/20 transition-all duration-1000" />
          
-         <div className="flex items-center justify-between mb-6 relative z-10">
-            <div className="flex items-center gap-3">
-               <div className="w-8 h-8 rounded-lg bg-[var(--color-border-subtle)] border border-[var(--color-border)] flex items-center justify-center">
-                  <Bitcoin size={16} className="text-orange-500" />
+         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 relative z-10">
+            <div className="flex items-center gap-4">
+               <div className="w-10 h-10 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shadow-inner">
+                  <Bitcoin size={20} className="text-orange-500" strokeWidth={1.5} />
                </div>
-               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-secondary leading-none">Live_Price_Node</div>
+               <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-secondary/60 leading-none">Asset Tracking</div>
             </div>
-            <div className="flex items-center gap-1.5 text-[9px] font-bold text-secondary opacity-60">
-               <Clock size={10} />
-               <span className="uppercase tracking-widest leading-none">
-                 {btc?.timestamp ? new Date(btc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "SYNC"}
+            <div className="flex items-center gap-2 text-[9px] sm:text-[10px] font-black text-secondary/40">
+               <Clock size={12} strokeWidth={2} />
+               <span className="uppercase tracking-[0.1em] leading-none">
+                 {btc?.timestamp ? new Date(btc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "OFFLINE"}
                </span>
             </div>
          </div>
 
-         <div className="relative z-10 space-y-1">
-            <div className="text-[10px] font-black text-secondary uppercase tracking-widest">BTC / USD</div>
-            <div className="text-4xl font-black tracking-tighter uppercase leading-none text-foreground font-mono">
+         <div className="relative z-10 space-y-2">
+            <div className="text-[10px] sm:text-[11px] font-black text-secondary/40 uppercase tracking-[0.25em]">Bitcoin Core</div>
+            <div className="text-3xl sm:text-5xl font-black tracking-tighter uppercase leading-none text-foreground font-mono tabular-nums">
                ${btc?.price ? Number(btc.price).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : "—"}
             </div>
             
-            <div className={`flex items-center gap-1.5 pt-2 font-black text-xs uppercase tracking-widest ${positive ? 'text-green-500' : 'text-red-500'}`}>
-               <ChangeIcon size={14} />
-               <span>{positive ? "+" : ""}{priceChange}%</span>
-               <span className="text-[9px] text-secondary opacity-60 ml-1">24H_SHIFT</span>
+            <div className={`flex items-center flex-wrap gap-2 pt-3 font-black text-sm uppercase tracking-widest ${positive ? 'text-green-500' : 'text-red-500'}`}>
+               <div className={`p-1 rounded-lg ${positive ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                  <ChangeIcon size={16} strokeWidth={2.5} />
+               </div>
+               <span className="text-base sm:text-lg tabular-nums">{positive ? "+" : ""}{Number(priceChange).toFixed(2)}%</span>
+               <span className="text-[9px] sm:text-[10px] text-secondary/40 font-bold ml-1 sm:ml-2">24h Delta</span>
             </div>
          </div>
 
-         <div className="mt-8 relative z-10 border-t border-[var(--color-border-subtle)] pt-4">
-            <div className="flex justify-between items-center">
+         <div className="mt-10 relative z-10 border-t border-[var(--color-border-subtle)] pt-6">
+            <div className="flex justify-between items-center gap-2">
                <div className="flex flex-col">
-                  <span className="text-[8px] font-black tracking-widest text-secondary opacity-60 uppercase leading-none mb-1">Volume_24h</span>
-                  <span className="text-[11px] font-black text-foreground tracking-tight leading-none">${formatNumber(btc?.volume)}</span>
+                  <span className="text-[8px] sm:text-[9px] font-black tracking-[0.2em] text-secondary/40 uppercase leading-none mb-2">Volume</span>
+                  <span className="text-xs sm:text-sm font-black text-foreground tracking-tight leading-none tabular-nums">${formatNumber(btc?.volume)}</span>
                </div>
-               <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-                  <span className="text-[8px] font-black tracking-widest text-secondary opacity-60 uppercase">Telemetry_Live</span>
+               <div className="flex items-center gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-orange-500/5 border border-orange-500/10">
+                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-orange-500 animate-pulse shadow-[0_0_8px_rgba(249,115,22,0.5)]" />
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-orange-500/80 uppercase whitespace-nowrap">Live Feed</span>
                </div>
             </div>
          </div>

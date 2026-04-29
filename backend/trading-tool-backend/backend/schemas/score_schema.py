@@ -42,3 +42,6 @@ class MasterScoreResponse(BaseModel):
     domains: Dict[str, Any]
     summary: str
     date: Optional[str]
+
+class IntelligenceWeightsRequest(BaseModel):
+    weights: Dict[str, float]

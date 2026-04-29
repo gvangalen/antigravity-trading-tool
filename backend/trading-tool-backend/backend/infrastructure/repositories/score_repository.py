@@ -79,3 +79,24 @@ class ScoreRepository:
         result = await self.db.execute(stmt, {"user_id": user_id})
         row = result.mappings().first()
         return dict(row) if row else None
+
+    async def fetch_historical_scores(self, user_id: int, days: int = 30) -> List[Dict[str, Any]]:
+        """
+        Fetches historical scores and BTC prices for the analytics chart.
+        """
+        stmt = text("""
+            SELECT 
+                ds.report_date as date,
+                ds.macro_score,
+                ds.technical_score,
+                ds.market_score,
+                ds.setup_score,
+                bh.price as btc_price
+            FROM daily_scores ds
+            LEFT JOIN btc_price_history bh ON bh.date = ds.report_date
+            WHERE ds.user_id = :user_id
+            AND ds.report_date >= CURRENT_DATE - INTERVAL '1 day' * :days
+            ORDER BY ds.report_date ASC
+        """)
+        result = await self.db.execute(stmt, {"user_id": user_id, "days": days})
+        return [dict(row) for row in result.mappings()]

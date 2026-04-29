@@ -74,6 +74,7 @@ export function useMarketData() {
     setError("");
 
     try {
+      await loadLiveBTC();
       setSevenDayData(await fetchMarketData7d());
 
       const [week, maand, kwartaal, jaar] = await Promise.all([
