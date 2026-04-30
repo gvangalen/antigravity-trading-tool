@@ -163,11 +163,6 @@ export default function DashboardPage() {
              </div>
           </div>
 
-          {/* 📊 ANALYTICS: SCORE HISTORY */}
-          <DashboardErrorBoundary>
-             <ScoreHistoryChart />
-          </DashboardErrorBoundary>
-
           {/* 📑 BOTTOM: DEEP ANALYSIS TABS */}
           <DashboardErrorBoundary>
             <TableTabs 
@@ -215,6 +210,11 @@ export default function DashboardPage() {
                  </div>
                }
             />
+          </DashboardErrorBoundary>
+
+          {/* 📊 ANALYTICS: SCORE HISTORY (Moved to bottom) */}
+          <DashboardErrorBoundary>
+             <ScoreHistoryChart />
           </DashboardErrorBoundary>
 
         </main>
