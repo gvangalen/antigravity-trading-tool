@@ -12,6 +12,7 @@ import TradingViewChart from "@/components/charts/TradingViewChart";
 import CompactGauges from "@/components/dashboard/CompactGauges";
 import TradingBrain from "@/components/dashboard/TradingBrain";
 import TableTabs from "@/components/dashboard/TableTabs";
+import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 
 // Table Components
@@ -107,8 +108,17 @@ export default function DashboardPage() {
            <BarChart3 size={12} />
            {t.dashboard.title}
         </div>
-        <h1 className="page-title text-3xl sm:text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3 truncate">{t.dashboard.overview}</h1>
-        <p className="page-subtitle text-sm sm:text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">{t.dashboard.subtitle}</p>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="max-w-2xl">
+            <h1 className="page-title text-3xl sm:text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3 truncate">{t.dashboard.overview}</h1>
+            <p className="page-subtitle text-sm sm:text-[15px] font-medium text-slate-400 dark:text-slate-500 leading-relaxed">{t.dashboard.subtitle}</p>
+          </div>
+          <div className="pb-1">
+             <DashboardErrorBoundary>
+                <SystemConnectivity />
+             </DashboardErrorBoundary>
+          </div>
+        </div>
       </header>
 
       {/* 🚀 QUICK STATS & GAUGES */}
