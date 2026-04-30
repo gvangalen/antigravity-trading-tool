@@ -37,6 +37,7 @@ export default function AddBotForm({
     name: "",
     strategy_id: null,
     mode: "manual",
+    is_live: false,
     risk_profile: "balanced",
   });
 
@@ -55,6 +56,7 @@ export default function AddBotForm({
           ? initialData.strategy_id
           : initialData.strategy?.id ?? null,
       mode: initialData.mode ?? "manual",
+      is_live: initialData.is_live ?? false,
       risk_profile: initialData.risk_profile ?? "balanced",
     });
   }, [initialData]);
@@ -171,8 +173,30 @@ export default function AddBotForm({
         </div>
       )}
 
-      {/* ================= MODE & RISK GRID ================= */}
+      {/* ================= EXECUTION TYPE & RISK ================= */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+            Execution Environment
+          </label>
+          <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-2xl border-2 border-slate-100 dark:border-slate-800">
+             <button 
+                type="button"
+                onClick={() => setForm(s => ({ ...s, is_live: false }))}
+                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!form.is_live ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+             >
+                📝 Paper Trading
+             </button>
+             <button 
+                type="button"
+                onClick={() => setForm(s => ({ ...s, is_live: true }))}
+                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${form.is_live ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-emerald-600'}`}
+             >
+                ⚡ Live Exchange
+             </button>
+          </div>
+        </div>
+
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
             Operating Mode
@@ -194,7 +218,9 @@ export default function AddBotForm({
             </div>
           </div>
         </div>
+      </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
             Safety Profile

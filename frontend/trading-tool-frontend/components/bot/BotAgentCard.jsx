@@ -439,6 +439,11 @@ export default function BotAgentCard({
                  <Activity size={12} />
                  {isAuto ? "AUTO-PILOT" : "MANUAL-LINK"}
               </div>
+
+              <div className={`px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-2 ${bot?.is_live ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>
+                 {bot?.is_live ? <Zap size={12} /> : <Clock size={12} />}
+                 {bot?.is_live ? "LIVE" : "PAPER"}
+              </div>
             </div>
 
             {/* 🔁 BACKTEST BUTTONS */}
@@ -499,9 +504,9 @@ export default function BotAgentCard({
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-2 bg-[var(--color-border-subtle)] border border-slate-100 rounded-[1.5rem]">
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Status Response</div>
-             <div className="text-xs font-black text-foreground uppercase tracking-tight flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${botState === 'live' ? 'bg-green-500' : 'bg-slate-400'}`} />
-                {botState} session
+             <div className={`text-xs font-black uppercase tracking-tight flex items-center gap-2 ${bot?.is_live ? 'text-emerald-600' : 'text-blue-600'}`}>
+                <div className={`w-2 h-2 rounded-full ${botState === 'live' ? (bot?.is_live ? 'bg-emerald-500' : 'bg-green-500') : 'bg-slate-400'}`} />
+                {bot?.is_live ? 'LIVE' : 'PAPER'} {botState}
              </div>
           </div>
 
