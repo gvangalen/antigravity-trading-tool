@@ -187,17 +187,11 @@ function BotPageInner() {
            <Wallet size={12} />
            System Control
         </div>
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="max-w-2xl">
             <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Bots</h1>
             <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 leading-relaxed">
               Manage your automated trading strategies
             </p>
-          </div>
-          <div className="pb-1">
-             <DashboardErrorBoundary>
-                <SystemConnectivity />
-             </DashboardErrorBoundary>
           </div>
         </div>
       </header>
