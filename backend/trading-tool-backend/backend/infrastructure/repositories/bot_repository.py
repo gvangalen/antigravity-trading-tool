@@ -40,7 +40,7 @@ class BotRepository:
     async def get_bot_configs(self, user_id: int) -> List[dict]:
         query = text("""
             SELECT
-              b.id, b.name, b.is_active, b.mode, b.cadence, b.risk_profile,
+              b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
               b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
               b.budget_max_order_eur, b.max_asset_exposure_pct, b.last_run,
               b.created_at, b.updated_at,
@@ -277,7 +277,7 @@ class BotRepository:
     async def get_bot_portfolios_base(self, user_id: int) -> List[dict]:
         query = text("""
             SELECT
-              id, name, is_active, mode, COALESCE(risk_profile,'balanced') as risk_profile,
+              id, name, is_active, is_live, mode, COALESCE(risk_profile,'balanced') as risk_profile,
               COALESCE(budget_total_eur,0) as budget_total_eur, COALESCE(budget_daily_limit_eur,0) as budget_daily_limit_eur,
               COALESCE(budget_min_order_eur,0) as budget_min_order_eur, COALESCE(budget_max_order_eur,0) as budget_max_order_eur
             FROM bot_configs

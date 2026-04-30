@@ -290,3 +290,16 @@ class SystemLog(Base):
     user_id = Column(Integer, nullable=True)
     metadata_json = Column("metadata", JSON, nullable=True) # Context: payloads, stack traces, etc.
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class ExchangeKey(Base):
+    __tablename__ = 'exchange_keys'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    exchange_name = Column(String, nullable=False) # 'bybit', 'bitvavo'
+    api_key = Column(String, nullable=False) # Encrypted
+    api_secret = Column(String, nullable=False) # Encrypted
+    api_passphrase = Column(String, nullable=True) # Encrypted, optional
+    is_active = Column(Boolean, default=True)
+    is_live = Column(Boolean, default=False) # False = Simulated/Paper, True = Real Exchange
+    created_at = Column(DateTime, default=datetime.utcnow)

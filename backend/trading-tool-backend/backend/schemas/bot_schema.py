@@ -6,6 +6,7 @@ class BotConfigCreateSchema(BaseModel):
     name: str
     strategy_id: int
     mode: str = "manual"
+    is_live: bool = False
     risk_profile: str = "balanced"
     budget_total_eur: float = 0.0
     budget_daily_limit_eur: float = 0.0
@@ -17,6 +18,7 @@ class BotConfigCreateSchema(BaseModel):
 class BotConfigUpdateSchema(BaseModel):
     name: Optional[str] = None
     mode: Optional[str] = None
+    is_live: Optional[bool] = None
     risk_profile: Optional[str] = None
     is_active: Optional[bool] = None
     budget_total_eur: Optional[float] = None

@@ -38,3 +38,6 @@ cryptography
 
 # ✅ Retry Logic
 tenacity>=8.2
+
+# ✅ Exchange Connectivity
+ccxt>=4.1
