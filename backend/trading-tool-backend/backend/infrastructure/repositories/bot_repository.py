@@ -180,9 +180,9 @@ class BotRepository:
         query_portfolio = text("""
             INSERT INTO bot_portfolios (user_id, bot_id, symbol, cash_eur, position_qty, invested_eur, avg_entry, realized_pnl_eur, updated_at)
             SELECT 
-                :user_id, :bot_id, :symbol, :cash_delta, :qty_delta,
-                CASE WHEN :qty_delta > 0 THEN ABS(:cash_delta) ELSE 0 END,
-                CASE WHEN :qty_delta > 0 THEN ABS(:cash_delta) / :qty_delta ELSE 0 END,
+                :user_id, :bot_id, :symbol, :cash_delta::NUMERIC, :qty_delta::NUMERIC,
+                CASE WHEN :qty_delta::NUMERIC > 0 THEN ABS(:cash_delta::NUMERIC) ELSE 0 END,
+                CASE WHEN :qty_delta::NUMERIC > 0 THEN ABS(:cash_delta::NUMERIC) / :qty_delta::NUMERIC ELSE 0 END,
                 0, NOW()
             ON CONFLICT (bot_id) DO UPDATE SET
                 cash_eur = bot_portfolios.cash_eur + EXCLUDED.cash_eur,
