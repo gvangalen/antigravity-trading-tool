@@ -110,19 +110,6 @@ export default function BotAgentCard({
     console.log("🧭 TRADE PLAN RAW", decision?.trade_plan);
   }, [bot, decision]);
 
-  /* ================= REFRESH ON BUDGET UPDATE ================= */
-  useEffect(() => {
-    const handleBudgetUpdate = () => {
-      console.log("🔄 Budget updated → refreshing bot decision");
-      onGenerate?.(bot);
-    };
-
-    window.addEventListener("bot:budget-updated", handleBudgetUpdate);
-
-    return () => {
-      window.removeEventListener("bot:budget-updated", handleBudgetUpdate);
-    };
-  }, [bot, onGenerate]);
 
   /* ================= NORMALIZE DECISION ================= */
   const normalizedDecision = useMemo(() => {

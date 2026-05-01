@@ -1,6 +1,7 @@
 "use client";
 
-import { Wallet, Info } from "lucide-react";
+import { Wallet, Info, Zap, Clock, LayoutGrid } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
 
 import BotBudgetBar from "./BotBudgetBar";
 import BotPnLBadge from "./BotPnLBadge";
@@ -9,13 +10,46 @@ import BotPnLBadge from "./BotPnLBadge";
  * BotPortfolioOverview — READ ONLY
  * --------------------------------------------------
  * ✅ Aggregatie over ALLE bots
+ * ✅ Filterbaar op Paper / Live
  * ✅ Budget usage = executed trades
  * ✅ Invested = executed trades only
  * ✅ Backend blijft single source of truth
  */
-export default function BotPortfolioOverview({ bots = [] }) {
-  const list = Array.isArray(bots) ? bots : [];
-  if (!list.length) return null;
+export default function BotPortfolioOverview({ 
+  bots = [], 
+  envFilter = "all", 
+  onEnvFilterChange 
+}) {
+  const [exchangeBalances, setExchangeBalances] = useState([]);
+  const [exchangeLoading, setExchangeLoading] = useState(false);
+
+  useEffect(() => {
+    if (envFilter === "live") {
+      const fetchEx = async () => {
+        setExchangeLoading(true);
+        try {
+          const res = await fetch("/api/exchange/balances");
+          if (res.ok) {
+            const data = await res.json();
+            setExchangeBalances(data);
+          }
+        } catch (err) {
+          console.error("Exchange fetch failed", err);
+        } finally {
+          setExchangeLoading(false);
+        }
+      };
+      fetchEx();
+    }
+  }, [envFilter]);
+
+  const list = useMemo(() => {
+    const raw = Array.isArray(bots) ? bots : [];
+    if (envFilter === "all") return raw;
+    return raw.filter(b => envFilter === "live" ? b.is_live : !b.is_live);
+  }, [bots, envFilter]);
+
+  if (!Array.isArray(bots) || bots.length === 0) return null;
 
   // -----------------------------
   // Helper
@@ -93,18 +127,44 @@ export default function BotPortfolioOverview({ bots = [] }) {
               Systeem Overzicht
            </div>
            <h3 className="text-3xl font-black text-foreground tracking-tighter uppercase leading-none">
-             Portfolio <span className="text-blue-600/30">—</span> Alle bots
+             Portfolio <span className="text-blue-600/30">—</span> {envFilter === 'all' ? 'Alle bots' : envFilter === 'live' ? 'Live Exchange' : 'Paper Trading'}
            </h3>
-           <p className="text-[13px] font-medium text-secondary mt-2">
-             Geaggregeerd overzicht van budget en posities over al je actieve bots.
-           </p>
+            <p className="text-[13px] font-medium text-secondary mt-2">
+              Geaggregeerd overzicht van budget en posities over je geselecteerde omgeving.
+            </p>
         </div>
 
-        <div className="bg-[var(--color-border-subtle)] px-4 py-2 rounded-xl border-2 border-slate-200/50">
-           <div className="text-[9px] font-black text-secondary uppercase tracking-widest">Actieve Bots</div>
-           <span className="text-xl font-black text-foreground tracking-tighter tabular-nums">
-             {list.length}
-           </span>
+        <div className="flex flex-col items-end gap-4">
+          <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl border-2 border-slate-100 dark:border-slate-800 shadow-inner">
+             <button 
+                onClick={() => onEnvFilterChange?.("all")}
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${envFilter === "all" ? 'bg-white dark:bg-slate-800 text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+             >
+                <LayoutGrid size={12} />
+                All
+             </button>
+             <button 
+                onClick={() => onEnvFilterChange?.("paper")}
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${envFilter === "paper" ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-md' : 'text-slate-400 hover:text-blue-500'}`}
+             >
+                <Clock size={12} />
+                Paper
+             </button>
+             <button 
+                onClick={() => onEnvFilterChange?.("live")}
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${envFilter === "live" ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-md' : 'text-slate-400 hover:text-emerald-500'}`}
+             >
+                <Zap size={12} />
+                Live
+             </button>
+          </div>
+
+          <div className="bg-[var(--color-border-subtle)] px-4 py-2 rounded-xl border-2 border-slate-200/50">
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest">Actieve Bots</div>
+             <span className="text-xl font-black text-foreground tracking-tighter tabular-nums">
+               {list.length}
+             </span>
+          </div>
         </div>
       </div>
 
@@ -112,14 +172,30 @@ export default function BotPortfolioOverview({ bots = [] }) {
          BUDGET SECTION (BLUEPRINT STYLE)
       ============================= */}
       <div className="bg-blue-50/20 border-2 border-blue-600/5 rounded-3xl p-8">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-blue-600 text-white rounded-lg">
-             <Wallet size={16} />
+        <div className="flex items-center justify-between gap-3 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-600 text-white rounded-lg shadow-lg shadow-blue-600/20">
+               <Wallet size={16} />
+            </div>
+            <div>
+               <div className="text-[10px] font-black text-secondary uppercase tracking-widest">Gebruik van Totaal Budget</div>
+               <div className="text-[11px] font-bold text-blue-600/60 uppercase">Single Source of Truth: Backend</div>
+            </div>
           </div>
-          <div>
-             <div className="text-[10px] font-black text-secondary uppercase tracking-widest">Gebruik van Totaal Budget</div>
-             <div className="text-[11px] font-bold text-blue-600/60 uppercase">Single Source of Truth: Backend</div>
-          </div>
+
+          {envFilter === 'live' && exchangeBalances.length > 0 && (
+            <div className="flex items-center gap-4 animate-in fade-in slide-in-from-right-4 duration-500">
+               <div className="text-right">
+                  <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">Bitvavo Cash</div>
+                  <div className="text-sm font-black text-emerald-600">€{Number(exchangeBalances[0]?.free?.EUR ?? 0).toLocaleString()}</div>
+               </div>
+               <div className="w-px h-8 bg-slate-200 dark:bg-slate-800" />
+               <div className="text-right">
+                  <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">Totaal Waarde</div>
+                  <div className="text-sm font-black text-slate-900 dark:text-white">€{Number(exchangeBalances[0]?.total_eur ?? 0).toLocaleString()}</div>
+               </div>
+            </div>
+          )}
         </div>
 
         {hasBudget ? (

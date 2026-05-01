@@ -1,5 +1,5 @@
 import logging
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, Request
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -162,10 +162,11 @@ async def get_trade_plan(
 async def get_portfolio_balance_history(
     bucket: str = "1h",
     limit: int = 500,
+    is_live: Optional[bool] = None,
     current_user: dict = Depends(get_current_user),
     service: BotService = Depends(get_bot_service)
 ):
-    return await service.get_portfolio_history(bucket, limit, current_user["id"])
+    return await service.get_portfolio_history(bucket, limit, current_user["id"], is_live)
 
 @router.get("/bot/balance-history")
 async def get_bot_balance_history(

@@ -31,6 +31,7 @@ function BotPageInner() {
   const { activeBot, setActiveBot } = useActiveBot();
 
   const [statusFilter, setStatusFilter] = useState("all");
+  const [envFilter, setEnvFilter] = useState("all"); // "all", "paper", "live"
   const [generatingBotId, setGeneratingBotId] = useState(null);
 
   const {
@@ -81,6 +82,7 @@ function BotPageInner() {
       return {
         bot_id: bot.id,
         symbol: p?.symbol ?? bot?.symbol ?? "—",
+        is_live: bot.is_live,
         budget: p?.budget ?? {},
         stats: p?.stats ?? {},
       };
@@ -169,7 +171,17 @@ function BotPageInner() {
         title: "💰 Portfolio & Budget",
         description: <BotBudgetForm initialBudget={budgetRef.current} onChange={(v) => (budgetRef.current = v)} />,
         confirmText: "Save",
-        onConfirm: async () => { await updateBot(bot.id, { budget_total_eur: budgetRef.current.total_eur, budget_daily_limit_eur: budgetRef.current.daily_limit_eur, budget_max_order_eur: budgetRef.current.max_order_eur, max_asset_exposure_pct: budgetRef.current.max_asset_exposure_pct }); showSnackbar("Budget updated", "success"); },
+        onConfirm: async () => {
+          await updateBot(bot.id, {
+            budget_total_eur: budgetRef.current.total_eur,
+            budget_daily_limit_eur: budgetRef.current.daily_limit_eur,
+            budget_max_order_eur: budgetRef.current.max_order_eur,
+            max_asset_exposure_pct: budgetRef.current.max_asset_exposure_pct,
+          });
+          showSnackbar("Budget updated", "success");
+          // 🔥 Refresh decision to apply new budget to guardrails
+          await handleGenerateDecision(bot);
+        },
       });
       return;
     }
@@ -193,7 +205,6 @@ function BotPageInner() {
               Manage your automated trading strategies
             </p>
           </div>
-        </div>
       </header>
 
       <div className="max-w-full grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-10 items-start pb-24">
@@ -211,31 +222,44 @@ function BotPageInner() {
                 <PortfolioBalanceCard
                   title="RECAP"
                   defaultRange="1W"
-                  dataByRange={portfolioBalanceDataByRange}
+                  is_live={envFilter === "all" ? null : envFilter === "live"}
                 />
               </div>
             </div>
 
-            <BotPortfolioOverview bots={aggregatedBotsForOverview} />
+            <BotPortfolioOverview 
+              bots={aggregatedBotsForOverview} 
+              envFilter={envFilter}
+              onEnvFilterChange={setEnvFilter}
+            />
           </div>
 
           {/* BOT DEPLOYMENT SECTION */}
-          <div className="space-y-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-6">
-                <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">My Bots</h2>
-
-                <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 transition-colors">
-                  <button onClick={() => setStatusFilter("all")} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "all" ? "bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-sm" : "text-slate-400 dark:text-slate-500 hover:text-slate-600"}`}>All ({bots.length})</button>
-                  <button onClick={() => setStatusFilter("active")} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "active" ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm" : "text-slate-400 dark:text-slate-500 hover:text-emerald-500"}`}>Active ({bots.filter(b => b.is_active).length})</button>
-                  <button onClick={() => setStatusFilter("paused")} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "paused" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-sm" : "text-slate-400 dark:text-slate-500 hover:text-amber-500"}`}>Paused ({bots.filter(b => !b.is_active).length})</button>
-                </div>
+          <div className="space-y-8 pt-8 border-t border-slate-100 dark:border-slate-800">
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tighter">My Bots</h2>
+                <p className="text-[13px] font-medium text-slate-400 dark:text-slate-500 mt-1">Overzicht en beheer van al je actieve handelsstrategieën.</p>
               </div>
 
-              <button onClick={handleAddBot} className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-[12px] uppercase tracking-widest shadow-lg shadow-blue-600/20 transition-all active:scale-95">
-                <Plus size={16} />
-                New Bot
-              </button>
+              <div className="flex flex-wrap items-center justify-between gap-6">
+                <div className="flex bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-inner">
+                  <button onClick={() => setStatusFilter("all")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "all" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-slate-600"}`}>All ({bots.length})</button>
+                  <button onClick={() => setStatusFilter("active")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "active" ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-emerald-500"}`}>Active ({bots.filter(b => b.is_active).length})</button>
+                  <button onClick={() => setStatusFilter("paused")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "paused" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-amber-500"}`}>Paused ({bots.filter(b => !b.is_active).length})</button>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <DashboardErrorBoundary>
+                    <SystemConnectivity />
+                  </DashboardErrorBoundary>
+
+                  <button onClick={handleAddBot} className="flex items-center gap-2 px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-[12px] uppercase tracking-[0.15em] shadow-xl shadow-blue-600/20 transition-all active:scale-95">
+                    <Plus size={18} strokeWidth={3} />
+                    New Bot
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-10">

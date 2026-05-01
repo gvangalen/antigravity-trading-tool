@@ -7,8 +7,6 @@ import NotificationToggle from "@/components/NotificationToggle";
 import { Search, ChevronRight } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
-import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 
 export default function TopBar() {
   const { t } = useTranslation();
@@ -71,13 +69,6 @@ export default function TopBar() {
 
         {/* RIGHT — Search + Avatar */}
         <div className="flex items-center gap-6">
-
-        {/* ⚡ SYSTEM STATUS (New) */}
-        <div className="hidden xl:flex items-center">
-           <DashboardErrorBoundary>
-              <SystemConnectivity />
-           </DashboardErrorBoundary>
-        </div>
 
         {/* Minimal High-Depth Search */}
         <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus-within:ring-4 focus-within:ring-blue-600/5 transition-all shadow-inner">

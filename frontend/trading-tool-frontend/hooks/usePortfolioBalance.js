@@ -7,7 +7,8 @@ import {
 } from "@/lib/api/botApi";
 
 export default function usePortfolioBalance({
-  bot_id = null,        // 🔥 NIEUW
+  bot_id = null,
+  is_live = null,        // 🔥 NIEUW
   bucket = "1h",
   limit = 300,
   autoLoad = true,
@@ -36,6 +37,7 @@ export default function usePortfolioBalance({
         res = await fetchPortfolioBalanceHistory({
           bucket,
           limit,
+          is_live,
         });
       }
 
@@ -47,7 +49,7 @@ export default function usePortfolioBalance({
     } finally {
       setLoading(false);
     }
-  }, [bot_id, bucket, limit]);
+  }, [bot_id, is_live, bucket, limit]);
 
   useEffect(() => {
     if (autoLoad) load();

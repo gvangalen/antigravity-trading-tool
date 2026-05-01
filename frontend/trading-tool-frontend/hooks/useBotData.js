@@ -319,11 +319,10 @@ export default function useBotData() {
 
         const res = await createBotConfig(payload);
 
-        await Promise.all([
-          loadConfigs(),
-          loadPortfolios(),
-          loadToday()
-        ]);
+        // 🔥 NON-BLOCKING REFRESH
+        loadConfigs();
+        loadPortfolios();
+        loadToday();
 
         return res;
 
@@ -351,11 +350,10 @@ export default function useBotData() {
 
         const res = await updateBotConfig(bot_id, payload);
 
-        await Promise.all([
-          loadConfigs(),
-          loadPortfolios(),
-          loadToday()
-        ]);
+        // 🔥 NON-BLOCKING REFRESH
+        loadConfigs();
+        loadPortfolios();
+        loadToday();
 
         return res;
 
@@ -383,11 +381,10 @@ export default function useBotData() {
 
         const res = await deleteBotConfig(bot_id);
 
-        await Promise.all([
-          loadConfigs(),
-          loadPortfolios(),
-          loadToday()
-        ]);
+        // 🔥 NON-BLOCKING REFRESH
+        loadConfigs();
+        loadPortfolios();
+        loadToday();
 
         return res;
 

@@ -42,14 +42,7 @@ export default function BotBudgetForm({ initialBudget, onChange }) {
   }, [initialBudget]);
 
   useEffect(() => {
-
     onChange?.(form);
-
-    // notify rest of UI (Guardrails / Portfolio / Bot cards)
-    window.dispatchEvent(
-      new CustomEvent("bot:budget-updated", { detail: form })
-    );
-
   }, [form, onChange]);
 
   return (

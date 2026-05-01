@@ -307,8 +307,9 @@ export const createManualOrder = async ({
 export const fetchPortfolioBalanceHistory = async ({
   bucket = "1h",
   limit = 500,
+  is_live = null,
 } = {}) => {
-  const query = buildQuery({ bucket, limit });
+  const query = buildQuery({ bucket, limit, is_live });
 
   const data = await handleApi(
     fetchAuth(`/api/portfolio/balance-history?${query}`)

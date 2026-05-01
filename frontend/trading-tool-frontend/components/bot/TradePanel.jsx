@@ -320,7 +320,14 @@ export default function TradePanel({
           <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Beschikbaar Saldo</div>
           <div className="flex items-center gap-2 justify-end">
              {side === "buy"
-               ? <div className="text-lg font-black text-blue-600 tracking-tighter">{fmt(availableQuote)} <span className="text-[10px] opacity-60 ml-0.5">{quoteSymbol}</span></div>
+               ? (
+                 <div className="flex flex-col items-end">
+                    <div className="text-lg font-black text-blue-600 tracking-tighter">{fmt(availableQuote)} <span className="text-[10px] opacity-60 ml-0.5">{quoteSymbol}</span></div>
+                    {availableQuote < balanceQuote && (
+                      <div className="text-[8px] font-bold text-orange-500 uppercase tracking-tighter">Capped by budget limits</div>
+                    )}
+                 </div>
+               )
                : <div className="text-lg font-black text-emerald-600 tracking-tighter">{fmt(balanceBase,6)} <span className="text-[10px] opacity-60 ml-0.5">{baseSymbol}</span></div>
              }
           </div>

@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { Zap, Link as LinkIcon, RefreshCcw, ShieldCheck, XCircle } from "lucide-react";
-import Modal from "@/components/ui/Modal";
+import { useModal } from "@/components/modal/ModalProvider";
 import ExchangeSettingsForm from "@/components/bot/ExchangeSettingsForm";
 
 export default function SystemConnectivity() {
+  const { openConfirm, close: closeModal } = useModal();
   const [exchanges, setExchanges] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
 
   const fetchExchanges = async () => {
     try {
@@ -39,60 +39,52 @@ export default function SystemConnectivity() {
       throw new Error(err.detail || "Failed to save keys");
     }
     await fetchExchanges();
-    setShowModal(false);
+    closeModal();
+  };
+
+  const handleOpenSettings = () => {
+    openConfirm({
+      title: "Exchange Connection",
+      description: <ExchangeSettingsForm onSave={handleSave} onCancel={closeModal} />,
+      icon: <Zap size={20} />,
+      tone: "info"
+    });
   };
 
   const isConnected = exchanges.length > 0;
 
   return (
     <div className="flex items-center gap-6">
-      <div className="flex items-center gap-2">
-        <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
-        <span className="text-[10px] font-black text-secondary dark:text-slate-500 uppercase tracking-widest">
-          {isConnected ? 'Exchange Linked' : 'Simulated Environment'}
-        </span>
-      </div>
-
       <button
-        onClick={() => setShowModal(true)}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all ${
+        onClick={handleOpenSettings}
+        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${
           isConnected 
-          ? 'bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-100' 
-          : 'bg-blue-50 border-blue-100 text-blue-600 hover:bg-blue-100'
+          ? 'bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-100 hover:shadow-emerald-600/5' 
+          : 'bg-blue-50 border-blue-100 text-blue-600 hover:bg-blue-100 hover:shadow-blue-600/5'
         }`}
       >
-        <LinkIcon size={12} />
-        {isConnected ? 'Manage Exchange' : 'Connect Exchange'}
+        <LinkIcon size={14} />
+        {isConnected ? 'Exchange Settings' : 'Connect Exchange'}
       </button>
 
-      {/* BALANCE PILLS */}
-      {exchanges.map((ex, idx) => (
-        <div key={idx} className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg">
-           <span className="text-[9px] font-black text-slate-400 uppercase">{ex.exchange}</span>
-           <span className="text-[11px] font-black text-slate-900 dark:text-white">€{ex.total_eur.toLocaleString()}</span>
-        </div>
-      ))}
-
-      <Modal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        title={
-          <div className="flex items-center gap-3">
-             <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-600/20">
-                <Zap size={20} />
-             </div>
-             <div>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Exchange Connection</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global Asset Synchronization</p>
-             </div>
+      <div className="flex items-center gap-3">
+        {exchanges.map((ex, idx) => (
+          <div key={idx} className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg">
+             <span className="text-[9px] font-black text-slate-400 uppercase">{ex.exchange}</span>
+             <span className="text-[11px] font-black text-slate-900 dark:text-white">€{ex.total_eur.toLocaleString()}</span>
           </div>
-        }
-      >
-        <ExchangeSettingsForm 
-          onSave={handleSave} 
-          onCancel={() => setShowModal(false)} 
-        />
-      </Modal>
+        ))}
+        
+        {isConnected && (
+          <button 
+            onClick={fetchExchanges}
+            disabled={loading}
+            className={`p-2 rounded-lg bg-slate-100 dark:bg-slate-900 text-secondary hover:text-blue-600 transition-all ${loading ? 'animate-spin' : ''}`}
+          >
+            <RefreshCcw size={14} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

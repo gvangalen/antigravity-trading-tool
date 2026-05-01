@@ -410,3 +410,26 @@ class BotRepository:
         """)
         result = await self.session.execute(query, {"user_id": user_id, "bot_id": bot_id, "bucket": bucket, "limit": limit})
         return [dict(r._mapping) for r in result.fetchall()]
+
+    async def get_filtered_portfolio_balance_history(self, user_id: int, is_live: bool, bucket: str, limit: int) -> List[dict]:
+        if not await self.check_table_exists("bot_portfolio_snapshots"):
+            return []
+        
+        # We aggregate all snapshots for bots matching the is_live filter
+        query = text("""
+            SELECT 
+                s.ts,
+                SUM(s.equity_eur) as equity_eur,
+                SUM(s.cash_eur) as cash_eur,
+                SUM(s.net_qty) as btc_qty,
+                AVG(s.price_eur) as price_eur, -- price should be similar across bots at same ts
+                SUM(s.invested_eur) as invested_eur
+            FROM bot_portfolio_snapshots s
+            JOIN bot_configs b ON b.id = s.bot_id
+            WHERE s.user_id = :user_id AND b.is_live = :is_live AND s.bucket = :bucket
+            GROUP BY s.ts
+            ORDER BY s.ts ASC
+            LIMIT :limit
+        """)
+        result = await self.session.execute(query, {"user_id": user_id, "is_live": is_live, "bucket": bucket, "limit": limit})
+        return [dict(r._mapping) for r in result.fetchall()]

@@ -18,6 +18,7 @@ export default function TradePanelContainer({
   const [price, setPrice] = useState(null);
 
   const [balanceQuote, setBalanceQuote] = useState(0);
+  const [availableQuote, setAvailableQuote] = useState(0);
   const [balanceBase, setBalanceBase] = useState(0);
 
   const [watchLevels, setWatchLevels] = useState({});
@@ -41,11 +42,23 @@ export default function TradePanelContainer({
       pullback: decision?.watch_levels?.pullback_zone ?? null,
     });
 
-    /* ---------- TOTAL BOT BUDGET ---------- */
+    /* ---------- BUDGET LIMITS ---------- */
 
-    const totalBudget = Number(
-      bot?.budget?.total_eur ??
-      bot?.budget_total_eur ??
+    const dailyLimit = Number(
+      bot?.budget?.daily_limit_eur ??
+      bot?.budget_daily_limit_eur ??
+      0
+    );
+
+    const maxOrder = Number(
+      bot?.budget?.max_order_eur ??
+      bot?.budget_max_order_eur ??
+      0
+    );
+
+    const todaySpent = Number(
+      portfolio?.stats?.today_spent_eur ??
+      portfolio?.stats?.today_spent ??
       0
     );
 
@@ -59,11 +72,18 @@ export default function TradePanelContainer({
       0
     ));
 
-    /* ---------- AVAILABLE CAPITAL ---------- */
+    /* ---------- CALCULATE CAPS ---------- */
 
-    const availableBudget = Math.max(0, totalBudget - invested);
+    const remainingTotal = Math.max(0, totalBudget - invested);
+    const remainingDaily = dailyLimit > 0 ? Math.max(0, dailyLimit - todaySpent) : Infinity;
 
-    setBalanceQuote(availableBudget);
+    // Available for trade is the tightest of all limits
+    let cappedAvailable = remainingTotal;
+    if (remainingDaily < cappedAvailable) cappedAvailable = remainingDaily;
+    if (maxOrder > 0 && maxOrder < cappedAvailable) cappedAvailable = maxOrder;
+
+    setBalanceQuote(remainingTotal);
+    setAvailableQuote(cappedAvailable);
 
     /* ---------- BTC HOLDINGS ---------- */
 
@@ -186,8 +206,8 @@ export default function TradePanelContainer({
         throw new Error("Quantity is verplicht");
       }
 
-      if (order.side === "buy" && valueEur > balanceQuote) {
-        throw new Error("Onvoldoende budget beschikbaar");
+      if (order.side === "buy" && valueEur > availableQuote) {
+        throw new Error("Onvoldoende budget beschikbaar (limiet bereikt)");
       }
 
       if (order.side === "sell" && quantity > balanceBase) {
@@ -250,6 +270,7 @@ export default function TradePanelContainer({
     <TradePanel
       price={price}
       balanceQuote={balanceQuote}
+      availableQuote={availableQuote}
       balanceBase={balanceBase}
       quoteSymbol="EUR"
       baseSymbol="BTC"

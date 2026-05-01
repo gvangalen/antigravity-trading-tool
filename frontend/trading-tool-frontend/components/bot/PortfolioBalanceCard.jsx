@@ -92,6 +92,7 @@ function calcDelta(series, mode) {
 export default function PortfolioBalanceCard({
   defaultRange = "1W",
   title = "Portfolio balance",
+  is_live = null,
 }) {
   const [range, setRange] = useState(defaultRange);
   const [mode, setMode] = useState("equity");
@@ -100,6 +101,7 @@ export default function PortfolioBalanceCard({
     RANGES.find((r) => r.key === range) || RANGES[1];
 
   const { data, loading, reload } = usePortfolioBalance({
+    is_live,
     bucket: rangeConfig.bucket,
     limit: rangeConfig.limit,
   });

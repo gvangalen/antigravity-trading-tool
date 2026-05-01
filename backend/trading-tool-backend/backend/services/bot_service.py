@@ -143,6 +143,25 @@ class BotService:
             "macro": 10, "technical": 10, "market": 10, "setup": 10
         }
         
+        # 🔥 SYNC: Probeer master insight op te halen voor consistente scores met Overview
+        from backend.infrastructure.repositories.score_repository import ScoreRepository
+        score_repo = ScoreRepository(self.session)
+        master = await score_repo.get_master_score(user_id)
+        
+        if master and master.top_signals:
+            meta = master.top_signals
+            if isinstance(meta, str):
+                try: meta = json.loads(meta)
+                except: meta = {}
+            
+            domains = meta.get("domains", {})
+            if domains:
+                # Overschrijf raw scores met de AI-geïnterpreteerde domein scores
+                if "macro" in domains: daily_scores["macro"] = domains["macro"].get("score", daily_scores["macro"])
+                if "technical" in domains: daily_scores["technical"] = domains["technical"].get("score", daily_scores["technical"])
+                if "market" in domains: daily_scores["market"] = domains["market"].get("score", daily_scores["market"])
+                if "setup" in domains: daily_scores["setup"] = domains["setup"].get("score", daily_scores["setup"])
+        
         bot_rows = await self.repository.get_active_bots_with_setups(user_id)
         if not bot_rows:
             return {"date": str(today), "scores": daily_scores, "decisions": [], "orders": [], "executions": []}
@@ -247,7 +266,38 @@ class BotService:
     # MANUL ORDER & SKIP
     # ==========================
     async def create_manual_order(self, payload: BotManualOrderSchema, user_id: int) -> dict:
+        # 1. Fetch bot config to get limits
+        bot = await self.repository.get_bot_config(user_id, payload.bot_id)
+        if not bot:
+            from fastapi import HTTPException
+            raise HTTPException(404, "Bot niet gevonden")
+            
+        # 2. Fetch current stats
+        stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id)
+        
+        # 3. Guardrail check for BUY orders
         notional = round(payload.quantity * payload.price, 2)
+        
+        if payload.side == "buy":
+            from fastapi import HTTPException
+            
+            # Total Budget Check
+            invested = abs(float(stats.get("net_executed_cash_delta_eur", 0)))
+            total_budget = float(bot["budget_total_eur"])
+            if invested + notional > total_budget:
+                raise HTTPException(400, f"Totaal budget overschreden (Max {total_budget} EUR)")
+                
+            # Daily Limit Check
+            daily_limit = float(bot["budget_daily_limit_eur"])
+            today_spent = float(stats.get("today_spent_eur", 0))
+            if daily_limit > 0 and (today_spent + notional) > (daily_limit + 0.01): # small buffer for rounding
+                raise HTTPException(400, f"Daglimiet overschreden (Max {daily_limit} EUR, vandaag al {today_spent} EUR besteed)")
+                
+            # Max Order Check
+            max_order = float(bot["budget_max_order_eur"])
+            if max_order > 0 and notional > (max_order + 0.01):
+                raise HTTPException(400, f"Maximale ordergrootte overschreden (Max {max_order} EUR)")
+
         if payload.side == "buy":
             cash_delta = -notional
             qty_delta = payload.quantity
@@ -400,7 +450,19 @@ class BotService:
     # ==========================
     # BALANCE HISTORY (PORTFOLIO/BOT)
     # ==========================
-    async def get_portfolio_history(self, bucket: str, limit: int, user_id: int) -> List[dict]:
+    async def get_portfolio_history(self, bucket: str, limit: int, user_id: int, is_live: Optional[bool] = None) -> List[dict]:
+        if is_live is not None:
+            rows = await self.repository.get_filtered_portfolio_balance_history(user_id, is_live, bucket, max(1, min(limit, 2000)))
+            return [{
+                "ts": r["ts"].isoformat() if r.get("ts") else None,
+                "equity": float(r["equity_eur"] or 0),
+                "cash": float(r["cash_eur"] or 0),
+                "btc_qty": float(r["btc_qty"] or 0),
+                "btc_value": float(r["btc_qty"] * r["price_eur"]) if r.get("btc_qty") and r.get("price_eur") else 0,
+                "invested": float(r["invested_eur"] or 0),
+                "unrealized_pnl": float((r["btc_qty"] * r["price_eur"]) - r["invested_eur"]) if r.get("btc_qty") and r.get("price_eur") else 0
+            } for r in rows]
+
         rows = await self.repository.get_portfolio_balance_history(user_id, bucket, max(1, min(limit, 2000)))
         return [{
             "ts": r["ts"].isoformat() if r.get("ts") else None,

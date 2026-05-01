@@ -16,25 +16,6 @@ export default function GuardrailsPanel({
      LISTEN FOR BUDGET CHANGES
   ============================ */
 
-  useEffect(() => {
-
-    const handleBudgetUpdate = () => {
-      onRefresh?.();
-    };
-
-    window.addEventListener(
-      "bot:budget-updated",
-      handleBudgetUpdate
-    );
-
-    return () => {
-      window.removeEventListener(
-        "bot:budget-updated",
-        handleBudgetUpdate
-      );
-    };
-
-  }, [onRefresh]);
 
   /* ============================
      CORE VALUES
