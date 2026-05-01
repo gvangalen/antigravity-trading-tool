@@ -55,6 +55,25 @@ class BotRepository:
         result = await self.session.execute(query, {"user_id": user_id})
         return [dict(r._mapping) for r in result.fetchall()]
 
+    async def get_bot_config(self, user_id: int, bot_id: int) -> Optional[dict]:
+        query = text("""
+            SELECT
+              b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
+              b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
+              b.budget_max_order_eur, b.max_asset_exposure_pct, b.last_run,
+              b.created_at, b.updated_at,
+              s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
+              st.id AS setup_id, st.name AS setup_name, st.symbol AS symbol, st.timeframe AS timeframe
+            FROM bot_configs b
+            LEFT JOIN strategies s ON s.id = b.strategy_id
+            LEFT JOIN setups st    ON st.id = s.setup_id
+            WHERE b.user_id = :user_id AND b.id = :bot_id
+            LIMIT 1
+        """)
+        result = await self.session.execute(query, {"user_id": user_id, "bot_id": bot_id})
+        row = result.fetchone()
+        return dict(row._mapping) if row else None
+
     async def get_active_bots_with_setups(self, user_id: int) -> List[dict]:
         query = text("""
             SELECT
@@ -288,46 +307,43 @@ class BotRepository:
         return [dict(r._mapping) for r in result.fetchall()]
 
     async def get_bot_ledger_stats(self, user_id: int, bot_id: int, today: date) -> dict:
-        query = text("""
+        # 1. Total stats (Invested)
+        query1 = text("""
             SELECT
               COALESCE(SUM(cash_delta_eur),0) as net_cash,
               COALESCE(SUM(qty_delta),0) as net_qty
             FROM bot_ledger
             WHERE user_id=:user_id AND bot_id=:bot_id
         """)
-        res = await self.session.execute(query, {"user_id": user_id, "bot_id": bot_id})
-        row1 = res.fetchone()
+        res1 = await self.session.execute(query1, {"user_id": user_id, "bot_id": bot_id})
+        row1 = res1.fetchone()
 
-        query_exec = text("""
+        # 2. Executed cash (Invested cost basis)
+        query2 = text("""
             SELECT COALESCE(SUM(cash_delta_eur),0)
             FROM bot_ledger
             WHERE user_id=:user_id AND bot_id=:bot_id AND entry_type='execute'
         """)
-        res_exec = await self.session.execute(query_exec, {"user_id": user_id, "bot_id": bot_id})
-        row2 = res_exec.fetchone()
+        res2 = await self.session.execute(query2, {"user_id": user_id, "bot_id": bot_id})
+        row2 = res2.fetchone()
 
-        query_spent = text("""
-            SELECT COALESCE(SUM(ABS(cash_delta_eur)),0)
+        # 3. Today spent (Daily consumption)
+        query3 = text("""
+            SELECT COALESCE(SUM(ABS(cash_delta_eur)), 0)
             FROM bot_ledger
-            WHERE user_id=:user_id AND bot_id=:bot_id AND entry_type='execute' AND cash_delta_eur < 0 AND DATE(ts)=:today
+            WHERE user_id=:user_id AND bot_id=:bot_id
+              AND DATE(ts) = :today
+              AND entry_type = 'execute'
+              AND cash_delta_eur < 0
         """)
-        res_spent = await self.session.execute(query_spent, {"user_id": user_id, "bot_id": bot_id, "today": today})
-        row3 = res_spent.fetchone()
-
-        query_res = text("""
-            SELECT COALESCE(SUM(ABS(cash_delta_eur)),0)
-            FROM bot_ledger
-            WHERE user_id=:user_id AND bot_id=:bot_id AND entry_type='reserve' AND cash_delta_eur < 0 AND DATE(ts)=:today
-        """)
-        res_res = await self.session.execute(query_res, {"user_id": user_id, "bot_id": bot_id, "today": today})
-        row4 = res_res.fetchone()
+        res3 = await self.session.execute(query3, {"user_id": user_id, "bot_id": bot_id, "today": today})
+        row3 = res3.fetchone()
 
         return {
             "net_cash": float(row1[0] or 0),
             "net_qty": float(row1[1] or 0),
             "executed_cash": float(row2[0] or 0),
-            "today_spent": float(row3[0] or 0),
-            "today_reserved": float(row4[0] or 0)
+            "today_spent": float(row3[0] or 0)
         }
 
     async def get_market_price(self, symbol: str) -> Optional[float]:
