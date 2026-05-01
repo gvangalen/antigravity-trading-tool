@@ -266,35 +266,35 @@ class BotService:
     # MANUL ORDER & SKIP
     # ==========================
     async def create_manual_order(self, payload: BotManualOrderSchema, user_id: int) -> dict:
+        from datetime import date
+        from fastapi import HTTPException
+
         # 1. Fetch bot config to get limits
         bot = await self.repository.get_bot_config(user_id, payload.bot_id)
         if not bot:
-            from fastapi import HTTPException
             raise HTTPException(404, "Bot niet gevonden")
             
         # 2. Fetch current stats
-        stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id)
+        stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
         
         # 3. Guardrail check for BUY orders
         notional = round(payload.quantity * payload.price, 2)
         
         if payload.side == "buy":
-            from fastapi import HTTPException
-            
             # Total Budget Check
-            invested = abs(float(stats.get("net_executed_cash_delta_eur", 0)))
-            total_budget = float(bot["budget_total_eur"])
-            if invested + notional > total_budget:
+            invested = abs(float(stats.get("executed_cash", 0)))
+            total_budget = float(bot.get("budget_total_eur", 0))
+            if total_budget > 0 and (invested + notional) > (total_budget + 0.01):
                 raise HTTPException(400, f"Totaal budget overschreden (Max {total_budget} EUR)")
                 
             # Daily Limit Check
-            daily_limit = float(bot["budget_daily_limit_eur"])
-            today_spent = float(stats.get("today_spent_eur", 0))
-            if daily_limit > 0 and (today_spent + notional) > (daily_limit + 0.01): # small buffer for rounding
+            daily_limit = float(bot.get("budget_daily_limit_eur", 0))
+            today_spent = float(stats.get("today_spent", 0))
+            if daily_limit > 0 and (today_spent + notional) > (daily_limit + 0.01):
                 raise HTTPException(400, f"Daglimiet overschreden (Max {daily_limit} EUR, vandaag al {today_spent} EUR besteed)")
                 
             # Max Order Check
-            max_order = float(bot["budget_max_order_eur"])
+            max_order = float(bot.get("budget_max_order_eur", 0))
             if max_order > 0 and notional > (max_order + 0.01):
                 raise HTTPException(400, f"Maximale ordergrootte overschreden (Max {max_order} EUR)")
 
