@@ -257,6 +257,14 @@ export default function TradePanel({
   ========================= */
 
   const handleSubmit = async () => {
+    console.log("🚀 Submitting Manual Order:", {
+      side,
+      qty: qtyBase,
+      price: effectivePrice,
+      quote: orderValueQuote,
+      isInvalid: !canSubmit,
+      availableQuote
+    });
 
     if (!canSubmit) return;
 

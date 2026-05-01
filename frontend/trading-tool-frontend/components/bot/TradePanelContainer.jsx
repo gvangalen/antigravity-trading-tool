@@ -44,33 +44,34 @@ export default function TradePanelContainer({
 
     /* ---------- BUDGET LIMITS ---------- */
 
-    const totalBudget = Number(
-      bot?.budget?.total_eur ??
-      bot?.budget_total_eur ??
-      0
-    );
-
     const dailyLimit = Number(
-      bot?.budget?.daily_limit_eur ??
-      bot?.budget_daily_limit_eur ??
-      0
-    );
+    bot?.budget?.daily_limit_eur ?? bot?.budget_daily_limit_eur ?? 0
+  );
+  const totalBudget = Number(
+    bot?.budget?.total_eur ?? bot?.budget_total_eur ?? 0
+  );
+  const maxOrder = Number(
+    bot?.budget?.max_order_eur ?? bot?.budget_max_order_eur ?? 0
+  );
 
-    const maxOrder = Number(
-      bot?.budget?.max_order_eur ??
-      bot?.budget_max_order_eur ??
-      0
-    );
+  const todaySpent = Number(
+    portfolio?.stats?.today_spent_eur ?? portfolio?.stats?.today_spent ?? 0
+  );
+  const invested = Number(
+    portfolio?.stats?.invested_eur ?? portfolio?.stats?.executed_cash ?? 0
+  );
 
-    const todaySpent = Number(
-      portfolio?.stats?.today_spent_eur ??
-      portfolio?.stats?.today_spent ??
-      0
-    );
+  console.log("🛡️ TradePanelContainer Debug:", {
+    bot_id: bot?.id,
+    dailyLimit,
+    maxOrder,
+    todaySpent,
+    portfolio_stats: portfolio?.stats,
+  });
 
     /* ---------- INVESTED AMOUNT ---------- */
 
-    const invested = Math.abs(Number(
+    const investedAmount = Math.abs(Number(
       portfolio?.stats?.net_executed_cash_delta_eur ??
       portfolio?.stats?.invested_eur ??
       portfolio?.stats?.invested ??

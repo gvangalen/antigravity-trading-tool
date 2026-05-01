@@ -298,7 +298,11 @@ function BotPageInner() {
 
         {/* 🛰️ RIGHT: GLOBAL OVERRIDES */}
         <aside className="lg:sticky lg:top-8">
-          <GlobalTradePanel />
+          <GlobalTradePanel 
+            decision={decisionsByBot?.[activeBot?.id]}
+            portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
+            onManualTrade={handleGenerateDecision} // Refresh on trade
+          />
         </aside>
 
       </div>
