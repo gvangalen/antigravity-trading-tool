@@ -44,6 +44,12 @@ export default function TradePanelContainer({
 
     /* ---------- BUDGET LIMITS ---------- */
 
+    const totalBudget = Number(
+      bot?.budget?.total_eur ??
+      bot?.budget_total_eur ??
+      0
+    );
+
     const dailyLimit = Number(
       bot?.budget?.daily_limit_eur ??
       bot?.budget_daily_limit_eur ??
