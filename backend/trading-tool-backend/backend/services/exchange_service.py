@@ -29,6 +29,10 @@ class ExchangeService:
         # Bybit settings
         if exchange_name.lower() == 'bybit':
             config['options'] = {'defaultType': 'spot'}
+            
+        # Bitvavo settings - requires operatorId for orders
+        if exchange_name.lower() == 'bitvavo':
+            config['options'] = {'operatorId': 1} # Mandatory integer ID for Bitvavo
 
         client = exchange_class(config)
         return client
