@@ -339,11 +339,24 @@ class BotRepository:
         res3 = await self.session.execute(query3, {"user_id": user_id, "bot_id": bot_id, "today": today})
         row3 = res3.fetchone()
 
+        # 4. Today reserved (Pending consumption)
+        query4 = text("""
+            SELECT COALESCE(SUM(ABS(cash_delta_eur)), 0)
+            FROM bot_ledger
+            WHERE user_id=:user_id AND bot_id=:bot_id
+              AND DATE(ts) = :today
+              AND entry_type = 'reserve'
+              AND cash_delta_eur < 0
+        """)
+        res4 = await self.session.execute(query4, {"user_id": user_id, "bot_id": bot_id, "today": today})
+        row4 = res4.fetchone()
+
         return {
             "net_cash": float(row1[0] or 0),
             "net_qty": float(row1[1] or 0),
             "executed_cash": float(row2[0] or 0),
-            "today_spent": float(row3[0] or 0)
+            "today_spent": float(row3[0] or 0),
+            "today_reserved": float(row4[0] or 0)
         }
 
     async def get_market_price(self, symbol: str) -> Optional[float]:
