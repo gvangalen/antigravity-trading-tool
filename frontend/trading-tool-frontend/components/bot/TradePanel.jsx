@@ -256,6 +256,7 @@ export default function TradePanel({
      Submit
   ========================= */
 
+  const handleSubmit = async () => {
     if (!canSubmit) return;
 
     const p = num(effectivePrice, null);
@@ -263,7 +264,6 @@ export default function TradePanel({
     const v = num(orderValueQuote, null);
 
     try {
-
       await onSubmit?.({
         symbol,
         side,
