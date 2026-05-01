@@ -546,6 +546,34 @@ const runBacktest = useCallback(
   []
 );
 
+const createManualOrder = useCallback(
+  async (payload) => {
+    setLoading((l) => ({ ...l, action: true }));
+    setError(null);
+
+    try {
+      const res = await apiCreateManualOrder(payload);
+
+      // 🔥 REFRESH ALL DATA
+      await Promise.all([
+        loadPortfolios(),
+        loadToday(),
+        loadTradesForBot(payload.bot_id),
+        loadConfigs(),
+      ]);
+
+      return res;
+    } catch (err) {
+      console.error("Manual order failed", err);
+      setError(err.message || "Order plaatsen mislukt");
+      throw err;
+    } finally {
+      setLoading((l) => ({ ...l, action: false }));
+    }
+  },
+  [loadPortfolios, loadToday, loadTradesForBot, loadConfigs]
+);
+
   /* =====================================================
      🔁 INIT LOAD
   ===================================================== */
@@ -588,10 +616,7 @@ const runBacktest = useCallback(
     executeBotDecision,
     skipBot,
   
-    loadTradesForBot,
-    loadTradePlan,
-    saveTradePlanForDecision,
-    createManualOrder: apiCreateManualOrder,
+    createManualOrder,
     runBacktest,
   };
 }
