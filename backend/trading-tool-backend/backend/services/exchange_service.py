@@ -61,3 +61,28 @@ class ExchangeService:
             return []
         finally:
             await client.close()
+
+    @staticmethod
+    async def create_order(client: Any, symbol: str, side: str, amount: float, price: float = None, order_type: str = 'market') -> Dict[str, Any]:
+        """
+        Creates an order on the exchange.
+        """
+        try:
+            # Map symbol if needed (Bitvavo uses BTC-EUR)
+            ccxt_symbol = symbol
+            if '-' not in symbol and '/' not in symbol:
+                ccxt_symbol = f"{symbol}/EUR" # Default to EUR pair
+
+            logger.info(f"🚀 Executing {order_type} {side} order for {amount} {ccxt_symbol} at {price}")
+            
+            if order_type == 'market':
+                order = await client.create_order(ccxt_symbol, 'market', side, amount)
+            else:
+                order = await client.create_order(ccxt_symbol, 'limit', side, amount, price)
+                
+            return order
+        except Exception as e:
+            logger.error(f"❌ Error creating order on {client.id}: {e}")
+            raise e
+        finally:
+            await client.close()

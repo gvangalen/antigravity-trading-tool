@@ -13,6 +13,8 @@ from backend.schemas.bot_schema import (
     TradePlanUpsertSchema
 )
 from backend.infrastructure.repositories.bot_repository import BotRepository
+from backend.infrastructure.repositories.exchange_repository import ExchangeRepository
+from backend.services.exchange_service import ExchangeService
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,7 @@ class BotService:
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
         self.repository = BotRepository(db_session)
+        self.exchange_repo = ExchangeRepository(db_session)
 
     def _safe_json(self, v, fallback):
         if v is None:
@@ -305,6 +308,29 @@ class BotService:
             cash_delta = notional
             qty_delta = -payload.quantity
             
+        # 4. Handle Live Exchange Execution
+        if bot.get("is_live"):
+            try:
+                keys = await self.exchange_repo.get_active_keys(user_id)
+                if not keys:
+                    raise HTTPException(400, "Geen actieve exchange keys gevonden voor live trading.")
+                
+                # Use the first active key (assuming Bitvavo for now based on user context)
+                key = keys[0]
+                client = await ExchangeService.get_client(
+                    key.exchange_name, key.api_key, key.api_secret, key.api_passphrase
+                )
+                
+                # Execute on exchange
+                logger.info(f"⚡ LIVE ORDER: Sending {payload.side} {payload.quantity} {payload.symbol} to {key.exchange_name}")
+                await ExchangeService.create_order(
+                    client, payload.symbol, payload.side, payload.quantity, payload.price, 
+                    order_type='limit' # Always limit for manual for safety
+                )
+            except Exception as e:
+                logger.error(f"❌ Exchange Order Failed: {str(e)}")
+                raise HTTPException(500, f"Order bij exchange mislukt: {str(e)}")
+
         order_id = await self.repository.create_manual_order(
             user_id, payload.bot_id, payload.symbol, payload.side, payload.quantity, payload.price
         )
