@@ -40,6 +40,7 @@ class BotManualOrderSchema(BaseModel):
     side: str
     quantity: float
     price: float
+    value_eur: Optional[float] = None
 
 class TradePlanUpsertSchema(BaseModel):
     entry_plan: List[Dict[str, Any]] = []

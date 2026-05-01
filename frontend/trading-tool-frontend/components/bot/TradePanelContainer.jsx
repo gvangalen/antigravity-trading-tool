@@ -225,6 +225,7 @@ export default function TradePanelContainer({
         side: order.side,
         quantity: quantity,
         price: effectivePrice,
+        value_eur: valueEur,
       });
 
       /* ---------- REFRESH LOCAL BALANCE ---------- */

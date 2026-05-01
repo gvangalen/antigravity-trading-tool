@@ -52,6 +52,22 @@ class ExchangeService:
             await client.close()
 
     @staticmethod
+    async def fetch_ticker(client: Any, symbol: str) -> Dict[str, Any]:
+        """
+        Fetches the latest ticker for a symbol.
+        """
+        try:
+            ccxt_symbol = symbol
+            if '-' not in symbol and '/' not in symbol:
+                ccxt_symbol = f"{symbol}/EUR"
+            return await client.fetch_ticker(ccxt_symbol)
+        except Exception as e:
+            logger.error(f"❌ Error fetching ticker from {client.id}: {e}")
+            return {}
+        finally:
+            await client.close()
+
+    @staticmethod
     async def fetch_positions(client: Any) -> List[Dict[str, Any]]:
         """
         Fetches active positions.

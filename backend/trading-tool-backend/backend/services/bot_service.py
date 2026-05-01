@@ -323,10 +323,33 @@ class BotService:
                 
                 # Execute on exchange
                 logger.info(f"⚡ LIVE ORDER: Sending {payload.side} {payload.quantity} {payload.symbol} to {key.exchange_name}")
+                
+                # Fetch latest price to ensure quantity is correct if value_eur is used
+                final_qty = payload.quantity
+                final_price = payload.price
+                
+                if payload.value_eur and payload.value_eur > 0:
+                    ticker = await ExchangeService.fetch_ticker(client, payload.symbol)
+                    if ticker and 'last' in ticker:
+                        live_ex_price = float(ticker['last'])
+                        # Recalculate quantity based on REAL exchange price
+                        final_qty = payload.value_eur / live_ex_price
+                        final_price = live_ex_price
+                        logger.info(f"🔄 Recalculated live qty: {final_qty} @ {final_price} (Target: {payload.value_eur} EUR)")
+                    
+                    # Re-instantiate client because fetch_ticker closes it
+                    client = await ExchangeService.get_client(
+                        key.exchange_name, key.api_key, key.api_secret, key.api_passphrase
+                    )
+
                 await ExchangeService.create_order(
-                    client, payload.symbol, payload.side, payload.quantity, payload.price, 
-                    order_type='limit' # Always limit for manual for safety
+                    client, payload.symbol, payload.side, final_qty, final_price, 
+                    order_type='limit'
                 )
+                
+                # Update payload values for internal ledger consistency
+                payload.quantity = final_qty
+                payload.price = final_price
             except Exception as e:
                 logger.error(f"❌ Exchange Order Failed: {str(e)}")
                 raise HTTPException(500, f"Order bij exchange mislukt: {str(e)}")
