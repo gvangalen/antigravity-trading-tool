@@ -301,7 +301,7 @@ function BotPageInner() {
           <GlobalTradePanel 
             decision={decisionsByBot?.[activeBot?.id]}
             portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
-            onManualTrade={handleGenerateDecision} // Refresh on trade
+            onManualTrade={() => handleGenerateDecision(activeBot)} // 🔥 FIX: Pass bot, not order
           />
         </aside>
 

@@ -61,14 +61,6 @@ export default function TradePanelContainer({
     portfolio?.stats?.invested_eur ?? portfolio?.stats?.executed_cash ?? 0
   );
 
-  console.log("🛡️ TradePanelContainer Debug:", {
-    bot_id: bot?.id,
-    dailyLimit,
-    maxOrder,
-    todaySpent,
-    portfolio_stats: portfolio?.stats,
-  });
-
     /* ---------- INVESTED AMOUNT ---------- */
 
     const investedAmount = Math.abs(Number(
@@ -208,6 +200,10 @@ export default function TradePanelContainer({
       }
 
       /* ---------- VALIDATION ---------- */
+      
+      if (!botId) {
+        throw new Error("Geen actieve bot geselecteerd.");
+      }
 
       if (!quantity || quantity <= 0) {
         throw new Error("Quantity is verplicht");

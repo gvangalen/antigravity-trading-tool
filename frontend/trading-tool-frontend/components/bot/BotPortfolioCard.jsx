@@ -47,13 +47,6 @@ export default function BotPortfolioSection({ bot }) {
 
   const todaySpent = stats.today_spent_eur ?? 0;
 
-  console.log("📊 BotPortfolioCard Debug:", {
-    bot_id: bot?.bot_id || bot?.id,
-    budget,
-    stats,
-    todaySpent
-  });
-
   return (
     <div className="space-y-6">
       {/* 💳 BUDGET CONTROLS */}
