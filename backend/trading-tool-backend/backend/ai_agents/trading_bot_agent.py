@@ -7,6 +7,9 @@ from typing import Any, Dict, List, Optional
 from backend.utils.db import get_db_connection
 # ✅ Engine brain (single source of truth)
 from backend.engine.bot_brain import run_bot_brain
+import asyncio
+from backend.services.exchange_service import ExchangeService
+from backend.utils.encryption_utils import EncryptionUtils
 
 
 logger = logging.getLogger(__name__)
@@ -161,6 +164,34 @@ def _clear_existing_pending_orders_for_day(
                 """,
                 (user_id, user_id, bot_id, decision_id),
             )
+
+def _execute_on_exchange_sync(conn, user_id: int, exchange_name: str, symbol: str, side: str, qty: float, price: float):
+    """
+    Sync wrapper to execute on exchange using the async ExchangeService.
+    """
+    # 1. Fetch keys
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT api_key, api_secret, api_passphrase FROM exchange_keys WHERE user_id=%s AND exchange_name=%s AND is_active=TRUE LIMIT 1",
+            (user_id, exchange_name)
+        )
+        row = cur.fetchone()
+    
+    if not row:
+        raise RuntimeError(f"No active keys found for {exchange_name}")
+    
+    api_key, api_secret, api_passphrase = row
+
+    async def _run():
+        client = await ExchangeService.get_client(exchange_name, api_key, api_secret, api_passphrase)
+        # Always use limit for safety in manual/bot trades
+        return await ExchangeService.create_order(client, symbol, side, qty, price, order_type='limit')
+
+    try:
+        return asyncio.run(_run())
+    except Exception as e:
+        logger.error(f"❌ Exchange execution failed: {e}")
+        raise e
 
 def _touch_bot_last_run(conn, *, user_id: int, bot_id: int) -> None:
     """
@@ -546,6 +577,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
               b.id              AS bot_id,
               b.name            AS bot_name,
               b.mode,
+              b.is_live,
               b.risk_profile,
               b.strategy_id,
               b.last_run,
@@ -578,6 +610,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
             bot_id,
             bot_name,
             mode,
+            is_live,
             risk_profile,
             strategy_id,
             last_run,
@@ -597,6 +630,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
                 "bot_id": int(bot_id),
                 "bot_name": bot_name,
                 "mode": mode,
+                "is_live": bool(is_live),
                 "risk_profile": risk_profile or "balanced",
                 "strategy_id": int(strategy_id),
 
@@ -1540,6 +1574,7 @@ def run_trading_bot_agent(
                         bot_id=bot["bot_id"],
                         decision_id=decision_id,
                         order=order,
+                        is_live=bot.get("is_live", False),
                     )
                     execution_status = "filled"
 
@@ -1631,6 +1666,7 @@ def _auto_execute_decision(
     bot_id: int,
     decision_id: int,
     order: dict,
+    is_live: bool = False,
 ):
     symbol = (order.get("symbol") or DEFAULT_SYMBOL).upper()
     side = (order.get("side") or "buy").lower().strip()
@@ -1642,6 +1678,11 @@ def _auto_execute_decision(
         raise RuntimeError("Invalid execution parameters")
 
     cash_delta, qty_delta, notional = _ledger_deltas(side, qty, price)
+
+    # 0) Live Execution
+    if is_live:
+        _execute_on_exchange_sync(conn, user_id, "bitvavo", symbol, side, qty, price)
+
 
     with conn.cursor() as cur:
         # 1) Decision -> executed
@@ -1757,6 +1798,15 @@ def execute_manual_decision(
         raise RuntimeError("Invalid order execution values")
 
     cash_delta, qty_delta, notional = _ledger_deltas(side, qty, price)
+
+    # 1.5) Live Execution
+    with conn.cursor() as cur:
+        cur.execute("SELECT is_live FROM bot_configs WHERE id=%s", (bot_id,))
+        bot_live = cur.fetchone()[0]
+    
+    if bot_live:
+        _execute_on_exchange_sync(conn, user_id, "bitvavo", symbol, side, qty, price)
+
 
     with conn.cursor() as cur:
         # 2) Decision -> executed
