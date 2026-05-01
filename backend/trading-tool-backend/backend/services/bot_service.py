@@ -331,7 +331,7 @@ class BotService:
             "is_live": bot.get("is_live", False)
         }
 
-    async def create_manual_order(self, payload: ManualOrderSchema, user_id: int) -> dict:
+    async def create_manual_order(self, payload: BotManualOrderSchema, user_id: int) -> dict:
         from datetime import date
         from fastapi import HTTPException
 
