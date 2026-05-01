@@ -105,6 +105,21 @@ async def mark_bot_executed(
 # ==========================================================
 # 🟡 MANUAL ORDERS (PAPER TRADE / DISCRETIONARY)
 # ==========================================================
+@router.post("/orders/preview")
+async def preview_manual_order(
+    payload: BotManualOrderSchema,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        service = BotService(db)
+        return await service.preview_manual_order(payload, current_user["id"])
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ [preview_manual_order] Error: {e}", exc_info=True)
+        raise HTTPException(500, detail=str(e))
+
 @router.post("/orders/manual")
 async def create_manual_order(
     payload: BotManualOrderSchema,

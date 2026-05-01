@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useModal } from "@/components/modal/ModalProvider";
 import TradePanel from "./TradePanel";
-import { fetchTradePlan, createManualOrder } from "@/lib/api/botApi";
+import OrderPreviewModal from "./OrderPreviewModal";
+import { fetchTradePlan, createManualOrder, previewManualOrder } from "@/lib/api/botApi";
 import { fetchLatestBTC } from "@/lib/api/market";
 
 export default function TradePanelContainer({
@@ -12,6 +14,7 @@ export default function TradePanelContainer({
   onManualTrade,
 }) {
 
+  const { showSnackbar } = useModal();
   const botId = bot?.id;
   const decisionId = decision?.id;
 
@@ -26,6 +29,14 @@ export default function TradePanelContainer({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  /* =====================================================
+     PREVIEW STATE
+  ===================================================== */
+  
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [draftOrder, setDraftOrder] = useState(null);
 
   /* =====================================================
      BOT CAPITAL
@@ -175,83 +186,78 @@ export default function TradePanelContainer({
      ORDER HANDLER
   ===================================================== */
 
-  async function handleOrder(order) {
+  async function handleOrderRequest(order) {
+    setDraftOrder(order);
+    await refreshPreview(order);
+    setShowPreview(true);
+  }
 
+  async function refreshPreview(order = draftOrder) {
+    if (!order) return;
+    try {
+      setLoading(true);
+      const data = await previewManualOrder({
+        bot_id: botId,
+        symbol: "BTC",
+        side: order.side,
+        quantity: order.quantity,
+        price: order.orderType === "market" ? price : order.price,
+        value_eur: order.value_eur,
+      });
+      setPreviewData(data);
+    } catch (err) {
+      console.error("Preview error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleConfirmOrder() {
+    if (!previewData || !draftOrder) return;
     setError(null);
 
     try {
-
       setLoading(true);
-
-      const effectivePrice =
-        order.orderType === "market"
-          ? price
-          : Number(order.price);
-
-      let quantity = Number(order.quantity ?? 0);
-      let valueEur = Number(order.value_eur ?? 0);
-
-      /* ---------- SIZE CONVERSION ---------- */
-
-      if (order.size_mode === "quote") {
-        quantity = valueEur / effectivePrice;
-      } else {
-        valueEur = quantity * effectivePrice;
-      }
-
-      /* ---------- VALIDATION ---------- */
-      
-      if (!botId) {
-        throw new Error("Geen actieve bot geselecteerd.");
-      }
-
-      if (!quantity || quantity <= 0) {
-        throw new Error("Quantity is verplicht");
-      }
-
-      if (order.side === "buy" && valueEur > availableQuote) {
-        throw new Error("Onvoldoende budget beschikbaar (limiet bereikt)");
-      }
-
-      if (order.side === "sell" && quantity > balanceBase) {
-        throw new Error("Onvoldoende BTC");
-      }
 
       /* ---------- CREATE ORDER ---------- */
 
       await createManualOrder({
         bot_id: botId,
         symbol: "BTC",
-        side: order.side,
-        quantity: quantity,
-        price: effectivePrice,
-        value_eur: valueEur,
+        side: draftOrder.side,
+        quantity: previewData.quantity,
+        price: previewData.price,
+        value_eur: previewData.gross_eur,
       });
 
       /* ---------- REFRESH LOCAL BALANCE ---------- */
 
-      if (order.side === "buy") {
-        setBalanceQuote((prev) => Math.max(0, prev - valueEur));
-        setBalanceBase((prev) => prev + quantity);
+      if (draftOrder.side === "buy") {
+        setBalanceQuote((prev) => Math.max(0, prev - previewData.gross_eur));
+        setBalanceBase((prev) => prev + previewData.quantity);
       }
 
-      if (order.side === "sell") {
-        setBalanceQuote((prev) => prev + valueEur);
-        setBalanceBase((prev) => Math.max(0, prev - quantity));
+      if (draftOrder.side === "sell") {
+        setBalanceQuote((prev) => prev + previewData.gross_eur);
+        setBalanceBase((prev) => Math.max(0, prev - previewData.quantity));
       }
 
-      onManualTrade?.(order);
+      onManualTrade?.(draftOrder);
+      setShowPreview(false);
+
+      showSnackbar(
+        `${draftOrder.side === "buy" ? "Koop" : "Verkoop"} order succesvol geplaatst!`,
+        "success"
+      );
+      
+      window.dispatchEvent(new Event("portfolio:updated"));
 
     } catch (err) {
-
+      showSnackbar(err.message || "Order mislukt", "danger");
       setError(err.message || "Order mislukt");
-
     } finally {
-
       setLoading(false);
-
     }
-
   }
 
   /* =====================================================
@@ -271,19 +277,30 @@ export default function TradePanelContainer({
   ===================================================== */
 
   return (
-    <TradePanel
-      price={price}
-      balanceQuote={balanceQuote}
-      availableQuote={availableQuote}
-      balanceBase={balanceBase}
-      quoteSymbol="EUR"
-      baseSymbol="BTC"
-      watchLevels={watchLevels}
-      strategy={strategy}
-      loading={loading}
-      error={error}
-      onSubmit={handleOrder}
-    />
-  );
+    <>
+      <TradePanel
+        price={price}
+        balanceQuote={balanceQuote}
+        availableQuote={availableQuote}
+        balanceBase={balanceBase}
+        quoteSymbol="EUR"
+        baseSymbol="BTC"
+        watchLevels={watchLevels}
+        strategy={strategy}
+        loading={loading}
+        error={error}
+        onSubmit={handleOrderRequest}
+      />
 
+      {showPreview && (
+        <OrderPreviewModal
+          preview={previewData}
+          loading={loading}
+          onConfirm={handleConfirmOrder}
+          onCancel={() => setShowPreview(false)}
+          onRefresh={refreshPreview}
+        />
+      )}
+    </>
+  );
 }

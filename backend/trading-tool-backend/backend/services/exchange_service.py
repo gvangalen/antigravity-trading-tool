@@ -52,6 +52,28 @@ class ExchangeService:
             await client.close()
 
     @staticmethod
+    async def fetch_trading_fees(client: Any, symbol: str) -> Dict[str, Any]:
+        """
+        Fetches trading fees for a symbol.
+        """
+        try:
+            ccxt_symbol = symbol
+            if '-' not in symbol and '/' not in symbol:
+                ccxt_symbol = f"{symbol}/EUR"
+            
+            # Bitvavo/Bybit support fetch_trading_fees
+            if hasattr(client, 'fetch_trading_fees'):
+                fees = await client.fetch_trading_fees()
+                if ccxt_symbol in fees:
+                    return fees[ccxt_symbol]
+            return {}
+        except Exception as e:
+            logger.error(f"❌ Error fetching trading fees from {client.id}: {e}")
+            return {}
+        finally:
+            await client.close()
+
+    @staticmethod
     async def fetch_ticker(client: Any, symbol: str) -> Dict[str, Any]:
         """
         Fetches the latest ticker for a symbol.

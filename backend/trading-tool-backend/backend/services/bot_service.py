@@ -268,7 +268,70 @@ class BotService:
     # ==========================
     # MANUL ORDER & SKIP
     # ==========================
-    async def create_manual_order(self, payload: BotManualOrderSchema, user_id: int) -> dict:
+    async def preview_manual_order(self, payload: BotManualOrderSchema, user_id: int):
+        """
+        Provides a real-time preview of a manual order with fees.
+        """
+        bot = await self.repository.get_bot_config(user_id, payload.bot_id)
+        if not bot:
+            raise HTTPException(404, "Bot niet gevonden.")
+
+        # Default values from payload
+        price = payload.price
+        amount_eur = payload.value_eur or (payload.quantity * payload.price)
+        fee_rate = 0.0025 # Default Bitvavo taker fee
+        fee_eur = amount_eur * fee_rate
+
+        if bot.get("is_live"):
+            keys = await self.exchange_repo.get_active_keys(user_id)
+            if keys:
+                key = keys[0]
+                try:
+                    client = await ExchangeService.get_client(
+                        key.exchange_name, key.api_key, key.api_secret, key.api_passphrase
+                    )
+                    ticker = await ExchangeService.fetch_ticker(client, payload.symbol)
+                    if ticker and 'last' in ticker:
+                        price = float(ticker['last'])
+                    
+                    # Re-instantiate for fees
+                    client = await ExchangeService.get_client(
+                        key.exchange_name, key.api_key, key.api_secret, key.api_passphrase
+                    )
+                    fees = await ExchangeService.fetch_trading_fees(client, payload.symbol)
+                    if fees and 'taker' in fees:
+                        fee_rate = float(fees['taker'])
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not fetch live preview data: {e}")
+
+        # Recalculate based on best available data
+        fee_eur = amount_eur * fee_rate
+        quantity = (amount_eur - fee_eur) / price if payload.side == "buy" else (amount_eur / price)
+        
+        # If selling, fee is usually deducted from the received EUR
+        if payload.side == "sell":
+             quantity = payload.quantity
+             gross_eur = quantity * price
+             fee_eur = gross_eur * fee_rate
+             net_eur = gross_eur - fee_eur
+        else:
+             # Buying: We spend amount_eur total (Gross)
+             gross_eur = amount_eur
+             net_eur = amount_eur - fee_eur
+
+        return {
+            "symbol": payload.symbol,
+            "side": payload.side,
+            "price": price,
+            "gross_eur": round(gross_eur, 2),
+            "fee_eur": round(fee_eur, 2),
+            "fee_rate": fee_rate,
+            "net_eur": round(net_eur, 2),
+            "quantity": round(quantity, 8),
+            "is_live": bot.get("is_live", False)
+        }
+
+    async def create_manual_order(self, payload: ManualOrderSchema, user_id: int) -> dict:
         from datetime import date
         from fastapi import HTTPException
 

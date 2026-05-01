@@ -276,30 +276,11 @@ export default function TradePanel({
         sl: useTpSl ? num(slPrice, null) : null,
       });
 
-      showSnackbar(
-        `${side === "buy" ? "Koop" : "Verkoop"} order geplaatst ✔ ${fmt(q,6)} ${baseSymbol} @ ${fmt(p)}`,
-        "success"
-      );
-
-      window.dispatchEvent(new Event("portfolio:updated"));
-
-      setAmountPct(0);
-      setAmountQuoteInput("");
-      setAmountBaseInput("");
-      setTpPrice("");
-      setSlPrice("");
-
+      // Clear local state only if needed, but usually we wait for confirm
+      // For now we don't clear here so the modal can show the details
     } catch (err) {
-
-      console.error("❌ Order error:", err);
-
-      showSnackbar(
-        err?.message || "Order plaatsen mislukt",
-        "danger"
-      );
-
+      console.error("❌ Draft error:", err);
     }
-
   };
 
   /* =========================

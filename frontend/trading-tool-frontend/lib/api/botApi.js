@@ -268,7 +268,33 @@ export const saveTradePlan = async (decision_id, payload = {}) => {
 
 /* =====================================================
    🟢 10. MANUAL ORDER (🔥 SAFE)
-===================================================== */
+   ===================================================== */
+
+export const previewManualOrder = async ({
+  bot_id,
+  symbol = "BTC",
+  side,
+  quantity,
+  price,
+  value_eur,
+}) => {
+  if (!bot_id) throw new Error("bot_id is verplicht");
+  if (!side) throw new Error("side is verplicht");
+
+  return handleApi(
+    fetchAuth(`/api/orders/preview`, {
+      method: "POST",
+      body: JSON.stringify({
+        bot_id,
+        symbol,
+        side,
+        quantity: toNumber(quantity, 0),
+        price: toNumber(price, 0),
+        value_eur: toNumber(value_eur, 0),
+      }),
+    })
+  );
+};
 
 export const createManualOrder = async ({
   bot_id,
