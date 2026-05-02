@@ -199,7 +199,7 @@ body {
 }
 
 /* 📊 Trade Utilities - V2 PRO ALIVE (UPGRADED) */
-.trade-panel-new {
+.trade-panel-final-v2 {
   @apply bg-[var(--color-card)] rounded-3xl border-2 border-[var(--color-border)] flex flex-col;
 }
 
