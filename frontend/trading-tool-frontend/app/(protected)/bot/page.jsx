@@ -296,14 +296,14 @@ function BotPageInner() {
           </div>
         </div>
 
-        {/* 🛰️ RIGHT: GLOBAL OVERRIDES */}
-        <aside className="space-y-6">
+        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Fixed: Non-sticky to allow scrolling) */}
+        <div className="space-y-6 relative">
           <GlobalTradePanel 
             decision={decisionsByBot?.[activeBot?.id]}
             portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
             onManualTrade={() => handleGenerateDecision(activeBot)} // 🔥 FIX: Pass bot, not order
           />
-        </aside>
+        </div>
 
       </div>
     </div>
