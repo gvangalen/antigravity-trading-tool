@@ -21,7 +21,7 @@ ssh -i $SSH_KEY -o StrictHostKeyChecking=no ubuntu@$SERVER_IP "
     git reset --hard origin/main && \
     git clean -fd && \
     cd frontend/trading-tool-frontend && \
-    $PM2_PATH restart frontend || $PM2_PATH start 'npx serve out -p 5002 -s' --name 'frontend'
+    $PM2_PATH restart frontend || $PM2_PATH start 'npx serve out -p 5006 -s' --name 'frontend'
 "
 
 echo "🧠 3. Triggering AI Agents on Live Database..."
