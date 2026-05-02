@@ -298,8 +298,8 @@ function BotPageInner() {
           </div>
         </div>
 
-        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Fixed: Explicitly non-sticky) */}
-        <div className="lg:col-span-1 !relative !top-0 !h-auto">
+        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Fixed: Integrated into flow) */}
+        <div className="lg:col-span-1">
           <GlobalTradePanel 
             decision={decisionsByBot?.[activeBot?.id]}
             portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
