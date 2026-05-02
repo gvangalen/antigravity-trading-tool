@@ -9,6 +9,7 @@ const withPWA = require('next-pwa')({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export', // ✅ Required for Capacitor
+  trailingSlash: true, // ✅ Required for pretty URLs in static export
   images: {
     unoptimized: true, // ✅ Required for static export
   },
