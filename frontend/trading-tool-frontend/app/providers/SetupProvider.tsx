@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { fetchLastSetup } from "@/lib/api/setups";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 type SetupContextType = {
   activeSetup: any;
@@ -18,8 +19,16 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
   const [setupLoading, setSetupLoading] = useState(true);
   const [focusedBotId, setFocusedBotId] = useState<number | null>(null);
 
+  const { user, sessionChecked } = useAuth() as any;
+
   useEffect(() => {
     async function loadActiveSetup() {
+      // 🛑 Only fetch if we have a definitive session and a user
+      if (!sessionChecked || !user) {
+        if (sessionChecked) setSetupLoading(false);
+        return;
+      }
+
       try {
         const { fetchActiveSetup } = await import("@/lib/api/setups");
         const active = await fetchActiveSetup();
@@ -36,7 +45,7 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
       }
     }
     loadActiveSetup();
-  }, []);
+  }, [user, sessionChecked]);
 
   return (
     <SetupContext.Provider value={{ 
