@@ -209,10 +209,10 @@ function BotPageInner() {
           </div>
       </header>
 
-      <div className="max-w-full grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-10 pb-24">
+      <div className="max-w-full flex flex-col lg:flex-row gap-10 pb-24 items-start">
         
         {/* 🕋 LEFT: MAIN COMMAND CENTER */}
-        <div className="space-y-12 min-w-0">
+        <div className="flex-1 min-w-0 space-y-12">
           <div className="space-y-6">
             <BotScores scores={dailyScores} loading={loading?.today} />
             
@@ -298,8 +298,8 @@ function BotPageInner() {
           </div>
         </div>
 
-        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Fixed: Explicitly non-frozen) */}
-        <div className="lg:col-span-1 !relative !h-auto !top-0 !block">
+        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Fixed for Safari) */}
+        <div className="w-full lg:w-[350px] shrink-0 !relative !h-auto !top-0 !block">
           <GlobalTradePanel 
             decision={decisionsByBot?.[activeBot?.id]}
             portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
