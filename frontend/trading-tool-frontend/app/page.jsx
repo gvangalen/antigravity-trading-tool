@@ -20,7 +20,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300 font-sans selection:bg-blue-600/30">
-      {/* v1.1.2 - cache break */}
+      <span className="hidden">v1.1.3-final-cache-break</span>
       
       {/* 1. HEADER */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-[var(--color-border-subtle)]">
