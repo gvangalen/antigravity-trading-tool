@@ -31,6 +31,7 @@ function BotPageInner() {
   const { activeBot, setActiveBot } = useActiveBot();
 
   const [statusFilter, setStatusFilter] = useState("all");
+  const [currentTime, setCurrentTime] = useState(null);
   const [envFilter, setEnvFilter] = useState("all"); // "all", "paper", "live"
   const [generatingBotId, setGeneratingBotId] = useState(null);
 
@@ -59,6 +60,7 @@ function BotPageInner() {
   } = useMarketIntelligence();
 
   useEffect(() => {
+    setCurrentTime(new Date());
     loadStrategies();
   }, [loadStrategies]);
 
@@ -121,9 +123,9 @@ function BotPageInner() {
         ALL: normalizeSeries(byRange["ALL"] || byRange["all"]),
       };
     }
-    const single = [{ ts: new Date().toISOString(), value_eur: totalPortfolioValueEur }];
+    const single = [{ ts: currentTime?.toISOString() || new Date().toISOString(), value_eur: totalPortfolioValueEur }];
     return { "1D": single, "1W": single, "1M": single, "1Y": single, ALL: single };
-  }, [today, totalPortfolioValueEur]);
+  }, [today, totalPortfolioValueEur, currentTime]);
 
   const handleGenerateDecision = async (bot) => {
     try { 
@@ -296,8 +298,8 @@ function BotPageInner() {
           </div>
         </div>
 
-        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Fixed: Non-sticky to allow scrolling) */}
-        <div className="space-y-6 relative">
+        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Fixed: Explicitly non-sticky) */}
+        <div className="space-y-6 !static lg:!relative">
           <GlobalTradePanel 
             decision={decisionsByBot?.[activeBot?.id]}
             portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
