@@ -48,7 +48,7 @@ export default function GlobalTradePanel({
       </div>
 
       {/* ⚡ TRADE PANEL (High Depth) */}
-      <div className="card overflow-hidden">
+      <div className="card">
         <div className="bg-slate-50/10 p-1">
           <TradePanelContainer
             bot={activeBot}
