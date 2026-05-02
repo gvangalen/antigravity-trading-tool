@@ -298,8 +298,8 @@ function BotPageInner() {
           </div>
         </div>
 
-        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Fixed for Safari) */}
-        <div className="w-full lg:w-[350px] shrink-0 !relative !h-auto !top-0 !block">
+        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Watermark: v2145) */}
+        <div id="tp-final-v2145" className="w-full lg:w-[350px] shrink-0 !relative !h-auto !top-0 !block">
           <GlobalTradePanel 
             decision={decisionsByBot?.[activeBot?.id]}
             portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}

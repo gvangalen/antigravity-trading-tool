@@ -12,37 +12,33 @@ import { useState } from "react";
 export default function ProtectedLayout({ children }) {
   const [isAIOpen, setIsAIOpen] = useState(false);
   return (
-    <AppProviders>
-      <AuthGuard>
+    <>
+      {/* 🧱 SIDEBAR (NAVBAR handles its own mobile/desktop state) */}
+      <NavBar />
 
-        {/* 🧱 SIDEBAR (NAVBAR handles its own mobile/desktop state) */}
-        <NavBar />
-
-        {/* 🕋 MAIN CONTENT SHELL */}
-        <div 
-          className="lg:pl-64 min-h-screen bg-white transition-all duration-200 h-auto"
-          style={{ 
-            paddingRight: isAIOpen ? (typeof window !== 'undefined' && window.innerWidth < 1024 ? "0px" : "400px") : "0px",
-          }}
-        >
-          
-          {/* 🛰️ TOPBAR (HIDDEN ON MOBILE to favor NavBar mobile header) */}
-          <div className="top-bar hidden lg:block">
-            <TopBar />
-          </div>
- 
-          {/* 📄 PAGE CONTENT */}
-          <main className="pt-16 lg:pt-16 min-h-screen px-4 lg:px-10 h-auto overflow-visible">
-            {children}
-          </main>
-          
+      {/* 🕋 MAIN CONTENT SHELL */}
+      <div 
+        className="lg:pl-64 min-h-screen bg-white transition-all duration-200 h-auto"
+        style={{ 
+          paddingRight: isAIOpen ? (typeof window !== 'undefined' && window.innerWidth < 1024 ? "0px" : "400px") : "0px",
+        }}
+      >
+        
+        {/* 🛰️ TOPBAR (HIDDEN ON MOBILE to favor NavBar mobile header) */}
+        <div className="top-bar hidden lg:block">
+          <TopBar />
         </div>
 
-        <AIAssistant isOpen={isAIOpen} setIsOpen={setIsAIOpen} />
-        <AIFloatingButton isOpen={isAIOpen} onClick={() => setIsAIOpen(true)} />
-        <ScrollToTop />
+        {/* 📄 PAGE CONTENT */}
+        <main className="pt-16 lg:pt-16 min-h-screen px-4 lg:px-10 h-auto overflow-visible">
+          {children}
+        </main>
+        
+      </div>
 
-      </AuthGuard>
-    </AppProviders>
+      <AIAssistant isOpen={isAIOpen} setIsOpen={setIsAIOpen} />
+      <AIFloatingButton isOpen={isAIOpen} onClick={() => setIsAIOpen(true)} />
+      <ScrollToTop />
+    </>
   );
 }
