@@ -288,7 +288,11 @@ export default function TradePanel({
   ========================= */
 
   return (
-    <div data-test-version="v4" className="trade-panel-final-v2 animate-fade-in p-8 space-y-8 !relative !top-0 border-4 border-red-600">
+    <div 
+      data-test-version="v4-final-atom"
+      className="tp-v999-no-sticky animate-fade-in p-8 space-y-8 !relative !top-0 border-8 border-red-600"
+      style={{ position: 'relative !important', top: '0 !important' }}
+    >
       <div className="flex justify-between items-end border-b-2 border-slate-100 pb-6">
         <div>
            <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Status</div>

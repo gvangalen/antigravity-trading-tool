@@ -299,11 +299,11 @@ function BotPageInner() {
         </div>
 
         {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Fixed: Explicitly non-sticky) */}
-        <div className="space-y-6 !relative !top-0">
+        <div className="lg:col-span-1 !relative !top-0 !h-auto">
           <GlobalTradePanel 
             decision={decisionsByBot?.[activeBot?.id]}
             portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
-            onManualTrade={() => handleGenerateDecision(activeBot)} // 🔥 FIX: Pass bot, not order
+            onManualTrade={() => handleGenerateDecision(activeBot)}
           />
         </div>
 

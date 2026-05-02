@@ -2,6 +2,7 @@ import "@/styles/globals.css";
 import AppProviders from "@/app/providers/AppProviders";
 import AuthGuard from "@/components/auth/AuthGuard";
 import InstallPWA from "@/components/ui/InstallPWA";
+import CacheKiller from "@/components/ui/CacheKiller";
 import { BRANDING } from "@/lib/branding";
 
 export const metadata = {
@@ -33,7 +34,8 @@ export default function RootLayout({ children }) {
       <head>
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
       </head>
-      <body>
+      <body className="bg-background text-foreground transition-colors duration-300 selection:bg-blue-600/30">
+        <CacheKiller />
         <AppProviders>
           <AuthGuard>
             {children}

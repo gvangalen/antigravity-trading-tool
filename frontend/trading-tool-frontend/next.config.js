@@ -14,6 +14,9 @@ const nextConfig = {
   },
   reactStrictMode: true,
   transpilePackages: ['rc-slider'], // ✅ Native transpiler for Next.js 13+
+  generateBuildId: async () => {
+    return 'build-' + Date.now();
+  },
   experimental: {
     appDir: true,
   },
