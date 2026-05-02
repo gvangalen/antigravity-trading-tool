@@ -209,7 +209,7 @@ function BotPageInner() {
           </div>
       </header>
 
-      <div className="max-w-full grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-10 items-start pb-24">
+      <div className="max-w-full grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-10 pb-24">
         
         {/* 🕋 LEFT: MAIN COMMAND CENTER */}
         <div className="space-y-12 min-w-0">
@@ -299,7 +299,7 @@ function BotPageInner() {
         </div>
 
         {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Fixed: Explicitly non-sticky) */}
-        <div className="space-y-6 !static lg:!relative">
+        <div className="space-y-6">
           <GlobalTradePanel 
             decision={decisionsByBot?.[activeBot?.id]}
             portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}

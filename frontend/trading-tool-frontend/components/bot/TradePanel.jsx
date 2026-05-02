@@ -288,7 +288,7 @@ export default function TradePanel({
   ========================= */
 
   return (
-    <div className="trade-panel animate-fade-in p-8 space-y-8">
+    <div className="trade-panel-new animate-fade-in p-8 space-y-8">
       <div className="flex justify-between items-end border-b-2 border-slate-100 pb-6">
         <div>
            <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Status</div>
