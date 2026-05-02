@@ -39,6 +39,7 @@ export default function AddBotForm({
     mode: "manual",
     is_live: false,
     risk_profile: "balanced",
+    base_currency: "EUR",
   });
 
   /* =====================================================
@@ -58,6 +59,7 @@ export default function AddBotForm({
       mode: initialData.mode ?? "manual",
       is_live: initialData.is_live ?? false,
       risk_profile: initialData.risk_profile ?? "balanced",
+      base_currency: initialData.base_currency ?? "EUR",
     });
   }, [initialData]);
 
@@ -219,7 +221,7 @@ export default function AddBotForm({
           </div>
         </div>
       </div>
-
+ 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
@@ -241,6 +243,30 @@ export default function AddBotForm({
                   {r.label}
                 </option>
               ))}
+            </select>
+            <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
+               ▼
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+            Base Currency
+          </label>
+          <div className="relative">
+            <select
+              className="w-full bg-card border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground appearance-none focus:border-blue-600 outline-none"
+              value={form.base_currency}
+              onChange={(e) =>
+                setForm((s) => ({
+                  ...s,
+                  base_currency: e.target.value,
+                }))
+              }
+            >
+              <option value="EUR">🇪🇺 EUR (Euro)</option>
+              <option value="USD">🇺🇸 USD (US Dollar)</option>
             </select>
             <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
                ▼

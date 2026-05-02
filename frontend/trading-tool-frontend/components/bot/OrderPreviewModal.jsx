@@ -24,7 +24,8 @@ export default function OrderPreviewModal({
   onConfirm,
   onCancel,
   onRefresh,
-  loading = false
+  loading = false,
+  currencySymbol = "€"
 }) {
   const [seconds, setSeconds] = useState(10);
 
@@ -83,14 +84,14 @@ export default function OrderPreviewModal({
                       {isBuy ? 'Markt Koop' : 'Markt Verkoop'}
                    </div>
                    <div className="text-lg font-black text-slate-900 tracking-tighter">
-                      {preview.symbol} / EUR
+                      {preview.symbol} / {currencySymbol === "€" ? "EUR" : "USD"}
                    </div>
                 </div>
              </div>
              <div className="text-right">
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Actuele Koers</div>
                 <div className="text-lg font-black text-slate-900 tracking-tighter">
-                   € {fmt(preview.price)}
+                   {currencySymbol} {fmt(preview.price)}
                 </div>
              </div>
           </div>
@@ -99,7 +100,7 @@ export default function OrderPreviewModal({
           <div className="space-y-3">
              <div className="flex justify-between items-center px-2">
                 <span className="text-xs font-bold text-slate-400 uppercase">Order Bedrag</span>
-                <span className="text-sm font-black text-slate-900">€ {fmt(preview.gross_eur)}</span>
+                <span className="text-sm font-black text-slate-900">{currencySymbol} {fmt(preview.gross_eur)}</span>
              </div>
              
              <div className="flex justify-between items-center px-2">
@@ -107,7 +108,7 @@ export default function OrderPreviewModal({
                    Geschatte Fee 
                    <span className="px-1.5 py-0.5 bg-slate-100 text-[9px] rounded-md text-slate-500">{(preview.fee_rate * 100).toFixed(2)}%</span>
                 </span>
-                <span className="text-sm font-black text-rose-600">- € {fmt(preview.fee_eur)}</span>
+                <span className="text-sm font-black text-rose-600">- {currencySymbol} {fmt(preview.fee_eur)}</span>
              </div>
 
              <div className="h-px bg-slate-100 my-2" />
@@ -120,7 +121,7 @@ export default function OrderPreviewModal({
                    </div>
                    {isBuy && (
                       <div className="text-[10px] font-bold text-blue-400 uppercase tracking-tighter">
-                         € {fmt(preview.net_eur)} netto waarde
+                         {currencySymbol} {fmt(preview.net_eur)} netto waarde
                       </div>
                    )}
                 </div>

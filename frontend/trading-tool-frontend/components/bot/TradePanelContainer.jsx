@@ -283,7 +283,7 @@ export default function TradePanelContainer({
         balanceQuote={balanceQuote}
         availableQuote={availableQuote}
         balanceBase={balanceBase}
-        quoteSymbol="EUR"
+        quoteSymbol={bot?.base_currency || "EUR"}
         baseSymbol="BTC"
         watchLevels={watchLevels}
         strategy={strategy}
@@ -296,6 +296,7 @@ export default function TradePanelContainer({
         <OrderPreviewModal
           preview={previewData}
           loading={loading}
+          currencySymbol={bot?.base_currency === "USD" ? "$" : "€"}
           onConfirm={handleConfirmOrder}
           onCancel={() => setShowPreview(false)}
           onRefresh={refreshPreview}

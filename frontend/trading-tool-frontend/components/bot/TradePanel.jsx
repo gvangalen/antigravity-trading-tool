@@ -408,7 +408,7 @@ export default function TradePanel({
 
         {!hasBalance && (
           <div className="flex items-center gap-2 p-3 bg-rose-50 text-rose-600 rounded-xl border border-rose-100 text-[10px] font-black uppercase tracking-widest">
-            <XCircle size={14}/> {side === "buy" ? "Onvoldoende EUR" : "Onvoldoende BTC"}
+            <XCircle size={14}/> {side === "buy" ? `Onvoldoende ${quoteSymbol}` : `Onvoldoende ${baseSymbol}`}
           </div>
         )}
       </div>
