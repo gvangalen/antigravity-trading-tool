@@ -295,16 +295,18 @@ function BotPageInner() {
                 );
               })}
             </div>
+            
+            <div className="mt-20">
+              <GlobalTradePanel 
+                decision={decisionsByBot?.[activeBot?.id]}
+                portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
+                onManualTrade={() => handleGenerateDecision(activeBot)}
+              />
+            </div>
           </div>
         </div>
 
-        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Fixed: Integrated into flow) */}
         <div className="lg:col-span-1">
-          <GlobalTradePanel 
-            decision={decisionsByBot?.[activeBot?.id]}
-            portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
-            onManualTrade={() => handleGenerateDecision(activeBot)}
-          />
         </div>
 
       </div>
