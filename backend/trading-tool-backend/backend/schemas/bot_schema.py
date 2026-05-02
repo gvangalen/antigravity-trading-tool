@@ -14,6 +14,7 @@ class BotConfigCreateSchema(BaseModel):
     budget_max_order_eur: float = 0.0
     max_asset_exposure_pct: float = 100.0
     cadence: str = "daily"
+    base_currency: str = "EUR"
 
 class BotConfigUpdateSchema(BaseModel):
     name: Optional[str] = None
@@ -27,6 +28,7 @@ class BotConfigUpdateSchema(BaseModel):
     budget_max_order_eur: Optional[float] = None
     max_asset_exposure_pct: Optional[float] = None
     cadence: Optional[str] = None
+    base_currency: Optional[str] = None
     
     # Aliases
     total_eur: Optional[float] = None

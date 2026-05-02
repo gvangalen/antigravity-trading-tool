@@ -42,7 +42,7 @@ class BotRepository:
             SELECT
               b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
               b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
-              b.budget_max_order_eur, b.max_asset_exposure_pct, b.last_run,
+              b.budget_max_order_eur, b.max_asset_exposure_pct, b.base_currency, b.last_run,
               b.created_at, b.updated_at,
               s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
               st.id AS setup_id, st.name AS setup_name, st.symbol AS symbol, st.timeframe AS timeframe
@@ -60,7 +60,7 @@ class BotRepository:
             SELECT
               b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
               b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
-              b.budget_max_order_eur, b.max_asset_exposure_pct, b.last_run,
+              b.budget_max_order_eur, b.max_asset_exposure_pct, b.base_currency, b.last_run,
               b.created_at, b.updated_at,
               s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
               st.id AS setup_id, st.name AS setup_name, st.symbol AS symbol, st.timeframe AS timeframe
@@ -230,11 +230,11 @@ class BotRepository:
             INSERT INTO bot_configs (
                 user_id, name, strategy_id, mode, risk_profile, cadence,
                 budget_total_eur, budget_daily_limit_eur, budget_min_order_eur,
-                budget_max_order_eur, max_asset_exposure_pct, created_at, updated_at
+                budget_max_order_eur, max_asset_exposure_pct, base_currency, created_at, updated_at
             )
             VALUES (:user_id, :name, :strategy_id, :mode, :risk_profile, :cadence,
                     :budget_total_eur, :budget_daily_limit_eur, :budget_min_order_eur,
-                    :budget_max_order_eur, :max_asset_exposure_pct, NOW(), NOW())
+                    :budget_max_order_eur, :max_asset_exposure_pct, :base_currency, NOW(), NOW())
             RETURNING id
         """)
         result = await self.session.execute(query, payload)
@@ -298,7 +298,8 @@ class BotRepository:
             SELECT
               id, name, is_active, is_live, mode, COALESCE(risk_profile,'balanced') as risk_profile,
               COALESCE(budget_total_eur,0) as budget_total_eur, COALESCE(budget_daily_limit_eur,0) as budget_daily_limit_eur,
-              COALESCE(budget_min_order_eur,0) as budget_min_order_eur, COALESCE(budget_max_order_eur,0) as budget_max_order_eur
+              COALESCE(budget_min_order_eur,0) as budget_min_order_eur, COALESCE(budget_max_order_eur,0) as budget_max_order_eur,
+              COALESCE(base_currency, 'EUR') as base_currency
             FROM bot_configs
             WHERE user_id=:user_id
             ORDER BY id ASC
