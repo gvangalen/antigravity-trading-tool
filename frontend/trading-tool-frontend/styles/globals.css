@@ -191,8 +191,15 @@
   animation: pulse-soft 3s ease-in-out infinite;
 }
 
+html, body {
+  height: auto !important;
+  min-h-screen: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+}
+
 body {
-  @apply bg-white text-slate-900 antialiased font-sans selection:bg-blue-600 selection:text-white overflow-x-hidden;
+  @apply bg-white text-slate-900 antialiased font-sans selection:bg-blue-600 selection:text-white;
   background-color: var(--color-bg);
   color: var(--color-text);
   letter-spacing: -0.015em;

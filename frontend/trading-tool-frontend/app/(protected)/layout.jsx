@@ -20,7 +20,7 @@ export default function ProtectedLayout({ children }) {
 
         {/* 🕋 MAIN CONTENT SHELL */}
         <div 
-          className="lg:pl-64 min-h-screen bg-white transition-all duration-200"
+          className="lg:pl-64 min-h-screen bg-white transition-all duration-200 h-auto"
           style={{ 
             paddingRight: isAIOpen ? (typeof window !== 'undefined' && window.innerWidth < 1024 ? "0px" : "400px") : "0px",
           }}
@@ -30,9 +30,9 @@ export default function ProtectedLayout({ children }) {
           <div className="top-bar hidden lg:block">
             <TopBar />
           </div>
-
+ 
           {/* 📄 PAGE CONTENT */}
-          <main className="pt-16 lg:pt-16 min-h-screen px-4 lg:px-10">
+          <main className="pt-16 lg:pt-16 min-h-screen px-4 lg:px-10 h-auto overflow-visible">
             {children}
           </main>
           

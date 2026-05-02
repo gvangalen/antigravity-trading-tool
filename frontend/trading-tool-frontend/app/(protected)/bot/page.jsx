@@ -193,7 +193,7 @@ function BotPageInner() {
   };
 
   return (
-    <div className="page-container !max-w-none !px-6 bg-white dark:bg-[#020617] transition-colors min-h-screen">
+    <div className="page-container !max-w-none !px-6 bg-white dark:bg-[#020617] transition-colors h-auto overflow-visible">
       
       {/* 🟢 STANDARD PAGE HEADER */}
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
