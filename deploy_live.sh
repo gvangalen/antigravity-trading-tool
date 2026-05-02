@@ -22,7 +22,7 @@ ssh -i $SSH_KEY -o StrictHostKeyChecking=no ubuntu@$SERVER_IP "
     git clean -fd && \
     $PM2_PATH delete frontend || true && \
     cd frontend/trading-tool-frontend && \
-    $PM2_PATH serve out 5005 --name "frontend" --spa && \
+    $PM2_PATH start 'npx serve out -p 5002 -s' --name 'frontend' && \
     cd ../.. && \
     $PM2_PATH restart all
 "
