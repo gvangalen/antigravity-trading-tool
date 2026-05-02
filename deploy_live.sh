@@ -19,6 +19,7 @@ ssh -i $SSH_KEY -o StrictHostKeyChecking=no ubuntu@$SERVER_IP "
     cd ~/antigravity-trading-tool && \
     git fetch origin main && \
     git reset --hard origin/main && \
+    git clean -fd && \
     $PM2_PATH restart all
 "
 
