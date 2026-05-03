@@ -19,7 +19,7 @@ module.exports = {
     },
     {
       name: 'celery-worker',
-      script: 'celery',
+      script: '/home/ubuntu/.local/bin/celery',
       args: '-A backend.celery_task.celery_app worker --loglevel=info --concurrency=1',
       cwd: './backend/trading-tool-backend',
       interpreter: 'none',
@@ -27,7 +27,7 @@ module.exports = {
     },
     {
       name: 'celery-beat',
-      script: 'celery',
+      script: '/home/ubuntu/.local/bin/celery',
       args: '-A backend.celery_task.celery_app beat --loglevel=info',
       cwd: './backend/trading-tool-backend',
       interpreter: 'none',
