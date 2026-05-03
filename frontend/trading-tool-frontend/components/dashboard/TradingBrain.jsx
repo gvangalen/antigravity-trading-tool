@@ -24,14 +24,15 @@ import { useTranslation } from "@/app/providers/I18nProvider";
  * 🧠 TradingBrain — Unified Decision Panel (V2.1)
  * Combines Master Score, Active Setup, AI Advice, Bot Status, and Daily Snippet.
  */
-export default function TradingBrain() {
+export default function TradingBrain({ symbol = "BTC" }) {
   const { t } = useTranslation();
   const { activeSetup, loading: setupLoading } = useActiveSetup();
-  const { macro, technical, market, setup: dailySetup, master, loading: scoresLoading } = useScoresData();
+  const { macro, technical, market, setup: dailySetup, master, loading: scoresLoading } = useScoresData(symbol);
   const { summary, aiStatus, loading: sidebarLoading } = useSidebarData();
+  const { data: marketIntelligence, loading: intelLoading } = useMarketIntelligence(symbol);
   const { strategy, loading: strategyLoading } = useSetupStrategy(activeSetup?.id);
 
-  const isLoading = setupLoading || scoresLoading || sidebarLoading || strategyLoading;
+  const isLoading = setupLoading || scoresLoading || sidebarLoading || strategyLoading || intelLoading;
   
   // 1. DATA PREP
   const ticker = activeSetup?.symbol || "–";
@@ -54,7 +55,7 @@ export default function TradingBrain() {
                 activeSetup?.name?.toLowerCase().includes("dca");
   
   // Minimal report snippet (1 sentence)
-  const reportSnippet = (master?.summary || summary)?.split('.')[0] + '.';
+  const reportSnippet = (marketIntelligence?.summary || master?.summary || summary)?.split('.')[0] + '.';
 
   if (isLoading && !activeSetup) {
     return <BrainSkeleton />;

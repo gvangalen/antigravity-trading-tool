@@ -24,17 +24,17 @@ class ScoreService:
 
     async def get_macro_score(self, user_id: int):
         # We invoke the legacy synchronous generation utilities via thread worker
-        return await asyncio.to_thread(generate_scores_db, "macro", user_id=user_id)
+        return await asyncio.to_thread(generate_scores_db, "macro", user_id=user_id, symbol="BTC") # Macro is asset-agnostic
 
-    async def get_technical_score(self, user_id: int):
-        return await asyncio.to_thread(generate_scores_db, "technical", user_id=user_id)
+    async def get_technical_score(self, user_id: int, symbol: str = "BTC"):
+        return await asyncio.to_thread(generate_scores_db, "technical", user_id=user_id, symbol=symbol)
 
-    async def get_market_score(self, user_id: int):
-        return await asyncio.to_thread(generate_scores_db, "market", user_id=user_id)
+    async def get_market_score(self, user_id: int, symbol: str = "BTC"):
+        return await asyncio.to_thread(generate_scores_db, "market", user_id=user_id, symbol=symbol)
 
-    async def get_daily_scores(self, user_id: int) -> DailyCombinedScoreResponse:
-        logger.info(f"🔍 Fetching daily scores for user_id={user_id}")
-        scores = await self.repository.fetch_daily_scores(user_id)
+    async def get_daily_scores(self, user_id: int, symbol: str = "BTC") -> DailyCombinedScoreResponse:
+        logger.info(f"🔍 Fetching daily scores for user_id={user_id} symbol={symbol}")
+        scores = await self.repository.fetch_daily_scores(user_id, symbol)
         logger.info(f"📊 Raw scores from DB: {scores}")
         if not scores:
             logger.warning(f"⚠️ No daily scores found for user_id={user_id} today")

@@ -192,6 +192,41 @@ function BotPageInner() {
     if (type === "delete") { openConfirm({ title: "🗑️ Delete", tone: "danger", confirmText: "Delete", onConfirm: async () => { await deleteBot(bot.id); showSnackbar("Bot deleted", "danger"); } }); }
   };
 
+  /* =====================================================
+     🛸 THE GLIDER (ULTRA-SMOOTH 60FPS VERSION)
+  ===================================================== */
+  const gliderRef = useRef(null);
+  const requestRef = useRef();
+
+  useEffect(() => {
+    const updatePosition = () => {
+      if (!gliderRef.current) return;
+      
+      const container = gliderRef.current.parentElement;
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const offset = Math.max(0, -rect.top + 100); // 100px margin from top
+      
+      const containerHeight = container.offsetHeight;
+      const gliderHeight = gliderRef.current.offsetHeight;
+      const maxOffset = Math.max(0, containerHeight - gliderHeight - 40);
+      
+      const finalOffset = Math.min(offset, maxOffset);
+      
+      // Direct DOM manipulation for maximum performance (no React jitter)
+      gliderRef.current.style.transform = `translate3d(0, ${finalOffset}px, 0)`;
+      
+      requestRef.current = requestAnimationFrame(updatePosition);
+    };
+
+    requestRef.current = requestAnimationFrame(updatePosition);
+    
+    return () => {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
+  }, [bots.length]); 
+
   return (
     <div className="page-container !max-w-none !px-6 bg-white dark:bg-[#020617] transition-colors h-auto overflow-visible">
       
@@ -209,10 +244,11 @@ function BotPageInner() {
           </div>
       </header>
 
-      <div className="max-w-full flex flex-col lg:flex-row gap-10 pb-24 items-start">
+      <div className="max-w-full flex flex-col lg:flex-row gap-10 pb-24 items-start relative">
         
         {/* 🕋 LEFT: MAIN COMMAND CENTER */}
         <div className="flex-1 min-w-0 space-y-12">
+          {/* ... existing content ... */}
           <div className="space-y-6">
             <BotScores scores={dailyScores} loading={loading?.today} />
             
@@ -298,13 +334,22 @@ function BotPageInner() {
           </div>
         </div>
 
-        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (Watermark: v2155) */}
-        <div id="tp-final-v2155" className="w-full lg:w-[350px] shrink-0 !relative !h-auto !top-0 !block">
-          <GlobalTradePanel 
-            decision={decisionsByBot?.[activeBot?.id]}
-            portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
-            onManualTrade={() => handleGenerateDecision(activeBot)}
-          />
+        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (v2200-SMOOTH) */}
+        <div 
+          className="w-full lg:w-[350px] shrink-0"
+          style={{ 
+            willChange: 'transform',
+            backfaceVisibility: 'hidden'
+          }}
+          ref={gliderRef}
+        >
+          <div id="tp-final-v2200-smooth">
+            <GlobalTradePanel 
+              decision={decisionsByBot?.[activeBot?.id]}
+              portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
+              onManualTrade={() => handleGenerateDecision(activeBot)}
+            />
+          </div>
         </div>
 
       </div>

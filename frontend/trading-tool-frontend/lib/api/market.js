@@ -9,17 +9,21 @@ import { fetchAuth } from "@/lib/api/auth";
 // =======================================================
 //
 
-export const fetchMarketData7d = () => fetchWithRetry(`/api/market_data/7d`, "GET");
-export const fetchLatestBTC = () => fetchWithRetry(`/api/market_data/btc/latest`, "GET");
+export const fetchMarketData7d = (symbol = "BTC") => fetchWithRetry(`/api/market_data/7d?symbol=${symbol}`, "GET");
+export const fetchLatestPrice = (symbol = "BTC") => fetchWithRetry(`/api/market_data/${symbol}/latest`, "GET");
+export const fetchLatestBTC = () => fetchLatestPrice("BTC"); // Fallback
 
-export const fetchForwardReturnsWeek = () =>
-  fetchWithRetry(`/api/market_data/forward/week`, "GET");
-export const fetchForwardReturnsMonth = () =>
-  fetchWithRetry(`/api/market_data/forward/maand`, "GET");
-export const fetchForwardReturnsQuarter = () =>
-  fetchWithRetry(`/api/market_data/forward/kwartaal`, "GET");
-export const fetchForwardReturnsYear = () =>
-  fetchWithRetry(`/api/market_data/forward/jaar`, "GET");
+export const syncMarketData7d = (symbol = "BTC", overwrite = false) =>
+  fetchAuth(`/api/market_data/7d/fill?symbol=${symbol}&overwrite=${overwrite}`, { method: "POST" });
+
+export const fetchForwardReturnsWeek = (symbol = "BTC") =>
+  fetchWithRetry(`/api/market_data/forward/week?symbol=${symbol}`, "GET");
+export const fetchForwardReturnsMonth = (symbol = "BTC") =>
+  fetchWithRetry(`/api/market_data/forward/maand?symbol=${symbol}`, "GET");
+export const fetchForwardReturnsQuarter = (symbol = "BTC") =>
+  fetchWithRetry(`/api/market_data/forward/kwartaal?symbol=${symbol}`, "GET");
+export const fetchForwardReturnsYear = (symbol = "BTC") =>
+  fetchWithRetry(`/api/market_data/forward/jaar?symbol=${symbol}`, "GET");
 
 //
 // =======================================================
@@ -27,11 +31,11 @@ export const fetchForwardReturnsYear = () =>
 // =======================================================
 //
 
-export const fetchMarketDayData = () =>
-  fetchAuth(`/api/market_data/day`, { method: "GET" });
+export const fetchMarketDayData = (symbol = "BTC") =>
+  fetchAuth(`/api/market_data/day?symbol=${symbol}`, { method: "GET" });
 
-export const fetchUserMarketHistory = () =>
-  fetchAuth(`/api/market_data/indicators`, { method: "GET" });
+export const fetchUserMarketHistory = (symbol = "BTC") =>
+  fetchAuth(`/api/market_data/indicators?symbol=${symbol}`, { method: "GET" });
 
 //
 // =======================================================
@@ -45,22 +49,22 @@ export const getMarketIndicatorNames = () =>
 export const getScoreRulesForMarketIndicator = (name) =>
   fetchAuth(`/api/market/indicator_rules/${encodeURIComponent(name)}`, { method: "GET" });
 
-export const getUserMarketIndicators = () =>
-  fetchAuth(`/api/market_data/indicators`, { method: "GET" });
+export const getUserMarketIndicators = (symbol = "BTC") =>
+  fetchAuth(`/api/market_data/indicators?symbol=${symbol}`, { method: "GET" });
 
-export const marketIndicatorAdd = (indicatorName) =>
+export const marketIndicatorAdd = (indicatorName, symbol = "BTC") =>
   fetchAuth(`/api/market_data/indicator`, {
     method: "POST",
-    body: JSON.stringify({ indicator: indicatorName }),
+    body: JSON.stringify({ indicator: indicatorName, symbol }),
   });
 
 // ✅ DELETE OP NAME (zoals macro) + URL encode
-export const marketIndicatorDelete = (indicatorName) => {
+export const marketIndicatorDelete = (indicatorName, symbol = "BTC") => {
   if (!indicatorName) throw new Error("indicatorName is verplicht");
 
   const safe = encodeURIComponent(String(indicatorName).trim().toLowerCase());
 
-  return fetchAuth(`/api/market_data/indicator/${safe}`, {
+  return fetchAuth(`/api/market_data/indicator/${safe}?symbol=${symbol}`, {
     method: "DELETE",
   });
 };

@@ -28,7 +28,7 @@ const getAdvies = (score) =>
 /* ========================================================
    MAIN HOOK
 ======================================================== */
-export function useMarketData() {
+export function useMarketData(symbol = "BTC") {
   const [sevenDayData, setSevenDayData] = useState([]);
   const [btcLive, setBtcLive] = useState(null);
 
@@ -62,9 +62,9 @@ export function useMarketData() {
   -------------------------------------------------------- */
   useEffect(() => {
     loadAll();
-    const interval = setInterval(loadLiveBTC, 60000);
+    const interval = setInterval(loadLivePrice, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [symbol]);
 
   /* --------------------------------------------------------
      LOAD ALLES
@@ -74,27 +74,27 @@ export function useMarketData() {
     setError("");
 
     try {
-      await loadLiveBTC();
-      setSevenDayData(await fetchMarketData7d());
+      await loadLivePrice();
+      setSevenDayData(await fetchMarketData7d(symbol));
 
       const [week, maand, kwartaal, jaar] = await Promise.all([
-        fetchForwardReturnsWeek(),
-        fetchForwardReturnsMonth(),
-        fetchForwardReturnsQuarter(),
-        fetchForwardReturnsYear(),
+        fetchForwardReturnsWeek(symbol),
+        fetchForwardReturnsMonth(symbol),
+        fetchForwardReturnsQuarter(symbol),
+        fetchForwardReturnsYear(symbol),
       ]);
       setForwardReturns({ week, maand, kwartaal, jaar });
 
-      const dailyScores = await getDailyScores();
+      const dailyScores = await getDailyScores(symbol);
       const score = dailyScores?.market?.score ?? 50;
       setMarketScore(score);
       setAdviesState(getAdvies(score));
 
-      setMarketDayData((await fetchMarketDayData()) || []);
-      setActiveMarketIndicators((await getUserMarketIndicators()) || []);
+      setMarketDayData((await fetchMarketDayData(symbol)) || []);
+      setActiveMarketIndicators((await getUserMarketIndicators(symbol)) || []);
       setAvailableIndicators((await getMarketIndicatorNames()) || []);
     } catch (err) {
-      console.error("❌ loadAll error:", err);
+      console.error(`❌ loadAll error (${symbol}):`, err);
       setError("Kon market data niet laden.");
     } finally {
       setLoading(false);
@@ -102,11 +102,27 @@ export function useMarketData() {
   }
 
   /* --------------------------------------------------------
-     LIVE BTC
+     SYNC HISTORY
   -------------------------------------------------------- */
-  async function loadLiveBTC() {
+  async function syncHistory(targetSymbol = symbol) {
+    setLoading(true);
     try {
-      setBtcLive(await fetchLatestBTC());
+      await syncMarketData7d(targetSymbol, true);
+      await loadAll();
+    } catch (err) {
+      console.error(`❌ syncHistory error (${targetSymbol}):`, err);
+      setError("Kon history niet synchroniseren.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* --------------------------------------------------------
+     LIVE PRICE
+  -------------------------------------------------------- */
+  async function loadLivePrice() {
+    try {
+      setBtcLive(await fetchLatestPrice(symbol));
     } catch {
       setBtcLive(null);
     }
@@ -132,11 +148,11 @@ export function useMarketData() {
      REFRESH HELPERS
   -------------------------------------------------------- */
   async function refreshDay() {
-    setMarketDayData((await fetchMarketDayData()) || []);
+    setMarketDayData((await fetchMarketDayData(symbol)) || []);
   }
 
   async function refreshActive() {
-    setActiveMarketIndicators((await getUserMarketIndicators()) || []);
+    setActiveMarketIndicators((await getUserMarketIndicators(symbol)) || []);
   }
 
   /* --------------------------------------------------------
@@ -150,7 +166,7 @@ export function useMarketData() {
       return;
     }
 
-    await marketIndicatorAdd(indicatorName);
+    await marketIndicatorAdd(indicatorName, symbol);
 
     // refresh
     await refreshActive();
@@ -168,7 +184,7 @@ export function useMarketData() {
     const normalized = String(indicatorName).trim().toLowerCase();
 
     // 1) API delete
-    await marketIndicatorDelete(normalized);
+    await marketIndicatorDelete(normalized, symbol);
 
     // 2) Optimistic state update (direct uit UI halen)
     setMarketDayData((prev) =>
@@ -206,6 +222,7 @@ export function useMarketData() {
 
     addMarket,
     removeMarket,
+    syncHistory,
 
     availableIndicators,
     selectedIndicator,

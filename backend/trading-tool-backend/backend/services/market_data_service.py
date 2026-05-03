@@ -33,9 +33,9 @@ def sync_score_indicator(category: str, indicator: str, value: float, user_id: i
         if conn:
             conn.close()
 
-def sync_get_scores_for_symbol(user_id: int) -> Dict[str, Any]:
+def sync_get_scores_for_symbol(user_id: int, symbol: str = "BTC") -> Dict[str, Any]:
     from backend.utils.scoring_utils import get_scores_for_symbol
-    return get_scores_for_symbol(user_id=user_id, include_metadata=True)
+    return get_scores_for_symbol(user_id=user_id, symbol=symbol, include_metadata=True)
 
 
 
@@ -48,7 +48,7 @@ class MarketDataService:
     # CORE: List / Latest Datasets
     # =========================================================
     async def get_latest_btc_price(self) -> Optional[MarketDataResponse]:
-        snapshot = await self.repository.get_latest_btc_snapshot()
+        snapshot = await self.repository.get_latest_snapshot("BTC")
         if not snapshot:
             return None
         return MarketDataResponse.from_orm(snapshot)
@@ -73,7 +73,7 @@ class MarketDataService:
 
         # Bepaal value als deze leeg is
         if value is None:
-            snapshot = await self.repository.get_latest_btc_snapshot()
+            snapshot = await self.repository.get_latest_snapshot("BTC")
             if not snapshot:
                 raise HTTPException(404, "Geen globale BTC market_data gevonden.")
             
@@ -163,24 +163,34 @@ class MarketDataService:
     # =========================================================
     # 7D Data Fill & Fetch
     # =========================================================
-    async def fill_btc_7day_data(self, fallback_endpoints: dict, overwrite: bool = False) -> dict:
-        logger.info(f"📥 Handmatig ophalen BTC 7d market data gestart (overwrite={overwrite})")
-        coingecko_id = "bitcoin"
+    async def sync_symbol_7day_data(self, symbol: str, overwrite: bool = False) -> dict:
+        symbol = symbol.upper()
+        mapping = {
+            "BTC": "bitcoin",
+            "ETH": "ethereum",
+            "SOL": "solana"
+        }
+        coingecko_id = mapping.get(symbol)
+        if not coingecko_id:
+            return {"error": f"Symbol {symbol} niet ondersteund voor sync"}
+
+        logger.info(f"📥 Sync {symbol} 7d market data gestart (CG ID: {coingecko_id}, overwrite={overwrite})")
         url_ohlc = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/ohlc?vs_currency=usd&days=180"
-        url_volume = fallback_endpoints.get(
-            "btc_volume",
-            f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/market_chart?vs_currency=usd&days=180"
-        )
+        url_volume = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/market_chart?vs_currency=usd&days=180"
         
         async with httpx.AsyncClient(timeout=15.0) as client:
             res_ohlc = await client.get(url_ohlc)
             res_vol = await client.get(url_volume)
 
+            if res_ohlc.status_code != 200 or res_vol.status_code != 200:
+                logger.error(f"❌ CoinGecko API fout voor {symbol}: OHLC={res_ohlc.status_code}, VOL={res_vol.status_code}")
+                return {"error": f"CoinGecko API fout: {res_ohlc.status_code}"}
+
             ohlc_data = res_ohlc.json()
             volume_data = res_vol.json().get("total_volumes", [])
             
         if not isinstance(ohlc_data, list):
-            logger.error(f"❌ Ongeldige OHLC data van CoinGecko: {ohlc_data}")
+            logger.error(f"❌ Ongeldige OHLC data van CoinGecko voor {symbol}: {ohlc_data}")
             return {"error": "Ongeldige data bron"}
 
         volume_by_date = {
@@ -193,13 +203,13 @@ class MarketDataService:
         for entry in ohlc_data:
             ts, open_p, high_p, low_p, close_p = entry
             d = datetime.utcfromtimestamp(ts / 1000).date()
-            change = round((close_p - open_p) / open_p * 100, 2)
+            change = round((close_p - open_p) / open_p * 100, 2) if open_p else 0
             volume = volume_by_date.get(d)
 
-            existing = await self.repository.get_7d_record("BTC", d)
+            existing = await self.repository.get_7d_record(symbol, d)
             if not existing:
                 new_7d = MarketData7D(
-                    symbol="BTC",
+                    symbol=symbol,
                     date=d,
                     open=open_p,
                     high=high_p,
@@ -219,19 +229,22 @@ class MarketDataService:
                 existing.close = close_p
                 existing.change = change
                 existing.volume = volume or existing.volume
-                existing.created_at = datetime.utcnow() # Markeer als bijgewerkt
+                existing.created_at = datetime.utcnow()
                 updated += 1
 
         await self.session.commit()
         return {
-            "status": "✅ Sync voltooid", 
+            "status": f"✅ Sync {symbol} voltooid", 
             "inserted": inserted, 
             "updated": updated
         }
 
-    async def get_market_data_7d(self) -> List[MarketData7DResponse]:
-        records = await self.repository.get_market_data_7d("BTC")
-        # Origin returns reverse (oud -> nieuw)
+    async def fill_btc_7day_data(self, fallback_endpoints: dict = None, overwrite: bool = False) -> dict:
+        """Legacy wrapper for BTC."""
+        return await self.sync_symbol_7day_data("BTC", overwrite)
+
+    async def get_market_data_7d(self, symbol: str = "BTC") -> List[MarketData7DResponse]:
+        records = await self.repository.get_market_data_7d(symbol.upper())
         resp = [MarketData7DResponse.from_orm(r) for r in records]
         resp.reverse()
         return resp
@@ -239,12 +252,12 @@ class MarketDataService:
     # =========================================================
     # Forward Returns
     # =========================================================
-    async def get_market_forward_returns(self) -> List[MarketForwardReturnResponse]:
-        records = await self.repository.get_forward_returns("BTC")
+    async def get_market_forward_returns(self, symbol: str = "BTC") -> List[MarketForwardReturnResponse]:
+        records = await self.repository.get_forward_returns(symbol.upper())
         return [MarketForwardReturnResponse.from_orm(r) for r in records]
 
-    async def get_forward_returns_aggregated(self, period: str) -> List[ForwardReturnChartResponse]:
-        records = await self.repository.get_forward_returns_by_period("BTC", period)
+    async def get_forward_returns_aggregated(self, period: str, symbol: str = "BTC") -> List[ForwardReturnChartResponse]:
+        records = await self.repository.get_forward_returns_by_period(symbol.upper(), period)
         
         if period == '7d':
              data = defaultdict(lambda: [None] * 53)
@@ -275,12 +288,13 @@ class MarketDataService:
     # =========================================================
     # Interpreted Data
     # =========================================================
-    async def get_interpreted_data(self, user_id: int) -> dict:
-        snapshot = await self.repository.get_latest_btc_snapshot()
+    async def get_interpreted_data(self, user_id: int, symbol: str = "BTC") -> dict:
+        symbol = symbol.upper()
+        snapshot = await self.repository.get_latest_snapshot(symbol)
         if not snapshot:
-            raise HTTPException(404, "Geen BTC data gevonden.")
+            raise HTTPException(404, f"Geen {symbol} data gevonden.")
 
-        scores = await asyncio.to_thread(sync_get_scores_for_symbol, int(user_id))
+        scores = await asyncio.to_thread(sync_get_scores_for_symbol, int(user_id), symbol)
 
         return {
             "symbol": snapshot.symbol,
@@ -291,5 +305,5 @@ class MarketDataService:
             "score": scores.get("market_score", 10) or 10,
             "top_contributors": scores.get("market_top_contributors", []),
             "interpretation": scores.get("market_interpretation", "Geen interpretatie"),
-            "action": "Market-score is globaal, advies is informatief.",
+            "action": f"Market-score voor {symbol} is globaal, advies is informatief.",
         }

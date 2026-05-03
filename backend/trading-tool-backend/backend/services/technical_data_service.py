@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
@@ -22,7 +22,7 @@ class TechnicalDataService:
         self.session = session
         self.repository = TechnicalDataRepository(session)
 
-    async def add_technical_indicator(self, name_raw: str, user_id: int) -> Dict[str, Any]:
+    async def add_technical_indicator(self, name_raw: str, user_id: int, symbol: str = "BTC") -> Dict[str, Any]:
         """
         Voegt een technische indicator toe, roept de interpreter op, berekent de score en slaat de waarde op.
         Ondersteunt asynchrone DB en async fetch, maar synchrone scoring via to_thread.
@@ -30,24 +30,25 @@ class TechnicalDataService:
         # Normaliseer de naam
         name = normalize_indicator_name(name_raw)
 
-        # 1. Check op duplicates
-        is_duplicate = await self.repository.check_duplicate(name, user_id)
+        # 1. Check op duplicates (nu symbol-aware)
+        is_duplicate = await self.repository.check_duplicate(name, user_id, symbol)
         if is_duplicate:
-            raise ValueError(f"Indicator '{name}' is al toegevoegd.")
+            raise ValueError(f"Indicator '{name}' is al toegevoegd voor {symbol}.")
 
         # 2. Haal config op
         cfg = await self.repository.get_indicator_config(name)
         if not cfg:
             raise ValueError(f"Indicator '{name}' niet gevonden of niet actief.")
 
-        # 3. Interpreter call (async)
+        # 3. Interpreter call (async) - Symbol doorgeven!
         result = await fetch_technical_value(
             name=name,
             source=cfg.source,
-            link=cfg.link
+            link=cfg.link,
+            symbol=symbol
         )
         if not result:
-            raise ValueError(f"Geen waarde ontvangen voor '{name}'.")
+            raise ValueError(f"Geen waarde ontvangen voor '{name}' ({symbol}).")
 
         val = float(result["value"] if isinstance(result, dict) else result)
 
@@ -74,14 +75,15 @@ class TechnicalDataService:
         advies = scored.get("trend") or "neutral"
         uitleg = scored.get("interpretation") or "Geen interpretatie beschikbaar"
 
-        # 5. Opslaan in database via async Repository
+        # 5. Opslaan in database via async Repository (nu symbol-aware)
         new_ind = await self.repository.add_indicator(
             name=name,
             value=val,
             score=score,
             advies=advies,
             uitleg=uitleg,
-            user_id=user_id
+            user_id=user_id,
+            symbol=symbol
         )
 
         # Mark onboarding step
@@ -95,3 +97,17 @@ class TechnicalDataService:
             "advies": new_ind.advies,
             "uitleg": new_ind.uitleg
         }
+
+    async def get_indicators(self, user_id: int, symbol: Optional[str] = None) -> List[Any]:
+        return await self.repository.get_latest_for_user(user_id, symbol)
+
+    async def get_day_indicators(self, user_id: int, symbol: Optional[str] = None) -> List[Any]:
+        return await self.repository.get_day_data(user_id, symbol)
+
+    async def delete_indicator(self, name_raw: str, user_id: int, symbol: Optional[str] = None) -> int:
+        name = normalize_indicator_name(name_raw)
+        return await self.repository.delete_indicator(name, user_id, symbol)
+
+    async def get_indicator_rules(self, name_raw: str, user_id: int) -> List[Any]:
+        name = normalize_indicator_name(name_raw)
+        return await self.repository.get_rules_for_indicator(name, user_id)

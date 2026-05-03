@@ -6,11 +6,11 @@ import { API_BASE_URL } from '@/lib/config';
 //
 // =============================================================
 // 📥 1. Alle technische data ophalen (user-specific)
-// =============================================================
-export const technicalDataAll = async () => {
-  console.log("📡 [technicalDataAll] GET /api/technical_data");
+// =============================================
+export const technicalDataAll = async (symbol = "BTC") => {
+  console.log(`📡 [technicalDataAll] GET /api/technical_data?symbol=${symbol}`);
 
-  const data = await fetchAuth(`/api/technical_data`, {
+  const data = await fetchAuth(`/api/technical_data?symbol=${symbol}`, {
     method: "GET",
   });
 
@@ -22,11 +22,12 @@ export const technicalDataAll = async () => {
 // =============================================================
 // ➕ 2. Technische indicator toevoegen (user-specific)
 // =============================================================
-export const technicalDataAdd = async (indicator) => {
-  console.log(`➕ [technicalDataAdd] Indicator toevoegen: ${indicator}`);
+export const technicalDataAdd = async (indicator, symbol = "BTC") => {
+  console.log(`➕ [technicalDataAdd] Indicator toevoegen: ${indicator} voor ${symbol}`);
 
   const payload = {
     indicator,
+    symbol,
     value: 0.0,   
     score: 0,
     advies: null,
@@ -44,10 +45,10 @@ export const technicalDataAdd = async (indicator) => {
 // =============================================================
 // 🗑️ 3. Eén technische indicator verwijderen
 // =============================================================
-export const technicalDataDelete = async (indicator) => {
-  console.log(`🗑️ [technicalDataDelete] DELETE /api/technical_data/${indicator}`);
+export const technicalDataDelete = async (indicator, symbol = "BTC") => {
+  console.log(`🗑️ [technicalDataDelete] DELETE /api/technical_data/${indicator}?symbol=${symbol}`);
 
-  return await fetchAuth(`/api/technical_data/${indicator}`, {
+  return await fetchAuth(`/api/technical_data/${indicator}?symbol=${symbol}`, {
     method: "DELETE",
   });
 };
@@ -60,17 +61,17 @@ export const deleteTechnicalIndicator = technicalDataDelete;
 // =============================================================
 // 📆 4. Periodieke data (day / week / month / quarter)
 // =============================================================
-export const technicalDataDay = async () =>
-  await fetchAuth(`/api/technical_data/day`, { method: "GET" });
+export const technicalDataDay = async (symbol = "BTC") =>
+  await fetchAuth(`/api/technical_data/day?symbol=${symbol}`, { method: "GET" });
 
-export const technicalDataWeek = async () =>
-  await fetchAuth(`/api/technical_data/week`, { method: "GET" });
+export const technicalDataWeek = async (symbol = "BTC") =>
+  await fetchAuth(`/api/technical_data/week?symbol=${symbol}`, { method: "GET" });
 
-export const technicalDataMonth = async () =>
-  await fetchAuth(`/api/technical_data/month`, { method: "GET" });
+export const technicalDataMonth = async (symbol = "BTC") =>
+  await fetchAuth(`/api/technical_data/month?symbol=${symbol}`, { method: "GET" });
 
-export const technicalDataQuarter = async () =>
-  await fetchAuth(`/api/technical_data/quarter`, { method: "GET" });
+export const technicalDataQuarter = async (symbol = "BTC") =>
+  await fetchAuth(`/api/technical_data/quarter?symbol=${symbol}`, { method: "GET" });
 
 
 //

@@ -43,7 +43,7 @@ class BotRepository:
               b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
               b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
               b.budget_max_order_eur, b.max_asset_exposure_pct, b.base_currency, b.last_run,
-              b.created_at, b.updated_at,
+              b.symbol, b.created_at, b.updated_at,
               s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
               st.id AS setup_id, st.name AS setup_name, st.symbol AS symbol, st.timeframe AS timeframe
             FROM bot_configs b
@@ -61,7 +61,7 @@ class BotRepository:
               b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
               b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
               b.budget_max_order_eur, b.max_asset_exposure_pct, b.base_currency, b.last_run,
-              b.created_at, b.updated_at,
+              b.symbol, b.created_at, b.updated_at,
               s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
               st.id AS setup_id, st.name AS setup_name, st.symbol AS symbol, st.timeframe AS timeframe
             FROM bot_configs b
@@ -76,9 +76,8 @@ class BotRepository:
 
     async def get_active_bots_with_setups(self, user_id: int) -> List[dict]:
         query = text("""
-            SELECT
               b.id, b.name,
-              COALESCE(st.symbol,'BTC') AS symbol,
+              COALESCE(b.symbol,'BTC') AS symbol,
               COALESCE(st.timeframe,'—') AS timeframe,
               s.setup_type,
               st.name AS setup_name
@@ -230,11 +229,11 @@ class BotRepository:
             INSERT INTO bot_configs (
                 user_id, name, strategy_id, mode, risk_profile, cadence,
                 budget_total_eur, budget_daily_limit_eur, budget_min_order_eur,
-                budget_max_order_eur, max_asset_exposure_pct, base_currency, created_at, updated_at
+                budget_max_order_eur, max_asset_exposure_pct, base_currency, symbol, created_at, updated_at
             )
             VALUES (:user_id, :name, :strategy_id, :mode, :risk_profile, :cadence,
                     :budget_total_eur, :budget_daily_limit_eur, :budget_min_order_eur,
-                    :budget_max_order_eur, :max_asset_exposure_pct, :base_currency, NOW(), NOW())
+                    :budget_max_order_eur, :max_asset_exposure_pct, :base_currency, :symbol, NOW(), NOW())
             RETURNING id
         """)
         result = await self.session.execute(query, payload)

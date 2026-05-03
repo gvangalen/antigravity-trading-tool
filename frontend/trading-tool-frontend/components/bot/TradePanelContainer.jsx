@@ -264,6 +264,23 @@ export default function TradePanelContainer({
      PRICE LOADING STATE
   ===================================================== */
 
+  /* =====================================================
+     AGGRESSIVE SCROLL SYNC (FOR SAFARI)
+  ===================================================== */
+  useEffect(() => {
+    const sync = () => {
+      const el = document.getElementById("tp-final-v2155");
+      if (el) {
+        el.style.position = "relative";
+        el.style.height = "auto";
+        el.style.display = "block";
+      }
+    };
+    window.addEventListener("scroll", sync);
+    sync();
+    return () => window.removeEventListener("scroll", sync);
+  }, []);
+
   if (!price) {
     return (
       <div className="p-4 text-sm text-gray-500">

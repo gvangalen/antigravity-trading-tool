@@ -26,8 +26,8 @@ class MarketDataRepository:
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
-    async def get_latest_btc_snapshot(self) -> Optional[MarketData]:
-        return await self.get_latest_market_data('BTC')
+    async def get_latest_snapshot(self, symbol: str = 'BTC') -> Optional[MarketData]:
+        return await self.get_latest_market_data(symbol.upper())
 
     async def get_recent_market_data(self, min_timestamp) -> Sequence[MarketData]:
         stmt = (
@@ -77,11 +77,12 @@ class MarketDataRepository:
     # =========================================================
     # USER: Market Indicators
     # =========================================================
-    async def check_indicator_exists(self, name: str, user_id: int) -> bool:
+    async def check_indicator_exists(self, name: str, user_id: int, symbol: str) -> bool:
         stmt = (
             select(MarketDataIndicator.id)
             .where(MarketDataIndicator.name == name)
             .where(MarketDataIndicator.user_id == user_id)
+            .where(MarketDataIndicator.symbol == symbol)
             .limit(1)
         )
         result = await self.session.execute(stmt)
@@ -92,32 +93,35 @@ class MarketDataRepository:
         await self.session.flush()
         return indicator
 
-    async def get_user_market_indicators(self, user_id: int, limit: int = 200) -> Sequence[MarketDataIndicator]:
+    async def get_user_market_indicators(self, user_id: int, symbol: str, limit: int = 200) -> Sequence[MarketDataIndicator]:
         stmt = (
             select(MarketDataIndicator)
             .where(MarketDataIndicator.user_id == user_id)
+            .where(MarketDataIndicator.symbol == symbol)
             .order_by(desc(MarketDataIndicator.timestamp))
             .limit(limit)
         )
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def delete_user_market_indicator(self, name: str, user_id: int) -> bool:
+    async def delete_user_market_indicator(self, name: str, user_id: int, symbol: str) -> bool:
         stmt = (
             delete(MarketDataIndicator)
             .where(MarketDataIndicator.name == name)
             .where(MarketDataIndicator.user_id == user_id)
+            .where(MarketDataIndicator.symbol == symbol)
         )
         result = await self.session.execute(stmt)
         return result.rowcount > 0
 
-    async def get_active_day_indicators(self, user_id: int) -> Sequence[MarketDataIndicator]:
+    async def get_active_day_indicators(self, user_id: int, symbol: str) -> Sequence[MarketDataIndicator]:
         # DISTINCT ON equivalent by combining order_by and Python dict (or advanced SQL)
         # SQLAlchemy and asyncpg don't natively abstract PostgreSQL DISTINCT ON nicely without raw strings.
         # We can use order_by + manual distinct in memory because it's only active indicators per user.
         stmt = (
             select(MarketDataIndicator)
             .where(MarketDataIndicator.user_id == user_id)
+            .where(MarketDataIndicator.symbol == symbol)
             .order_by(desc(MarketDataIndicator.timestamp))
         )
         result = await self.session.execute(stmt)

@@ -3,16 +3,16 @@
 import { useEffect, useState } from "react";
 import { fetchMarketIntelligence } from "@/lib/api/marketIntelligence";
 
-export function useMarketIntelligence() {
+export function useMarketIntelligence(symbol = "BTC") {
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
-
+    setLoading(true);
     try {
 
-      const res = await fetchMarketIntelligence();
+      const res = await fetchMarketIntelligence(symbol);
       setData(res);
 
     } catch (err) {
@@ -29,7 +29,7 @@ export function useMarketIntelligence() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [symbol]);
 
   return { data, loading, reload: load };
 }

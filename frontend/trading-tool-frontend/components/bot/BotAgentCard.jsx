@@ -541,7 +541,7 @@ export default function BotAgentCard({
                   <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
                     <Activity size={16} strokeWidth={3} />
                   </div>
-                  <h3 className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Live Performance Scan (V2)</h3>
+                  <h3 className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">{symbol} Performance Scan (V2)</h3>
                 </div>
                 <button 
                   onClick={() => setBacktestResult(null)}

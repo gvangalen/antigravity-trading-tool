@@ -20,12 +20,18 @@ async def get_intelligence_service(db: AsyncSession = Depends(get_db)):
 # =========================================================
 @router.get("/market/intelligence", response_model=Dict[str, Any])
 async def get_market_intelligence_api(
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     service: IntelligenceService = Depends(get_intelligence_service)
 ):
     try:
         user_id = current_user["id"]
-        return await service.get_market_intelligence(user_id=user_id)
+        
+        # V1 Constraint: Only allow BTC, ETH, SOL
+        if symbol.upper() not in ["BTC", "ETH", "SOL"]:
+            symbol = "BTC"
+            
+        return await service.get_market_intelligence(user_id=user_id, symbol=symbol.upper())
     except Exception as e:
         logger.exception("❌ Error fetching market intelligence")
         raise HTTPException(status_code=500, detail="Fout bij ophalen market intelligence")

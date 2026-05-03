@@ -715,10 +715,12 @@ def build_order_proposal(
 # =====================================================
 # 📊 Daily scores (single source of truth)
 # =====================================================
-def _get_daily_scores(conn, user_id: int, report_date: date) -> Dict[str, float]:
+def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC") -> Dict[str, float]:
     """
     Single source of truth. Returned scores are ALWAYS in [10..100].
     """
+    symbol = (symbol or DEFAULT_SYMBOL).upper()
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -726,9 +728,10 @@ def _get_daily_scores(conn, user_id: int, report_date: date) -> Dict[str, float]
             FROM daily_scores
             WHERE user_id=%s
               AND report_date=%s
+              AND symbol=%s
             LIMIT 1
             """,
-            (user_id, report_date),
+            (user_id, report_date, symbol),
         )
         row = cur.fetchone()
 
@@ -1330,7 +1333,6 @@ def run_trading_bot_agent(
                 "bot_ids": [],
             }
 
-        scores = _get_daily_scores(conn, user_id, report_date)
 
         results = []
         touched_bot_ids = []
@@ -1342,6 +1344,11 @@ def run_trading_bot_agent(
             # SYMBOL
             # =========================
             symbol = (bot.get("symbol") or DEFAULT_SYMBOL).upper()
+
+            # =========================
+            # SCORES (SYMBOL SPECIFIC)
+            # =========================
+            scores = _get_daily_scores(conn, user_id, report_date, symbol)
 
             # =========================
             # LIVE PRICE (CACHED)

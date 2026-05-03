@@ -10,9 +10,9 @@ import { useState, useEffect } from "react";
  * 📏 CompactGauges — Minimalist Status Bar (V2.1)
  * Replaces large Gauge cards with a slim horizontal strip.
  */
-export default function CompactGauges() {
+export default function CompactGauges({ symbol = "BTC" }) {
   const { t } = useTranslation();
-  const { macro, technical, market, setup, master, loading, saveWeights } = useScoresData();
+  const { macro, technical, market, setup, master, loading, saveWeights } = useScoresData(symbol);
   const [isEditing, setIsEditing] = useState(false);
   const [localWeights, setLocalWeights] = useState({
      macro: 0.25,

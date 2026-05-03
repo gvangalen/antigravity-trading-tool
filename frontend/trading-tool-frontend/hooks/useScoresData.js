@@ -16,7 +16,7 @@ const normalizeArray = (v) => {
   try { return JSON.parse(v); } catch { return []; }
 };
 
-export function useScoresData() {
+export function useScoresData(symbol = "BTC") {
   const [scores, setScores] = useState({
     macro: { score: 0, uitleg: '', advies: '⚖️ Neutraal', top_contributors: [] },
     technical: { score: 0, uitleg: '', advies: '⚖️ Neutraal', top_contributors: [] },
@@ -32,10 +32,11 @@ export function useScoresData() {
   const [loading, setLoading] = useState(true);
 
   async function fetchScores() {
+    setLoading(true);
     const [dailyRes, masterRes, historyRes] = await Promise.allSettled([
-      getDailyScores(),
-      getAiMasterScore(),
-      getScoreHistory(30)
+      getDailyScores(symbol),
+      getAiMasterScore(symbol),
+      getScoreHistory(30, symbol)
     ]);
 
     const daily = dailyRes.status === 'fulfilled' ? dailyRes.value : null;
@@ -43,7 +44,7 @@ export function useScoresData() {
     const history = historyRes.status === 'fulfilled' ? historyRes.value : [];
 
     if (!daily) {
-      console.warn("❌ Daily scores niet geladen");
+      console.warn(`❌ Daily scores niet geladen voor ${symbol}`);
       setLoading(false);
       return;
     }
@@ -113,7 +114,7 @@ export function useScoresData() {
 
   useEffect(() => {
     fetchScores();
-  }, []);
+  }, [symbol]);
 
   return { ...scores, loading, saveWeights, refresh: fetchScores };
 }

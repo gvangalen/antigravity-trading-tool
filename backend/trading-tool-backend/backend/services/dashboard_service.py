@@ -12,10 +12,10 @@ logger = logging.getLogger(__name__)
 # =========================================================
 # SYNCHRONOUS WRAPPER FOR SCORING ENGINE
 # =========================================================
-def sync_get_scores_for_symbol(user_id: int) -> dict:
+def sync_get_scores_for_symbol(user_id: int, symbol: str = "BTC") -> dict:
     from backend.utils.scoring_utils import get_scores_for_symbol
     try:
-        return get_scores_for_symbol(user_id=user_id, include_metadata=True)
+        return get_scores_for_symbol(user_id=user_id, symbol=symbol, include_metadata=True)
     except TypeError:
         return get_scores_for_symbol(include_metadata=True)
 
@@ -24,13 +24,13 @@ class DashboardService:
         self.session = db_session
         self.repository = DashboardRepository(db_session)
 
-    async def get_dashboard_data(self, user_id: int) -> DashboardResponse:
+    async def get_dashboard_data(self, user_id: int, symbol: str = "BTC") -> DashboardResponse:
         try:
             # Parallel Database Queries
-            market_data_task = self.repository.get_latest_market_data(user_id)
-            technical_data_task = self.repository.get_latest_technical_data(user_id)
+            market_data_task = self.repository.get_latest_market_data(user_id, symbol)
+            technical_data_task = self.repository.get_latest_technical_data(user_id, symbol)
             macro_data_task = self.repository.get_latest_macro_data(user_id)
-            setups_task = self.repository.get_user_setups_summary(user_id)
+            setups_task = self.repository.get_user_setups_summary(user_id, symbol)
             
             market_data, technical_rows, macro_data, setups = await asyncio.gather(
                 market_data_task,
@@ -50,7 +50,7 @@ class DashboardService:
             }
             
             # Execute Sync Scoring Request
-            scores = await asyncio.to_thread(sync_get_scores_for_symbol, user_id)
+            scores = await asyncio.to_thread(sync_get_scores_for_symbol, user_id, symbol)
             
             macro_score = scores.get("macro_score", 0)
             technical_score = scores.get("technical_score", 0)

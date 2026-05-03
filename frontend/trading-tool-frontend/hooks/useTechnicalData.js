@@ -28,7 +28,7 @@ const getAdvies = (score) =>
 /* ========================================================
    MAIN HOOK — TECHNICAL (CONSISTENT MET MARKET & MACRO)
 ======================================================== */
-export function useTechnicalData(activeTab = "Dag") {
+export function useTechnicalData(activeTab = "Dag", symbol = "BTC") {
   const [technicalData, setTechnicalData] = useState([]);
   const [avgScore, setAvgScore] = useState("N/A");
   const [advies, setAdvies] = useState("⚖️ Neutraal");
@@ -51,7 +51,7 @@ export function useTechnicalData(activeTab = "Dag") {
   useEffect(() => {
     loadData();
     loadIndicatorNames();
-  }, [activeTab]);
+  }, [activeTab, symbol]);
 
   /* ======================================================
      LADEN VAN TECHNICAL DATA
@@ -65,10 +65,10 @@ export function useTechnicalData(activeTab = "Dag") {
 
       const tab = activeTab.toLowerCase();
 
-      if (tab === "dag" || tab === "day") raw = await technicalDataDay();
-      else if (tab === "week") raw = await technicalDataWeek();
-      else if (tab === "maand" || tab === "month") raw = await technicalDataMonth();
-      else if (tab === "kwartaal" || tab === "quarter") raw = await technicalDataQuarter();
+      if (tab === "dag" || tab === "day") raw = await technicalDataDay(symbol);
+      else if (tab === "week") raw = await technicalDataWeek(symbol);
+      else if (tab === "maand" || tab === "month") raw = await technicalDataMonth(symbol);
+      else if (tab === "kwartaal" || tab === "quarter") raw = await technicalDataQuarter(symbol);
 
       const dataList = Array.isArray(raw) ? raw : [];
 
@@ -90,7 +90,7 @@ export function useTechnicalData(activeTab = "Dag") {
       /* --------------------------------------------------
          DAGELIJKSE TECHNICAL SCORE
       -------------------------------------------------- */
-      const scores = await getDailyScores();
+      const scores = await getDailyScores(symbol);
       const backendScore = scores?.technical?.score ?? null;
 
       if (backendScore !== null) {
@@ -101,7 +101,7 @@ export function useTechnicalData(activeTab = "Dag") {
         updateScore(normalized);
       }
     } catch (err) {
-      console.error("❌ Fout bij technical data:", err);
+      console.error(`❌ Fout bij technical data (${symbol}):`, err);
       setTechnicalData([]);
       setAvgScore("N/A");
       setAdvies("⚖️ Neutraal");
@@ -148,7 +148,7 @@ export function useTechnicalData(activeTab = "Dag") {
       return;
     }
 
-    await technicalDataAdd(indicatorName);
+    await technicalDataAdd(indicatorName, symbol);
     await loadData();
   }
 
@@ -156,7 +156,7 @@ export function useTechnicalData(activeTab = "Dag") {
      ❌ INDICATOR VERWIJDEREN
   ====================================================== */
   async function removeTechnicalIndicator(indicatorName) {
-    await deleteTechnicalIndicator(indicatorName);
+    await deleteTechnicalIndicator(indicatorName, symbol);
     await loadData();
   }
 

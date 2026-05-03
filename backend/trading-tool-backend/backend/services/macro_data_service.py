@@ -49,13 +49,13 @@ class MacroDataService:
     # =========================================================
     # USER INDICATORS: CRUD
     # =========================================================
-    async def add_macro_indicator(self, user_id: int, raw_name: str, payload_value: Optional[float]) -> MacroAddResponse:
+    async def add_macro_indicator(self, user_id: int, raw_name: str, payload_value: Optional[float], symbol: Optional[str] = None) -> MacroAddResponse:
         indicator_name = raw_name.strip()
         if not indicator_name:
             raise HTTPException(400, "❌ Indicator mag niet leeg zijn.")
 
-        # Check duplicate
-        exists = await self.repository.check_indicator_exists(indicator_name, user_id)
+        # Check of indicator al bestaat voor deze user (Macro is Global Pool)
+        exists = await self.repository.check_indicator_exists(user_id, indicator_name)
         if exists:
             raise HTTPException(409, f"Indicator '{indicator_name}' is al toegevoegd voor deze gebruiker.")
 
@@ -107,6 +107,7 @@ class MacroDataService:
             interpretation=interpretation,
             action=action,
             score=score,
+            symbol=symbol,
             user_id=user_id
         )
         saved_record = await self.repository.add_macro_data(record)
@@ -120,28 +121,29 @@ class MacroDataService:
             score=score,
             trend=trend,
             interpretation=interpretation,
-            action=action
+            action=action,
+            symbol=symbol
         )
 
     # =========================================================
     # QUERIES
     # =========================================================
-    async def get_macro_indicators(self, user_id: int) -> List[MacroDataResponse]:
+    async def get_macro_indicators(self, user_id: int, symbol: Optional[str] = None) -> List[MacroDataResponse]:
         records = await self.repository.get_user_macro_data(user_id)
         return [MacroDataResponse.from_orm(r) for r in records]
 
-    async def get_latest_macro_day_data(self, user_id: int) -> List[MacroDataResponse]:
+    async def get_latest_macro_day_data(self, user_id: int, symbol: Optional[str] = None) -> List[MacroDataResponse]:
         records = await self.repository.get_active_day_macro_data(user_id)
         return [MacroDataResponse.from_orm(r) for r in records]
 
-    async def get_macro_week_data(self, user_id: int) -> List[MacroAggregateResponse]:
-        cache_key = f"week_{user_id}"
+    async def get_macro_week_data(self, user_id: int, symbol: str = "BTC") -> List[MacroAggregateResponse]:
+        cache_key = f"week_{user_id}_{symbol}"
         now = datetime.now()
         if cache_key in self._cache:
             data, expiry = self._cache[cache_key]
             if now < expiry: return data
 
-        records = await self.repository.get_macro_week_data(user_id)
+        records = await self.repository.get_macro_week_data(user_id, symbol)
          # Format needed for frontend: indicator, waarde, ...
         result = [
             MacroAggregateResponse(
@@ -157,8 +159,8 @@ class MacroDataService:
         self._cache[cache_key] = (result, now + timedelta(seconds=self._CACHE_TTL))
         return result
 
-    async def get_macro_month_data(self, user_id: int) -> List[MacroAggregateResponse]:
-        records = await self.repository.get_macro_aggregated_data(user_id, 4)
+    async def get_macro_month_data(self, user_id: int, symbol: str = "BTC") -> List[MacroAggregateResponse]:
+        records = await self.repository.get_macro_aggregated_data(user_id, symbol, 4)
         return [
             MacroAggregateResponse(
                 indicator=r.name,
@@ -171,8 +173,8 @@ class MacroDataService:
             ) for r in records
         ]
 
-    async def get_macro_quarter_data(self, user_id: int) -> List[MacroAggregateResponse]:
-        records = await self.repository.get_macro_aggregated_data(user_id, 12)
+    async def get_macro_quarter_data(self, user_id: int, symbol: str = "BTC") -> List[MacroAggregateResponse]:
+        records = await self.repository.get_macro_aggregated_data(user_id, symbol, 12)
         return [
             MacroAggregateResponse(
                 indicator=r.name,
@@ -196,7 +198,7 @@ class MacroDataService:
         records = await self.repository.get_indicator_rules(name, user_id)
         return [MacroIndicatorRuleResponse.from_orm(r) for r in records]
 
-    async def delete_macro_indicator(self, name: str, user_id: int) -> dict:
+    async def delete_macro_indicator(self, name: str, user_id: int, symbol: Optional[str] = None) -> dict:
         deleted = await self.repository.delete_user_macro_indicator(name, user_id)
         if not deleted:
             raise HTTPException(404, f"Indicator '{name}' niet gevonden voor deze gebruiker.")

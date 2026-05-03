@@ -19,6 +19,8 @@ import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 
 export default function MarketPage() {
+  const [activeSymbol, setActiveSymbol] = useState("BTC");
+
   // ===============================
   // 🧭 ONBOARDING HOOK
   // ===============================
@@ -32,13 +34,14 @@ export default function MarketPage() {
     forwardReturns, 
     availableIndicators,
     btcLive,
-    loading 
-  } = useMarketData();
+    loading,
+    syncHistory
+  } = useMarketData(activeSymbol);
 
   // ===============================
   // 📈 SCORE DATA
   // ===============================
-  const { market: marketScore } = useScoresData();
+  const { market: marketScore } = useScoresData(activeSymbol);
 
   // ===============================
   // 🔥 ONBOARDING TRIGGER
@@ -73,13 +76,32 @@ export default function MarketPage() {
       <OnboardingBanner step="market" />
 
       {/* 🟢 STANDARD PAGE HEADER */}
-      <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
-        <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
-           <Activity size={12} />
-           Status: Connected
+      <header className="page-header border-l-4 border-blue-600 pl-8 mb-16 flex flex-col md:flex-row md:items-end justify-between gap-8">
+        <div className="flex-1">
+          <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
+             <Activity size={12} />
+             Status: Connected
+          </div>
+          <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Market</h1>
+          <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">Analysis of market sentiment and price action for {activeSymbol}</p>
         </div>
-        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Market</h1>
-        <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">Analysis of market sentiment and price action</p>
+
+        {/* 🎛️ SYMBOL SELECTOR */}
+        <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-inner">
+          {["BTC", "ETH", "SOL"].map((s) => (
+            <button
+              key={s}
+              onClick={() => setActiveSymbol(s)}
+              className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all tracking-widest ${
+                activeSymbol === s 
+                  ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm scale-[1.02]" 
+                  : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
       </header>
 
       {/* 🚀 MARKET HUD */}
@@ -89,6 +111,7 @@ export default function MarketPage() {
           bias={biasText}
           btc={btcLive}
           loading={loading || !marketScore}
+          symbol={activeSymbol}
         />
       </DashboardErrorBoundary>
 
@@ -96,10 +119,10 @@ export default function MarketPage() {
       <div className="space-y-8 px-4">
          <div className="flex items-center gap-4 mb-2">
             <div className="w-8 h-0.5 bg-blue-600/30" />
-            <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] opacity-90">Analysis</span>
+            <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] opacity-90">{activeSymbol} Analysis</span>
          </div>
          <DashboardErrorBoundary>
-           <AgentInsightPanel category="market" />
+           <AgentInsightPanel category="market" symbol={activeSymbol} />
          </DashboardErrorBoundary>
       </div>
 
@@ -109,13 +132,14 @@ export default function MarketPage() {
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
              <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                <LayoutGrid size={16} className="text-blue-600" />
-               Configuration
+               Configuration ({activeSymbol})
              </div>
           </div>
           <div className="card-p p-8">
             <MarketIndicatorScoreView
               availableIndicators={availableIndicators || []}
               loading={loading}
+              symbol={activeSymbol}
             />
           </div>
         </div>
@@ -131,9 +155,10 @@ export default function MarketPage() {
            <div className="card-p p-0">
               <DashboardErrorBoundary>
                 <TechnicalTerminalGrid
-                  title="Market Signal Monitor"
+                  title={`${activeSymbol} Signal Monitor`}
                   onRemoveIndicator={() => {}}
                   loading={loading}
+                  symbol={activeSymbol}
                 />
               </DashboardErrorBoundary>
            </div>
@@ -145,7 +170,7 @@ export default function MarketPage() {
              <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
                 <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                   <History size={16} className="text-blue-600" />
-                  History
+                  {activeSymbol} Price History
                 </div>
              </div>
              <div className="card-p p-8">
@@ -160,7 +185,7 @@ export default function MarketPage() {
              <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
                 <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                   <TrendingUp size={16} className="text-blue-600" />
-                  Forecast
+                  {activeSymbol} Forecast
                 </div>
              </div>
              <div className="card-p p-8">
@@ -168,12 +193,34 @@ export default function MarketPage() {
              </div>
           </div>
         </div>
+
+        {/* ⚙️ SYSTEM MAINTENANCE */}
+        <div className="card bg-slate-50 dark:bg-slate-900/50 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden mb-24">
+          <div className="p-8 flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="space-y-2">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight uppercase tracking-widest">System Maintenance</h3>
+              <p className="text-sm text-slate-400 font-medium">Sync historical Coingecko data to enable backtesting for specific assets.</p>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              {["BTC", "ETH", "SOL"].map(s => (
+                <button
+                  key={s}
+                  onClick={() => syncHistory(s)}
+                  disabled={loading}
+                  className="px-6 py-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-black text-slate-700 dark:text-slate-200 hover:border-blue-500 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                >
+                  Sync {s} History
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       {loading && (
         <div className="fixed bottom-8 right-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-bounce z-50 transition-colors">
            <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-           <span className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Loading Data...</span>
+           <span className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Processing {activeSymbol}...</span>
         </div>
       )}
     </div>

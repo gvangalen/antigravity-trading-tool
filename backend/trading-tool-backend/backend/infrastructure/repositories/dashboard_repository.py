@@ -17,14 +17,14 @@ class DashboardRepository:
         result = await self.session.execute(query, {"user_id": user_id, "symbol": symbol})
         return [dict(row._mapping) for row in result.fetchall()]
 
-    async def get_latest_technical_data(self, user_id: int) -> List[dict]:
+    async def get_latest_technical_data(self, user_id: int, symbol: str = "BTC") -> List[dict]:
         query = text("""
             SELECT LOWER(indicator) AS indicator, value, score, timestamp
             FROM technical_indicators
-            WHERE user_id = :user_id
+            WHERE user_id = :user_id AND symbol = :symbol
             ORDER BY indicator, timestamp DESC
         """)
-        result = await self.session.execute(query, {"user_id": user_id})
+        result = await self.session.execute(query, {"user_id": user_id, "symbol": symbol})
         return [dict(row._mapping) for row in result.fetchall()]
 
     async def get_latest_macro_data(self, user_id: int) -> List[dict]:
@@ -38,15 +38,15 @@ class DashboardRepository:
         result = await self.session.execute(query, {"user_id": user_id})
         return [dict(row._mapping) for row in result.fetchall()]
 
-    async def get_user_setups_summary(self, user_id: int) -> List[dict]:
+    async def get_user_setups_summary(self, user_id: int, symbol: str = "BTC") -> List[dict]:
         query = text("""
             SELECT DISTINCT ON (name)
                 name, created_at AS timestamp
             FROM setups
-            WHERE user_id = :user_id
+            WHERE user_id = :user_id AND symbol = :symbol
             ORDER BY name, created_at DESC
         """)
-        result = await self.session.execute(query, {"user_id": user_id})
+        result = await self.session.execute(query, {"user_id": user_id, "symbol": symbol})
         return [dict(row._mapping) for row in result.fetchall()]
 
     async def get_latest_trading_advice(self, user_id: int, symbol: str) -> Optional[dict]:

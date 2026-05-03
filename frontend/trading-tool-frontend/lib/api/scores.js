@@ -6,12 +6,12 @@ import { fetchAuth } from '@/lib/api/auth';  // ✅ JUISTE AUTH
 // =====================================================
 // 🔹 1. Dagelijkse scores ophalen (met veilige fallback)
 // =====================================================
-export async function getDailyScores() {
+export async function getDailyScores(symbol = "BTC") {
   try {
-    const data = await fetchAuth(`/api/scores/daily`);
+    const data = await fetchAuth(`/api/scores/daily?symbol=${symbol}`);
 
     if (!data || typeof data !== 'object') {
-      console.warn("⚠️ getDailyScores(): backend gaf leeg resultaat → fallback");
+      console.warn(`⚠️ getDailyScores(): backend gaf leeg resultaat voor ${symbol} → fallback`);
       return fallbackScores();
     }
 
@@ -26,9 +26,9 @@ export async function getDailyScores() {
 // =====================================================
 // 🔹 2. AI Master Score ophalen
 // =====================================================
-export async function getAiMasterScore() {
+export async function getAiMasterScore(symbol = "BTC") {
   try {
-    const data = await fetchAuth(`/api/ai/master_score`);
+    const data = await fetchAuth(`/api/ai/master_score?symbol=${symbol}`);
     return data || { master_score: 50 };
   } catch (err) {
     console.error('❌ getAiMasterScore ERROR:', err);
@@ -38,7 +38,7 @@ export async function getAiMasterScore() {
 
 //
 // =====================================================
-// 🔹 3. Macro summary ophalen
+// 🔹 3. Macro summary ophalen (Blijft globaal)
 // =====================================================
 export async function getMacroSummary() {
   try {
@@ -54,9 +54,9 @@ export async function getMacroSummary() {
 // =====================================================
 // 🔹 4. Score History ophalen (Analytics)
 // =====================================================
-export async function getScoreHistory(days = 30) {
+export async function getScoreHistory(days = 30, symbol = "BTC") {
   try {
-    const data = await fetchAuth(`/api/scores/history?days=${days}`);
+    const data = await fetchAuth(`/api/scores/history?days=${days}&symbol=${symbol}`);
     return data || [];
   } catch (err) {
     console.error('❌ getScoreHistory ERROR:', err);

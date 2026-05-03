@@ -118,6 +118,7 @@ class MarketDataIndicator(Base):
     interpretation = Column(String)
     action = Column(String)
     score = Column(Numeric)
+    symbol = Column(String, default="BTC")
     user_id = Column(Integer, nullable=True) # UUID via clerk/nextauth o.i.d.
     timestamp = Column(DateTime, default=datetime.utcnow)
 
@@ -148,6 +149,7 @@ class MacroData(Base):
     interpretation = Column(String)
     action = Column(String)
     score = Column(Numeric)
+    symbol = Column(String, default="BTC")
     user_id = Column(Integer, nullable=True) # UUID via clerk/nextauth o.i.d.
     timestamp = Column(DateTime, default=datetime.utcnow)
 
@@ -177,6 +179,7 @@ class TechnicalDataIndicator(Base):
     score = Column(Numeric)
     advies = Column(String)
     uitleg = Column(String)
+    symbol = Column(String, default="BTC")
     user_id = Column(Integer, nullable=True) # UUID via clerk/nextauth o.i.d.
     timestamp = Column(DateTime, default=datetime.utcnow)
 
@@ -254,6 +257,7 @@ class DailyScore(Base):
     technical_score = Column(Numeric)
     market_score = Column(Numeric)
     setup_score = Column(Numeric)
+    symbol = Column(String, default="BTC")
 
 class AiCategoryInsight(Base):
     __tablename__ = 'ai_category_insights'

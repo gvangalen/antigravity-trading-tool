@@ -62,7 +62,7 @@ class ScoreRepository:
         row = result.mappings().first()
         return dict(row) if row else None
 
-    async def fetch_daily_scores(self, user_id: int) -> Optional[Dict[str, Any]]:
+    async def fetch_daily_scores(self, user_id: int, symbol: str = "BTC") -> Optional[Dict[str, Any]]:
         """
         Native async fetch of daily scores for the dashboard.
         """
@@ -73,16 +73,16 @@ class ScoreRepository:
                 market_score, market_interpretation, market_top_contributors,
                 setup_score, report_date
             FROM daily_scores
-            WHERE user_id = :user_id AND report_date = CURRENT_DATE
+            WHERE user_id = :user_id AND report_date = CURRENT_DATE AND symbol = :symbol
             LIMIT 1
         """)
-        result = await self.db.execute(stmt, {"user_id": user_id})
+        result = await self.db.execute(stmt, {"user_id": user_id, "symbol": symbol})
         row = result.mappings().first()
         return dict(row) if row else None
 
-    async def fetch_historical_scores(self, user_id: int, days: int = 30) -> List[Dict[str, Any]]:
+    async def fetch_historical_scores(self, user_id: int, days: int = 30, symbol: str = "BTC") -> List[Dict[str, Any]]:
         """
-        Fetches historical scores and BTC prices for the analytics chart.
+        Fetches historical scores and asset prices for the analytics chart.
         """
         stmt = text("""
             SELECT 
@@ -91,12 +91,12 @@ class ScoreRepository:
                 ds.technical_score,
                 ds.market_score,
                 ds.setup_score,
-                bh.price as btc_price
+                md.price as btc_price
             FROM daily_scores ds
-            LEFT JOIN btc_price_history bh ON bh.date = ds.report_date
-            WHERE ds.user_id = :user_id
+            LEFT JOIN market_data md ON md.symbol = ds.symbol AND md.timestamp::date = ds.report_date
+            WHERE ds.user_id = :user_id AND ds.symbol = :symbol
             AND ds.report_date >= CURRENT_DATE - INTERVAL '1 day' * :days
             ORDER BY ds.report_date ASC
         """)
-        result = await self.db.execute(stmt, {"user_id": user_id, "days": days})
+        result = await self.db.execute(stmt, {"user_id": user_id, "days": days, "symbol": symbol})
         return [dict(row) for row in result.mappings()]

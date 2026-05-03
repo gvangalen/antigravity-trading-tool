@@ -16,15 +16,15 @@ import {
 import { useScoresData } from "@/hooks/useScoresData";
 import { TrendingUp, Activity } from "lucide-react";
 
-export default function ScoreHistoryChart() {
-  const { history, loading } = useScoresData();
+export default function ScoreHistoryChart({ symbol = "BTC" }) {
+  const { history, loading } = useScoresData(symbol);
 
   if (loading || !history || history.length === 0) {
     return (
       <div className="w-full h-[400px] bg-card rounded-[2.5rem] border border-[var(--color-border)] p-10 flex items-center justify-center">
          <div className="flex flex-col items-center gap-4">
             <Activity className="animate-pulse text-blue-500/20" size={40} />
-            <p className="text-[11px] font-black uppercase tracking-widest text-secondary/40">Synchronizing History...</p>
+            <p className="text-[11px] font-black uppercase tracking-widest text-secondary/40">Synchronizing {symbol} History...</p>
          </div>
       </div>
     );
@@ -47,7 +47,7 @@ export default function ScoreHistoryChart() {
           </div>
           <div>
             <div className="text-[11px] font-bold text-secondary/60 uppercase tracking-[0.2em] mb-0.5">Performance Analytics</div>
-            <div className="text-2xl font-black text-foreground tracking-tight uppercase leading-none">Intelligence Correlation</div>
+            <div className="text-2xl font-black text-foreground tracking-tight uppercase leading-none">{symbol} Intelligence Correlation</div>
           </div>
         </div>
 
@@ -58,7 +58,7 @@ export default function ScoreHistoryChart() {
            </div>
            <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-slate-300" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-secondary">BTC Price</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-secondary">{symbol} Price</span>
            </div>
         </div>
       </div>
@@ -137,7 +137,7 @@ export default function ScoreHistoryChart() {
 
       <div className="mt-8 pt-6 border-t border-[var(--color-border-subtle)] relative z-10">
          <p className="text-[10px] text-secondary/50 leading-relaxed font-bold uppercase tracking-wider italic text-center">
-            Historical correlation between technical intelligence scores and BTC price action (30D Lookback).
+            Historical correlation between technical intelligence scores and {symbol} price action (30D Lookback).
          </p>
       </div>
     </div>

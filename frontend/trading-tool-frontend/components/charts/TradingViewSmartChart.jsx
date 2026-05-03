@@ -41,6 +41,19 @@ export default function TradingViewSmartChart({
   useEffect(() => {
     if (!containerRef.current || candlesLoading || !candles.length) return;
 
+    // 🛡️ SECURITY CHECK: Prevent "width(-1)" error in console
+    if (containerRef.current.clientWidth <= 0) {
+      // Re-run this effect when the container gets a size
+      const observer = new ResizeObserver(() => {
+        if (containerRef.current && containerRef.current.clientWidth > 0) {
+          // This will trigger a re-render or we can just wait for the next tick
+          window.dispatchEvent(new Event('resize'));
+        }
+      });
+      observer.observe(containerRef.current);
+      return () => observer.disconnect();
+    }
+
     const chart = createChart(containerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: "#ffffff" },

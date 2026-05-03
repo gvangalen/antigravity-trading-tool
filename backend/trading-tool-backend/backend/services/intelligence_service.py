@@ -21,16 +21,17 @@ class IntelligenceService:
     def __init__(self, repository: IntelligenceRepository):
         self.repository = repository
 
-    async def get_market_intelligence(self, user_id: int) -> Dict[str, Any]:
+    async def get_market_intelligence(self, user_id: int, symbol: str = "BTC") -> Dict[str, Any]:
         # 1. Check Cache
         now = datetime.now()
-        cached = self._cache.get(user_id)
+        cache_key = f"{user_id}_{symbol}"
+        cached = self._cache.get(cache_key)
         if cached and cached["expires_at"] > now:
-            # logger.info(f"🎯 Cache HIT voor Market Intelligence (user: {user_id})")
+            # logger.info(f"🎯 Cache HIT voor Market Intelligence (user: {user_id}, symbol: {symbol})")
             return cached["data"]
 
         # 2. Fetch scores (Async)
-        daily_score = await self.repository.get_latest_daily_scores(user_id)
+        daily_score = await self.repository.get_latest_daily_scores(user_id, symbol)
         
         if not daily_score:
             scores = {
@@ -57,7 +58,7 @@ class IntelligenceService:
             )
 
         # 4. Save to Cache
-        self._cache[user_id] = {
+        self._cache[cache_key] = {
             "data": result,
             "expires_at": now + timedelta(seconds=self._CACHE_TTL_SECONDS)
         }

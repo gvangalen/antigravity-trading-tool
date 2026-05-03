@@ -35,12 +35,25 @@ def calculate_rsi(closes, period=14):
 # =========================================================
 # 🌐 Technische indicator waarde ophalen (RAW ONLY)
 # =========================================================
-async def fetch_technical_value(name: str, source: str = None, link: str = None):
-
+async def fetch_technical_value(name: str, source: str = None, link: str = None, symbol: str = "BTC"):
+    """
+    🌐 Technische indicator waarde ophalen (RAW ONLY)
+    Ondersteunt {symbol} templates in de link.
+    """
     try:
         if not link:
             logger.warning(f"⚠️ Geen link opgegeven voor '{name}'")
             return None
+
+        # Dynamisch symbool injecteren in de link
+        if "{symbol}" in link:
+            # Binance gebruikt vaak SYMBOLUSDT, maar soms moet het anders gemapt worden
+            # Voor nu gaan we uit van de standaard symbol mapping
+            link = link.replace("{symbol}", symbol.upper())
+        elif "binance" in link.lower() and "symbol=" in link.lower():
+            # Fallback: als er geen template is maar wel Binance, probeer de symbol= param te vinden
+            import re
+            link = re.sub(r"symbol=[A-Z0-9]+", f"symbol={symbol.upper()}USDT", link)
 
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(link)

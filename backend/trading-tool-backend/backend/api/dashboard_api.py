@@ -26,12 +26,18 @@ async def get_dashboard_service(db: AsyncSession = Depends(get_db)):
 # =========================================================
 @router.get("/dashboard", response_model=DashboardResponse)
 async def get_dashboard_data(
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     service: DashboardService = Depends(get_dashboard_service)
 ):
     """Haalt alle data voor de widgets op via parallel database queries."""
     user_id = current_user["id"]
-    return await service.get_dashboard_data(user_id)
+    
+    # V1 Constraint: Only allow BTC, ETH, SOL
+    if symbol.upper() not in ["BTC", "ETH", "SOL"]:
+        symbol = "BTC"
+        
+    return await service.get_dashboard_data(user_id, symbol.upper())
 
 
 # =========================================================

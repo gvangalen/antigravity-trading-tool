@@ -39,13 +39,18 @@ export default function DashboardPage() {
   const { t } = useTranslation();
   const { activeSetup, focusedBotId, setFocusedBotId } = useActiveSetup();
   const { configs: botConfigs } = useBotData();
+
+  // 🔥 SYMBOL RESOLUTION
+  const focusedBot = botConfigs.find(b => b.id === focusedBotId);
+  const activeSymbol = focusedBot?.symbol || activeSetup?.symbol || "BTC";
+
   const {
     technicalData,
     removeTechnicalIndicator: handleRemove,
     loading: technicalLoading,
     error: technicalError,
     reload: technicalReload,
-  } = useTechnicalData("Day");
+  } = useTechnicalData("Day", activeSymbol);
 
   /* --------------------------------------------------------
      🔹 Afgeleide helpers (BELANGRIJK)
@@ -59,7 +64,7 @@ export default function DashboardPage() {
   const { macroData, loading: macroLoading, error: macroError, reload: macroReload } =
     useMacroData();
   
-   const { sevenDayData, btcLive, loading: marketLoading } = useMarketData();
+   const { sevenDayData, btcLive, loading: marketLoading } = useMarketData(activeSymbol);
  
    /* --------------------------------------------------------
      🔁 MAPPING & SYNC
@@ -118,7 +123,7 @@ export default function DashboardPage() {
       <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl transition-all duration-300">
         <div className="card-p p-4 sm:p-10">
            <DashboardErrorBoundary>
-             <CompactGauges />
+             <CompactGauges symbol={activeSymbol} />
            </DashboardErrorBoundary>
         </div>
       </div>
@@ -161,7 +166,7 @@ export default function DashboardPage() {
              {/* RIGHT: THE BRAIN */}
              <div className="w-full lg:w-[340px] shrink-0">
                 <DashboardErrorBoundary>
-                   <TradingBrain />
+                   <TradingBrain symbol={activeSymbol} />
                 </DashboardErrorBoundary>
              </div>
           </div>
@@ -217,7 +222,7 @@ export default function DashboardPage() {
 
           {/* 📊 ANALYTICS: SCORE HISTORY (Moved to bottom) */}
           <DashboardErrorBoundary>
-             <ScoreHistoryChart />
+             <ScoreHistoryChart symbol={activeSymbol} />
           </DashboardErrorBoundary>
 
         </main>

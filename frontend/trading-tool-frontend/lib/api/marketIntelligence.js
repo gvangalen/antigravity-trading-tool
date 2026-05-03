@@ -8,5 +8,5 @@ import { fetchAuth } from "@/lib/api/auth";
 // =======================================================
 //
 
-export const fetchMarketIntelligence = () =>
-  fetchAuth(`/api/market/intelligence`, { method: "GET" });
+export const fetchMarketIntelligence = (symbol = "BTC") =>
+  fetchAuth(`/api/market/intelligence?symbol=${symbol}`, { method: "GET" });

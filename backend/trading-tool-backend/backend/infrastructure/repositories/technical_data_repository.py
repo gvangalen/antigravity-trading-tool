@@ -9,11 +9,13 @@ class TechnicalDataRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_latest_for_user(self, user_id: int, limit: int = 50) -> List[TechnicalDataIndicator]:
+    async def get_latest_for_user(self, user_id: int, symbol: Optional[str] = None, limit: int = 50) -> List[TechnicalDataIndicator]:
+        stmt = select(TechnicalDataIndicator).where(TechnicalDataIndicator.user_id == user_id)
+        if symbol:
+            stmt = stmt.where(TechnicalDataIndicator.symbol == symbol)
+        
         result = await self.session.execute(
-            select(TechnicalDataIndicator)
-            .where(TechnicalDataIndicator.user_id == user_id)
-            .order_by(TechnicalDataIndicator.timestamp.desc())
+            stmt.order_by(TechnicalDataIndicator.timestamp.desc())
             .limit(limit)
         )
         return list(result.scalars().all())
@@ -31,8 +33,8 @@ class TechnicalDataRepository:
         )
         return result.scalars().first()
 
-    async def check_duplicate(self, name: str, user_id: int) -> bool:
-        result = await self.session.execute(
+    async def check_duplicate(self, name: str, user_id: int, symbol: str = "BTC") -> bool:
+        stmt = (
             select(TechnicalDataIndicator)
             .where(
                 and_(
@@ -40,8 +42,11 @@ class TechnicalDataRepository:
                     TechnicalDataIndicator.user_id == user_id
                 )
             )
-            .limit(1)
         )
+        if symbol:
+            stmt = stmt.where(TechnicalDataIndicator.symbol == symbol)
+        
+        result = await self.session.execute(stmt.limit(1))
         return result.scalars().first() is not None
 
     async def add_indicator(
@@ -51,7 +56,8 @@ class TechnicalDataRepository:
         score: float,
         advies: str,
         uitleg: str,
-        user_id: int
+        user_id: int,
+        symbol: str = "BTC"
     ) -> TechnicalDataIndicator:
         new_ind = TechnicalDataIndicator(
             indicator=name,
@@ -60,6 +66,7 @@ class TechnicalDataRepository:
             advies=advies,
             uitleg=uitleg,
             user_id=user_id,
+            symbol=symbol,
             timestamp=datetime.utcnow()
         )
         self.session.add(new_ind)
@@ -67,14 +74,14 @@ class TechnicalDataRepository:
         await self.session.flush()
         return new_ind
 
-    async def get_day_data(self, user_id: int) -> List[TechnicalDataIndicator]:
+    async def get_day_data(self, user_id: int, symbol: str = "BTC") -> List[TechnicalDataIndicator]:
         """
         Haalt de meest recente record op per indicator voor deze gebruiker.
         Dit is de 'Cockpit' view: we willen altijd iets zien, ook als de task van vandaag faalde.
         """
-        return await self.get_latest_data_fallback(user_id)
+        return await self.get_latest_data_fallback(user_id, symbol)
 
-    async def get_latest_data_fallback(self, user_id: int) -> List[TechnicalDataIndicator]:
+    async def get_latest_data_fallback(self, user_id: int, symbol: str = "BTC") -> List[TechnicalDataIndicator]:
         """
         Helper die per indicator simpelweg het allerlaatste record pakt.
         Voorkomt 'Geen verbinding' errors op het dashboard.
@@ -82,16 +89,19 @@ class TechnicalDataRepository:
         stmt = (
             select(TechnicalDataIndicator)
             .distinct(TechnicalDataIndicator.indicator)
-            .where(TechnicalDataIndicator.user_id == user_id)
+            .where(and_(
+                TechnicalDataIndicator.user_id == user_id,
+                TechnicalDataIndicator.symbol == symbol
+            ))
             .order_by(TechnicalDataIndicator.indicator, TechnicalDataIndicator.timestamp.desc())
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def get_week_data(self, user_id: int) -> List[TechnicalDataIndicator]:
-        return await self._get_data_by_weeks(user_id, 1)
+    async def get_week_data(self, user_id: int, symbol: str = "BTC") -> List[TechnicalDataIndicator]:
+        return await self._get_data_by_weeks(user_id, 1, symbol)
 
-    async def _get_data_by_weeks(self, user_id: int, limit: int) -> List[TechnicalDataIndicator]:
+    async def _get_data_by_weeks(self, user_id: int, limit: int, symbol: str = "BTC") -> List[TechnicalDataIndicator]:
         """
         Helper om data over X weken op te halen. 
         Eerst de meest recente week-startdatums bepalen en dan de data pff.
@@ -100,7 +110,10 @@ class TechnicalDataRepository:
         week_trunc = func.date_trunc('week', TechnicalDataIndicator.timestamp)
         weeks_result = await self.session.execute(
             select(func.cast(week_trunc, Date))
-            .where(TechnicalDataIndicator.user_id == user_id)
+            .where(and_(
+                TechnicalDataIndicator.user_id == user_id,
+                TechnicalDataIndicator.symbol == symbol
+            ))
             .distinct()
             .order_by(func.cast(week_trunc, Date).desc())
             .limit(limit)
@@ -116,6 +129,7 @@ class TechnicalDataRepository:
             .where(
                 and_(
                     TechnicalDataIndicator.user_id == user_id,
+                    TechnicalDataIndicator.symbol == symbol,
                     func.cast(func.date_trunc('week', TechnicalDataIndicator.timestamp), Date).in_(weeks)
                 )
             )
@@ -123,14 +137,14 @@ class TechnicalDataRepository:
         )
         return list(result.scalars().all())
 
-    async def get_month_data(self, user_id: int) -> List[TechnicalDataIndicator]:
-        return await self._get_data_by_weeks(user_id, 4)
+    async def get_month_data(self, user_id: int, symbol: str = "BTC") -> List[TechnicalDataIndicator]:
+        return await self._get_data_by_weeks(user_id, 4, symbol)
 
-    async def get_quarter_data(self, user_id: int) -> List[TechnicalDataIndicator]:
-        return await self._get_data_by_weeks(user_id, 12)
+    async def get_quarter_data(self, user_id: int, symbol: str = "BTC") -> List[TechnicalDataIndicator]:
+        return await self._get_data_by_weeks(user_id, 12, symbol)
 
-    async def delete_indicator(self, indicator: str, user_id: int) -> int:
-        result = await self.session.execute(
+    async def delete_indicator(self, indicator: str, user_id: int, symbol: Optional[str] = None) -> int:
+        stmt = (
             delete(TechnicalDataIndicator)
             .where(
                 and_(
@@ -139,6 +153,10 @@ class TechnicalDataRepository:
                 )
             )
         )
+        if symbol:
+            stmt = stmt.where(TechnicalDataIndicator.symbol == symbol)
+        
+        result = await self.session.execute(stmt)
         return result.rowcount
 
     async def get_all_indicators(self) -> List[dict]:
@@ -184,7 +202,7 @@ class TechnicalDataRepository:
 
         return rows
 
-    async def get_indicator_history(self, indicator_name: str, user_id: int, limit: int = 30) -> List[TechnicalDataIndicator]:
+    async def get_indicator_history(self, indicator_name: str, user_id: int, symbol: str = "BTC", limit: int = 30) -> List[TechnicalDataIndicator]:
         """
         Haalt de laatste 'limit' datapunten op voor een specifieke indicator.
         Handig voor sparklines (trend-visualisatie).
@@ -194,7 +212,8 @@ class TechnicalDataRepository:
             .where(
                 and_(
                     func.lower(TechnicalDataIndicator.indicator) == func.lower(indicator_name),
-                    TechnicalDataIndicator.user_id == user_id
+                    TechnicalDataIndicator.user_id == user_id,
+                    TechnicalDataIndicator.symbol == symbol
                 )
             )
             .order_by(TechnicalDataIndicator.timestamp.desc())

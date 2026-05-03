@@ -176,7 +176,7 @@ def run_bot_backtest(
                     state["total_trades"] += 1
 
             # Get Context for Brain
-            scores = _get_daily_scores(conn, user_id, report_date)
+            scores = _get_daily_scores(conn, user_id, report_date, symbol)
             snapshot = _get_active_strategy_snapshot(conn, user_id, strategy_id, report_date)
             
             if not snapshot or not scores or (scores.get('macro') == 10 and scores.get('technical') == 10):

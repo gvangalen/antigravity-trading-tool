@@ -26,13 +26,14 @@ logger.info("🚀 technical_data_api.py geladen — asynchrone Clean Architectur
 # ===============================================================
 @router.get("/technical_data", response_model=List[TechnicalDataResponse])
 async def get_technical_data(
+    symbol: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     try:
         user_id = current_user["id"]
         repo = TechnicalDataRepository(session)
-        rows = await repo.get_latest_for_user(user_id)
+        rows = await repo.get_latest_for_user(user_id, symbol=symbol)
         return [
             TechnicalDataResponse(
                 indicator=r.indicator,
@@ -62,6 +63,7 @@ async def add_technical_indicator(
     data = await request.json()
     user_id = current_user["id"]
     name_raw = data.get("indicator")
+    symbol = data.get("symbol") or "BTC"
 
     if not name_raw:
         raise HTTPException(400, "❌ 'indicator' is verplicht.")
@@ -69,7 +71,7 @@ async def add_technical_indicator(
     service = TechnicalDataService(session)
     try:
         # Dit voert validation, external call, duplicate checking en scoring uit
-        result = await service.add_technical_indicator(name_raw, user_id)
+        result = await service.add_technical_indicator(name_raw, user_id, symbol=symbol)
         # Commit manually if auto-commit not configured in router middleware properly
         await session.commit()
         return result
@@ -93,13 +95,14 @@ async def add_technical_indicator(
 # ===============================================================
 @router.get("/technical_data/day", response_model=List[TechnicalDataResponse])
 async def get_latest_day_data(
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     try:
         user_id = current_user["id"]
         repo = TechnicalDataRepository(session)
-        rows = await repo.get_day_data(user_id)
+        rows = await repo.get_day_data(user_id, symbol=symbol)
         return [
             TechnicalDataResponse(
                 indicator=r.indicator,
@@ -121,13 +124,14 @@ async def get_latest_day_data(
 # ===============================================================
 @router.get("/technical_data/week", response_model=List[TechnicalDataResponse])
 async def get_technical_week_data(
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     try:
         user_id = current_user["id"]
         repo = TechnicalDataRepository(session)
-        rows = await repo.get_week_data(user_id)
+        rows = await repo.get_week_data(user_id, symbol=symbol)
         return [
             TechnicalDataResponse(
                 indicator=r.indicator,
@@ -146,13 +150,14 @@ async def get_technical_week_data(
 
 @router.get("/technical_data/month", response_model=List[TechnicalDataResponse])
 async def get_technical_month_data(
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     try:
         user_id = current_user["id"]
         repo = TechnicalDataRepository(session)
-        rows = await repo.get_month_data(user_id)
+        rows = await repo.get_month_data(user_id, symbol=symbol)
         return [
             TechnicalDataResponse(
                 indicator=r.indicator,
@@ -171,13 +176,14 @@ async def get_technical_month_data(
 
 @router.get("/technical_data/quarter", response_model=List[TechnicalDataResponse])
 async def get_technical_quarter_data(
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     try:
         user_id = current_user["id"]
         repo = TechnicalDataRepository(session)
-        rows = await repo.get_quarter_data(user_id)
+        rows = await repo.get_quarter_data(user_id, symbol=symbol)
         return [
             TechnicalDataResponse(
                 indicator=r.indicator,
@@ -200,12 +206,13 @@ async def get_technical_quarter_data(
 @router.delete("/technical_data/{indicator}")
 async def delete_technical_indicator(
     indicator: str,
+    symbol: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     user_id = current_user["id"]
     repo = TechnicalDataRepository(session)
-    deleted = await repo.delete_indicator(indicator, user_id)
+    deleted = await repo.delete_indicator(indicator, user_id, symbol=symbol)
     await session.commit()
 
     return {
@@ -243,13 +250,14 @@ async def get_rules_for_indicator(
 @router.get("/technical/history/{indicator_name}", response_model=List[TechnicalIndicatorHistoryResponse])
 async def get_indicator_history(
     indicator_name: str,
+    symbol: str = "BTC",
     limit: int = 30,
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     user_id = current_user["id"]
     repo = TechnicalDataRepository(session)
-    rows = await repo.get_indicator_history(indicator_name, user_id, limit)
+    rows = await repo.get_indicator_history(indicator_name, user_id, symbol=symbol, limit=limit)
     return [
         TechnicalIndicatorHistoryResponse(
             value=float(r.value),

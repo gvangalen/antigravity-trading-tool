@@ -252,6 +252,7 @@ def fetch_strategy_score_for_today(
     *,
     conn,
     user_id: int,
+    symbol: str = "BTC",
 ) -> Optional[float]:
     """
     Strategy execution score komt UIT score agent (daily_scores).
@@ -264,9 +265,10 @@ def fetch_strategy_score_for_today(
             FROM daily_scores
             WHERE user_id = %s
               AND report_date = CURRENT_DATE
+              AND symbol = %s
             LIMIT 1;
             """,
-            (user_id,),
+            (user_id, symbol),
         )
         row = cur.fetchone()
 
@@ -527,6 +529,7 @@ def analyze_and_store_strategy(
         score = fetch_strategy_score_for_today(
             conn=conn,
             user_id=user_id,
+            symbol=setup.get("symbol", "BTC")
         ) or 0.0
 
         snapshot["confidence_score"] = score

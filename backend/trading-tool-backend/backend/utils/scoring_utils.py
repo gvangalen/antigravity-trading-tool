@@ -40,7 +40,7 @@ def normalize_indicator_name(name: str) -> str:
 # =========================================================
 # 🔢 SCORE ENGINE (USER-AWARE)
 # =========================================================
-def generate_scores_db(category: str, user_id: Optional[int] = None) -> Dict[str, Any]:
+def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str = "BTC") -> Dict[str, Any]:
     """
     Universele score-engine voor:
     - macro
@@ -70,19 +70,35 @@ def generate_scores_db(category: str, user_id: Optional[int] = None) -> Dict[str
         with conn.cursor() as cur:
             # ✅ GLOBAL vs USER mode
             if user_id is not None:
-                cur.execute(f"""
-                    SELECT DISTINCT ON ({name_col}) {name_col}, value
-                    FROM {data_table}
-                    WHERE user_id = %s
-                    ORDER BY {name_col}, timestamp DESC
-                """, (user_id,))
+                if category == "macro":
+                    cur.execute(f"""
+                        SELECT DISTINCT ON ({name_col}) {name_col}, value
+                        FROM {data_table}
+                        WHERE user_id = %s
+                        ORDER BY {name_col}, timestamp DESC
+                    """, (user_id,))
+                else:
+                    cur.execute(f"""
+                        SELECT DISTINCT ON ({name_col}) {name_col}, value
+                        FROM {data_table}
+                        WHERE user_id = %s AND symbol = %s
+                        ORDER BY {name_col}, timestamp DESC
+                    """, (user_id, symbol))
             else:
-                # 🌍 GLOBAL: Pak de allerlaatste waarde van elke indicator in het systeem
-                cur.execute(f"""
-                    SELECT DISTINCT ON ({name_col}) {name_col}, value
-                    FROM {data_table}
-                    ORDER BY {name_col}, timestamp DESC
-                """)
+                # 🌍 GLOBAL
+                if category == "macro":
+                    cur.execute(f"""
+                        SELECT DISTINCT ON ({name_col}) {name_col}, value
+                        FROM {data_table}
+                        ORDER BY {name_col}, timestamp DESC
+                    """)
+                else:
+                    cur.execute(f"""
+                        SELECT DISTINCT ON ({name_col}) {name_col}, value
+                        FROM {data_table}
+                        WHERE symbol = %s
+                        ORDER BY {name_col}, timestamp DESC
+                    """, (symbol,))
             
             rows = cur.fetchall()
 
@@ -100,7 +116,7 @@ def generate_scores_db(category: str, user_id: Optional[int] = None) -> Dict[str
         total_weight = 0.0
 
         for indicator, value in data.items():
-
+            logger.info(f"DEBUG: Scoring {category} indicator: {indicator} = {value}")
             # ✅ CRUCIAAL: user_id meegeven
             scored = score_indicator(
                 conn=conn,
@@ -152,7 +168,7 @@ def generate_scores_db(category: str, user_id: Optional[int] = None) -> Dict[str
 # =========================================================
 # 🔗 DASHBOARD: DAILY COMBINED SCORES
 # =========================================================
-def get_scores_for_symbol(user_id: int, include_metadata: bool = False) -> Dict[str, Any]:
+def get_scores_for_symbol(user_id: int, symbol: str = "BTC", include_metadata: bool = False) -> Dict[str, Any]:
 
     conn = get_db_connection()
     if not conn:
@@ -178,8 +194,9 @@ def get_scores_for_symbol(user_id: int, include_metadata: bool = False) -> Dict[
                 FROM daily_scores
                 WHERE user_id = %s
                   AND report_date = CURRENT_DATE
+                  AND symbol = %s
                 LIMIT 1
-            """, (user_id,))
+            """, (user_id, symbol))
             row = cur.fetchone()
 
         if not row:
