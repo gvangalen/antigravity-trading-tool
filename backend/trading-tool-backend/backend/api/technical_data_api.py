@@ -1,6 +1,6 @@
 import logging
-from typing import List
-from fastapi import APIRouter, HTTPException, Depends, Request
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Depends, Request, Query
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.database import get_db
