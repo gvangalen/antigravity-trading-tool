@@ -137,8 +137,9 @@ class MarketDataService:
         await self.session.commit()
         return {"message": f"Indicator '{name}' verwijderd.", "rows_deleted": 1}
 
-    async def get_market_day_data(self, user_id: int) -> List[dict]:
-        records = await self.repository.get_active_day_indicators(user_id)
+    async def get_market_day_data(self, user_id: int, symbol: str = "BTC") -> List[dict]:
+        symbol = symbol.upper() if symbol else "BTC"
+        records = await self.repository.get_active_day_indicators(user_id, symbol=symbol)
         # Note: In standard response we return dict via Pydantic or manual
         return [MarketDataIndicatorResponse.from_orm(r).dict() for r in records]
 
