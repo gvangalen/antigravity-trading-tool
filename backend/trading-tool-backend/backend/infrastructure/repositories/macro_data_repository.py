@@ -7,6 +7,15 @@ class MacroDataRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def get_global_indicators(self, category: str = 'macro') -> Sequence[Indicator]:
+        stmt = (
+            select(Indicator)
+            .where(Indicator.category == category)
+            .order_by(Indicator.display_name.asc())
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def check_indicator_exists(self, user_id: int, name: str) -> bool:
         stmt = (
             select(MacroData)

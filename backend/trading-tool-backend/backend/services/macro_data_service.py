@@ -136,31 +136,8 @@ class MacroDataService:
         records = await self.repository.get_active_day_macro_data(user_id)
         return [MacroDataResponse.from_orm(r) for r in records]
 
-    async def get_macro_week_data(self, user_id: int, symbol: str = "BTC") -> List[MacroAggregateResponse]:
-        cache_key = f"week_{user_id}_{symbol}"
-        now = datetime.now()
-        if cache_key in self._cache:
-            data, expiry = self._cache[cache_key]
-            if now < expiry: return data
-
+    async def get_macro_week_data(self, user_id: int, symbol: Optional[str] = "BTC") -> List[MacroAggregateResponse]:
         records = await self.repository.get_macro_week_data(user_id, symbol)
-         # Format needed for frontend: indicator, waarde, ...
-        result = [
-            MacroAggregateResponse(
-                indicator=r.name,
-                waarde=r.value,
-                trend=r.trend,
-                interpretation=r.interpretation,
-                action=r.action,
-                score=r.score,
-                timestamp=r.timestamp
-            ) for r in records
-        ]
-        self._cache[cache_key] = (result, now + timedelta(seconds=self._CACHE_TTL))
-        return result
-
-    async def get_macro_month_data(self, user_id: int, symbol: str = "BTC") -> List[MacroAggregateResponse]:
-        records = await self.repository.get_macro_aggregated_data(user_id, symbol, 4)
         return [
             MacroAggregateResponse(
                 indicator=r.name,
@@ -173,8 +150,22 @@ class MacroDataService:
             ) for r in records
         ]
 
-    async def get_macro_quarter_data(self, user_id: int, symbol: str = "BTC") -> List[MacroAggregateResponse]:
-        records = await self.repository.get_macro_aggregated_data(user_id, symbol, 12)
+    async def get_macro_month_data(self, user_id: int, symbol: Optional[str] = "BTC") -> List[MacroAggregateResponse]:
+        records = await self.repository.get_macro_month_data(user_id, symbol)
+        return [
+            MacroAggregateResponse(
+                indicator=r.name,
+                waarde=r.value,
+                trend=r.trend,
+                interpretation=r.interpretation,
+                action=r.action,
+                score=r.score,
+                timestamp=r.timestamp
+            ) for r in records
+        ]
+
+    async def get_macro_quarter_data(self, user_id: int, symbol: Optional[str] = "BTC") -> List[MacroAggregateResponse]:
+        records = await self.repository.get_macro_quarter_data(user_id, symbol)
         return [
             MacroAggregateResponse(
                 indicator=r.name,

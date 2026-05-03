@@ -76,7 +76,7 @@ class BotRepository:
 
     async def get_active_bots_with_setups(self, user_id: int) -> List[dict]:
         query = text("""
-              b.id, b.name,
+            SELECT b.id, b.name,
               COALESCE(b.symbol,'BTC') AS symbol,
               COALESCE(st.timeframe,'—') AS timeframe,
               s.setup_type,
