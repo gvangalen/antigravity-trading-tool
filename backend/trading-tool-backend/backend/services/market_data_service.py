@@ -62,20 +62,21 @@ class MarketDataService:
     # =========================================================
     # USER INDICATORS: CRUD
     # =========================================================
-    async def add_user_market_indicator(self, user_id: int, raw_name: str, value: Optional[float]) -> MarketDataIndicatorResponse:
+    async def add_user_market_indicator(self, user_id: int, raw_name: str, value: Optional[float], symbol: str = "BTC") -> MarketDataIndicatorResponse:
+        symbol = symbol.upper() if symbol else "BTC"
         indicator_name = raw_name.strip()
         if not indicator_name:
             raise HTTPException(400, "❌ Indicator mag niet leeg zijn.")
 
-        exists = await self.repository.check_indicator_exists(indicator_name, user_id)
+        exists = await self.repository.check_indicator_exists(indicator_name, user_id, symbol=symbol)
         if exists:
-            raise HTTPException(409, f"Indicator '{indicator_name}' is al toegevoegd.")
+            raise HTTPException(409, f"Indicator '{indicator_name}' is al toegevoegd voor {symbol}.")
 
         # Bepaal value als deze leeg is
         if value is None:
-            snapshot = await self.repository.get_latest_snapshot("BTC")
+            snapshot = await self.repository.get_latest_snapshot(symbol)
             if not snapshot:
-                raise HTTPException(404, "Geen globale BTC market_data gevonden.")
+                raise HTTPException(404, f"Geen globale {symbol} market_data gevonden.")
             
             lname = indicator_name.lower()
             if "price" in lname:
@@ -88,7 +89,7 @@ class MarketDataService:
                 raise HTTPException(
                     400,
                     "❌ Geen 'value' meegegeven en indicator kan niet automatisch "
-                    "worden gemapt op price/change_24h/volume.",
+                    f"worden gemapt voor {symbol}.",
                 )
 
         try:
@@ -114,6 +115,7 @@ class MarketDataService:
             action=action,
             score=score,
             user_id=user_id,
+            symbol=symbol,
             timestamp=datetime.utcnow()
         )
         saved_record = await self.repository.add_market_data_indicator(new_record)
@@ -126,16 +128,18 @@ class MarketDataService:
 
         return MarketDataIndicatorResponse.from_orm(saved_record)
 
-    async def list_user_market_indicators(self, user_id: int, limit: int) -> List[MarketDataIndicatorResponse]:
-        records = await self.repository.get_user_market_indicators(user_id, limit)
+    async def list_user_market_indicators(self, user_id: int, symbol: str = "BTC", limit: int = 200) -> List[MarketDataIndicatorResponse]:
+        symbol = symbol.upper() if symbol else "BTC"
+        records = await self.repository.get_user_market_indicators(user_id, symbol=symbol, limit=limit)
         return [MarketDataIndicatorResponse.from_orm(r) for r in records]
 
-    async def delete_user_market_indicator(self, name: str, user_id: int) -> dict:
-        deleted = await self.repository.delete_user_market_indicator(name, user_id)
+    async def delete_user_market_indicator(self, name: str, user_id: int, symbol: str = "BTC") -> dict:
+        symbol = symbol.upper() if symbol else "BTC"
+        deleted = await self.repository.delete_user_market_indicator(name, user_id, symbol=symbol)
         if not deleted:
-            raise HTTPException(404, f"Indicator '{name}' niet gevonden voor deze gebruiker.")
+            raise HTTPException(404, f"Indicator '{name}' niet gevonden voor {symbol}.")
         await self.session.commit()
-        return {"message": f"Indicator '{name}' verwijderd.", "rows_deleted": 1}
+        return {"message": f"Indicator '{name}' verwijderd voor {symbol}.", "rows_deleted": 1}
 
     async def get_market_day_data(self, user_id: int, symbol: str = "BTC") -> List[dict]:
         symbol = symbol.upper() if symbol else "BTC"
