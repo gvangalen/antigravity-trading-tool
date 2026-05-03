@@ -22,6 +22,7 @@ module.exports = {
       script: 'celery',
       args: '-A backend.celery_task.celery_app worker --loglevel=info --concurrency=1',
       cwd: './backend/trading-tool-backend',
+      interpreter: 'none',
       max_memory_restart: '300M'
     },
     {
@@ -29,6 +30,7 @@ module.exports = {
       script: 'celery',
       args: '-A backend.celery_task.celery_app beat --loglevel=info',
       cwd: './backend/trading-tool-backend',
+      interpreter: 'none',
       max_memory_restart: '200M'
     }
   ]
