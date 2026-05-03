@@ -7,7 +7,7 @@ module.exports = {
       interpreter: '/home/ubuntu/.nvm/versions/node/v20.19.5/bin/node',
       env: {
         NODE_ENV: 'production',
-        PORT: 5008
+        PORT: 5002
       },
       max_memory_restart: '500M'
     },
