@@ -62,20 +62,46 @@ class ScoreService:
         if not scores or not has_all_data:
             logger.info(f"🚀 Data incomplete for {symbol}. Triggering RUNTIME scan...")
             try:
-                # 1. Technical (this will now respect the global config and fetch missing values)
-                tech_res = await asyncio.to_thread(generate_scores_db, "technical", user_id=user_id, symbol=symbol)
-                # 2. Market
+                from backend.utils.scoring_engine import run_category_scoring
+                from backend.utils.technical_interpreter import fetch_technical_value
+                
+                # 1. Technical: Fetch missing values and score them individually
+                user_configs = await tech_repo.get_user_configs(user_id)
+                tech_values = {}
+                for conf in user_configs:
+                    try:
+                        # Haal live waarde op
+                        cfg = await tech_repo.get_indicator_config(conf.indicator)
+                        if cfg:
+                            res = await fetch_technical_value(conf.indicator, cfg.source, cfg.link, symbol=symbol)
+                            val = float(res["value"] if isinstance(res, dict) else res)
+                            tech_values[conf.indicator] = val
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to fetch {conf.indicator} for {symbol}: {e}")
+
+                # Score and Persist individual technical indicators
+                tech_res = await asyncio.to_thread(
+                    run_category_scoring, 
+                    user_id=user_id, 
+                    category="technical", 
+                    indicator_values=tech_values,
+                    persist=True,
+                    symbol=symbol
+                )
+
+                # 2. Market (similar logic)
                 mark_res = await asyncio.to_thread(generate_scores_db, "market", user_id=user_id, symbol=symbol)
+                
                 # 3. Macro (global)
                 mac_res = await asyncio.to_thread(generate_scores_db, "macro", user_id=user_id)
 
-                # Save daily scores
+                # Save daily combined scores
                 await self.repository.save_daily_combined_score(
                     user_id=user_id,
                     symbol=symbol,
                     macro_score=mac_res.get("total_score", 50),
                     macro_interpretation="Runtime macro scan",
-                    technical_score=tech_res.get("total_score", 50),
+                    technical_score=tech_res.get("weighted_score", 50),
                     technical_interpretation="Runtime technical scan",
                     market_score=mark_res.get("total_score", 50),
                     market_interpretation="Runtime market scan",

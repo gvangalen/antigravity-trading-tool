@@ -393,6 +393,7 @@ def score_category(
     indicator_values: Dict[str, Any],
     persist: bool = True,
     ts: Optional[datetime] = None,
+    symbol: str = "BTC"
 ) -> Dict[str, Any]:
     if ts is None:
         ts = datetime.utcnow()
@@ -440,6 +441,7 @@ def score_category(
             category=category,
             items=items,
             ts=ts,
+            symbol=symbol
         )
 
     return {
@@ -461,6 +463,7 @@ def persist_indicator_scores(
     category: str,
     items: List[Dict[str, Any]],
     ts: Optional[datetime] = None,
+    symbol: str = "BTC"
 ) -> None:
     if ts is None:
         ts = datetime.utcnow()
@@ -491,10 +494,11 @@ def persist_indicator_scores(
                     interpretation,
                     action,
                     timestamp,
-                    user_id
+                    user_id,
+                    symbol
                 )
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT (user_id, indicator, score_date)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (user_id, indicator, symbol, score_date)
                 DO UPDATE SET
                     value = EXCLUDED.value,
                     score = EXCLUDED.score,
@@ -512,6 +516,7 @@ def persist_indicator_scores(
                     action,
                     ts,
                     user_id,
+                    symbol
                 ),
             )
 
@@ -525,6 +530,7 @@ def run_category_scoring(
     indicator_values: Dict[str, Any],
     persist: bool = True,
     ts: Optional[datetime] = None,
+    symbol: str = "BTC"
 ) -> Dict[str, Any]:
     conn = get_db_connection()
     if not conn:
@@ -538,6 +544,7 @@ def run_category_scoring(
             indicator_values=indicator_values,
             persist=persist,
             ts=ts,
+            symbol=symbol
         )
         conn.commit()
         return result

@@ -19,11 +19,12 @@ async def get_report_service(db: AsyncSession = Depends(get_db)):
 # ======================================================
 @router.get("/report/daily/latest")
 async def get_daily_latest(
+    symbol: str = Query("BTC"),
     current_user: dict = Depends(get_current_user),
     service: ReportService = Depends(get_report_service)
 ):
     try:
-        return await service.get_latest_report(current_user["id"], "daily_reports")
+        return await service.get_latest_report(current_user["id"], "daily_reports", symbol=symbol)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

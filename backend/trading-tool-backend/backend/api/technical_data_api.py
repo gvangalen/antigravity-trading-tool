@@ -103,6 +103,20 @@ async def get_latest_day_data(
         user_id = current_user["id"]
         repo = TechnicalDataRepository(session)
         rows = await repo.get_day_data(user_id, symbol=symbol)
+        
+        # 🔥 RUNTIME TRIGGER: Als er geen data is voor deze symbol, probeer het dan aan te maken
+        if not rows and symbol:
+             logger.info(f"🚀 Geen technical data voor {symbol}. Triggering runtime scan...")
+             from backend.services.score_service import ScoreService
+             from backend.infrastructure.repositories.score_repository import ScoreRepository
+             
+             score_service = ScoreService(ScoreRepository(session))
+             # Dit triggert de agents via de score service logica
+             await score_service.get_daily_scores(user_id, symbol)
+             
+             # Probeer het opnieuw na de scan
+             rows = await repo.get_day_data(user_id, symbol=symbol)
+
         return [
             TechnicalDataResponse(
                 indicator=r.indicator,
