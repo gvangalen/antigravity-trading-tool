@@ -49,7 +49,7 @@ export default function TradingViewChart({
     };
 
     // Small delay to ensure DOM is ready and prevent 'null' querySelector errors
-    timeoutId = setTimeout(initChart, 200);
+    timeoutId = setTimeout(initChart, 300);
 
     return () => {
       isMounted = false;

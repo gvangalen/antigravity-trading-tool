@@ -42,7 +42,7 @@ export default function TradingViewSmartChart({
     if (!containerRef.current || candlesLoading || !candles.length) return;
 
     // 🛡️ SECURITY CHECK: Prevent "width(-1)" error in console
-    if (containerRef.current.clientWidth <= 0) {
+    if (containerRef.current.clientWidth <= 0 || containerRef.current.clientHeight <= 0) {
       // Re-run this effect when the container gets a size
       const observer = new ResizeObserver(() => {
         if (containerRef.current && containerRef.current.clientWidth > 0) {
