@@ -62,12 +62,12 @@ export default function MarketSevenDayTable({ history, loading = false }) {
              <CalendarDays className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">Historical Log</div>
-            <h2 className="text-xl font-black text-foreground tracking-tight uppercase leading-none mt-1">7-Day Market Telemetry</h2>
+            <div className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">Historisch Log</div>
+            <h2 className="text-xl font-black text-foreground tracking-tight uppercase leading-none mt-1">Markt Historie (7 Dagen)</h2>
           </div>
         </div>
-        <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] bg-card px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
-           ARCHIVAL_SYNC: OK
+        <div className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] bg-blue-50 px-4 py-2 rounded-xl border border-blue-100 shadow-sm">
+           SYSTEEM STATUS: LIVE
         </div>
       </div>
 
@@ -75,13 +75,13 @@ export default function MarketSevenDayTable({ history, loading = false }) {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-slate-100 text-[10px] font-black text-secondary uppercase tracking-widest">
-              <th className="px-8 py-5">Node_Date</th>
-              <th className="px-8 py-5 text-right">Price_Open</th>
-              <th className="px-8 py-5 text-right">Price_High</th>
-              <th className="px-8 py-5 text-right">Price_Low</th>
-              <th className="px-8 py-5 text-right">Price_Close</th>
-              <th className="px-8 py-5 text-right">Day_Shift</th>
-              <th className="px-8 py-5 text-right">Volume_Node</th>
+              <th className="px-8 py-5">Datum</th>
+              <th className="px-8 py-5 text-right">Open</th>
+              <th className="px-8 py-5 text-right">Hoog</th>
+              <th className="px-8 py-5 text-right">Laag</th>
+              <th className="px-8 py-5 text-right">Sluit</th>
+              <th className="px-8 py-5 text-right">Verandering</th>
+              <th className="px-8 py-5 text-right">Volume</th>
             </tr>
           </thead>
 

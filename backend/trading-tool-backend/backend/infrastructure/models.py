@@ -139,6 +139,19 @@ class MarketIndicatorRule(Base):
     is_active = Column(Boolean, default=True)
     user_id = Column(Integer, nullable=True)
 
+class UserIndicatorConfig(Base):
+    """
+    🎯 SINGLE SOURCE OF TRUTH voor User Indicator Preferences.
+    Deze tabel onthoudt welke indicators een gebruiker wil volgen, ONAFHANKELIJK van het symbool.
+    """
+    __tablename__ = 'user_indicator_configs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    indicator = Column(String, nullable=False) # e.g. 'rsi', 'ma200'
+    category = Column(String, default='technical') # 'technical', 'macro', 'market'
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class MacroData(Base):
     __tablename__ = 'macro_data'
 
@@ -306,4 +319,15 @@ class ExchangeKey(Base):
     api_passphrase = Column(String, nullable=True) # Encrypted, optional
     is_active = Column(Boolean, default=True)
     is_live = Column(Boolean, default=False) # False = Simulated/Paper, True = Real Exchange
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Watchlist(Base):
+    """
+    ⭐ Assets die de engine dagelijks moet scannen voor de user.
+    """
+    __tablename__ = 'watchlists'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    symbol = Column(String, nullable=False) # e.g. 'BTC', 'ETH'
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -35,14 +35,13 @@ import useBotData from "@/hooks/useBotData";
 
 import ScoreHistoryChart from "@/components/dashboard/ScoreHistoryChart";
 
+import { useCurrentAsset } from "@/hooks/useCurrentAsset";
+
 export default function DashboardPage() {
   const { t } = useTranslation();
   const { activeSetup, focusedBotId, setFocusedBotId } = useActiveSetup();
   const { configs: botConfigs } = useBotData();
-
-  // 🔥 SYMBOL RESOLUTION
-  const focusedBot = botConfigs.find(b => b.id === focusedBotId);
-  const activeSymbol = focusedBot?.symbol || activeSetup?.symbol || "BTC";
+  const { symbol: activeSymbol } = useCurrentAsset();
 
   const {
     technicalData,
@@ -62,26 +61,17 @@ export default function DashboardPage() {
 
 
   const { macroData, loading: macroLoading, error: macroError, reload: macroReload } =
-    useMacroData();
+    useMacroData("Dag", activeSymbol);
   
-   const { sevenDayData, btcLive, loading: marketLoading } = useMarketData(activeSymbol);
+   const { sevenDayData, btcLive: assetLive, loading: marketLoading } = useMarketData(activeSymbol);
  
    /* --------------------------------------------------------
      🔁 MAPPING & SYNC
    -------------------------------------------------------- */
-  function mapSetupToTradingView(setup) {
-    if (!setup) {
-      return {
-        symbol: "BINANCE:BTCUSDT",
-        interval: "D",
-      };
-    }
-
-    const symbolMap = {
-      BTC: "BINANCE:BTCUSDT",
-      ETH: "BINANCE:ETHUSDT",
-    };
-
+  function mapSetupToTradingView(setup, globalSymbol) {
+    // Priority: 1. Setup/Bot Symbol, 2. Global Selected Asset
+    const targetSymbol = setup?.symbol || globalSymbol || "BTC";
+    
     const intervalMap = {
       "1W": "W",
       "1D": "D",
@@ -90,12 +80,12 @@ export default function DashboardPage() {
     };
 
     return {
-      symbol: symbolMap[setup.symbol] ?? "BINANCE:BTCUSDT",
-      interval: intervalMap[setup.timeframe] ?? "D",
+      symbol: `BINANCE:${targetSymbol}USDT`,
+      interval: intervalMap[setup?.timeframe] ?? "D",
     };
   }
 
-  const tvConfig = mapSetupToTradingView(activeSetup);
+  const tvConfig = mapSetupToTradingView(activeSetup, activeSymbol);
   
   // 🔥 INDICATOR SYNC: Extract names and map to TV studies
   const activeIndicatorNames = Array.isArray(technicalData) 
@@ -136,7 +126,7 @@ export default function DashboardPage() {
              {/* LEFT: MARKET VIEW */}
              <div className="flex-1 space-y-6">
                 <DashboardErrorBoundary>
-                   <MarketLiveCard data={btcLive} loading={!btcLive} />
+                   <MarketLiveCard data={assetLive} loading={!assetLive} symbol={activeSymbol} />
                 </DashboardErrorBoundary>
 
                 <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden">
@@ -199,7 +189,7 @@ export default function DashboardPage() {
                     <div className="card-p p-8">
                       <MarketSummaryForDashboard
                         sevenDayData={sevenDayData}
-                        btcLive={btcLive}
+                        btcLive={assetLive}
                         loading={marketLoading}
                       />
                     </div>

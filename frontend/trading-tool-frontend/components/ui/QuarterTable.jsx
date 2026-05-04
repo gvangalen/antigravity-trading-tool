@@ -13,7 +13,7 @@ export default function QuarterTable({ data = [], onRemove }) {
   if (!groups || groups.length === 0) {
     return (
       <div className="bg-card border border-slate-200 rounded-[2rem] p-12 text-center text-xs font-black text-secondary uppercase tracking-widest italic opacity-60">
-         NO_QUARTERLY_TELEMETRY_DETECTED
+         Geen kwartaaloverzicht beschikbaar
       </div>
     );
   }
@@ -29,23 +29,23 @@ export default function QuarterTable({ data = [], onRemove }) {
                  <Info className="w-4 h-4" />
               </div>
               <div className="text-[10px] font-black text-muted uppercase tracking-widest leading-none">
-                 QUARTERLY_LOG_NODE: {group.label.toUpperCase()}
+                 Kwartaaloverzicht: {group.label.toUpperCase()}
               </div>
             </div>
-            <div className="text-[8px] font-black text-slate-300 uppercase tracking-[0.2em]">
-               STATUS: ARCHIVAL_SYNC_COMPLETED
+            <div className="text-[8px] font-black text-blue-500 uppercase tracking-[0.2em]">
+               SYSTEEM STATUS: LIVE
             </div>
           </div>
 
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 text-[10px] font-black text-secondary uppercase tracking-widest">
-                <th className="px-8 py-4">Indicator Node</th>
-                <th className="px-8 py-4 text-center">Value</th>
+                <th className="px-8 py-4">Indicator</th>
+                <th className="px-8 py-4 text-center">Waarde</th>
                 <th className="px-8 py-4 text-center">Score</th>
-                <th className="px-8 py-4">Decision_Signal</th>
-                <th className="px-8 py-4">System_Interpretation</th>
-                {onRemove && <th className="px-8 py-4 text-right">Actions</th>}
+                <th className="px-8 py-4">Signaal</th>
+                <th className="px-8 py-4">Toelichting</th>
+                {onRemove && <th className="px-8 py-4 text-right">Acties</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">

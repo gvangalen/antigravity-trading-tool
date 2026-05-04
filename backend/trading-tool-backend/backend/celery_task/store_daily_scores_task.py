@@ -50,26 +50,9 @@ def fetch_setup_score_from_setup_agent(conn, user_id: int):
 # =========================================================
 def build_daily_scores_for_user(user_id: int):
     """
-    Bouwt daily_scores voor één user.
-
-    BRONNEN:
-    - macro      → generate_scores_db
-    - technical  → generate_scores_db
-    - market     → generate_scores_db
-    - setup      → SETUP AGENT (ai_category_insights)
-
-    ❌ GEEN eigen setup-berekening meer
+    Bouwt daily_scores voor de assets in de watchlist van de user.
     """
-
-    logger.info(f"🧮 Daily scores bouwen (user_id={user_id})")
-
-    macro = generate_scores_db("macro", user_id=user_id)
-    technical = generate_scores_db("technical", user_id=user_id)
-    market = generate_scores_db("market", user_id=user_id)
-
-    macro_score = macro.get("total_score", 0)
-    technical_score = technical.get("total_score", 0)
-    market_score = market.get("total_score", 0)
+    logger.info(f"🧮 Daily scores bouwen voor watchlist van user_id={user_id}")
 
     conn = get_db_connection()
     if not conn:
@@ -77,77 +60,76 @@ def build_daily_scores_for_user(user_id: int):
         return
 
     try:
-        # 🔥 Setup-score UIT setup agent
-        setup_score = fetch_setup_score_from_setup_agent(conn, user_id)
-
-        # fallback: geen setup agent gedraaid → score = 0 (of NULL)
-        if setup_score is None:
-            setup_score = None
-
+        # 1. Haal watchlist op
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO daily_scores (
-                    report_date,
-                    user_id,
-                    macro_score,
-                    technical_score,
-                    market_score,
-                    setup_score,
+            cur.execute("SELECT symbol FROM watchlists WHERE user_id = %s", (user_id,))
+            watchlist = [r[0] for r in cur.fetchall()]
 
-                    macro_interpretation,
-                    technical_interpretation,
-                    market_interpretation,
+        # 2. Als er geen watchlist is, doen we een fallback naar BTC (of niks?)
+        if not watchlist:
+            logger.info(f"ℹ️ Geen watchlist voor user {user_id}. Gebruik BTC als fallback.")
+            watchlist = ["BTC"]
 
-                    macro_top_contributors,
-                    technical_top_contributors,
-                    market_top_contributors
+        for symbol in watchlist:
+            logger.info(f"🔍 Scannen van asset {symbol} voor user {user_id}")
+            
+            macro = generate_scores_db("macro", user_id=user_id) # Macro is vaak global maar kan symbol-aware zijn
+            technical = generate_scores_db("technical", user_id=user_id, symbol=symbol)
+            market = generate_scores_db("market", user_id=user_id, symbol=symbol)
+
+            macro_score = macro.get("total_score", 50)
+            technical_score = technical.get("total_score", 50)
+            market_score = market.get("total_score", 50)
+
+            # 🔥 Setup-score UIT setup agent (per asset?)
+            # Voorlopig is setup agent nog globaal/per user. 
+            # TODO: Setup agent symbol-aware maken indien nodig.
+            setup_score = fetch_setup_score_from_setup_agent(conn, user_id)
+
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO daily_scores (
+                        report_date, user_id, symbol,
+                        macro_score, technical_score, market_score, setup_score,
+                        macro_interpretation, technical_interpretation, market_interpretation,
+                        macro_top_contributors, technical_top_contributors, market_top_contributors
+                    )
+                    VALUES (
+                        CURRENT_DATE, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s,
+                        %s::jsonb, %s::jsonb, %s::jsonb
+                    )
+                    ON CONFLICT (user_id, symbol, report_date)
+                    DO UPDATE SET
+                        macro_score = EXCLUDED.macro_score,
+                        technical_score = EXCLUDED.technical_score,
+                        market_score = EXCLUDED.market_score,
+                        setup_score = EXCLUDED.setup_score,
+                        macro_interpretation = EXCLUDED.macro_interpretation,
+                        technical_interpretation = EXCLUDED.technical_interpretation,
+                        market_interpretation = EXCLUDED.market_interpretation,
+                        macro_top_contributors = EXCLUDED.macro_top_contributors,
+                        technical_top_contributors = EXCLUDED.technical_top_contributors,
+                        market_top_contributors = EXCLUDED.market_top_contributors;
+                    """,
+                    (
+                        user_id, symbol,
+                        macro_score, technical_score, market_score, setup_score,
+                        "Rule-based macro scan", "Rule-based technical scan", "Rule-based market scan",
+                        _jsonb(list(macro.get("scores", {}).keys())),
+                        _jsonb(list(technical.get("scores", {}).keys())),
+                        _jsonb(list(market.get("scores", {}).keys())),
+                    ),
                 )
-                VALUES (
-                    CURRENT_DATE,
-                    %s, %s, %s, %s, %s,
-                    %s, %s, %s,
-                    %s::jsonb, %s::jsonb, %s::jsonb
-                )
-                ON CONFLICT (user_id, report_date)
-                DO UPDATE SET
-                    macro_score = EXCLUDED.macro_score,
-                    technical_score = EXCLUDED.technical_score,
-                    market_score = EXCLUDED.market_score,
-                    setup_score = EXCLUDED.setup_score,
-
-                    macro_interpretation = EXCLUDED.macro_interpretation,
-                    technical_interpretation = EXCLUDED.technical_interpretation,
-                    market_interpretation = EXCLUDED.market_interpretation,
-
-                    macro_top_contributors = EXCLUDED.macro_top_contributors,
-                    technical_top_contributors = EXCLUDED.technical_top_contributors,
-                    market_top_contributors = EXCLUDED.market_top_contributors;
-                """,
-                (
-                    user_id,
-                    macro_score,
-                    technical_score,
-                    market_score,
-                    setup_score,
-
-                    "Rule-based macro score",
-                    "Rule-based technical score",
-                    "Rule-based market score",
-
-                    _jsonb(list(macro.get("scores", {}).keys())),
-                    _jsonb(list(technical.get("scores", {}).keys())),
-                    _jsonb(list(market.get("scores", {}).keys())),
-                ),
-            )
-
+        
         conn.commit()
-        logger.info(f"💾 daily_scores opgeslagen (user_id={user_id})")
+        logger.info(f"💾 Daily scores voor watchlist opgeslagen (user_id={user_id})")
 
     except Exception:
         conn.rollback()
-        logger.error("❌ Fout bij opslaan daily_scores", exc_info=True)
-
+        logger.error(f"❌ Fout bij build_daily_scores_for_user ({user_id})", exc_info=True)
     finally:
         conn.close()
 

@@ -68,8 +68,33 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
 
     try:
         with conn.cursor() as cur:
-            # ✅ GLOBAL vs USER mode
-            if user_id is not None:
+            # ✅ NEW: Use Global Config if available
+            if user_id is not None and category == "technical":
+                # Haal eerst de config op
+                cur.execute("""
+                    SELECT indicator FROM user_indicator_configs 
+                    WHERE user_id = %s AND category = %s
+                """, (user_id, category))
+                configs = [r[0] for r in cur.fetchall()]
+                
+                if configs:
+                    # Haal nu de data op voor deze specifieke indicators en dit symbool
+                    cur.execute(f"""
+                        SELECT DISTINCT ON ({name_col}) {name_col}, value
+                        FROM {data_table}
+                        WHERE user_id = %s AND symbol = %s AND {name_col} = ANY(%s)
+                        ORDER BY {name_col}, timestamp DESC
+                    """, (user_id, symbol, configs))
+                else:
+                    # Fallback naar alles wat we hebben voor dit symbool
+                    cur.execute(f"""
+                        SELECT DISTINCT ON ({name_col}) {name_col}, value
+                        FROM {data_table}
+                        WHERE user_id = %s AND symbol = %s
+                        ORDER BY {name_col}, timestamp DESC
+                    """, (user_id, symbol))
+            
+            elif user_id is not None:
                 if category == "macro":
                     cur.execute(f"""
                         SELECT DISTINCT ON ({name_col}) {name_col}, value
@@ -85,21 +110,9 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                         ORDER BY {name_col}, timestamp DESC
                     """, (user_id, symbol))
             else:
-                # 🌍 GLOBAL
-                if category == "macro":
-                    cur.execute(f"""
-                        SELECT DISTINCT ON ({name_col}) {name_col}, value
-                        FROM {data_table}
-                        ORDER BY {name_col}, timestamp DESC
-                    """)
-                else:
-                    cur.execute(f"""
-                        SELECT DISTINCT ON ({name_col}) {name_col}, value
-                        FROM {data_table}
-                        WHERE symbol = %s
-                        ORDER BY {name_col}, timestamp DESC
-                    """, (symbol,))
-            
+                # 🌍 GLOBAL mode (fallback)
+                pass
+
             rows = cur.fetchall()
 
         data = {

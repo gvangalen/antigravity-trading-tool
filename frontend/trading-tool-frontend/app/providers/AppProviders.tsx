@@ -7,13 +7,16 @@ import { Toaster } from "react-hot-toast";
 
 import { I18nProvider } from "./I18nProvider";
 
+import { AssetProvider } from "./AssetProvider";
+
 export default function AppProviders({ children }) {
   return (
     <AuthProvider>
       <I18nProvider>
         <ModalProvider>
-          <SetupProvider>
-          <Toaster 
+          <AssetProvider>
+            <SetupProvider>
+              <Toaster 
             position="bottom-center"
             toastOptions={{
               duration: 3000,
@@ -44,8 +47,9 @@ export default function AppProviders({ children }) {
             }}
           />
           {children}
-        </SetupProvider>
-      </ModalProvider>
+            </SetupProvider>
+          </AssetProvider>
+        </ModalProvider>
       </I18nProvider>
     </AuthProvider>
   );

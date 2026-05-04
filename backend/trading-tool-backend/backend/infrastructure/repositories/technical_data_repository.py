@@ -3,11 +3,46 @@ from sqlalchemy import select, and_, func, delete, Date
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from backend.infrastructure.models import TechnicalDataIndicator, TechnicalIndicatorRule, Indicator
+from backend.infrastructure.models import TechnicalDataIndicator, TechnicalIndicatorRule, Indicator, UserIndicatorConfig
 
 class TechnicalDataRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def get_user_configs(self, user_id: int, category: str = 'technical') -> List[UserIndicatorConfig]:
+        stmt = select(UserIndicatorConfig).where(
+            and_(
+                UserIndicatorConfig.user_id == user_id,
+                UserIndicatorConfig.category == category
+            )
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def ensure_user_config(self, user_id: int, indicator: str, category: str = 'technical'):
+        # Check if exists
+        stmt = select(UserIndicatorConfig).where(
+            and_(
+                UserIndicatorConfig.user_id == user_id,
+                UserIndicatorConfig.indicator == indicator,
+                UserIndicatorConfig.category == category
+            )
+        )
+        res = await self.session.execute(stmt)
+        if not res.scalars().first():
+            new_conf = UserIndicatorConfig(user_id=user_id, indicator=indicator, category=category)
+            self.session.add(new_conf)
+            await self.session.flush()
+
+    async def remove_user_config(self, user_id: int, indicator: str, category: str = 'technical'):
+        stmt = delete(UserIndicatorConfig).where(
+            and_(
+                UserIndicatorConfig.user_id == user_id,
+                UserIndicatorConfig.indicator == indicator,
+                UserIndicatorConfig.category == category
+            )
+        )
+        await self.session.execute(stmt)
 
     async def get_latest_for_user(self, user_id: int, symbol: Optional[str] = None, limit: int = 50) -> List[TechnicalDataIndicator]:
         stmt = select(TechnicalDataIndicator).where(TechnicalDataIndicator.user_id == user_id)

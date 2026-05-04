@@ -18,8 +18,10 @@ import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 
+import { useCurrentAsset } from "@/hooks/useCurrentAsset";
+
 export default function MarketPage() {
-  const [activeSymbol, setActiveSymbol] = useState("BTC");
+  const { symbol: activeSymbol } = useCurrentAsset();
 
   // ===============================
   // 🧭 ONBOARDING HOOK
@@ -84,23 +86,6 @@ export default function MarketPage() {
           </div>
           <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Market</h1>
           <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">Analysis of market sentiment and price action for {activeSymbol}</p>
-        </div>
-
-        {/* 🎛️ SYMBOL SELECTOR */}
-        <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-inner">
-          {["BTC", "ETH", "SOL"].map((s) => (
-            <button
-              key={s}
-              onClick={() => setActiveSymbol(s)}
-              className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all tracking-widest ${
-                activeSymbol === s 
-                  ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm scale-[1.02]" 
-                  : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
         </div>
       </header>
 

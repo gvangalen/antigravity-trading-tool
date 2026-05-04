@@ -7,6 +7,7 @@ import { useScoresData } from "@/hooks/useScoresData";
 import { useSidebarData } from "@/hooks/useSidebarData";
 import { useSetupStrategy } from "@/hooks/useSetupStrategy";
 import Link from "next/link";
+import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
 import { 
   Rocket, 
   Target, 

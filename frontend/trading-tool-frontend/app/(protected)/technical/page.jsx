@@ -25,14 +25,12 @@ const SYMBOL_MAP = {
   "ma_200": "BINANCE:BTCUSDT",
 };
 
+import { useCurrentAsset } from "@/hooks/useCurrentAsset";
+
 export default function TechnicalPage() {
   const [activeTab, setActiveTab] = useState("Dag");
   const { openConfirm, showSnackbar } = useModal();
-
-  // ===============================
-  // 🧭 ONBOARDING HOOK
-  // ===============================
-  const { status, completeStep } = useOnboarding();
+  const { symbol: selectedAsset } = useCurrentAsset();
 
   // ===============================
   // ⚙️ TECHNICAL DATA
@@ -43,9 +41,9 @@ export default function TechnicalPage() {
     removeTechnicalIndicator,
     loading: loadingIndicators,
     error,
-  } = useTechnicalData(activeTab);
+  } = useTechnicalData(activeTab, selectedAsset);
 
-  const { technical: technicalScore } = useScoresData();
+  const { technical: technicalScore } = useScoresData(selectedAsset);
 
   // ===============================
   // 🔥 ONBOARDING TRIGGER
@@ -120,7 +118,7 @@ export default function TechnicalPage() {
         </div>
         <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Technical</h1>
         <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">
-          Analysis of trends and technical indicators
+          Analysis of trends and technical indicators for {selectedAsset}
         </p>
       </header>
 
@@ -144,7 +142,7 @@ export default function TechnicalPage() {
            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Analysis</span>
         </div>
         <DashboardErrorBoundary>
-          <AgentInsightPanel category="technical" />
+          <AgentInsightPanel category="technical" symbol={selectedAsset} />
         </DashboardErrorBoundary>
       </div>
  

@@ -30,10 +30,8 @@ class TechnicalDataService:
         # Normaliseer de naam
         name = normalize_indicator_name(name_raw)
 
-        # 1. Check op duplicates (nu symbol-aware)
-        is_duplicate = await self.repository.check_duplicate(name, user_id, symbol)
-        if is_duplicate:
-            raise ValueError(f"Indicator '{name}' is al toegevoegd voor {symbol}.")
+        # 🎯 GLOBAL STRATEGY: Zorg dat deze indicator in de globale config van de user staat
+        await self.repository.ensure_user_config(user_id, name)
 
         # 2. Haal config op
         cfg = await self.repository.get_indicator_config(name)
@@ -106,6 +104,8 @@ class TechnicalDataService:
 
     async def delete_indicator(self, name_raw: str, user_id: int, symbol: Optional[str] = None) -> int:
         name = normalize_indicator_name(name_raw)
+        # 🎯 GLOBAL STRATEGY: Verwijder uit globale config
+        await self.repository.remove_user_config(user_id, name)
         return await self.repository.delete_indicator(name, user_id, symbol)
 
     async def get_indicator_rules(self, name_raw: str, user_id: int) -> List[Any]:

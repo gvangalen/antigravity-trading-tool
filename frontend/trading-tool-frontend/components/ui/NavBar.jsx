@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { BRANDING } from "@/lib/branding";
+import AssetSwitcher from "./AssetSwitcher";
 import { useAuth } from "@/components/auth/AuthGuard"; // useAuth is actually in AuthProvider usually but AuthGuard re-exports sometimes, or use direct
 // Actually AuthGuard.jsx has useAuth. Let's check imports.
 // Ah, AuthGuard.jsx uses useAuth from AuthProvider. Wait.
@@ -205,6 +206,9 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
           );
         })}
 
+        {/* ⭐ WATCHLIST SECTION */}
+        <WatchlistSidebar onNavigate={onNavigate} />
+
         {/* ADMIN SECTION */}
         {adminLinks.length > 0 && (
           <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800">
@@ -242,6 +246,59 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
              <span key={i}>{line}<br/></span>
            ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WatchlistSidebar({ onNavigate }) {
+  const { watchlist, remove } = require("@/hooks/useWatchlist").useWatchlist();
+  const { symbol: activeSymbol, setSelectedAsset } = require("@/app/providers/AssetProvider").useAsset();
+  const { Star, X } = require("lucide-react");
+
+  if (!watchlist || watchlist.length === 0) return null;
+
+  return (
+    <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800">
+      <p className="px-5 text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-3 flex items-center gap-2">
+        <Star size={10} className="text-amber-400 fill-amber-400" />
+        Watchlist (Engine)
+      </p>
+      <div className="space-y-1">
+        {watchlist.map((symbol) => {
+          const isActive = activeSymbol === symbol;
+          return (
+            <div
+              key={symbol}
+              className={`
+                group flex items-center justify-between px-5 py-3 rounded-xl transition-all cursor-pointer
+                ${isActive 
+                  ? "bg-slate-100 dark:bg-slate-900 text-blue-600 font-black" 
+                  : "text-muted hover:bg-slate-50 dark:hover:bg-slate-900/50 hover:text-slate-900 dark:hover:text-white"
+                }
+              `}
+              onClick={() => {
+                setSelectedAsset(symbol);
+                onNavigate();
+              }}
+            >
+              <div className="flex items-center gap-4">
+                <div className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-blue-600 animate-pulse" : "bg-slate-300 dark:bg-slate-700"}`} />
+                <span className="text-[11px] font-black uppercase tracking-widest">{symbol}</span>
+              </div>
+              
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  remove(symbol);
+                }}
+                className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

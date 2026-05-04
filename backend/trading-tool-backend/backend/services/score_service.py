@@ -14,6 +14,7 @@ from backend.schemas.score_schema import (
 )
 
 from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,57 @@ class ScoreService:
     async def get_daily_scores(self, user_id: int, symbol: str = "BTC") -> DailyCombinedScoreResponse:
         logger.info(f"🔍 Fetching daily scores for user_id={user_id} symbol={symbol}")
         scores = await self.repository.fetch_daily_scores(user_id, symbol)
-        logger.info(f"📊 Raw scores from DB: {scores}")
+        
+        # 🔥 RUNTIME ENGINE: Check if we need to refresh/calculate
+        tech_repo = TechnicalDataRepository(self.repository.session)
+        user_configs = await tech_repo.get_user_configs(user_id)
+        
+        # If user has no config yet, let's use their BTC indicators as their initial global config
+        if not user_configs:
+            logger.info(f"🆕 Initializing global indicator config for user {user_id} from BTC data...")
+            btc_data = await tech_repo.get_latest_data_fallback(user_id, symbol="BTC")
+            for d in btc_data:
+                await tech_repo.ensure_user_config(user_id, d.indicator)
+            await self.repository.session.commit()
+            user_configs = await tech_repo.get_user_configs(user_id)
+
+        # Check if we have data for ALL configured indicators for THIS symbol
+        has_all_data = True
+        if user_configs:
+            for conf in user_configs:
+                exists = await tech_repo.check_duplicate(conf.indicator, user_id, symbol)
+                if not exists:
+                    has_all_data = False
+                    break
+
+        if not scores or not has_all_data:
+            logger.info(f"🚀 Data incomplete for {symbol}. Triggering RUNTIME scan...")
+            try:
+                # 1. Technical (this will now respect the global config and fetch missing values)
+                tech_res = await asyncio.to_thread(generate_scores_db, "technical", user_id=user_id, symbol=symbol)
+                # 2. Market
+                mark_res = await asyncio.to_thread(generate_scores_db, "market", user_id=user_id, symbol=symbol)
+                # 3. Macro (global)
+                mac_res = await asyncio.to_thread(generate_scores_db, "macro", user_id=user_id)
+
+                # Save daily scores
+                await self.repository.save_daily_combined_score(
+                    user_id=user_id,
+                    symbol=symbol,
+                    macro_score=mac_res.get("total_score", 50),
+                    macro_interpretation="Runtime macro scan",
+                    technical_score=tech_res.get("total_score", 50),
+                    technical_interpretation="Runtime technical scan",
+                    market_score=mark_res.get("total_score", 50),
+                    market_interpretation="Runtime market scan",
+                    setup_score=0.0
+                )
+                await self.repository.session.commit()
+                scores = await self.repository.fetch_daily_scores(user_id, symbol)
+            except Exception as e:
+                logger.error(f"❌ Runtime scoring failed: {e}")
+                scores = {}
+
         if not scores:
             logger.warning(f"⚠️ No daily scores found for user_id={user_id} today")
             scores = {}

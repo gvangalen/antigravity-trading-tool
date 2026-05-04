@@ -7,6 +7,7 @@ import NotificationToggle from "@/components/NotificationToggle";
 import { Search, ChevronRight } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import AssetSearchBar from "./AssetSearchBar";
 
 export default function TopBar() {
   const { t } = useTranslation();
@@ -48,38 +49,25 @@ export default function TopBar() {
   return (
     <header className="h-full w-full flex items-center justify-between px-10 bg-card dark:bg-[#020617] transition-colors border-b-2 border-slate-100 dark:border-slate-800">
       
-      {/* LEFT — Breadcrumb (Deep V2 Pro Style) */}
-        <div className="flex items-center gap-4">
+      {/* LEFT — Breadcrumb & Greeting */}
+        <div className="flex items-center gap-8">
         <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            {/* Branding removed for a cleaner look */}
-          </div>
-          <h2 className="text-xl font-bold text-foreground dark:text-slate-100 tracking-tight leading-none mt-1.5">
+          <h2 className="text-xl font-bold text-foreground dark:text-slate-100 tracking-tight leading-none">
             {currentLabel}
           </h2>
+          <p className="text-[10px] font-extrabold text-secondary dark:text-slate-500 tracking-widest uppercase mt-1">
+            {greetingText}
+          </p>
         </div>
       </div>
 
-      {/* CENTER — Greeting (High Clarity) */}
-      <div className="hidden lg:flex flex-1 justify-center">
-        <p className="text-sm font-extrabold text-foreground dark:text-slate-200 tracking-tight transition-colors">
-          {greetingText}
-        </p>
+      {/* CENTER — Global Asset Search (Primary Control) */}
+      <div className="hidden lg:flex flex-1 justify-center max-w-xl">
+        <AssetSearchBar />
       </div>
 
-        {/* RIGHT — Search + Avatar */}
-        <div className="flex items-center gap-6">
-
-        {/* Minimal High-Depth Search */}
-        <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus-within:ring-4 focus-within:ring-blue-600/5 transition-all shadow-inner">
-          <Search size={14} className="text-secondary" />
-          <input
-            className="bg-transparent outline-none w-48 text-xs font-bold text-foreground dark:text-slate-100 placeholder-slate-400"
-            placeholder={t.common.search}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+      {/* RIGHT — Avatar & Profile */}
+      <div className="flex items-center gap-6">
 
         {/* Avatar Menu (contains Notification setting) */}
 

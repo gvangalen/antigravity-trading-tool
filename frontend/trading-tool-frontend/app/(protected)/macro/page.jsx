@@ -53,8 +53,11 @@ const SYMBOL_MAP = {
   "btc_dominance": "CRYPTOCAP:BTC.D"
 };
 
+import { useCurrentAsset } from "@/hooks/useCurrentAsset";
+
 export default function MacroPage() {
   const [activeTab, setActiveTab] = useState("Dag");
+  const { symbol: selectedAsset } = useCurrentAsset();
 
   // ===============================
   // 🧭 ONBOARDING HOOK
@@ -74,12 +77,12 @@ export default function MacroPage() {
     activeMacroIndicatorNames,
     loading: loadingIndicators,
     error,
-  } = useMacroData(activeTab);
+  } = useMacroData(activeTab, selectedAsset);
 
   // ===============================
   // 📈 SCORE DATA
   // ===============================
-  const { macro } = useScoresData();
+  const { macro } = useScoresData(selectedAsset);
   const { openConfirm, showSnackbar } = useModal();
 
   // ===============================
@@ -167,7 +170,7 @@ export default function MacroPage() {
         </div>
         <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Macro Dashboard</h1>
         <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">
-          Analysis of global economic trends and market conditions
+          Analysis of global economic trends and market conditions for {selectedAsset}
         </p>
       </header>
 
@@ -191,7 +194,7 @@ export default function MacroPage() {
            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Analysis</span>
         </div>
         <DashboardErrorBoundary>
-          <AgentInsightPanel category="macro" />
+          <AgentInsightPanel category="macro" symbol={selectedAsset} />
         </DashboardErrorBoundary>
       </div>
 

@@ -115,6 +115,7 @@ safe_include("backend.api.ai_assistant_api", "ai_assistant_api")
 safe_include("backend.api.admin_api", "admin_api")
 safe_include("backend.api.notifications_api", "notifications_api")
 safe_include("backend.api.exchange_api", "exchange_api")
+safe_include("backend.api.watchlist_api", "watchlist_api")
 
 # ==================================================================
 # 🧠 Phase 3: Semantic Cache Initialization
