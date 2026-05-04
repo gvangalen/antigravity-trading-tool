@@ -6,6 +6,7 @@ import { useAsset } from "@/app/providers/AssetProvider";
 import { Search, X, Command, Coins } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useWatchlist } from "@/hooks/useWatchlist";
+import { useActiveSetup } from "@/app/providers/SetupProvider";
 
 const ASSETS = [
   { symbol: "BTC", name: "Bitcoin", icon: "₿" },
@@ -14,9 +15,6 @@ const ASSETS = [
   { symbol: "ADA", name: "Cardano", icon: "A" },
   { symbol: "DOT", name: "Polkadot", icon: "P" },
 ];
-
-import { useRouter } from "next/navigation";
-import { useActiveSetup } from "@/app/providers/SetupProvider";
 
 export default function AssetSearchBar() {
   const router = useRouter();
