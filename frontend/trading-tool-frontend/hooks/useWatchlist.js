@@ -9,6 +9,11 @@ export function useWatchlist() {
 
   useEffect(() => {
     loadWatchlist();
+
+    // Listen for changes from other components
+    const handleSync = () => loadWatchlist();
+    window.addEventListener("watchlist-updated", handleSync);
+    return () => window.removeEventListener("watchlist-updated", handleSync);
   }, []);
 
   async function loadWatchlist() {
@@ -22,10 +27,15 @@ export function useWatchlist() {
     }
   }
 
+  const notify = () => {
+    window.dispatchEvent(new CustomEvent("watchlist-updated"));
+  };
+
   async function add(symbol) {
     try {
       await addToWatchlist(symbol);
       await loadWatchlist();
+      notify();
     } catch (err) {
       console.error("❌ Watchlist add error:", err);
     }
@@ -35,6 +45,7 @@ export function useWatchlist() {
     try {
       await removeFromWatchlist(symbol);
       await loadWatchlist();
+      notify();
     } catch (err) {
       console.error("❌ Watchlist remove error:", err);
     }
