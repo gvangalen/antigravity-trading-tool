@@ -39,9 +39,20 @@ import { useCurrentAsset } from "@/hooks/useCurrentAsset";
 
 export default function DashboardPage() {
   const { t } = useTranslation();
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const urlSymbol = searchParams?.get("symbol")?.toUpperCase();
+  
+  const { selectedAsset, setSelectedAsset } = require("@/app/providers/AssetProvider").useAsset();
   const { activeSetup, focusedBotId, setFocusedBotId } = useActiveSetup();
   const { configs: botConfigs } = useBotData();
   const { symbol: activeSymbol } = useCurrentAsset();
+
+  // Sync URL param to global state if they differ
+  useEffect(() => {
+    if (urlSymbol && urlSymbol !== selectedAsset) {
+      setSelectedAsset(urlSymbol);
+    }
+  }, [urlSymbol, selectedAsset, setSelectedAsset]);
 
   const {
     technicalData,

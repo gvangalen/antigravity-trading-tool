@@ -14,7 +14,13 @@ import { useSearchParams } from "next/navigation";
  */
 export function useCurrentAsset() {
   const searchParams = useSearchParams();
-  const urlSymbol = searchParams.get("symbol")?.toUpperCase();
+  
+  // Try searchParams first, then window.location as fallback
+  let urlSymbol = searchParams?.get("symbol")?.toUpperCase();
+  if (!urlSymbol && typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    urlSymbol = params.get("symbol")?.toUpperCase();
+  }
   
   const { selectedAsset } = useAsset();
   const { activeSetup, focusedBotId } = useActiveSetup();
