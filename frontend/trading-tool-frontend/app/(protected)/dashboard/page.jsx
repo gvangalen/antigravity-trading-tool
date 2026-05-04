@@ -95,7 +95,7 @@ export default function DashboardPage() {
 
 
   return (
-    <div className="page-container bg-white dark:bg-[#020617] transition-colors min-h-screen">
+    <div key={activeSymbol} className="page-container bg-white dark:bg-[#020617] transition-colors min-h-screen">
       
       {/* 🟢 STANDARD PAGE HEADER */}
       <header className="page-header border-l-4 border-blue-600 pl-4 sm:pl-8 mb-8 sm:mb-16">
