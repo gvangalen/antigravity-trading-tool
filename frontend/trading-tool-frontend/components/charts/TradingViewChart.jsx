@@ -13,10 +13,11 @@ export default function TradingViewChart({
   const chartId = useRef(`tv-chart-${Math.random().toString(36).substr(2, 9)}`);
 
   useEffect(() => {
+    let isMounted = true;
     let timeoutId;
     
     const initChart = () => {
-      if (!containerRef.current) return;
+      if (!containerRef.current || !isMounted) return;
       
       // Clear previous widget
       containerRef.current.innerHTML = "";
@@ -48,9 +49,10 @@ export default function TradingViewChart({
     };
 
     // Small delay to ensure DOM is ready and prevent 'null' querySelector errors
-    timeoutId = setTimeout(initChart, 100);
+    timeoutId = setTimeout(initChart, 200);
 
     return () => {
+      isMounted = false;
       clearTimeout(timeoutId);
       if (containerRef.current) {
         containerRef.current.innerHTML = "";
@@ -60,6 +62,7 @@ export default function TradingViewChart({
 
   return (
     <div
+      key={`container-${symbol}-${interval}`}
       className="rounded-xl border bg-card overflow-hidden"
       style={{ height }}
     >
