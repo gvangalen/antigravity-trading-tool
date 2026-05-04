@@ -27,6 +27,9 @@ import { useAuth } from "@/components/auth/AuthGuard"; // useAuth is actually in
 // Actually AuthGuard.jsx has useAuth. Let's check imports.
 // Ah, AuthGuard.jsx uses useAuth from AuthProvider. Wait.
 import { useAuth as useAuthHook } from "@/components/auth/AuthProvider"; 
+import { useWatchlist } from "@/hooks/useWatchlist";
+import { useAsset } from "@/app/providers/AssetProvider";
+import { Star } from "lucide-react";
 
 export default function NavBar() {
   const { t } = useTranslation();
@@ -252,9 +255,10 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
 }
 
 function WatchlistSidebar({ onNavigate }) {
-  const { watchlist, remove } = require("@/hooks/useWatchlist").useWatchlist();
-  const { symbol: activeSymbol, setSelectedAsset } = require("@/app/providers/AssetProvider").useAsset();
-  const { Star, X } = require("lucide-react");
+  const router = require("next/navigation").useRouter();
+  const { watchlist, remove } = useWatchlist();
+  const { symbol: activeSymbol, setSelectedAsset } = useAsset();
+  const { setActiveSetup, setFocusedBotId } = require("@/app/providers/SetupProvider").useActiveSetup();
 
   if (!watchlist || watchlist.length === 0) return null;
 
@@ -278,7 +282,13 @@ function WatchlistSidebar({ onNavigate }) {
                 }
               `}
               onClick={() => {
+                // Clear focus and update global state
+                setActiveSetup(null);
+                setFocusedBotId(null);
                 setSelectedAsset(symbol);
+                
+                // Navigate with URL param to force update
+                router.push(`/dashboard?symbol=${symbol}`);
                 onNavigate();
               }}
             >

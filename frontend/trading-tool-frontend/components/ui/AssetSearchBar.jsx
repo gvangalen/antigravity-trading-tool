@@ -57,8 +57,8 @@ export default function AssetSearchBar() {
     // Switch asset globally
     setSelectedAsset(symbol);
     
-    // Force navigation to dashboard to ensure data refresh
-    router.push("/dashboard");
+    // Force navigation to dashboard with symbol parameter to ensure data refresh
+    router.push(`/dashboard?symbol=${symbol}`);
   };
 
   const toggleWatchlist = (e, symbol) => {
