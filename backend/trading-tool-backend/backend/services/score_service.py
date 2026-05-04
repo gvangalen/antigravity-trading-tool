@@ -38,7 +38,7 @@ class ScoreService:
         scores = await self.repository.fetch_daily_scores(user_id, symbol)
         
         # 🔥 RUNTIME ENGINE: Check if we need to refresh/calculate
-        tech_repo = TechnicalDataRepository(self.repository.session)
+        tech_repo = TechnicalDataRepository(self.repository.db)
         user_configs = await tech_repo.get_user_configs(user_id)
         
         # If user has no config yet, let's use their BTC indicators as their initial global config
@@ -47,7 +47,7 @@ class ScoreService:
             btc_data = await tech_repo.get_latest_data_fallback(user_id, symbol="BTC")
             for d in btc_data:
                 await tech_repo.ensure_user_config(user_id, d.indicator)
-            await self.repository.session.commit()
+            await self.repository.db.commit()
             user_configs = await tech_repo.get_user_configs(user_id)
 
         # Check if we have data for ALL configured indicators for THIS symbol
@@ -81,7 +81,7 @@ class ScoreService:
                     market_interpretation="Runtime market scan",
                     setup_score=0.0
                 )
-                await self.repository.session.commit()
+                await self.repository.db.commit()
                 scores = await self.repository.fetch_daily_scores(user_id, symbol)
             except Exception as e:
                 logger.error(f"❌ Runtime scoring failed: {e}")
