@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { Search, X, Command, Coins } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,8 +15,13 @@ const ASSETS = [
   { symbol: "DOT", name: "Polkadot", icon: "P" },
 ];
 
+import { useRouter } from "next/navigation";
+import { useActiveSetup } from "@/app/providers/SetupProvider";
+
 export default function AssetSearchBar() {
+  const router = useRouter();
   const { selectedAsset, setSelectedAsset } = useAsset();
+  const { setActiveSetup, setFocusedBotId } = useActiveSetup();
   const { isInWatchlist, add, remove } = useWatchlist();
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -40,17 +46,19 @@ export default function AssetSearchBar() {
   }, []);
 
   const handleSelect = (symbol) => {
-    if (symbol === selectedAsset) {
-      setIsOpen(false);
-      return;
-    }
-    
     // Smooth transition: close first, then switch
     setIsOpen(false);
-    setTimeout(() => {
-      setSelectedAsset(symbol);
-      setQuery("");
-    }, 100);
+    setQuery("");
+    
+    // Clear setup/bot focus to allow global asset to take over
+    setActiveSetup(null);
+    setFocusedBotId(null);
+    
+    // Switch asset globally
+    setSelectedAsset(symbol);
+    
+    // Force navigation to dashboard to ensure data refresh
+    router.push("/dashboard");
   };
 
   const toggleWatchlist = (e, symbol) => {
