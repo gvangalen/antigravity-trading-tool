@@ -75,7 +75,7 @@ export default function MarketLiveCard({ symbol = "BTC", data = null, loading: p
              <Activity className="w-5 h-5" />
              <span className="text-[11px] font-black uppercase tracking-[0.2em]">Live {symbol} Koers</span>
           </div>
-          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
+          <div suppressHydrationWarning className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
              <Clock size={12} className="opacity-50" />
              {asset.timestamp ? new Date(asset.timestamp).toLocaleTimeString() : "–"}
           </div>
@@ -84,7 +84,7 @@ export default function MarketLiveCard({ symbol = "BTC", data = null, loading: p
        <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
           <div>
              <span className="metric-label">Huidige Koers (USD)</span>
-             <h2 className="metric-value text-5xl font-mono !tracking-tighter">
+             <h2 suppressHydrationWarning className="metric-value text-5xl font-mono !tracking-tighter">
                 ${Number(asset.price || 0).toLocaleString(undefined, { 
                   minimumFractionDigits: 2,
                   maximumFractionDigits: symbol === 'BTC' ? 2 : 4 

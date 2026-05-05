@@ -84,7 +84,7 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
             </div>
             <div className="flex items-center gap-2 text-[9px] sm:text-[10px] font-black text-secondary/40">
                <Clock size={12} strokeWidth={2} />
-               <span className="uppercase tracking-[0.1em] leading-none">
+               <span suppressHydrationWarning className="uppercase tracking-[0.1em] leading-none">
                  {btc?.timestamp ? new Date(btc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "OFFLINE"}
                </span>
             </div>
@@ -92,7 +92,7 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
 
          <div className="relative z-10 space-y-2">
             <div className="text-[10px] sm:text-[11px] font-black text-secondary/40 uppercase tracking-[0.25em]">{symbol} Price</div>
-            <div className="text-3xl sm:text-5xl font-black tracking-tighter uppercase leading-none text-foreground font-mono tabular-nums">
+            <div suppressHydrationWarning className="text-3xl sm:text-5xl font-black tracking-tighter uppercase leading-none text-foreground font-mono tabular-nums">
                ${btc?.price ? Number(btc.price).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : "—"}
             </div>
             

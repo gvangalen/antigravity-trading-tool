@@ -4,7 +4,7 @@ from backend.infrastructure.database import SessionLocal
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.services.score_service import ScoreService
-from backend.utils.market_data_utils import sync_market_data_7d
+
 from backend.utils.technical_interpreter import fetch_technical_value
 import asyncio
 
@@ -29,8 +29,9 @@ async def _async_initialize(user_id: int, symbol: str):
         try:
             # 1. Sync Market History (7 days)
             # This is already async safe usually
-            from backend.utils.market_data_utils import sync_market_data_7d
-            await sync_market_data_7d(symbol, overwrite=False)
+            from backend.services.market_data_service import MarketDataService
+            market_service = MarketDataService(db)
+            await market_service.sync_symbol_7day_data(symbol, overwrite=False)
             
             # 2. Fetch Technical Indicators for this symbol
             tech_repo = TechnicalDataRepository(db)
