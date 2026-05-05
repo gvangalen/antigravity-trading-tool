@@ -97,15 +97,17 @@ class ScoreService:
 
                 # Save daily combined scores
                 await self.repository.save_daily_combined_score(
-                    user_id=user_id,
-                    symbol=symbol,
-                    macro_score=mac_res.get("total_score", 50),
-                    macro_interpretation="Runtime macro scan",
-                    technical_score=tech_res.get("weighted_score", 50),
-                    technical_interpretation="Runtime technical scan",
-                    market_score=mark_res.get("total_score", 50),
-                    market_interpretation="Runtime market scan",
-                    setup_score=0.0
+                    user_id, 
+                    symbol, 
+                    {
+                        "macro": mac_res.get("total_score", 50),
+                        "macro_interpretation": "Runtime macro scan",
+                        "technical": tech_res.get("weighted_score", 50),
+                        "technical_interpretation": "Runtime technical scan",
+                        "market": mark_res.get("total_score", 50),
+                        "market_interpretation": "Runtime market scan",
+                        "setup": 0.0
+                    }
                 )
                 await self.repository.db.commit()
                 scores = await self.repository.fetch_daily_scores(user_id, symbol)
