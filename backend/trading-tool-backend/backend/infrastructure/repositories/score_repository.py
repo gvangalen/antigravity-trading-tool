@@ -107,3 +107,41 @@ class ScoreRepository:
         """)
         result = await self.db.execute(stmt, {"user_id": user_id, "days": days, "symbol": symbol})
         return [dict(row) for row in result.mappings()]
+
+    async def save_daily_combined_score(self, user_id: int, symbol: str, scores: Dict[str, Any]):
+        """
+        Persist aggregated scores to daily_scores table (UPSERT).
+        """
+        stmt = text("""
+            INSERT INTO daily_scores (
+                user_id, symbol, report_date,
+                macro_score, technical_score, market_score, setup_score,
+                macro_interpretation, technical_interpretation, market_interpretation
+            )
+            VALUES (
+                :user_id, :symbol, CURRENT_DATE,
+                :macro, :technical, :market, :setup,
+                :macro_int, :tech_int, :market_int
+            )
+            ON CONFLICT (user_id, symbol, report_date)
+            DO UPDATE SET
+                macro_score = EXCLUDED.macro_score,
+                technical_score = EXCLUDED.technical_score,
+                market_score = EXCLUDED.market_score,
+                setup_score = EXCLUDED.setup_score,
+                macro_interpretation = EXCLUDED.macro_interpretation,
+                technical_interpretation = EXCLUDED.technical_interpretation,
+                market_interpretation = EXCLUDED.market_interpretation
+        """)
+        await self.db.execute(stmt, {
+            "user_id": user_id,
+            "symbol": symbol,
+            "macro": scores.get("macro", 0),
+            "technical": scores.get("technical", 0),
+            "market": scores.get("market", 0),
+            "setup": scores.get("setup", 0),
+            "macro_int": scores.get("macro_interpretation", ""),
+            "tech_int": scores.get("technical_interpretation", ""),
+            "market_int": scores.get("market_interpretation", "")
+        })
+        await self.db.commit()
