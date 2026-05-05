@@ -14,8 +14,10 @@ class ReportRepository:
         if table_name not in allowed:
             raise ValueError("Invalid report table name")
 
-    async def get_latest_report(self, user_id: int, table_name: str) -> Optional[Dict[str, Any]]:
+    async def get_latest_report(self, user_id: int, table_name: str, symbol: Optional[str] = None) -> Optional[Dict[str, Any]]:
         self._validate_table_name(table_name)
+        
+        # Currently daily_reports don't have symbol column, but future-proofing here
         stmt = text(f"""
             SELECT *
             FROM {table_name}

@@ -29,8 +29,8 @@ class ReportService:
     # FETCH REPORTS
     # =================
 
-    async def get_latest_report(self, user_id: int, table_name: str) -> Dict[str, Any]:
-        row = await self.repository.get_latest_report(user_id, table_name)
+    async def get_latest_report(self, user_id: int, table_name: str, symbol: Optional[str] = None) -> Dict[str, Any]:
+        row = await self.repository.get_latest_report(user_id, table_name, symbol=symbol)
         if not row:
             if table_name == "daily_reports":
                 raise ValueError("Geen dagelijks rapport gevonden")
