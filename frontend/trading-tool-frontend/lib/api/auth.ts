@@ -66,7 +66,7 @@ function withCacheBust(path: string) {
 
 async function fetchAuthInternal(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit & { _retry?: boolean } = {}
 ): Promise<any> {
   // ✅ default no-store (maar laat caller override toe)
   const cacheMode = (options as any)?.cache ?? "no-store";
@@ -75,27 +75,40 @@ async function fetchAuthInternal(
     ...options,
     credentials: "include",
 
-    // 🔥 BELANGRIJK: voorkom cached responses (root cause van jouw issue)
+    // 🔥 BELANGRIJK: voorkom cached responses
     cache: cacheMode as RequestCache,
 
     headers: {
-      // JSON default
       "Content-Type": "application/json",
-
-      // 🔥 Extra harde no-cache headers (helpt bij proxies / sommige setups)
       "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
       Pragma: "no-cache",
       Expires: "0",
-
       ...(options.headers || {}),
     },
   });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
+    // 🔁 AUTO-REFRESH LOGIC
+    if (res.status === 401 && !options._retry) {
+      console.warn(`⚠️ 401 Unauthorized op ${path}. Probeer token te refreshen...`);
+      const refreshResult = await apiRefresh();
+      
+      if (refreshResult.success) {
+         console.log("✅ Token succesvol vernieuwd! Retrying request...");
+         // Retry de originele request met flag _retry
+         return fetchAuthInternal(path, { ...options, _retry: true });
+      } else {
+         console.error("❌ Token refresh mislukt. Gebruiker moet opnieuw inloggen.");
+         clearUserLocal();
+         if (typeof window !== "undefined") {
+            window.location.href = "/login";
+         }
+      }
+    }
 
+    const text = await res.text().catch(() => "");
     const error: any = new Error("API request failed");
-    error.status = res.status; // ✅ jij had deze al: goed
+    error.status = res.status;
     error.body = text;
     error.path = path;
 
@@ -103,7 +116,7 @@ async function fetchAuthInternal(
     throw error;
   }
 
-  // ✅ JSON veilig parsen, maar als het geen JSON is: return response object
+  // ✅ JSON veilig parsen
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
     try {
@@ -113,7 +126,6 @@ async function fetchAuthInternal(
     }
   }
 
-  // bv. PDF endpoints / file downloads
   return res;
 }
 
