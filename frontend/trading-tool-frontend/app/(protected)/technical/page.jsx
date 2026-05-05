@@ -44,6 +44,7 @@ export default function TechnicalPage() {
   } = useTechnicalData(activeTab, selectedAsset);
 
   const { technical: technicalScore } = useScoresData(selectedAsset);
+  const { status, completeStep } = useOnboarding();
 
   // ===============================
   // 🔥 ONBOARDING TRIGGER

@@ -68,3 +68,9 @@ export const marketIndicatorDelete = (indicatorName, symbol = "BTC") => {
     method: "DELETE",
   });
 };
+// ✅ INITIALIZE ASSET (Triggers background warming)
+export const initializeAsset = (symbol) =>
+  fetchAuth(`/api/market/asset/initialize`, {
+    method: "POST",
+    body: JSON.stringify({ symbol }),
+  });

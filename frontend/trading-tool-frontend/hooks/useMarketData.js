@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   fetchMarketData7d,
-  fetchLatestBTC,
+  fetchLatestPrice,
   fetchForwardReturnsWeek,
   fetchForwardReturnsMonth,
   fetchForwardReturnsQuarter,

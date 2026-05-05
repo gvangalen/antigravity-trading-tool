@@ -55,16 +55,14 @@ export default function AssetSearchBar() {
     // Switch asset globally
     setSelectedAsset(symbol);
     
+    // 🔥 TRIGGER INITIALIZATION: Warm up data in background
+    import("@/lib/api/market").then(({ initializeAsset }) => {
+      initializeAsset(symbol).catch(err => console.error("❌ Init error:", err));
+    });
+    
     // 🚀 THE 'BOEM' FIX: Update URL and navigate
-    // Using window.location.href as a fallback if router doesn't trigger refresh
     const targetUrl = `/dashboard?symbol=${symbol}`;
     router.push(targetUrl);
-    
-    // Optional: force refresh if we are already on dashboard but nothing happens
-    if (window.location.pathname.includes("/dashboard")) {
-       // router.push is usually enough, but let's be sure
-       console.log(`🚀 Switching to ${symbol}...`);
-    }
   };
 
   const toggleWatchlist = (e, symbol) => {
@@ -73,6 +71,10 @@ export default function AssetSearchBar() {
       remove(symbol);
     } else {
       add(symbol);
+      // 🔥 TRIGGER INITIALIZATION: Warm up data when added to watchlist
+      import("@/lib/api/market").then(({ initializeAsset }) => {
+        initializeAsset(symbol).catch(err => console.error("❌ Init error:", err));
+      });
     }
   };
 

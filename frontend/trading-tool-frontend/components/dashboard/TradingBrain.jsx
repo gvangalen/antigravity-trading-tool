@@ -29,7 +29,7 @@ export default function TradingBrain({ symbol = "BTC" }) {
   const { t } = useTranslation();
   const { activeSetup, loading: setupLoading } = useActiveSetup();
   const { macro, technical, market, setup: dailySetup, master, loading: scoresLoading } = useScoresData(symbol);
-  const { summary, aiStatus, loading: sidebarLoading } = useSidebarData();
+  const { summary, aiStatus, loading: sidebarLoading } = useSidebarData(symbol);
   const { data: marketIntelligence, loading: intelLoading } = useMarketIntelligence(symbol);
   const { strategy, loading: strategyLoading } = useSetupStrategy(activeSetup?.id);
 

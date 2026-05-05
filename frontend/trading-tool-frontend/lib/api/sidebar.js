@@ -9,9 +9,9 @@ import { fetchAuth } from '@/lib/api/auth';
  *  - Dashboard sidebar
  *  - Daily widgets
  */
-export const fetchDailyReportSummary = async () => {
+export const fetchDailyReportSummary = async (symbol = "BTC") => {
   try {
-    const res = await fetchAuth('/api/report/daily/latest');
+    const res = await fetchAuth(`/api/report/daily/latest?symbol=${symbol}`);
 
     // backend returnt volledige report → we pakken summary veld
     if (res?.summary) {

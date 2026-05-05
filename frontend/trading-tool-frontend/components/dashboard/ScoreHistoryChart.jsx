@@ -125,7 +125,7 @@ export default function ScoreHistoryChart({ symbol = "BTC" }) {
             <Line 
               yAxisId="right"
               type="monotone" 
-              dataKey="btc_price" 
+              dataKey={symbol === "BTC" ? "btc_price" : "asset_price"} 
               stroke="#cbd5e1" 
               strokeWidth={2} 
               strokeDasharray="5 5"

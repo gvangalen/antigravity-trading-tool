@@ -8,7 +8,7 @@ import { formatNumber } from "@/components/market/utils";
  * 🛰️ MarketTerminalHUD — PRO V2
  * Visualizes live price action (BTC) and market sentiment (Score & Bias).
  */
-export default function MarketTerminalHUD({ score, bias, btc = {} }) {
+export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC" }) {
   
   const scoreNum = Number(score ?? 0);
   const priceChange = btc?.change_24h || 0;
@@ -71,14 +71,14 @@ export default function MarketTerminalHUD({ score, bias, btc = {} }) {
          </div>
       </div>
 
-      {/* 📡 MODULE 2: LIVE BTC PRICE NODE */}
+      {/* 📡 MODULE 2: LIVE ASSET PRICE NODE */}
       <div className="bg-card rounded-[2.5rem] border border-[var(--color-border)] p-6 sm:p-10 flex flex-col justify-between shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group h-full transition-all hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)]">
          <div className="absolute top-0 right-0 w-40 h-40 bg-orange-500/10 blur-[80px] rounded-full -mr-20 -mt-20 group-hover:bg-orange-500/20 transition-all duration-1000" />
          
          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 relative z-10">
             <div className="flex items-center gap-4">
                <div className="w-10 h-10 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shadow-inner">
-                  <Bitcoin size={20} className="text-orange-500" strokeWidth={1.5} />
+                  <Activity size={20} className="text-orange-500" strokeWidth={1.5} />
                </div>
                <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-secondary/60 leading-none">Asset Tracking</div>
             </div>
@@ -91,7 +91,7 @@ export default function MarketTerminalHUD({ score, bias, btc = {} }) {
          </div>
 
          <div className="relative z-10 space-y-2">
-            <div className="text-[10px] sm:text-[11px] font-black text-secondary/40 uppercase tracking-[0.25em]">Bitcoin Core</div>
+            <div className="text-[10px] sm:text-[11px] font-black text-secondary/40 uppercase tracking-[0.25em]">{symbol} Price</div>
             <div className="text-3xl sm:text-5xl font-black tracking-tighter uppercase leading-none text-foreground font-mono tabular-nums">
                ${btc?.price ? Number(btc.price).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : "—"}
             </div>

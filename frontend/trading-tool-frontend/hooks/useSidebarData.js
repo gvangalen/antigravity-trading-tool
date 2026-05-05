@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { fetchDailyReportSummary } from '@/lib/api/sidebar'; // deze bestaat wél nog
 
-export function useSidebarData() {
+export function useSidebarData(symbol = "BTC") {
   const [summary, setSummary] = useState('Geen samenvatting beschikbaar');
   const [trades, setTrades] = useState([]);
   const [aiStatus, setAiStatus] = useState({
@@ -21,8 +21,8 @@ export function useSidebarData() {
       setLoading(true);
 
       try {
-        // 🟢 Enige echte API call
-        const summaryRes = await fetchDailyReportSummary();
+        // 🟢 Enige echte API call - Nu met symbol!
+        const summaryRes = await fetchDailyReportSummary(symbol);
 
         if (!mounted) return;
 
@@ -57,7 +57,7 @@ export function useSidebarData() {
 
     load();
     return () => { mounted = false };
-  }, []);
+  }, [symbol]);
 
   return {
     summary,

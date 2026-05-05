@@ -289,6 +289,12 @@ function WatchlistSidebar({ onNavigate }) {
                 
                 // Navigate with URL param to force update
                 router.push(`/dashboard?symbol=${symbol}`);
+                
+                // 🔥 TRIGGER INITIALIZATION: Ensure data is fresh
+                import("@/lib/api/market").then(({ initializeAsset }) => {
+                  initializeAsset(symbol).catch(err => console.error("❌ Init error:", err));
+                });
+
                 onNavigate();
               }}
             >

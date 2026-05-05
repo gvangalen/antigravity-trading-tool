@@ -27,9 +27,11 @@ export function useCurrentAsset() {
   const { configs: botConfigs } = useBotData();
 
   const focusedBot = botConfigs.find(b => b.id === focusedBotId);
-  const activeSymbol = focusedBot?.symbol || activeSetup?.symbol || urlSymbol || selectedAsset;
   
-  const isOverride = !!(focusedBot || activeSetup || urlSymbol);
+  // 🔥 PRIORITY: 1. URL (?symbol=), 2. Bot, 3. Setup, 4. Global
+  const activeSymbol = urlSymbol || focusedBot?.symbol || activeSetup?.symbol || selectedAsset;
+  
+  const isOverride = !!(urlSymbol || focusedBot || activeSetup);
 
   return {
     symbol: activeSymbol,

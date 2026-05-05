@@ -137,7 +137,7 @@ export default function DashboardPage() {
              {/* LEFT: MARKET VIEW */}
              <div className="flex-1 space-y-6">
                 <DashboardErrorBoundary>
-                   <MarketLiveCard data={assetLive} loading={!assetLive} symbol={activeSymbol} />
+                   <MarketLiveCard symbol={activeSymbol} data={assetLive} loading={!assetLive} />
                 </DashboardErrorBoundary>
 
                 <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden">
