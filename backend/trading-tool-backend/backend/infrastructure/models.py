@@ -285,6 +285,7 @@ class AiCategoryInsight(Base):
     risk = Column(String)
     summary = Column(String)
     top_signals = Column(JSON)
+    symbol = Column(String, default="BTC")
 
 class PushSubscription(Base):
     __tablename__ = 'push_subscriptions'

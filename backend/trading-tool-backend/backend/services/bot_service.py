@@ -140,7 +140,7 @@ class BotService:
     # ==========================
     # BOT DECISIONS (TODAY/HISTORY)
     # ==========================
-    async def get_bot_today(self, user_id: int) -> dict:
+    async def get_bot_today(self, user_id: int, symbol: str = "BTC") -> dict:
         today = date.today()
         daily_scores = await self.repository.get_daily_scores_row(user_id, today) or {
             "macro": 10, "technical": 10, "market": 10, "setup": 10
@@ -149,7 +149,7 @@ class BotService:
         # 🔥 SYNC: Probeer master insight op te halen voor consistente scores met Overview
         from backend.infrastructure.repositories.score_repository import ScoreRepository
         score_repo = ScoreRepository(self.session)
-        master = await score_repo.get_master_score(user_id)
+        master = await score_repo.get_master_score(user_id, symbol=symbol)
         
         if master and master.top_signals:
             meta = master.top_signals

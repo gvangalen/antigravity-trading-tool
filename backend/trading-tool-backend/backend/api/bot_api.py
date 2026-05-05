@@ -62,10 +62,11 @@ async def delete_bot_config(
 # ==========================================================
 @router.get("/bot/today")
 async def get_bot_today(
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     service: BotService = Depends(get_bot_service)
 ):
-    return await service.get_bot_today(current_user["id"])
+    return await service.get_bot_today(current_user["id"], symbol=symbol)
 
 @router.get("/bot/history")
 async def get_bot_history(
