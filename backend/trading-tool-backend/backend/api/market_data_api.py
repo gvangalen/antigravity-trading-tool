@@ -187,7 +187,15 @@ async def get_market_data_7d(
 ):
     try:
         service = MarketDataService(db)
-        return await service.get_market_data_7d(symbol)
+        data = await service.get_market_data_7d(symbol)
+        
+        # 🔥 RUNTIME TRIGGER: Haal automatisch data op via CoinGecko als tabel leeg is
+        if not data:
+            logger.info(f"🚀 Geen 7D data gevonden voor {symbol}. Haal data on-the-fly op via CoinGecko...")
+            await service.sync_symbol_7day_data(symbol, overwrite=False)
+            data = await service.get_market_data_7d(symbol)
+            
+        return data
     except Exception as e:
         logger.error(f"❌ [7d] {symbol} Fout: {e}")
         raise HTTPException(500, "Fout bij ophalen 7-daagse data.")
