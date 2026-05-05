@@ -468,12 +468,10 @@ def persist_indicator_scores(
     if ts is None:
         ts = datetime.utcnow()
 
-    _, scores_table = _table_names(category)
-
     with conn.cursor() as cur:
         for it in items:
-            indicator = str(it.get("indicator") or "").strip()
-            if not indicator:
+            indicator_val = str(it.get("indicator") or "").strip()
+            if not indicator_val:
                 continue
 
             value = it.get("value")
@@ -484,41 +482,33 @@ def persist_indicator_scores(
 
             score = _clamp_score(int(score or 10))
 
-            cur.execute(
-                f"""
-                INSERT INTO {scores_table} (
-                    indicator,
-                    value,
-                    score,
-                    trend,
-                    interpretation,
-                    action,
-                    timestamp,
-                    user_id,
-                    symbol
+            if category == "macro":
+                cur.execute(
+                    """
+                    INSERT INTO macro_data (
+                        name, value, score, trend, interpretation, action, timestamp, user_id, symbol
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    """,
+                    (indicator_val, value, score, trend, interpretation, action, ts, user_id, symbol)
                 )
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT (user_id, indicator, symbol, score_date)
-                DO UPDATE SET
-                    value = EXCLUDED.value,
-                    score = EXCLUDED.score,
-                    trend = EXCLUDED.trend,
-                    interpretation = EXCLUDED.interpretation,
-                    action = EXCLUDED.action,
-                    timestamp = EXCLUDED.timestamp
-                """,
-                (
-                    indicator,
-                    value,
-                    score,
-                    trend,
-                    interpretation,
-                    action,
-                    ts,
-                    user_id,
-                    symbol
-                ),
-            )
+            elif category == "market":
+                cur.execute(
+                    """
+                    INSERT INTO market_data_indicators (
+                        name, value, score, trend, interpretation, action, timestamp, user_id, symbol
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    """,
+                    (indicator_val, value, score, trend, interpretation, action, ts, user_id, symbol)
+                )
+            elif category == "technical":
+                cur.execute(
+                    """
+                    INSERT INTO technical_indicators (
+                        indicator, value, score, advies, uitleg, timestamp, user_id, symbol
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                    """,
+                    (indicator_val, value, score, trend, interpretation, ts, user_id, symbol)
+                )
 
 
 # ============================================================
