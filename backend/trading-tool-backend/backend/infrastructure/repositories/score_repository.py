@@ -38,10 +38,12 @@ class ScoreRepository:
             mapped.append(dict(row))
         return mapped
 
-    async def get_master_score(self, user_id: int) -> Optional[AiCategoryInsight]:
+    async def get_master_score(self, user_id: int, symbol: str = "BTC") -> Optional[AiCategoryInsight]:
+        # Filter by user, category and symbol (Master scores are now partitioned by symbol)
         stmt = select(AiCategoryInsight).where(
             AiCategoryInsight.user_id == user_id,
-            AiCategoryInsight.category == 'master'
+            AiCategoryInsight.category == 'master',
+            AiCategoryInsight.symbol == symbol
         ).order_by(AiCategoryInsight.date.desc()).limit(1)
         
         result = await self.db.execute(stmt)
@@ -91,9 +93,14 @@ class ScoreRepository:
                 ds.technical_score,
                 ds.market_score,
                 ds.setup_score,
-                md.price as btc_price
+                md.price as btc_price,
+                md.price as asset_price
             FROM daily_scores ds
-            LEFT JOIN market_data md ON md.symbol = ds.symbol AND md.timestamp::date = ds.report_date
+            LEFT JOIN (
+                SELECT DISTINCT ON (symbol, timestamp::date) symbol, price, timestamp::date as d
+                FROM market_data
+                ORDER BY symbol, timestamp::date, timestamp DESC
+            ) md ON md.symbol = ds.symbol AND md.d = ds.report_date
             WHERE ds.user_id = :user_id AND ds.symbol = :symbol
             AND ds.report_date >= CURRENT_DATE - INTERVAL '1 day' * :days
             ORDER BY ds.report_date ASC

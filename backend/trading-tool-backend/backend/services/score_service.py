@@ -165,8 +165,8 @@ class ScoreService:
             setup=setup
         )
 
-    async def get_master_score(self, user_id: int) -> MasterScoreResponse:
-        insight = await self.repository.get_master_score(user_id)
+    async def get_master_score(self, user_id: int, symbol: str = "BTC") -> MasterScoreResponse:
+        insight = await self.repository.get_master_score(user_id, symbol=symbol)
         
         # --- NEW: User Weights Logic ---
         user_weights = {}
@@ -215,11 +215,11 @@ class ScoreService:
             date=str(insight.date) if insight.date else None
         )
 
-    async def get_score_history(self, user_id: int, days: int = 30) -> List[Dict[str, Any]]:
+    async def get_score_history(self, user_id: int, days: int = 30, symbol: str = "BTC") -> List[Dict[str, Any]]:
         """
         Retrieves historical score data for charting.
         """
-        history = await self.repository.fetch_historical_scores(user_id, days)
+        history = await self.repository.fetch_historical_scores(user_id, days, symbol=symbol)
         # Format for frontend (e.g. ensure floats, handle nulls)
         formatted = []
         for h in history:
@@ -229,6 +229,7 @@ class ScoreService:
                 "technical": float(h["technical_score"] or 0),
                 "market": float(h["market_score"] or 0),
                 "setup": float(h["setup_score"] or 0),
-                "btc_price": float(h["btc_price"]) if h["btc_price"] else None
+                "btc_price": float(h["btc_price"]) if h["btc_price"] else None,
+                "asset_price": float(h["asset_price"]) if "asset_price" in h and h["asset_price"] else None
             })
         return formatted

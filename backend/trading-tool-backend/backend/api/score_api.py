@@ -71,14 +71,15 @@ async def get_market_score(
 # =========================================================
 @router.get("/scores/daily", response_model=DailyCombinedScoreResponse)
 async def get_daily_scores(
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     service: ScoreService = Depends(get_score_service)
 ):
     try:
         user_id = current_user["id"]
-        return await service.get_daily_scores(user_id=user_id)
+        return await service.get_daily_scores(user_id=user_id, symbol=symbol)
     except Exception as e:
-        logger.error(f"❌ Fout bij /scores/daily: {e}", exc_info=True)
+        logger.error(f"❌ Fout bij /scores/daily ({symbol}): {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij ophalen daily scores")
 
 
@@ -88,14 +89,15 @@ async def get_daily_scores(
 @router.get("/scores/history")
 async def get_score_history(
     days: int = 30,
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     service: ScoreService = Depends(get_score_service)
 ):
     try:
         user_id = current_user["id"]
-        return await service.get_score_history(user_id=user_id, days=days)
+        return await service.get_score_history(user_id=user_id, days=days, symbol=symbol)
     except Exception as e:
-        logger.error(f"❌ Fout bij /scores/history: {e}", exc_info=True)
+        logger.error(f"❌ Fout bij /scores/history ({symbol}): {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij ophalen score historie")
 
 
@@ -123,12 +125,13 @@ async def update_intelligence_weights(
 # =========================================================
 @router.get("/ai/master_score", response_model=MasterScoreResponse)
 async def get_ai_master_score(
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     service: ScoreService = Depends(get_score_service)
 ):
     try:
         user_id = current_user["id"]
-        return await service.get_master_score(user_id=user_id)
+        return await service.get_master_score(user_id=user_id, symbol=symbol)
     except Exception as e:
         logger.error(f"❌ Fout bij ophalen AI Master Score: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij ophalen master score")
