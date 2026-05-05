@@ -20,45 +20,21 @@ logger.setLevel(logging.INFO)
 # REPORT AGENT ROLE
 # =====================================================
 REPORT_TASK = """
-Je bent een senior Bitcoin market strategist.
+Je bent een senior Multi-Asset Portfolio Strategist.
 
-Je schrijft GEEN daily snapshot.
-Je UPDATE een bestaand marktregime.
+Je schrijft GEEN daily snapshot voor één asset, maar een holistisch dagrapport dat de gehele watchlist van de gebruiker analyseert.
 
 PRIMAIRE TAAK:
-- Detecteer het huidige marktregime
-- Bepaal of het regime intact blijft, verdiept of kantelt
-- Analyseer veranderingen binnen dat kader
-- Bouw voort op het vorige rapport
-
-HERSTART HET MARKTVERHAAL NOOIT.
-
-Markten bewegen in regimes — niet per dag.
-
-DENKKADER (intern toepassen, niet benoemen):
-CURRENT_REGIME
-REGIME_DIRECTION
-REGIME_STRENGTH
-RISK_ENVIRONMENT
+- Analyseer het algemene marktregime (globaal).
+- Beoordeel de specifieke assets in de watchlist (BTC, SOL, ETH, etc.).
+- Identificeer convergentie tussen verschillende assets.
+- Bepaal welk asset momenteel de sterkste 'setup' of 'edge' heeft.
 
 FOCUS:
-- regime continuïteit
-- structureel vs reactief
-- signaalconvergentie
-- positioneel risico
-
-Schrijf alsof een portfolio manager dit leest om exposure te bepalen.
-
-GEEN:
-- storytelling
-- educatie
-- indicator uitleg
-- opsommingen
-- herhaling van data
-- prijslevels (behalve spot)
-
-Elke sectie moet voortbouwen op dezelfde centrale markthypothese.
-Nooit opnieuw definiëren.
+- Intermarket relaties.
+- Relatieve sterkte tussen assets in de watchlist.
+- Signaalconvergentie per asset.
+- Positioneel risico over het gehele portfolio.
 """
 
 # =====================================================
@@ -530,7 +506,7 @@ def reduce_repetition(text: str, seen: List[str]) -> str:
 # =====================================================
 # SCORES & MARKET
 # =====================================================
-def get_daily_scores(user_id: int) -> Dict[str, Any]:
+def get_daily_scores(user_id: int, symbol: str = "BTC") -> Dict[str, Any]:
     conn = get_db_connection()
     if not conn:
         return {}
@@ -540,11 +516,11 @@ def get_daily_scores(user_id: int) -> Dict[str, Any]:
                 """
                 SELECT macro_score, technical_score, market_score, setup_score
                 FROM daily_scores
-                WHERE user_id = %s
+                WHERE user_id = %s AND symbol = %s
                 ORDER BY report_date DESC
                 LIMIT 1;
                 """,
-                (user_id,),
+                (user_id, symbol),
             )
             row = cur.fetchone()
 
@@ -660,7 +636,7 @@ def get_macro_indicator_highlights(user_id: int) -> List[dict]:
 # =====================================================
 # Technical indicator highlights
 # =====================================================
-def get_technical_indicator_highlights(user_id: int) -> List[dict]:
+def get_technical_indicator_highlights(user_id: int, symbol: str = "BTC") -> List[dict]:
     conn = get_db_connection()
     if not conn:
         return []
@@ -668,7 +644,7 @@ def get_technical_indicator_highlights(user_id: int) -> List[dict]:
         with conn.cursor() as cur:
             return _indicator_list(
                 cur,
-                """
+                f"""
                 SELECT DISTINCT ON (indicator)
                     indicator,
                     value,
@@ -676,6 +652,7 @@ def get_technical_indicator_highlights(user_id: int) -> List[dict]:
                     COALESCE(uitleg, advies)
                 FROM technical_indicators
                 WHERE user_id = %s
+                  AND symbol = '{symbol}'
                   AND score IS NOT NULL
                   AND DATE(timestamp) = CURRENT_DATE
                 ORDER BY indicator, timestamp DESC
@@ -685,6 +662,48 @@ def get_technical_indicator_highlights(user_id: int) -> List[dict]:
             )
     finally:
         conn.close()
+
+def get_watchlist_summary(user_id: int) -> List[Dict[str, Any]]:
+    """
+    Verzamelt de essentie van alle assets in de watchlist voor het rapport.
+    """
+    conn = get_db_connection()
+    if not conn:
+        return []
+        
+    try:
+        with conn.cursor() as cur:
+            # 1. Haal alle unieke symbols van deze gebruiker op (die vandaag scores hebben)
+            cur.execute("""
+                SELECT DISTINCT symbol 
+                FROM daily_scores 
+                WHERE user_id = %s 
+                AND report_date = CURRENT_DATE
+            """, (user_id,))
+            symbols = [r[0] for r in cur.fetchall()]
+            
+            if not symbols:
+                # Fallback naar watchlist tabel of default
+                cur.execute("SELECT symbol FROM user_assets WHERE user_id = %s AND is_active = TRUE", (user_id,))
+                symbols = [r[0] for r in cur.fetchall()] or ["BTC"]
+
+        watchlist_data = []
+        for symbol in symbols:
+            # Haal scores op
+            scores = get_daily_scores(user_id, symbol=symbol)
+            # Haal top indicators op
+            tech = get_technical_indicator_highlights(user_id, symbol=symbol)
+            
+            watchlist_data.append({
+                "symbol": symbol,
+                "scores": scores,
+                "top_indicators": tech
+            })
+            
+        return watchlist_data
+    finally:
+        if conn:
+            conn.close()
 
 
 # =====================================================
@@ -974,15 +993,10 @@ def build_compact_context(
     portfolio_health,
     ai_insights,
     ai_reflections,
+    watchlist_data = None
 ) -> str:
     """
-    Compacte context builder.
-
-    Vermindert tokens drastisch terwijl:
-    - regime context behouden blijft
-    - transition risk prioriteit houdt
-    - causale signalen behouden blijven
-    - positionering context intact blijft
+    Compacte context builder voor Multi-Asset Rapport.
     """
 
     def short_indicators(lst, max_items=3):
@@ -1001,47 +1015,29 @@ def build_compact_context(
             "label": regime.get("label") if regime else None,
             "confidence": regime.get("confidence") if regime else None,
         },
-
-        "transition": {
-            "risk": transition.get("transition_risk"),
-            "flag": transition.get("primary_flag"),
-            "narrative": transition.get("narrative"),
-        },
-
+        "watchlist": [
+            {
+                "symbol": w["symbol"],
+                "master_score": w["scores"].get("technical_score", 50),
+                "indicators": short_indicators(w["top_indicators"])
+            }
+            for w in (watchlist_data or [])
+        ],
         "deltas": {
             "macro": deltas.get("macro_delta"),
             "market": deltas.get("market_delta"),
             "technical": deltas.get("technical_delta"),
-            "price": deltas.get("price_delta"),
-            "volume": deltas.get("volume_delta"),
         },
-
-        "market": {
-            "price": market.get("price"),
-            "change": market.get("change_24h"),
-            "volume": market.get("volume"),
-        },
-
         "scores": {
             "macro": scores.get("macro_score"),
             "technical": scores.get("technical_score"),
             "market": scores.get("market_score"),
-            "setup": scores.get("setup_score"),
         },
-
-        "indicators": {
-            "market": short_indicators(market_ind),
-            "macro": short_indicators(macro_ind),
-            "technical": short_indicators(tech_ind),
-        },
-
         "positioning": {
             "best_setup": best_setup.get("name") if best_setup else None,
-            "strategy": active_strategy.get("setup_name") if active_strategy else None,
             "bot_action": bot_snapshot.get("action"),
             "portfolio_health": portfolio_health
         },
-
         "memory": {
             "prev_summary": prev_report[1] if prev_report else None
         }
@@ -1050,19 +1046,12 @@ def build_compact_context(
     return json.dumps(context, ensure_ascii=False)
 
 
-
-# =====================================================
-# MAIN BUILDER — REPORT AGENT 2.0 (SAFE + CONTEXT-AWARE)
-# =====================================================
-from backend.ai_core.regime_memory import get_regime_memory
-from backend.engine.transition_detector import compute_transition_detector
-
 def generate_daily_report_sections(user_id: int) -> Dict[str, Any]:
-
     # -------------------------------------------------
-    # 1) Basis data
+    # 1) Basis data (Multi-Asset)
     # -------------------------------------------------
-    scores = get_daily_scores(user_id)
+    watchlist_data = get_watchlist_summary(user_id)
+    scores = get_daily_scores(user_id) # default BTC voor legacy keys
     market = get_market_snapshot()
 
     market_ind = get_market_indicator_highlights(user_id)
@@ -1074,80 +1063,21 @@ def generate_daily_report_sections(user_id: int) -> Dict[str, Any]:
     active_strategy = get_active_strategy_snapshot(user_id)
     bot_snapshot = get_bot_daily_snapshot(user_id)
     portfolio_health = get_portfolio_health_snapshot(user_id)
-
     deltas = get_daily_deltas(user_id)
 
     # -------------------------------------------------
     # REGIME & TRANSITION
     # -------------------------------------------------
     regime = get_regime_memory(user_id)
-
-    transition = None
-    if regime and regime.get("signals"):
-        transition = regime["signals"].get("transition")
-
-    if not transition:
-        transition = compute_transition_detector(user_id)
+    transition = compute_transition_detector(user_id)
 
     # -------------------------------------------------
-    # Extra context uit DB
-    # -------------------------------------------------
-    conn = get_db_connection()
-    prev_report = None
-    ai_insights = []
-    ai_reflections = []
-    
-    if conn:
-        try:
-            with conn.cursor() as cur:
-
-                cur.execute(
-                    """
-                    SELECT report_date, executive_summary
-                    FROM daily_reports
-                    WHERE user_id = %s
-                      AND report_date < CURRENT_DATE
-                    ORDER BY report_date DESC
-                    LIMIT 1;
-                    """,
-                    (user_id,),
-                )
-                prev_report = cur.fetchone()
-
-                cur.execute(
-                    """
-                    SELECT category, avg_score, trend, bias, risk, summary
-                    FROM ai_category_insights
-                    WHERE user_id = %s
-                    ORDER BY date DESC
-                    LIMIT 5;
-                    """,
-                    (user_id,),
-                )
-                ai_insights = cur.fetchall()
-
-                cur.execute(
-                    """
-                    SELECT category, indicator, ai_score, comment, recommendation
-                    FROM ai_reflections
-                    WHERE user_id = %s
-                    ORDER BY date DESC
-                    LIMIT 5;
-                    """,
-                    (user_id,),
-                )
-                ai_reflections = cur.fetchall()
-
-        finally:
-            conn.close()
-
-    # -------------------------------------------------
-    # COMPACT CONTEXT (🔥 NIEUW)
+    # COMPACT CONTEXT
     # -------------------------------------------------
     context_blob = build_compact_context(
         regime,
         transition,
-        prev_report,
+        None,
         deltas,
         market,
         scores,
@@ -1158,8 +1088,9 @@ def generate_daily_report_sections(user_id: int) -> Dict[str, Any]:
         active_strategy,
         bot_snapshot,
         portfolio_health,
-        ai_insights,
-        ai_reflections,
+        [],
+        [],
+        watchlist_data=watchlist_data
     )
 
     base_context = "CONTEXT:\n" + context_blob + "\n\n"
@@ -1167,21 +1098,17 @@ def generate_daily_report_sections(user_id: int) -> Dict[str, Any]:
     # -------------------------------------------------
     # BATCHED AI GENERATION
     # -------------------------------------------------
-    
     batched_prompt = f"""
 {base_context}
 
-Je bent een Bitcoin market strategist. Retourneer ALLEEN een geldig JSON object met EXACT deze 8 keys, elk met jouw bijbehorende tekstsectie.
-Formatvereisten:
-- Geen markdown block (geen ```json)
-- Geen inleidende tekst
-- Elke sectie volgt de specifieke instructies
+Je bent een Multi-Asset Portfolio Strategist. Retourneer ALLEEN een JSON object met EXACT deze 8 keys.
+Analyseer de gehele watchlist ({', '.join([w['symbol'] for w in watchlist_data])}).
 
 Keys:
-1. "executive_summary": {p_exec()}
-2. "market_analysis": {p_market()}
+1. "executive_summary": {p_exec()} Focus op het dagrapport voor de gehele watchlist.
+2. "market_analysis": {p_market()} Betrek relatieve sterkte van assets.
 3. "macro_context": {p_macro()}
-4. "technical_analysis": {p_technical()}
+4. "technical_analysis": {p_technical()} Vergelijk technische signalen tussen de assets.
 5. "setup_validation": {p_setup(best_setup)}
 6. "strategy_implication": {p_strategy(active_strategy)}
 7. "bot_strategy": {p_bot_strategy(bot_snapshot)}
@@ -1190,62 +1117,33 @@ Keys:
 
     batched_result = {}
     try:
-        raw_json = ask_gpt_json(
-            prompt=batched_prompt,
-            system_role=SYSTEM_PROMPT,
-            max_tokens=2500,
-        )
+        raw_json = ask_gpt_json(prompt=batched_prompt, system_role=SYSTEM_PROMPT)
         if isinstance(raw_json, dict):
             batched_result = raw_json
-    except Exception as e:
+    except Exception:
         logger.exception("❌ Batched AI generation failed")
 
-    def get_section(key: str, default: str) -> str:
-        text = batched_result.get(key)
-        if not text or not isinstance(text, str):
-            return default
-        return reduce_repetition(text.strip(), seen_sentences)
-
     seen_sentences: List[str] = []
-
-    executive_summary = get_section("executive_summary", "Regime intact.")
-    market_analysis = get_section("market_analysis", "Market steady.")
-    macro_context = get_section("macro_context", "Macro unchanged.")
-    technical_analysis = get_section("technical_analysis", "Technicals neutral.")
-    setup_validation = get_section("setup_validation", "Setups selective.")
-    strategy_implication = get_section("strategy_implication", "Strategy stable.")
-    bot_strategy = get_section("bot_strategy", "Bot inactive.")
-    outlook = get_section("outlook", "Await confirmation.")
+    def get_section(key: str, default: str) -> str:
+        text = batched_result.get(key, default)
+        return reduce_repetition(str(text).strip(), seen_sentences)
 
     # -------------------------------------------------
     # RESULT
     # -------------------------------------------------
     result = {
-        "executive_summary": executive_summary,
-        "market_analysis": market_analysis,
-        "macro_context": macro_context,
-        "technical_analysis": technical_analysis,
-        "setup_validation": setup_validation,
-        "strategy_implication": strategy_implication,
-        "bot_strategy": bot_strategy,
-        "bot_snapshot": bot_snapshot,
-        "outlook": outlook,
-        "price": market.get("price"),
-        "change_24h": market.get("change_24h"),
-        "volume": market.get("volume"),
-        "macro_score": scores.get("macro_score"),
-        "technical_score": scores.get("technical_score"),
-        "market_score": scores.get("market_score"),
-        "setup_score": scores.get("setup_score"),
-        "market_indicator_highlights": market_ind,
-        "macro_indicator_highlights": macro_ind,
-        "technical_indicator_highlights": tech_ind,
+        "executive_summary": get_section("executive_summary", "Regime intact."),
+        "market_analysis": get_section("market_analysis", "Market steady."),
+        "macro_context": get_section("macro_context", "Macro unchanged."),
+        "technical_analysis": get_section("technical_analysis", "Technicals neutral."),
+        "setup_validation": get_section("setup_validation", "Setups selective."),
+        "strategy_implication": get_section("strategy_implication", "Strategy stable."),
+        "bot_strategy": get_section("bot_strategy", "Bot inactive."),
+        "outlook": get_section("outlook", "Await confirmation."),
+        "watchlist": watchlist_data,
         "best_setup": best_setup,
-        "top_setups": setup_snapshot.get("top_setups", []),
-        "active_strategy": active_strategy,
-        "deltas": deltas,
         "transition": transition,
     }
 
-    logger.info("✅ Report agent (compact context) OK")
+    logger.info("✅ Multi-Asset Report agent OK")
     return result
