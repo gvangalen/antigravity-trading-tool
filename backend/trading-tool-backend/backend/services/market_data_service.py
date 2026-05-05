@@ -180,8 +180,9 @@ class MarketDataService:
             return {"error": f"Symbol {symbol} niet ondersteund voor sync"}
 
         logger.info(f"📥 Sync {symbol} 7d market data gestart (CG ID: {coingecko_id}, overwrite={overwrite})")
-        url_ohlc = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/ohlc?vs_currency=usd&days=180"
-        url_volume = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/market_chart?vs_currency=usd&days=180"
+        # Use days=14 to get 4-hourly data, which we will aggregate to true daily OHLC
+        url_ohlc = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/ohlc?vs_currency=usd&days=14"
+        url_volume = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/market_chart?vs_currency=usd&days=14"
         
         async with httpx.AsyncClient(timeout=15.0) as client:
             res_ohlc = await client.get(url_ohlc)
@@ -198,18 +199,39 @@ class MarketDataService:
             logger.error(f"❌ Ongeldige OHLC data van CoinGecko voor {symbol}: {ohlc_data}")
             return {"error": "Ongeldige data bron"}
 
-        volume_by_date = {
-            datetime.utcfromtimestamp(ts / 1000).date(): vol
-            for ts, vol in volume_data
+        from datetime import timezone
+        volume_by_date = {}
+        for ts, vol in volume_data:
+            d = datetime.fromtimestamp(ts / 1000, timezone.utc).date()
+            if d not in volume_by_date:
+                volume_by_date[d] = []
+            volume_by_date[d].append(vol)
+            
+        avg_volume_by_date = {
+            d: sum(v)/len(v) for d, v in volume_by_date.items()
         }
 
-        inserted = 0
-        updated = 0
+        # Aggregate 4-hourly to daily
+        daily_ohlc = {}
         for entry in ohlc_data:
             ts, open_p, high_p, low_p, close_p = entry
-            d = datetime.utcfromtimestamp(ts / 1000).date()
+            d = datetime.fromtimestamp(ts / 1000, timezone.utc).date()
+            if d not in daily_ohlc:
+                daily_ohlc[d] = {"open": open_p, "high": high_p, "low": low_p, "close": close_p}
+            else:
+                daily_ohlc[d]["high"] = max(daily_ohlc[d]["high"], high_p)
+                daily_ohlc[d]["low"] = min(daily_ohlc[d]["low"], low_p)
+                daily_ohlc[d]["close"] = close_p # last close of the day
+                
+        inserted = 0
+        updated = 0
+        for d, data in daily_ohlc.items():
+            open_p = data["open"]
+            high_p = data["high"]
+            low_p = data["low"]
+            close_p = data["close"]
             change = round((close_p - open_p) / open_p * 100, 2) if open_p else 0
-            volume = volume_by_date.get(d)
+            volume = avg_volume_by_date.get(d)
 
             existing = await self.repository.get_7d_record(symbol, d)
             if not existing:
@@ -227,7 +249,6 @@ class MarketDataService:
                 await self.repository.add_market_data_7d(new_7d)
                 inserted += 1
             elif overwrite:
-                # Update bestaand record
                 existing.open = open_p
                 existing.high = high_p
                 existing.low = low_p
@@ -239,10 +260,91 @@ class MarketDataService:
 
         await self.session.commit()
         return {
-            "status": f"✅ Sync {symbol} voltooid", 
+            "status": f"✅ Sync {symbol} 7D voltooid", 
             "inserted": inserted, 
             "updated": updated
         }
+
+    async def sync_symbol_forward_returns(self, symbol: str) -> dict:
+        symbol = symbol.upper()
+        mapping = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"}
+        coingecko_id = mapping.get(symbol)
+        if not coingecko_id:
+            return {"error": f"Symbol {symbol} niet ondersteund"}
+
+        logger.info(f"📥 Sync {symbol} forward returns gestart (CG ID: {coingecko_id})")
+        url_chart = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/market_chart?vs_currency=usd&days=365"
+        
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            res = await client.get(url_chart)
+            if res.status_code != 200:
+                logger.error(f"❌ CoinGecko API fout: {res.status_code}")
+                return {"error": "API fout"}
+            prices = res.json().get("prices", [])
+
+        from datetime import timezone
+        from collections import defaultdict
+        
+        daily_prices = {}
+        for ts, price in prices:
+            d = datetime.fromtimestamp(ts/1000, timezone.utc).date()
+            daily_prices[d] = price
+            
+        sorted_dates = sorted(daily_prices.keys())
+        if not sorted_dates:
+            return {"error": "Geen prijs data"}
+
+        groups = {
+            "7d": defaultdict(list),
+            "30d": defaultdict(list),
+            "90d": defaultdict(list),
+            "365d": defaultdict(list)
+        }
+        
+        for d in sorted_dates:
+            p = daily_prices[d]
+            iso_year, iso_week, _ = d.isocalendar()
+            quarter = (d.month - 1) // 3 + 1
+            
+            groups["7d"][(iso_year, iso_week)].append((d, p))
+            groups["30d"][(d.year, d.month)].append((d, p))
+            groups["90d"][(d.year, quarter)].append((d, p))
+            groups["365d"][(d.year, 1)].append((d, p))
+            
+        from backend.infrastructure.models import MarketForwardReturn
+        
+        # Oude data wissen
+        from sqlalchemy import delete
+        await self.session.execute(
+            delete(MarketForwardReturn).where(MarketForwardReturn.symbol == symbol)
+        )
+        
+        inserted = 0
+        for period, group_data in groups.items():
+            for key, items in group_data.items():
+                items.sort(key=lambda x: x[0])
+                start_d, start_p = items[0]
+                end_d, end_p = items[-1]
+                change = (end_p - start_p) / start_p * 100 if start_p > 0 else 0
+                
+                # Start date as datetime for DB
+                start_dt = datetime(start_d.year, start_d.month, start_d.day)
+                end_dt = datetime(end_d.year, end_d.month, end_d.day)
+                
+                new_ret = MarketForwardReturn(
+                    symbol=symbol,
+                    period=period,
+                    start_date=start_dt,
+                    end_date=end_dt,
+                    change=round(change, 2),
+                    avg_daily=round(change / max((end_d - start_d).days, 1), 3),
+                    created_at=datetime.utcnow()
+                )
+                self.session.add(new_ret)
+                inserted += 1
+
+        await self.session.commit()
+        return {"status": f"✅ Forward Returns gegenereerd", "inserted": inserted}
 
     async def fill_btc_7day_data(self, fallback_endpoints: dict = None, overwrite: bool = False) -> dict:
         """Legacy wrapper for BTC."""
