@@ -44,6 +44,38 @@ class MarketDataService:
         self.session = db_session
         self.repository = MarketDataRepository(db_session)
 
+    async def sync_live_price(self, symbol: str) -> dict:
+        """Fetches the live price from Binance and updates the market_data table."""
+        symbol = symbol.upper()
+        binance_symbol = f"{symbol}USDT"
+        
+        url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={binance_symbol}"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(url)
+            if res.status_code != 200:
+                logger.error(f"❌ Kon live prijs voor {symbol} niet ophalen van Binance: {res.status_code}")
+                return {"error": "API fout"}
+                
+            data = res.json()
+            
+        price = float(data.get("lastPrice", 0))
+        change_24h = float(data.get("priceChangePercent", 0))
+        volume = float(data.get("quoteVolume", 0))
+        
+        from backend.infrastructure.models import MarketData
+        from datetime import datetime
+        
+        new_data = MarketData(
+            symbol=symbol,
+            price=price,
+            change_24h=change_24h,
+            volume=volume,
+            timestamp=datetime.utcnow()
+        )
+        self.session.add(new_data)
+        await self.session.commit()
+        return {"status": "✅ Live price synced", "price": price}
+
     # =========================================================
     # CORE: List / Latest Datasets
     # =========================================================

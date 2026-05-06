@@ -138,6 +138,11 @@ async def get_latest_price(
 ):
     try:
         service = MarketDataService(db)
+        
+        # 🔥 RUNTIME TRIGGER: Altijd actuele live koers ophalen direct via Binance
+        logger.info(f"🚀 Live koers ophalen voor {symbol}...")
+        await service.sync_live_price(symbol)
+        
         result = await service.repository.get_latest_snapshot(symbol.upper())
         if not result:
             raise HTTPException(404, f"Geen {symbol} data gevonden")
