@@ -82,9 +82,9 @@ class SetupService:
             if mn is not None and mx is not None and int(mn) > int(mx):
                 raise HTTPException(400, f"min_{cat}_score mag niet hoger zijn dan max_{cat}_score")
 
-        exists = await self.repository.check_name_exists(payload.name, payload.symbol, user_id)
+        exists = await self.repository.check_name_exists(payload.name, user_id)
         if exists:
-            raise HTTPException(409, "Setup met deze naam en symbol bestaat al")
+            raise HTTPException(409, "Setup met deze naam bestaat al")
 
         tags = raw_payload.get("tags", [])
         if isinstance(tags, str):
@@ -92,7 +92,6 @@ class SetupService:
 
         # Zorg dat de geparseerde velden zeker weten naar raw data overgeschreven worden
         raw_payload["name"] = payload.name
-        raw_payload["symbol"] = payload.symbol
         raw_payload["setup_type"] = setup_type
 
         # Use the raw dict directly because of the hybrid strategy
@@ -121,18 +120,23 @@ class SetupService:
         rows = await self.repository.get_dca_setups(user_id)
         return [self._format_setup(r) for r in rows]
 
-    async def get_daily_setup_scores(self, user_id: int) -> List[dict]:
-        rows = await self.repository.get_daily_scores(user_id)
+    async def get_daily_setup_scores(self, user_id: int, symbol: str = "BTC") -> List[dict]:
+        # Bereken dynamisch voor het gevraagde symbool
+        active_res = await self.get_active_setup(user_id, symbol)
+        active = active_res.get("active")
+        
+        if not active:
+            return []
+            
         return [
             {
-                "setup_id": int(r.setup_id),
-                "score": int(r.score) if r.score is not None else None,
-                "is_best": bool(r.is_best),
-                "name": r.name,
-                "symbol": r.symbol,
-                "timeframe": r.timeframe,
+                "setup_id": active["setup_id"],
+                "score": active["score"],
+                "is_best": True,
+                "name": active["name"],
+                "symbol": symbol,
+                "timeframe": active["timeframe"],
             }
-            for r in rows
         ]
 
     async def update_setup(self, setup_id: int, raw_payload: dict, user_id: int) -> dict:
@@ -148,7 +152,7 @@ class SetupService:
 
         updates = {}
         allowed_fields = [
-            "name", "symbol", "timeframe", "setup_type",
+            "name", "timeframe", "setup_type",
             "dca_frequency", "dca_day", "dca_month_day",
             "account_type", "min_investment", "trend", "score_logic",
             "favorite", "description", "action", "category",
@@ -213,25 +217,82 @@ class SetupService:
             raise HTTPException(404, "Setup niet gevonden")
         return self._format_setup(row)
 
-    async def get_active_setup(self, user_id: int) -> dict:
-        row = await self.repository.get_active_setup(user_id)
-        if not row:
+    async def get_active_setup(self, user_id: int, symbol: str = "BTC") -> dict:
+        from backend.ai_agents.setup_ai_agent import score_overlap
+        from sqlalchemy import text
+        
+        symbol = symbol.upper()
+        
+        # 1. Haal huidige scores op voor deze asset
+        query_scores = text("""
+            SELECT macro_score, technical_score, market_score
+            FROM daily_scores
+            WHERE user_id = :user_id AND symbol = :symbol
+            ORDER BY report_date DESC LIMIT 1
+        """)
+        res_scores = await self.session.execute(query_scores, {"user_id": user_id, "symbol": symbol})
+        row_scores = res_scores.fetchone()
+        
+        macro = float(row_scores[0]) if row_scores and row_scores[0] is not None else 50.0
+        technical = float(row_scores[1]) if row_scores and row_scores[1] is not None else 50.0
+        market = float(row_scores[2]) if row_scores and row_scores[2] is not None else 50.0
+
+        # 2. Haal ALLE setups op
+        setups = await self.repository.get_all_setups(user_id)
+        if not setups:
+            return {"active": None}
+
+        # 3. Bereken overlap score runtime
+        best_setup = None
+        best_score = -1
+
+        for s in setups:
+            m = score_overlap(macro, s.get("min_macro_score"), s.get("max_macro_score"))
+            t = score_overlap(technical, s.get("min_technical_score"), s.get("max_technical_score"))
+            mk = score_overlap(market, s.get("min_market_score"), s.get("max_market_score"))
+
+            active_components = 0
+            total_score = 0
+            
+            if s.get("min_macro_score") is not None or s.get("max_macro_score") is not None:
+                active_components += 1
+                total_score += m
+            if s.get("min_technical_score") is not None or s.get("max_technical_score") is not None:
+                active_components += 1
+                total_score += t
+            if s.get("min_market_score") is not None or s.get("max_market_score") is not None:
+                active_components += 1
+                total_score += mk
+                
+            if active_components == 0:
+                raw_score = round((m + t + mk) / 3)
+            else:
+                raw_score = round(total_score / active_components)
+
+            score = max(25, raw_score)
+
+            if score > best_score:
+                best_score = score
+                best_setup = s
+
+        if not best_setup:
             return {"active": None}
             
+        # Return de beste
         return {
             "active": {
-                "setup_id": row.setup_id,
-                "score": row.score,
-                "ai_explanation": row.ai_explanation,
-                "name": row.name,
-                "symbol": row.symbol,
-                "timeframe": row.timeframe,
-                "trend": row.trend,
-                "setup_type": row.setup_type,
-                "min_investment": row.min_investment,
-                "tags": row.tags,
-                "favorite": row.favorite,
-                "action": row.action,
-                "setup_explanation": row.setup_explanation,
+                "setup_id": best_setup.get("id"),
+                "score": best_score,
+                "ai_explanation": "Berekend via dynamische overlap.",
+                "name": best_setup.get("name"),
+                "symbol": symbol,
+                "timeframe": best_setup.get("timeframe"),
+                "trend": best_setup.get("trend"),
+                "setup_type": best_setup.get("setup_type"),
+                "min_investment": best_setup.get("min_investment"),
+                "tags": best_setup.get("tags"),
+                "favorite": best_setup.get("favorite"),
+                "action": best_setup.get("action"),
+                "setup_explanation": best_setup.get("explanation"),
             }
         }

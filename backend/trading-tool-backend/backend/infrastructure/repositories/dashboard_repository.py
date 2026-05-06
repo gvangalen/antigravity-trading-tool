@@ -38,15 +38,15 @@ class DashboardRepository:
         result = await self.session.execute(query, {"user_id": user_id})
         return [dict(row._mapping) for row in result.fetchall()]
 
-    async def get_user_setups_summary(self, user_id: int, symbol: str = "BTC") -> List[dict]:
+    async def get_user_setups_summary(self, user_id: int) -> List[dict]:
         query = text("""
             SELECT DISTINCT ON (name)
                 name, created_at AS timestamp
             FROM setups
-            WHERE user_id = :user_id AND symbol = :symbol
+            WHERE user_id = :user_id
             ORDER BY name, created_at DESC
         """)
-        result = await self.session.execute(query, {"user_id": user_id, "symbol": symbol})
+        result = await self.session.execute(query, {"user_id": user_id})
         return [dict(row._mapping) for row in result.fetchall()]
 
     async def get_latest_trading_advice(self, user_id: int, symbol: str) -> Optional[dict]:

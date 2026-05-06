@@ -8,12 +8,12 @@ class SetupRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def check_name_exists(self, name: str, symbol: str, user_id: int) -> bool:
+    async def check_name_exists(self, name: str, user_id: int) -> bool:
         query = text("""
             SELECT id FROM setups
-            WHERE name = :name AND symbol = :symbol AND user_id = :user_id
+            WHERE name = :name AND user_id = :user_id
         """)
-        result = await self.session.execute(query, {"name": name, "symbol": symbol, "user_id": user_id})
+        result = await self.session.execute(query, {"name": name, "user_id": user_id})
         return result.fetchone() is not None
 
     async def simple_check_name(self, name: str, user_id: int) -> bool:
@@ -25,7 +25,7 @@ class SetupRepository:
     async def create_setup(self, payload: dict, user_id: int, tags: list) -> int:
         query = text("""
             INSERT INTO setups (
-                name, symbol, timeframe,
+                name, timeframe,
                 setup_type,
                 dca_frequency, dca_day, dca_month_day,
                 account_type, min_investment, tags, trend, score_logic,
@@ -36,7 +36,7 @@ class SetupRepository:
                 created_at, user_id
             )
             VALUES (
-                :name, :symbol, :timeframe,
+                :name, :timeframe,
                 :setup_type,
                 :dca_frequency, :dca_day, :dca_month_day,
                 :account_type, :min_investment, :tags, :trend, :score_logic,
@@ -51,7 +51,6 @@ class SetupRepository:
         
         params = {
             "name": payload.get("name"),
-            "symbol": payload.get("symbol"),
             "timeframe": payload.get("timeframe"),
             "setup_type": payload.get("setup_type"),
             

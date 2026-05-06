@@ -76,11 +76,12 @@ async def get_dca_setups(
 # ============================================================
 @router.get("/setups/daily-scores")
 async def get_daily_setup_scores(
+    symbol: str = Query("BTC"),
     current_user: dict = Depends(get_current_user),
     service: SetupService = Depends(get_setup_service)
 ):
     user_id = current_user["id"]
-    return await service.get_daily_setup_scores(user_id)
+    return await service.get_daily_setup_scores(user_id, symbol.upper())
 
 # ============================================================
 # 4️⃣ Setup bijwerken
@@ -149,11 +150,12 @@ async def get_top_setups(
 # ============================================================
 @router.get("/setups/active")
 async def get_active_setup(
+    symbol: str = Query("BTC"),
     current_user: dict = Depends(get_current_user),
     service: SetupService = Depends(get_setup_service)
 ):
     user_id = current_user["id"]
-    return await service.get_active_setup(user_id)
+    return await service.get_active_setup(user_id, symbol.upper())
 
 # ============================================================
 # 9️⃣ Eén setup ophalen

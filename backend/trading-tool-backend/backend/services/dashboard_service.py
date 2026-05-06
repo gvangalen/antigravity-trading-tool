@@ -30,7 +30,7 @@ class DashboardService:
             market_data_task = self.repository.get_latest_market_data(user_id, symbol)
             technical_data_task = self.repository.get_latest_technical_data(user_id, symbol)
             macro_data_task = self.repository.get_latest_macro_data(user_id)
-            setups_task = self.repository.get_user_setups_summary(user_id, symbol)
+            setups_task = self.repository.get_user_setups_summary(user_id)
             
             market_data, technical_rows, macro_data, setups = await asyncio.gather(
                 market_data_task,
@@ -55,7 +55,13 @@ class DashboardService:
             macro_score = scores.get("macro_score", 0)
             technical_score = scores.get("technical_score", 0)
             market_score = scores.get("market_score", 0)
-            setup_score = scores.get("setup_score", 0)
+            
+            # GET DYNAMIC SETUP SCORE
+            from backend.services.setup_service import SetupService
+            setup_service = SetupService(self.session)
+            active_setup_dict = await setup_service.get_active_setup(user_id, symbol)
+            active_setup = active_setup_dict.get("active")
+            setup_score = active_setup.get("score", 0) if active_setup else 0
             
             # Logic & Explanations formatting
             macro_explanation = (
