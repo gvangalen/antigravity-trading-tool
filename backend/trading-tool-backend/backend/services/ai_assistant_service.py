@@ -182,13 +182,19 @@ class AiAssistantService:
 
         # 4. Generate Insight via GATEWAY (Single Call)
         prompt = (
-            f"GENERATE ACTION-ORIENTED TRADING INSIGHT\n"
+            f"GENERATE ACTION-ORIENTED TRADING INSIGHT\n\n"
+            f"--- LIVE MARKET DATA ({symbol}) ---\n"
+            f"{live_context}\n\n"
+            f"--- MARKET ANALYSIS CONTEXT ---\n"
+            f"{market_context}\n\n"
+            f"--- BOT & PERFORMANCE CONTEXT ---\n"
+            f"{bot_context}\n\n"
             f"--- CONTEXT DATA ---\n"
             f"USER: {user_name} | PAGE: {page_type} | ASSET: {symbol} | TIME: {timeframe}\n\n"
             f"--- INSTRUCTIONS ---\n"
-            f"- GREETING: Exactly 1 sentence (Hoi {user_name}, BTC/market summary...).\n"
-            f"- CONCLUSION/ACTION: Exactly 1 sentence each.\n"
-            f"- WHY: Technical reasoning (RSI/price) in max 2 sentences.\n"
+            f"- GREETING: Exactly 1 sentence (Hoi {user_name}, {symbol} price and trend summary...).\n"
+            f"- CONCLUSION/ACTION: Exactly 1 sentence each. Make sure they use the real-time price and technical metrics from the contexts above. Never hallucinate outdated values (like $30,000 for BTC) unless it matches the live data.\n"
+            f"- WHY: Technical reasoning (RSI/price/metrics) in max 2 sentences based strictly on the provided contexts.\n"
             f"- terminology: refer to as 'coach' advice.\n"
             f"- Be extremely concise.\n\n"
             f"FALLBACK: If strategy is missing, suggest setup for {symbol}."
