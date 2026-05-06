@@ -210,7 +210,7 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
         })}
 
         {/* ⭐ WATCHLIST SECTION */}
-        <WatchlistSidebar onNavigate={onNavigate} />
+        <WatchlistSidebar onNavigate={onNavigate} pathname={pathname} />
 
         {/* ADMIN SECTION */}
         {adminLinks.length > 0 && (
@@ -254,7 +254,7 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
   );
 }
 
-function WatchlistSidebar({ onNavigate }) {
+function WatchlistSidebar({ onNavigate, pathname }) {
   const router = require("next/navigation").useRouter();
   const { watchlist, remove } = useWatchlist();
   const { symbol: activeSymbol, setSelectedAsset } = useAsset();
@@ -287,8 +287,8 @@ function WatchlistSidebar({ onNavigate }) {
                 setFocusedBotId(null);
                 setSelectedAsset(symbol);
                 
-                // Navigate with URL param to force update
-                router.push(`/dashboard?symbol=${symbol}`);
+                // Navigate with URL param to force update on the current page
+                router.push(`${pathname}?symbol=${symbol}`);
                 
                 // 🔥 TRIGGER INITIALIZATION: Ensure data is fresh
                 import("@/lib/api/market").then(({ initializeAsset }) => {
