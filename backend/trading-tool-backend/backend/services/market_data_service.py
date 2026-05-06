@@ -267,26 +267,50 @@ class MarketDataService:
 
     async def sync_symbol_forward_returns(self, symbol: str) -> dict:
         symbol = symbol.upper()
-        mapping = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"}
-        coingecko_id = mapping.get(symbol)
-        if not coingecko_id:
-            return {"error": f"Symbol {symbol} niet ondersteund"}
+        # Binance uses symbols like BTCUSDT, SOLUSDT
+        binance_symbol = f"{symbol}USDT"
 
-        logger.info(f"📥 Sync {symbol} forward returns gestart (CG ID: {coingecko_id})")
-        url_chart = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/market_chart?vs_currency=usd&days=365"
+        logger.info(f"📥 Sync {symbol} forward returns gestart via Binance API")
         
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            res = await client.get(url_chart)
-            if res.status_code != 200:
-                logger.error(f"❌ CoinGecko API fout: {res.status_code}")
-                return {"error": "API fout"}
-            prices = res.json().get("prices", [])
-
-        from datetime import timezone
+        from datetime import datetime, timezone
         from collections import defaultdict
         
+        all_prices = []
+        end_time = int(datetime.now(timezone.utc).timestamp() * 1000)
+        
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            # We want up to 11 years of data (4000 days). Binance gives max 1000 per request.
+            for _ in range(4):
+                url = f"https://api.binance.com/api/v3/klines?symbol={binance_symbol}&interval=1d&limit=1000&endTime={end_time}"
+                res = await client.get(url)
+                if res.status_code != 200:
+                    logger.error(f"❌ Binance API fout voor {symbol}: {res.status_code}")
+                    break
+                    
+                klines = res.json()
+                if not klines:
+                    break
+                    
+                chunk_prices = []
+                for k in klines:
+                    ts = k[0]
+                    close_price = float(k[4])
+                    chunk_prices.append((ts, close_price))
+                    
+                # Prepend because we are going backwards in time chunk by chunk
+                all_prices = chunk_prices + all_prices
+                
+                # Next end_time is the open time of the first kline in this chunk minus 1 ms
+                end_time = klines[0][0] - 1
+                
+                if len(klines) < 1000:
+                    break
+                    
+        if not all_prices:
+            return {"error": "Geen prijs data gevonden op Binance"}
+
         daily_prices = {}
-        for ts, price in prices:
+        for ts, price in all_prices:
             d = datetime.fromtimestamp(ts/1000, timezone.utc).date()
             daily_prices[d] = price
             
