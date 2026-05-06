@@ -393,12 +393,12 @@ export default function BotAgentCard({
       {/* 🕋 MODULAR HEADER HUD */}
       <div className="p-8 pb-4 space-y-6">
         <div className="flex items-start justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <div className="w-14 h-14 rounded-2xl bg-[var(--color-border-subtle)] border border-slate-100 text-[var(--primary)] flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform">
+          <div className="flex items-start gap-5">
+            <div className="w-14 h-14 rounded-2xl bg-[var(--color-border-subtle)] border border-slate-100 text-[var(--primary)] flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform mt-1">
                <Bot size={28} className="opacity-80" />
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-2.5">
               <div className="flex items-center gap-3">
                 <h2 className="text-2xl font-black text-foreground tracking-tight">{bot?.name}</h2>
                 <div className={`w-2.5 h-2.5 rounded-full ${botState === 'live' ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)] animate-pulse' : botState === 'waiting' ? 'bg-yellow-400' : 'bg-slate-300'}`} />
@@ -415,79 +415,74 @@ export default function BotAgentCard({
                   </>
                 )}
               </div>
+
+              {/* HORIZONTAL PILLS CONTAINER */}
+              <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                <div className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1.5 ${risk.className}`}>
+                   {risk.icon}
+                   {risk.label.replace('Risk: ', '')}
+                </div>
+                
+                <div className="px-3 py-1.5 rounded-xl border border-slate-200 bg-[var(--color-border-subtle)] text-[9px] font-black text-muted uppercase tracking-widest shadow-sm flex items-center gap-1.5">
+                   <Activity size={10} />
+                   {isAuto ? "AUTO-PILOT" : "MANUAL-LINK"}
+                </div>
+
+                <div className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1.5 ${bot?.is_live ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>
+                   {bot?.is_live ? <Zap size={10} /> : <Clock size={10} />}
+                   {bot?.is_live ? "LIVE" : "PAPER"}
+                </div>
+
+                <button
+                  onClick={() => handleBacktest()}
+                  disabled={backtestLoading || scenariosLoading}
+                  className="h-8 px-3 rounded-xl border border-slate-200 bg-card text-muted hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all shadow-sm active:scale-95 flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider disabled:opacity-50"
+                >
+                  {backtestLoading ? (
+                    <div className="w-2.5 h-2.5 border-2 border-slate-300 border-t-[var(--primary)] animate-spin rounded-full" />
+                  ) : (
+                    <RotateCcw size={11} className="opacity-70" />
+                  )}
+                  {backtestLoading ? "ANALYZING..." : "RUN BACKTEST"}
+                </button>
+
+                <button
+                  onClick={handleRunScenarios}
+                  disabled={backtestLoading || scenariosLoading}
+                  className="h-8 px-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider disabled:opacity-50"
+                >
+                  {scenariosLoading ? (
+                    <div className="w-2.5 h-2.5 border-2 border-indigo-300 border-t-indigo-600 animate-spin rounded-full" />
+                  ) : (
+                    <Activity size={11} className="opacity-70" />
+                  )}
+                  SCENARIOS
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center flex-wrap gap-4">
-            {/* TACTICAL BADGES */}
-            <div className="hidden sm:flex flex-wrap items-center gap-3">
-              <div className={`px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-2 ${risk.className}`}>
-                 {risk.icon}
-                 {risk.label.replace('Risk: ', '')}
+          <div className="relative" ref={settingsRef}>
+            <button
+              className="w-10 h-10 flex items-center justify-center rounded-xl border border-slate-200 bg-card text-secondary hover:text-slate-800 hover:border-slate-400 transition-all shadow-sm active:scale-95"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowSettings((v) => !v);
+              }}
+            >
+              <MoreVertical size={20} />
+            </button>
+
+            {showSettings && (
+              <div className="absolute right-0 mt-3 z-[100] min-w-[220px]">
+                <BotSettingsMenu
+                  onOpen={(type) => {
+                    setShowSettings(false);
+                    onOpenSettings?.(type, bot);
+                  }}
+                />
               </div>
-              
-              <div className="px-4 py-2 rounded-xl border border-slate-200 bg-[var(--color-border-subtle)] text-[10px] font-black text-muted uppercase tracking-widest shadow-sm flex items-center gap-2">
-                 <Activity size={12} />
-                 {isAuto ? "AUTO-PILOT" : "MANUAL-LINK"}
-              </div>
-
-              <div className={`px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-2 ${bot?.is_live ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>
-                 {bot?.is_live ? <Zap size={12} /> : <Clock size={12} />}
-                 {bot?.is_live ? "LIVE" : "PAPER"}
-              </div>
-            </div>
-
-            {/* 🔁 BACKTEST BUTTONS */}
-            <div className="flex items-center flex-wrap gap-2">
-              <button
-                onClick={() => handleBacktest()}
-                disabled={backtestLoading || scenariosLoading}
-                className="h-10 px-4 rounded-xl border border-slate-200 bg-card text-muted hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all shadow-sm active:scale-95 flex items-center gap-2 text-xs font-black uppercase tracking-wider disabled:opacity-50"
-              >
-                {backtestLoading ? (
-                  <div className="w-3 h-3 border-2 border-slate-300 border-t-[var(--primary)] animate-spin rounded-full" />
-                ) : (
-                  <RotateCcw size={14} className="opacity-70" />
-                )}
-                {backtestLoading ? "ANALYZING..." : "RUN BACKTEST"}
-              </button>
-
-              <button
-                onClick={handleRunScenarios}
-                disabled={backtestLoading || scenariosLoading}
-                className="h-10 px-4 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all shadow-sm active:scale-95 flex items-center gap-2 text-xs font-black uppercase tracking-wider disabled:opacity-50"
-              >
-                {scenariosLoading ? (
-                  <div className="w-3 h-3 border-2 border-indigo-300 border-t-indigo-600 animate-spin rounded-full" />
-                ) : (
-                  <Activity size={14} className="opacity-70" />
-                )}
-                SCENARIOS
-              </button>
-            </div>
-
-            <div className="relative" ref={settingsRef}>
-              <button
-                className="w-10 h-10 flex items-center justify-center rounded-xl border border-slate-200 bg-card text-secondary hover:text-slate-800 hover:border-slate-400 transition-all shadow-sm active:scale-95"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowSettings((v) => !v);
-                }}
-              >
-                <MoreVertical size={20} />
-              </button>
-
-              {showSettings && (
-                <div className="absolute right-0 mt-3 z-[100] min-w-[220px]">
-                  <BotSettingsMenu
-                    onOpen={(type) => {
-                      setShowSettings(false);
-                      onOpenSettings?.(type, bot);
-                    }}
-                  />
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
 
