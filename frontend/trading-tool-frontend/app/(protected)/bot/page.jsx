@@ -31,6 +31,7 @@ function BotPageInner() {
   const { activeBot, setActiveBot } = useActiveBot();
 
   const [statusFilter, setStatusFilter] = useState("all");
+  const [assetFilter, setAssetFilter] = useState("all");
   const [currentTime, setCurrentTime] = useState(null);
   const [envFilter, setEnvFilter] = useState("all"); // "all", "paper", "live"
   const [generatingBotId, setGeneratingBotId] = useState(null);
@@ -91,13 +92,24 @@ function BotPageInner() {
     });
   }, [bots, portfolios]);
   
+  const availableAssets = useMemo(() => {
+    const assets = new Set(aggregatedBotsForOverview.map(b => b.symbol).filter(s => s && s !== "—"));
+    return Array.from(assets).sort();
+  }, [aggregatedBotsForOverview]);
+
   const filteredBots = useMemo(() => {
     return bots.filter((bot) => {
-      if (statusFilter === "active") return bot.is_active;
-      if (statusFilter === "paused") return !bot.is_active;
+      if (statusFilter === "active" && !bot.is_active) return false;
+      if (statusFilter === "paused" && bot.is_active) return false;
+      
+      const p = portfolios.find((x) => x.bot_id === bot.id);
+      const symbol = p?.symbol ?? bot?.symbol ?? "—";
+      
+      if (assetFilter !== "all" && symbol !== assetFilter) return false;
+      
       return true;
     });
-  }, [bots, statusFilter]);
+  }, [bots, statusFilter, assetFilter, portfolios]);
 
   const totalPortfolioValueEur = useMemo(() => {
     return portfolios.reduce((acc, p) => {
@@ -281,10 +293,25 @@ function BotPageInner() {
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-6">
-                <div className="flex bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-inner">
-                  <button onClick={() => setStatusFilter("all")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "all" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-slate-600"}`}>All ({bots.length})</button>
-                  <button onClick={() => setStatusFilter("active")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "active" ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-emerald-500"}`}>Active ({bots.filter(b => b.is_active).length})</button>
-                  <button onClick={() => setStatusFilter("paused")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "paused" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-amber-500"}`}>Paused ({bots.filter(b => !b.is_active).length})</button>
+                <div className="flex gap-4">
+                  <div className="flex bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-inner">
+                    <button onClick={() => setStatusFilter("all")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "all" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-slate-600"}`}>All ({bots.length})</button>
+                    <button onClick={() => setStatusFilter("active")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "active" ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-emerald-500"}`}>Active ({bots.filter(b => b.is_active).length})</button>
+                    <button onClick={() => setStatusFilter("paused")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "paused" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-amber-500"}`}>Paused ({bots.filter(b => !b.is_active).length})</button>
+                  </div>
+                  
+                  <div className="flex bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-inner items-center">
+                    <select
+                      value={assetFilter}
+                      onChange={(e) => setAssetFilter(e.target.value)}
+                      className="bg-transparent px-4 py-1 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer appearance-none"
+                    >
+                      <option value="all">ALL ASSETS</option>
+                      {availableAssets.map((a) => (
+                        <option key={a} value={a}>{a}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-4">
