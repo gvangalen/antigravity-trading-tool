@@ -1,17 +1,20 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { assistantChat, fetchAssistantInsight, getAssistantPreferences } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks } from "lucide-react";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { ChatSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { useAsset } from "@/app/providers/AssetProvider";
+import { useWatchlist } from "@/hooks/useWatchlist";
 
 export default function AIAssistant({ isOpen, setIsOpen }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { symbol: globalSymbol } = useAsset();
+  const router = useRouter();
+  const watchlist = useWatchlist();
   
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -80,6 +83,37 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     }
   };
 
+  const handleActionClick = async (action) => {
+    if (!action) return;
+    const { type, symbol, params } = action;
+
+    try {
+      if (type === "add_to_watchlist") {
+        if (symbol && watchlist?.add) {
+          await watchlist.add(symbol);
+        }
+      } else if (type === "open_setup_page") {
+        router.push(`/setup${symbol ? `?symbol=${symbol}` : ""}`);
+        setIsOpen(false);
+      } else if (type === "generate_strategy") {
+        router.push(`/strategy${symbol ? `?symbol=${symbol}` : ""}`);
+        setIsOpen(false);
+      } else if (type === "open_bot_draft") {
+        // Support prefilled bot parameters via query params
+        const qParams = new URLSearchParams();
+        if (symbol) qParams.append("symbol", symbol);
+        if (params?.mode) qParams.append("mode", params.mode);
+        if (params?.risk) qParams.append("risk", params.risk);
+        if (params?.budget) qParams.append("budget", params.budget);
+        
+        router.push(`/bot?action=new_bot&${qParams.toString()}`);
+        setIsOpen(false);
+      }
+    } catch (err) {
+      console.error("Action execution failed", err);
+    }
+  };
+
   const handleChat = async (directQuery, isSilent = false) => {
     const activeQuery = directQuery !== undefined ? directQuery : query;
     if (!activeQuery.trim()) return;
@@ -93,7 +127,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
     try {
       const res = await assistantChat(activeQuery, context);
-      setMessages(prev => [...prev, { role: "assistant", text: res.response, intent: res.intent }]);
+      setMessages(prev => [...prev, { role: "assistant", text: res.response, intent: res.intent, action: res.action }]);
     } catch (err) {
       setMessages(prev => [...prev, { 
         role: "assistant", 
@@ -327,6 +361,9 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                     : "bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-foreground dark:text-slate-100"
               }`}>
                 <p className="text-sm leading-relaxed">{m.text}</p>
+                {m.action && (
+                  <ActionCard action={m.action} onAction={handleActionClick} />
+                )}
                 {m.isError && (
                   <button 
                     onClick={() => handleChat(messages[i-1]?.text)} 
@@ -366,5 +403,63 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         </div>
       </div>
     </aside>
+  );
+}
+
+function ActionCard({ action, onAction }) {
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const handleClick = async () => {
+    setLoading(true);
+    try {
+      await onAction(action);
+      setSuccess(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getActionLabel = () => {
+    switch (action.type) {
+      case "add_to_watchlist": return `Add ${action.symbol || ""} to Watchlist`;
+      case "open_setup_page": return `Configure Setup for ${action.symbol || ""}`;
+      case "generate_strategy": return `Generate ${action.symbol || ""} Strategy`;
+      case "open_bot_draft": return `Deploy ${action.symbol || ""} Paper Bot`;
+      default: return "Execute Action";
+    }
+  };
+
+  const getActionDescription = () => {
+    switch (action.type) {
+      case "add_to_watchlist": return `Add ${action.symbol || ""} to the live tracking engine.`;
+      case "open_setup_page": return `Open setups tab to create custom macro rules for ${action.symbol || ""}.`;
+      case "generate_strategy": return `Use AI to build a customized algorithmic strategy for ${action.symbol || ""}.`;
+      case "open_bot_draft": return `Open bot configuration modal with recommended pre-filled parameters.`;
+      default: return "";
+    }
+  };
+
+  return (
+    <div className="mt-3 p-4 bg-blue-100/10 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-900/40 rounded-2xl flex flex-col gap-3">
+      <div>
+        <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-blue-600 dark:text-blue-400">Proposed Action</h4>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1 leading-snug">{getActionDescription()}</p>
+      </div>
+      
+      <button 
+        onClick={handleClick}
+        disabled={loading || success}
+        className={`w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all shadow-md active:scale-95 ${
+          success 
+            ? "bg-emerald-600 shadow-emerald-600/15 cursor-default" 
+            : "bg-blue-600 hover:bg-blue-700 shadow-blue-600/15"
+        }`}
+      >
+        {loading ? "Processing..." : success ? "✓ Executed Successfully" : getActionLabel()}
+      </button>
+    </div>
   );
 }

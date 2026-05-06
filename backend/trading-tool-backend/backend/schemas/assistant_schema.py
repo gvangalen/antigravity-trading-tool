@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 
 class AssistantChatRequest(BaseModel):
     query: str
@@ -9,6 +9,7 @@ class AssistantChatRequest(BaseModel):
 class AssistantChatResponse(BaseModel):
     response: str
     intent: str
+    action: Optional[Dict[str, Any]] = None
 
 class AssistantPreferenceUpdate(BaseModel):
     report_style: Optional[str]

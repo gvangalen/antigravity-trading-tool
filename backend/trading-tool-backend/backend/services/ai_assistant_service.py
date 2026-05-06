@@ -37,7 +37,7 @@ class AiAssistantService:
         self.strategy_repo = strategy_repo
         self.ai_gateway = ai_gateway
 
-    async def get_chat_response(self, user_id: int, user_query: str, context_data: Optional[Dict[str, str]] = None) -> str:
+    async def get_chat_response(self, user_id: int, user_query: str, context_data: Optional[Dict[str, str]] = None) -> tuple[str, Optional[Dict[str, Any]]]:
         # 1. Classify Intent (Rule-based V1)
         intent = self._classify_intent(user_query)
         logger.info(f"🧠 Assistant Chat Intent: {intent} for query: {user_query}")
@@ -69,27 +69,85 @@ class AiAssistantService:
         # 5. Build System Prompt
         system_role = get_role_prompt(role_key, preferences)
 
-        # 6. Generate Response via GATEWAY
+        # 6. Generate Response via GATEWAY using JSON mode to allow action parameters
         prompt = (
             f"USER QUERY: {user_query}\n\n"
             f"LIVE MARKET CONTEXT:\n{live_context}\n\n"
             f"HISTORICAL/ANALYSIS CONTEXT:\n{context}\n\n"
             f"FRONTEND METADATA:\n{context_data}"
         )
-        response = await self.ai_gateway.ask(
+        
+        system_role_json = (
+            system_role + 
+            "\n\nIMPORTANT: You must return a JSON object with exactly two fields:\n"
+            "- 'response': (string) your conversational response to the user's message in Dutch.\n"
+            "- 'action': (object or null) if the user explicitly asks to add a coin to their watchlist, "
+            "build/create/generate a setup or strategy, or deploy/create a bot, populate this object. "
+            "Otherwise, set 'action' to null.\n"
+            "The 'action' object must have:\n"
+            "   * 'type': one of ['add_to_watchlist', 'open_setup_page', 'generate_strategy', 'open_bot_draft']\n"
+            "   * 'symbol': the relevant crypto symbol (e.g., 'SOL', 'BTC')\n"
+            "   * 'params': (object) optional parameters like risk (aggressive, conservative, balanced), mode (paper, live), budget (int)\n\n"
+            "Example of action:\n"
+            "If user says: 'Voeg SOL toe aan mn watchlist', return:\n"
+            "{\n"
+            "  \"response\": \"Ik ga SOL toevoegen aan je watchlist!\",\n"
+            "  \"action\": {\"type\": \"add_to_watchlist\", \"symbol\": \"SOL\", \"params\": {}}\n"
+            "}"
+        )
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "response": {"type": "string"},
+                "action": {
+                    "type": "object",
+                    "properties": {
+                        "type": {"type": "string", "enum": ["add_to_watchlist", "open_setup_page", "generate_strategy", "open_bot_draft"]},
+                        "symbol": {"type": "string"},
+                        "params": {"type": "object"}
+                    },
+                    "required": ["type"],
+                    "nullable": True
+                }
+            },
+            "required": ["response", "action"]
+        }
+
+        response_data = await self.ai_gateway.ask(
             user_id=user_id, 
             prompt=prompt, 
-            system_role=system_role, 
+            system_role=system_role_json, 
+            mode="json",
+            schema=schema,
             purpose=f"chat_{intent}"
         )
 
-        if not response:
-            response = "⚠️ Kon geen analyse ophalen. Probeer opnieuw."
+        # Robust parsing of JSON-mode response
+        chat_text = "⚠️ Kon geen analyse ophalen. Probeer opnieuw."
+        action = None
+
+        if response_data:
+            if isinstance(response_data, dict):
+                chat_text = response_data.get("response", chat_text)
+                action = response_data.get("action")
+            elif isinstance(response_data, str):
+                # Fallback if cached or raw string returned
+                try:
+                    import json
+                    parsed = json.loads(response_data)
+                    if isinstance(parsed, dict):
+                        chat_text = parsed.get("response", chat_text)
+                        action = parsed.get("action")
+                    else:
+                        chat_text = response_data
+                except Exception:
+                    chat_text = response_data
 
         # 7. Selective Preference Update (Optional/Explicit feedback)
         await self._handle_implicit_feedback(user_id, user_query)
 
-        return response
+        return chat_text, action
 
     async def get_assistant_insight(self, user_id: int, context_data: Dict[str, str]) -> Dict[str, Any]:
         # 1. Fetch Contexts

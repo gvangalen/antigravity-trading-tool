@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { Wallet, Plus } from "lucide-react";
 
 import useBotData from "@/hooks/useBotData";
@@ -25,6 +26,7 @@ import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 
 function BotPageInner() {
   const { openConfirm, showSnackbar } = useModal();
+  const searchParams = useSearchParams();
   const formRef = useRef({});
   const budgetRef = useRef({});
 
@@ -153,11 +155,11 @@ function BotPageInner() {
     }
   };
 
-  const handleAddBot = () => {
-    formRef.current = {};
+  const handleAddBot = (initialValues = {}) => {
+    formRef.current = initialValues;
     openConfirm({
       title: "➕ New Bot",
-      description: <BotForm strategies={strategies} onChange={(v) => (formRef.current = v)} />,
+      description: <BotForm strategies={strategies} initialValues={initialValues} onChange={(v) => (formRef.current = v)} />,
       confirmText: "Create Bot",
       onConfirm: async () => {
         if (!formRef.current?.name || !formRef.current?.strategy_id) { showSnackbar("Please fill in all fields", "danger"); return; }
@@ -165,6 +167,30 @@ function BotPageInner() {
       },
     });
   };
+
+  useEffect(() => {
+    const action = searchParams.get("action");
+    if (action === "new_bot") {
+      const symbol = searchParams.get("symbol") || "";
+      const mode = searchParams.get("mode") || "paper";
+      const risk = searchParams.get("risk") || "balanced";
+      const budget = searchParams.get("budget") || "";
+      
+      // Auto-prefill the form values
+      const initialValues = {
+        name: `AI Bot ${symbol} ${mode === "paper" ? "Paper" : "Live"}`,
+        symbol: symbol,
+        is_live: mode === "live",
+        budget_total_eur: budget ? Number(budget) : 1000,
+      };
+
+      handleAddBot(initialValues);
+
+      // Clean search parameters to avoid re-opening modal on subsequent updates
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [searchParams, strategies]);
 
   const handleOpenBotSettings = async (type, bot) => {
     if (!bot) return;
