@@ -332,7 +332,7 @@ function BotPageInner() {
                 const isActive = activeBot?.id === bot.id;
                 return (
                   <div key={bot.id} onClick={(e) => { if (e.target.closest("button") || e.target.closest("input")) return; setActiveBot(bot); }} 
-                  className={`relative transition-all duration-300 ${isActive ? "ring-4 ring-blue-600/20 ring-offset-4 dark:ring-offset-[#020617] rounded-3xl shadow-xl" : "hover:scale-[1.002]"}`}>
+                  className={`relative transition-all duration-300 cursor-pointer ${isActive ? "ring-4 ring-blue-500 shadow-[0_0_25px_rgba(59,130,246,0.25)] ring-offset-4 dark:ring-offset-[#020617] rounded-[2.5rem] z-10" : "hover:scale-[1.002]"}`}>
                     <BotAgentCard
                       bot={bot}
                       decision={decisionsByBot?.[bot.id]}
