@@ -6,10 +6,12 @@ import { assistantChat, fetchAssistantInsight, getAssistantPreferences } from "@
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks } from "lucide-react";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { ChatSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { useAsset } from "@/app/providers/AssetProvider";
 
 export default function AIAssistant({ isOpen, setIsOpen }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { symbol: globalSymbol } = useAsset();
   
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -48,7 +50,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
     return {
       page_type: pageMap[pathname] || "Unknown",
-      symbol: searchParams.get("symbol") || searchParams.get("asset") || "BTC",
+      symbol: searchParams.get("symbol") || searchParams.get("asset") || globalSymbol || "BTC",
       timeframe: searchParams.get("tf") || searchParams.get("interval") || (pathname.includes("dashboard") || pathname === "/" ? "Weekly" : "Daily"),
       setup_name: searchParams.get("name") || "No specific setup",
     };
@@ -63,7 +65,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         getAssistantPreferences().then(res => setPreferences(res.preferences || {}));
       }
     }
-  }, [isOpen, pathname]);
+  }, [isOpen, pathname, searchParams, globalSymbol]);
 
   const loadInsight = async () => {
     setInsightLoading(true);
