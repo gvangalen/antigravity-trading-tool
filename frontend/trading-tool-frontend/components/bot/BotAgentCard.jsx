@@ -20,6 +20,8 @@ import {
   Activity,
   RotateCcw,
   Zap,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 export default function BotAgentCard({
@@ -55,6 +57,8 @@ export default function BotAgentCard({
 
   const [savingPlan, setSavingPlan] = useState(false);
   const [saveError, setSaveError] = useState(null);
+
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const isAuto = bot?.mode === "auto";
 
@@ -519,6 +523,15 @@ export default function BotAgentCard({
           </div>
         </div>
 
+        {/* 🔽 EXPAND TOGGLE 🔽 */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
+          className="w-full mt-4 py-3 border border-slate-200 dark:border-slate-800 border-dashed rounded-xl text-[10px] font-black text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center justify-center gap-2 uppercase tracking-[0.2em] shadow-sm active:scale-[0.99]"
+        >
+          {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          {isExpanded ? "Collapse Diagnostics" : "View Full Diagnostics"}
+        </button>
+
         {/* 📊 BACKTEST RESULTS SECTION */}
         {/* ⏳ LOADING STATE */}
         {(backtestLoading || scenariosLoading) && (
@@ -724,86 +737,90 @@ export default function BotAgentCard({
       </div>
 
       {/* 🚀 MAIN COCKPIT MODULES */}
-      <div className="p-8 pt-4 space-y-10">
-        
-        {/* Module 1: Portfolio & Safety Check */}
-        <div className="bg-slate-50/50 rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
-          <div className="flex flex-col">
-            <div className="flex-1 p-6 lg:p-8">
-              <BotPortfolioCard bot={portfolio} />
+      {isExpanded && (
+        <>
+          <div className="p-8 pt-4 space-y-10 border-t border-slate-100 dark:border-slate-800/50 mt-4 animate-fade-in">
+            
+            {/* Module 1: Portfolio & Safety Check */}
+            <div className="bg-slate-50/50 rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
+              <div className="flex flex-col">
+                <div className="flex-1 p-6 lg:p-8">
+                  <BotPortfolioCard bot={portfolio} />
+                </div>
+
+                <div className="p-6 lg:p-8 bg-white/50 border-t border-slate-100">
+                  <GuardrailsPanel
+                    decision={normalizedDecision}
+                    bot={bot}
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="p-6 lg:p-8 bg-white/50 border-t border-slate-100">
-              <GuardrailsPanel
-                decision={normalizedDecision}
-                bot={bot}
-              />
+            {/* Module 2: Market Intelligence (THE BRAIN) */}
+            <div className="bg-card rounded-[2rem] border border-slate-200 p-6 lg:p-8 shadow-sm">
+              {loadingMarketIntelligence ? (
+                <div className="flex items-center gap-3 text-xs font-black text-secondary uppercase tracking-widest p-10 justify-center">
+                  <div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-[var(--primary)] animate-spin" />
+                  Syncing Brain...
+                </div>
+              ) : (
+                <MarketDecisionCard data={marketIntelligence} />
+              )}
+            </div>
+
+            {/* Module 3: Execution Engine & Price Ladder */}
+            <div className="bg-card rounded-[2rem] border border-slate-200 overflow-hidden shadow-md">
+              <div className="flex flex-col">
+                <div className="flex-1 p-6 lg:p-8">
+                  <BotDecisionCard
+                    bot={bot}
+                    decision={normalizedDecision}
+                    order={safeOrder}
+                    loading={loadingDecision}
+                    isAuto={isAuto}
+                    onGenerate={onGenerate}
+                    onExecute={!isAuto ? onExecute : undefined}
+                    onSkip={!isAuto ? onSkip : undefined}
+                  />
+                </div>
+
+                <div className="p-6 lg:p-8 bg-slate-50/30 border-t border-slate-100">
+                  <TradePlanCard
+                    decision={normalizedDecision}
+                    tradePlan={planSource}
+                    loading={loadingDecision}
+                    allowManual={!isAuto}
+                    onSave={canSavePlan ? handleSaveTradePlan : undefined}
+                    saving={savingPlan}
+                    error={saveError}
+                  />
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Module 2: Market Intelligence (THE BRAIN) */}
-        <div className="bg-card rounded-[2rem] border border-slate-200 p-6 lg:p-8 shadow-sm">
-          {loadingMarketIntelligence ? (
-            <div className="flex items-center gap-3 text-xs font-black text-secondary uppercase tracking-widest p-10 justify-center">
-              <div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-[var(--primary)] animate-spin" />
-              Syncing Brain...
-            </div>
-          ) : (
-            <MarketDecisionCard data={marketIntelligence} />
-          )}
-        </div>
+          {/* 📜 TERMINAL LOGS / HISTORY (BOTTOM BAR) */}
+          <div className="mt-auto border-t border-slate-100 bg-[var(--color-border-subtle)] text-muted overflow-hidden">
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowHistory((v) => !v); }}
+              className="w-full p-5 lg:p-6 text-xs font-black uppercase tracking-[0.2em] hover:bg-slate-100/80 hover:text-slate-800 transition-all flex items-center justify-between group"
+            >
+              <div className="flex items-center gap-3">
+                <Clock size={14} className="group-hover:rotate-[360deg] transition-transform duration-700" />
+                {showHistory ? "SYSTEM_LOGS_MINIMIZE" : "SYSTEM_LOGS_OPEN"}
+              </div>
+              <div className="text-[10px] opacity-40">[{combinedHistory.length} ENTRIES]</div>
+            </button>
 
-        {/* Module 3: Execution Engine & Price Ladder */}
-        <div className="bg-card rounded-[2rem] border border-slate-200 overflow-hidden shadow-md">
-          <div className="flex flex-col">
-            <div className="flex-1 p-6 lg:p-8">
-              <BotDecisionCard
-                bot={bot}
-                decision={normalizedDecision}
-                order={safeOrder}
-                loading={loadingDecision}
-                isAuto={isAuto}
-                onGenerate={onGenerate}
-                onExecute={!isAuto ? onExecute : undefined}
-                onSkip={!isAuto ? onSkip : undefined}
-              />
-            </div>
-
-            <div className="p-6 lg:p-8 bg-slate-50/30 border-t border-slate-100">
-              <TradePlanCard
-                decision={normalizedDecision}
-                tradePlan={planSource}
-                loading={loadingDecision}
-                allowManual={!isAuto}
-                onSave={canSavePlan ? handleSaveTradePlan : undefined}
-                saving={savingPlan}
-                error={saveError}
-              />
-            </div>
+            {showHistory && (
+              <div className="p-6 bg-card border-t border-slate-100 max-h-[400px] overflow-y-auto animate-fade-slide">
+                <BotHistoryTable history={combinedHistory} />
+              </div>
+            )}
           </div>
-        </div>
-      </div>
-
-      {/* 📜 TERMINAL LOGS / HISTORY (BOTTOM BAR) */}
-      <div className="mt-auto border-t border-slate-100 bg-[var(--color-border-subtle)] text-muted overflow-hidden">
-        <button
-          onClick={() => setShowHistory((v) => !v)}
-          className="w-full p-5 lg:p-6 text-xs font-black uppercase tracking-[0.2em] hover:bg-slate-100/80 hover:text-slate-800 transition-all flex items-center justify-between group"
-        >
-          <div className="flex items-center gap-3">
-            <Clock size={14} className="group-hover:rotate-[360deg] transition-transform duration-700" />
-            {showHistory ? "SYSTEM_LOGS_MINIMIZE" : "SYSTEM_LOGS_OPEN"}
-          </div>
-          <div className="text-[10px] opacity-40">[{combinedHistory.length} ENTRIES]</div>
-        </button>
-
-        {showHistory && (
-          <div className="p-8 pt-0 border-t border-slate-200/50 animate-fade-in">
-            <BotHistoryTable history={combinedHistory} />
-          </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
