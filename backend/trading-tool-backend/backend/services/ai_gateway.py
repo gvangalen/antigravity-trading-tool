@@ -225,7 +225,19 @@ class AiGateway:
         summary = global_macro.get("summary") if global_macro else "De markt is momenteel in beweging."
         msg = f"Inzicht van de Global Intelligence Layer: {summary}\n\n(Opmerking: Je hebt je dagelijkse AI-limiet bereikt.)"
         if mode == "json":
-            return {"greeting": "Hoi!", "conclusion": "Platform Update", "why": "Limiet bereikt", "action": "Check dashboard"}
+            return {
+                "greeting": "Hoi!",
+                "bot_insight": {
+                    "conclusion": "AI-limiet bereikt",
+                    "action": "Check dashboard",
+                    "why": "Je hebt je dagelijkse limiet aan AI-aanvragen bereikt."
+                },
+                "market_insight": {
+                    "conclusion": "Intelligence Layer is standby.",
+                    "action": "Bekijk live charts",
+                    "why": "Inzichten zijn gepauzeerd wegens de limiet."
+                }
+            }
         return msg
 
     async def _save_cache(self, query_hash: str, text_query: str, norm_query: str, response: Any, cost: float, symbol: str, timeframe: str, category: str, ttl: int, embedding: Optional[List[float]]):
