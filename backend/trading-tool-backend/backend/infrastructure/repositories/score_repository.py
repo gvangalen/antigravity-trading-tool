@@ -52,17 +52,31 @@ class ScoreRepository:
     async def get_global_insight(self, category: str) -> Optional[Dict[str, Any]]:
         """
         Haalt de meest recente globale AI-conclusie op voor een categorie.
+        Robust to database schema differences (e.g. missing avg_score in some environments).
         """
         stmt = text("""
-            SELECT category, avg_score, trend, bias, risk, summary, top_signals, date
+            SELECT *
             FROM global_market_insights
             WHERE category = :category
             ORDER BY date DESC, created_at DESC
             LIMIT 1
         """)
-        result = await self.db.execute(stmt, {"category": category})
-        row = result.mappings().first()
-        return dict(row) if row else None
+        try:
+            result = await self.db.execute(stmt, {"category": category})
+            row = result.mappings().first()
+            if not row:
+                return None
+            
+            data = dict(row)
+            # Ensure avg_score exists even if column is named 'score' or missing
+            if "avg_score" not in data:
+                data["avg_score"] = data.get("score", 0)
+                
+            return data
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"⚠️ Robust DB get_global_insight fallback activated: {e}")
+            return None
 
     async def fetch_daily_scores(self, user_id: int, symbol: str = "BTC") -> Optional[Dict[str, Any]]:
         """
