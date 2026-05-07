@@ -118,6 +118,26 @@ safe_include("backend.api.exchange_api", "exchange_api")
 safe_include("backend.api.watchlist_api", "watchlist_api")
 
 # ==================================================================
+# 🔧 Database Schema Migration / Hotfixes
+# ==================================================================
+@app.on_event("startup")
+async def database_migrations():
+    logger.info("🔧 Running database schema hotfixes/migrations...")
+    from backend.infrastructure.database import async_session_factory
+    from sqlalchemy import text
+    async with async_session_factory() as session:
+        try:
+            # Safely add avg_score column to global_market_insights if it doesn't exist
+            await session.execute(text("""
+                ALTER TABLE global_market_insights 
+                ADD COLUMN IF NOT EXISTS avg_score numeric(5,2);
+            """))
+            await session.commit()
+            logger.info("✅ Database schema migration: global_market_insights.avg_score checked/added.")
+        except Exception as e:
+            logger.error(f"❌ Database schema migration failed: {e}")
+
+# ==================================================================
 # 🧠 Phase 3: Semantic Cache Initialization
 # ==================================================================
 @app.on_event("startup")
