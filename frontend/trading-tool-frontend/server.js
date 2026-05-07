@@ -20,11 +20,14 @@ const mimeTypes = {
   '.ttf': 'application/font-ttf',
   '.eot': 'application/vnd.ms-fontobject',
   '.otf': 'application/font-otf',
-  '.wasm': 'application/wasm'
+  '.wasm': 'application/wasm',
+  '.txt': 'text/plain'
 };
 
 http.createServer((req, res) => {
-  let filePath = path.join(PUBLIC_DIR, req.url === '/' ? 'index.html' : req.url);
+  // Strip query string from URL to correctly find static files (e.g. macro.txt?_rsc=...)
+  const cleanUrl = req.url.split('?')[0];
+  let filePath = path.join(PUBLIC_DIR, cleanUrl === '/' ? 'index.html' : cleanUrl);
   
   // Handige fallback voor Next.js static export (zonder .html in URL)
   if (!fs.existsSync(filePath) && !path.extname(filePath)) {
