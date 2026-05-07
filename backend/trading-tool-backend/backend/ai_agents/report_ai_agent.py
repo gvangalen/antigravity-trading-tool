@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from backend.utils.db import get_db_connection
 from backend.utils.openai_client import ask_gpt_text, ask_gpt_json, ask_gpt_text
 from backend.ai_core.system_prompt_builder import build_system_prompt
+from backend.engine.transition_detector import compute_transition_detector
 
 
 # =====================================================
@@ -684,7 +685,7 @@ def get_watchlist_summary(user_id: int) -> List[Dict[str, Any]]:
             
             if not symbols:
                 # Fallback naar watchlist tabel of default
-                cur.execute("SELECT symbol FROM user_assets WHERE user_id = %s AND is_active = TRUE", (user_id,))
+                cur.execute("SELECT symbol FROM watchlists WHERE user_id = %s", (user_id,))
                 symbols = [r[0] for r in cur.fetchall()] or ["BTC"]
 
         watchlist_data = []
