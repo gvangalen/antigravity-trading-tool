@@ -82,6 +82,10 @@ class ScoreRepository:
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"⚠️ Robust DB get_global_insight fallback activated: {e}")
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass
             return None
 
     async def fetch_daily_scores(self, user_id: int, symbol: str = "BTC") -> Optional[Dict[str, Any]]:

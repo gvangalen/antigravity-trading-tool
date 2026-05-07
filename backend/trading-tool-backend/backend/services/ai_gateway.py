@@ -255,13 +255,20 @@ class AiGateway:
         similarity_score: float = None, cache_age_seconds: int = None,
         rejected_reason: str = None, symbol: str = "GLOBAL"
     ):
-        stmt = text("""
-            INSERT INTO ai_usage_logs (user_id, model, prompt_tokens, completion_tokens, cost, purpose, status, response_time_ms, estimated_cost_if_full, similarity_score, cache_age_seconds, rejected_reason, symbol)
-            VALUES (:u, :m, :p, :c, :co, :pur, :s, :rt, :ec, :ss, :cas, :rr, :sym)
-        """)
-        await self.user_repo.db.execute(stmt, {
-            "u": user_id, "m": model, "p": p_tokens, "c": c_tokens, "co": cost, "pur": purpose, "s": status,
-            "rt": response_time_ms, "ec": estimated_cost_if_full, "ss": similarity_score, "cas": cache_age_seconds, "rr": rejected_reason,
-            "sym": symbol
-        })
-        await self.user_repo.db.commit()
+        try:
+            stmt = text("""
+                INSERT INTO ai_usage_logs (user_id, model, prompt_tokens, completion_tokens, cost, purpose, status, response_time_ms, estimated_cost_if_full, similarity_score, cache_age_seconds, rejected_reason, symbol)
+                VALUES (:u, :m, :p, :c, :co, :pur, :s, :rt, :ec, :ss, :cas, :rr, :sym)
+            """)
+            await self.user_repo.db.execute(stmt, {
+                "u": user_id, "m": model, "p": p_tokens, "c": c_tokens, "co": cost, "pur": purpose, "s": status,
+                "rt": response_time_ms, "ec": estimated_cost_if_full, "ss": similarity_score, "cas": cache_age_seconds, "rr": rejected_reason,
+                "sym": symbol
+            })
+            await self.user_repo.db.commit()
+        except Exception as e:
+            logger.error(f"❌ AI usage logging error (non-blocking fallback): {e}")
+            try:
+                await self.user_repo.db.rollback()
+            except Exception:
+                pass
