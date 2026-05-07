@@ -409,8 +409,24 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 function ActionCard({ action, onAction }) {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  
+  // State for bundle execution
+  const [steps, setSteps] = useState([]);
+  const [bundleStatus, setBundleStatus] = useState("idle"); // idle, running, success, failed
 
-  const handleClick = async () => {
+  useEffect(() => {
+    if (action?.type === "bundle" && action?.actions) {
+      setSteps(
+        action.actions.map((act, index) => ({
+          ...act,
+          id: index,
+          status: "pending", // pending, processing, success, failed
+        }))
+      );
+    }
+  }, [action]);
+
+  const handleSingleClick = async () => {
     setLoading(true);
     try {
       await onAction(action);
@@ -422,26 +438,159 @@ function ActionCard({ action, onAction }) {
     }
   };
 
-  const getActionLabel = () => {
-    switch (action.type) {
-      case "add_to_watchlist": return `Add ${action.symbol || ""} to Watchlist`;
-      case "open_setup_page": return `Configure Setup for ${action.symbol || ""}`;
-      case "generate_strategy": return `Generate ${action.symbol || ""} Strategy`;
-      case "open_bot_draft": return `Deploy ${action.symbol || ""} Paper Bot`;
+  const handleBundleClick = async () => {
+    setBundleStatus("running");
+    
+    let hasError = false;
+    const updatedSteps = [...steps];
+
+    for (let i = 0; i < updatedSteps.length; i++) {
+      // Update state to processing for the current step
+      updatedSteps[i] = { ...updatedSteps[i], status: "processing" };
+      setSteps([...updatedSteps]);
+
+      try {
+        // Execute the action via the callback
+        await onAction(updatedSteps[i]);
+        
+        // Mark as success
+        updatedSteps[i] = { ...updatedSteps[i], status: "success" };
+        setSteps([...updatedSteps]);
+      } catch (err) {
+        console.error(`Step ${i} failed:`, err);
+        updatedSteps[i] = { ...updatedSteps[i], status: "failed" };
+        setSteps([...updatedSteps]);
+        hasError = true;
+        break; // Stop sequential execution upon error
+      }
+      
+      // Short delay for visual polish & sequential feel
+      await new Promise(resolve => setTimeout(resolve, 600));
+    }
+
+    if (hasError) {
+      setBundleStatus("failed");
+    } else {
+      setBundleStatus("success");
+    }
+  };
+
+  const getActionLabel = (act = action) => {
+    switch (act.type) {
+      case "add_to_watchlist": return `Add ${act.symbol || ""} to Watchlist`;
+      case "open_setup_page": return `Configure Setup for ${act.symbol || ""}`;
+      case "generate_strategy": return `Generate ${act.symbol || ""} Strategy`;
+      case "open_bot_draft": return `Deploy ${act.symbol || ""} Paper Bot`;
       default: return "Execute Action";
     }
   };
 
-  const getActionDescription = () => {
-    switch (action.type) {
-      case "add_to_watchlist": return `Add ${action.symbol || ""} to the live tracking engine.`;
-      case "open_setup_page": return `Open setups tab to create custom macro rules for ${action.symbol || ""}.`;
-      case "generate_strategy": return `Use AI to build a customized algorithmic strategy for ${action.symbol || ""}.`;
+  const getActionDescription = (act = action) => {
+    switch (act.type) {
+      case "add_to_watchlist": return `Add ${act.symbol || ""} to the live tracking engine.`;
+      case "open_setup_page": return `Open setups tab to create custom macro rules for ${act.symbol || ""}.`;
+      case "generate_strategy": return `Use AI to build a customized algorithmic strategy for ${act.symbol || ""}.`;
       case "open_bot_draft": return `Open bot configuration modal with recommended pre-filled parameters.`;
       default: return "";
     }
   };
 
+  // --- RENDERING MULTI-ACTION BUNDLE ---
+  if (action?.type === "bundle") {
+    return (
+      <div className="mt-3 p-5 bg-gradient-to-br from-blue-600/5 to-indigo-600/5 dark:from-blue-950/10 dark:to-indigo-950/10 border-2 border-blue-200/50 dark:border-blue-900/40 rounded-2xl flex flex-col gap-4 shadow-xl shadow-blue-500/5">
+        <div className="flex items-center justify-between border-b border-blue-100/30 dark:border-blue-900/20 pb-2.5">
+          <div>
+            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400 flex items-center gap-2">
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+              </span>
+              🛒 AI Operator Checkout
+            </h4>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-1">
+              Approve and deploy the suggested pipeline
+            </p>
+          </div>
+        </div>
+
+        {/* Action Steps List */}
+        <div className="space-y-3">
+          {steps.map((step, idx) => (
+            <div 
+              key={step.id} 
+              className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
+                step.status === "processing" 
+                  ? "bg-blue-50/50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-800 shadow-sm"
+                  : step.status === "success"
+                    ? "bg-emerald-50/20 dark:bg-emerald-950/10 border-emerald-500/30 dark:border-emerald-500/20"
+                    : step.status === "failed"
+                      ? "bg-rose-50/20 dark:bg-rose-950/10 border-rose-500/30 dark:border-rose-500/20"
+                      : "bg-white/50 dark:bg-slate-900/40 border-slate-100 dark:border-slate-800"
+              }`}
+            >
+              {/* Step Number / Status Indicator */}
+              <div className="flex-shrink-0 mt-0.5">
+                {step.status === "pending" && (
+                  <div className="w-5 h-5 rounded-full border-2 border-slate-200 dark:border-slate-700 flex items-center justify-center text-[9px] font-black text-slate-400 dark:text-slate-500">
+                    {idx + 1}
+                  </div>
+                )}
+                {step.status === "processing" && (
+                  <div className="w-5 h-5 flex items-center justify-center text-blue-500">
+                    <Loader2 size={16} className="animate-spin" />
+                  </div>
+                )}
+                {step.status === "success" && (
+                  <div className="w-5 h-5 rounded-full bg-emerald-500 dark:bg-emerald-600 flex items-center justify-center text-white text-[10px] font-black transition-all duration-300 scale-100">
+                    ✓
+                  </div>
+                )}
+                {step.status === "failed" && (
+                  <div className="w-5 h-5 rounded-full bg-rose-500 dark:bg-rose-600 flex items-center justify-center text-white text-[10px] font-black">
+                    !
+                  </div>
+                )}
+              </div>
+
+              {/* Step Info */}
+              <div className="flex-1">
+                <span className="text-xs font-black text-foreground dark:text-slate-200 block leading-tight">
+                  {step.description || getActionLabel(step)}
+                </span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium block mt-0.5">
+                  {getActionDescription(step)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Execution Trigger */}
+        <button 
+          onClick={handleBundleClick}
+          disabled={bundleStatus === "running" || bundleStatus === "success"}
+          className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all shadow-lg active:scale-95 ${
+            bundleStatus === "success" 
+              ? "bg-emerald-600 shadow-emerald-600/15 cursor-default" 
+              : bundleStatus === "failed"
+                ? "bg-rose-600 shadow-rose-600/15"
+                : "bg-blue-600 hover:bg-blue-700 shadow-blue-600/15"
+          }`}
+        >
+          {bundleStatus === "running" 
+            ? "Executing Pipeline..." 
+            : bundleStatus === "success" 
+              ? "✓ Pipeline Deployed Successfully" 
+              : bundleStatus === "failed"
+                ? "Retry Pipeline"
+                : `Confirm & Deploy (${steps.length} Actions)`}
+        </button>
+      </div>
+    );
+  }
+
+  // --- RENDERING SINGLE ACTION ---
   return (
     <div className="mt-3 p-4 bg-blue-100/10 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-900/40 rounded-2xl flex flex-col gap-3">
       <div>
@@ -450,7 +599,7 @@ function ActionCard({ action, onAction }) {
       </div>
       
       <button 
-        onClick={handleClick}
+        onClick={handleSingleClick}
         disabled={loading || success}
         className={`w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all shadow-md active:scale-95 ${
           success 

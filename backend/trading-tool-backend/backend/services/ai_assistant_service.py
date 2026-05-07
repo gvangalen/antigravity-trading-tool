@@ -83,16 +83,25 @@ class AiAssistantService:
             "- 'response': (string) your conversational response to the user's message in Dutch.\n"
             "- 'action': (object or null) if the user explicitly asks to add a coin to their watchlist, "
             "build/create/generate a setup or strategy, or deploy/create a bot, populate this object. "
-            "Otherwise, set 'action' to null.\n"
-            "The 'action' object must have:\n"
+            "Otherwise, set 'action' to null.\n\n"
+            "The 'action' object can represent a SINGLE action or a BUNDLE of multiple actions:\n"
+            "1. For SINGLE actions, 'type' must be one of ['add_to_watchlist', 'open_setup_page', 'generate_strategy', 'open_bot_draft'], and 'symbol' and 'params' should be populated.\n"
+            "2. For MULTIPLE actions (e.g. 'Voeg SOL toe en maak een agressieve paper bot'), you MUST set 'type' to 'bundle'. Then, populate the 'actions' array with individual action objects, each having:\n"
             "   * 'type': one of ['add_to_watchlist', 'open_setup_page', 'generate_strategy', 'open_bot_draft']\n"
-            "   * 'symbol': the relevant crypto symbol (e.g., 'SOL', 'BTC')\n"
-            "   * 'params': (object) optional parameters like risk (aggressive, conservative, balanced), mode (paper, live), budget (int)\n\n"
-            "Example of action:\n"
-            "If user says: 'Voeg SOL toe aan mn watchlist', return:\n"
+            "   * 'symbol': relevant crypto symbol (e.g., 'SOL')\n"
+            "   * 'params': (object) optional parameters like risk (aggressive, conservative, balanced), mode (paper, live), budget (int)\n"
+            "   * 'description': a short description of this step in Dutch (e.g. 'Voeg SOL toe aan de Watchlist', 'Start een agressieve SOL Paper Bot')\n"
+            "Put individual actions in a logical sequential order (dependencies first, e.g., 'add_to_watchlist' before 'open_bot_draft').\n\n"
+            "Example of bundle:\n"
             "{\n"
-            "  \"response\": \"Ik ga SOL toevoegen aan je watchlist!\",\n"
-            "  \"action\": {\"type\": \"add_to_watchlist\", \"symbol\": \"SOL\", \"params\": {}}\n"
+            "  \"response\": \"Ik ga SOL toevoegen en een agressieve paper bot voorbereiden!\",\n"
+            "  \"action\": {\n"
+            "    \"type\": \"bundle\",\n"
+            "    \"actions\": [\n"
+            "      {\"type\": \"add_to_watchlist\", \"symbol\": \"SOL\", \"description\": \"Voeg SOL toe aan de Watchlist\"},\n"
+            "      {\"type\": \"open_bot_draft\", \"symbol\": \"SOL\", \"params\": {\"risk\": \"aggressive\", \"mode\": \"paper\"}, \"description\": \"Start een agressieve SOL Paper Bot\"}\n"
+            "    ]\n"
+            "  }\n"
             "}"
         )
 
@@ -103,9 +112,22 @@ class AiAssistantService:
                 "action": {
                     "type": "object",
                     "properties": {
-                        "type": {"type": "string", "enum": ["add_to_watchlist", "open_setup_page", "generate_strategy", "open_bot_draft"]},
+                        "type": {"type": "string", "enum": ["add_to_watchlist", "open_setup_page", "generate_strategy", "open_bot_draft", "bundle"]},
                         "symbol": {"type": "string"},
-                        "params": {"type": "object"}
+                        "params": {"type": "object"},
+                        "actions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {"type": "string", "enum": ["add_to_watchlist", "open_setup_page", "generate_strategy", "open_bot_draft"]},
+                                    "symbol": {"type": "string"},
+                                    "params": {"type": "object"},
+                                    "description": {"type": "string"}
+                                },
+                                "required": ["type"]
+                            }
+                        }
                     },
                     "required": ["type"],
                     "nullable": True
