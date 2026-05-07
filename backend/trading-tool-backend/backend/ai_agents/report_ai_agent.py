@@ -1118,7 +1118,7 @@ Keys:
 
     batched_result = {}
     try:
-        raw_json = ask_gpt_json(prompt=batched_prompt, system_role=SYSTEM_PROMPT)
+        raw_json = ask_gpt_json(prompt=batched_prompt, system_role=SYSTEM_PROMPT, max_tokens=3000)
         if isinstance(raw_json, dict):
             batched_result = raw_json
     except Exception:
