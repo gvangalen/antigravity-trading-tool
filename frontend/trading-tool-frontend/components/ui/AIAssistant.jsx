@@ -92,6 +92,10 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         if (symbol && watchlist?.add) {
           await watchlist.add(symbol);
         }
+      } else if (type === "remove_from_watchlist") {
+        if (symbol && watchlist?.remove) {
+          await watchlist.remove(symbol);
+        }
       } else if (type === "open_setup_page") {
         router.push(`/setup${symbol ? `?symbol=${symbol}` : ""}`);
         setIsOpen(false);
@@ -478,6 +482,7 @@ function ActionCard({ action, onAction }) {
   const getActionLabel = (act = action) => {
     switch (act.type) {
       case "add_to_watchlist": return `Add ${act.symbol || ""} to Watchlist`;
+      case "remove_from_watchlist": return `Remove ${act.symbol || ""} from Watchlist`;
       case "open_setup_page": return `Configure Setup for ${act.symbol || ""}`;
       case "generate_strategy": return `Generate ${act.symbol || ""} Strategy`;
       case "open_bot_draft": return `Deploy ${act.symbol || ""} Paper Bot`;
@@ -488,6 +493,7 @@ function ActionCard({ action, onAction }) {
   const getActionDescription = (act = action) => {
     switch (act.type) {
       case "add_to_watchlist": return `Add ${act.symbol || ""} to the live tracking engine.`;
+      case "remove_from_watchlist": return `Remove ${act.symbol || ""} from the live tracking engine.`;
       case "open_setup_page": return `Open setups tab to create custom macro rules for ${act.symbol || ""}.`;
       case "generate_strategy": return `Use AI to build a customized algorithmic strategy for ${act.symbol || ""}.`;
       case "open_bot_draft": return `Open bot configuration modal with recommended pre-filled parameters.`;

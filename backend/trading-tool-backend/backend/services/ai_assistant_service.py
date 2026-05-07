@@ -81,13 +81,13 @@ class AiAssistantService:
             system_role + 
             "\n\nIMPORTANT: You must return a JSON object with exactly two fields:\n"
             "- 'response': (string) your conversational response to the user's message in Dutch.\n"
-            "- 'action': (object or null) if the user explicitly asks to add a coin to their watchlist, "
+            "- 'action': (object or null) if the user explicitly asks to add or remove a coin to/from their watchlist, "
             "build/create/generate a setup or strategy, or deploy/create a bot, populate this object. "
             "Otherwise, set 'action' to null.\n\n"
             "The 'action' object can represent a SINGLE action or a BUNDLE of multiple actions:\n"
-            "1. For SINGLE actions, 'type' must be one of ['add_to_watchlist', 'open_setup_page', 'generate_strategy', 'open_bot_draft'], and 'symbol' and 'params' should be populated.\n"
+            "1. For SINGLE actions, 'type' must be one of ['add_to_watchlist', 'remove_from_watchlist', 'open_setup_page', 'generate_strategy', 'open_bot_draft'], and 'symbol' and 'params' should be populated.\n"
             "2. For MULTIPLE actions (e.g. 'Voeg SOL toe en maak een agressieve paper bot'), you MUST set 'type' to 'bundle'. Then, populate the 'actions' array with individual action objects, each having:\n"
-            "   * 'type': one of ['add_to_watchlist', 'open_setup_page', 'generate_strategy', 'open_bot_draft']\n"
+            "   * 'type': one of ['add_to_watchlist', 'remove_from_watchlist', 'open_setup_page', 'generate_strategy', 'open_bot_draft']\n"
             "   * 'symbol': relevant crypto symbol (e.g., 'SOL')\n"
             "   * 'params': (object) optional parameters like risk (aggressive, conservative, balanced), mode (paper, live), budget (int)\n"
             "   * 'description': a short description of this step in Dutch (e.g. 'Voeg SOL toe aan de Watchlist', 'Start een agressieve SOL Paper Bot')\n"
@@ -112,7 +112,7 @@ class AiAssistantService:
                 "action": {
                     "type": "object",
                     "properties": {
-                        "type": {"type": "string", "enum": ["add_to_watchlist", "open_setup_page", "generate_strategy", "open_bot_draft", "bundle"]},
+                        "type": {"type": "string", "enum": ["add_to_watchlist", "remove_from_watchlist", "open_setup_page", "generate_strategy", "open_bot_draft", "bundle"]},
                         "symbol": {"type": "string"},
                         "params": {"type": "object"},
                         "actions": {
@@ -120,7 +120,7 @@ class AiAssistantService:
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "type": {"type": "string", "enum": ["add_to_watchlist", "open_setup_page", "generate_strategy", "open_bot_draft"]},
+                                    "type": {"type": "string", "enum": ["add_to_watchlist", "remove_from_watchlist", "open_setup_page", "generate_strategy", "open_bot_draft"]},
                                     "symbol": {"type": "string"},
                                     "params": {"type": "object"},
                                     "description": {"type": "string"}
