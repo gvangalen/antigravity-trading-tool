@@ -58,7 +58,7 @@ class ScoreRepository:
             SELECT *
             FROM global_market_insights
             WHERE category = :category
-            ORDER BY date DESC, created_at DESC
+            ORDER BY date DESC, updated_at DESC
             LIMIT 1
         """)
         try:

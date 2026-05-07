@@ -39,6 +39,8 @@ async def assistant_chat(
         user_id = current_user["id"]
         response, action = await service.get_chat_response(user_id, request.query, request.context)
         intent = service._classify_intent(request.query)
+        if not isinstance(action, dict):
+            action = None
         return AssistantChatResponse(response=response, intent=intent, action=action)
     except Exception as e:
         logger.error(f"❌ AI Assistant Chat Error: {e}", exc_info=True)

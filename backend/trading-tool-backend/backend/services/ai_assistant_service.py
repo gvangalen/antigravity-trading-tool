@@ -166,6 +166,10 @@ class AiAssistantService:
                 except Exception:
                     chat_text = response_data
 
+        # Ensure action is strictly a dict or None
+        if not isinstance(action, dict):
+            action = None
+
         # 7. Selective Preference Update (Optional/Explicit feedback)
         await self._handle_implicit_feedback(user_id, user_query)
 
