@@ -30,7 +30,7 @@ echo "⚡ Using prebuilt frontend (no build on server)"
 
 pm2 delete frontend || true
 
-pm2 serve out 5002 --name frontend --spa
+pm2 start server.js --name frontend
 
 pm2 save
 
