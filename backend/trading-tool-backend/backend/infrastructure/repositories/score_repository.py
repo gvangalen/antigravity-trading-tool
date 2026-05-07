@@ -52,7 +52,7 @@ class ScoreRepository:
     async def get_global_insight(self, category: str) -> Optional[Dict[str, Any]]:
         """
         Haalt de meest recente globale AI-conclusie op voor een categorie.
-        Robust to database schema differences (e.g. missing avg_score in some environments).
+        Robust to database schema differences (e.g. missing avg_score or fields nested in JSONB in some environments).
         """
         stmt = text("""
             SELECT *
@@ -72,6 +72,12 @@ class ScoreRepository:
             if "avg_score" not in data:
                 data["avg_score"] = data.get("score", 0)
                 
+            # If production schema has fields nested in a JSONB 'data' column, unpack them robustly
+            if "data" in data and isinstance(data["data"], dict):
+                for k, v in data["data"].items():
+                    if k not in data:
+                        data[k] = v
+                        
             return data
         except Exception as e:
             import logging
