@@ -1144,6 +1144,18 @@ Keys:
         "watchlist": watchlist_data,
         "best_setup": best_setup,
         "transition": transition,
+        "price": market.get("price"),
+        "change_24h": market.get("change_24h"),
+        "volume": market.get("volume"),
+        "macro_score": scores.get("macro_score"),
+        "technical_score": scores.get("technical_score"),
+        "market_score": scores.get("market_score"),
+        "setup_score": scores.get("setup_score"),
+        "market_indicator_highlights": market_ind,
+        "macro_indicator_highlights": macro_ind,
+        "technical_indicator_highlights": tech_ind,
+        "active_strategy": active_strategy,
+        "bot_snapshot": bot_snapshot,
     }
 
     logger.info("✅ Multi-Asset Report agent OK")
