@@ -257,7 +257,7 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
 function WatchlistSidebar({ onNavigate, pathname }) {
   const router = require("next/navigation").useRouter();
   const { watchlist, remove } = useWatchlist();
-  const { symbol: activeSymbol, setSelectedAsset } = useAsset();
+  const { selectedAsset: activeSymbol, setSelectedAsset } = useAsset();
   const { setActiveSetup, setFocusedBotId } = require("@/app/providers/SetupProvider").useActiveSetup();
 
   if (!watchlist || watchlist.length === 0) return null;
@@ -275,9 +275,9 @@ function WatchlistSidebar({ onNavigate, pathname }) {
             <div
               key={symbol}
               className={`
-                group flex items-center justify-between px-5 py-3 rounded-xl transition-all cursor-pointer
+                group flex items-center justify-between px-5 py-3 rounded-xl transition-all cursor-pointer border border-transparent
                 ${isActive 
-                  ? "bg-slate-100 dark:bg-slate-900 text-blue-600 font-black" 
+                  ? "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 font-black border-blue-100/50 dark:border-blue-900/30 shadow-sm" 
                   : "text-muted hover:bg-slate-50 dark:hover:bg-slate-900/50 hover:text-slate-900 dark:hover:text-white"
                 }
               `}
