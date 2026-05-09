@@ -29,7 +29,8 @@ import { useAuth } from "@/components/auth/AuthGuard"; // useAuth is actually in
 import { useAuth as useAuthHook } from "@/components/auth/AuthProvider"; 
 import { useWatchlist } from "@/hooks/useWatchlist";
 import { useAsset } from "@/app/providers/AssetProvider";
-import { Star } from "lucide-react";
+import { Star, AlertTriangle } from "lucide-react";
+import { useModal } from "@/components/modal/ModalProvider";
 
 export default function NavBar() {
   const { t } = useTranslation();
@@ -259,6 +260,7 @@ function WatchlistSidebar({ onNavigate, pathname }) {
   const { watchlist, remove } = useWatchlist();
   const { selectedAsset: activeSymbol, setSelectedAsset } = useAsset();
   const { setActiveSetup, setFocusedBotId } = require("@/app/providers/SetupProvider").useActiveSetup();
+  const { openConfirm, showSnackbar } = useModal();
 
   if (!watchlist || watchlist.length === 0) return null;
 
@@ -306,7 +308,18 @@ function WatchlistSidebar({ onNavigate, pathname }) {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  remove(symbol);
+                  openConfirm({
+                    title: "Asset verwijderen?",
+                    description: `Weet je zeker dat je ${symbol} wilt verwijderen van je watchlist? De asset is dan niet meer zichtbaar in je actieve tracking engine.`,
+                    tone: "danger",
+                    confirmText: "Verwijder",
+                    cancelText: "Annuleer",
+                    icon: <AlertTriangle size={20} />,
+                    onConfirm: async () => {
+                      await remove(symbol);
+                      showSnackbar(`${symbol} verwijderd van watchlist`, "success");
+                    }
+                  });
                 }}
                 className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all"
               >
