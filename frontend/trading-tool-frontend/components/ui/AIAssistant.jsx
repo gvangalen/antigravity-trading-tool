@@ -594,43 +594,19 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       <div className="p-6 bg-card dark:bg-[#0f172a] border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] relative z-10">
         {activeState && activeState.current_flow && activeState.current_flow !== "none" && (() => {
           const progress = getFlowProgress(activeState);
-          if (!progress) {
-            return (
-              <div className="mb-3 p-3 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/20 dark:border-blue-500/10 rounded-2xl flex items-center justify-between animate-pulse">
-                <div className="flex items-center gap-2">
-                  <Brain className="w-4 h-4 text-blue-500" />
-                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                    Workflow: {activeState.current_flow.replace("_", " ")} ({activeState.asset})
-                  </span>
-                </div>
-                <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">
-                  Invoer verzamelen...
-                </span>
-              </div>
-            );
-          }
+          if (!progress) return null;
+          const activeStep = Math.min(progress.filled + 1, progress.total);
           return (
-            <div className="mb-4 p-4 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/20 dark:border-blue-500/10 rounded-2xl flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Brain className="w-4 h-4 text-blue-500 animate-pulse" />
-                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                    {progress.flowLabel} ({activeState.asset})
-                  </span>
-                </div>
-                <span className="text-[10px] font-black text-blue-600 dark:text-blue-400">
-                  {progress.percentage}% Compleet
-                </span>
+            <div className="mb-4 p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-2xl flex flex-col gap-2.5">
+              <div className="flex items-center justify-between text-xs font-medium text-slate-700 dark:text-slate-300">
+                <span className="font-semibold">{progress.flowLabel === "Setup Creation" ? "Setup Wizard" : progress.flowLabel}</span>
+                <span className="text-slate-400 dark:text-slate-500">Stap {activeStep} van {progress.total}</span>
               </div>
-              <div className="w-full h-2 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
+              <div className="w-full h-1 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                  className="h-full bg-blue-600 dark:bg-blue-500 rounded-full transition-all duration-500 ease-out"
                   style={{ width: `${progress.percentage}%` }}
                 />
-              </div>
-              <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 dark:text-slate-500 leading-none">
-                <span>Stap {progress.filled} van {progress.total}</span>
-                <span>Invoer verzamelen...</span>
               </div>
             </div>
           );
