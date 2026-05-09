@@ -1,0 +1,274 @@
+# =====================================================
+# TRADAMIND AI ASSISTANT - FLOW REGISTRY
+# =====================================================
+from typing import Dict, Any, List, Optional
+
+FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
+    "user_onboarding": {
+        "page": "/profile",
+        "assistant_role": "Onboarding Coach",
+        "required_slots": ["experience_level", "risk_profile", "investment_goals"],
+        "question_sequence": [
+            {
+                "slot": "experience_level",
+                "question_beginner": "Hoi! Laten we je ervaring personaliseren. Hoeveel ervaring heb je al met crypto-trading? (kies uit: beginner, intermediate, advanced)",
+                "question_advanced": "Wat is je crypto-trading ervaring? (beginner / intermediate / advanced):"
+            },
+            {
+                "slot": "risk_profile",
+                "question_beginner": "En hoe ga je om met risico? Ben je heel voorzichtig (conservative), zoek je een gezonde balans (balanced), of ga je voor maximale winst met hogere risico's (aggressive)?",
+                "question_advanced": "Risicoprofiel? (conservative / balanced / aggressive):"
+            },
+            {
+                "slot": "investment_goals",
+                "question_beginner": "Als laatste: wat is je belangrijkste doel op Tradamind? Bijvoorbeeld 'wekelijks passief bijkopen' of 'actief traden op daggrafieken'?",
+                "question_advanced": "Wat zijn je primaire investeringsdoelen?"
+            }
+        ],
+        "draft_type": None,
+        "allowed_actions": ["navigate_to_page"],
+        "suggested_next_actions": [
+            {
+                "label": "Ga naar Overview",
+                "query": "ga naar dashboard",
+                "page_link": "/dashboard"
+            }
+        ]
+    },
+    "setup_creation": {
+        "page": "/setup",
+        "assistant_role": "Setup Wizard",
+        "required_slots": ["symbol", "setup_type"],
+        "conditional_slots": {
+            "dca_frequency": {
+                "depends_on": "setup_type",
+                "equals_value": "dca"
+            }
+        },
+        "question_sequence": [
+            {
+                "slot": "symbol",
+                "question_beginner": "Voor welke cryptomunt (zoals SOL, BTC of ETH) wil je deze setup maken?",
+                "question_advanced": "Voer de asset-ticker in (bijv. SOL, BTC):"
+            },
+            {
+                "slot": "setup_type",
+                "question_beginner": "Kies je voor een periodieke 'dca' setup (passief bijkopen) of een actieve handmatige 'trade' setup?",
+                "question_advanced": "Setup type? ('dca' of 'trade'):"
+            },
+            {
+                "slot": "dca_frequency",
+                "question_beginner": "Hoe vaak wil je bijkopen? Dagelijks, Wekelijks, of Maandelijks?",
+                "question_advanced": "DCA frequentie? ('daily', 'weekly', 'monthly'):"
+            }
+        ],
+        "draft_type": "setup",
+        "allowed_actions": ["open_setup_page"],
+        "suggested_next_actions": [
+            {
+                "label": "Ontwerp Strategie",
+                "query": "ontwerp een strategie voor deze setup",
+                "page_link": "/strategy"
+            }
+        ]
+    },
+    "strategy_creation": {
+        "page": "/strategy",
+        "assistant_role": "Strategie Architect",
+        "required_slots": ["symbol", "setup_type", "base_amount"],
+        "conditional_slots": {
+            "entry": {
+                "depends_on": "setup_type",
+                "equals_value": "trade"
+            },
+            "targets": {
+                "depends_on": "setup_type",
+                "equals_value": "trade"
+            },
+            "stop_loss": {
+                "depends_on": "setup_type",
+                "equals_value": "trade"
+            }
+        },
+        "question_sequence": [
+            {
+                "slot": "symbol",
+                "question_beginner": "Voor welke cryptomunt gaan we deze strategie ontwerpen?",
+                "question_advanced": "Asset ticker:"
+            },
+            {
+                "slot": "setup_type",
+                "question_beginner": "Wordt dit een 'dca' of een actieve 'trade' strategie?",
+                "question_advanced": "Strategie type ('dca'/'trade'):"
+            },
+            {
+                "slot": "base_amount",
+                "question_beginner": "Wat is het basisbedrag per order in EUR? (bijv. €100)",
+                "question_advanced": "Inleg per order (EUR):"
+            },
+            {
+                "slot": "entry",
+                "question_beginner": "Op welke koers wil je instappen? (bijv. de actuele koers of een specifiek niveau)",
+                "question_advanced": "Entry price:"
+            },
+            {
+                "slot": "targets",
+                "question_beginner": "Wat zijn je winstdoelen? Je kunt één of meerdere doelen opgeven (bijv. [150, 160])",
+                "question_advanced": "Take profit targets (array van getallen, bijv. [150, 160]):"
+            },
+            {
+                "slot": "stop_loss",
+                "question_beginner": "Waar leggen we de stop-loss neer om je kapitaal te beschermen? (bijv. €130)",
+                "question_advanced": "Stop loss limit:"
+            }
+        ],
+        "draft_type": "strategy",
+        "allowed_actions": ["generate_strategy"],
+        "suggested_next_actions": [
+            {
+                "label": "Start een Bot",
+                "query": "start een trading bot voor deze strategie",
+                "page_link": "/bot"
+            }
+        ]
+    },
+    "bot_creation": {
+        "page": "/bot",
+        "assistant_role": "Bot Deployer",
+        "required_slots": ["name", "budget_total_eur"],
+        "question_sequence": [
+            {
+                "slot": "name",
+                "question_beginner": "Welke naam wil je deze trading bot geven? (bijv. 'SOL Autopilot Bot')",
+                "question_advanced": "Bot naam:"
+            },
+            {
+                "slot": "budget_total_eur",
+                "question_beginner": "Wat is het totale budget in EUR dat deze bot mag beheren? (bijv. €500)",
+                "question_advanced": "Totaal budget (EUR):"
+            }
+        ],
+        "draft_type": "bot",
+        "allowed_actions": ["open_bot_draft"],
+        "suggested_next_actions": [
+            {
+                "label": "Ga naar Overview",
+                "query": "ga naar dashboard",
+                "page_link": "/dashboard"
+            }
+        ]
+    },
+    "macro_analysis_walkthrough": {
+        "page": "/macro",
+        "assistant_role": "Macro Analist",
+        "required_slots": ["symbol"],
+        "question_sequence": [
+            {
+                "slot": "symbol",
+                "question_beginner": "Voor welke munt wil je de macro-economische analyse doorlopen?",
+                "question_advanced": "Macro walkthrough asset ticker:"
+            }
+        ],
+        "draft_type": None,
+        "allowed_actions": ["navigate_to_page"],
+        "suggested_next_actions": [
+            {
+                "label": "Check Technics",
+                "query": "bekijk de technische analyse",
+                "page_link": "/technical"
+            }
+        ]
+    },
+    "technical_analysis_walkthrough": {
+        "page": "/technical",
+        "assistant_role": "Technische Gids",
+        "required_slots": ["symbol"],
+        "question_sequence": [
+            {
+                "slot": "symbol",
+                "question_beginner": "Voor welke munt wil je de technische indicatoren doornemen?",
+                "question_advanced": "Technical walkthrough asset ticker:"
+            }
+        ],
+        "draft_type": None,
+        "allowed_actions": ["navigate_to_page"],
+        "suggested_next_actions": [
+            {
+                "label": "Maak een Setup",
+                "query": "maak een setup",
+                "page_link": "/setup"
+            }
+        ]
+    },
+    "portfolio_review": {
+        "page": "/portfolio",
+        "assistant_role": "Risico Adviseur",
+        "required_slots": [],
+        "question_sequence": [],
+        "draft_type": None,
+        "allowed_actions": ["navigate_to_page"],
+        "suggested_next_actions": [
+            {
+                "label": "Markt bekijken",
+                "query": "laat me de markt zien",
+                "page_link": "/market"
+            }
+        ]
+    },
+    "report_walkthrough": {
+        "page": "/report",
+        "assistant_role": "Performance Coach",
+        "required_slots": [],
+        "question_sequence": [],
+        "draft_type": None,
+        "allowed_actions": ["navigate_to_page"],
+        "suggested_next_actions": [
+            {
+                "label": "Pas Strategie aan",
+                "query": "pas mijn actieve strategie aan",
+                "page_link": "/strategy"
+            }
+        ]
+    },
+    "risk_check": {
+        "page": "/portfolio",
+        "assistant_role": "Risico Adviseur",
+        "required_slots": ["symbol", "proposed_size"],
+        "question_sequence": [
+            {
+                "slot": "symbol",
+                "question_beginner": "Over welke munt wil je de risicocontrole uitvoeren?",
+                "question_advanced": "Asset ticker:"
+            },
+            {
+                "slot": "proposed_size",
+                "question_beginner": "Wat is de voorgestelde ordergrootte in EUR?",
+                "question_advanced": "Order size (EUR):"
+            }
+        ],
+        "draft_type": None,
+        "allowed_actions": ["navigate_to_page"],
+        "suggested_next_actions": [
+            {
+                "label": "Bekijk Portfolio",
+                "query": "toon mijn portfolio",
+                "page_link": "/portfolio"
+            }
+        ]
+    },
+    "navigate_to_page": {
+        "page": "/dashboard",
+        "assistant_role": "Centraal Kompas",
+        "required_slots": ["target_page"],
+        "question_sequence": [
+            {
+                "slot": "target_page",
+                "question_beginner": "Naar welke pagina wil je navigeren?",
+                "question_advanced": "Bestemmingspagina:"
+            }
+        ],
+        "draft_type": None,
+        "allowed_actions": ["navigate_to_page"],
+        "suggested_next_actions": []
+    }
+}

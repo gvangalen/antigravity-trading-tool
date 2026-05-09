@@ -198,7 +198,10 @@ class AiAssistantService:
             f"ADAPTIVE INTELLIGENCE CONTEXT:\n{adaptive_profile_str}\n\n"
             f"FRONTEND METADATA:\n{context_data}"
         )
-        
+
+        # Build registry prompt instructions dynamically from central flow registry
+        registry_instructions = self._build_flow_registry_prompt(conv_state, stated_exp)
+
         system_role_json = (
             system_role + 
             "\n\nIMPORTANT: You must return a JSON object with exactly five fields:\n"
@@ -211,26 +214,7 @@ class AiAssistantService:
             "- 'reasoning': (object or null) internal diagnostic reasoning containing: "
             "'confidence_score' (float, 0-100), 'risk_detected' (boolean), 'reasons' (list of strings), and "
             "'coaching_level' (string, e.g. 'beginner' or 'advanced').\n\n"
-            "=== CONVERSATION STATE ENGINE (SLOT FILLING) ===\n"
-            "You are a stateful slot-filling assistant. If a user wants to create/set up a setup, strategy, or bot, you must manage their progress using the 'state' field in the JSON response.\n"
-            "If they start a flow or are in a flow, you MUST keep 'draft' as null until ALL mandatory fields (slots) are collected.\n"
-            "While collecting fields, you must set state.current_flow to one of ['setup_creation', 'strategy_creation', 'bot_creation'], populate state.slots with all gathered properties, list any missing properties in state.missing_slots, set state.status to 'collecting', and ask a friendly Dutch question to obtain the next missing parameter.\n"
-            "Once ALL slots are collected, you must populate the full 'draft' object, set state.current_flow to 'none', state.status to 'complete', state.slots to {}, and present the finalized draft to the user!\n\n"
-            "Mandatory fields/slots and EXACT questioning sequence:\n\n"
-            "1. For 'setup_creation' (Setups Page):\n"
-            "   - 'symbol': Welke coin wil je volgen? (bijv. SOL, BTC, ETH)\n"
-            "   - 'setup_type': Kies je voor een periodieke 'dca' of een actieve handmatige 'trade' setup?\n"
-            "   - 'dca_frequency' (only if setup_type is 'dca'): Hoe vaak wil je bijkopen? (kies uit: 'daily', 'weekly', 'monthly')\n"
-            "   * Gids de gebruiker uiterst vriendelijk door deze stappen. Stel de vragen één voor één om hen niet te overspoelen.\n\n"
-            "2. For 'strategy_creation' (Strategies Page):\n"
-            "   - 'symbol': Voor welke coin gaan we deze strategie ontwerpen?\n"
-            "   - 'setup_type': Wordt dit een 'dca' of een actieve 'trade' strategie?\n"
-            "   - 'base_amount': Wat is het basisbedrag per order in EUR (bijv. €100)?\n"
-            "   * Als het een 'trade' strategie is, vraag dan ook optioneel naar het instappunt ('entry'), winstdoelen ('targets') en de 'stop_loss'.\n\n"
-            "3. For 'bot_creation' (Bots Page):\n"
-            "   - 'name': Welke naam wil je deze trading bot geven? (bijv. 'SOL Autopilot Bot')\n"
-            "   - 'budget_total_eur': Wat is het totale budget in EUR dat deze bot mag beheren (bijv. €500)?\n"
-            "   - 'risk_profile' (optioneel): Welk risicoprofiel hanteren we? (kies uit: 'conservative', 'balanced', 'aggressive')\n\n"
+            f"{registry_instructions}\n"
             "=== ACTION SCHEMAS ===\n"
             "The 'action' object can represent a SINGLE action or a BUNDLE of multiple actions:\n"
             "1. For SINGLE actions, 'type' must be one of ['add_to_watchlist', 'remove_from_watchlist', 'open_setup_page', 'generate_strategy', 'open_bot_draft'], and 'symbol' and 'params' should be populated.\n"
@@ -637,7 +621,10 @@ class AiAssistantService:
             f"ADAPTIVE INTELLIGENCE CONTEXT:\n{adaptive_profile_str}\n\n"
             f"FRONTEND METADATA:\n{context_data}"
         )
-        
+
+        # Build registry prompt instructions dynamically from central flow registry
+        registry_instructions = self._build_flow_registry_prompt(conv_state, stated_exp)
+
         system_role_json = (
             system_role + 
             "\n\nIMPORTANT: You must return a JSON object with exactly five fields:\n"
@@ -650,17 +637,7 @@ class AiAssistantService:
             "- 'reasoning': (object or null) internal diagnostic reasoning containing: "
             "'confidence_score' (float, 0-100), 'risk_detected' (boolean), 'reasons' (list of strings), and "
             "'coaching_level' (string, e.g. 'beginner' or 'advanced').\n\n"
-            "=== CONVERSATION STATE ENGINE (SLOT FILLING) ===\n"
-            "You are a stateful slot-filling assistant. If a user wants to create/set up a setup, strategy, bot, or onboarding, you must manage their progress using the 'state' field in the JSON response.\n"
-            "If they start a flow or are in a flow, you MUST keep 'draft' as null until ALL mandatory fields (slots) are collected.\n"
-            "While collecting fields, you must set state.current_flow to one of ['setup_creation', 'strategy_creation', 'bot_creation', 'user_onboarding'], populate state.slots with all gathered properties, list any missing properties in state.missing_slots, set state.status to 'collecting', and ask a friendly Dutch question to obtain the next missing parameter.\n"
-            "Keep onboarding questions extremely brief and friendly. Do not build a long survey. Aim for fast activation and wow moments!\n"
-            "Once ALL slots are collected, you must populate the full 'draft' object (or set draft/action appropriately for onboarding completion), set state.current_flow to 'none', state.status to 'complete', state.slots to {}, and present the final confirmation or welcoming overview to the user!\n\n"
-            "Mandatory fields/slots:\n"
-            "1. For 'setup_creation': 'symbol' (e.g. SOL, BTC), 'setup_type' ('dca' or 'trade'), 'dca_frequency' (only if setup_type is 'dca')\n"
-            "2. For 'strategy_creation': 'symbol', 'setup_type' ('dca' or 'trade'), 'base_amount'\n"
-            "3. For 'bot_creation': 'name', 'budget_total_eur'\n"
-            "4. For 'user_onboarding': 'experience_level' ('beginner', 'advanced', 'expert'), 'risk_profile' ('conservative', 'balanced', 'aggressive'), 'investment_goals' ('steady accumulation', 'passive income', 'active growth', 'hedging')\n\n"
+            f"{registry_instructions}\n"
             "=== ACTION SCHEMAS ===\n"
             "The 'action' object can represent a SINGLE action or a BUNDLE of multiple actions:\n"
             "1. For SINGLE actions, 'type' must be one of ['add_to_watchlist', 'remove_from_watchlist', 'open_setup_page', 'generate_strategy', 'open_bot_draft', 'navigate_to_page'], and 'symbol' and 'params' should be populated.\n"
@@ -1005,7 +982,53 @@ class AiAssistantService:
                 }
             }
 
-        return insight
+    def _build_flow_registry_prompt(self, conv_state: Optional[dict], stated_exp: str) -> str:
+        from backend.ai_agents.flow_registry import FLOW_DEFINITIONS
+        import json
+
+        active_flow_name = conv_state.get("current_flow") if conv_state else None
+        if active_flow_name and active_flow_name in FLOW_DEFINITIONS:
+            flow = FLOW_DEFINITIONS[active_flow_name]
+            # Build specific instructions for the active flow
+            question_guide = []
+            for q in flow.get("question_sequence", []):
+                q_text = q.get(f"question_{stated_exp}", q.get("question_beginner"))
+                question_guide.append(f"- For slot '{q['slot']}': Use question: \"{q_text}\"")
+            
+            question_guide_str = "\n".join(question_guide)
+            conditional_str = json.dumps(flow.get("conditional_slots", {}))
+
+            return (
+                f"\n=== ACTIVE CONVERSATIONAL FLOW MANDATE (FLOW REGISTRY) ===\n"
+                f"You are currently executing the active flow: '{active_flow_name}'\n"
+                f"Your active Role is: '{flow.get('assistant_role')}'\n"
+                f"Target Page for this flow: {flow.get('page')}\n"
+                f"Primary required slots: {json.dumps(flow.get('required_slots'))}\n"
+                f"Conditional slots: {conditional_str}\n"
+                f"Already collected slots: {json.dumps(conv_state.get('slots', {}))}\n\n"
+                f"CRITICAL INSTRUCTIONS:\n"
+                f"1. You MUST continue this flow. Keep 'draft' as null until ALL required slots (and conditional slots if applicable) are collected.\n"
+                f"2. Set state.current_flow to '{active_flow_name}' and state.status to 'collecting' and state.slots to the accumulated dictionary of slots.\n"
+                f"3. Ask the user for the next missing slot using EXACTLY or closely adapted to this question:\n"
+                f"{question_guide_str}\n"
+                f"4. Once ALL slots are gathered, set state.current_flow to 'none', state.status to 'complete', state.slots to {{}}, and populate the final 'draft' with type '{flow.get('draft_type')}' using payload matching the fields. Present the draft card to the user.\n"
+            )
+        else:
+            # List candidate flows so LLM can trigger them
+            flows_list = []
+            for name, defs in FLOW_DEFINITIONS.items():
+                flows_list.append(
+                    f"- '{name}': Role: '{defs.get('assistant_role')}', Slots: {json.dumps(defs.get('required_slots'))}, Draft Type: {defs.get('draft_type')}"
+                )
+            flows_str = "\n".join(flows_list)
+            return (
+                f"\n=== AVAILABLE CONVERSATIONAL FLOWS (FLOW REGISTRY) ===\n"
+                f"If the user wants to start an interactive workflow or action, you must transition them into one of these flows by setting 'state.current_flow' to the flow name and state.status to 'collecting' and initiating the questions:\n"
+                f"{flows_str}\n\n"
+                f"FLOW START INSTRUCTIONS:\n"
+                f"- When transitioning, extract any slots already present in the user query and put them in state.slots.\n"
+                f"- Begin asking for the first missing slot using the flow's question sequence.\n"
+            )
 
     def _classify_intent(self, query: str) -> str:
         q = query.lower()

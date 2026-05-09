@@ -67,6 +67,73 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
   const context = getContext();
 
+  const getFlowProgress = (state) => {
+    if (!state || !state.current_flow || state.current_flow === "none") return null;
+    
+    const flowSlots = {
+      user_onboarding: ["experience_level", "risk_profile", "investment_goals"],
+      setup_creation: ["symbol", "setup_type", "dca_frequency"],
+      strategy_creation: ["symbol", "setup_type", "base_amount", "entry", "targets", "stop_loss"],
+      bot_creation: ["name", "budget_total_eur"],
+      macro_analysis_walkthrough: ["symbol"],
+      technical_analysis_walkthrough: ["symbol"],
+      risk_check: ["symbol", "proposed_size"],
+      navigate_to_page: ["target_page"]
+    };
+
+    const slots = flowSlots[state.current_flow] || [];
+    if (slots.length === 0) return null;
+
+    // Calculate filled slots
+    const filledSlots = Object.keys(state.slots || {}).filter(k => state.slots[k] !== undefined && state.slots[k] !== null && state.slots[k] !== "");
+    
+    // Determine effective total slots (taking conditional parameters into account)
+    let totalSlots = slots.length;
+    const setupType = state.slots?.setup_type;
+    if (state.current_flow === "setup_creation" && setupType === "trade") {
+      totalSlots = 2; // symbol, setup_type (no dca_frequency)
+    }
+    if (state.current_flow === "strategy_creation" && setupType === "dca") {
+      totalSlots = 3; // symbol, setup_type, base_amount
+    }
+
+    const percentage = Math.min(Math.round((filledSlots.length / totalSlots) * 100), 100);
+    return {
+      filled: filledSlots.length,
+      total: totalSlots,
+      percentage,
+      flowLabel: state.current_flow.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+    };
+  };
+
+  const parseSuggestedActions = (text) => {
+    if (!text) return [];
+    
+    const headerRegex = /(?:Volgende stappen|Suggested actions|Proactieve volgacties):/i;
+    const match = text.match(headerRegex);
+    if (!match) return [];
+    
+    const headerIndex = match.index;
+    const sectionText = text.substring(headerIndex + match[0].length);
+    
+    const lines = sectionText.split("\n");
+    const suggestions = [];
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("-") || trimmed.startsWith("*")) {
+        const label = trimmed.substring(1).trim();
+        if (label) suggestions.push(label);
+      } else if (/^\d+\./.test(trimmed)) {
+        const label = trimmed.replace(/^\d+\./, "").trim();
+        if (label) suggestions.push(label);
+      } else if (trimmed.length > 0 && suggestions.length > 0) {
+        break;
+      }
+    }
+    return suggestions.slice(0, 4);
+  };
+
   useEffect(() => {
     if (isOpen) {
       loadInsight();
@@ -461,6 +528,27 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                     : "bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-foreground dark:text-slate-100"
               }`}>
                 <p className="text-sm leading-relaxed">{m.text}</p>
+                {m.role === "assistant" && m.isComplete !== false && (() => {
+                  const suggestions = parseSuggestedActions(m.text);
+                  if (suggestions.length === 0) return null;
+                  return (
+                    <div className="mt-4 pt-3 border-t border-slate-100/50 dark:border-slate-800/50 flex flex-col gap-2">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Volgende stappen:</span>
+                      <div className="flex flex-wrap gap-2">
+                        {suggestions.map((s, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleChat(s)}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold bg-white dark:bg-slate-950 hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:text-blue-700 border border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-900/40 transition-all hover:-translate-y-0.5 active:translate-y-0 hover:shadow-sm text-left"
+                          >
+                            <Zap size={10} className="text-amber-500" />
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {m.reasoning && m.isComplete !== false && (
                   <ReasoningWidget reasoning={m.reasoning} />
                 )}
@@ -504,19 +592,49 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
       {/* INPUT AREA */}
       <div className="absolute bottom-0 left-0 right-0 p-6 bg-card dark:bg-[#0f172a] border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
-        {activeState && activeState.current_flow && activeState.current_flow !== "none" && (
-          <div className="mb-3 p-3 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/20 dark:border-blue-500/10 rounded-2xl flex items-center justify-between animate-pulse">
-            <div className="flex items-center gap-2">
-              <Brain className="w-4 h-4 text-blue-500" />
-              <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                Workflow: {activeState.current_flow.replace("_", " ")} ({activeState.asset})
-              </span>
+        {activeState && activeState.current_flow && activeState.current_flow !== "none" && (() => {
+          const progress = getFlowProgress(activeState);
+          if (!progress) {
+            return (
+              <div className="mb-3 p-3 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/20 dark:border-blue-500/10 rounded-2xl flex items-center justify-between animate-pulse">
+                <div className="flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-blue-500" />
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                    Workflow: {activeState.current_flow.replace("_", " ")} ({activeState.asset})
+                  </span>
+                </div>
+                <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">
+                  Invoer verzamelen...
+                </span>
+              </div>
+            );
+          }
+          return (
+            <div className="mb-4 p-4 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/20 dark:border-blue-500/10 rounded-2xl flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-blue-500 animate-pulse" />
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                    {progress.flowLabel} ({activeState.asset})
+                  </span>
+                </div>
+                <span className="text-[10px] font-black text-blue-600 dark:text-blue-400">
+                  {progress.percentage}% Compleet
+                </span>
+              </div>
+              <div className="w-full h-2 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                  style={{ width: `${progress.percentage}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 dark:text-slate-500 leading-none">
+                <span>Stap {progress.filled} van {progress.total}</span>
+                <span>Invoer verzamelen...</span>
+              </div>
             </div>
-            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">
-              Invoer verzamelen...
-            </span>
-          </div>
-        )}
+          );
+        })()}
         <div className="relative group">
           <input 
             type="text" 
