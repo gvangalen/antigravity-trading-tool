@@ -517,7 +517,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         </div>
 
         {/* MESSAGES AREA */}
-        <div className="p-6 space-y-6 pb-24">
+        <div className="p-6 space-y-6 pb-6">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[90%] rounded-2xl p-4 ${
@@ -591,7 +591,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       </div>
 
       {/* INPUT AREA */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 bg-card dark:bg-[#0f172a] border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
+      <div className="p-6 bg-card dark:bg-[#0f172a] border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] relative z-10">
         {activeState && activeState.current_flow && activeState.current_flow !== "none" && (() => {
           const progress = getFlowProgress(activeState);
           if (!progress) {
