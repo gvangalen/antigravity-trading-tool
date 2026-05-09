@@ -16,7 +16,7 @@ import { createBotConfig } from "@/lib/api/botApi";
 export default function AIAssistant({ isOpen, setIsOpen }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { symbol: globalSymbol } = useAsset();
+  const { selectedAsset: globalSymbol } = useAsset();
   const router = useRouter();
   const watchlist = useWatchlist();
   const { openConfirm, showSnackbar } = useModal();
