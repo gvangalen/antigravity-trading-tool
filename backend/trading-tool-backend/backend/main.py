@@ -148,6 +148,31 @@ async def database_migrations():
                 ALTER TABLE ai_category_insights 
                 ADD COLUMN IF NOT EXISTS symbol VARCHAR DEFAULT 'BTC';
             """))
+            # Safely add Phase 3 & 4 Observability columns to ai_usage_logs if they don't exist in live database
+            await session.execute(text("""
+                ALTER TABLE ai_usage_logs 
+                ADD COLUMN IF NOT EXISTS trace_id VARCHAR;
+            """))
+            await session.execute(text("""
+                ALTER TABLE ai_usage_logs 
+                ADD COLUMN IF NOT EXISTS completion_status VARCHAR DEFAULT 'success';
+            """))
+            await session.execute(text("""
+                ALTER TABLE ai_usage_logs 
+                ADD COLUMN IF NOT EXISTS parser_recovery_triggered BOOLEAN DEFAULT false;
+            """))
+            await session.execute(text("""
+                ALTER TABLE ai_usage_logs 
+                ADD COLUMN IF NOT EXISTS confidence_score NUMERIC(5, 2);
+            """))
+            await session.execute(text("""
+                ALTER TABLE ai_usage_logs 
+                ADD COLUMN IF NOT EXISTS safety_guardrail_triggered BOOLEAN DEFAULT false;
+            """))
+            await session.execute(text("""
+                ALTER TABLE ai_usage_logs 
+                ADD COLUMN IF NOT EXISTS symbol VARCHAR DEFAULT 'BTC';
+            """))
             # Safely create indexes on ai_usage_logs for performance under load
             await session.execute(text("""
                 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_user_id ON ai_usage_logs(user_id);
@@ -162,7 +187,7 @@ async def database_migrations():
                 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_completion_status ON ai_usage_logs(completion_status);
             """))
             await session.commit()
-            logger.info("✅ Database schema migration: global_market_insights.avg_score, conversation_state, ai_category_insights.symbol, and ai_usage_logs performance indexes checked/added.")
+            logger.info("✅ Database schema migration: global_market_insights.avg_score, conversation_state, ai_category_insights.symbol, ai_usage_logs observability columns, and performance indexes checked/added.")
         except Exception as e:
             logger.error(f"❌ Database schema migration failed: {e}")
 
