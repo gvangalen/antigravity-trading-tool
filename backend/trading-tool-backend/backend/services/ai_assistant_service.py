@@ -981,6 +981,8 @@ class AiAssistantService:
                     "why": "Scan loopt nog op live data inputs."
                 }
             }
+        
+        return insight
 
     def _build_flow_registry_prompt(self, conv_state: Optional[dict], stated_exp: str) -> str:
         from backend.ai_agents.flow_registry import FLOW_DEFINITIONS
