@@ -1,9 +1,31 @@
 import logging
 import uuid
 import time
+import collections
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+
+class InMemoryRateLimiter:
+    def __init__(self, requests_limit: int, window_seconds: int):
+        self.requests_limit = requests_limit
+        self.window_seconds = window_seconds
+        self.history = collections.defaultdict(list)
+
+    def check_rate_limit(self, identifier: str):
+        now = time.time()
+        # Clean old timestamps
+        self.history[identifier] = [t for t in self.history[identifier] if now - t < self.window_seconds]
+        if len(self.history[identifier]) >= self.requests_limit:
+            logger.warning(f"🛑 Rate limit exceeded for identifier: {identifier}")
+            raise HTTPException(
+                status_code=429,
+                detail="Te veel verzoeken. Gelieve een minuut te wachten voor u nieuwe vragen stelt."
+            )
+        self.history[identifier].append(now)
+
+# Limit user queries to max 6 queries or streams per minute (IP and User ID bounded)
+chat_rate_limiter = InMemoryRateLimiter(requests_limit=6, window_seconds=60)
 
 from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
@@ -41,6 +63,7 @@ async def get_assistant_service(db: AsyncSession = Depends(get_db)):
 @router.post("/assistant/chat", response_model=AssistantChatResponse)
 async def assistant_chat(
     request: AssistantChatRequest,
+    raw_request: Request,
     x_trace_id: Optional[str] = Header(None),
     current_user: dict = Depends(get_current_user),
     service: AiAssistantService = Depends(get_assistant_service)
@@ -48,6 +71,12 @@ async def assistant_chat(
     trace_id = x_trace_id or f"trdm-trace-{uuid.uuid4().hex[:8]}-{hex(int(time.time()))[2:]}"
     try:
         user_id = current_user["id"]
+        ip_addr = raw_request.client.host if raw_request.client else "unknown"
+        
+        # Apply Rate Limiting
+        chat_rate_limiter.check_rate_limit(f"user_{user_id}")
+        chat_rate_limiter.check_rate_limit(f"ip_{ip_addr}")
+        
         response, action, draft, state, reasoning = await service.get_chat_response(
             user_id, request.query, request.history, request.context, trace_id=trace_id
         )
@@ -63,6 +92,8 @@ async def assistant_chat(
         return AssistantChatResponse(
             response=response, intent=intent, action=action, draft=draft, state=state, reasoning=reasoning, trace_id=trace_id
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ AI Assistant Chat Error: {e} | Trace: {trace_id}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij AI Assistant")
@@ -75,6 +106,7 @@ import json
 async def assistant_chat_stream(
     request: AssistantChatRequest,
     background_tasks: BackgroundTasks,
+    raw_request: Request,
     x_trace_id: Optional[str] = Header(None),
     current_user: dict = Depends(get_current_user),
     service: AiAssistantService = Depends(get_assistant_service)
@@ -83,6 +115,12 @@ async def assistant_chat_stream(
     ⚡ Real-Time SSE Stream for AI Assistant Chat (Fase 3 Lightweight)
     """
     user_id = current_user["id"]
+    ip_addr = raw_request.client.host if raw_request.client else "unknown"
+
+    # Apply Rate Limiting
+    chat_rate_limiter.check_rate_limit(f"user_{user_id}")
+    chat_rate_limiter.check_rate_limit(f"ip_{ip_addr}")
+
     trace_id = x_trace_id or f"trdm-trace-{uuid.uuid4().hex[:8]}-{hex(int(time.time()))[2:]}"
 
     async def event_generator():
@@ -91,6 +129,11 @@ async def assistant_chat_stream(
                 user_id, request.query, request.history, request.context,
                 trace_id=trace_id, background_tasks=background_tasks
             ):
+                # Hardened early client disconnect cleanup
+                if await raw_request.is_disconnected():
+                    logger.warning(f"🔌 Client disconnected mid-stream | Trace: {trace_id}. Aborting stream generator.")
+                    break
+
                 event_name = chunk["event"]
                 data_val = chunk["data"]
                 
