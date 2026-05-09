@@ -384,6 +384,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
 
       {/* SAVE */}
       <button
+        id="setup-edit-submit"
         type="submit"
         disabled={loading}
         className="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl text-[12px] font-black uppercase tracking-widest transition-all active:scale-95 border-b-4 border-blue-800 active:border-b-0"

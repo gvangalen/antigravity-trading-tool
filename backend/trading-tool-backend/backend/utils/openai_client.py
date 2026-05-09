@@ -185,3 +185,31 @@ async def ask_gpt_json_async(*args, **kwargs):
 
 async def ask_gpt_text_async(*args, **kwargs):
     return await asyncio.to_thread(ask_gpt_text, *args, **kwargs)
+
+
+def stream_gpt_json(
+    *,
+    prompt: str,
+    system_role: str,
+    max_tokens: Optional[int] = None
+):
+    """
+    Initiates a streaming chat completion in JSON mode, yielding the raw OpenAI stream.
+    """
+    if not client:
+        logger.error("❌ GPT Stream Call gefaald: Geen OpenAI Client")
+        raise ValueError("AI is offline")
+
+    messages = [
+        {"role": "system", "content": system_role},
+        {"role": "user", "content": prompt + "\n\nRETURN ONLY VALID JSON."}
+    ]
+
+    return client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=JSON_TEMP,
+        max_tokens=max_tokens or MAX_TOKENS,
+        response_format={"type": "json_object"},
+        stream=True
+    )

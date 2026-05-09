@@ -1,0 +1,10 @@
+{
+  "scenario_id": "TS-04",
+  "query": "annuleer setup",
+  "expected_intent": "chat",
+  "assertions": {
+    "intent": "chat",
+    "max_duration_ms": 150.0,
+    "must_contain": ["geannuleerd", "setup-flow"]
+  }
+}

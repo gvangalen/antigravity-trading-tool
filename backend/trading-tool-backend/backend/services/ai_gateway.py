@@ -44,7 +44,8 @@ class AiGateway:
         schema: Optional[Dict[str, Any]] = None,
         purpose: str = "assistant",
         symbol: str = "GLOBAL",
-        timeframe: str = "1H"
+        timeframe: str = "1H",
+        user_model: Optional[Any] = None
     ) -> Union[str, Dict[str, Any]]:
         """
         De centrale toegangspoort voor AI-aanvragen. 
@@ -68,9 +69,9 @@ class AiGateway:
                 cache_age_seconds=age, symbol=symbol
             )
             return response
-
-        # 2. STEP 2: Semantic Match (Only for non-trading categories)
-        not_allowed_semantic = ["trading_signal", "entry_exit", "live_price"]
+            
+        # 2. STEP 2: Semantic Match (Only for non-trading, non-assistant categories)
+        not_allowed_semantic = ["trading_signal", "entry_exit", "live_price", "assistant"]
         if purpose not in not_allowed_semantic:
             semantic_hit = await self._check_semantic_match(norm_query, symbol, timeframe, purpose)
             if semantic_hit:
@@ -85,11 +86,15 @@ class AiGateway:
                     similarity_score=score, cache_age_seconds=age, symbol=symbol
                 )
                 return response
-
+                
         # 3. Get User & Quota State
-        user = await self.user_repo.get_by_id(user_id)
+        if user_model is not None:
+            user = user_model
+        else:
+            user = await self.user_repo.get_by_id(user_id)
+            
         if not user: return "Gebruiker niet gevonden."
-
+        
         limit = getattr(user, "ai_requests_limit_day", 25) or 25
         used = getattr(user, "ai_requests_used_day", 0) or 0
         
@@ -102,13 +107,14 @@ class AiGateway:
                 cost=0.0, purpose=purpose, status="fallback", response_time_ms=duration_ms, symbol=symbol
             )
             return res
-
+            
         # 5. STEP 3: Full AI Call
         res = await self._execute_ai_call(
             user_id, prompt, norm_query, system_role, mode, schema, 
             purpose, symbol, timeframe, start_time=start_time
         )
         return res
+
 
     async def _check_exact_match(self, query_hash: str, symbol: str, timeframe: str, category: str) -> Optional[Tuple[Any, float, int]]:
         stmt = text("""

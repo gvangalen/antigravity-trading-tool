@@ -12,6 +12,8 @@ import {
   BarChart3, 
   ShieldCheck,
   AlertTriangle,
+  AlertOctagon,
+  Cpu,
   ArrowUpRight,
   ArrowDownRight,
   Target,
@@ -181,6 +183,97 @@ export default function AdminAiDashboard() {
           trend="positive"
           isHighlight
         />
+      </div>
+
+      {/* ⚠️ REAL-TIME ANOMALY ALERT PANEL */}
+      <div className="mb-10 p-8 bg-white border border-slate-100 rounded-[32px] shadow-sm">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-rose-50 text-rose-600 rounded-2xl">
+              <AlertTriangle size={20} className="animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider italic">
+                Real-Time AI Anomaly Radar
+              </h3>
+              <p className="text-slate-400 text-xs">Aangedreven door de Tradamind Streaming Observability Engine</p>
+            </div>
+          </div>
+          <span className="px-4 py-1.5 bg-slate-100 rounded-xl text-[10px] font-black uppercase text-slate-500 tracking-widest">
+            {stats.anomalies?.length || 0} Incidenten gedetecteerd
+          </span>
+        </div>
+
+        {stats.anomalies && stats.anomalies.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2">
+            {stats.anomalies.map((anomaly, idx) => {
+              const severityColors = {
+                critical: "bg-rose-50 border-rose-100 text-rose-800",
+                high: "bg-orange-50 border-orange-100 text-orange-800",
+                warning: "bg-amber-50 border-amber-100 text-amber-800",
+              };
+              const severityBadge = {
+                critical: "bg-rose-200 text-rose-900",
+                high: "bg-orange-200 text-orange-900",
+                warning: "bg-amber-200 text-amber-900",
+              };
+              return (
+                <div 
+                  key={idx} 
+                  className={`p-5 border rounded-2xl flex gap-4 transition-all hover:shadow-md ${severityColors[anomaly.severity] || "bg-slate-50 border-slate-100 text-slate-800"}`}
+                >
+                  <div className="mt-1 flex-shrink-0">
+                    {anomaly.type === "budget_breach" && <DollarSign size={20} className="text-rose-600" />}
+                    {anomaly.type === "parser_recovery" && <Cpu size={20} className="text-amber-600" />}
+                    {anomaly.type === "hallucination_risk" && <BrainCircuit size={20} className="text-orange-600" />}
+                    {anomaly.type === "safety_guardrail_trigger" && <ShieldCheck size={20} className="text-blue-600" />}
+                  </div>
+                  <div className="flex-grow">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${severityBadge[anomaly.severity] || "bg-slate-200 text-slate-800"}`}>
+                        {anomaly.severity}
+                      </span>
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 italic">
+                        {anomaly.type.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <p className="text-xs font-black leading-relaxed tracking-tight italic">{anomaly.message}</p>
+                    {anomaly.details && (
+                      <div className="mt-3 bg-white/40 p-2.5 rounded-lg border border-black/5 flex flex-wrap gap-x-4 gap-y-1.5">
+                        {anomaly.details.email && (
+                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                            Email: <span className="text-slate-800 lowercase font-bold">{anomaly.details.email}</span>
+                          </div>
+                        )}
+                        {anomaly.details.trace_id && (
+                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                            Trace: <span className="text-slate-800 font-mono text-[9px]">{anomaly.details.trace_id.slice(0, 16)}...</span>
+                          </div>
+                        )}
+                        {anomaly.details.confidence_score !== undefined && (
+                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                            Confidence: <span className="text-slate-800 font-bold">{anomaly.details.confidence_score}%</span>
+                          </div>
+                        )}
+                        {anomaly.details.response_time_ms && (
+                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                            Latency: <span className="text-slate-800 font-bold">{anomaly.details.response_time_ms}ms</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-10 border border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400">
+            <ShieldCheck size={48} className="text-emerald-500 stroke-1 mb-3 animate-pulse" />
+            <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Systeemstatus: Normaal</p>
+            <p className="text-[10px] font-semibold text-slate-400 mt-1 uppercase tracking-widest">Geen actieve afwijkingen gedetecteerd op de Oracle Cloud Node.</p>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8 mb-10">
@@ -359,6 +452,52 @@ export default function AdminAiDashboard() {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      {/* 🚀 FEATURE ECONOMICS TABLE */}
+      <div className="mt-10 p-8 bg-white border border-slate-100 rounded-[32px] shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between mb-8">
+          <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
+            <Zap size={14} className="text-violet-500" />
+            Feature Economics & Margin Contribution
+          </h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-slate-50">
+                <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Feature type / Purpose</th>
+                <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Usage volume</th>
+                <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Total Cost MTD</th>
+                <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Avg Cost / Call</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {feature_breakdown.map((item, idx) => (
+                <tr key={idx} className="group hover:bg-slate-50/50 transition-colors">
+                  <td className="py-5 pr-4">
+                    <p className="text-sm font-black text-slate-900 italic tracking-tight uppercase">{item.purpose.replace('chat_', '').replace('_', ' ')}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Active orchestration model</p>
+                  </td>
+                  <td className="py-5">
+                    <div className="text-sm font-black text-slate-900 flex items-center gap-2">
+                      {item.total_requests}
+                      <span className="text-[10px] font-bold text-slate-400">calls</span>
+                    </div>
+                  </td>
+                  <td className="py-5">
+                    <span className="text-sm font-black text-slate-900">€{item.total_cost.toFixed(4)}</span>
+                  </td>
+                  <td className="py-5">
+                    <span className="px-2.5 py-1.5 bg-slate-50 text-slate-700 font-mono text-xs font-bold rounded-xl border border-slate-100/50">
+                      €{item.avg_cost.toFixed(6)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

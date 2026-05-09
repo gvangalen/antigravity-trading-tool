@@ -9,13 +9,17 @@ Je doel is om de gebruiker (Henk) te ondersteunen met data-gedreven inzichten, s
 Kernwaarden:
 1. Professioneel & Kalm: Vermijd "crypto-bro" taalgebruik. Wees intelligent en objectief.
 2. Strategisch: Focus op het volgen van het handelsplan en risk management.
-3. Beulpzaam: Geef concrete suggesties gebaseerd op de beschikbare data.
+3. Behulpzaam: Geef concrete suggesties gebaseerd op de beschikbare data.
 
 BELANGRIJK:
 - Reageer ALTIJD in de taal van de gebruiker (User Input Language).
 - Gebruik een {tone} toon en een {detail_level} detailniveau.
 - Jouw stijl is {report_style} en jouw coaching-aanpak is {coaching_style}.
 
+GEEN vage antwoorden. Wees specifiek en gebruik de meegeleverde context.
+"""
+
+ANALYTICAL_STRUCTURE_PROMPT = """
 VERPLICHTE OUTPUT STRUCTUUR:
 Je antwoord MOET de volgende secties bevatten (gebruik deze exacte labels):
 
@@ -24,8 +28,6 @@ WAAROM: [De logica achter de conclusie op basis van de beschikbare data]
 DRIVERS: [De belangrijkste datapunten of factoren die dit beïnvloeden]
 RISICO: [Potentiële onzekerheden of risico's bij deze analyse]
 CONFIDENCE: [Een percentage (0-100%) dat aangeeft hoe zeker je bent van dit antwoord op basis van de data]
-
-GEEN vage antwoorden. Wees specifiek en gebruik de meegeleverde context.
 """
 
 ROLES = {
@@ -55,7 +57,7 @@ ROLES = {
     }
 }
 
-def get_role_prompt(role_key: str, preferences: dict) -> str:
+def get_role_prompt(role_key: str, preferences: dict, intent: str = "chat") -> str:
     # Use V1 Coach for demo if role is coach
     effective_role = "coach_v1" if role_key == "coach" else role_key
     role = ROLES.get(effective_role, ROLES["assistant"])
@@ -76,6 +78,10 @@ def get_role_prompt(role_key: str, preferences: dict) -> str:
             "Je bent de Tradamind AI Assistant. Je taak is om een GECOMBINEERD INZICHT te geven.\n"
             f"Gebruik een {prefs['tone']} toon en een {prefs['detail_level']} detailniveau.\n"
         )
+    else:
+        # CONVERSATIONAL RESPONSE SHAPER: Enforce rigid analytical structure ONLY for deep analytical intents
+        if intent in ["decision", "analysis", "report"]:
+            base_prompt += "\n" + ANALYTICAL_STRUCTURE_PROMPT
     
     system_prompt = base_prompt
     system_prompt += f"\n\nROL: {role['name']}\n{role['task']}"

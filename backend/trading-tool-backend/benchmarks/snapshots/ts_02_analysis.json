@@ -1,0 +1,12 @@
+{
+  "scenario_id": "TS-02",
+  "query": "Geef me een trend analyse van Solana",
+  "expected_intent": "analysis",
+  "assertions": {
+    "intent": "analysis",
+    "min_confidence_score": 50.0,
+    "must_contain_reasoning": true,
+    "active_asset": "SOL",
+    "must_contain": ["Solana", "SOL", "trend"]
+  }
+}

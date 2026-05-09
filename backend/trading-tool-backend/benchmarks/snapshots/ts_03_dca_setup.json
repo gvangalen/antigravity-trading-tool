@@ -1,0 +1,13 @@
+{
+  "scenario_id": "TS-03",
+  "query": "Zet een dca setup op voor BTC met 5% interval",
+  "expected_intent": "dca_setup",
+  "assertions": {
+    "intent": "dca_setup",
+    "must_have_draft": true,
+    "draft_fields": {
+      "pair": "BTC",
+      "interval": 5.0
+    }
+  }
+}

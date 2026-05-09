@@ -462,3 +462,155 @@ class BotRepository:
         """)
         result = await self.session.execute(query, {"user_id": user_id, "is_live": is_live, "bucket": bucket, "limit": limit})
         return [dict(r._mapping) for r in result.fetchall()]
+
+    async def get_portfolio_intelligence_context(self, user_id: int) -> Dict[str, Any]:
+        """
+        Calculates and returns real-time cash, equity, asset allocations, 
+        and detailed performance metrics for all bot portfolios.
+        """
+        query = text("""
+            SELECT 
+                c.id AS bot_id, 
+                c.name, 
+                COALESCE(p.symbol, st.symbol, 'BTC') AS symbol, 
+                COALESCE(p.cash_eur, 0) AS cash_eur, 
+                COALESCE(p.position_qty, 0) AS position_qty, 
+                COALESCE(p.invested_eur, 0) AS invested_eur, 
+                COALESCE(p.avg_entry, 0) AS avg_entry, 
+                COALESCE(p.realized_pnl_eur, 0) AS realized_pnl_eur,
+                c.is_active, 
+                c.is_live,
+                COALESCE(c.budget_total_eur, 0) AS budget_total_eur,
+                COALESCE(c.budget_daily_limit_eur, 0) AS budget_daily_limit_eur,
+                COALESCE(c.risk_profile, 'balanced') AS risk_profile
+            FROM bot_configs c
+            LEFT JOIN bot_portfolios p ON p.bot_id = c.id
+            LEFT JOIN strategies s     ON s.id = c.strategy_id
+            LEFT JOIN setups st        ON st.id = s.setup_id
+            WHERE c.user_id = :user_id
+            ORDER BY c.id ASC
+        """)
+        result = await self.session.execute(query, {"user_id": user_id})
+        rows = result.fetchall()
+        
+        # Get unique symbols and retrieve their live market prices
+        symbols = list(set(row._mapping["symbol"] for row in rows))
+        prices = {}
+        for sym in symbols:
+            prices[sym] = await self.get_market_price(sym) or 0.0
+            
+        bot_states = []
+        global_cash = 0.0
+        global_invested = 0.0
+        global_realized = 0.0
+        global_position_value = 0.0
+        global_budget = 0.0
+        asset_values = {}
+        
+        for r in rows:
+            mapping = r._mapping
+            bot_id = mapping["bot_id"]
+            name = mapping["name"]
+            sym = mapping["symbol"]
+            cash = float(mapping["cash_eur"])
+            qty = float(mapping["position_qty"])
+            invested = float(mapping["invested_eur"])
+            avg_entry = float(mapping["avg_entry"])
+            realized = float(mapping["realized_pnl_eur"])
+            budget = float(mapping["budget_total_eur"])
+            is_active = bool(mapping["is_active"])
+            is_live = bool(mapping["is_live"])
+            risk = mapping["risk_profile"]
+            
+            price = prices.get(sym, 0.0)
+            pos_val = qty * price
+            unrealized = pos_val - invested
+            bot_equity = cash + pos_val
+            
+            global_cash += cash
+            global_invested += invested
+            global_realized += realized
+            global_position_value += pos_val
+            global_budget += budget
+            
+            asset_values[sym] = asset_values.get(sym, 0.0) + pos_val
+            
+            bot_states.append({
+                "bot_id": bot_id,
+                "name": name,
+                "symbol": sym,
+                "cash": cash,
+                "qty": qty,
+                "invested": invested,
+                "avg_entry": avg_entry,
+                "realized_pnl": realized,
+                "unrealized_pnl": unrealized,
+                "position_value": pos_val,
+                "equity": bot_equity,
+                "budget_total": budget,
+                "is_active": is_active,
+                "is_live": is_live,
+                "risk_profile": risk
+            })
+            
+        global_equity = global_cash + global_position_value
+        global_unrealized = global_position_value - global_invested
+        
+        allocations = {}
+        if global_equity > 0:
+            allocations["Cash"] = round((global_cash / global_equity) * 100, 2)
+            for sym, val in asset_values.items():
+                allocations[sym] = round((val / global_equity) * 100, 2)
+        else:
+            allocations["Cash"] = 100.0
+            
+        return {
+            "global": {
+                "total_equity": global_equity,
+                "cash_balance": global_cash,
+                "invested_value": global_invested,
+                "current_position_value": global_position_value,
+                "realized_pnl": global_realized,
+                "unrealized_pnl": global_unrealized,
+                "total_budget_limit": global_budget,
+                "allocations_pct": allocations
+            },
+            "bots": bot_states
+        }
+
+    async def get_user_behavioral_signals(self, user_id: int) -> Dict[str, Any]:
+        """
+        Calculates user's real-time custom configuration metrics in a single query
+        to measure their trading experience level behaviorally.
+        """
+        query = text("""
+            SELECT 
+                (SELECT COUNT(*) FROM setups WHERE user_id = :user_id) as setups_count,
+                (SELECT COUNT(*) FROM strategies WHERE user_id = :user_id) as strategies_count,
+                (SELECT COUNT(*) FROM bot_configs WHERE user_id = :user_id) as bots_count
+        """)
+        result = await self.session.execute(query, {"user_id": user_id})
+        row = result.fetchone()
+        
+        setups = int(row[0] or 0)
+        strategies = int(row[1] or 0)
+        bots = int(row[2] or 0)
+        total_actions = setups + strategies + bots
+        
+        # Determine behavioral level based on custom configurations
+        if total_actions == 0:
+            behavioral_level = "Novice (Uses default templates exclusively)"
+        elif 1 <= total_actions <= 3:
+            behavioral_level = "Intermediate (Has configured some custom setups, strategies or bots)"
+        else:
+            behavioral_level = "Experienced (Active usage of custom configurations and trading bots)"
+            
+        return {
+            "setups_count": setups,
+            "strategies_count": strategies,
+            "bots_count": bots,
+            "total_custom_configs": total_actions,
+            "behavioral_level": behavioral_level
+        }
+
+

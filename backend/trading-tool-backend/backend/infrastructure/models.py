@@ -32,7 +32,9 @@ class User(Base):
         "report_style": "professional",
         "tone": "balanced",
         "detail_level": "medium",
-        "coaching_style": "constructive"
+        "coaching_style": "constructive",
+        "experience_level": "beginner",
+        "risk_profile": "balanced"
     })
 
 class AiUsageLog(Base):
@@ -53,6 +55,13 @@ class AiUsageLog(Base):
     rejected_reason = Column(String) # low_similarity, context_mismatch, expired, no_match
     estimated_cost_if_full = Column(Numeric(10, 6), default=0.0)
     timestamp = Column(DateTime, default=datetime.utcnow)
+    
+    # --- Phase 3: Enterprise Observability & AI Hardening ---
+    trace_id = Column(String, default=None, nullable=True)
+    completion_status = Column(String, default="success")
+    parser_recovery_triggered = Column(Boolean, default=False)
+    confidence_score = Column(Numeric(5, 2), default=None, nullable=True)
+    safety_guardrail_triggered = Column(Boolean, default=False)
 
 class AiResponseCache(Base):
     __tablename__ = 'ai_response_cache'
@@ -332,3 +341,17 @@ class Watchlist(Base):
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     symbol = Column(String, nullable=False) # e.g. 'BTC', 'ETH'
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ConversationState(Base):
+    """
+    🧠 Tijdelijk, compact, workflow-focused geheugen voor de AI assistent.
+    """
+    __tablename__ = 'conversation_state'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
+    current_flow = Column(String, nullable=True) # e.g. 'setup_creation', 'strategy_creation', 'bot_creation'
+    asset = Column(String, nullable=True) # e.g. 'SOL', 'BTC'
+    slots = Column(JSON, default=dict) # JSON dictionary of collected fields
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

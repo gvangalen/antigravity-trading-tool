@@ -42,10 +42,10 @@ export const fetchAIScore = (symbol = 'BTC') => {
 // ========================================
 // 💬 4. AI Assistant Chat
 // ========================================
-export const assistantChat = (query, context = {}) => {
+export const assistantChat = (query, context = {}, history = []) => {
   return fetchAuth(`/api/assistant/chat`, {
     method: 'POST',
-    body: JSON.stringify({ query, context }),
+    body: JSON.stringify({ query, context, history }),
   });
 };
 
@@ -73,4 +73,80 @@ export const fetchAssistantInsight = (context) => {
     method: 'POST',
     body: JSON.stringify(context),
   });
+};
+
+// ========================================
+// ⚡ 7. AI Assistant Chat Stream (SSE)
+// ========================================
+export const assistantChatStream = async (query, context = {}, history = [], onChunk, onEnvelope, onError) => {
+  try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/assistant/chat/stream`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query, context, history }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Streaming request failed: ${response.statusText}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+
+      for (const part of parts) {
+        if (!part.trim()) continue;
+
+        const lines = part.split('\n');
+        let event = 'text';
+        let data = '';
+
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            event = line.replace('event:', '').trim();
+          } else if (line.startsWith('data:')) {
+            data = line.replace('data:', '').trim();
+          }
+        }
+
+        if (event === 'text') {
+          onChunk(data);
+        } else if (event === 'envelope') {
+          try {
+            const parsedEnvelope = JSON.parse(data);
+            onEnvelope(parsedEnvelope);
+          } catch (err) {
+            console.error('Error parsing SSE envelope:', err);
+          }
+        } else if (event === 'error') {
+          try {
+            const errObj = JSON.parse(data);
+            onError(errObj.response || 'An error occurred during streaming.');
+          } catch {
+            onError(data || 'An error occurred during streaming.');
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in assistantChatStream:', error);
+    onError(error.message || 'Connection failed.');
+  }
 };

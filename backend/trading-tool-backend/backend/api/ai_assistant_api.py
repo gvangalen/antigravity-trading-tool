@@ -1,5 +1,8 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+import uuid
+import time
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
@@ -14,6 +17,8 @@ from backend.infrastructure.repositories.bot_repository import BotRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
+from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
+from backend.infrastructure.repositories.assistant_context_repository import AssistantContextRepository
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -26,25 +31,85 @@ async def get_assistant_service(db: AsyncSession = Depends(get_db)):
     user_repo = UserRepository(db)
     market_data_repo = MarketDataRepository(db)
     strategy_repo = StrategyRepository(db)
+    state_repo = ConversationStateRepository(db)
+    context_repo = AssistantContextRepository(db)
     ai_gateway = AiGateway(user_repo, score_repo)
-    return AiAssistantService(score_repo, setup_repo, report_repo, bot_repo, user_repo, market_data_repo, strategy_repo, ai_gateway)
-
+    return AiAssistantService(
+        score_repo, setup_repo, report_repo, bot_repo, user_repo, 
+        market_data_repo, strategy_repo, state_repo, ai_gateway, context_repo
+    )
 @router.post("/assistant/chat", response_model=AssistantChatResponse)
 async def assistant_chat(
     request: AssistantChatRequest,
+    x_trace_id: Optional[str] = Header(None),
     current_user: dict = Depends(get_current_user),
     service: AiAssistantService = Depends(get_assistant_service)
 ):
+    trace_id = x_trace_id or f"trdm-trace-{uuid.uuid4().hex[:8]}-{hex(int(time.time()))[2:]}"
     try:
         user_id = current_user["id"]
-        response, action = await service.get_chat_response(user_id, request.query, request.context)
+        response, action, draft, state, reasoning = await service.get_chat_response(
+            user_id, request.query, request.history, request.context, trace_id=trace_id
+        )
         intent = service._classify_intent(request.query)
         if not isinstance(action, dict):
             action = None
-        return AssistantChatResponse(response=response, intent=intent, action=action)
+        if not isinstance(draft, dict):
+            draft = None
+        if not isinstance(state, dict):
+            state = None
+        if not isinstance(reasoning, dict):
+            reasoning = None
+        return AssistantChatResponse(
+            response=response, intent=intent, action=action, draft=draft, state=state, reasoning=reasoning, trace_id=trace_id
+        )
     except Exception as e:
-        logger.error(f"❌ AI Assistant Chat Error: {e}", exc_info=True)
+        logger.error(f"❌ AI Assistant Chat Error: {e} | Trace: {trace_id}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij AI Assistant")
+
+
+from fastapi.responses import StreamingResponse
+import json
+
+@router.post("/assistant/chat/stream")
+async def assistant_chat_stream(
+    request: AssistantChatRequest,
+    background_tasks: BackgroundTasks,
+    x_trace_id: Optional[str] = Header(None),
+    current_user: dict = Depends(get_current_user),
+    service: AiAssistantService = Depends(get_assistant_service)
+):
+    """
+    ⚡ Real-Time SSE Stream for AI Assistant Chat (Fase 3 Lightweight)
+    """
+    user_id = current_user["id"]
+    trace_id = x_trace_id or f"trdm-trace-{uuid.uuid4().hex[:8]}-{hex(int(time.time()))[2:]}"
+
+    async def event_generator():
+        try:
+            async for chunk in service.get_chat_response_stream(
+                user_id, request.query, request.history, request.context,
+                trace_id=trace_id, background_tasks=background_tasks
+            ):
+                event_name = chunk["event"]
+                data_val = chunk["data"]
+                
+                # Inject trace_id into envelope payload so frontend has it immediately
+                if event_name == "envelope" and isinstance(data_val, dict):
+                    data_val["trace_id"] = trace_id
+                
+                if isinstance(data_val, dict):
+                    data_str = json.dumps(data_val)
+                else:
+                    data_str = str(data_val)
+                    
+                yield f"event: {event_name}\ndata: {data_str}\n\n"
+        except Exception as e:
+            logger.error(f"❌ Error in SSE assistant stream generator | Trace: {trace_id}: {e}", exc_info=True)
+            err_payload = json.dumps({"response": "⚠️ Externe stream fout opgetreden. Klik op retry.", "trace_id": trace_id})
+            yield f"event: error\ndata: {err_payload}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.get("/assistant/preferences", response_model=AssistantPreferences)
 async def get_preferences(

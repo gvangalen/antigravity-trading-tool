@@ -45,6 +45,12 @@ class PlatformAiOverview(BaseModel):
     avg_cost_per_full_request: float
     rejection_breakdown: Optional[Dict[str, int]] = {}
 
+class AiAnomaly(BaseModel):
+    type: str
+    severity: str
+    message: str
+    details: Optional[Dict[str, Any]] = None
+
 class AdminAiStatsResponse(BaseModel):
     overview: PlatformAiOverview
     top_users: List[UserUsageStat]
@@ -53,6 +59,7 @@ class AdminAiStatsResponse(BaseModel):
     latency_stats: List[ModeLatency]
     user_distribution: List[UserDistribution]
     heavy_user_impact_pct: float
+    anomalies: Optional[List[AiAnomaly]] = []
 
 # =========================================================
 # 👥 USER MANAGEMENT SCHEMAS

@@ -447,7 +447,7 @@ export default function StrategyForm({
       {error && <p className="text-red-500">{error}</p>}
 
       {!hideSubmit && (
-        <button disabled={!isValid} className="btn-primary w-full py-3 text-sm font-black uppercase tracking-widest">
+        <button id="strategy-edit-submit" disabled={!isValid} className="btn-primary w-full py-3 text-sm font-black uppercase tracking-widest">
           {isEdit ? "Bijwerken" : "Opslaan"}
         </button>
       )}

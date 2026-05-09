@@ -132,8 +132,24 @@ async def database_migrations():
                 ALTER TABLE global_market_insights 
                 ADD COLUMN IF NOT EXISTS avg_score numeric(5,2);
             """))
+            # Safely create conversation_state table if it doesn't exist
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS conversation_state (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                    current_flow VARCHAR,
+                    asset VARCHAR,
+                    slots JSONB DEFAULT '{}'::jsonb,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """))
+            # Safely add symbol column to ai_category_insights if it doesn't exist
+            await session.execute(text("""
+                ALTER TABLE ai_category_insights 
+                ADD COLUMN IF NOT EXISTS symbol VARCHAR DEFAULT 'BTC';
+            """))
             await session.commit()
-            logger.info("✅ Database schema migration: global_market_insights.avg_score checked/added.")
+            logger.info("✅ Database schema migration: global_market_insights.avg_score, conversation_state, and ai_category_insights.symbol checked/added.")
         except Exception as e:
             logger.error(f"❌ Database schema migration failed: {e}")
 

@@ -1,0 +1,10 @@
+{
+  "scenario_id": "TS-01",
+  "query": "Hoi, wie ben jij?",
+  "expected_intent": "chat",
+  "assertions": {
+    "intent": "chat",
+    "must_not_contain": ["CONCLUSIE:", "WAAROM:", "DRIVERS:", "RISICO:"],
+    "must_contain": ["Tradamind", "assistent", "helpen"]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "scenario_id": "TS-06",
+  "query": "start onboarding",
+  "expected_intent": "user_onboarding",
+  "assertions": {
+    "intent": "user_onboarding",
+    "must_not_contain": ["CONCLUSIE:", "WAAROM:", "DRIVERS:"],
+    "must_contain": ["ervaring", "risicoprofiel", "doelen"],
+    "must_have_state": true,
+    "state_current_flow": "user_onboarding"
+  }
+}

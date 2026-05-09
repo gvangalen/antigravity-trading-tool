@@ -144,6 +144,100 @@ class AdminAiService:
         res_rejections = await self.db.execute(stmt_rejections)
         rejection_breakdown = {r["rejected_reason"]: r["count"] for r in res_rejections.mappings()}
 
+        # 6. Real-time Anomaly Scanning (Fase 3)
+        anomalies = []
+        
+        # A. Budget violations
+        stmt_budget = text("""
+            SELECT id, email, ai_plan, ai_requests_used_day, ai_requests_limit_day
+            FROM users
+            WHERE is_active = TRUE AND ai_requests_used_day >= ai_requests_limit_day AND ai_requests_limit_day > 0
+        """)
+        res_budget = await self.db.execute(stmt_budget)
+        for row in res_budget.mappings():
+            anomalies.append({
+                "type": "budget_breach",
+                "severity": "critical",
+                "message": f"Gebruiker {row['email']} heeft de dagelijkse AI limiet overschreden: {row['ai_requests_used_day']}/{row['ai_requests_limit_day']} requests.",
+                "details": {
+                    "user_id": row["id"],
+                    "email": row["email"],
+                    "used": row["ai_requests_used_day"],
+                    "limit": row["ai_requests_limit_day"]
+                }
+            })
+            
+        # B. Parser Recovery Anomalies (Incomplete streams or JSON structure failure recovered by Hardened Parser)
+        stmt_parser = text("""
+            SELECT l.id, l.user_id, u.email, l.trace_id, l.timestamp, l.response_time_ms
+            FROM ai_usage_logs l
+            LEFT JOIN users u ON u.id = l.user_id
+            WHERE l.parser_recovery_triggered = TRUE AND l.timestamp >= date_trunc('day', current_date)
+            ORDER BY l.timestamp DESC
+            LIMIT 10
+        """)
+        res_parser = await self.db.execute(stmt_parser)
+        for row in res_parser.mappings():
+            anomalies.append({
+                "type": "parser_recovery",
+                "severity": "warning",
+                "message": f"Hardened Parser heeft een incomplete/corrupte JSON stream hersteld voor trace {row['trace_id'][:12]}...",
+                "details": {
+                    "log_id": row["id"],
+                    "user_id": row["user_id"],
+                    "email": row["email"],
+                    "trace_id": row["trace_id"],
+                    "response_time_ms": row["response_time_ms"]
+                }
+            })
+            
+        # C. Hallucination Risks (Confidence score below 50% or reasoning alerts)
+        stmt_hallucination = text("""
+            SELECT l.id, l.user_id, u.email, l.trace_id, l.confidence_score, l.timestamp
+            FROM ai_usage_logs l
+            LEFT JOIN users u ON u.id = l.user_id
+            WHERE l.confidence_score IS NOT NULL AND l.confidence_score < 50.0 AND l.timestamp >= date_trunc('day', current_date)
+            ORDER BY l.timestamp DESC
+            LIMIT 10
+        """)
+        res_hallucination = await self.db.execute(stmt_hallucination)
+        for row in res_hallucination.mappings():
+            anomalies.append({
+                "type": "hallucination_risk",
+                "severity": "high",
+                "message": f"Verhoogd risico op AI hallucinatie gedetecteerd (Confidence score: {row['confidence_score']:.1f}%) op trace {row['trace_id'][:12]}...",
+                "details": {
+                    "log_id": row["id"],
+                    "user_id": row["user_id"],
+                    "email": row["email"],
+                    "trace_id": row["trace_id"],
+                    "confidence_score": float(row["confidence_score"])
+                }
+            })
+            
+        # D. Safety Guardrail Triggers (Deterministic post-processing interventions)
+        stmt_safety = text("""
+            SELECT l.id, l.user_id, u.email, l.trace_id, l.timestamp
+            FROM ai_usage_logs l
+            LEFT JOIN users u ON u.id = l.user_id
+            WHERE l.safety_guardrail_triggered = TRUE AND l.timestamp >= date_trunc('day', current_date)
+            ORDER BY l.timestamp DESC
+            LIMIT 10
+        """)
+        res_safety = await self.db.execute(stmt_safety)
+        for row in res_safety.mappings():
+            anomalies.append({
+                "type": "safety_guardrail_trigger",
+                "severity": "warning",
+                "message": f"Deterministische Safety Guardrail is getriggerd op trace {row['trace_id'][:12]} om de output te beveiligen.",
+                "details": {
+                    "log_id": row["id"],
+                    "user_id": row["user_id"],
+                    "email": row["email"],
+                    "trace_id": row["trace_id"]
+                }
+            })
+
         return {
             "overview": {
                 "total_requests_today": sum(u['requests_today'] for u in heavy_users),
@@ -165,5 +259,6 @@ class AdminAiService:
             "mode_distribution": mode_distribution,
             "latency_stats": latency_stats,
             "user_distribution": [], # we can add if needed
-            "heavy_user_impact_pct": float(heavy_user_impact)
+            "heavy_user_impact_pct": float(heavy_user_impact),
+            "anomalies": anomalies
         }
