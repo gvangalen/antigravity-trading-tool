@@ -84,8 +84,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     const slots = flowSlots[state.current_flow] || [];
     if (slots.length === 0) return null;
 
-    // Calculate filled slots
-    const filledSlots = Object.keys(state.slots || {}).filter(k => state.slots[k] !== undefined && state.slots[k] !== null && state.slots[k] !== "");
+    // Calculate filled slots (only filter keys that are defined in the active flow's slots list!)
+    const filledSlots = slots.filter(k => state.slots && state.slots[k] !== undefined && state.slots[k] !== null && state.slots[k] !== "");
     
     // Determine effective total slots (taking conditional parameters into account)
     let totalSlots = slots.length;

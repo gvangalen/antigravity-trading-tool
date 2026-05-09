@@ -1011,7 +1011,10 @@ class AiAssistantService:
                 f"CRITICAL INSTRUCTIONS:\n"
                 f"1. You MUST continue this flow. Keep 'draft' as null until ALL required slots (and conditional slots if applicable) are collected.\n"
                 f"2. Set state.current_flow to '{active_flow_name}' and state.status to 'collecting' and state.slots to the accumulated dictionary of slots.\n"
-                f"3. Ask the user for the next missing slot using EXACTLY or closely adapted to this question:\n"
+                f"   - IMPORTANT (FLOW SWITCHING / RESET): If the user's latest query explicitly requests a NEW setup, strategy, or bot for a DIFFERENT asset (e.g. asking to make a setup for ETH while the active slots are for SOL), you MUST clear the old slots and start a fresh sequence. Set state.slots to only have the new symbol (e.g., {{'symbol': 'ETH'}}), set state.current_flow to '{active_flow_name}', and ask the user for the next slot (the setup_type).\n"
+                f"   - Do NOT mix up or keep slots from the previous asset (e.g. do not keep 'dca_frequency' or 'setup_type' from the old SOL setup if the user is asking to create a setup for ETH).\n"
+                f"3. Identify the NEXT missing slot in the sequence for the current active flow. Ask the user ONLY for that next missing slot. Do NOT ask for slots that the user has already provided in their latest message (e.g. if the user says 'make setup for ETH', then 'symbol' is already 'ETH' and is NOT missing, so ask for 'setup_type' instead!).\n"
+                f"   Use or closely adapt the corresponding question from this guide:\n"
                 f"{question_guide_str}\n"
                 f"4. Once ALL slots are gathered, set state.current_flow to 'none', state.status to 'complete', state.slots to {{}}, and populate the final 'draft' with type '{flow.get('draft_type')}' using payload matching the fields. Present the draft card to the user.\n"
             )
