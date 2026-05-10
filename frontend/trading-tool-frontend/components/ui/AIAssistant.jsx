@@ -306,6 +306,128 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     }));
   };
 
+  const handleEditDraft = async (draft, onSuccess) => {
+    if (draft.type === "setup") {
+      try {
+        const SetupForm = require("@/components/setup/SetupForm").default;
+        openConfirm({
+          title: `Bewerk Setup Concept`,
+          tone: "primary",
+          confirmText: "Opslaan & Creëren",
+          cancelText: "Annuleren",
+          description: (
+            <div className="space-y-6 pt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
+              <SetupForm 
+                mode="new"
+                initialData={draft.payload}
+                onSaved={() => {
+                  showSnackbar("Setup succesvol aangemaakt!", "success");
+                  onSuccess();
+                }}
+              />
+            </div>
+          ),
+          onConfirm: () => {
+            document.querySelector("#setup-edit-submit")?.click();
+          }
+        });
+      } catch (err) {
+        console.error("Failed to load SetupForm", err);
+      }
+    } else if (draft.type === "strategy") {
+      try {
+        const StrategyForm = require("@/components/strategy/StrategyForm").default;
+        const setupsList = await fetchSetups();
+        openConfirm({
+          title: `Bewerk Strategie Concept`,
+          tone: "primary",
+          confirmText: "Opslaan & Creëren",
+          cancelText: "Annuleren",
+          description: (
+            <div className="space-y-6 pt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
+              <StrategyForm 
+                setups={setupsList}
+                isEdit={false}
+                strategy={{
+                  name: draft.payload.name,
+                  symbol: draft.payload.symbol,
+                  setup_type: draft.payload.setup_type,
+                  setup_id: setupsList[0]?.id,
+                  base_amount: draft.payload.base_amount,
+                  entry: draft.payload.entry,
+                  targets: draft.payload.targets,
+                  stop_loss: draft.payload.stop_loss,
+                  execution_mode: draft.payload.execution_mode || "fixed"
+                }}
+                onSubmit={async (payload) => {
+                  await createStrategy(payload);
+                  showSnackbar("Strategie succesvol aangemaakt!", "success");
+                  onSuccess();
+                }}
+              />
+            </div>
+          ),
+          onConfirm: () => {
+            document.querySelector("#strategy-edit-submit")?.click();
+          }
+        });
+      } catch (err) {
+        console.error("Failed to load StrategyForm", err);
+      }
+    } else if (draft.type === "bot") {
+      try {
+        const AddBotForm = require("@/components/bot/AddBotForm").default;
+        const stratList = await fetchStrategies();
+        let currentFormVal = {};
+        openConfirm({
+          title: `Bewerk Bot Concept`,
+          tone: "primary",
+          confirmText: "Opslaan & Creëren",
+          cancelText: "Annuleren",
+          description: (
+            <div className="space-y-6 pt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
+              <AddBotForm 
+                strategies={stratList}
+                initialData={{
+                  name: draft.payload.name,
+                  strategy_id: draft.payload.strategy_id || stratList[0]?.id,
+                  mode: draft.payload.mode || "manual",
+                  is_live: draft.payload.is_live || false,
+                  risk_profile: draft.payload.risk_profile || "balanced",
+                  base_currency: draft.payload.base_currency || "EUR"
+                }}
+                onChange={(val) => {
+                  currentFormVal = val;
+                }}
+              />
+            </div>
+          ),
+          onConfirm: async () => {
+            const payload = {
+              name: currentFormVal.name || draft.payload.name,
+              strategy_id: currentFormVal.strategy_id || draft.payload.strategy_id || stratList[0]?.id,
+              mode: currentFormVal.mode || draft.payload.mode || "manual",
+              is_live: currentFormVal.is_live ?? draft.payload.is_live ?? false,
+              risk_profile: currentFormVal.risk_profile || draft.payload.risk_profile || "balanced",
+              base_currency: currentFormVal.base_currency || draft.payload.base_currency || "EUR",
+              budget_total_eur: draft.payload.budget_total_eur || 500.0,
+              budget_daily_limit_eur: draft.payload.budget_daily_limit_eur || 50.0,
+              budget_min_order_eur: draft.payload.budget_min_order_eur || 10.0,
+              budget_max_order_eur: draft.payload.budget_max_order_eur || 100.0,
+              max_asset_exposure_pct: draft.payload.max_asset_exposure_pct || 100.0,
+              cadence: draft.payload.cadence || "daily"
+            };
+            await createBotConfig(payload);
+            showSnackbar("Bot succesvol aangemaakt!", "success");
+            onSuccess();
+          }
+        });
+      } catch (err) {
+        console.error("Failed to load AddBotForm", err);
+      }
+    }
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -560,6 +682,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                     draft={m.draft} 
                     onCancel={() => handleCancelDraft(i)} 
                     onSuccess={() => handleDraftSuccess(i)}
+                    handleEditDraft={handleEditDraft}
                   />
                 )}
                 {m.draft && m.draftCanceled && m.isComplete !== false && (
@@ -583,6 +706,35 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
               </div>
             </div>
           ))}
+
+          {/* LIVE INTERACTIVE CONCEPT CARD */}
+          {activeState && activeState.current_flow && activeState.current_flow !== "none" && (
+            <div className="flex justify-start animate-in slide-in-from-bottom-3 duration-300">
+              <div className="max-w-[90%]">
+                <ConceptCard 
+                  state={activeState}
+                  onContinue={() => handleChat("ga door")}
+                  onEdit={() => {
+                    const mockDraft = {
+                      type: activeState.current_flow.split("_")[0],
+                      payload: {
+                        name: activeState.slots?.name || `${activeState.slots?.symbol || globalSymbol} Concept`,
+                        symbol: activeState.slots?.symbol || globalSymbol,
+                        setup_type: activeState.slots?.setup_type || "trade",
+                        ...activeState.slots
+                      }
+                    };
+                    handleEditDraft(mockDraft, async () => {
+                      setActiveState(null);
+                      await handleChat("ik heb hem zojuist opgeslagen", true);
+                    });
+                  }}
+                  onFinalize={() => handleChat("maak de setup")}
+                />
+              </div>
+            </div>
+          )}
+
           {loading && (
             <ChatSkeleton />
           )}
@@ -844,7 +996,7 @@ function ActionCard({ action, onAction }) {
   );
 }
 
-function DraftCard({ draft, onCancel, onSuccess }) {
+function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
   const { openConfirm, showSnackbar } = useModal();
   const [approving, setApproving] = useState(false);
 
@@ -898,126 +1050,8 @@ function DraftCard({ draft, onCancel, onSuccess }) {
     }
   };
 
-  const handleEditClick = async () => {
-    if (draft.type === "setup") {
-      try {
-        const SetupForm = require("@/components/setup/SetupForm").default;
-        openConfirm({
-          title: `Bewerk Setup Concept`,
-          tone: "primary",
-          confirmText: "Opslaan & Creëren",
-          cancelText: "Annuleren",
-          description: (
-            <div className="space-y-6 pt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
-              <SetupForm 
-                mode="new"
-                initialData={draft.payload}
-                onSaved={() => {
-                  showSnackbar("Setup succesvol aangemaakt!", "success");
-                  onSuccess();
-                }}
-              />
-            </div>
-          ),
-          onConfirm: () => {
-            document.querySelector("#setup-edit-submit")?.click();
-          }
-        });
-      } catch (err) {
-        console.error("Failed to load SetupForm", err);
-      }
-    } else if (draft.type === "strategy") {
-      try {
-        const StrategyForm = require("@/components/strategy/StrategyForm").default;
-        const setupsList = await fetchSetups();
-        openConfirm({
-          title: `Bewerk Strategie Concept`,
-          tone: "primary",
-          confirmText: "Opslaan & Creëren",
-          cancelText: "Annuleren",
-          description: (
-            <div className="space-y-6 pt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
-              <StrategyForm 
-                setups={setupsList}
-                isEdit={false}
-                strategy={{
-                  name: draft.payload.name,
-                  symbol: draft.payload.symbol,
-                  setup_type: draft.payload.setup_type,
-                  setup_id: setupsList[0]?.id,
-                  base_amount: draft.payload.base_amount,
-                  entry: draft.payload.entry,
-                  targets: draft.payload.targets,
-                  stop_loss: draft.payload.stop_loss,
-                  execution_mode: draft.payload.execution_mode || "fixed"
-                }}
-                onSubmit={async (payload) => {
-                  await createStrategy(payload);
-                  showSnackbar("Strategie succesvol aangemaakt!", "success");
-                  onSuccess();
-                }}
-              />
-            </div>
-          ),
-          onConfirm: () => {
-            document.querySelector("#strategy-edit-submit")?.click();
-          }
-        });
-      } catch (err) {
-        console.error("Failed to load StrategyForm", err);
-      }
-    } else if (draft.type === "bot") {
-      try {
-        const AddBotForm = require("@/components/bot/AddBotForm").default;
-        const stratList = await fetchStrategies();
-        let currentFormVal = {};
-        openConfirm({
-          title: `Bewerk Bot Concept`,
-          tone: "primary",
-          confirmText: "Opslaan & Creëren",
-          cancelText: "Annuleren",
-          description: (
-            <div className="space-y-6 pt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
-              <AddBotForm 
-                strategies={stratList}
-                initialData={{
-                  name: draft.payload.name,
-                  strategy_id: draft.payload.strategy_id || stratList[0]?.id,
-                  mode: draft.payload.mode || "manual",
-                  is_live: draft.payload.is_live || false,
-                  risk_profile: draft.payload.risk_profile || "balanced",
-                  base_currency: draft.payload.base_currency || "EUR"
-                }}
-                onChange={(val) => {
-                  currentFormVal = val;
-                }}
-              />
-            </div>
-          ),
-          onConfirm: async () => {
-            const payload = {
-              name: currentFormVal.name || draft.payload.name,
-              strategy_id: currentFormVal.strategy_id || draft.payload.strategy_id || stratList[0]?.id,
-              mode: currentFormVal.mode || draft.payload.mode || "manual",
-              is_live: currentFormVal.is_live ?? draft.payload.is_live ?? false,
-              risk_profile: currentFormVal.risk_profile || draft.payload.risk_profile || "balanced",
-              base_currency: currentFormVal.base_currency || draft.payload.base_currency || "EUR",
-              budget_total_eur: draft.payload.budget_total_eur || 500.0,
-              budget_daily_limit_eur: draft.payload.budget_daily_limit_eur || 50.0,
-              budget_min_order_eur: draft.payload.budget_min_order_eur || 10.0,
-              budget_max_order_eur: draft.payload.budget_max_order_eur || 100.0,
-              max_asset_exposure_pct: draft.payload.max_asset_exposure_pct || 100.0,
-              cadence: draft.payload.cadence || "daily"
-            };
-            await createBotConfig(payload);
-            showSnackbar("Bot succesvol aangemaakt!", "success");
-            onSuccess();
-          }
-        });
-      } catch (err) {
-        console.error("Failed to load AddBotForm", err);
-      }
-    }
+  const handleEditClick = () => {
+    handleEditDraft(draft, onSuccess);
   };
 
   const getAccentGradient = () => {
@@ -1175,6 +1209,150 @@ function DraftCard({ draft, onCancel, onSuccess }) {
             className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-red-500 hover:text-red-500 dark:hover:border-red-500/30 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 flex items-center justify-center"
           >
             CANCEL
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConceptCard({ state, onContinue, onEdit, onFinalize }) {
+  const { current_flow, slots } = state;
+  const flowType = current_flow?.split("_")?.[0] || "setup"; // setup, strategy, bot
+
+  const getAccentGradient = () => {
+    if (flowType === "setup") return "from-amber-500 to-yellow-400";
+    if (flowType === "strategy") return "from-blue-500 to-indigo-500";
+    return "from-emerald-500 to-teal-500";
+  };
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/40 shadow-md animate-in fade-in duration-300">
+      <div className="p-4 space-y-4">
+        {/* TITLE & BADGE */}
+        <div className="flex items-start justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+              Live Concept
+            </span>
+            <h4 className="text-xs font-black text-foreground dark:text-slate-200 tracking-tight leading-snug">
+              {flowType === "setup" ? `${slots?.symbol || "..."} Setup Concept` :
+               flowType === "strategy" ? `${slots?.symbol || "..."} Strategie Concept` :
+               `${slots?.name || "..."} Bot Concept`}
+            </h4>
+          </div>
+          <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm text-white bg-gradient-to-r ${getAccentGradient()}`}>
+            {flowType} concept
+          </span>
+        </div>
+
+        {/* METADATA RENDER WITH PLACEHOLDERS */}
+        <div className="rounded-xl bg-white dark:bg-slate-950 p-3.5 border border-slate-100 dark:border-slate-800/80 space-y-2.5 shadow-sm">
+          {flowType === "setup" && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Asset</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || <span className="text-slate-400 italic font-normal">[Vereist]</span>}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Setup Type</span>
+                <span className="uppercase text-xs text-foreground dark:text-slate-200">{slots?.setup_type || <span className="text-slate-400 italic font-normal">[Kies dca of trade]</span>}</span>
+              </div>
+              {slots?.setup_type === "dca" && (
+                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">DCA Parameters</span>
+                  <span className="text-xs text-foreground dark:text-slate-200">
+                    {slots?.dca_frequency || <span className="text-slate-400 italic font-normal">[Kies frequentie]</span>}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {flowType === "strategy" && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Asset</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || "SOL"}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Base Budget</span>
+                <span className="text-xs text-foreground dark:text-slate-200">
+                  {slots?.base_amount ? `€${slots.base_amount}` : <span className="text-slate-400 italic font-normal">[Kies inleg]</span>}
+                </span>
+              </div>
+              {slots?.setup_type === "trade" ? (
+                <>
+                  <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Entry Target</span>
+                    <span className="text-xs text-foreground dark:text-slate-200">
+                      {slots?.entry ? `€${slots.entry}` : <span className="text-slate-400 italic font-normal">[Optioneel]</span>}
+                    </span>
+                  </div>
+                  <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Stop Loss</span>
+                    <span className="text-xs text-rose-500">
+                      {slots?.stop_loss ? `€${slots.stop_loss}` : <span className="text-slate-400 italic font-normal">[Optioneel]</span>}
+                    </span>
+                  </div>
+                  <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Take Profit Targets</span>
+                    <span className="text-xs text-emerald-500 font-mono">
+                      {slots?.targets ? (Array.isArray(slots.targets) ? slots.targets.map(t => `€${t}`).join(" · ") : `€${slots.targets}`) : <span className="text-slate-400 italic font-normal">[Optioneel]</span>}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">DCA Multiplier Mode</span>
+                  <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{slots?.execution_mode || "fixed"}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {flowType === "bot" && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col col-span-2">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Bot Naam</span>
+                <span className="text-xs text-foreground dark:text-slate-200">{slots?.name || "SOL Bot"}</span>
+              </div>
+              <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Safety Profile</span>
+                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{slots?.risk_profile || "balanced"}</span>
+              </div>
+              <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Budget</span>
+                <span className="text-xs text-foreground dark:text-slate-200">
+                  {slots?.budget_total_eur ? `€${slots.budget_total_eur}` : <span className="text-slate-400 italic font-normal">[Vereist]</span>}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* CONTROLS */}
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={onContinue}
+            className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider text-white bg-blue-600 hover:bg-blue-700 transition-all flex items-center justify-center gap-1 active:scale-95 shadow-sm"
+          >
+            VERVOLG
+          </button>
+          
+          <button
+            onClick={onEdit}
+            className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 flex items-center justify-center"
+          >
+            BEWERK
+          </button>
+
+          <button
+            onClick={onFinalize}
+            className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider text-white transition-all shadow-md flex items-center justify-center bg-gradient-to-r ${getAccentGradient()} hover:opacity-90 active:scale-95`}
+          >
+            FINALISEER
           </button>
         </div>
       </div>

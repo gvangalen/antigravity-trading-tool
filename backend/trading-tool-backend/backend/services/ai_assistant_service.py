@@ -66,14 +66,23 @@ class AiAssistantService:
         import re
         q_clean = re.sub(r'[^\w\s]', '', q_lower)
         
+        is_abort = False
         if any(trigger in q_clean for trigger in abort_triggers):
+            # Exclude trading stop terms that contain 'stop'
+            trading_stop_terms = ["stop-loss", "stop loss", "stoploss", "stop-limit", "stop limit", "stoplimit"]
+            if any(term in q_lower for term in trading_stop_terms):
+                is_abort = False
+            else:
+                is_abort = True
+                
+        if is_abort:
             # Clear state in PostgreSQL immediately
             await self.state_repo.clear_state(user_id)
             logger.info(f"🧹 [Conversational-Abort-Engine] Cleared active conversation state for user {user_id} upon trigger: {user_query}")
             
             response_text = "Ik heb de huidige setup-flow voor je geannuleerd. Je kunt me altijd vragen om iets nieuws te starten of een andere vraag stellen! 👍"
             state_reset = {"current_flow": "none", "slots": {}, "status": "none"}
-            return response_text, None, None, state_reset
+            return response_text, None, None, state_reset, None
         
         # 1.5 Active Asset Priority Engine & Sequential Context Gathering
         explicit_symbol = None
@@ -107,6 +116,20 @@ class AiAssistantService:
         
         self.db_duration_ms = (time.perf_counter() - start_db) * 1000
         logger.info(f"⚡ [Ai-Assistant-Service] SEQUENTIAL DATABASE CONTEXT GATHER took {self.db_duration_ms:.2f}ms (Resolved Asset: {resolved_symbol})")
+
+        # Deterministic slot pre-parsing (Hybrid AI + Confirm UX)
+        conv_state = self._deterministic_pre_parse_slots(user_query, conv_state, resolved_symbol)
+
+        if conv_state and conv_state.get("status") == "complete":
+            # Deterministically build final draft payload in Python
+            draft = self._build_deterministic_draft(conv_state)
+            await self.state_repo.clear_state(user_id)
+            
+            flow_word = conv_state.get("current_flow", "setup").split("_")[0]
+            response_text = f"Perfect! Ik heb de {flow_word} voor {resolved_symbol} klaargezet. Bevestig de card hieronder om hem te activeren! 👍"
+            state_reset = {"current_flow": "none", "slots": {}, "status": "none"}
+            logger.info(f"🏁 [Deterministic-Completion-Interceptor] Completed flow '{conv_state.get('current_flow')}' with draft payload: {draft}")
+            return response_text, None, draft, state_reset, None
 
         # Process Live Market Context
         live_context = "No live market data available in database."
@@ -376,6 +399,20 @@ class AiAssistantService:
         if not isinstance(reasoning, dict):
             reasoning = None
 
+        # Force keep correct active flow from resetting or confusing names unless complete
+        if state and conv_state and conv_state.get("current_flow") and conv_state.get("current_flow") != "none":
+            if state.get("status") == "collecting":
+                state["current_flow"] = conv_state.get("current_flow")
+                
+        # Preserve and merge deterministic pre-parsed slots into the returned state
+        if state and isinstance(state, dict) and conv_state and isinstance(conv_state, dict):
+            state_slots = state.get("slots") or {}
+            pre_slots = conv_state.get("slots") or {}
+            for k, v in pre_slots.items():
+                if v is not None and v != "":
+                    state_slots[k] = v
+            state["slots"] = state_slots
+
         # Apply deterministic safety post-processing guardrail to text response
         chat_text = self._apply_safety_guardrails(chat_text)
 
@@ -447,7 +484,16 @@ class AiAssistantService:
         import re
         q_clean = re.sub(r'[^\w\s]', '', q_lower)
         
+        is_abort = False
         if any(trigger in q_clean for trigger in abort_triggers):
+            # Exclude trading stop terms that contain 'stop'
+            trading_stop_terms = ["stop-loss", "stop loss", "stoploss", "stop-limit", "stop limit", "stoplimit"]
+            if any(term in q_lower for term in trading_stop_terms):
+                is_abort = False
+            else:
+                is_abort = True
+
+        if is_abort:
             # Clear state in PostgreSQL immediately
             await self.state_repo.clear_state(user_id)
             logger.info(f"🧹 [Conversational-Abort-Engine] Cleared active conversation state for user {user_id} upon trigger: {user_query}")
@@ -530,6 +576,28 @@ class AiAssistantService:
         
         self.db_duration_ms = (time.perf_counter() - start_db) * 1000
         logger.info(f"⚡ [Ai-Assistant-Service] SEQUENTIAL DATABASE CONTEXT GATHER (Stream) took {self.db_duration_ms:.2f}ms (Resolved Asset: {resolved_symbol})")
+
+        # Deterministic slot pre-parsing (Hybrid AI + Confirm UX)
+        conv_state = self._deterministic_pre_parse_slots(user_query, conv_state, resolved_symbol)
+
+        if conv_state and conv_state.get("status") == "complete":
+            # Deterministically build final draft payload in Python
+            draft = self._build_deterministic_draft(conv_state)
+            await self.state_repo.clear_state(user_id)
+            
+            flow_word = conv_state.get("current_flow", "setup").split("_")[0]
+            response_text = f"Perfect! Ik heb de {flow_word} voor {resolved_symbol} klaargezet. Bevestig de card hieronder om hem te activeren! 👍"
+            state_reset = {"current_flow": "none", "slots": {}, "status": "none"}
+            logger.info(f"🏁 [Deterministic-Completion-Interceptor] Completed flow '{conv_state.get('current_flow')}' with draft payload: {draft}")
+            yield {"event": "text", "data": response_text}
+            yield {"event": "envelope", "data": {
+                "response": response_text,
+                "action": None,
+                "draft": draft,
+                "state": state_reset,
+                "reasoning": None
+            }}
+            return
 
         # Process Live Market Context
         live_context = "No live market data available in database."
@@ -720,6 +788,20 @@ class AiAssistantService:
         if not isinstance(state, dict): state = None
         if not isinstance(reasoning, dict): reasoning = None
 
+        # Force keep correct active flow from resetting or confusing names unless complete
+        if state and conv_state and conv_state.get("current_flow") and conv_state.get("current_flow") != "none":
+            if state.get("status") == "collecting":
+                state["current_flow"] = conv_state.get("current_flow")
+
+        # Preserve and merge deterministic pre-parsed slots into the returned state
+        if state and isinstance(state, dict) and conv_state and isinstance(conv_state, dict):
+            state_slots = state.get("slots") or {}
+            pre_slots = conv_state.get("slots") or {}
+            for k, v in pre_slots.items():
+                if v is not None and v != "":
+                    state_slots[k] = v
+            state["slots"] = state_slots
+
         # Apply safety guardrails to streamed text
         chat_text = self._apply_safety_guardrails(chat_text)
 
@@ -842,6 +924,242 @@ class AiAssistantService:
         pass
             
         return softened_text
+
+    def _deterministic_pre_parse_slots(self, user_query: str, conv_state: Optional[dict], resolved_symbol: str) -> Optional[dict]:
+        """
+        🎯 Deterministic Slot Pre-Parser (Fase 2: Hybrid AI + Confirm UX)
+        Extracts slot values deterministically before calling GPT to eliminate any LLM uncertainty.
+        Allows users to specify any slot in any order.
+        """
+        q_lower = user_query.strip().lower()
+        
+        # 1. Pre-initialize active flow if user requests to start one and there is no active flow
+        if not conv_state or not conv_state.get("current_flow") or conv_state.get("current_flow") == "none":
+            if any(w in q_lower for w in ["maak setup", "start setup", "setup voor", "setup aanmaken", "nieuwe setup", "setup maken"]):
+                conv_state = {
+                    "current_flow": "setup_creation",
+                    "slots": {"symbol": resolved_symbol},
+                    "status": "collecting"
+                }
+            elif any(w in q_lower for w in ["maak strategie", "start strategie", "strategie voor", "nieuwe strategie", "strategie maken"]):
+                conv_state = {
+                    "current_flow": "strategy_creation",
+                    "slots": {"symbol": resolved_symbol},
+                    "status": "collecting"
+                }
+            elif any(w in q_lower for w in ["maak bot", "start bot", "bot voor", "nieuwe bot", "bot maken"]):
+                conv_state = {
+                    "current_flow": "bot_creation",
+                    "slots": {"name": f"{resolved_symbol} Bot"},
+                    "status": "collecting"
+                }
+                
+        if not conv_state or not conv_state.get("current_flow") or conv_state.get("current_flow") == "none":
+            return conv_state
+
+        flow_name = conv_state.get("current_flow")
+        slots = dict(conv_state.get("slots" or {})) if conv_state.get("slots") else {}
+        
+        # Ensure slots has at least symbol if applicable
+        if "symbol" not in slots and flow_name in ["setup_creation", "strategy_creation"]:
+            slots["symbol"] = resolved_symbol
+
+        import re
+
+        # Helper to extract numbers
+        def extract_numbers(s: str) -> list:
+            # Matches integers or floats
+            return [float(x) for x in re.findall(r'\b\d+(?:\.\d+)?\b', s)]
+
+        # Let's find the current missing slots in sequence to know what slot we are pre-parsing
+        from backend.ai_agents.flow_registry import FLOW_DEFINITIONS
+        flow = FLOW_DEFINITIONS.get(flow_name)
+        if not flow:
+            return conv_state
+
+        # Check for immediate finalization override ("maak de setup", "finaliseer")
+        if any(w in q_lower for w in ["maak de setup", "maak nu", "opslaan", "finaliseer"]):
+            conv_state["status"] = "complete"
+            logger.info(f"🏁 [Deterministic-Pre-Parser] Forced completion for flow '{flow_name}' upon request: {user_query}")
+            return conv_state
+
+        # Build list of all missing slots
+        all_missing_slots = []
+        for step in flow.get("question_sequence", []):
+            slot_key = step["slot"]
+            # Skip conditional slots if their dependencies are not met
+            if flow_name == "setup_creation" and slot_key == "dca_frequency" and slots.get("setup_type") != "dca":
+                continue
+            if flow_name == "strategy_creation" and slot_key in ["entry", "targets", "stop_loss"] and slots.get("setup_type") != "trade":
+                continue
+
+            if slot_key not in slots or slots[slot_key] is None or slots[slot_key] == "":
+                all_missing_slots.append(slot_key)
+
+        if not all_missing_slots:
+            conv_state["status"] = "complete"
+            return conv_state
+
+        updated = False
+
+        if "setup_type" in all_missing_slots:
+            if any(w in q_lower for w in ["trade", "actief", "actieve", "manual", "handmatig"]):
+                slots["setup_type"] = "trade"
+                updated = True
+            elif any(w in q_lower for w in ["dca", "periodiek", "passief", "bijkopen"]):
+                slots["setup_type"] = "dca"
+                updated = True
+
+        if "dca_frequency" in all_missing_slots:
+            if any(w in q_lower for w in ["dagelijks", "daily", "dag"]):
+                slots["dca_frequency"] = "daily"
+                updated = True
+            elif any(w in q_lower for w in ["wekelijks", "weekly", "week"]):
+                slots["dca_frequency"] = "weekly"
+                updated = True
+            elif any(w in q_lower for w in ["maandelijks", "monthly", "maand"]):
+                slots["dca_frequency"] = "monthly"
+                updated = True
+
+        if "base_amount" in all_missing_slots:
+            # Look for eur inleg, e.g. "€100", "100 eur", "inleg van 100", "inleg: 100", "inleg 100"
+            nums = extract_numbers(q_lower)
+            if nums and any(w in q_lower for w in ["€", "eur", "inleg", "bedrag", "euro", "order", "inleg:"]):
+                slots["base_amount"] = nums[0]
+                updated = True
+
+        if "entry" in all_missing_slots:
+            if any(w in q_lower for w in ["instappen", "entry", "instap"]):
+                nums = extract_numbers(q_lower)
+                if nums:
+                    slots["entry"] = nums[0]
+                    updated = True
+
+        if "targets" in all_missing_slots:
+            if any(w in q_lower for w in ["target", "winstdoel", "take profit", "targets"]):
+                nums = extract_numbers(q_lower)
+                if nums:
+                    slots["targets"] = nums
+                    updated = True
+
+        if "stop_loss" in all_missing_slots:
+            if any(w in q_lower for w in ["stop-loss", "stop loss", "stoploss"]):
+                nums = extract_numbers(q_lower)
+                if nums:
+                    slots["stop_loss"] = nums[0]
+                    updated = True
+
+        if "experience_level" in all_missing_slots:
+            if "beginner" in q_lower:
+                slots["experience_level"] = "beginner"
+                updated = True
+            elif any(w in q_lower for w in ["intermediate", "gemiddeld", "midden"]):
+                slots["experience_level"] = "intermediate"
+                updated = True
+            elif any(w in q_lower for w in ["advanced", "gevorderd", "ervaren", "expert"]):
+                slots["experience_level"] = "advanced"
+                updated = True
+
+        if "risk_profile" in all_missing_slots:
+            if any(w in q_lower for w in ["conservative", "voorzichtig", "laag"]):
+                slots["risk_profile"] = "conservative"
+                updated = True
+            elif any(w in q_lower for w in ["balanced", "neutraal", "balans", "gemiddeld"]):
+                slots["risk_profile"] = "balanced"
+                updated = True
+            elif any(w in q_lower for w in ["aggressive", "agressief", "hoog"]):
+                slots["risk_profile"] = "aggressive"
+                updated = True
+
+        if updated:
+            conv_state["slots"] = slots
+            logger.info(f"🎯 [Deterministic-Pre-Parser] Successfully updated slots: {slots}")
+
+            # Re-check if any missing slots remain
+            final_missing = []
+            for step in flow.get("question_sequence", []):
+                slot_key = step["slot"]
+                if flow_name == "setup_creation" and slot_key == "dca_frequency" and slots.get("setup_type") != "dca":
+                    continue
+                if flow_name == "strategy_creation" and slot_key in ["entry", "targets", "stop_loss"] and slots.get("setup_type") != "trade":
+                    continue
+
+                if slot_key not in slots or slots[slot_key] is None or slots[slot_key] == "":
+                    final_missing.append(slot_key)
+
+            if not final_missing:
+                conv_state["status"] = "complete"
+                logger.info(f"🏁 [Deterministic-Pre-Parser] Flow '{flow_name}' automatically completed as all slots are satisfied.")
+
+        return conv_state
+
+    def _build_deterministic_draft(self, conv_state: dict) -> dict:
+        """
+        🎯 Builds the production-ready Draft object deterministically from conversation slots.
+        """
+        flow_name = conv_state.get("current_flow")
+        slots = conv_state.get("slots") or {}
+        symbol = slots.get("symbol", "BTC")
+
+        if flow_name == "setup_creation":
+            payload = {
+                "name": f"{symbol} Setup",
+                "symbol": symbol,
+                "setup_type": slots.get("setup_type", "trade"),
+                "timeframe": "1W"
+            }
+            if slots.get("setup_type") == "dca":
+                payload["dca_frequency"] = slots.get("dca_frequency", "weekly")
+                payload["dca_day"] = "monday"
+                payload["min_macro_score"] = 30
+                payload["max_macro_score"] = 70
+                payload["min_technical_score"] = 40
+                payload["max_technical_score"] = 80
+                payload["min_market_score"] = 20
+                payload["max_market_score"] = 60
+            return {
+                "type": "setup",
+                "payload": payload
+            }
+
+        elif flow_name == "strategy_creation":
+            payload = {
+                "name": f"{symbol} Strategy",
+                "symbol": symbol,
+                "setup_type": slots.get("setup_type", "trade"),
+                "execution_mode": "fixed",
+                "base_amount": slots.get("base_amount", 100.0)
+            }
+            if slots.get("setup_type") == "trade":
+                payload["entry"] = slots.get("entry", 100.0)
+                payload["targets"] = slots.get("targets", [110.0, 120.0])
+                payload["stop_loss"] = slots.get("stop_loss", 90.0)
+            return {
+                "type": "strategy",
+                "payload": payload
+            }
+
+        elif flow_name == "bot_creation":
+            payload = {
+                "name": slots.get("name") or f"{symbol} Bot",
+                "mode": slots.get("mode", "manual"),
+                "is_live": slots.get("is_live", False),
+                "risk_profile": slots.get("risk_profile", "balanced"),
+                "budget_total_eur": slots.get("budget_total_eur", 500.0),
+                "budget_daily_limit_eur": slots.get("budget_daily_limit_eur", 50.0),
+                "budget_min_order_eur": slots.get("budget_min_order_eur", 10.0),
+                "budget_max_order_eur": slots.get("budget_max_order_eur", 100.0),
+                "max_asset_exposure_pct": slots.get("max_asset_exposure_pct", 100.0),
+                "cadence": slots.get("cadence", "daily"),
+                "base_currency": slots.get("base_currency", "EUR")
+            }
+            return {
+                "type": "bot",
+                "payload": payload
+            }
+
+        return {}
+
 
     def _validate_and_sanitize_action(self, action: Optional[dict]) -> Optional[dict]:
         """
@@ -1007,15 +1325,35 @@ class AiAssistantService:
                 f"Primary required slots: {json.dumps(flow.get('required_slots'))}\n"
                 f"Conditional slots: {conditional_str}\n"
                 f"Already collected slots: {json.dumps(conv_state.get('slots', {}))}\n\n"
+                f"=== SLOT SCHEMA DEFINITIONS REFERENCE ===\n"
+                f"Extract user answers into 'state.slots' using these rules:\n"
+                f"- 'symbol': uppercase string ticker (e.g., 'SOL', 'BTC', 'ETH').\n"
+                f"- 'setup_type': must be exactly 'dca' or 'trade'. Extract 'dca' if user says 'dca' or 'passief bijkopen'; extract 'trade' if user says 'trade', 'actieve handmatige', or 'actief'.\n"
+                f"- 'dca_frequency': must be exactly 'daily', 'weekly', or 'monthly'.\n"
+                f"- 'base_amount': numeric value (e.g., 100).\n"
+                f"- 'entry': numeric value (e.g., 150.0).\n"
+                f"- 'targets': array of numeric values (e.g., [160.0, 170.0, 180.0]).\n"
+                f"- 'stop_loss': numeric value (e.g., 140.0).\n"
+                f"- 'name': string name (e.g., 'SOL Autopilot Bot').\n"
+                f"- 'budget_total_eur': numeric value (e.g., 500).\n\n"
+                f"=== STRICT ACTIVE FLOW CONCISENESS MANDATE ===\n"
+                f"1. TALK EXTREMELY LITTLE: Write at most ONE short, clear, direct sentence per turn.\n"
+                f"2. ZERO FILLER: Do NOT use polite conversational fillers or pleasantries (e.g., do NOT say 'Prima, we gaan...', 'Laten we de nieuwe...', 'Goed idee...').\n"
+                f"3. NO REPETITION: Do NOT repeat back any context, existing setups, or fields the user already provided. Just state the next prompt.\n"
+                f"4. ONLY 1 QUESTION: Ask EXACTLY ONE question to gather the next missing slot, or say 'Perfect. Ik zet je setup klaar.' if finalizing.\n"
+                f"   - INCORRECT: 'Je hebt al een setup voor SOL. Laten we de nieuwe trade setup voor SOL afmaken. Wat is je stop-loss voor deze trade?'\n"
+                f"   - CORRECT: 'Gewenste stop-loss voor deze trade?'\n\n"
                 f"CRITICAL INSTRUCTIONS:\n"
                 f"1. You MUST continue this flow. Keep 'draft' as null until ALL required slots (and conditional slots if applicable) are collected.\n"
-                f"2. Set state.current_flow to '{active_flow_name}' and state.status to 'collecting' and state.slots to the accumulated dictionary of slots.\n"
+                f"2. SLOT EXTRACTION (MANDATORY): You must extract the value for the current missing slot from the user's latest query (USER QUERY) and add/update it in 'state.slots'.\n"
+                f"3. Set state.current_flow to '{active_flow_name}' and state.status to 'collecting' and state.slots to the accumulated dictionary of slots.\n"
                 f"   - IMPORTANT (FLOW SWITCHING / RESET): If the user's latest query explicitly requests a NEW setup, strategy, or bot for a DIFFERENT asset (e.g. asking to make a setup for ETH while the active slots are for SOL), you MUST clear the old slots and start a fresh sequence. Set state.slots to only have the new symbol (e.g., {{'symbol': 'ETH'}}), set state.current_flow to '{active_flow_name}', and ask the user for the next slot (the setup_type).\n"
                 f"   - Do NOT mix up or keep slots from the previous asset (e.g. do not keep 'dca_frequency' or 'setup_type' from the old SOL setup if the user is asking to create a setup for ETH).\n"
-                f"3. Identify the NEXT missing slot in the sequence for the current active flow. Ask the user ONLY for that next missing slot. Do NOT ask for slots that the user has already provided in their latest message (e.g. if the user says 'make setup for ETH', then 'symbol' is already 'ETH' and is NOT missing, so ask for 'setup_type' instead!).\n"
+                f"4. Identify the NEXT missing slot in the sequence for the current active flow. Ask the user ONLY for that next missing slot. Do NOT ask for slots that the user has already provided in their latest message (e.g. if the user says 'make setup for ETH', then 'symbol' is already 'ETH' and is NOT missing, so ask for 'setup_type' instead!).\n"
                 f"   Use or closely adapt the corresponding question from this guide:\n"
                 f"{question_guide_str}\n"
-                f"4. Once ALL slots are gathered, set state.current_flow to 'none', state.status to 'complete', state.slots to {{}}, and populate the final 'draft' with type '{flow.get('draft_type')}' using payload matching the fields. Present the draft card to the user.\n"
+                f"5. Once ALL slots are gathered, set state.current_flow to 'none', state.status to 'complete', state.slots to {{}}, and populate the final 'draft' with type '{flow.get('draft_type')}' using payload matching the fields. Present the draft card to the user.\n"
+                f"6. CONFIRMATION / FINALIZATION TRIGGER: If the user says 'maak de setup', 'maak nu', 'opslaan', or 'finaliseer', you MUST immediately mark the flow as 'complete' (set state.status to 'complete', state.current_flow to 'none'), populate the draft object with all slots gathered so far (using standard defaults for any missing ones), and present the draft card to the user. Do NOT ask for more slots if they explicitly command to finish/make the setup.\n"
             )
         else:
             # List candidate flows so LLM can trigger them
