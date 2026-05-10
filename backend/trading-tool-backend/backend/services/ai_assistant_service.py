@@ -936,23 +936,9 @@ class AiAssistantService:
         # 1. Pre-initialize active flow if user requests to start one and there is no active flow
         if not conv_state or not conv_state.get("current_flow") or conv_state.get("current_flow") == "none":
             if any(w in q_lower for w in ["maak setup", "start setup", "setup voor", "setup aanmaken", "nieuwe setup", "setup maken"]):
-                # Parse explicit user choices during initialization if provided
-                init_setup_type = "trade" if any(w in q_lower for w in ["trade", "actief", "actieve", "manual", "handmatig"]) else "dca"
-                init_frequency = "weekly"
-                if any(w in q_lower for w in ["dagelijks", "daily", "dag"]):
-                    init_frequency = "daily"
-                elif any(w in q_lower for w in ["maandelijks", "monthly", "maand"]):
-                    init_frequency = "monthly"
-                
                 conv_state = {
                     "current_flow": "setup_creation",
-                    "slots": {
-                        "symbol": resolved_symbol,
-                        "setup_type": init_setup_type,
-                        "dca_frequency": init_frequency,
-                        "timeframe": "1w",
-                        "risk_profile": "balanced"
-                    },
+                    "slots": {"symbol": resolved_symbol},
                     "status": "collecting"
                 }
                 # PERSIST INITIALIZATION STATE TO DB IMMEDIATELY
@@ -969,10 +955,11 @@ class AiAssistantService:
             elif any(w in q_lower for w in ["maak bot", "start bot", "bot voor", "nieuwe bot", "bot maken"]):
                 conv_state = {
                     "current_flow": "bot_creation",
-                    "slots": {"name": f"{resolved_symbol} Bot"},
+                    "slots": {},
                     "status": "collecting"
                 }
                 await self.state_repo.save_state(user_id, "bot_creation", resolved_symbol, conv_state["slots"])
+                logger.info(f"🎯 [Deterministic-Pre-Parser] Persisted newly initialized bot flow to DB for user {user_id}")
                 logger.info(f"🎯 [Deterministic-Pre-Parser] Persisted newly initialized bot flow to DB for user {user_id}")
                 
         if not conv_state or not conv_state.get("current_flow") or conv_state.get("current_flow") == "none":
@@ -1075,6 +1062,35 @@ class AiAssistantService:
             slots["risk_profile"] = "aggressive"
             updated = True
 
+        # Market Condition
+        if any(w in q_lower for w in ["extreme fear", "extreme angst", "fear", "angst"]):
+            slots["market_condition"] = "extreme_fear"
+            updated = True
+        elif any(w in q_lower for w in ["bull market", "bull", "stijgend", "stijgende"]):
+            slots["market_condition"] = "bull_market"
+            updated = True
+        elif any(w in q_lower for w in ["bear market", "bear", "dalend", "dalende"]):
+            slots["market_condition"] = "bear_market"
+            updated = True
+        elif any(w in q_lower for w in ["neutral", "neutraal", "zijwaarts"]):
+            slots["market_condition"] = "neutral"
+            updated = True
+
+        # Budget Daily Limit
+        if any(w in q_lower for w in ["dagelijks limiet", "daily limit", "daglimiet", "dagelijks"]):
+            nums = extract_numbers(q_lower)
+            if nums:
+                slots["budget_daily_limit_eur"] = nums[0]
+                updated = True
+
+        # Name (for setup_creation or bot_creation)
+        if "name" not in slots or slots.get("name") is None or slots.get("name") == "":
+            is_trigger = any(w in q_lower for w in ["maak setup", "setup voor", "maak bot", "start bot", "annuleer", "cancel", "edit", "approve", "akkoord"])
+            is_slot_keyword = any(w in q_lower for w in ["trade", "dca", "dagelijks", "wekelijks", "maandelijks", "extreme fear", "bull market", "bear market", "neutraal"])
+            if not is_trigger and not is_slot_keyword and len(user_query.strip()) > 2 and len(user_query.strip()) < 40:
+                slots["name"] = user_query.strip()
+                updated = True
+
         if updated:
             conv_state["slots"] = slots
             logger.info(f"🎯 [Deterministic-Pre-Parser] Successfully updated slots: {slots}")
@@ -1112,10 +1128,11 @@ class AiAssistantService:
 
         if flow_name == "setup_creation":
             payload = {
-                "name": f"{symbol} Setup",
+                "name": slots.get("name") or f"{symbol} Setup",
                 "symbol": symbol,
                 "setup_type": slots.get("setup_type", "trade"),
-                "timeframe": "1W"
+                "timeframe": "1W",
+                "market_condition": slots.get("market_condition", "extreme_fear")
             }
             if slots.get("setup_type") == "dca":
                 payload["dca_frequency"] = slots.get("dca_frequency", "weekly")
@@ -1137,6 +1154,7 @@ class AiAssistantService:
                 "symbol": symbol,
                 "setup_type": slots.get("setup_type", "trade"),
                 "execution_mode": "fixed",
+                "risk_profile": slots.get("risk_profile", "balanced"),
                 "base_amount": slots.get("base_amount", 100.0)
             }
             if slots.get("setup_type") == "trade":

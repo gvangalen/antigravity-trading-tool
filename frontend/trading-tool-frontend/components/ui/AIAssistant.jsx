@@ -708,39 +708,57 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           ))}
 
           {/* LIVE INTERACTIVE CONCEPT CARD */}
-          {activeState && activeState.current_flow && activeState.current_flow !== "none" && (
-            <div className="flex justify-start animate-in slide-in-from-bottom-3 duration-300">
-              <div className="max-w-[90%]">
-                <ConceptCard 
-                  state={activeState}
-                  onCancel={() => {
-                    handleChat("annuleer", false);
-                    setActiveState(null);
-                  }}
-                  onEdit={() => {
-                    const mockDraft = {
-                      type: activeState.current_flow.split("_")[0],
-                      payload: {
-                        name: activeState.slots?.name || `${activeState.slots?.symbol || globalSymbol} Concept`,
-                        symbol: activeState.slots?.symbol || globalSymbol,
-                        setup_type: activeState.slots?.setup_type || "trade",
-                        ...activeState.slots
-                      }
-                    };
-                    handleEditDraft(mockDraft, async () => {
+          {activeState && activeState.current_flow && activeState.current_flow !== "none" && (() => {
+            const flow = activeState.current_flow;
+            const slots = activeState.slots || {};
+            let shouldShowCard = false;
+            
+            if (flow === "setup_creation") {
+              shouldShowCard = !!(slots.setup_type && slots.market_condition);
+            } else if (flow === "strategy_creation") {
+              shouldShowCard = !!(slots.setup_type && slots.base_amount);
+            } else if (flow === "bot_creation") {
+              shouldShowCard = !!slots.budget_total_eur;
+            } else {
+              shouldShowCard = true;
+            }
+
+            if (!shouldShowCard) return null;
+
+            return (
+              <div className="flex justify-start animate-in slide-in-from-bottom-3 duration-300">
+                <div className="max-w-[90%]">
+                  <ConceptCard 
+                    state={activeState}
+                    onCancel={() => {
+                      handleChat("annuleer", false);
                       setActiveState(null);
-                      await handleChat("ik heb hem zojuist opgeslagen", true);
-                    });
-                  }}
-                  onFinalize={() => handleChat("maak de setup")}
-                  onUpdateSlots={(newSlots) => {
-                    if (newSlots.setup_type) handleChat(newSlots.setup_type, true);
-                    if (newSlots.dca_frequency) handleChat(newSlots.dca_frequency, true);
-                  }}
-                />
+                    }}
+                    onEdit={() => {
+                      const mockDraft = {
+                        type: activeState.current_flow.split("_")[0],
+                        payload: {
+                          name: activeState.slots?.name || `${activeState.slots?.symbol || globalSymbol} Concept`,
+                          symbol: activeState.slots?.symbol || globalSymbol,
+                          setup_type: activeState.slots?.setup_type || "trade",
+                          ...activeState.slots
+                        }
+                      };
+                      handleEditDraft(mockDraft, async () => {
+                        setActiveState(null);
+                        await handleChat("ik heb hem zojuist opgeslagen", true);
+                      });
+                    }}
+                    onFinalize={() => handleChat("maak de setup")}
+                    onUpdateSlots={(newSlots) => {
+                      if (newSlots.setup_type) handleChat(newSlots.setup_type, true);
+                      if (newSlots.dca_frequency) handleChat(newSlots.dca_frequency, true);
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {loading && (
             <ChatSkeleton />

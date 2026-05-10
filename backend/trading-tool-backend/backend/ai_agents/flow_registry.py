@@ -38,7 +38,7 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "setup_creation": {
         "page": "/setup",
         "assistant_role": "Setup Wizard",
-        "required_slots": ["symbol", "setup_type"],
+        "required_slots": ["symbol", "setup_type", "market_condition", "name"],
         "conditional_slots": {
             "dca_frequency": {
                 "depends_on": "setup_type",
@@ -53,13 +53,23 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             },
             {
                 "slot": "setup_type",
-                "question_beginner": "DCA of trade?",
+                "question_beginner": "Wil je een DCA of een actieve Trade setup maken?",
                 "question_advanced": "DCA of trade?"
             },
             {
                 "slot": "dca_frequency",
-                "question_beginner": "Frequentie?",
+                "question_beginner": "Hoe vaak wil je bijkopen? (dagelijks, wekelijks of maandelijks)",
                 "question_advanced": "Frequentie?"
+            },
+            {
+                "slot": "market_condition",
+                "question_beginner": "Onder welke marktomstandigheden wil je deze setup activeren? (bijv. Extreme fear, Bull market, of Neutraal)",
+                "question_advanced": "Marktconditie?"
+            },
+            {
+                "slot": "name",
+                "question_beginner": "Welke herkenbare naam wil je deze setup geven? (bijv. 'SOL Fear Accumulator')",
+                "question_advanced": "Setup naam?"
             }
         ],
         "draft_type": "setup",
@@ -75,7 +85,7 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "strategy_creation": {
         "page": "/strategy",
         "assistant_role": "Strategie Architect",
-        "required_slots": ["symbol", "setup_type", "base_amount"],
+        "required_slots": ["symbol", "setup_type", "base_amount", "risk_profile"],
         "conditional_slots": {
             "entry": {
                 "depends_on": "setup_type",
@@ -107,6 +117,11 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "question_advanced": "Basisbedrag?"
             },
             {
+                "slot": "risk_profile",
+                "question_beginner": "Welk risicoprofiel wil je hanteren? (conservative, balanced of aggressive)",
+                "question_advanced": "Risicoprofiel?"
+            },
+            {
                 "slot": "entry",
                 "question_beginner": "Gewenste entry?",
                 "question_advanced": "Gewenste entry?"
@@ -135,7 +150,7 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "bot_creation": {
         "page": "/bot",
         "assistant_role": "Bot Deployer",
-        "required_slots": ["name", "budget_total_eur"],
+        "required_slots": ["name", "budget_total_eur", "budget_daily_limit_eur"],
         "question_sequence": [
             {
                 "slot": "name",
@@ -146,6 +161,11 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "slot": "budget_total_eur",
                 "question_beginner": "Totaal budget?",
                 "question_advanced": "Totaal budget?"
+            },
+            {
+                "slot": "budget_daily_limit_eur",
+                "question_beginner": "Dagelijks limiet budget?",
+                "question_advanced": "Dagelijks limiet?"
             }
         ],
         "draft_type": "bot",
