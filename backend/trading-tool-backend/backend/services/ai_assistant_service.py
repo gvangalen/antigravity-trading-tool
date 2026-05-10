@@ -945,22 +945,75 @@ class AiAssistantService:
                 await self.state_repo.save_state(user_id, "setup_creation", resolved_symbol, conv_state["slots"])
                 logger.info(f"🎯 [Deterministic-Pre-Parser] Persisted newly initialized setup flow to DB for user {user_id}")
             elif any(w in q_lower for w in ["maak strategie", "start strategie", "strategie voor", "nieuwe strategie", "strategie maken"]):
-                conv_state = {
-                    "current_flow": "strategy_creation",
-                    "slots": {"symbol": resolved_symbol},
-                    "status": "collecting"
-                }
-                await self.state_repo.save_state(user_id, "strategy_creation", resolved_symbol, conv_state["slots"])
-                logger.info(f"🎯 [Deterministic-Pre-Parser] Persisted newly initialized strategy flow to DB for user {user_id}")
+                # CHECK SETUP DEPENDENCY
+                existing_setups = await self.setup_repo.get_all_setups(user_id)
+                symbol_setups = [s for s in existing_setups if s.get("symbol") == resolved_symbol]
+                
+                if not symbol_setups:
+                    # Redirect to setup_creation!
+                    conv_state = {
+                        "current_flow": "setup_creation",
+                        "slots": {"symbol": resolved_symbol},
+                        "status": "collecting",
+                        "redirect_reason": "no_setup"
+                    }
+                    await self.state_repo.save_state(user_id, "setup_creation", resolved_symbol, conv_state["slots"])
+                    logger.info(f"🎯 [Chain-of-Dependence] No setup found for {resolved_symbol}. Redirected user {user_id} to setup_creation.")
+                else:
+                    conv_state = {
+                        "current_flow": "strategy_creation",
+                        "slots": {
+                            "symbol": resolved_symbol,
+                            "setup_id": symbol_setups[0]["id"]
+                        },
+                        "status": "collecting"
+                    }
+                    await self.state_repo.save_state(user_id, "strategy_creation", resolved_symbol, conv_state["slots"])
+                    logger.info(f"🎯 [Chain-of-Dependence] Setup found with ID {symbol_setups[0]['id']} for {resolved_symbol}. Initialized strategy_creation for user {user_id}.")
             elif any(w in q_lower for w in ["maak bot", "start bot", "bot voor", "nieuwe bot", "bot maken"]):
-                conv_state = {
-                    "current_flow": "bot_creation",
-                    "slots": {},
-                    "status": "collecting"
-                }
-                await self.state_repo.save_state(user_id, "bot_creation", resolved_symbol, conv_state["slots"])
-                logger.info(f"🎯 [Deterministic-Pre-Parser] Persisted newly initialized bot flow to DB for user {user_id}")
-                logger.info(f"🎯 [Deterministic-Pre-Parser] Persisted newly initialized bot flow to DB for user {user_id}")
+                # CHECK STRATEGY DEPENDENCY
+                existing_strategies = await self.strategy_repo.query_strategies(user_id, {"symbol": resolved_symbol})
+                
+                if not existing_strategies:
+                    # Check if we have a setup for this symbol:
+                    existing_setups = await self.setup_repo.get_all_setups(user_id)
+                    symbol_setups = [s for s in existing_setups if s.get("symbol") == resolved_symbol]
+                    
+                    if symbol_setups:
+                        # Setup exists but no strategy! Redirect to strategy_creation!
+                        conv_state = {
+                            "current_flow": "strategy_creation",
+                            "slots": {
+                                "symbol": resolved_symbol,
+                                "setup_id": symbol_setups[0]["id"]
+                            },
+                            "status": "collecting",
+                            "redirect_reason": "no_strategy"
+                        }
+                        await self.state_repo.save_state(user_id, "strategy_creation", resolved_symbol, conv_state["slots"])
+                        logger.info(f"🎯 [Chain-of-Dependence] Setup found but no strategy. Redirected user {user_id} to strategy_creation.")
+                    else:
+                        # Neither exists! Redirect to setup_creation!
+                        conv_state = {
+                            "current_flow": "setup_creation",
+                            "slots": {"symbol": resolved_symbol},
+                            "status": "collecting",
+                            "redirect_reason": "no_setup_nor_strategy"
+                        }
+                        await self.state_repo.save_state(user_id, "setup_creation", resolved_symbol, conv_state["slots"])
+                        logger.info(f"🎯 [Chain-of-Dependence] No setup/strategy found. Redirected user {user_id} to setup_creation.")
+                else:
+                    # We have a strategy! We can link its ID
+                    conv_state = {
+                        "current_flow": "bot_creation",
+                        "slots": {
+                            "name": f"{resolved_symbol} Bot",
+                            "strategy_id": existing_strategies[0]["id"]
+                        },
+                        "status": "collecting"
+                    }
+                    await self.state_repo.save_state(user_id, "bot_creation", resolved_symbol, conv_state["slots"])
+                    logger.info(f"🎯 [Chain-of-Dependence] Strategy found with ID {existing_strategies[0]['id']}. Initialized bot_creation for user {user_id}.")
                 
         if not conv_state or not conv_state.get("current_flow") or conv_state.get("current_flow") == "none":
             return conv_state
@@ -1344,6 +1397,27 @@ class AiAssistantService:
             question_guide_str = "\n".join(question_guide)
             conditional_str = json.dumps(flow.get("conditional_slots", {}))
 
+            symbol = conv_state.get("slots", {}).get("symbol", "BTC")
+            redirect_msg = ""
+            if conv_state.get("redirect_reason") == "no_setup":
+                redirect_msg = (
+                    f"\n[ALERT: REDIRECTED FLOW] The user requested a Strategy for '{symbol}', but there is NO Setup (Blueprint) for this asset yet. "
+                    f"You have been redirected to start a 'setup_creation' flow for '{symbol}' first. "
+                    f"Briefly explain this in Dutch (concise, e.g. 'Er is nog geen Setup voor {symbol}, laten we die eerst maken.') and then ask the first question of setup_creation: 'Wil je een DCA of trade setup?'"
+                )
+            elif conv_state.get("redirect_reason") == "no_strategy":
+                redirect_msg = (
+                    f"\n[ALERT: REDIRECTED FLOW] The user requested a Bot for '{symbol}', but there is NO Strategy for this asset yet. "
+                    f"You have been redirected to start a 'strategy_creation' flow for '{symbol}' first. "
+                    f"Briefly explain this in Dutch (concise, e.g. 'Er is nog geen Strategie voor {symbol}, laten we die eerst ontwerpen.') and then ask the first question of strategy_creation."
+                )
+            elif conv_state.get("redirect_reason") == "no_setup_nor_strategy":
+                redirect_msg = (
+                    f"\n[ALERT: REDIRECTED FLOW] The user requested a Bot for '{symbol}', but there is NO Setup or Strategy for this asset yet. "
+                    f"You have been redirected to start a 'setup_creation' flow for '{symbol}' first. "
+                    f"Briefly explain this in Dutch (concise, e.g. 'Er is nog geen Setup of Strategie voor {symbol}, laten we bij de basis beginnen en een Setup maken.') and then ask the first question of setup_creation: 'Wil je een DCA of trade setup?'"
+                )
+
             return (
                 f"\n=== ACTIVE CONVERSATIONAL FLOW MANDATE (FLOW REGISTRY) ===\n"
                 f"You are currently executing the active flow: '{active_flow_name}'\n"
@@ -1351,7 +1425,8 @@ class AiAssistantService:
                 f"Target Page for this flow: {flow.get('page')}\n"
                 f"Primary required slots: {json.dumps(flow.get('required_slots'))}\n"
                 f"Conditional slots: {conditional_str}\n"
-                f"Already collected slots: {json.dumps(conv_state.get('slots', {}))}\n\n"
+                f"Already collected slots: {json.dumps(conv_state.get('slots', {}))}\n"
+                f"{redirect_msg}\n\n"
                 f"=== SLOT SCHEMA DEFINITIONS REFERENCE ===\n"
                 f"Extract user answers into 'state.slots' using these rules:\n"
                 f"- 'symbol': uppercase string ticker (e.g., 'SOL', 'BTC', 'ETH').\n"
