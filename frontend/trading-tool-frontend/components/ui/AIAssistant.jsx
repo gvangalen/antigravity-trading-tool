@@ -434,7 +434,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, loading]);
+  }, [messages, loading, activeState]);
 
   if (!isOpen) return null;
 
@@ -445,7 +445,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       } w-full md:w-[400px]`}
     >
       {/* HEADER */}
-      <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-card dark:bg-[#0f172a] relative z-10 shadow-sm">
+      <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-card dark:bg-[#0f172a] relative z-10 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30">
              <Bot size={22} />
@@ -639,7 +639,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         </div>
 
         {/* MESSAGES AREA */}
-        <div className="p-6 space-y-6 pb-6">
+        <div className="p-6 space-y-6 pb-20">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[90%] rounded-2xl p-4 ${
@@ -743,7 +743,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       </div>
 
       {/* INPUT AREA */}
-      <div className="p-6 bg-card dark:bg-[#0f172a] border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] relative z-10">
+      <div className="p-6 bg-card dark:bg-[#0f172a] border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] relative z-10 flex-shrink-0">
         {pathname?.includes("/admin") && activeState && activeState.current_flow && activeState.current_flow !== "none" && (() => {
           const progress = getFlowProgress(activeState);
           if (!progress) return null;
