@@ -838,9 +838,8 @@ class AiAssistantService:
             softened_text = re.sub(pattern, replacement, softened_text, flags=re.IGNORECASE)
             
         # Add a gentle read-only footer disclaimer if any strong trigger words or allocations are discussed, or as a general assistant best practice.
-        trading_advices = ["kopen", "verkopen", "buy", "sell", "portfolio", "transactie", "allocation", "rendement"]
-        if any(word in softened_text.lower() for word in trading_advices) and "Geen financieel advies" not in softened_text:
-            softened_text += "\n\n*Disclaimer: Dit is uitsluitend educatieve en analytische informatie, geen direct koop- of verkoopadvies.*"
+        # Disabled to keep conversational flow clean and premium.
+        pass
             
         return softened_text
 

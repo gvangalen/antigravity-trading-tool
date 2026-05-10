@@ -592,7 +592,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
       {/* INPUT AREA */}
       <div className="p-6 bg-card dark:bg-[#0f172a] border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] relative z-10">
-        {activeState && activeState.current_flow && activeState.current_flow !== "none" && (() => {
+        {pathname?.includes("/admin") && activeState && activeState.current_flow && activeState.current_flow !== "none" && (() => {
           const progress = getFlowProgress(activeState);
           if (!progress) return null;
           const activeStep = Math.min(progress.filled + 1, progress.total);
@@ -1186,82 +1186,14 @@ function ReasoningWidget({ reasoning }) {
   const pathname = usePathname();
   if (!reasoning) return null;
 
-  const { confidence_score, risk_detected, reasons } = reasoning;
   const isAdminMode = pathname?.includes("/admin");
 
   if (isAdminMode) {
     return <DebugExplainabilityCard reasoning={reasoning} />;
   }
 
-  // qualitative trust states
-  const getTrustState = () => {
-    if (!confidence_score) return null;
-    if (confidence_score >= 80) {
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30">
-          Hoog vertrouwen
-        </span>
-      );
-    }
-    if (confidence_score >= 50) {
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/20">
-          Gemengd signaal
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800/50">
-        Voorzichtig scenario
-      </span>
-    );
-  };
-
-  // risk levels
-  const getRiskState = () => {
-    if (risk_detected) {
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/30">
-          Verhoogd risico
-        </span>
-      );
-    }
-    if (confidence_score >= 80) {
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30">
-          Lager risico
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800/50">
-        Normaal risico
-      </span>
-    );
-  };
-
-  return (
-    <div className="mt-4 p-4 bg-slate-50/50 dark:bg-slate-900/20 border border-slate-100/80 dark:border-slate-800/60 rounded-2xl flex flex-col gap-3.5">
-      <div className="flex items-center gap-2">
-        {getTrustState()}
-        {getRiskState()}
-      </div>
-
-      {reasons && reasons.length > 0 && (
-        <div className="space-y-1.5">
-          <h4 className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Waarom deze analyse?</h4>
-          <ul className="space-y-1.5 pl-0.5">
-            {reasons.map((reason, idx) => (
-              <li key={idx} className="text-xs font-medium text-slate-600 dark:text-slate-300 flex items-start gap-2 leading-relaxed">
-                <span className="text-blue-500/70 select-none mt-1 text-[8px]">•</span>
-                <span>{reason}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
+  // Hide completely for standard users
+  return null;
 }
 
 function DebugExplainabilityCard({ reasoning }) {
