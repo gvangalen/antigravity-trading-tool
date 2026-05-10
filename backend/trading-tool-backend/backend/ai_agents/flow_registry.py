@@ -48,18 +48,18 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "question_sequence": [
             {
                 "slot": "symbol",
-                "question_beginner": "Voor welke cryptomunt (zoals SOL, BTC of ETH) wil je deze setup maken?",
-                "question_advanced": "Voer de asset-ticker in (bijv. SOL, BTC):"
+                "question_beginner": "Welke asset?",
+                "question_advanced": "Welke asset?"
             },
             {
                 "slot": "setup_type",
-                "question_beginner": "Kies je voor een periodieke 'dca' setup (passief bijkopen) of een actieve handmatige 'trade' setup?",
-                "question_advanced": "Setup type? ('dca' of 'trade'):"
+                "question_beginner": "DCA of trade?",
+                "question_advanced": "DCA of trade?"
             },
             {
                 "slot": "dca_frequency",
-                "question_beginner": "Hoe vaak wil je bijkopen? Dagelijks, Wekelijks, of Maandelijks?",
-                "question_advanced": "DCA frequentie? ('daily', 'weekly', 'monthly'):"
+                "question_beginner": "Frequentie?",
+                "question_advanced": "Frequentie?"
             }
         ],
         "draft_type": "setup",
@@ -93,33 +93,33 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "question_sequence": [
             {
                 "slot": "symbol",
-                "question_beginner": "Voor welke cryptomunt gaan we deze strategie ontwerpen?",
-                "question_advanced": "Asset ticker:"
+                "question_beginner": "Welke asset?",
+                "question_advanced": "Welke asset?"
             },
             {
                 "slot": "setup_type",
-                "question_beginner": "Wordt dit een 'dca' of een actieve 'trade' strategie?",
-                "question_advanced": "Strategie type ('dca'/'trade'):"
+                "question_beginner": "DCA of trade?",
+                "question_advanced": "DCA of trade?"
             },
             {
                 "slot": "base_amount",
-                "question_beginner": "Wat is het basisbedrag per order in EUR? (bijv. €100)",
-                "question_advanced": "Inleg per order (EUR):"
+                "question_beginner": "Basisbedrag?",
+                "question_advanced": "Basisbedrag?"
             },
             {
                 "slot": "entry",
-                "question_beginner": "Op welke koers wil je instappen? (bijv. de actuele koers of een specifiek niveau)",
-                "question_advanced": "Entry price:"
+                "question_beginner": "Gewenste entry?",
+                "question_advanced": "Gewenste entry?"
             },
             {
                 "slot": "targets",
-                "question_beginner": "Wat zijn je winstdoelen? Je kunt één of meerdere doelen opgeven (bijv. [150, 160])",
-                "question_advanced": "Take profit targets (array van getallen, bijv. [150, 160]):"
+                "question_beginner": "Targets?",
+                "question_advanced": "Targets?"
             },
             {
                 "slot": "stop_loss",
-                "question_beginner": "Waar leggen we de stop-loss neer om je kapitaal te beschermen? (bijv. €130)",
-                "question_advanced": "Stop loss limit:"
+                "question_beginner": "Stop-loss?",
+                "question_advanced": "Stop-loss?"
             }
         ],
         "draft_type": "strategy",
@@ -139,13 +139,13 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "question_sequence": [
             {
                 "slot": "name",
-                "question_beginner": "Welke naam wil je deze trading bot geven? (bijv. 'SOL Autopilot Bot')",
-                "question_advanced": "Bot naam:"
+                "question_beginner": "Bot naam?",
+                "question_advanced": "Bot naam?"
             },
             {
                 "slot": "budget_total_eur",
-                "question_beginner": "Wat is het totale budget in EUR dat deze bot mag beheren? (bijv. €500)",
-                "question_advanced": "Totaal budget (EUR):"
+                "question_beginner": "Totaal budget?",
+                "question_advanced": "Totaal budget?"
             }
         ],
         "draft_type": "bot",
