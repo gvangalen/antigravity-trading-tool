@@ -1183,54 +1183,134 @@ function DraftCard({ draft, onCancel, onSuccess }) {
 }
 
 function ReasoningWidget({ reasoning }) {
+  const pathname = usePathname();
+  if (!reasoning) return null;
+
+  const { confidence_score, risk_detected, reasons } = reasoning;
+  const isAdminMode = pathname?.includes("/admin");
+
+  if (isAdminMode) {
+    return <DebugExplainabilityCard reasoning={reasoning} />;
+  }
+
+  // qualitative trust states
+  const getTrustState = () => {
+    if (!confidence_score) return null;
+    if (confidence_score >= 80) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30">
+          Hoog vertrouwen
+        </span>
+      );
+    }
+    if (confidence_score >= 50) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/20">
+          Gemengd signaal
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800/50">
+        Voorzichtig scenario
+      </span>
+    );
+  };
+
+  // risk levels
+  const getRiskState = () => {
+    if (risk_detected) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/30">
+          Verhoogd risico
+        </span>
+      );
+    }
+    if (confidence_score >= 80) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30">
+          Lager risico
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800/50">
+        Normaal risico
+      </span>
+    );
+  };
+
+  return (
+    <div className="mt-4 p-4 bg-slate-50/50 dark:bg-slate-900/20 border border-slate-100/80 dark:border-slate-800/60 rounded-2xl flex flex-col gap-3.5">
+      <div className="flex items-center gap-2">
+        {getTrustState()}
+        {getRiskState()}
+      </div>
+
+      {reasons && reasons.length > 0 && (
+        <div className="space-y-1.5">
+          <h4 className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Waarom deze analyse?</h4>
+          <ul className="space-y-1.5 pl-0.5">
+            {reasons.map((reason, idx) => (
+              <li key={idx} className="text-xs font-medium text-slate-600 dark:text-slate-300 flex items-start gap-2 leading-relaxed">
+                <span className="text-blue-500/70 select-none mt-1 text-[8px]">•</span>
+                <span>{reason}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DebugExplainabilityCard({ reasoning }) {
   const [isOpen, setIsOpen] = useState(false);
   if (!reasoning) return null;
 
   const { confidence_score, risk_detected, reasons, coaching_level } = reasoning;
-  
+
   return (
-    <div className="mt-3 overflow-hidden rounded-xl border border-slate-100 dark:border-slate-800 bg-white/40 dark:bg-slate-950/40 shadow-sm">
+    <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 shadow-sm">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 flex items-center justify-between text-left text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/60 transition-colors"
+        className="w-full px-3 py-2 flex items-center justify-between text-left text-[10px] font-black uppercase tracking-wider text-rose-500 dark:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors"
       >
-        <span className="flex items-center gap-1.5">
-          <Brain size={12} className="text-blue-500" />
-          Gedachtegang & Explainability
+        <span className="flex items-center gap-1.5 font-mono">
+          <Brain size={12} className="text-rose-500" />
+          [DEBUG] GEDACHTEGANG & DIAGNOSTICS
         </span>
         <ChevronDown size={12} className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen && (
-        <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-white/20 dark:bg-slate-950/20 space-y-2.5">
-          {/* Stats Bar */}
+        <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-2.5 font-mono text-[10px]">
           <div className="grid grid-cols-3 gap-2">
-            <div className="bg-slate-50/80 dark:bg-slate-900/80 rounded-lg p-2 text-center border border-slate-100/50 dark:border-slate-800/30">
-              <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Confidence</span>
-              <span className="text-[11px] font-mono font-black text-blue-500">{confidence_score ? `${confidence_score}%` : 'N/A'}</span>
+            <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-2 text-center border border-slate-100 dark:border-slate-800">
+              <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 block">Confidence</span>
+              <span className="text-[11px] font-black text-blue-500">{confidence_score ? `${confidence_score}%` : 'N/A'}</span>
             </div>
             
-            <div className="bg-slate-50/80 dark:bg-slate-900/80 rounded-lg p-2 text-center border border-slate-100/50 dark:border-slate-800/30">
-              <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Risico</span>
+            <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-2 text-center border border-slate-100 dark:border-slate-800">
+              <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 block">Risico</span>
               <span className={`text-[10px] font-black ${risk_detected ? 'text-rose-500 animate-pulse' : 'text-emerald-500'}`}>
-                {risk_detected ? 'Gedetecteerd' : 'Veilig'}
+                {risk_detected ? 'GEDETECTEERD' : 'VEILIG'}
               </span>
             </div>
             
-            <div className="bg-slate-50/80 dark:bg-slate-900/80 rounded-lg p-2 text-center border border-slate-100/50 dark:border-slate-800/30">
-              <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Coaching</span>
-              <span className="text-[10px] font-black text-amber-500 capitalize">{coaching_level || 'Algemeen'}</span>
+            <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-2 text-center border border-slate-100 dark:border-slate-800">
+              <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 block">Coaching</span>
+              <span className="text-[10px] font-black text-amber-500 uppercase">{coaching_level || 'ALGEMEEN'}</span>
             </div>
           </div>
 
-          {/* Reasons List */}
           {reasons && reasons.length > 0 && (
             <div className="space-y-1">
-              <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Doorslaggevende factoren:</span>
+              <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block">REASONING CHAINS:</span>
               <ul className="space-y-1 pl-2">
                 {reasons.map((reason, idx) => (
-                  <li key={idx} className="text-[10px] font-medium text-slate-600 dark:text-slate-300 flex items-start gap-1.5 leading-snug">
-                    <span className="text-blue-500 select-none mt-0.5">•</span>
+                  <li key={idx} className="text-[10px] text-slate-600 dark:text-slate-300 flex items-start gap-1.5">
+                    <span className="text-blue-500 mt-0.5">•</span>
                     <span>{reason}</span>
                   </li>
                 ))}
