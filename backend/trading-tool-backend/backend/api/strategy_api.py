@@ -1,5 +1,6 @@
 import logging
-from fastapi import APIRouter, HTTPException, Request, Depends
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
@@ -40,12 +41,13 @@ async def save_strategy(
 @router.post("/strategies/query")
 async def query_strategies(
     request: Request,
+    format: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     service: StrategyService = Depends(get_strategy_service)
 ):
     filters = await request.json()
     user_id = current_user["id"]
-    return await service.query_strategies(user_id, filters)
+    return await service.query_strategies(user_id, filters, format_type=format)
 
 # ==========================================================
 # 3️⃣ GENERATE STRATEGY (AI)
@@ -99,20 +101,22 @@ async def analyze_strategy(
 @router.get("/strategies/by_setup/{setup_id}")
 async def get_strategy_by_setup(
     setup_id: int,
+    format: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     service: StrategyService = Depends(get_strategy_service)
 ):
-    return await service.get_strategy_by_setup(setup_id, current_user["id"])
+    return await service.get_strategy_by_setup(setup_id, current_user["id"], format_type=format)
 
 # ==========================================================
 # 8️⃣ LAST STRATEGY
 # ==========================================================
 @router.get("/strategies/last")
 async def get_last_strategy(
+    format: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     service: StrategyService = Depends(get_strategy_service)
 ):
-    return await service.get_last_strategy(current_user["id"])
+    return await service.get_last_strategy(current_user["id"], format_type=format)
 
 # ==========================================================
 # 9️⃣ FAVORITE TOGGLE

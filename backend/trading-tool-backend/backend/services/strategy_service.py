@@ -190,9 +190,44 @@ class StrategyService:
         await mark_step_completed(user_id, "strategy", self.session)
         return {"id": strategy_id, "message": "✅ Strategie opgeslagen"}
 
-    async def query_strategies(self, user_id: int, filters: dict) -> List[dict]:
+    def format_strategy_for_mobile(self, strategy: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Trims and optimizes strategy payload for native mobile consumption.
+        Excludes massive decision curves while keeping necessary trade/DCA configurations.
+        """
+        if not strategy:
+            return {}
+
+        return {
+            "id": strategy.get("id"),
+            "setup_id": strategy.get("setup_id"),
+            "setup_name": strategy.get("setup_name"),
+            "name": strategy.get("name"),
+            "setup_type": strategy.get("setup_type"),
+            "execution_mode": strategy.get("execution_mode"),
+            "base_amount": strategy.get("base_amount"),
+            "symbol": strategy.get("symbol"),
+            "timeframe": strategy.get("timeframe"),
+            "entry": strategy.get("entry"),
+            "targets": strategy.get("targets"),
+            "stop_loss": strategy.get("stop_loss"),
+            "risk_reward": strategy.get("risk_reward"),
+            "explanation": strategy.get("explanation"),
+            "ai_explanation": strategy.get("ai_explanation"),
+            "risk_profile": strategy.get("risk_profile"),
+            "tags": strategy.get("tags"),
+            "favorite": strategy.get("favorite"),
+            "created_at": strategy.get("created_at"),
+            "has_decision_curve": bool(strategy.get("decision_curve")),
+            "decision_curve_name": strategy.get("decision_curve_name"),
+        }
+
+    async def query_strategies(self, user_id: int, filters: dict, format_type: Optional[str] = None) -> List[dict]:
         rows = await self.repository.query_strategies(user_id, filters)
-        return [self._format_strategy_row(r) for r in rows]
+        formatted = [self._format_strategy_row(r) for r in rows]
+        if format_type == "mobile":
+            return [self.format_strategy_for_mobile(s) for s in formatted if s]
+        return formatted
 
     async def update_strategy(self, strategy_id: int, raw_data: dict, user_id: int):
         execution_mode = (raw_data.get("execution_mode") or "").lower()
@@ -246,15 +281,23 @@ class StrategyService:
         await self.session.commit()
         return {"message": "🗑 Verwijderd"}
 
-    async def get_strategy_by_setup(self, setup_id: int, user_id: int) -> Optional[dict]:
+    async def get_strategy_by_setup(self, setup_id: int, user_id: int, format_type: Optional[str] = None) -> Optional[dict]:
         row = await self.repository.get_strategy_by_setup(setup_id, user_id)
         if not row:
             return None
-        return self._format_strategy_row(row)
+        formatted = self._format_strategy_row(row)
+        if format_type == "mobile" and formatted:
+            return self.format_strategy_for_mobile(formatted)
+        return formatted
 
-    async def get_last_strategy(self, user_id: int) -> Optional[dict]:
+    async def get_last_strategy(self, user_id: int, format_type: Optional[str] = None) -> Optional[dict]:
         row = await self.repository.get_last_strategy(user_id)
-        return self._format_strategy_row(row) if row else None
+        if not row:
+            return None
+        formatted = self._format_strategy_row(row)
+        if format_type == "mobile" and formatted:
+            return self.format_strategy_for_mobile(formatted)
+        return formatted
 
     async def toggle_favorite(self, strategy_id: int, user_id: int) -> dict:
         new_fav = await self.repository.toggle_favorite(strategy_id, user_id)

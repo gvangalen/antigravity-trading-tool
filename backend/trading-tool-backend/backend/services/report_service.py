@@ -29,7 +29,147 @@ class ReportService:
     # FETCH REPORTS
     # =================
 
-    async def get_latest_report(self, user_id: int, table_name: str, symbol: Optional[str] = None) -> Dict[str, Any]:
+    def format_report_for_mobile(self, report: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Formats and compresses a report payload to offer ultra-fast, clean,
+        easily parsable metrics, summaries, and indicator highlights for native mobile screens.
+        """
+        if not report:
+            return {}
+
+        import json
+
+        # Safe parsing helper
+        def safe_json_parse(val):
+            if isinstance(val, str):
+                try:
+                    return json.loads(val)
+                except Exception:
+                    return val
+            return val
+
+        # If it's a non-daily report and has meta_json, unpack it
+        meta_json_raw = report.get("meta_json")
+        meta = safe_json_parse(meta_json_raw) if meta_json_raw else None
+
+        # Build composite highlights/narratives
+        if meta and isinstance(meta, dict):
+            # For weekly/monthly/quarterly, unpack sections from meta
+            exec_summary = safe_json_parse(meta.get("executive_summary") or report.get("executive_summary") or report.get("summary") or "Status ok.")
+            market_analysis = safe_json_parse(meta.get("market_analysis") or meta.get("market_overview") or report.get("market_overview") or "")
+            outlook = safe_json_parse(meta.get("outlook") or report.get("outlook") or "")
+            
+            kpi_metrics = {
+                "macro_score": meta.get("macro_score") or report.get("macro_score"),
+                "technical_score": meta.get("technical_score") or report.get("technical_score"),
+                "market_score": meta.get("market_score") or report.get("market_score"),
+                "setup_score": meta.get("setup_score") or report.get("setup_score"),
+                "price": meta.get("price") or report.get("price"),
+                "change_24h": meta.get("change_24h") or report.get("change_24h"),
+                "volume": meta.get("volume") or report.get("volume"),
+            }
+            
+            # Watchlist
+            watchlist = safe_json_parse(meta.get("watchlist") or report.get("watchlist") or [])
+            best_setup = safe_json_parse(meta.get("best_setup") or report.get("best_setup"))
+            top_setups = safe_json_parse(meta.get("top_setups") or report.get("top_setups") or [])
+            bot_snapshot = safe_json_parse(meta.get("bot_snapshot") or report.get("bot_snapshot"))
+            active_strategy = safe_json_parse(meta.get("active_strategy") or report.get("active_strategy"))
+            
+            # Highlights
+            market_ind = safe_json_parse(meta.get("market_indicator_highlights") or report.get("market_indicator_highlights") or [])
+            macro_ind = safe_json_parse(meta.get("macro_indicator_highlights") or report.get("macro_indicator_highlights") or [])
+            tech_ind = safe_json_parse(meta.get("technical_indicator_highlights") or report.get("technical_indicator_highlights") or [])
+        else:
+            # Daily report format
+            exec_summary = safe_json_parse(report.get("executive_summary") or report.get("summary") or "Status ok.")
+            market_analysis = safe_json_parse(report.get("market_analysis") or report.get("market_overview") or "")
+            outlook = safe_json_parse(report.get("outlook") or "")
+            
+            kpi_metrics = {
+                "macro_score": report.get("macro_score"),
+                "technical_score": report.get("technical_score"),
+                "market_score": report.get("market_score"),
+                "setup_score": report.get("setup_score"),
+                "price": report.get("price"),
+                "change_24h": report.get("change_24h"),
+                "volume": report.get("volume"),
+            }
+            
+            watchlist = safe_json_parse(report.get("watchlist") or [])
+            best_setup = safe_json_parse(report.get("best_setup"))
+            top_setups = safe_json_parse(report.get("top_setups") or [])
+            bot_snapshot = safe_json_parse(report.get("bot_snapshot"))
+            active_strategy = safe_json_parse(report.get("active_strategy"))
+            
+            market_ind = safe_json_parse(report.get("market_indicator_highlights") or [])
+            macro_ind = safe_json_parse(report.get("macro_indicator_highlights") or [])
+            tech_ind = safe_json_parse(report.get("technical_indicator_highlights") or [])
+
+        # Normalize indicator highlights to a single list
+        highlights = []
+        if isinstance(market_ind, list):
+            for item in market_ind:
+                if isinstance(item, dict):
+                    highlights.append({
+                        "category": "market",
+                        "name": item.get("indicator") or item.get("name"),
+                        "value": item.get("value"),
+                        "score": item.get("score"),
+                        "interpretation": item.get("interpretation") or item.get("explanation"),
+                    })
+        if isinstance(macro_ind, list):
+            for item in macro_ind:
+                if isinstance(item, dict):
+                    highlights.append({
+                        "category": "macro",
+                        "name": item.get("indicator") or item.get("name"),
+                        "value": item.get("value"),
+                        "score": item.get("score"),
+                        "interpretation": item.get("interpretation") or item.get("explanation"),
+                    })
+        if isinstance(tech_ind, list):
+            for item in tech_ind:
+                if isinstance(item, dict):
+                    highlights.append({
+                        "category": "technical",
+                        "name": item.get("indicator") or item.get("name"),
+                        "value": item.get("value"),
+                        "score": item.get("score"),
+                        "interpretation": item.get("interpretation") or item.get("explanation"),
+                    })
+
+        # Dates & keys formatting
+        rdate = report.get("report_date")
+        if hasattr(rdate, 'isoformat'):
+            rdate = rdate.isoformat()
+
+        p_start = report.get("period_start")
+        if hasattr(p_start, 'isoformat'):
+            p_start = p_start.isoformat()
+
+        p_end = report.get("period_end")
+        if hasattr(p_end, 'isoformat'):
+            p_end = p_end.isoformat()
+
+        return {
+            "report_date": rdate,
+            "period_start": p_start,
+            "period_end": p_end,
+            "generated_at": report.get("generated_at"),
+            "executive_summary_compact": exec_summary,
+            "market_analysis_compact": market_analysis,
+            "outlook_compact": outlook,
+            "kpi_metrics": kpi_metrics,
+            "highlights": highlights,
+            "best_setup": best_setup,
+            "top_setups": top_setups,
+            "bot_snapshot": bot_snapshot,
+            "active_strategy": active_strategy,
+            "watchlist": watchlist,
+        }
+
+    async def get_latest_report(self, user_id: int, table_name: str, symbol: Optional[str] = None, format_type: Optional[str] = None) -> Dict[str, Any]:
         row = await self.repository.get_latest_report(user_id, table_name, symbol=symbol)
         if not row:
             if table_name == "daily_reports":
@@ -37,15 +177,24 @@ class ReportService:
             else:
                 return {"_status": "pending"}
                 
+        # Format for mobile if requested
+        if format_type == "mobile":
+            return self.format_report_for_mobile(row)
+
         if table_name != "daily_reports":
             return {"_status": "ready", **row}
         return row
 
-    async def get_report_by_date(self, user_id: int, table_name: str, date_str: str) -> Dict[str, Any]:
+    async def get_report_by_date(self, user_id: int, table_name: str, date_str: str, format_type: Optional[str] = None) -> Dict[str, Any]:
         parsed_date = self._parse_date(date_str)
         row = await self.repository.get_report_by_date(user_id, table_name, parsed_date)
         if not row:
             raise ValueError(f"Report niet gevonden voor {date_str}")
+
+        # Format for mobile if requested
+        if format_type == "mobile":
+            return self.format_report_for_mobile(row)
+
         return row
 
     async def get_report_history(self, user_id: int, table_name: str) -> List[str]:

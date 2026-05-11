@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,22 +21,24 @@ async def get_report_service(db: AsyncSession = Depends(get_db)):
 @router.get("/report/daily/latest")
 async def get_daily_latest(
     symbol: str = Query("BTC"),
+    format: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     service: ReportService = Depends(get_report_service)
 ):
     try:
-        return await service.get_latest_report(current_user["id"], "daily_reports", symbol=symbol)
+        return await service.get_latest_report(current_user["id"], "daily_reports", symbol=symbol, format_type=format)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 @router.get("/report/daily/by-date")
 async def get_daily_by_date(
     date: str = Query(...),
+    format: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     service: ReportService = Depends(get_report_service)
 ):
     try:
-        return await service.get_report_by_date(current_user["id"], "daily_reports", date)
+        return await service.get_report_by_date(current_user["id"], "daily_reports", date, format_type=format)
     except ValueError as e:
         raise HTTPException(status_code=404 if "gevonden" in str(e).lower() else 400, detail=str(e))
 
@@ -83,22 +86,24 @@ async def export_daily_pdf(
 # ======================================================
 @router.get("/report/weekly/latest")
 async def get_weekly_latest(
+    format: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     service: ReportService = Depends(get_report_service)
 ):
     try:
-        return await service.get_latest_report(current_user["id"], "weekly_reports")
+        return await service.get_latest_report(current_user["id"], "weekly_reports", format_type=format)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/report/weekly/by-date")
 async def get_weekly_by_date(
     date: str = Query(...),
+    format: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     service: ReportService = Depends(get_report_service)
 ):
     try:
-        return await service.get_report_by_date(current_user["id"], "weekly_reports", date)
+        return await service.get_report_by_date(current_user["id"], "weekly_reports", date, format_type=format)
     except ValueError as e:
         raise HTTPException(status_code=404 if "gevonden" in str(e).lower() else 400, detail=str(e))
 
@@ -136,22 +141,24 @@ async def export_weekly_pdf(
 # ======================================================
 @router.get("/report/monthly/latest")
 async def get_monthly_latest(
+    format: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     service: ReportService = Depends(get_report_service)
 ):
     try:
-        return await service.get_latest_report(current_user["id"], "monthly_reports")
+        return await service.get_latest_report(current_user["id"], "monthly_reports", format_type=format)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/report/monthly/by-date")
 async def get_monthly_by_date(
     date: str = Query(...),
+    format: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     service: ReportService = Depends(get_report_service)
 ):
     try:
-        return await service.get_report_by_date(current_user["id"], "monthly_reports", date)
+        return await service.get_report_by_date(current_user["id"], "monthly_reports", date, format_type=format)
     except ValueError as e:
         raise HTTPException(status_code=404 if "gevonden" in str(e).lower() else 400, detail=str(e))
 
@@ -189,22 +196,24 @@ async def export_monthly_pdf(
 # ======================================================
 @router.get("/report/quarterly/latest")
 async def get_quarterly_latest(
+    format: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     service: ReportService = Depends(get_report_service)
 ):
     try:
-        return await service.get_latest_report(current_user["id"], "quarterly_reports")
+        return await service.get_latest_report(current_user["id"], "quarterly_reports", format_type=format)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/report/quarterly/by-date")
 async def get_quarterly_by_date(
     date: str = Query(...),
+    format: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     service: ReportService = Depends(get_report_service)
 ):
     try:
-        return await service.get_report_by_date(current_user["id"], "quarterly_reports", date)
+        return await service.get_report_by_date(current_user["id"], "quarterly_reports", date, format_type=format)
     except ValueError as e:
         raise HTTPException(status_code=404 if "gevonden" in str(e).lower() else 400, detail=str(e))
 
