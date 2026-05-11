@@ -61,26 +61,111 @@ class SetupService:
             "user_id": item.get("user_id"),
         }
 
-    async def save_setup(self, payload: SetupCreateSchema, raw_payload: dict, user_id: int) -> dict:
-        setup_type = payload.setup_type.lower()
-        if setup_type not in ["dca", "trade"]:
-            raise HTTPException(400, "Ongeldig setup_type. Moet 'dca' of 'trade' zijn.")
+    def validate_setup_payload(self, raw_payload: dict, is_update: bool = False):
+        """
+        Validates a setup payload meticulously for logical consistency, correct ranges,
+        and missing fields. Raises an HTTPException(400) with descriptive messages.
+        """
+        # 1. Non-empty string validations for name and symbol
+        if not is_update or "name" in raw_payload:
+            name = raw_payload.get("name")
+            if not name or not isinstance(name, str) or not name.strip():
+                raise HTTPException(400, "Naam is verplicht en mag niet leeg zijn.")
+            if len(name) > 80:
+                raise HTTPException(400, "Naam mag maximaal 80 karakters lang zijn.")
 
-        if setup_type == "dca" and not raw_payload.get("dca_frequency"):
-            raise HTTPException(400, "dca_frequency is verplicht voor DCA setup")
+        if not is_update or "symbol" in raw_payload:
+            symbol = raw_payload.get("symbol")
+            if not symbol or not isinstance(symbol, str) or not symbol.strip():
+                raise HTTPException(400, "Symbool is verplicht.")
+            if len(symbol) < 2 or len(symbol) > 10:
+                raise HTTPException(400, "Symbool moet tussen 2 en 10 karakters lang zijn.")
+
+        # 2. Setup type validation
+        setup_type = raw_payload.get("setup_type")
+        if not is_update or "setup_type" in raw_payload:
+            if not setup_type or not isinstance(setup_type, str) or setup_type.lower() not in ["dca", "trade"]:
+                raise HTTPException(400, "Ongeldig setup_type. Moet 'dca' of 'trade' zijn.")
+            setup_type = setup_type.lower()
+
+        # 3. DCA validations
+        if setup_type == "dca":
+            dca_freq = raw_payload.get("dca_frequency")
+            if not dca_freq or not isinstance(dca_freq, str) or dca_freq.lower() not in ["daily", "weekly", "monthly"]:
+                raise HTTPException(400, "dca_frequency is verplicht voor DCA setup en moet 'daily', 'weekly' of 'monthly' zijn.")
+            
+            # Check weekly day
+            if dca_freq.lower() == "weekly":
+                dca_day = raw_payload.get("dca_day")
+                if dca_day is not None:
+                    try:
+                        dca_day_int = int(dca_day)
+                        if dca_day_int < 1 or dca_day_int > 7:
+                            raise ValueError()
+                    except (ValueError, TypeError):
+                        raise HTTPException(400, "dca_day moet een getal tussen 1 (maandag) en 7 (zondag) zijn voor wekelijkse DCA.")
+
+            # Check monthly day
+            if dca_freq.lower() == "monthly":
+                dca_m_day = raw_payload.get("dca_month_day")
+                if dca_m_day is not None:
+                    try:
+                        dca_m_day_int = int(dca_m_day)
+                        if dca_m_day_int < 1 or dca_m_day_int > 31:
+                            raise ValueError()
+                    except (ValueError, TypeError):
+                        raise HTTPException(400, "dca_month_day moet een getal tussen 1 en 31 zijn voor maandelijkse DCA.")
+
+        # 4. Score Limit range validations
+        for cat in ["macro", "technical", "market"]:
+            mn = raw_payload.get(f"min_{cat}_score")
+            mx = raw_payload.get(f"max_{cat}_score")
+            
+            if mn is not None:
+                try:
+                    mn_val = float(mn)
+                    if mn_val < -100 or mn_val > 100:
+                        raise ValueError()
+                except (ValueError, TypeError):
+                    raise HTTPException(400, f"min_{cat}_score moet een getal tussen -100 en 100 zijn.")
+            
+            if mx is not None:
+                try:
+                    mx_val = float(mx)
+                    if mx_val < -100 or mx_val > 100:
+                        raise ValueError()
+                except (ValueError, TypeError):
+                    raise HTTPException(400, f"max_{cat}_score moet een getal tussen -100 en 100 zijn.")
+
+            if mn is not None and mx is not None:
+                if float(mn) > float(mx):
+                    raise HTTPException(400, f"min_{cat}_score mag niet hoger zijn dan max_{cat}_score.")
+
+        # 5. Min investment validation
+        min_invest = raw_payload.get("min_investment")
+        if min_invest is not None:
+            try:
+                min_invest_val = float(min_invest)
+                if min_invest_val < 0:
+                    raise ValueError()
+            except (ValueError, TypeError):
+                raise HTTPException(400, "min_investment mag niet negatief zijn.")
+
+    async def save_setup(self, payload: SetupCreateSchema, raw_payload: dict, user_id: int) -> dict:
+        # Validate utilizing our robust payload validator
+        self.validate_setup_payload(raw_payload, is_update=False)
+
+        # Normalize uppercase symbol
+        raw_payload["symbol"] = str(raw_payload.get("symbol", "")).strip().upper()
+        payload.symbol = raw_payload["symbol"]
+
+        setup_type = payload.setup_type.lower()
 
         # Trade cleanup
         if setup_type == "trade":
             raw_payload["dca_frequency"] = None
             raw_payload["dca_day"] = None
             raw_payload["dca_month_day"] = None
-
-        # Score validation
-        for cat in ["macro", "technical", "market"]:
-            mn = raw_payload.get(f"min_{cat}_score")
-            mx = raw_payload.get(f"max_{cat}_score")
-            if mn is not None and mx is not None and int(mn) > int(mx):
-                raise HTTPException(400, f"min_{cat}_score mag niet hoger zijn dan max_{cat}_score")
 
         exists = await self.repository.check_name_exists(payload.name, user_id)
         if exists:
@@ -90,7 +175,6 @@ class SetupService:
         if isinstance(tags, str):
             tags = [t.strip() for t in tags.split(",") if t.strip()]
 
-        # Zorg dat de geparseerde velden zeker weten naar raw data overgeschreven worden
         raw_payload["name"] = payload.name
         raw_payload["setup_type"] = setup_type
 
@@ -140,19 +224,24 @@ class SetupService:
         ]
 
     async def update_setup(self, setup_id: int, raw_payload: dict, user_id: int) -> dict:
-        for cat in ["macro", "technical", "market"]:
-            mn = raw_payload.get(f"min_{cat}_score")
-            mx = raw_payload.get(f"max_{cat}_score")
-            if mn is not None and mx is not None and int(mn) > int(mx):
-                raise HTTPException(400, f"min_{cat}_score mag niet hoger zijn dan max_{cat}_score")
-
         row = await self.repository.get_setup_by_id(setup_id, user_id)
         if not row:
             raise HTTPException(403, "Geen toegang tot setup")
 
+        # Merge raw_payload with existing row to perform cross-field validations (e.g. min/max scores)
+        merged_payload = dict(row)
+        for k, v in raw_payload.items():
+            merged_payload[k] = v
+
+        self.validate_setup_payload(merged_payload, is_update=True)
+
+        # Normalize uppercase symbol if being updated
+        if "symbol" in raw_payload:
+            raw_payload["symbol"] = str(raw_payload["symbol"]).strip().upper()
+
         updates = {}
         allowed_fields = [
-            "name", "timeframe", "setup_type",
+            "name", "symbol", "timeframe", "setup_type",
             "dca_frequency", "dca_day", "dca_month_day",
             "account_type", "min_investment", "trend", "score_logic",
             "favorite", "description", "action", "category",
@@ -170,6 +259,12 @@ class SetupService:
             if isinstance(tags, str):
                 tags = [t.strip() for t in tags.split(",") if t.strip()]
             updates["tags"] = tags
+
+        # Cleanup DCA fields if setup type is changed to Trade
+        if updates.get("setup_type") == "trade":
+            updates["dca_frequency"] = None
+            updates["dca_day"] = None
+            updates["dca_month_day"] = None
 
         updates["last_validated"] = datetime.utcnow()
 

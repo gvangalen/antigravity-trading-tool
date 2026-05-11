@@ -4,6 +4,7 @@ import json
 from datetime import date, timedelta, datetime
 from typing import List, Dict, Any, Optional
 from fastapi import HTTPException
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.schemas.bot_schema import (
@@ -108,21 +109,132 @@ class BotService:
             })
         return out
 
+    async def validate_bot_payload(self, raw_payload: dict, user_id: int, is_update: bool = False, bot_id: Optional[int] = None):
+        """
+        Meticulously validates bot configuration inputs. Prevent bad data
+        from entering the database and prevent name conflicts (idempotency/flaky protection).
+        """
+        # 1. Name unique check
+        name = raw_payload.get("name")
+        if name:
+            if not isinstance(name, str) or not name.strip():
+                raise HTTPException(400, "Botnaam is verplicht en mag niet leeg zijn.")
+            if len(name) > 80:
+                raise HTTPException(400, "Botnaam mag maximaal 80 karakters bevatten.")
+
+            # Check duplicate name for the user
+            duplicate_query = text("""
+                SELECT id FROM bot_configs
+                WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
+            """)
+            res = await self.session.execute(duplicate_query, {"user_id": user_id, "name": name.strip()})
+            duplicate = res.fetchone()
+            if duplicate:
+                # If we're updating, allow same name if it's the current bot itself
+                if not is_update or duplicate[0] != bot_id:
+                    raise HTTPException(409, f"Een botconfiguratie met de naam '{name}' bestaat al.")
+
+        # 2. Strategy ownership check
+        strategy_id = raw_payload.get("strategy_id")
+        if strategy_id is not None:
+            strategy_query = text("""
+                SELECT id FROM strategies
+                WHERE id = :strategy_id AND user_id = :user_id
+            """)
+            res_strat = await self.session.execute(strategy_query, {"strategy_id": strategy_id, "user_id": user_id})
+            if not res_strat.fetchone():
+                raise HTTPException(400, f"De opgegeven strategy_id ({strategy_id}) bestaat niet of is niet van jou.")
+
+        # 3. Budget checks
+        budget_total = raw_payload.get("budget_total_eur", 0.0)
+        budget_daily = raw_payload.get("budget_daily_limit_eur", 0.0)
+        budget_min = raw_payload.get("budget_min_order_eur", 0.0)
+        budget_max = raw_payload.get("budget_max_order_eur", 0.0)
+
+        # Basic non-negative validation
+        for label, val in [
+            ("budget_total_eur", budget_total),
+            ("budget_daily_limit_eur", budget_daily),
+            ("budget_min_order_eur", budget_min),
+            ("budget_max_order_eur", budget_max)
+        ]:
+            if val is not None:
+                try:
+                    num_val = float(val)
+                    if num_val < 0:
+                        raise ValueError()
+                except (ValueError, TypeError):
+                    raise HTTPException(400, f"{label} moet een positief getal (of 0) zijn.")
+
+        # Logical budget consistency validations
+        if budget_total and budget_daily:
+            if float(budget_daily) > float(budget_total):
+                raise HTTPException(400, "Daglimiet (budget_daily_limit_eur) mag niet groter zijn dan het totaal budget.")
+
+        if budget_min and budget_max:
+            if float(budget_min) > float(budget_max):
+                raise HTTPException(400, "budget_min_order_eur mag niet groter zijn dan budget_max_order_eur.")
+
+        if budget_max and budget_total:
+            if float(budget_max) > float(budget_total):
+                raise HTTPException(400, "budget_max_order_eur mag niet groter zijn dan het totaal budget.")
+
+        # 4. Exposure check
+        exposure = raw_payload.get("max_asset_exposure_pct")
+        if exposure is not None:
+            try:
+                num_exp = float(exposure)
+                if num_exp < 0.0 or num_exp > 100.0:
+                    raise ValueError()
+            except (ValueError, TypeError):
+                raise HTTPException(400, "max_asset_exposure_pct moet een getal tussen 0.0 en 100.0 zijn.")
+
+        # 5. List options validation
+        cadence = raw_payload.get("cadence")
+        if cadence is not None:
+            if str(cadence).lower() not in ["hourly", "daily", "weekly", "monthly"]:
+                raise HTTPException(400, "cadence moet één van 'hourly', 'daily', 'weekly', of 'monthly' zijn.")
+
+        mode = raw_payload.get("mode")
+        if mode is not None:
+            if str(mode).lower() not in ["manual", "semi-auto", "auto"]:
+                raise HTTPException(400, "mode moet één van 'manual', 'semi-auto', of 'auto' zijn.")
+
+        risk = raw_payload.get("risk_profile")
+        if risk is not None:
+            if str(risk).lower() not in ["conservative", "balanced", "aggressive"]:
+                raise HTTPException(400, "risk_profile moet één van 'conservative', 'balanced', of 'aggressive' zijn.")
+
     async def create_bot_config(self, payload: BotConfigCreateSchema, user_id: int) -> dict:
         data = payload.dict()
         data["user_id"] = user_id
+
+        # Meticulously validate payload
+        await self.validate_bot_payload(data, user_id, is_update=False)
+
         bot_id = await self.repository.create_bot_config(data)
         await self.session.commit()
         return {"ok": True, "id": bot_id}
 
     async def update_bot_config(self, bot_id: int, payload: BotConfigUpdateSchema, user_id: int) -> dict:
+        existing = await self.repository.get_bot_config(user_id, bot_id)
+        if not existing:
+            raise HTTPException(404, "Bot niet gevonden")
+
         updates = payload.dict(exclude_unset=True)
         # Handle aliases
         if "total_eur" in updates: updates["budget_total_eur"] = updates.pop("total_eur")
         if "daily_limit_eur" in updates: updates["budget_daily_limit_eur"] = updates.pop("daily_limit_eur")
         if "min_order_eur" in updates: updates["budget_min_order_eur"] = updates.pop("min_order_eur")
         if "max_order_eur" in updates: updates["budget_max_order_eur"] = updates.pop("max_order_eur")
-        
+
+        # Merge updates on top of existing config for cross-field consistency validations
+        merged = dict(existing)
+        for k, v in updates.items():
+            merged[k] = v
+
+        await self.validate_bot_payload(merged, user_id, is_update=True, bot_id=bot_id)
+
         updated_id = await self.repository.update_bot_config(user_id, bot_id, updates)
         if not updated_id:
             raise HTTPException(404, "Bot niet gevonden")
