@@ -21,6 +21,7 @@ class AssistantChatResponse(BaseModel):
     state: Optional[Dict[str, Any]] = None
     reasoning: Optional[AssistantReasoning] = None
     trace_id: Optional[str] = None
+    suggested_actions: Optional[List[str]] = None
 
 class AssistantPreferenceUpdate(BaseModel):
     report_style: Optional[str]

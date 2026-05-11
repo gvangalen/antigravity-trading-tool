@@ -2,13 +2,13 @@ import os
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response, Cookie
+from fastapi import APIRouter, Depends, HTTPException, Response, Cookie, Body
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
-from backend.schemas.auth_schema import LoginRequest, RegisterRequest, UserOut
+from backend.schemas.auth_schema import LoginRequest, RegisterRequest, RefreshRequest, UserOut
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.auth_service import AuthService
 from backend.utils.system_logger import sys_logger
@@ -100,7 +100,9 @@ async def login(
 
         return {
             "success": True,
-            "user": result["user"].dict()
+            "user": result["user"].dict(),
+            "access_token": result["access_token"],
+            "refresh_token": result["refresh_token"],
         }
 
     except ValueError as e:
@@ -120,15 +122,18 @@ async def login(
 async def refresh_token(
     response: Response, 
     refresh_token: Optional[str] = Cookie(default=None),
+    body: Optional[RefreshRequest] = Body(default=None),
     service: AuthService = Depends(get_auth_service)
 ):
-    if not refresh_token:
+    token = refresh_token or (body.refresh_token if body else None)
+
+    if not token:
         raise HTTPException(status_code=401, detail="Geen refresh token")
 
     try:
-        new_access = await service.refresh_access_token(refresh_token)
+        new_access = await service.refresh_access_token(token)
 
-        resp = JSONResponse({"success": True})
+        resp = JSONResponse({"success": True, "access_token": new_access})
         resp.set_cookie(
             "access_token",
             new_access,

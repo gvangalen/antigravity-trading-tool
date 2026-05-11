@@ -67,7 +67,8 @@ async def verify_coach_mode():
         print(f"Sending query: {query}")
         
         try:
-            response = await service.get_chat_response(user_id, query)
+            result = await service.get_chat_response(user_id, query)
+            response = result[0]
             print("\nAI COACH RESPONSE:")
             print("====================================")
             print(response)

@@ -60,7 +60,7 @@ async def test_flow():
             print(f"User Query: '{query}'")
             
             # Use non-streaming chat endpoint to inspect the full parsed structure easily
-            response_text, action, draft, state, reasoning = await service.get_chat_response(
+            response_text, action, draft, state, reasoning, suggested_actions = await service.get_chat_response(
                 user_id=user_id,
                 user_query=query,
                 context_data={"symbol": "SOL"}
@@ -70,6 +70,7 @@ async def test_flow():
             print(f"Returned State: {state}")
             print(f"Returned Action: {action}")
             print(f"Returned Draft: {draft}")
+            print(f"Returned Suggested Actions: {suggested_actions}")
             
             # Fetch and print DB state to confirm state persistence
             db_state = await state_repo.get_state(user_id)

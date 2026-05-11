@@ -76,8 +76,7 @@ async def assistant_chat(
         # Apply Rate Limiting
         chat_rate_limiter.check_rate_limit(f"user_{user_id}")
         chat_rate_limiter.check_rate_limit(f"ip_{ip_addr}")
-        
-        response, action, draft, state, reasoning = await service.get_chat_response(
+        response, action, draft, state, reasoning, suggested_actions = await service.get_chat_response(
             user_id, request.query, request.history, request.context, trace_id=trace_id
         )
         intent = service._classify_intent(request.query)
@@ -89,8 +88,17 @@ async def assistant_chat(
             state = None
         if not isinstance(reasoning, dict):
             reasoning = None
+        if not isinstance(suggested_actions, list):
+            suggested_actions = None
         return AssistantChatResponse(
-            response=response, intent=intent, action=action, draft=draft, state=state, reasoning=reasoning, trace_id=trace_id
+            response=response,
+            intent=intent,
+            action=action,
+            draft=draft,
+            state=state,
+            reasoning=reasoning,
+            suggested_actions=suggested_actions,
+            trace_id=trace_id
         )
     except HTTPException:
         raise

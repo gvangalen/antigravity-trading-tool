@@ -4,7 +4,7 @@ from typing import Dict, Any
 
 import jwt
 from jwt import PyJWTError
-from fastapi import Cookie, HTTPException, status
+from fastapi import Cookie, Header, HTTPException, status
 import bcrypt
 
 # =========================================================
@@ -73,15 +73,24 @@ def decode_token(token: str) -> Dict[str, Any]:
 # 👤 CURRENT USER VIA COOKIE
 # =========================================================
 
-async def get_current_user(access_token: str = Cookie(default=None)):
-    if not access_token:
+async def get_current_user(
+    access_token: str = Cookie(default=None),
+    authorization: str = Header(default=None),
+):
+    bearer_token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        bearer_token = authorization.split(" ", 1)[1].strip()
+
+    token = access_token or bearer_token
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing access token",
         )
 
     try:
-        payload = decode_token(access_token)
+        payload = decode_token(token)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

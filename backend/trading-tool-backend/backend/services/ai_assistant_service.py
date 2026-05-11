@@ -50,7 +50,7 @@ class AiAssistantService:
         history: Optional[List[Dict[str, Any]]] = None,
         context_data: Optional[Dict[str, str]] = None,
         trace_id: Optional[str] = None
-    ) -> tuple[str, Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    ) -> tuple[str, Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[List[str]]]:
         # Start response time tracking
         self.start_overall_time = time.perf_counter()
         import uuid
@@ -82,7 +82,7 @@ class AiAssistantService:
             
             response_text = "Ik heb de huidige setup-flow voor je geannuleerd. Je kunt me altijd vragen om iets nieuws te starten of een andere vraag stellen! 👍"
             state_reset = {"current_flow": "none", "slots": {}, "status": "none"}
-            return response_text, None, None, state_reset, None
+            return response_text, None, None, state_reset, None, ["Toon dashboard", "Start nieuwe setup"]
         
         # 1.5 Active Asset Priority Engine & Sequential Context Gathering
         explicit_symbol = None
@@ -119,7 +119,6 @@ class AiAssistantService:
 
         # Deterministic slot pre-parsing (Hybrid AI + Confirm UX)
         conv_state = await self._deterministic_pre_parse_slots(user_query, conv_state, resolved_symbol, user_id)
-
         if conv_state and conv_state.get("status") == "complete":
             # Deterministically build final draft payload in Python
             draft = self._build_deterministic_draft(conv_state)
@@ -129,8 +128,7 @@ class AiAssistantService:
             response_text = f"Perfect! Ik heb de {flow_word} voor {resolved_symbol} klaargezet. Bevestig de card hieronder om hem te activeren! 👍"
             state_reset = {"current_flow": "none", "slots": {}, "status": "none"}
             logger.info(f"🏁 [Deterministic-Completion-Interceptor] Completed flow '{conv_state.get('current_flow')}' with draft payload: {draft}")
-            return response_text, None, draft, state_reset, None
-
+            return response_text, None, draft, state_reset, None, ["Activeer setup", "Vraag over macro"]
         # Process Live Market Context
         live_context = "No live market data available in database."
         if live_data:
@@ -172,6 +170,7 @@ class AiAssistantService:
         
         # Get User Preferences
         preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+        user_name = user.first_name if (user and getattr(user, "first_name", None)) else "Handelaar"
 
         # Assemble Adaptive Intelligence Profile
         stated_exp = preferences.get("experience_level", "beginner")
@@ -194,17 +193,17 @@ class AiAssistantService:
             f"   - If both Stated Preference and Behavioral signals agree on advanced/experienced level: Speak using dense, professional, trade-oriented parameters. Skip definitions. Present metrics directly and keep explanations brief and bulleted.\n"
             f"   - If Stated Preference is 'advanced' but Behavioral signals are 'Novice' (0 setups/bots): Do not use overly basic analogies, but explain setup requirements carefully and step-by-step anyway. Use professional terms but ensure educational clarity.\n"
             f"3. CALIBRATING RISK THRESHOLDS & COACHING:\n"
-            f"   - CONSERVATIVE PROFILE: Focus on downside protection and capital preservation. Proactively warn Henk if more than 40% of total equity is concentrated in a single volatile coin or if cash is low (<20%).\n"
+            f"   - CONSERVATIVE PROFILE: Focus on downside protection and capital preservation. Proactively warn {user_name} if more than 40% of total equity is concentrated in a single volatile coin or if cash is low (<20%).\n"
             f"   - BALANCED PROFILE: Follow default risk limits (warn at >60% concentration or <10% cash) and recommend balanced asset-matching.\n"
             f"   - AGGRESSIVE PROFILE: Align with higher exposure allocations, but reinforce trading discipline. Warn only if asset concentration exceeds 80% and emphasize strict take-profit execution limits.\n"
             f"4. CASUAL PROFILE SIGNALS & CONFIDENCE PROPOSALS:\n"
-            f"   - If Henk makes a casual statement indicating a level or risk that does NOT match his active Stated Preference (e.g. says 'vol gas' while on conservative, or says 'ik snap DCA niet' while on advanced):\n"
+            f"   - If {user_name} makes a casual statement indicating a level or risk that does NOT match his active Stated Preference (e.g. says 'vol gas' while on conservative, or says 'ik snap DCA niet' while on advanced):\n"
             f"     * Adapt your current response to his statement (e.g., be supportive or trade-focused for this turn).\n"
             f"     * DO NOT mutate his permanent profile behind his back. Instead, conversationally offer a polite proposal to update his settings: e.g. 'Ik merk dat je vaker agressievere setups bespreekt. Wil je dat ik je risicoprofiel aanpas naar agressief?'"
         )
 
         # 5. Build System Prompt
-        system_role = get_role_prompt(role_key, preferences, intent=intent)
+        system_role = get_role_prompt(role_key, preferences, intent=intent, user_name=user_name)
 
         # 6. Generate Response via GATEWAY using JSON mode to allow action parameters
         prompt = (
@@ -227,7 +226,7 @@ class AiAssistantService:
 
         system_role_json = (
             system_role + 
-            "\n\nIMPORTANT: You must return a JSON object with exactly five fields:\n"
+            "\n\nIMPORTANT: You must return a JSON object with exactly six fields:\n"
             "- 'response': (string) your conversational response to the user's message in Dutch.\n"
             "- 'action': (object or null) if the user explicitly asks to add or remove a coin to/from their watchlist, "
             "or open pages, populate this object. Otherwise, set 'action' to null.\n"
@@ -236,7 +235,8 @@ class AiAssistantService:
             "- 'state': (object or null) current active conversation workflow state.\n"
             "- 'reasoning': (object or null) internal diagnostic reasoning containing: "
             "'confidence_score' (float, 0-100), 'risk_detected' (boolean), 'reasons' (list of strings), and "
-            "'coaching_level' (string, e.g. 'beginner' or 'advanced').\n\n"
+            "'coaching_level' (string, e.g. 'beginner' or 'advanced').\n"
+            "- 'suggested_actions': (array of strings or null) 2-3 dynamic suggested next actions for the user, presented as brief phrases (e.g., ['Bekijk macro analyse voor SOL', 'Start DCA setup']).\n\n"
             f"{registry_instructions}\n"
             "=== ACTION SCHEMAS ===\n"
             "The 'action' object can represent a SINGLE action or a BUNDLE of multiple actions:\n"
@@ -346,6 +346,11 @@ class AiAssistantService:
                     },
                     "required": ["confidence_score", "risk_detected", "reasons", "coaching_level"],
                     "nullable": True
+                },
+                "suggested_actions": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "nullable": True
                 }
             },
         }
@@ -366,6 +371,7 @@ class AiAssistantService:
         draft = None
         state = None
         reasoning = None
+        suggested_actions = None
 
         if response_data:
             if isinstance(response_data, dict):
@@ -374,6 +380,7 @@ class AiAssistantService:
                 draft = response_data.get("draft")
                 state = response_data.get("state")
                 reasoning = response_data.get("reasoning")
+                suggested_actions = response_data.get("suggested_actions")
             elif isinstance(response_data, str):
                 # Fallback if cached or raw string returned
                 try:
@@ -385,6 +392,7 @@ class AiAssistantService:
                         draft = parsed.get("draft")
                         state = parsed.get("state")
                         reasoning = parsed.get("reasoning")
+                        suggested_actions = parsed.get("suggested_actions")
                     else:
                         chat_text = response_data
                 except Exception:
@@ -398,6 +406,10 @@ class AiAssistantService:
             state = None
         if not isinstance(reasoning, dict):
             reasoning = None
+        if isinstance(suggested_actions, list):
+            suggested_actions = [str(act) for act in suggested_actions if act]
+        else:
+            suggested_actions = None
 
         # ABSOLUTE BACKEND STATE SUPREMACY: If the backend has an active collecting flow,
         # we completely ignore the LLM's returned state and use our deterministic, persistent backend state.
@@ -454,7 +466,7 @@ class AiAssistantService:
             f"(DB sequential gather: {self.db_duration_ms:.2f}ms)"
         )
 
-        return chat_text, action, draft, state, reasoning
+        return chat_text, action, draft, state, reasoning, suggested_actions
 
     async def get_chat_response_stream(
         self, 
@@ -633,13 +645,12 @@ class AiAssistantService:
             history_str = "\n".join(history_lines)
 
         # Build Portfolio Context
-        portfolio_context_str = self._build_portfolio_context_str(portfolio_intelligence)
-
-        # Route Agent (Select Role)
+        portfolio_context_str = self._bui        # Route Agent (Select Role)
         role_key = self._route_role(intent)
         
         # Get User Preferences
         preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+        user_name = user.first_name if (user and getattr(user, "first_name", None)) else "Handelaar"
 
         # Assemble Adaptive Intelligence Profile
         stated_exp = preferences.get("experience_level", "beginner")
@@ -662,24 +673,24 @@ class AiAssistantService:
             f"   - If both Stated Preference and Behavioral signals agree on advanced/experienced level: Speak using dense, professional, trade-oriented parameters. Skip definitions. Present metrics directly and keep explanations brief and bulleted.\n"
             f"   - If Stated Preference is 'advanced' but Behavioral signals are 'Novice' (0 setups/bots): Do not use overly basic analogies, but explain setup requirements carefully and step-by-step anyway. Use professional terms but ensure educational clarity.\n"
             f"3. CALIBRATING RISK THRESHOLDS & COACHING:\n"
-            f"   - CONSERVATIVE PROFILE: Focus on downside protection and capital preservation. Proactively warn Henk if more than 40% of total equity is concentrated in a single volatile coin or if cash is low (<20%).\n"
+            f"   - CONSERVATIVE PROFILE: Focus on downside protection and capital preservation. Proactively warn {user_name} if more than 40% of total equity is concentrated in a single volatile coin or if cash is low (<20%).\n"
             f"   - BALANCED PROFILE: Follow default risk limits (warn at >60% concentration or <10% cash) and recommend balanced asset-matching.\n"
             f"   - AGGRESSIVE PROFILE: Align with higher exposure allocations, but reinforce trading discipline. Warn only if asset concentration exceeds 80% and emphasize strict take-profit execution limits.\n"
             f"4. CASUAL PROFILE SIGNALS & CONFIDENCE PROPOSALS:\n"
-            f"   - If Henk makes a casual statement indicating a level or risk that does NOT match his active Stated Preference (e.g. says 'vol gas' while on conservative, or says 'ik snap DCA niet' while on advanced):\n"
+            f"   - If {user_name} makes a casual statement indicating a level or risk that does NOT match his active Stated Preference (e.g. says 'vol gas' while on conservative, or says 'ik snap DCA niet' while on advanced):\n"
             f"     * Adapt your current response to his statement (e.g., be supportive or trade-focused for this turn).\n"
             f"     * DO NOT mutate his permanent profile behind his back. Instead, conversationally offer a polite proposal to update his settings: e.g. 'Ik merk dat je vaker agressievere setups bespreekt. Wil je dat ik je risicoprofiel aanpas naar agressief?'"
         )
 
         # 5. Build System Prompt
-        system_role = get_role_prompt(role_key, preferences, intent=intent)
+        system_role = get_role_prompt(role_key, preferences, intent=intent, user_name=user_name)
 
         # 6. Generate Response via GATEWAY using JSON mode to allow action parameters
         prompt = (
             f"=== BOVENGESCHIKT TARGET ASSET MANDAAT (CRITICAL DIRECTIVE) ===\n"
             f"De actieve asset die hieronder wordt meegegeven is ALTIJD de primaire asset waarover je spreekt wanneer de gebruiker praat over 'deze asset', 'deze coin', 'dit gedrag' of 'hier':\n"
             f"PRIMARY TARGET ASSET: {resolved_symbol}\n"
-            f"Negeer eventuele andere assets uit de conversatiegeschiedenis tenzij de gebruiker in zijn allerlaatste bericht expliciet een andere asset bij naam noemt.\n\n"
+            f"Negeer eventuele andere assets uit de conversatiegeschiedenis tenzij de gebruiker in his allerlaatste bericht expliciet een andere asset bij naam noemt.\n\n"
             f"USER QUERY: {user_query}\n\n"
             f"RECENT CONVERSATION HISTORY:\n{history_str}\n\n"
             f"CONVERSATION STATE ENGINE:\n{conv_state_str}\n\n"
@@ -695,7 +706,7 @@ class AiAssistantService:
 
         system_role_json = (
             system_role + 
-            "\n\nIMPORTANT: You must return a JSON object with exactly five fields:\n"
+            "\n\nIMPORTANT: You must return a JSON object with exactly six fields:\n"
             "- 'response': (string) your conversational response to the user's message in Dutch.\n"
             "- 'action': (object or null) if the user explicitly asks to add or remove a coin to/from their watchlist, "
             "or open pages, populate this object. Otherwise, set 'action' to null.\n"
@@ -704,19 +715,14 @@ class AiAssistantService:
             "- 'state': (object or null) current active conversation workflow state.\n"
             "- 'reasoning': (object or null) internal diagnostic reasoning containing: "
             "'confidence_score' (float, 0-100), 'risk_detected' (boolean), 'reasons' (list of strings), and "
-            "'coaching_level' (string, e.g. 'beginner' or 'advanced').\n\n"
+            "'coaching_level' (string, e.g. 'beginner' or 'advanced').\n"
+            "- 'suggested_actions': (array of strings or null) 2-3 dynamic suggested next actions for the user, presented as brief phrases (e.g., ['Bekijk macro analyse voor SOL', 'Start DCA setup']).\n\n"
             f"{registry_instructions}\n"
             "=== ACTION SCHEMAS ===\n"
             "The 'action' object can represent a SINGLE action or a BUNDLE of multiple actions:\n"
             "1. For SINGLE actions, 'type' must be one of ['add_to_watchlist', 'remove_from_watchlist', 'open_setup_page', 'generate_strategy', 'open_bot_draft', 'navigate_to_page'], and 'symbol' and 'params' should be populated.\n"
             "2. For 'navigate_to_page', you must specify 'params' with a 'path' key. ALLOWED_PATHS (strict whitelist): ['/dashboard', '/macro', '/technical', '/bot', '/strategy', '/setup', '/report', '/profile']. Any path outside this whitelist is strictly rejected.\n"
             "3. For MULTIPLE actions, 'type' must be 'bundle'. Then, populate the 'actions' array.\n\n"
-            "=== SUGGESTED NEXT ACTIONS ===\n"
-            "Always end your conversational response with 2-3 brief suggested action options under the Dutch header 'Volgende stappen:' as a bullet list, e.g.:\n"
-            "- Bekijk macro analyse voor SOL\n"
-            "- Start DCA bot setup\n"
-            "- Open bot configuratie\n"
-            "Make them highly relevant, concise, and clickable for the user!\n\n"
             "=== DRAFT SCHEMAS ===\n"
             "The 'draft' object represents a prefilled draft configured for the user to review. It must contain:\n"
             "- 'type': (string) 'setup', 'strategy', or 'bot'\n"
@@ -774,6 +780,7 @@ class AiAssistantService:
         draft = None
         state = None
         reasoning = None
+        suggested_actions = None
 
         if envelope:
             chat_text = envelope.get("response", chat_text)
@@ -781,12 +788,17 @@ class AiAssistantService:
             draft = envelope.get("draft")
             state = envelope.get("state")
             reasoning = envelope.get("reasoning")
+            suggested_actions = envelope.get("suggested_actions")
 
         # Ensure types are strict and validate actions
         action = self._validate_and_sanitize_action(action)
         if not isinstance(draft, dict): draft = None
         if not isinstance(state, dict): state = None
         if not isinstance(reasoning, dict): reasoning = None
+        if isinstance(suggested_actions, list):
+            suggested_actions = [str(act) for act in suggested_actions if act]
+        else:
+            suggested_actions = None
 
         # ABSOLUTE BACKEND STATE SUPREMACY: If the backend has an active collecting flow,
         # we completely ignore the LLM's returned state and use our deterministic, persistent backend state.
@@ -897,7 +909,8 @@ class AiAssistantService:
                 "action": action,
                 "draft": draft,
                 "state": state,
-                "reasoning": reasoning
+                "reasoning": reasoning,
+                "suggested_actions": suggested_actions
             }
         }
 
@@ -1138,9 +1151,31 @@ class AiAssistantService:
 
         # Name (for setup_creation or bot_creation)
         if "name" not in slots or slots.get("name") is None or slots.get("name") == "":
+            # 1. Check for explicit name pattern (e.g., "genaamd SOL Power", "naam: Power")
+            explicit_name = None
+            import re
+            name_match = re.search(r'(?:genaamd|naam:|heet|called)\s+([a-zA-Z0-9\s_-]{2,30})', user_query, re.IGNORECASE)
+            if name_match:
+                explicit_name = name_match.group(1).strip()
+            
+            # 2. Check if we should greedily capture the query as the name
+            should_greedy_capture = False
             is_trigger = any(w in q_lower for w in ["maak setup", "setup voor", "maak bot", "start bot", "annuleer", "cancel", "edit", "approve", "akkoord"])
             is_slot_keyword = any(w in q_lower for w in ["trade", "dca", "dagelijks", "wekelijks", "maandelijks", "extreme fear", "bull market", "bear market", "neutraal"])
-            if not is_trigger and not is_slot_keyword and len(user_query.strip()) > 2 and len(user_query.strip()) < 40:
+            
+            if not is_trigger and not is_slot_keyword and 2 < len(user_query.strip()) < 40:
+                if flow_name == "setup_creation":
+                    # Only capture as name if we already have setup_type and market_condition!
+                    if "setup_type" in slots and "market_condition" in slots:
+                        should_greedy_capture = True
+                elif flow_name == "bot_creation":
+                    # For bot creation, name is the first question. Capture it!
+                    should_greedy_capture = True
+
+            if explicit_name:
+                slots["name"] = explicit_name
+                updated = True
+            elif should_greedy_capture:
                 slots["name"] = user_query.strip()
                 updated = True
 
