@@ -27,9 +27,16 @@ class InMemoryRateLimiter:
 # Limit user queries to max 6 queries or streams per minute (IP and User ID bounded)
 chat_rate_limiter = InMemoryRateLimiter(requests_limit=6, window_seconds=60)
 
+from typing import List
+from sqlalchemy import select
 from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
-from backend.schemas.assistant_schema import AssistantChatRequest, AssistantChatResponse, AssistantPreferences, AssistantPreferenceUpdate, AssistantInsightResponse
+from backend.infrastructure.models import ChatSession, ChatMessage
+from backend.schemas.assistant_schema import (
+    AssistantChatRequest, AssistantChatResponse, AssistantPreferences, 
+    AssistantPreferenceUpdate, AssistantInsightResponse, ChatSessionResponse, 
+    ChatMessageResponse, ChatSessionDetailResponse
+)
 from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.ai_gateway import AiGateway
 from backend.infrastructure.repositories.score_repository import ScoreRepository
@@ -76,8 +83,8 @@ async def assistant_chat(
         # Apply Rate Limiting
         chat_rate_limiter.check_rate_limit(f"user_{user_id}")
         chat_rate_limiter.check_rate_limit(f"ip_{ip_addr}")
-        response, action, draft, state, reasoning, suggested_actions = await service.get_chat_response(
-            user_id, request.query, request.history, request.context, trace_id=trace_id
+        response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
+            user_id, request.query, request.history, request.context, trace_id=trace_id, session_id=request.session_id
         )
         intent = service._classify_intent(request.query)
         if not isinstance(action, dict):
@@ -98,13 +105,89 @@ async def assistant_chat(
             state=state,
             reasoning=reasoning,
             suggested_actions=suggested_actions,
-            trace_id=trace_id
+            trace_id=trace_id,
+            session_id=actual_session_id
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"❌ AI Assistant Chat Error: {e} | Trace: {trace_id}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij AI Assistant")
+
+
+# =====================================================
+# Chat Sessions REST endpoints
+# =====================================================
+
+@router.get("/assistant/sessions", response_model=List[ChatSessionResponse])
+async def list_chat_sessions(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        user_id = current_user["id"]
+        # Fetch sessions ordered by updated_at desc
+        stmt = select(ChatSession).where(ChatSession.user_id == user_id).order_by(ChatSession.updated_at.desc())
+        res = await db.execute(stmt)
+        sessions = res.scalars().all()
+        return sessions
+    except Exception as e:
+        logger.exception("❌ Error opvragen chatsessies")
+        raise HTTPException(status_code=500, detail="Fout bij ophalen chatsessies")
+
+
+@router.get("/assistant/sessions/{session_id}", response_model=ChatSessionDetailResponse)
+async def get_chat_session_detail(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        user_id = current_user["id"]
+        # Fetch session
+        stmt = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+        res = await db.execute(stmt)
+        session = res.scalars().first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Chatsessie niet gevonden")
+        
+        # Fetch messages ordered chronologically
+        msg_stmt = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc())
+        msg_res = await db.execute(msg_stmt)
+        messages = msg_res.scalars().all()
+        
+        return ChatSessionDetailResponse(session=session, messages=messages)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Error opvragen chatsessie {session_id}")
+        raise HTTPException(status_code=500, detail="Fout bij ophalen chatsessie details")
+
+
+@router.delete("/assistant/sessions/{session_id}")
+async def delete_chat_session(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        user_id = current_user["id"]
+        # Verify ownership
+        stmt = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+        res = await db.execute(stmt)
+        session = res.scalars().first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Chatsessie niet gevonden")
+        
+        # Delete session (will cascade delete messages due to Foreign Key ON DELETE CASCADE)
+        await db.delete(session)
+        await db.commit()
+        return {"status": "ok", "message": "Chathistorie succesvol gewist"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ Error verwijderen chatsessie {session_id}")
+        raise HTTPException(status_code=500, detail="Fout bij verwijderen chatsessie")
 
 
 from fastapi.responses import StreamingResponse

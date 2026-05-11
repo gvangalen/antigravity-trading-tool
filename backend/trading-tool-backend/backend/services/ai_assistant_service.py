@@ -1,9 +1,11 @@
 import logging
 import time
+import uuid
+import asyncio
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional, AsyncGenerator
-from sqlalchemy import select
-from backend.infrastructure.models import AiCategoryInsight
+from sqlalchemy import select, update
+from backend.infrastructure.models import AiCategoryInsight, ChatSession, ChatMessage
 
 from backend.ai_agents.ai_assistant_prompts import get_role_prompt
 from backend.services.ai_gateway import AiGateway
@@ -43,19 +45,95 @@ class AiAssistantService:
         self.ai_gateway = ai_gateway
         self.context_repo = context_repo
 
+    def generate_clean_title(self, query: str) -> str:
+        q_lower = query.lower()
+        if "dca" in q_lower:
+            asset = "BTC"
+            if "eth" in q_lower:
+                asset = "ETH"
+            elif "sol" in q_lower:
+                asset = "SOL"
+            return f"DCA Setup {asset}"
+        elif "bot" in q_lower or "start" in q_lower:
+            return "Bot Activeren/Aanpassen"
+        elif "macro" in q_lower or "score" in q_lower:
+            return "Markt & Macro Analyse"
+        elif "rsi" in q_lower or "macd" in q_lower or "technic" in q_lower:
+            return "Technische Indicatoren"
+        elif "sol" in q_lower:
+            return "Solana Analyse"
+        elif "eth" in q_lower:
+            return "Ethereum Vraag"
+        words = query.strip().split()
+        if words:
+            import re
+            clean_words = []
+            for w in words[:4]:
+                cw = re.sub(r'[^\w]', '', w)
+                if cw:
+                    clean_words.append(cw)
+            if clean_words:
+                title = " ".join(clean_words).capitalize()
+                if len(words) > 4:
+                    title += "..."
+                return title
+        return "Nieuw gesprek"
+
     async def get_chat_response(
         self, 
         user_id: int, 
         user_query: str, 
         history: Optional[List[Dict[str, Any]]] = None,
         context_data: Optional[Dict[str, str]] = None,
-        trace_id: Optional[str] = None
-    ) -> tuple[str, Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[List[str]]]:
+        trace_id: Optional[str] = None,
+        session_id: Optional[str] = None
+    ) -> tuple[str, Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[List[str]], Optional[str]]:
         # Start response time tracking
         self.start_overall_time = time.perf_counter()
-        import uuid
         self.trace_id = trace_id or f"trdm-trace-{uuid.uuid4().hex[:8]}-{hex(int(time.time()))[2:]}"
         
+        # Resolve or create persistent Chat Session if requested
+        actual_session_id = None
+        if session_id:
+            if session_id == "new":
+                actual_session_id = str(uuid.uuid4())
+                new_session = ChatSession(
+                    id=actual_session_id,
+                    user_id=user_id,
+                    title=self.generate_clean_title(user_query),
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                self.state_repo.session.add(new_session)
+                await self.state_repo.session.flush()
+            else:
+                actual_session_id = session_id
+                session_stmt = select(ChatSession).where(ChatSession.id == actual_session_id, ChatSession.user_id == user_id)
+                session_res = await self.state_repo.session.execute(session_stmt)
+                existing_session = session_res.scalars().first()
+                if not existing_session:
+                    actual_session_id = str(uuid.uuid4())
+                    new_session = ChatSession(
+                        id=actual_session_id,
+                        user_id=user_id,
+                        title=self.generate_clean_title(user_query),
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
+                    )
+                    self.state_repo.session.add(new_session)
+                    await self.state_repo.session.flush()
+                else:
+                    if not history:
+                        history = []
+                        msg_stmt = select(ChatMessage).where(ChatMessage.session_id == actual_session_id).order_by(ChatMessage.created_at.asc())
+                        msg_res = await self.state_repo.session.execute(msg_stmt)
+                        db_messages = msg_res.scalars().all()
+                        for m in db_messages:
+                            history.append({
+                                "role": m.role,
+                                "text": m.content
+                            })
+
         # 1. Classify Intent (Rule-based V1)
         intent = self._classify_intent(user_query)
         logger.info(f"🧠 Assistant Chat Intent: {intent} for query: {user_query}")
@@ -82,7 +160,15 @@ class AiAssistantService:
             
             response_text = "Ik heb de huidige setup-flow voor je geannuleerd. Je kunt me altijd vragen om iets nieuws te starten of een andere vraag stellen! 👍"
             state_reset = {"current_flow": "none", "slots": {}, "status": "none"}
-            return response_text, None, None, state_reset, None, ["Toon dashboard", "Start nieuwe setup"]
+            
+            if actual_session_id:
+                user_msg = ChatMessage(session_id=actual_session_id, role="user", content=user_query, created_at=datetime.utcnow(), intent=intent)
+                assistant_msg = ChatMessage(session_id=actual_session_id, role="assistant", content=response_text, created_at=datetime.utcnow(), intent=intent)
+                self.state_repo.session.add(user_msg)
+                self.state_repo.session.add(assistant_msg)
+                await self.state_repo.session.commit()
+
+            return response_text, None, None, state_reset, None, ["Toon dashboard", "Start nieuwe setup"], actual_session_id
         
         # 1.5 Active Asset Priority Engine & Sequential Context Gathering
         explicit_symbol = None
@@ -116,7 +202,7 @@ class AiAssistantService:
         
         self.db_duration_ms = (time.perf_counter() - start_db) * 1000
         logger.info(f"⚡ [Ai-Assistant-Service] SEQUENTIAL DATABASE CONTEXT GATHER took {self.db_duration_ms:.2f}ms (Resolved Asset: {resolved_symbol})")
-
+ 
         # Deterministic slot pre-parsing (Hybrid AI + Confirm UX)
         conv_state = await self._deterministic_pre_parse_slots(user_query, conv_state, resolved_symbol, user_id)
         if conv_state and conv_state.get("status") == "complete":
@@ -128,7 +214,15 @@ class AiAssistantService:
             response_text = f"Perfect! Ik heb de {flow_word} voor {resolved_symbol} klaargezet. Bevestig de card hieronder om hem te activeren! 👍"
             state_reset = {"current_flow": "none", "slots": {}, "status": "none"}
             logger.info(f"🏁 [Deterministic-Completion-Interceptor] Completed flow '{conv_state.get('current_flow')}' with draft payload: {draft}")
-            return response_text, None, draft, state_reset, None, ["Activeer setup", "Vraag over macro"]
+            
+            if actual_session_id:
+                user_msg = ChatMessage(session_id=actual_session_id, role="user", content=user_query, created_at=datetime.utcnow(), intent=intent)
+                assistant_msg = ChatMessage(session_id=actual_session_id, role="assistant", content=response_text, created_at=datetime.utcnow(), intent=intent, actions=draft)
+                self.state_repo.session.add(user_msg)
+                self.state_repo.session.add(assistant_msg)
+                await self.state_repo.session.commit()
+
+            return response_text, None, draft, state_reset, None, ["Activeer setup", "Vraag over macro"], actual_session_id
         # Process Live Market Context
         live_context = "No live market data available in database."
         if live_data:
@@ -456,17 +550,32 @@ class AiAssistantService:
         else:
             await self.state_repo.clear_state(user_id)
 
-        # 7. Selective Preference Update (Optional/Explicit feedback)
-        await self._handle_implicit_feedback(user_id, user_query)
+        # Persist conversation message exchange to DB if session tracking is enabled
+        if actual_session_id:
+            user_msg = ChatMessage(
+                session_id=actual_session_id,
+                role="user",
+                content=user_query,
+                created_at=datetime.utcnow(),
+                intent=intent
+            )
+            assistant_msg = ChatMessage(
+                session_id=actual_session_id,
+                role="assistant",
+                content=chat_text,
+                created_at=datetime.utcnow(),
+                intent=intent,
+                actions=action
+            )
+            self.state_repo.session.add(user_msg)
+            self.state_repo.session.add(assistant_msg)
+            
+            # Update session updated_at timestamp to bubble to top of active list
+            session_stmt = update(ChatSession).where(ChatSession.id == actual_session_id).values(updated_at=datetime.utcnow())
+            await self.state_repo.session.execute(session_stmt)
+            await self.state_repo.session.commit()
 
-        # Log total duration
-        overall_duration_ms = (time.perf_counter() - self.start_overall_time) * 1000
-        logger.info(
-            f"⏱️ [Ai-Assistant-Service] TOTAL get_chat_response execution took {overall_duration_ms:.2f}ms "
-            f"(DB sequential gather: {self.db_duration_ms:.2f}ms)"
-        )
-
-        return chat_text, action, draft, state, reasoning, suggested_actions
+        return chat_text, action, draft, state, reasoning, suggested_actions, actual_session_id
 
     async def get_chat_response_stream(
         self, 
@@ -1411,8 +1520,13 @@ class AiAssistantService:
                     "conclusion": "Marktdata wordt verwerkt.",
                     "action": "Monitor de huidige trend op de grafiek.",
                     "why": "Scan loopt nog op live data inputs."
-                }
+                },
+                "suggested_actions": ["DCA setup maken", "Mijn bots bekijken", "Risico aanpassen"]
             }
+        
+        # Enforce valid suggested_actions list in parsed result
+        if "suggested_actions" not in insight or not isinstance(insight["suggested_actions"], list):
+            insight["suggested_actions"] = ["Pas bot aan", "DCA setup maken", "Risico aanpassen"]
         
         return insight
 

@@ -1,11 +1,13 @@
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
+from datetime import datetime
 
 class AssistantChatRequest(BaseModel):
     query: str
     context: Optional[Dict[str, str]] = None
     timeframe: Optional[str] = None
     history: Optional[List[Dict[str, Any]]] = None
+    session_id: Optional[str] = None  # Optional session ID for persistent chats
 
 class AssistantReasoning(BaseModel):
     confidence_score: float
@@ -22,6 +24,7 @@ class AssistantChatResponse(BaseModel):
     reasoning: Optional[AssistantReasoning] = None
     trace_id: Optional[str] = None
     suggested_actions: Optional[List[str]] = None
+    session_id: Optional[str] = None  # Return session ID to the client
 
 class AssistantPreferenceUpdate(BaseModel):
     report_style: Optional[str]
@@ -39,3 +42,34 @@ class AssistantInsightResponse(BaseModel):
     bot_insight: Optional[Dict[str, str]] = None
     market_insight: Optional[Dict[str, str]] = None
     context_detected: Optional[Dict[str, str]] = None
+    suggested_actions: Optional[List[str]] = None  # Server-Driven proactive action chips
+
+# =====================================================
+# Chat Session Management schemas
+# =====================================================
+
+class ChatSessionResponse(BaseModel):
+    id: str
+    user_id: int
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
+
+class ChatMessageResponse(BaseModel):
+    id: int
+    role: str
+    content: str
+    created_at: datetime
+    intent: Optional[str] = None
+    actions: Optional[Dict[str, Any]] = None
+
+    class Config:
+        orm_mode = True
+
+class ChatSessionDetailResponse(BaseModel):
+    session: ChatSessionResponse
+    messages: List[ChatMessageResponse]
+

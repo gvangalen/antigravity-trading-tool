@@ -186,8 +186,42 @@ async def database_migrations():
             await session.execute(text("""
                 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_completion_status ON ai_usage_logs(completion_status);
             """))
+
+            # Safely create chat_sessions table if it doesn't exist
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS chat_sessions (
+                    id VARCHAR PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    title VARCHAR NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """))
+            # Safely create chat_messages table if it doesn't exist
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS chat_messages (
+                    id SERIAL PRIMARY KEY,
+                    session_id VARCHAR NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+                    role VARCHAR NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    intent VARCHAR,
+                    actions JSONB DEFAULT '{}'::jsonb
+                );
+            """))
+            # Safely create indexes on chat tables for query speed
+            await session.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON chat_sessions(user_id);
+            """))
+            await session.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_chat_sessions_updated_at ON chat_sessions(updated_at DESC);
+            """))
+            await session.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id);
+            """))
+
             await session.commit()
-            logger.info("✅ Database schema migration: global_market_insights.avg_score, conversation_state, ai_category_insights.symbol, ai_usage_logs observability columns, and performance indexes checked/added.")
+            logger.info("✅ Database schema migration: global_market_insights.avg_score, conversation_state, ai_category_insights.symbol, ai_usage_logs, chat_sessions, and chat_messages tables/indexes checked/added.")
         except Exception as e:
             logger.error(f"❌ Database schema migration failed: {e}")
 
