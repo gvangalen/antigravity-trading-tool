@@ -355,3 +355,13 @@ class ConversationState(Base):
     asset = Column(String, nullable=True) # e.g. 'SOL', 'BTC'
     slots = Column(JSON, default=dict) # JSON dictionary of collected fields
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class MobilePushToken(Base):
+    __tablename__ = 'mobile_push_tokens'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    push_token = Column(String, nullable=False, unique=True)  # ExponentPushToken[xxxx]
+    device_name = Column(String, nullable=True)                # e.g., "iPhone 15"
+    created_at = Column(DateTime, default=datetime.utcnow)
