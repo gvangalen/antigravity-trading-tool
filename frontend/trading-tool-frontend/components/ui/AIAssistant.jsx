@@ -14,6 +14,9 @@ import { createStrategy, fetchStrategies } from "@/lib/api/strategy";
 import { createBotConfig } from "@/lib/api/botApi";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
+import SetupForm from "@/components/setup/SetupForm";
+import StrategyForm from "@/components/strategy/StrategyForm";
+import AddBotForm from "@/components/bot/AddBotForm";
 
 export default function AIAssistant({ isOpen, setIsOpen }) {
   const pathname = usePathname();
@@ -350,7 +353,6 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   const handleEditDraft = async (draft, onSuccess) => {
     if (draft.type === "setup") {
       try {
-        const SetupForm = (await import("@/components/setup/SetupForm")).default;
         openConfirm({
           title: `Bewerk Setup Concept`,
           tone: "primary",
@@ -377,7 +379,6 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       }
     } else if (draft.type === "strategy") {
       try {
-        const StrategyForm = (await import("@/components/strategy/StrategyForm")).default;
         const setupsList = await fetchSetups();
         openConfirm({
           title: `Bewerk Strategie Concept`,
@@ -417,7 +418,6 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       }
     } else if (draft.type === "bot") {
       try {
-        const AddBotForm = (await import("@/components/bot/AddBotForm")).default;
         const stratList = await fetchStrategies();
         let currentFormVal = {};
         openConfirm({
