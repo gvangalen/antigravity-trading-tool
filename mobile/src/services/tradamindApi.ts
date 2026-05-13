@@ -152,8 +152,8 @@ export const intelligenceApi = {
     return apiClient.get<MasterScoreResponse>('/api/ai/master_score', { symbol });
   },
 
-  activeSetups() {
-    return apiClient.get<SetupResponse>('/api/setups/active');
+  activeSetups(symbol?: string) {
+    return apiClient.get<SetupResponse>('/api/setups/active', { symbol });
   },
 
   topSetups() {
@@ -170,6 +170,14 @@ export const intelligenceApi = {
 
   botToday(symbol: string) {
     return apiClient.get<BotResponse>('/api/bot/today', { symbol });
+  },
+
+  skipBotToday(payload: { bot_id: number; report_date?: string | null }) {
+    return apiClient.post<BotResponse>('/api/bot/skip', payload);
+  },
+
+  markBotExecuted(payload: { bot_id: number; decision_id: number }) {
+    return apiClient.post<BotResponse>('/api/bot/mark_executed', payload);
   },
 
   botConfigs() {

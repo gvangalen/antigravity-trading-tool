@@ -69,36 +69,4 @@ export const fetchStrategyReflections = async () => {
   return res?.reflections ?? [];
 };
 
-//
-// ============================
-// 🎯 ACTIEVE STRATEGIE (VANDAAG)
-// ============================
-//
 
-// Geeft terug:
-// {
-//   active: true/false,
-//   entry,
-//   targets,
-//   stop_loss,
-//   confidence_score,
-//   adjustment_reason,
-//   changes,
-//   market_context,
-//   setup_name,
-//   symbol,
-//   timeframe
-// }
-
-export const fetchActiveStrategyToday = async () => {
-  const res = await fetchAuth(`/api/strategy/active/today`, {
-    method: "GET",
-  });
-
-  // Geen actieve strategie = card kan "geen signaal vandaag" tonen
-  if (!res || res.active === false) {
-    return null;
-  }
-
-  return res;
-};
