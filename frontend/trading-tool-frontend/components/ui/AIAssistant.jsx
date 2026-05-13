@@ -187,7 +187,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     }
   }, [isOpen, pathname, searchParams, globalSymbol]);
 
-  const loadInsight = async () => {
+  async function loadInsight() {
     setInsightLoading(true);
     try {
       const res = await fetchAssistantInsight(context);
@@ -198,9 +198,9 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     } finally {
       setInsightLoading(false);
     }
-  };
+  }
 
-  const handleActionClick = async (action) => {
+  async function handleActionClick(action) {
     if (!action) return;
     const { type, symbol, params } = action;
 
@@ -238,9 +238,9 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     } catch (err) {
       console.error("Action execution failed", err);
     }
-  };
+  }
 
-  const handleChat = async (directQuery, isSilent = false) => {
+  async function handleChat(directQuery, isSilent = false) {
     const activeQuery = directQuery !== undefined ? directQuery : query;
     if (!activeQuery.trim()) return;
 
