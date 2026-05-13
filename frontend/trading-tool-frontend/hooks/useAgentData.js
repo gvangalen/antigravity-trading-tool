@@ -18,26 +18,6 @@ import {
 
 import { fetchActiveStrategyToday } from "@/lib/api/strategy";
 
-/* ======================================================
-   🧠 INSIGHTS + REFLECTIES (BESTAAND)
-   → Wordt gebruikt door AgentInsightPanel
-====================================================== */
-
-const insightMap = {
-  macro: fetchMacroInsight,
-  market: fetchMarketInsight,
-  technical: fetchTechnicalInsight,
-  setup: fetchSetupInsight,
-  strategy: fetchStrategyInsight,
-};
-
-const reflectionMap = {
-  macro: fetchMacroReflections,
-  market: fetchMarketReflections,
-  technical: fetchTechnicalReflections,
-  setup: fetchSetupReflections,
-  strategy: fetchStrategyReflections,
-};
 export function useAgentData(category) {
   const [insight, setInsight] = useState(null);
   const [reflections, setReflections] = useState([]);
@@ -49,6 +29,22 @@ export function useAgentData(category) {
     if (!category || !isAuthenticated) return;
 
     console.log(`🧠 [useAgentData] load voor categorie: ${category}`);
+
+    const insightMap = {
+      macro: fetchMacroInsight,
+      market: fetchMarketInsight,
+      technical: fetchTechnicalInsight,
+      setup: fetchSetupInsight,
+      strategy: fetchStrategyInsight,
+    };
+
+    const reflectionMap = {
+      macro: fetchMacroReflections,
+      market: fetchMarketReflections,
+      technical: fetchTechnicalReflections,
+      setup: fetchSetupReflections,
+      strategy: fetchStrategyReflections,
+    };
 
     const fetchInsightFn = insightMap[category];
     const fetchReflectionsFn = reflectionMap[category];
