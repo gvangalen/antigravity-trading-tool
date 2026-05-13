@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { fetchLastSetup, fetchActiveSetup } from "@/lib/api/setups";
+import { fetchAuth } from "@/lib/api/auth";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 type SetupContextType = {
@@ -30,11 +30,13 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const active = await fetchActiveSetup();
+        const resActive = await fetchAuth('/api/setups/active', { method: 'GET' }).catch(() => null);
+        const active = resActive?.active ?? null;
         if (active) {
           setActiveSetup(active);
         } else {
-          const last = await fetchLastSetup();
+          const resLast = await fetchAuth('/api/setups/last', { method: 'GET' }).catch(() => null);
+          const last = resLast?.setup ?? null;
           setActiveSetup(last || null);
         }
       } catch (err) {
