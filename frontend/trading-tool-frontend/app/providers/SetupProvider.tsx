@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { fetchLastSetup } from "@/lib/api/setups";
+import { fetchLastSetup, fetchActiveSetup } from "@/lib/api/setups";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 type SetupContextType = {
@@ -30,7 +30,6 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const { fetchActiveSetup } = await import("@/lib/api/setups");
         const active = await fetchActiveSetup();
         if (active) {
           setActiveSetup(active);

@@ -3,6 +3,7 @@
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { ModalProvider } from "@/components/modal/ModalProvider";
 import { SetupProvider } from "@/app/providers/SetupProvider";
+import { ActiveBotProvider } from "@/app/providers/ActiveBotProvider";
 import { Toaster } from "react-hot-toast";
 
 import { I18nProvider } from "./I18nProvider";
@@ -15,8 +16,9 @@ export default function AppProviders({ children }) {
       <I18nProvider>
         <ModalProvider>
           <AssetProvider>
-            <SetupProvider>
-              <Toaster 
+            <ActiveBotProvider>
+              <SetupProvider>
+                <Toaster 
             position="bottom-center"
             toastOptions={{
               duration: 3000,
@@ -48,6 +50,7 @@ export default function AppProviders({ children }) {
           />
           {children}
             </SetupProvider>
+            </ActiveBotProvider>
           </AssetProvider>
         </ModalProvider>
       </I18nProvider>
