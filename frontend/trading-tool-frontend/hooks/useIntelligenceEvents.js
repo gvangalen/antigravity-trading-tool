@@ -15,7 +15,7 @@ export default function useIntelligenceEvents() {
     if (!silent) setLoading(true);
     
     try {
-      const data = await apiGet("/assistant/events");
+      const data = await apiGet("/api/assistant/events");
       setEvents(data || []);
       setError(null);
     } catch (err) {
@@ -32,7 +32,7 @@ export default function useIntelligenceEvents() {
     setEvents((prev) => prev.filter((ev) => ev.id !== eventId));
     
     try {
-      await apiPost(`/assistant/events/${eventId}/archive`);
+      await apiPost(`/api/assistant/events/${eventId}/archive`);
     } catch (err) {
       console.error(`❌ Failed to archive event ${eventId}:`, err);
       // Re-fetch in case of failure to maintain synchronization
