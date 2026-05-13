@@ -177,6 +177,24 @@ class ReportService:
             else:
                 return {"_status": "pending"}
                 
+        if table_name == "daily_reports":
+            import json
+            from backend.infrastructure.repositories.score_repository import ScoreRepository
+            score_repo = ScoreRepository(self.repository.db)
+            target_symbol = symbol or "BTC"
+            master = await score_repo.get_master_score(user_id, symbol=target_symbol)
+            if master and master.top_signals:
+                meta = master.top_signals
+                if isinstance(meta, str):
+                    try: meta = json.loads(meta)
+                    except: meta = {}
+                domains = meta.get("domains", {})
+                if domains:
+                    if "macro" in domains: row["macro_score"] = domains["macro"].get("score", row.get("macro_score"))
+                    if "technical" in domains: row["technical_score"] = domains["technical"].get("score", row.get("technical_score"))
+                    if "market" in domains: row["market_score"] = domains["market"].get("score", row.get("market_score"))
+                    if "setup" in domains: row["setup_score"] = domains["setup"].get("score", row.get("setup_score"))
+
         # Format for mobile if requested
         if format_type == "mobile":
             return self.format_report_for_mobile(row)
@@ -190,6 +208,23 @@ class ReportService:
         row = await self.repository.get_report_by_date(user_id, table_name, parsed_date)
         if not row:
             raise ValueError(f"Report niet gevonden voor {date_str}")
+
+        if table_name == "daily_reports":
+            import json
+            from backend.infrastructure.repositories.score_repository import ScoreRepository
+            score_repo = ScoreRepository(self.repository.db)
+            master = await score_repo.get_master_score(user_id, symbol="BTC")
+            if master and master.top_signals:
+                meta = master.top_signals
+                if isinstance(meta, str):
+                    try: meta = json.loads(meta)
+                    except: meta = {}
+                domains = meta.get("domains", {})
+                if domains:
+                    if "macro" in domains: row["macro_score"] = domains["macro"].get("score", row.get("macro_score"))
+                    if "technical" in domains: row["technical_score"] = domains["technical"].get("score", row.get("technical_score"))
+                    if "market" in domains: row["market_score"] = domains["market"].get("score", row.get("market_score"))
+                    if "setup" in domains: row["setup_score"] = domains["setup"].get("score", row.get("setup_score"))
 
         # Format for mobile if requested
         if format_type == "mobile":

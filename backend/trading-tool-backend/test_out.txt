@@ -1,0 +1,275 @@
+INFO:TEST_MOBILE_HARDENING:🎬 Starting FINN Mobile Live Operator & Push Hardening Tests...
+INFO:TEST_MOBILE_HARDENING:👤 Using test user: id=31, email=clasinavgalen@gmail.com
+INFO:TEST_MOBILE_HARDENING:
+🧪 [TEST 1] Verifying Mobile Overview Event Payload Enrichment...
+INFO:backend.services.dashboard_service:🔄 [MobileOverview] Cache MISS/Bypass for user_id=31. Executing hardened composition...
+INFO:backend.utils.openai_client:🤖 OpenAI Client geïnitialiseerd (Model: gpt-4o-mini)
+INFO:faiss.loader:Loading faiss.
+INFO:faiss.loader:Successfully loaded faiss.
+INFO:backend.infrastructure.vector_store:📂 Vector index geladen (70 items)
+ERROR:backend.services.dashboard_service:❌ [MobileOverview] P2 Error: bot_portfolios_task failed: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.UndefinedColumnError'>: column "base_currency" does not exist
+[SQL: 
+            SELECT
+              id, name, is_active, is_live, mode, COALESCE(risk_profile,'balanced') as risk_profile,
+              COALESCE(budget_total_eur,0) as budget_total_eur, COALESCE(budget_daily_limit_eur,0) as budget_daily_limit_eur,
+              COALESCE(budget_min_order_eur,0) as budget_min_order_eur, COALESCE(budget_max_order_eur,0) as budget_max_order_eur,
+              COALESCE(base_currency, 'EUR') as base_currency
+            FROM bot_configs
+            WHERE user_id=$1
+            ORDER BY id ASC
+        ]
+[parameters: (31,)]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+NoneType: None
+ERROR:backend.services.dashboard_service:❌ [MobileOverview] P3 Error: ai_insight_task failed: (sqlalchemy.dialects.postgresql.asyncpg.Error) <class 'asyncpg.exceptions.InFailedSQLTransactionError'>: current transaction is aborted, commands ignored until end of transaction block
+[SQL: SELECT ai_category_insights.id, ai_category_insights.user_id, ai_category_insights.category, ai_category_insights.date, ai_category_insights.avg_score, ai_category_insights.trend, ai_category_insights.bias, ai_category_insights.risk, ai_category_insights.summary, ai_category_insights.top_signals, ai_category_insights.symbol 
+FROM ai_category_insights 
+WHERE ai_category_insights.user_id = $1::INTEGER AND ai_category_insights.category = $2::VARCHAR ORDER BY ai_category_insights.date DESC 
+ LIMIT $3::INTEGER]
+[parameters: (31, 'macro', 1)]
+(Background on this error at: https://sqlalche.me/e/20/dbapi)
+NoneType: None
+ERROR:backend.services.dashboard_service:❌ [MobileOverview] P4 Error: intel_task failed: (sqlalchemy.dialects.postgresql.asyncpg.Error) <class 'asyncpg.exceptions.InFailedSQLTransactionError'>: current transaction is aborted, commands ignored until end of transaction block
+[SQL: 
+            SELECT 
+                c.id AS bot_id, 
+                c.name, 
+                COALESCE(p.symbol, st.symbol, 'BTC') AS symbol, 
+                COALESCE(p.cash_eur, 0) AS cash_eur, 
+                COALESCE(p.position_qty, 0) AS position_qty, 
+                COALESCE(p.invested_eur, 0) AS invested_eur, 
+                COALESCE(p.avg_entry, 0) AS avg_entry, 
+                COALESCE(p.realized_pnl_eur, 0) AS realized_pnl_eur,
+                c.is_active, 
+                c.is_live,
+                COALESCE(c.budget_total_eur, 0) AS budget_total_eur,
+                COALESCE(c.budget_daily_limit_eur, 0) AS budget_daily_limit_eur,
+                COALESCE(c.risk_profile, 'balanced') AS risk_profile
+            FROM bot_configs c
+            LEFT JOIN bot_portfolios p ON p.bot_id = c.id
+            LEFT JOIN strategies s     ON s.id = c.strategy_id
+            LEFT JOIN setups st        ON st.id = s.setup_id
+            WHERE c.user_id = $1
+            ORDER BY c.id ASC
+        ]
+[parameters: (31,)]
+(Background on this error at: https://sqlalche.me/e/20/dbapi)
+NoneType: None
+INFO:root:✅ Verbonden met database market_dashboard op 127.0.0.1:5432
+INFO:root:✅ Verbonden met database market_dashboard op 127.0.0.1:5432
+INFO:root:✅ Verbonden met database market_dashboard op 127.0.0.1:5432
+ERROR:backend.services.dashboard_service:⚠️ [MobileOverview] P3 Warning: Failed to retrieve user object: (sqlalchemy.dialects.postgresql.asyncpg.Error) <class 'asyncpg.exceptions.InFailedSQLTransactionError'>: current transaction is aborted, commands ignored until end of transaction block
+[SQL: SELECT users.id, users.email, users.password_hash, users.role, users.is_active, users.first_name, users.last_name, users.last_login_at, users.subscription_status, users.created_at, users.ai_plan, users.ai_requests_limit_day, users.ai_requests_used_day, users.ai_tokens_used_month, users.ai_usage_current, users.ai_monthly_budget, users.last_usage_reset, users.ai_preferences 
+FROM users 
+WHERE users.id = $1::INTEGER]
+[parameters: (31,)]
+(Background on this error at: https://sqlalche.me/e/20/dbapi)
+INFO:TEST_MOBILE_HARDENING:👉 Mobile overview resolved in 0.426s (Speed Limit: <1.0s)
+INFO:TEST_MOBILE_HARDENING:✅ Mobile overview successfully validated. Found 0 active intelligence events.
+INFO:TEST_MOBILE_HARDENING:
+🧪 [TEST 2] Verifying Push Token Format Validation...
+2026-05-12 21:42:54.936 | WARNING  | backend.services.push_service:send_expo_notification:53 - 📱 [PushService] Invalid Expo token format detected: 'invalid_token_123'. Skipping dispatch.
+2026-05-12 21:42:54.936 | WARNING  | backend.services.push_service:send_expo_notification:53 - 📱 [PushService] Invalid Expo token format detected: 'ExponentPushToken['. Skipping dispatch.
+2026-05-12 21:42:54.936 | WARNING  | backend.services.push_service:send_expo_notification:53 - 📱 [PushService] Invalid Expo token format detected: 'ExpoPushToken[abc'. Skipping dispatch.
+2026-05-12 21:42:54.936 | WARNING  | backend.services.push_service:send_expo_notification:53 - 📱 [PushService] Invalid Expo token format detected: '123]'. Skipping dispatch.
+INFO:TEST_MOBILE_HARDENING:✅ Format validation correctly rejects bad tokens.
+INFO:TEST_MOBILE_HARDENING:
+🧪 [TEST 3] Verifying Expo DeviceNotRegistered Dead Token Database Removal...
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 521, in _prepare_and_execute
+    prepared_stmt, attributes = await adapt_connection._prepare(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        operation, self._invalidate_schema_cache_asof
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 768, in _prepare
+    prepared_stmt = await self._connection.prepare(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        operation, name=self._prepared_statement_name_func()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/asyncpg/connection.py", line 638, in prepare
+    return await self._prepare(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/asyncpg/connection.py", line 657, in _prepare
+    stmt = await self._get_statement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/asyncpg/connection.py", line 443, in _get_statement
+    statement = await self._protocol.prepare(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "asyncpg/protocol/protocol.pyx", line 165, in prepare
+asyncpg.exceptions.InFailedSQLTransactionError: current transaction is aborted, commands ignored until end of transaction block
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1964, in _exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 942, in do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 580, in execute
+    self._adapt_connection.await_(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._prepare_and_execute(operation, parameters)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 558, in _prepare_and_execute
+    self._handle_exception(error)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 508, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 792, in _handle_exception
+    raise translated_error from error
+sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.Error: <class 'asyncpg.exceptions.InFailedSQLTransactionError'>: current transaction is aborted, commands ignored until end of transaction block
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/gvangalen/.gemini/antigravity/brain/bd5f93eb-cebe-4e94-af06-87b03af0c951/scratch/test_mobile_hardening.py", line 130, in <module>
+    asyncio.run(run_tests())
+    ~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 720, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/Users/gvangalen/.gemini/antigravity/brain/bd5f93eb-cebe-4e94-af06-87b03af0c951/scratch/test_mobile_hardening.py", line 75, in run_tests
+    await session.execute(delete(MobilePushToken).where(MobilePushToken.push_token == dead_token_val))
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/ext/asyncio/session.py", line 463, in execute
+    result = await greenlet_spawn(
+             ^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 201, in greenlet_spawn
+    result = context.throw(*sys.exc_info())
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/orm/session.py", line 2365, in execute
+    return self._execute_internal(
+           ~~~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+    ...<4 lines>...
+        _add_event=_add_event,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/orm/session.py", line 2251, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self,
+        ^^^^^
+    ...<4 lines>...
+        conn,
+        ^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/orm/bulk_persistence.py", line 2021, in orm_execute_statement
+    return super().orm_execute_statement(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        session, statement, params, execution_options, bind_arguments, conn
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/orm/context.py", line 305, in orm_execute_statement
+    result = conn.execute(
+        statement, params or {}, execution_options=execution_options
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1416, in execute
+    return meth(
+        self,
+        distilled_parameters,
+        execution_options or NO_OPTIONS,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/sql/elements.py", line 516, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self, distilled_params, execution_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1638, in _execute_clauseelement
+    ret = self._execute_context(
+        dialect,
+    ...<8 lines>...
+        cache_hit=cache_hit,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1843, in _execute_context
+    return self._exec_single_context(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        dialect, context, statement, parameters
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1983, in _exec_single_context
+    self._handle_dbapi_exception(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        e, str_statement, effective_parameters, cursor, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 2352, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1964, in _exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 942, in do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 580, in execute
+    self._adapt_connection.await_(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._prepare_and_execute(operation, parameters)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 558, in _prepare_and_execute
+    self._handle_exception(error)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 508, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 792, in _handle_exception
+    raise translated_error from error
+sqlalchemy.exc.DBAPIError: (sqlalchemy.dialects.postgresql.asyncpg.Error) <class 'asyncpg.exceptions.InFailedSQLTransactionError'>: current transaction is aborted, commands ignored until end of transaction block
+[SQL: DELETE FROM mobile_push_tokens WHERE mobile_push_tokens.push_token = $1::VARCHAR]
+[parameters: ('ExponentPushToken[dead-token-uuid-1234]',)]
+(Background on this error at: https://sqlalche.me/e/20/dbapi)

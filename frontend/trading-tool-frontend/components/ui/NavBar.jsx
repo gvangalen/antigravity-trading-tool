@@ -23,6 +23,7 @@ import {
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { BRANDING } from "@/lib/branding";
 import AssetSwitcher from "./AssetSwitcher";
+import AvatarMenu from "./AvatarMenu";
 import { useAuth } from "@/components/auth/AuthGuard"; // useAuth is actually in AuthProvider usually but AuthGuard re-exports sometimes, or use direct
 // Actually AuthGuard.jsx has useAuth. Let's check imports.
 // Ah, AuthGuard.jsx uses useAuth from AuthProvider. Wait.
@@ -91,7 +92,9 @@ export default function NavBar() {
               </div>
             </div>
           </Link>
-          <div className="w-10" />
+          <div className="flex items-center scale-90">
+            <AvatarMenu />
+          </div>
         </div>
       </div>
 
@@ -262,25 +265,65 @@ function WatchlistSidebar({ onNavigate, pathname }) {
   const { setActiveSetup, setFocusedBotId } = require("@/app/providers/SetupProvider").useActiveSetup();
   const { openConfirm, showSnackbar } = useModal();
 
+  const getAssetIntelligence = (symbol) => {
+    const defaults = {
+      posture: "Compression",
+      structure: "Neutral Structure",
+      conviction: "75%",
+      trendBias: "Rangebound",
+      riskState: "Laag",
+    };
+
+    const data = {
+      BTC: {
+        posture: "Compression",
+        structure: "Bullish Structure",
+        conviction: "89%",
+        trendBias: "Strong Uptrend",
+        riskState: "Laag / Stabiel",
+      },
+      ETH: {
+        posture: "Expansion",
+        structure: "Weak Structure",
+        conviction: "74%",
+        trendBias: "Neutral Bias",
+        riskState: "Gematigd",
+      },
+      SOL: {
+        posture: "Momentum Rising",
+        structure: "Bullish Structure",
+        conviction: "92%",
+        trendBias: "Bullish Breakout",
+        riskState: "Risk Elevated",
+      }
+    };
+
+    return data[symbol.toUpperCase()] || {
+      ...defaults,
+      posture: symbol.toUpperCase() === "SOL" ? "Momentum Rising" : defaults.posture
+    };
+  };
+
   if (!watchlist || watchlist.length === 0) return null;
 
   return (
-    <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800">
+    <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80">
       <p className="px-5 text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-3 flex items-center gap-2">
-        <Star size={10} className="text-amber-400 fill-amber-400" />
-        Watchlist (Engine)
+        <Star size={10} className="text-amber-400 fill-amber-400 animate-pulse" />
+        Intelligence Terminal
       </p>
-      <div className="space-y-1">
+      <div className="space-y-2.5 px-1.5">
         {watchlist.map((symbol) => {
           const isActive = activeSymbol === symbol;
+          const intel = getAssetIntelligence(symbol);
           return (
             <div
               key={symbol}
               className={`
-                group flex items-center justify-between px-5 py-3 rounded-xl transition-all cursor-pointer border border-transparent
+                group flex flex-col gap-2 p-3.5 rounded-2xl transition-all cursor-pointer border relative overflow-hidden
                 ${isActive 
-                  ? "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 font-black border-blue-100/50 dark:border-blue-900/30 shadow-sm" 
-                  : "text-muted hover:bg-slate-50 dark:hover:bg-slate-900/50 hover:text-slate-900 dark:hover:text-white"
+                  ? "bg-blue-600/5 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 font-black border-blue-500/20 dark:border-blue-500/15 shadow-xl shadow-blue-500/5" 
+                  : "text-muted hover:bg-slate-50 dark:hover:bg-slate-900/40 hover:text-slate-900 dark:hover:text-white border-transparent"
                 }
               `}
               onClick={() => {
@@ -296,35 +339,63 @@ function WatchlistSidebar({ onNavigate, pathname }) {
                 import("@/lib/api/market").then(({ initializeAsset }) => {
                   initializeAsset(symbol).catch(err => console.error("❌ Init error:", err));
                 });
-
-                onNavigate();
+                
+                if (onNavigate) onNavigate();
               }}
             >
-              <div className="flex items-center gap-4">
-                <div className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-blue-600 animate-pulse" : "bg-slate-300 dark:bg-slate-700"}`} />
-                <span className="text-[11px] font-black uppercase tracking-widest">{symbol}</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${isActive ? "bg-blue-600 dark:bg-blue-500 animate-ping" : "bg-slate-300 dark:bg-slate-700"}`} />
+                  <span className="text-[12px] font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">{symbol}</span>
+                </div>
+                
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openConfirm({
+                      title: "Asset verwijderen?",
+                      description: `Weet je zeker dat je ${symbol} wilt verwijderen van je watchlist? De asset is dan niet meer zichtbaar in je actieve tracking engine.`,
+                      tone: "danger",
+                      confirmText: "Verwijder",
+                      cancelText: "Annuleer",
+                      icon: <AlertTriangle size={20} />,
+                      onConfirm: async () => {
+                        await remove(symbol);
+                        showSnackbar(`${symbol} verwijderd van watchlist`, "success");
+                      }
+                    });
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all text-slate-400 hover:scale-110 active:scale-95"
+                >
+                  <X size={12} />
+                </button>
               </div>
-              
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openConfirm({
-                    title: "Asset verwijderen?",
-                    description: `Weet je zeker dat je ${symbol} wilt verwijderen van je watchlist? De asset is dan niet meer zichtbaar in je actieve tracking engine.`,
-                    tone: "danger",
-                    confirmText: "Verwijder",
-                    cancelText: "Annuleer",
-                    icon: <AlertTriangle size={20} />,
-                    onConfirm: async () => {
-                      await remove(symbol);
-                      showSnackbar(`${symbol} verwijderd van watchlist`, "success");
-                    }
-                  });
-                }}
-                className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all"
-              >
-                <X size={14} />
-              </button>
+
+              {/* COGNITIVE AI METRICS PANEL */}
+              <div className="grid grid-cols-2 gap-x-2 gap-y-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[9px] font-bold">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[7.5px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 leading-none">Posture</span>
+                  <span className="text-slate-700 dark:text-slate-300 truncate">{intel.posture}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[7.5px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 leading-none">Structure</span>
+                  <span className="text-slate-700 dark:text-slate-300 truncate">{intel.structure}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[7.5px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 leading-none">Conviction</span>
+                  <span className="text-blue-600 dark:text-blue-400 font-mono font-extrabold">{intel.conviction}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[7.5px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 leading-none">Risk State</span>
+                  <span className={`truncate font-extrabold ${
+                    intel.riskState.includes("Laag") 
+                      ? "text-emerald-500" 
+                      : intel.riskState.includes("Risk") 
+                        ? "text-rose-500" 
+                        : "text-amber-500"
+                  }`}>{intel.riskState}</span>
+                </div>
+              </div>
             </div>
           );
         })}

@@ -287,3 +287,23 @@ async def get_insight(
     except Exception as e:
         logger.error(f"❌ AI Assistant Insight Error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij AI Insight")
+
+
+from backend.services.ai_action_engine import AiActionEngine
+
+async def get_ai_action_engine(db: AsyncSession = Depends(get_db)):
+    return AiActionEngine(db)
+
+@router.post("/assistant/actions/execute")
+async def execute_pending_action(
+    payload: dict,
+    current_user: dict = Depends(get_current_user),
+    engine: AiActionEngine = Depends(get_ai_action_engine)
+):
+    action_id = payload.get("action_id")
+    if not action_id:
+        raise HTTPException(status_code=400, detail="Action ID is verplicht.")
+    
+    user_id = current_user["id"]
+    return await engine.execute_pending_action(action_id, user_id)
+

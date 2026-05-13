@@ -1,56 +1,92 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '../constants/theme';
-import { AssistantScreen } from '../screens/AssistantScreen';
-import { SettingsScreen } from '../screens/SettingsScreen';
-import { StrategyScreen } from '../screens/StrategyScreen';
-import { TodayScreen } from '../screens/TodayScreen';
+import { FinnScreen } from '../screens/FinnScreen';
+import { PortfolioScreen } from '../screens/PortfolioScreen';
+import { ReportScreen } from '../screens/ReportScreen';
+import { SetupScreen } from '../screens/SetupScreen';
+import { WatchlistScreen } from '../screens/WatchlistScreen';
 
 export type MainTabParamList = {
-  Assistant: undefined;
-  Today: undefined;
-  Strategy: undefined;
-  Settings: undefined;
+  FINN: undefined;
+  Watchlist: undefined;
+  Setup: undefined;
+  Portfolio: undefined;
+  Report: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 const tabIcons: Record<keyof MainTabParamList, string> = {
-  Assistant: 'AI',
-  Today: 'TD',
-  Strategy: 'ST',
-  Settings: 'SE',
+  FINN: 'FN',
+  Watchlist: 'WL',
+  Setup: 'SU',
+  Portfolio: 'PF',
+  Report: 'RP',
 };
 
 export function MainTabNavigator() {
   return (
     <Tab.Navigator
-      initialRouteName="Assistant"
+      initialRouteName="FINN"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: theme.colors.accent,
-        tabBarInactiveTintColor: theme.colors.textMuted,
-        tabBarIcon: ({ color }) => (
-          <Text style={{ color, fontSize: 11, fontWeight: '900' }}>{tabIcons[route.name]}</Text>
+        tabBarInactiveTintColor: theme.colors.textDim,
+        tabBarIcon: ({ color, focused }) => (
+          <View
+            style={[
+              styles.iconBadge,
+              focused && styles.iconBadgeActive,
+              focused && { borderColor: theme.colors.accent },
+            ]}
+          >
+            <Text style={[styles.iconText, { color }]}>{tabIcons[route.name]}</Text>
+          </View>
         ),
         tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '800',
+          fontSize: 11,
+          fontWeight: '900',
+          letterSpacing: 0,
         },
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
-          height: 76,
+          borderTopWidth: 1,
+          height: 84,
           paddingBottom: 12,
-          paddingTop: 8,
+          paddingTop: 10,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 2,
         },
       })}
     >
-      <Tab.Screen name="Assistant" component={AssistantScreen} />
-      <Tab.Screen name="Today" component={TodayScreen} />
-      <Tab.Screen name="Strategy" component={StrategyScreen} />
-      <Tab.Screen name="Settings" component={SettingsScreen} />
+      <Tab.Screen name="FINN" component={FinnScreen} />
+      <Tab.Screen name="Watchlist" component={WatchlistScreen} />
+      <Tab.Screen name="Setup" component={SetupScreen} />
+      <Tab.Screen name="Portfolio" component={PortfolioScreen} />
+      <Tab.Screen name="Report" component={ReportScreen} />
     </Tab.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  iconBadge: {
+    alignItems: 'center',
+    borderColor: 'transparent',
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: 'center',
+    width: 34,
+  },
+  iconBadgeActive: {
+    backgroundColor: theme.colors.accentSoft,
+  },
+  iconText: {
+    fontSize: 10,
+    fontWeight: '900',
+  },
+});

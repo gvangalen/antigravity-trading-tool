@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, fetchAssistantInsight, getAssistantPreferences, assistantChatStream } from "@/lib/api/ai";
+import { assistantChat, fetchAssistantInsight, getAssistantPreferences, assistantChatStream, executePendingAction } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks } from "lucide-react";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { ChatSkeleton } from "@/components/dashboard/DashboardSkeleton";
@@ -12,6 +12,8 @@ import { useModal } from "@/components/modal/ModalProvider";
 import { saveNewSetup, fetchSetups } from "@/lib/api/setups";
 import { createStrategy, fetchStrategies } from "@/lib/api/strategy";
 import { createBotConfig } from "@/lib/api/botApi";
+import { useActiveSetup } from "@/app/providers/SetupProvider";
+import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 
 export default function AIAssistant({ isOpen, setIsOpen }) {
   const pathname = usePathname();
@@ -43,6 +45,26 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     return insight?.[block]?.[field] || insight?.[block.replace('_insight', '')]?.[field];
   };
 
+  // 🛰️ Active Entities Context (Phase 2 Sync)
+  let activeSetup = null;
+  let focusedBotId = null;
+  let activeBot = null;
+  
+  try {
+    const setupCtx = useActiveSetup();
+    activeSetup = setupCtx?.activeSetup;
+    focusedBotId = setupCtx?.focusedBotId;
+  } catch (e) {
+    console.warn("ActiveSetup context not ready:", e);
+  }
+
+  try {
+    const botCtx = useActiveBot();
+    activeBot = botCtx?.activeBot;
+  } catch (e) {
+    console.warn("ActiveBot context not ready:", e);
+  }
+
   const getContext = () => {
     const pageMap = {
       "/dashboard": "Dashboard",
@@ -58,10 +80,14 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     };
 
     return {
+      page: pathname,
       page_type: pageMap[pathname] || "Unknown",
       symbol: searchParams.get("symbol") || searchParams.get("asset") || globalSymbol || "BTC",
       timeframe: searchParams.get("tf") || searchParams.get("interval") || (pathname.includes("dashboard") || pathname === "/" ? "Weekly" : "Daily"),
-      setup_name: searchParams.get("name") || "No specific setup",
+      setup_id: activeSetup?.id || activeSetup?.setup_id || null,
+      bot_id: activeBot?.id || activeBot?.bot_id || focusedBotId || null,
+      strategy_id: activeSetup?.strategy_id || null,
+      setup_name: searchParams.get("name") || activeSetup?.name || "No specific setup"
     };
   };
 
@@ -133,6 +159,21 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     }
     return suggestions.slice(0, 4);
   };
+
+  useEffect(() => {
+    const handleTrigger = (e) => {
+      const { query: queryText, openAssistant } = e.detail || {};
+      if (openAssistant) {
+        setIsOpen(true);
+      }
+      if (queryText) {
+        handleChat(queryText);
+      }
+    };
+
+    window.addEventListener("finn-action-trigger", handleTrigger);
+    return () => window.removeEventListener("finn-action-trigger", handleTrigger);
+  }, [messages, handleChat]);
 
   useEffect(() => {
     if (isOpen) {
@@ -674,10 +715,25 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 {m.reasoning && m.isComplete !== false && (
                   <ReasoningWidget reasoning={m.reasoning} />
                 )}
-                {m.action && m.isComplete !== false && (
+                {/* Universal Action Card Renderer */}
+                {m.isComplete !== false && (() => {
+                  const card = (m.draft?.type === "action_card" ? m.draft : null) || (m.action?.type === "action_card" ? m.action : null);
+                  if (card) {
+                    return (
+                      <UniversalActionCard
+                        card={card}
+                        onCancel={() => handleCancelDraft(i)}
+                        onSuccess={() => handleDraftSuccess(i)}
+                        handleEditDraft={handleEditDraft}
+                      />
+                    );
+                  }
+                  return null;
+                })()}
+                {m.action && m.action.type !== "action_card" && m.isComplete !== false && (
                   <ActionCard action={m.action} onAction={handleActionClick} />
                 )}
-                {m.draft && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
+                {m.draft && m.draft.type !== "action_card" && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
                   <DraftCard 
                     draft={m.draft} 
                     onCancel={() => handleCancelDraft(i)} 
@@ -807,6 +863,298 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         </div>
       </div>
     </aside>
+  );
+}
+
+function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
+  const { openConfirm, showSnackbar } = useModal();
+  const [status, setStatus] = useState("pending"); // pending, executing, success, error, canceled
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const cardType = card.card_type || "";
+  const payload = card.payload || {};
+  const isDraft = cardType.endsWith("_draft_card");
+  const baseType = cardType.replace("_draft_card", "").replace("_card", ""); // setup, strategy, bot, add_to_watchlist, remove_from_watchlist etc.
+
+  const handleApprove = async () => {
+    setStatus("executing");
+    setErrorMessage("");
+    try {
+      const res = await executePendingAction(card.action_id);
+      if (res && res.error) {
+        throw new Error(res.error || "Execution failed.");
+      }
+      setStatus("success");
+      showSnackbar("✓ Actie succesvol uitgevoerd!", "success");
+      if (onSuccess) onSuccess();
+    } catch (err) {
+      console.error("Action execution failed:", err);
+      setStatus("error");
+      setErrorMessage(err.message || "Fout bij het uitvoeren van deze actie.");
+      showSnackbar("Uitvoering mislukt", "danger");
+    }
+  };
+
+  const handleCancelClick = () => {
+    setStatus("canceled");
+    if (onCancel) onCancel();
+  };
+
+  const handleEditClick = () => {
+    if (!handleEditDraft) return;
+    const draftType = cardType.replace("_draft_card", ""); // setup, strategy, bot
+    const mockDraft = {
+      type: draftType,
+      payload: payload
+    };
+    handleEditDraft(mockDraft, () => {
+      setStatus("success");
+      if (onSuccess) onSuccess();
+    });
+  };
+
+  // --- Theme styling ---
+  const getAccentGradient = () => {
+    if (baseType === "setup") return "from-amber-500 to-yellow-400";
+    if (baseType === "strategy") return "from-blue-500 to-indigo-500";
+    if (baseType === "bot") return "from-emerald-500 to-teal-500";
+    return "from-violet-500 to-fuchsia-500";
+  };
+
+  const getRiskBadge = () => {
+    if (baseType === "setup") {
+      const isDca = payload.setup_type === "dca";
+      return isDca 
+        ? { text: "Laag Risico", class: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20" }
+        : { text: "Medium Risico", class: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20" };
+    }
+    if (baseType === "strategy") {
+      const sl = parseFloat(payload.stop_loss);
+      const isHighSl = sl && sl > 12;
+      return isHighSl
+        ? { text: "Hoog Risico", class: "bg-rose-500/10 text-rose-500 dark:text-rose-400 border-rose-500/20" }
+        : { text: "Medium Risico", class: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20" };
+    }
+    if (baseType === "bot") {
+      const risk = payload.risk_profile || "balanced";
+      if (risk === "aggressive") return { text: "Actief Risico", class: "bg-rose-500/10 text-rose-500 dark:text-rose-400 border-rose-500/20" };
+      if (risk === "conservative") return { text: "Behoedzaam", class: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20" };
+      return { text: "Gebalanceerd", class: "bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/20" };
+    }
+    return { text: "Operationeel", class: "bg-violet-500/10 text-violet-500 dark:text-violet-400 border-violet-500/20" };
+  };
+
+  const riskBadge = getRiskBadge();
+
+  if (status === "canceled") {
+    return (
+      <div className="mt-4 p-4 bg-slate-100/50 dark:bg-slate-950/20 border border-dashed border-slate-200 dark:border-slate-800/80 rounded-2xl text-center text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider animate-in fade-in duration-200">
+        ✕ Actie Geannuleerd
+      </div>
+    );
+  }
+
+  if (status === "success") {
+    return (
+      <div className="mt-4 p-5 bg-emerald-500/10 dark:bg-emerald-950/20 border border-emerald-500/30 rounded-2xl text-center text-xs text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-widest flex flex-col items-center justify-center gap-2 animate-in fade-in zoom-in-95 duration-300">
+        <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center text-lg font-black shadow-lg shadow-emerald-500/20 animate-bounce">
+          ✓
+        </div>
+        <span>Actie Succesvol Uitgevoerd!</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-xl shadow-slate-100/10 dark:shadow-none animate-in fade-in slide-in-from-bottom-4 duration-300">
+      {/* CARD ACCENT LINE */}
+      <div className={`h-1.5 w-full bg-gradient-to-r ${getAccentGradient()}`} />
+
+      <div className="p-4 space-y-4">
+        {/* CARD TITLE & RISK BADGE */}
+        <div className="flex items-start justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              AI Command Center
+            </span>
+            <h4 className="text-xs font-black text-foreground dark:text-slate-200 tracking-tight leading-snug">
+              {payload.name || (baseType === "add_to_watchlist" ? `Watchlist Activatie: ${payload.symbol}` : baseType === "remove_from_watchlist" ? `Watchlist Deactivatie: ${payload.symbol}` : `${payload.symbol || "Asset"} Concept`)}
+            </h4>
+          </div>
+          <div className="flex flex-col items-end gap-1.5">
+            <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm text-white bg-gradient-to-r ${getAccentGradient()}`}>
+              {baseType} {isDraft ? "draft" : "actie"}
+            </span>
+            <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded border ${riskBadge.class}`}>
+              {riskBadge.text}
+            </span>
+          </div>
+        </div>
+
+        {/* METADATA CONTENT AREA */}
+        <div className="rounded-xl bg-slate-50 dark:bg-slate-950 p-3.5 border border-slate-100 dark:border-slate-800/80 space-y-2.5 shadow-inner">
+          {baseType === "setup" && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Asset</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || "SOL"}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Setup Type</span>
+                <span className="uppercase text-xs text-foreground dark:text-slate-200">{payload.setup_type || "dca"}</span>
+              </div>
+              {payload.setup_type === "dca" && (
+                <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">DCA Parameters</span>
+                  <span className="text-xs text-foreground dark:text-slate-200">
+                    {payload.dca_frequency || "weekly"} {payload.dca_day ? `op ${payload.dca_day}` : ""}
+                  </span>
+                </div>
+              )}
+              {(payload.min_macro_score !== undefined || payload.min_technical_score !== undefined) && (
+                <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2 space-y-1">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Score Drempelwaarden</span>
+                  <div className="grid grid-cols-3 gap-2 mt-1">
+                    <div className="bg-white dark:bg-slate-900 rounded-lg p-1.5 text-center border border-slate-100 dark:border-slate-800">
+                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Macro</div>
+                      <div className="text-[10px] font-mono font-black text-blue-500">{payload.min_macro_score ?? 30}-{payload.max_macro_score ?? 70}</div>
+                    </div>
+                    <div className="bg-white dark:bg-slate-900 rounded-lg p-1.5 text-center border border-slate-100 dark:border-slate-800">
+                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Tech</div>
+                      <div className="text-[10px] font-mono font-black text-amber-500">{payload.min_technical_score ?? 40}-{payload.max_technical_score ?? 80}</div>
+                    </div>
+                    <div className="bg-white dark:bg-slate-900 rounded-lg p-1.5 text-center border border-slate-100 dark:border-slate-800">
+                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Market</div>
+                      <div className="text-[10px] font-mono font-black text-emerald-500">{payload.min_market_score ?? 20}-{payload.max_market_score ?? 60}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {baseType === "strategy" && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Asset</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || "SOL"}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Base Budget</span>
+                <span className="text-xs text-foreground dark:text-slate-200">€{payload.base_amount || 100.0}</span>
+              </div>
+              {payload.setup_type === "trade" ? (
+                <>
+                  <div className="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Entry Target</span>
+                    <span className="text-xs text-foreground dark:text-slate-200">€{payload.entry}</span>
+                  </div>
+                  <div className="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Stop Loss</span>
+                    <span className="text-xs text-rose-500">€{payload.stop_loss}</span>
+                  </div>
+                  <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Take Profit Targets</span>
+                    <span className="text-xs text-emerald-500 font-mono">
+                      {Array.isArray(payload.targets) ? payload.targets.map(t => `€${t}`).join(" · ") : `€${payload.targets}`}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">DCA Multiplier Mode</span>
+                  <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{payload.execution_mode || "fixed"}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {baseType === "bot" && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Safety Profile</span>
+                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{payload.risk_profile || "balanced"}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Budget</span>
+                <span className="text-xs text-foreground dark:text-slate-200">€{payload.budget_total_eur || 500.0}</span>
+              </div>
+              <div className="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Environment</span>
+                <span className="text-xs text-foreground dark:text-slate-200">
+                  {payload.is_live ? "⚡ LIVE Real" : "📝 PAPER Sandbox"}
+                </span>
+              </div>
+              <div className="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Mode</span>
+                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{payload.mode || "manual"}</span>
+              </div>
+            </div>
+          )}
+
+          {baseType.includes("watchlist") && (
+            <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-3">
+              <Activity size={18} className="text-violet-500 animate-pulse" />
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Doel Asset</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol}</span>
+              </div>
+            </div>
+          )}
+
+          {!["setup", "strategy", "bot"].includes(baseType) && !baseType.includes("watchlist") && (
+            <div className="text-xs text-slate-500 dark:text-slate-400 font-bold leading-relaxed">
+              {payload.description || "Geen gedetailleerde parameters beschikbaar."}
+            </div>
+          )}
+        </div>
+
+        {/* INLINE ERROR DISPLAY */}
+        {status === "error" && (
+          <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-[10px] text-rose-500 font-black tracking-wide leading-snug animate-in fade-in slide-in-from-top-1 duration-200">
+            ⚠ {errorMessage}
+          </div>
+        )}
+
+        {/* CONTROL BUTTONS WITH OPTIMISTIC LOADING */}
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={handleApprove}
+            disabled={status === "executing"}
+            className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider text-white transition-all shadow-md flex items-center justify-center gap-1.5 bg-gradient-to-r ${getAccentGradient()} hover:opacity-90 active:scale-95 disabled:opacity-50`}
+          >
+            {status === "executing" ? (
+              <>
+                <Loader2 size={12} className="animate-spin" />
+                <span>Laden...</span>
+              </>
+            ) : (
+              "APPROVE"
+            )}
+          </button>
+
+          {isDraft && handleEditDraft ? (
+            <button
+              onClick={handleEditClick}
+              disabled={status === "executing"}
+              className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-50 flex items-center justify-center"
+            >
+              EDIT
+            </button>
+          ) : (
+            <div className="col-span-1" /> // Placeholder to maintain exact symmetrical grid alignment
+          )}
+
+          <button
+            onClick={handleCancelClick}
+            disabled={status === "executing"}
+            className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-red-500 hover:text-red-500 dark:hover:border-red-500/30 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-50 flex items-center justify-center"
+          >
+            CANCEL
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

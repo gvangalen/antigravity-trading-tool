@@ -4,8 +4,8 @@ import uuid
 import asyncio
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional, AsyncGenerator
-from sqlalchemy import select, update
-from backend.infrastructure.models import AiCategoryInsight, ChatSession, ChatMessage
+from sqlalchemy import select, update, and_, desc
+from backend.infrastructure.models import AiCategoryInsight, ChatSession, ChatMessage, AiIntelligenceEvent, AiPendingAction
 
 from backend.ai_agents.ai_assistant_prompts import get_role_prompt
 from backend.services.ai_gateway import AiGateway
@@ -299,6 +299,9 @@ class AiAssistantService:
         # 5. Build System Prompt
         system_role = get_role_prompt(role_key, preferences, intent=intent, user_name=user_name)
 
+        # 5.5 Synthesise Chronological Continuity and Event Memory Context
+        continuity_str = await self._build_continuity_context_str(user_id)
+
         # 6. Generate Response via GATEWAY using JSON mode to allow action parameters
         prompt = (
             f"=== BOVENGESCHIKT TARGET ASSET MANDAAT (CRITICAL DIRECTIVE) ===\n"
@@ -311,6 +314,7 @@ class AiAssistantService:
             f"LIVE MARKET CONTEXT:\n{live_context}\n\n"
             f"HISTORICAL/ANALYSIS CONTEXT:\n{context}\n\n"
             f"REAL-TIME PORTFOLIO CONTEXT:\n{portfolio_context_str}\n\n"
+            f"CHRONOLOGICAL CONTINUITY & EVENT MEMORY:\n{continuity_str}\n\n"
             f"ADAPTIVE INTELLIGENCE CONTEXT:\n{adaptive_profile_str}\n\n"
             f"FRONTEND METADATA:\n{context_data}"
         )
@@ -504,6 +508,9 @@ class AiAssistantService:
             suggested_actions = [str(act) for act in suggested_actions if act]
         else:
             suggested_actions = None
+
+        # Intercept and register transactional items as centralized pending actions / cards
+        action, draft = await self._process_universal_action_cards(user_id, action, draft, trace_id)
 
         # ABSOLUTE BACKEND STATE SUPREMACY: If the backend has an active collecting flow,
         # we completely ignore the LLM's returned state and use our deterministic, persistent backend state.
@@ -794,6 +801,9 @@ class AiAssistantService:
         # 5. Build System Prompt
         system_role = get_role_prompt(role_key, preferences, intent=intent, user_name=user_name)
 
+        # 5.5 Synthesise Chronological Continuity and Event Memory Context
+        continuity_str = await self._build_continuity_context_str(user_id)
+
         # 6. Generate Response via GATEWAY using JSON mode to allow action parameters
         prompt = (
             f"=== BOVENGESCHIKT TARGET ASSET MANDAAT (CRITICAL DIRECTIVE) ===\n"
@@ -806,6 +816,7 @@ class AiAssistantService:
             f"LIVE MARKET CONTEXT:\n{live_context}\n\n"
             f"HISTORICAL/ANALYSIS CONTEXT:\n{context}\n\n"
             f"REAL-TIME PORTFOLIO CONTEXT:\n{portfolio_context_str}\n\n"
+            f"CHRONOLOGICAL CONTINUITY & EVENT MEMORY:\n{continuity_str}\n\n"
             f"ADAPTIVE INTELLIGENCE CONTEXT:\n{adaptive_profile_str}\n\n"
             f"FRONTEND METADATA:\n{context_data}"
         )
@@ -908,6 +919,9 @@ class AiAssistantService:
             suggested_actions = [str(act) for act in suggested_actions if act]
         else:
             suggested_actions = None
+
+        # Intercept and register transactional items as centralized pending actions / cards
+        action, draft = await self._process_universal_action_cards(user_id, action, draft, self.trace_id)
 
         # ABSOLUTE BACKEND STATE SUPREMACY: If the backend has an active collecting flow,
         # we completely ignore the LLM's returned state and use our deterministic, persistent backend state.
@@ -1432,6 +1446,86 @@ class AiAssistantService:
         return action
 
 
+    async def _process_universal_action_cards(
+        self, 
+        user_id: int, 
+        action: Optional[dict], 
+        draft: Optional[dict], 
+        trace_id: str
+    ) -> tuple[Optional[dict], Optional[dict]]:
+        """
+        Intercepts transactional actions or drafts and registers them centrally as pending actions in the database,
+        returning a standardized, unified Universal Action Card payload for the clients.
+        """
+        from backend.services.ai_action_engine import AiActionEngine
+        action_engine = AiActionEngine(self.state_repo.session)
+
+        processed_draft = draft
+        processed_action = action
+
+        # 1. Process Draft Payloads (setup, strategy, bot)
+        if draft and isinstance(draft, dict):
+            draft_type = draft.get("type")
+            payload = draft.get("payload") or {}
+            
+            if draft_type in ["setup", "strategy", "bot"] and payload:
+                # Register the transaction centrally on the server
+                action_id = await action_engine.register_pending_action(
+                    user_id=user_id,
+                    action_type=f"{draft_type}_draft",
+                    payload=payload,
+                    trace_id=trace_id
+                )
+                
+                # Replace with standardized Universal Action Card manifest payload
+                processed_draft = {
+                    "type": "action_card",
+                    "card_type": f"{draft_type}_draft_card",
+                    "action_id": action_id,
+                    "payload": {
+                        "name": payload.get("name") or f"{payload.get('symbol', 'Asset')} Draft",
+                        "symbol": payload.get("symbol"),
+                        "description": f"Goedgekeurd door AI. Bevestig om deze {draft_type} setup te activeren."
+                    }
+                }
+
+        # 2. Process Transactional Actions (watchlist, deletion, risk profile modifications, etc.)
+        if action and isinstance(action, dict):
+            act_type = action.get("type")
+            
+            transactional_types = [
+                "add_to_watchlist", "remove_from_watchlist", 
+                "delete_bot", "stop_bot", "risk_profile_change"
+            ]
+            
+            if act_type in transactional_types:
+                # Extract payload parameters
+                payload = action.get("params") or action.get("payload") or {}
+                if not payload and action.get("symbol"):
+                    payload = {"symbol": action["symbol"]}
+
+                # Register the transaction centrally on the server
+                action_id = await action_engine.register_pending_action(
+                    user_id=user_id,
+                    action_type=act_type,
+                    payload=payload,
+                    trace_id=trace_id
+                )
+
+                # Replace with standardized Universal Action Card manifest payload
+                processed_action = {
+                    "type": "action_card",
+                    "card_type": f"{act_type}_card",
+                    "action_id": action_id,
+                    "payload": {
+                        "symbol": payload.get("symbol"),
+                        "description": f"Goedkeuring vereist voor actie: {act_type}."
+                    }
+                }
+
+        return processed_action, processed_draft
+
+
     async def get_assistant_insight(self, user_id: int, context_data: Dict[str, str]) -> Dict[str, Any]:
         start_insight = time.perf_counter()
         symbol = context_data.get("symbol", "BTC")
@@ -1841,6 +1935,55 @@ class AiAssistantService:
         ])
         
         return "\n".join(lines)
+
+    async def _build_continuity_context_str(self, user_id: int) -> str:
+        """
+        Synthesiseert een chronologisch overzicht van recente acties, gedetecteerde risico's,
+        en eerdere chatsessies om FINN continuïteit en persistent geheugen te geven.
+        """
+        try:
+            # 1. Haal recente goedgekeurde acties op
+            stmt_actions = (
+                select(AiPendingAction)
+                .where(and_(AiPendingAction.user_id == user_id, AiPendingAction.status == 'executed'))
+                .order_by(desc(AiPendingAction.created_at))
+                .limit(3)
+            )
+            res_actions = await self.state_repo.session.execute(stmt_actions)
+            executed_actions = res_actions.scalars().all()
+
+            # 2. Haal actieve intelligence events op
+            stmt_events = (
+                select(AiIntelligenceEvent)
+                .where(and_(AiIntelligenceEvent.user_id == user_id, AiIntelligenceEvent.status == 'active'))
+                .order_by(desc(AiIntelligenceEvent.created_at))
+                .limit(5)
+            )
+            res_events = await self.state_repo.session.execute(stmt_events)
+            active_events = res_events.scalars().all()
+
+            lines = ["CHRONOLOGISCHE CONTINUÏTEIT EN GEHEUGEN (SINGLE SOURCE OF TRUTH):"]
+            
+            if executed_actions:
+                lines.append("- RECENT DOOR GEBRUIKER GEACTIVEERDE ACTIES (Approved via Card):")
+                for act in executed_actions:
+                    dt_str = act.created_at.strftime('%Y-%m-%d %H:%M') if act.created_at else "onbekend"
+                    lines.append(f"  * [{dt_str}] Type '{act.type}' is succesvol uitgevoerd door de handelaar.")
+            else:
+                lines.append("- Geen recent goedgekeurde acties in database.")
+
+            if active_events:
+                lines.append("- RECENT LIVE ASSISTANT INTELLIGENCE EVENTS:")
+                for ev in active_events:
+                    dt_str = ev.created_at.strftime('%Y-%m-%d %H:%M') if ev.created_at else "onbekend"
+                    lines.append(f"  * [{dt_str}] [{ev.severity.upper()}] {ev.title}: {ev.description}")
+            else:
+                lines.append("- Geen actieve risico- of marktevenementen gedetecteerd.")
+
+            return "\n".join(lines)
+        except Exception as e:
+            logger.error(f"Error in _build_continuity_context_str: {e}")
+            return "CHRONOLOGISCHE CONTINUÏTEIT: Tijdelijk niet beschikbaar door een interne service fout."
 
 
 async def record_ai_usage_background(

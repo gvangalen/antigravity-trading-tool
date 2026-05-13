@@ -116,6 +116,7 @@ safe_include("backend.api.admin_api", "admin_api")
 safe_include("backend.api.notifications_api", "notifications_api")
 safe_include("backend.api.exchange_api", "exchange_api")
 safe_include("backend.api.watchlist_api", "watchlist_api")
+safe_include("backend.api.intelligence_event_api", "intelligence_event_api")
 
 # ==================================================================
 # 🔧 Database Schema Migration / Hotfixes
@@ -220,8 +221,47 @@ async def database_migrations():
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id);
             """))
 
+            # Safely create ai_pending_actions table if it doesn't exist
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS ai_pending_actions (
+                    id VARCHAR PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    type VARCHAR NOT NULL,
+                    payload JSONB NOT NULL,
+                    status VARCHAR NOT NULL DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP NOT NULL,
+                    trace_id VARCHAR
+                );
+            """))
+            await session.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_ai_pending_actions_user_id ON ai_pending_actions(user_id);
+            """))
+
+            # Safely create ai_intelligence_events table if it doesn't exist
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS ai_intelligence_events (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    type VARCHAR NOT NULL,
+                    symbol VARCHAR,
+                    title VARCHAR NOT NULL,
+                    description TEXT NOT NULL,
+                    severity VARCHAR NOT NULL DEFAULT 'info',
+                    payload JSONB DEFAULT '{}'::jsonb,
+                    status VARCHAR NOT NULL DEFAULT 'active',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """))
+            await session.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_ai_intelligence_events_user_id ON ai_intelligence_events(user_id);
+            """))
+            await session.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_ai_intelligence_events_status ON ai_intelligence_events(status);
+            """))
+
             await session.commit()
-            logger.info("✅ Database schema migration: global_market_insights.avg_score, conversation_state, ai_category_insights.symbol, ai_usage_logs, chat_sessions, and chat_messages tables/indexes checked/added.")
+            logger.info("✅ Database schema migration: global_market_insights.avg_score, conversation_state, ai_category_insights.symbol, ai_usage_logs, chat_sessions, chat_messages, ai_pending_actions, and ai_intelligence_events tables/indexes checked/added.")
         except Exception as e:
             logger.error(f"❌ Database schema migration failed: {e}")
 

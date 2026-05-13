@@ -2,9 +2,17 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
+class AssistantContextSchema(BaseModel):
+    page: Optional[str] = None
+    symbol: Optional[str] = None
+    timeframe: Optional[str] = None
+    bot_id: Optional[int] = None
+    setup_id: Optional[int] = None
+    strategy_id: Optional[int] = None
+
 class AssistantChatRequest(BaseModel):
     query: str
-    context: Optional[Dict[str, str]] = None
+    context: Optional[AssistantContextSchema] = None
     timeframe: Optional[str] = None
     history: Optional[List[Dict[str, Any]]] = None
     session_id: Optional[str] = None  # Optional session ID for persistent chats

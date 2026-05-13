@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
@@ -11,10 +11,10 @@ class DashboardRepository:
             SELECT DISTINCT ON (symbol)
                 symbol, price, volume, change_24h, timestamp
             FROM market_data
-            WHERE user_id = :user_id AND symbol = :symbol
+            WHERE symbol = :symbol
             ORDER BY symbol, timestamp DESC
         """)
-        result = await self.session.execute(query, {"user_id": user_id, "symbol": symbol})
+        result = await self.session.execute(query, {"symbol": symbol})
         return [dict(row._mapping) for row in result.fetchall()]
 
     async def get_latest_technical_data(self, user_id: int, symbol: str = "BTC") -> List[dict]:
@@ -78,3 +78,21 @@ class DashboardRepository:
             return result.scalar() == 1
         except Exception:
             return False
+
+    async def get_latest_prices_and_changes(self, user_id: int, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+        query = text("""
+            SELECT DISTINCT ON (symbol)
+                symbol, price, change_24h
+            FROM market_data
+            WHERE symbol = ANY(:symbols)
+            ORDER BY symbol, timestamp DESC
+        """)
+        result = await self.session.execute(query, {"symbols": symbols})
+        rows = result.fetchall()
+        return {
+            row.symbol.upper(): {
+                "price": float(row.price) if row.price is not None else None,
+                "change_24h": float(row.change_24h) if row.change_24h is not None else None
+            }
+            for row in rows
+        }

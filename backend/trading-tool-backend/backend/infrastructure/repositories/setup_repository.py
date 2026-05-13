@@ -25,7 +25,7 @@ class SetupRepository:
     async def create_setup(self, payload: dict, user_id: int, tags: list) -> int:
         query = text("""
             INSERT INTO setups (
-                name, timeframe,
+                name, symbol, timeframe,
                 setup_type,
                 dca_frequency, dca_day, dca_month_day,
                 account_type, min_investment, tags, trend, score_logic,
@@ -36,7 +36,7 @@ class SetupRepository:
                 created_at, user_id
             )
             VALUES (
-                :name, :timeframe,
+                :name, :symbol, :timeframe,
                 :setup_type,
                 :dca_frequency, :dca_day, :dca_month_day,
                 :account_type, :min_investment, :tags, :trend, :score_logic,
@@ -51,6 +51,7 @@ class SetupRepository:
         
         params = {
             "name": payload.get("name"),
+            "symbol": payload.get("symbol"),
             "timeframe": payload.get("timeframe"),
             "setup_type": payload.get("setup_type"),
             

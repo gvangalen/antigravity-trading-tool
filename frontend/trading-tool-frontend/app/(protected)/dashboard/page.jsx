@@ -14,6 +14,7 @@ import TradingBrain from "@/components/dashboard/TradingBrain";
 import TableTabs from "@/components/dashboard/TableTabs";
 import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
+import FINNIntelligenceFeed from "@/components/dashboard/FINNIntelligenceFeed";
 
 // Table Components
 import TechnicalDayTableForDashboard from "@/components/technical/TechnicalDayTableForDashboard";
@@ -127,6 +128,13 @@ export default function DashboardPage() {
              <CompactGauges symbol={activeSymbol} />
            </DashboardErrorBoundary>
         </div>
+      </div>
+
+      {/* 🔮 LIVE INTELLIGENCE TERMINAL (V3.0) */}
+      <div className="mt-12">
+        <DashboardErrorBoundary>
+          <FINNIntelligenceFeed />
+        </DashboardErrorBoundary>
       </div>
 
       <div className="flex flex-col xl:flex-row gap-20 py-12">

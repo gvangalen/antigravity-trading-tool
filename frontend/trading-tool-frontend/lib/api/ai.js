@@ -76,77 +76,140 @@ export const fetchAssistantInsight = (context) => {
 };
 
 // ========================================
-// ⚡ 7. AI Assistant Chat Stream (SSE)
+// ⚡ 7. Execute Pending AI Action
 // ========================================
-export const assistantChatStream = async (query, context = {}, history = [], onChunk, onEnvelope, onError) => {
-  try {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    const headers = {
-      'Content-Type': 'application/json',
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+export const executePendingAction = (actionId) => {
+  return fetchAuth(`/api/assistant/actions/execute`, {
+    method: 'POST',
+    body: JSON.stringify({ action_id: actionId }),
+  });
+};
+
+// ========================================
+// ⚡ 8. AI Assistant Chat Stream (SSE) with Resilience
+// ========================================
+let activeAbortController = null;
+
+export const assistantChatStream = async (query, context = {}, history = [], onChunk, onEnvelope, onError, maxRetries = 2) => {
+  // 1. Cancel previous stream to prevent duplicates & resource leaks
+  if (activeAbortController) {
+    try {
+      activeAbortController.abort();
+    } catch (e) {
+      console.warn("Aborted previous assistant stream:", e);
     }
+  }
 
-    const response = await fetch(`${API_BASE_URL}/api/assistant/chat/stream`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ query, context, history }),
-    });
+  activeAbortController = new AbortController();
+  const signal = activeAbortController.signal;
 
-    if (!response.ok) {
-      throw new Error(`Streaming request failed: ${response.statusText}`);
-    }
+  let attempt = 0;
+  let delay = 1000;
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
+  while (attempt <= maxRetries) {
+    if (signal.aborted) return;
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
 
-      buffer += decoder.decode(value, { stream: true });
-      
-      const parts = buffer.split('\n\n');
-      buffer = parts.pop() || '';
+      const response = await fetch(`${API_BASE_URL}/api/assistant/chat/stream`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        signal,
+        body: JSON.stringify({ query, context, history }),
+      });
 
-      for (const part of parts) {
-        if (!part.trim()) continue;
+      if (!response.ok) {
+        throw new Error(`Streaming request failed: ${response.statusText}`);
+      }
 
-        const lines = part.split('\n');
-        let event = 'text';
-        let data = '';
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
 
-        for (const line of lines) {
-          if (line.startsWith('event:')) {
-            event = line.replace('event:', '').trim();
-          } else if (line.startsWith('data:')) {
-            data = line.replace('data:', '').trim();
-          }
+      while (true) {
+        if (signal.aborted) {
+          try { reader.cancel(); } catch {}
+          return;
         }
 
-        if (event === 'text') {
-          onChunk(data);
-        } else if (event === 'envelope') {
-          try {
-            const parsedEnvelope = JSON.parse(data);
-            onEnvelope(parsedEnvelope);
-          } catch (err) {
-            console.error('Error parsing SSE envelope:', err);
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+
+        for (const part of parts) {
+          if (!part.trim()) continue;
+
+          const lines = part.split('\n');
+          let event = 'text';
+          let data = '';
+
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              event = line.replace('event:', '').trim();
+            } else if (line.startsWith('data:')) {
+              data = line.replace('data:', '').trim();
+            }
           }
-        } else if (event === 'error') {
-          try {
-            const errObj = JSON.parse(data);
-            onError(errObj.response || 'An error occurred during streaming.');
-          } catch {
-            onError(data || 'An error occurred during streaming.');
+
+          if (event === 'text') {
+            onChunk(data);
+          } else if (event === 'envelope') {
+            try {
+              const parsedEnvelope = JSON.parse(data);
+              onEnvelope(parsedEnvelope);
+            } catch (err) {
+              console.error('Error parsing SSE envelope:', err);
+            }
+          } else if (event === 'error') {
+            try {
+              const errObj = JSON.parse(data);
+              onError(errObj.response || 'An error occurred during streaming.');
+            } catch {
+              onError(data || 'An error occurred during streaming.');
+            }
           }
         }
       }
+
+      // If we finished successfully, clear abort controller reference and break
+      if (activeAbortController?.signal === signal) {
+        activeAbortController = null;
+      }
+      return;
+
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log("Stream fetch explicitly aborted.");
+        return;
+      }
+
+      console.warn(`Stream attempt ${attempt + 1} failed.`, error);
+      attempt++;
+
+      if (attempt <= maxRetries && !signal.aborted) {
+        // Wait with exponential backoff before retrying
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+      } else {
+        console.error('Max streaming retries reached. Failing gracefully.', error);
+        if (activeAbortController?.signal === signal) {
+          activeAbortController = null;
+        }
+        onError(error.message || 'Connection failed.');
+      }
     }
-  } catch (error) {
-    console.error('Error in assistantChatStream:', error);
-    onError(error.message || 'Connection failed.');
   }
 };
+

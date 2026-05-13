@@ -17,7 +17,8 @@ import {
   ChevronRight,
   Activity,
   Zap,
-  Target
+  Target,
+  Rocket
 } from "lucide-react";
 
 import { useScoresData } from "@/hooks/useScoresData";

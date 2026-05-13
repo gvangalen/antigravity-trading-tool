@@ -9,17 +9,16 @@ from backend.schemas.dashboard_schema import (
     DashboardResponse,
     TradingAdviceSchema,
     TopSetupSchema,
-    SetupSummarySchema
+    SetupSummarySchema,
+    MobileOverviewResponse
 )
 from backend.services.dashboard_service import DashboardService
-from backend.infrastructure.repositories.dashboard_repository import DashboardRepository
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 async def get_dashboard_service(db: AsyncSession = Depends(get_db)):
-    repo = DashboardRepository(db)
-    return DashboardService(repo)
+    return DashboardService(db)
 
 # =========================================================
 # 🔥 DASHBOARD DATA (USER-SPECIFIEK)
@@ -83,3 +82,20 @@ async def get_setup_summary(
 ):
     user_id = current_user["id"]
     return await service.get_setup_summary(user_id)
+
+
+# =========================================================
+# 📱 UNIFIED MOBILE OVERVIEW BOOTSTRAP (Fase 4 / Optie C)
+# =========================================================
+@router.get("/dashboard/mobile-overview", response_model=MobileOverviewResponse)
+async def get_mobile_overview(
+    bypass_cache: bool = False,
+    current_user: dict = Depends(get_current_user),
+    service: DashboardService = Depends(get_dashboard_service)
+):
+    """
+    Consolideert macro, technical, active bots, watchlist en FINN briefings
+    in één snelle request voor mobiele startschermen met ingebouwde in-memory caching.
+    """
+    user_id = current_user["id"]
+    return await service.get_mobile_overview(user_id, bypass_cache=bypass_cache)

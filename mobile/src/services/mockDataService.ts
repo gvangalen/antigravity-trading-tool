@@ -1,4 +1,4 @@
-import { apiClient } from './apiClient';
+import { assistantApi } from './tradamindApi';
 import { ChatMessage } from '../types/assistant';
 import { TodayScores } from '../types/scores';
 import { Strategy } from '../types/strategy';
@@ -38,8 +38,18 @@ export async function getInitialChatMessages(): Promise<ChatMessage[]> {
 
 export async function sendAssistantMessage(content: string): Promise<ChatMessage> {
   try {
-    const response = await apiClient.postAssistantChat({ message: content });
-    return response.message;
+    const response = await assistantApi.chat(content, {
+      page_type: 'legacy_mobile_mock',
+      symbol: 'BTC',
+      timeframe: 'Daily',
+    });
+
+    return {
+      id: response.trace_id || `assistant-${Date.now()}`,
+      role: 'assistant',
+      content: response.response,
+      createdAt: now(),
+    };
   } catch {
     await wait(700);
 

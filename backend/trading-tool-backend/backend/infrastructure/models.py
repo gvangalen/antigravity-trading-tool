@@ -388,3 +388,31 @@ class ChatMessage(Base):
     intent = Column(String, nullable=True)  # e.g., 'chat', 'decision', etc.
     actions = Column(JSON, nullable=True)   # Custom buttons/forms in JSON format
 
+
+class AiPendingAction(Base):
+    __tablename__ = 'ai_pending_actions'
+
+    id = Column(String, primary_key=True)  # UUID string
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    type = Column(String, nullable=False)  # 'setup_draft', 'strategy_draft', 'bot_draft', 'watchlist_add', etc.
+    payload = Column(JSON, nullable=False)  # Config payload
+    status = Column(String, nullable=False, default='pending')  # 'pending', 'executed', 'expired', 'canceled'
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    trace_id = Column(String, nullable=True)
+
+
+class AiIntelligenceEvent(Base):
+    __tablename__ = 'ai_intelligence_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    type = Column(String, nullable=False)  # 'macro_shift', 'volatility_expansion', 'risk_spike', 'bot_underperformance', 'drawdown_alert', 'setup_activation'
+    symbol = Column(String, nullable=True)  # e.g., 'SOL', 'BTC'
+    title = Column(String, nullable=False)  # e.g., "Hoge SOL Concentratie"
+    description = Column(String, nullable=False)  # Rich explanation in Dutch
+    severity = Column(String, nullable=False, default='info')  # 'info', 'warning', 'critical'
+    payload = Column(JSON, nullable=True)  # Contextual parameters/attributes
+    status = Column(String, nullable=False, default='active')  # 'active', 'archived'
+    created_at = Column(DateTime, default=datetime.utcnow)
+

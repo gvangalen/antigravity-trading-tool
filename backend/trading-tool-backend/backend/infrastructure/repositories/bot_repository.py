@@ -43,9 +43,9 @@ class BotRepository:
               b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
               b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
               b.budget_max_order_eur, b.max_asset_exposure_pct, b.base_currency, b.last_run,
-              b.symbol, b.created_at, b.updated_at,
+              COALESCE(st.symbol, 'BTC') AS symbol, b.created_at, b.updated_at,
               s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
-              st.id AS setup_id, st.name AS setup_name, st.symbol AS symbol, st.timeframe AS timeframe
+              st.id AS setup_id, st.name AS setup_name, st.symbol AS setup_symbol, st.timeframe AS timeframe
             FROM bot_configs b
             LEFT JOIN strategies s ON s.id = b.strategy_id
             LEFT JOIN setups st    ON st.id = s.setup_id
@@ -61,9 +61,9 @@ class BotRepository:
               b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
               b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
               b.budget_max_order_eur, b.max_asset_exposure_pct, b.base_currency, b.last_run,
-              b.symbol, b.created_at, b.updated_at,
+              COALESCE(st.symbol, 'BTC') AS symbol, b.created_at, b.updated_at,
               s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
-              st.id AS setup_id, st.name AS setup_name, st.symbol AS symbol, st.timeframe AS timeframe
+              st.id AS setup_id, st.name AS setup_name, st.symbol AS setup_symbol, st.timeframe AS timeframe
             FROM bot_configs b
             LEFT JOIN strategies s ON s.id = b.strategy_id
             LEFT JOIN setups st    ON st.id = s.setup_id
@@ -77,7 +77,7 @@ class BotRepository:
     async def get_active_bots_with_setups(self, user_id: int) -> List[dict]:
         query = text("""
             SELECT b.id, b.name,
-              COALESCE(b.symbol,'BTC') AS symbol,
+              COALESCE(st.symbol,'BTC') AS symbol,
               COALESCE(st.timeframe,'—') AS timeframe,
               s.setup_type,
               st.name AS setup_name
