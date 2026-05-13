@@ -5,6 +5,7 @@ import { useModal } from "@/components/modal/ModalProvider";
 
 import { generateExplanation } from "@/lib/api/setups";
 import AILoader from "@/components/ui/AILoader";
+import SetupForm from "@/components/setup/SetupForm";
 
 import {
   Star,
@@ -164,9 +165,6 @@ export default function SetupList({
   }
 
   function SetupFormWrapper({ setup }) {
-    const SetupForm =
-      require("@/components/setup/SetupForm").default;
-
     return (
       <div className="space-y-6 pt-4">
         <SetupForm

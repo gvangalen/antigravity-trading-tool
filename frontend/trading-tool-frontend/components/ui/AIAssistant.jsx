@@ -350,7 +350,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   const handleEditDraft = async (draft, onSuccess) => {
     if (draft.type === "setup") {
       try {
-        const SetupForm = require("@/components/setup/SetupForm").default;
+        const SetupForm = (await import("@/components/setup/SetupForm")).default;
         openConfirm({
           title: `Bewerk Setup Concept`,
           tone: "primary",
@@ -377,7 +377,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       }
     } else if (draft.type === "strategy") {
       try {
-        const StrategyForm = require("@/components/strategy/StrategyForm").default;
+        const StrategyForm = (await import("@/components/strategy/StrategyForm")).default;
         const setupsList = await fetchSetups();
         openConfirm({
           title: `Bewerk Strategie Concept`,
@@ -417,7 +417,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       }
     } else if (draft.type === "bot") {
       try {
-        const AddBotForm = require("@/components/bot/AddBotForm").default;
+        const AddBotForm = (await import("@/components/bot/AddBotForm")).default;
         const stratList = await fetchStrategies();
         let currentFormVal = {};
         openConfirm({
