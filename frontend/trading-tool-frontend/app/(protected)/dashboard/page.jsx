@@ -82,8 +82,8 @@ export default function DashboardPage() {
      🔁 MAPPING & SYNC
    -------------------------------------------------------- */
   function mapSetupToTradingView(setup, globalSymbol) {
-    // Priority: 1. Setup/Bot Symbol, 2. Global Selected Asset
-    const targetSymbol = setup?.symbol || globalSymbol || "BTC";
+    // Priority: 1. Global Active Symbol (already resolves URL/bot/setup/global), 2. Setup Symbol
+    const targetSymbol = globalSymbol || setup?.symbol || "BTC";
     
     const intervalMap = {
       "1W": "W",
