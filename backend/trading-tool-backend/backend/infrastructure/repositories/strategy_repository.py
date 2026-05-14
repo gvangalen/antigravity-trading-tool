@@ -99,12 +99,32 @@ class StrategyRepository:
     async def query_strategies(self, user_id: int, filters: dict) -> List[dict]:
         q = """
             SELECT
-                s.*,
+                s.id,
+                s.setup_id,
+                s.name,
+                s.user_id,
+                COALESCE(sn.entry::text, s.entry::text) as entry,
+                COALESCE(sn.targets, array_to_string(s.targets, ',')) as targets,
+                COALESCE(sn.stop_loss::text, s.stop_loss::text) as stop_loss,
+                s.risk_profile,
+                s.explanation,
+                s.setup_type,
+                s.execution_mode,
+                s.base_amount,
+                s.decision_curve,
+                s.decision_curve_id,
+                s.data,
+                s.created_at,
                 st.symbol AS setup_symbol,
                 st.timeframe AS setup_timeframe,
                 st.name AS setup_name
             FROM strategies s
             LEFT JOIN setups st ON st.id = s.setup_id
+            LEFT JOIN (
+                SELECT DISTINCT ON (strategy_id) strategy_id, entry::text as entry, targets::text as targets, stop_loss::text as stop_loss 
+                FROM active_strategy_snapshot 
+                ORDER BY strategy_id, snapshot_date DESC
+            ) sn ON sn.strategy_id = s.id
             WHERE s.user_id = :user_id
         """
         params = {"user_id": user_id}
@@ -167,8 +187,6 @@ class StrategyRepository:
         return result.rowcount
 
     async def get_strategy_by_setup(self, setup_id: int, user_id: int) -> Optional[dict]:
-        # We prioritiseren de 'active_strategy_snapshot' van vandaag voor het dashboard.
-        # Als die er niet is, vallen we terug op de laatst gemaakte strategie.
         query = text("""
             SELECT 
                 s.id,
@@ -186,8 +204,11 @@ class StrategyRepository:
                 s.data,
                 s.created_at
             FROM strategies s
-            LEFT JOIN active_strategy_snapshot sn ON s.id = sn.strategy_id 
-                AND sn.snapshot_date = CURRENT_DATE
+            LEFT JOIN (
+                SELECT DISTINCT ON (strategy_id) strategy_id, entry::text as entry, targets::text as targets, stop_loss::text as stop_loss 
+                FROM active_strategy_snapshot 
+                ORDER BY strategy_id, snapshot_date DESC
+            ) sn ON sn.strategy_id = s.id
             WHERE s.setup_id = :setup_id AND s.user_id = :user_id
             ORDER BY s.created_at DESC
             LIMIT 1
