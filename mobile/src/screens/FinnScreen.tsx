@@ -190,16 +190,27 @@ export function FinnScreen() {
           insightResource.refresh();
         }}
       >
-        <AssetContextHeader
-          asset={briefing.asset}
-          context="FINN operating layer"
-          updatedAt={overviewResource.updatedAt || insightResource.updatedAt}
-        />
-        <SectionHeader
-          label="FINN"
-          title={`AI trading chief of staff${user?.first_name ? ` voor ${user.first_name}` : ''}`}
-          description="Live mobile overview, coaching, setup uitleg, risk warnings and desktop continuation in one assistant-first home."
-        />
+        <View style={styles.compactHeader}>
+          <View style={styles.headerTitleRow}>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>FINN</Text>
+            <View style={styles.headerBadge}>
+              <Text style={styles.headerBadgeText}>Chief of Staff</Text>
+            </View>
+          </View>
+          <Text style={[styles.headerContextText, { color: colors.textDim }]}>
+            {briefing.asset} · Active Operating Layer
+          </Text>
+        </View>
+
+        <View style={[styles.postureBox, { backgroundColor: appearance === 'light' ? '#EFF6FF' : theme.colors.accentSoft, borderColor: appearance === 'light' ? '#BFDBFE' : '#3B82F644' }]}>
+          <View style={styles.hudSectionHeader}>
+            <Text style={styles.hudSectionIcon}>🛡️</Text>
+            <Text style={[styles.hudSectionTitle, { color: colors.textDim }]}>ACTIEVE BRIEFING</Text>
+          </View>
+          <Text style={[styles.quoteText, { color: colors.text }]}>
+            "{(insightResource.data as any)?.greeting || `Hallo ${user?.first_name || 'Henk'}, alle ${briefing.asset} feeds draaien stabiel.`} {briefing.summary || insightCard.body || 'BTC bevindt zich in een consolidatiefase met verhoogd correctierisico zolang volume achterblijft.'}"
+          </Text>
+        </View>
 
         <MobileFINNFeed
           events={localEvents}
@@ -211,23 +222,6 @@ export function FinnScreen() {
           <LoadingSkeletonCard />
         ) : (
           <View style={styles.hudContainer}>
-            {/* PERSONALIZED GREETING */}
-            <View style={[styles.greetingBox, { backgroundColor: appearance === 'light' ? '#EFF6FF' : theme.colors.accentSoft, borderColor: appearance === 'light' ? '#BFDBFE' : '#3B82F644' }]}>
-              <Text style={[styles.quoteText, { color: colors.text }]}>
-                "{(insightResource.data as any)?.greeting || `Hallo ${user?.first_name || 'Henk'}, alle ${briefing.asset} feeds en portfolio operaties draaien stabiel.`}"
-              </Text>
-            </View>
-
-            {/* Section 3 — FINN Briefing */}
-            <View style={[styles.briefingBox, { backgroundColor: colors.surface, borderColor: colors.borderStrong }]}>
-              <View style={styles.hudSectionHeader}>
-                <Text style={styles.hudSectionIcon}>🛡️</Text>
-                <Text style={[styles.hudSectionTitle, { color: colors.textDim }]}>FINN BRIEFING</Text>
-              </View>
-              <Text style={[styles.quoteText, { color: colors.text }]}>
-                "{briefing.summary || insightCard.body || 'BTC bevindt zich momenteel in een consolidatiefase met verhoogd correctierisico zolang volume achterblijft. FINN handhaaft een defensieve posture.'}"
-              </Text>
-            </View>
 
             {/* Section 4 — Recent Conversations */}
             <View style={[styles.recentSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -405,13 +399,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
-  briefingBox: {
-    borderWidth: 1,
-    borderRadius: theme.radius.lg,
-    padding: theme.spacing.lg,
-    marginBottom: theme.spacing.sm,
+  compactHeader: {
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
   },
-  greetingBox: {
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  headerBadge: {
+    backgroundColor: '#3B82F622',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  headerBadgeText: {
+    color: '#3B82F6',
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  headerContextText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  postureBox: {
     borderWidth: 1,
     borderRadius: theme.radius.lg,
     padding: theme.spacing.lg,

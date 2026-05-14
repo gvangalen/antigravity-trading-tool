@@ -488,16 +488,21 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       } w-full md:w-[400px]`}
     >
       {/* HEADER */}
-      <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-card dark:bg-[#0f172a] relative z-10 shadow-sm flex-shrink-0">
+      <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-card dark:bg-[#0f172a] relative z-10 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30">
-             <Bot size={22} />
+          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30">
+             <Bot size={20} />
           </div>
           <div>
-            <h2 className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">Tradamind AI</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">FINN</h2>
+              <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">Chief of Staff</span>
+            </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-bold text-secondary dark:text-slate-500 uppercase tracking-widest leading-none">Intelligence Layer Pulse</span>
+              <span className="text-[10px] font-bold text-secondary dark:text-slate-500 uppercase tracking-widest leading-none">
+                {context.page_type} · {context.symbol} · {context.timeframe}
+              </span>
             </div>
           </div>
         </div>
@@ -510,32 +515,43 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar scroll-smooth" ref={scrollRef}>
-        {/* SECTION 1 — Active Context */}
-        <div className="px-6 py-4 border-b border-slate-50 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20">
-          <div className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-sm">
-             <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-                <Activity size={14} className="text-blue-600 dark:text-blue-400" />
-             </div>
-             <div>
-                <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest block leading-none mb-1">Active Context</span>
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block leading-none">{context.page_type} • {context.symbol} • {context.timeframe}</span>
-             </div>
+        {/* SECTION 1 — FINN POSTURE & BRIEFING */}
+        <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20 space-y-2.5 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Shield size={12} className="text-blue-600" />
+              <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Actieve Briefing</span>
+            </div>
+            <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-200/50 dark:border-emerald-800/50">Defensieve Posture</span>
           </div>
-        </div>
-
-        {/* PERSONALIZED GREETING */}
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-blue-50/40 dark:bg-blue-900/10 animate-fade-in">
-          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-4 border-blue-500 pl-3 py-1">
-            "{insight?.greeting || 
-              (context.page_type === "Onboarding" 
-                ? `Hallo ${preferences?.first_name || 'Henk'}, de onboarding protocollen zijn geladen. Laten we je cockpit startklaar maken.`
-                : (insightLoading 
-                  ? `Hallo ${preferences?.first_name || 'Henk'}, bezig met synchroniseren van ${context.symbol}...` 
-                  : `Hallo ${preferences?.first_name || 'Henk'}, alle ${context.symbol} feeds en portfolio operaties draaien stabiel.`
-                )
-              )
-            }"
-          </p>
+          {isOnboarding ? (
+            <div className="p-4 bg-blue-600/5 dark:bg-blue-600/10 border-2 border-blue-600/20 rounded-2xl animate-in slide-in-from-right-4 duration-500">
+               <div className="flex items-center gap-2.5 mb-3">
+                  <div className="p-1.5 bg-blue-600 rounded-lg shadow-lg shadow-blue-600/20">
+                    <ListChecks size={14} className="text-white" />
+                  </div>
+                  <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 tracking-widest uppercase">Setup Guide</span>
+               </div>
+               <div className="space-y-3">
+                  <p className="text-sm font-bold text-foreground dark:text-slate-100 leading-snug">
+                    {stepStatus?.[`has_${pathname.split('/').pop()}`] ? (
+                      `Excellent. The ${pathname.split('/').pop()} data stream is now stabilized and streaming high-fidelity intelligence to your cockpit. Return to the Launch Center for the next protocol.`
+                    ) : (
+                      pathname.includes("market") ? "Market data is required to monitor live price action. Search for BTC and add it to your monitor." :
+                      pathname.includes("macro") ? "Macro indicators track global liquidity and dollar strength. Search for DXY and add it to your monitor." :
+                      pathname.includes("technical") ? "Technical signals identify price momentum and trends. Search for RSI and add it to your monitor." :
+                      pathname.includes("setup") ? "Setups define your specific entry and exit rules. Click the 'New Setup' button to create your first rule-set." :
+                      pathname.includes("strategy") ? "The strategy engine builds your AI-driven execution model. Click the 'Generate Strategy' button to finalize your cockpit." :
+                      "I will guide you through the 5 steps to activate your system. Once initialized, your dashboard will be fully operational with live data and AI insights."
+                    )}
+                  </p>
+               </div>
+            </div>
+          ) : (
+            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
+              "{insight?.greeting || `Hallo ${preferences?.first_name || 'Henk'}, alle ${context.symbol} feeds draaien stabiel.`} {getInsightField('bot_insight', 'conclusion') || getInsightField('market_insight', 'conclusion') || "BTC bevindt zich momenteel in een consolidatiefase met verhoogd correctierisico zolang volume achterblijft."}"
+            </p>
+          )}
         </div>
 
         {/* SECTION 2 — FINN Live Intelligence Terminal */}
@@ -588,47 +604,6 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
               ))
             )}
           </div>
-        </div>
-
-        {/* SECTION 3 — FINN Briefing */}
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/10 space-y-3">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-blue-600 text-white rounded-lg">
-              <Shield size={12} />
-            </div>
-            <span className="text-[10px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest">FINN Briefing</span>
-          </div>
-          {isOnboarding ? (
-            <div className="p-4 bg-blue-600/5 dark:bg-blue-600/10 border-2 border-blue-600/20 rounded-2xl animate-in slide-in-from-right-4 duration-500">
-               <div className="flex items-center gap-2.5 mb-3">
-                  <div className="p-1.5 bg-blue-600 rounded-lg shadow-lg shadow-blue-600/20">
-                    <ListChecks size={14} className="text-white" />
-                  </div>
-                  <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 tracking-widest uppercase">Setup Guide</span>
-               </div>
-               
-               <div className="space-y-3">
-                  <p className="text-sm font-bold text-foreground dark:text-slate-100 leading-snug">
-                    {stepStatus?.[`has_${pathname.split('/').pop()}`] ? (
-                      `Excellent. The ${pathname.split('/').pop()} data stream is now stabilized and streaming high-fidelity intelligence to your cockpit. Return to the Launch Center for the next protocol.`
-                    ) : (
-                      pathname.includes("market") ? "Market data is required to monitor live price action. Search for BTC and add it to your monitor." :
-                      pathname.includes("macro") ? "Macro indicators track global liquidity and dollar strength. Search for DXY and add it to your monitor." :
-                      pathname.includes("technical") ? "Technical signals identify price momentum and trends. Search for RSI and add it to your monitor." :
-                      pathname.includes("setup") ? "Setups define your specific entry and exit rules. Click the 'New Setup' button to create your first rule-set." :
-                      pathname.includes("strategy") ? "The strategy engine builds your AI-driven execution model. Click the 'Generate Strategy' button to finalize your cockpit." :
-                      "I will guide you through the 5 steps to activate your system. Once initialized, your dashboard will be fully operational with live data and AI insights."
-                    )}
-                  </p>
-               </div>
-            </div>
-          ) : (
-            <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm group hover:border-blue-500/30 transition-all">
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic">
-                "{getInsightField('bot_insight', 'conclusion') || getInsightField('market_insight', 'conclusion') || "BTC bevindt zich momenteel in een consolidatiefase met verhoogd correctierisico zolang volume achterblijft. FINN handhaaft een defensieve posture."}"
-              </p>
-            </div>
-          )}
         </div>
 
         {/* SECTION 4 — Recent Conversations */}
