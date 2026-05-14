@@ -5,6 +5,35 @@ import { Globe2, LineChart, DollarSign, Settings2, Sliders, Save, X } from "luci
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { GaugeSkeleton } from "./DashboardSkeleton";
 import { useState, useEffect } from "react";
+import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
+
+const getStructureLabel = (domain, score) => {
+  if (domain === 'macro') {
+    if (score >= 75) return "Expansion Regime";
+    if (score >= 50) return "Recovery Phase";
+    if (score >= 35) return "Stagflation Risk";
+    return "Contraction Regime";
+  }
+  if (domain === 'technical') {
+    if (score >= 75) return "Bullish Continuation";
+    if (score >= 55) return "Bullish Recovery";
+    if (score >= 40) return "Consolidation";
+    return "Bearish Correction";
+  }
+  if (domain === 'market') {
+    if (score >= 75) return "High Conviction";
+    if (score >= 50) return "Capital Inflow";
+    if (score >= 35) return "Liquidity Divergence";
+    return "Risk Aversion";
+  }
+  if (domain === 'setup') {
+    if (score >= 75) return "Premium Alignment";
+    if (score >= 50) return "Favorable Risk/Reward";
+    if (score >= 35) return "Sub-optimal Quality";
+    return "High Drawdown Risk";
+  }
+  return "Stable Structure";
+};
 
 /**
  * 📏 CompactGauges — Minimalist Status Bar (V2.1)
@@ -13,6 +42,7 @@ import { useState, useEffect } from "react";
 export default function CompactGauges({ symbol = "BTC" }) {
   const { t } = useTranslation();
   const { macro, technical, market, setup, master, loading, saveWeights } = useScoresData(symbol);
+  const { data: marketIntelligence } = useMarketIntelligence(symbol);
   const [isEditing, setIsEditing] = useState(false);
   const [localWeights, setLocalWeights] = useState({
      macro: 0.25,
@@ -75,10 +105,10 @@ export default function CompactGauges({ symbol = "BTC" }) {
   };
 
   const items = [
-    { id: 'macro', title: t.dashboard.gauges.macro, icon: <Globe2 size={14} />, score: macro.score, weight: localWeights.macro },
-    { id: 'technical', title: t.dashboard.gauges.technical, icon: <LineChart size={14} />, score: technical.score, weight: localWeights.technical },
-    { id: 'market', title: t.dashboard.gauges.market, icon: <DollarSign size={14} />, score: market.score, weight: localWeights.market },
-    { id: 'setup', title: t.dashboard.gauges.setup, icon: <Settings2 size={14} />, score: setup.score, weight: localWeights.setup },
+    { id: 'macro', title: t.dashboard.gauges.macro, icon: <Globe2 size={14} />, score: macro.score, weight: localWeights.macro, structure: getStructureLabel('macro', macro.score) },
+    { id: 'technical', title: t.dashboard.gauges.technical, icon: <LineChart size={14} />, score: technical.score, weight: localWeights.technical, structure: getStructureLabel('technical', technical.score) },
+    { id: 'market', title: t.dashboard.gauges.market, icon: <DollarSign size={14} />, score: market.score, weight: localWeights.market, structure: getStructureLabel('market', market.score) },
+    { id: 'setup', title: t.dashboard.gauges.setup, icon: <Settings2 size={14} />, score: setup.score, weight: localWeights.setup, structure: getStructureLabel('setup', setup.score) },
   ];
 
   if (loading && !isEditing) {
@@ -135,13 +165,18 @@ export default function CompactGauges({ symbol = "BTC" }) {
           return (
             <div key={idx} className="space-y-2">
                <div className={`flex items-center justify-between px-3 sm:px-4 py-2.5 rounded-xl border ${borderClass} ${bgClass} shadow-sm transition-all hover:shadow-md ${isEditing ? 'ring-2 ring-blue-500/20 border-blue-500/40' : ''}`}>
-                  <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-                  <div className={`shrink-0 p-1.5 rounded-lg bg-card dark:bg-slate-800 shadow-sm ${colorClass} border border-slate-50 dark:border-slate-700`}>
-                     {item.icon}
-                  </div>
-                  <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-secondary dark:text-slate-500 truncate">
-                     {item.title}
-                  </span>
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                    <div className={`shrink-0 p-2 rounded-lg bg-card dark:bg-slate-800 shadow-sm ${colorClass} border border-slate-50 dark:border-slate-700`}>
+                       {item.icon}
+                    </div>
+                    <div className="flex flex-col min-w-0 text-left">
+                      <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-secondary dark:text-slate-500 truncate leading-none">
+                         {item.title}
+                      </span>
+                      <span className="text-[9px] font-extrabold uppercase tracking-widest text-[var(--primary)] dark:text-blue-400 truncate mt-1 leading-none">
+                         {item.structure}
+                      </span>
+                    </div>
                   </div>
                   
                   <div className="flex items-center gap-1.5 shrink-0 ml-2">
@@ -185,6 +220,44 @@ export default function CompactGauges({ symbol = "BTC" }) {
             </div>
           );
         })}
+      </div>
+
+      {/* 🧩 MARKET CYCLE PROGRESSOR */}
+      <div className="space-y-4 pt-4 px-2 border-t border-slate-100 dark:border-slate-800/80">
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Structural Cycle Phase</div>
+          <div className="text-[10px] font-black text-[var(--primary)] uppercase tracking-widest bg-blue-50 dark:bg-blue-900/20 px-2.5 py-0.5 rounded-md border border-blue-100 dark:border-blue-800/50">
+             Active: {marketIntelligence?.cycle || "Expansion"}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-3 h-3 items-end pb-2">
+          {["Accumulation", "Expansion", "Distribution", "Correction"].map((p, i) => {
+            const phaseStr = marketIntelligence?.cycle || "Expansion";
+            const phaseIndex = { accumulation: 0, expansion: 1, distribution: 2, correction: 3 }[phaseStr.toLowerCase()] ?? 1;
+            const isActive = i === phaseIndex;
+            const isCompleted = i < phaseIndex;
+            
+            return (
+              <div key={p} className="relative group flex flex-col items-center">
+                <div 
+                  className={`w-full h-2 rounded-full transition-all duration-700 ${
+                    isActive 
+                      ? "bg-blue-600 shadow-[0_0_12px_rgba(37,99,235,0.4)] scale-y-125" 
+                      : isCompleted 
+                        ? "bg-slate-300 dark:bg-slate-700" 
+                        : "bg-[var(--color-border-subtle)] dark:bg-slate-800"
+                  }`} 
+                />
+                <div className={`mt-3 text-[9px] font-black uppercase tracking-[0.15em] transition-colors whitespace-nowrap ${
+                  isActive ? "text-blue-600 dark:text-blue-400" : isCompleted ? "text-muted dark:text-slate-400" : "text-slate-300 dark:text-slate-600"
+                }`}>
+                  {p}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {isEditing && (
