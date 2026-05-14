@@ -222,43 +222,6 @@ export default function CompactGauges({ symbol = "BTC" }) {
         })}
       </div>
 
-      {/* 🧩 MARKET CYCLE PROGRESSOR */}
-      <div className="space-y-4 pt-4 px-2 border-t border-slate-100 dark:border-slate-800/80">
-        <div className="flex items-center justify-between">
-          <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Structural Cycle Phase</div>
-          <div className="text-[10px] font-black text-[var(--primary)] uppercase tracking-widest bg-blue-50 dark:bg-blue-900/20 px-2.5 py-0.5 rounded-md border border-blue-100 dark:border-blue-800/50">
-             Active: {marketIntelligence?.cycle || "Expansion"}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-4 gap-3 h-3 items-end pb-2">
-          {["Accumulation", "Expansion", "Distribution", "Correction"].map((p, i) => {
-            const phaseStr = marketIntelligence?.cycle || "Expansion";
-            const phaseIndex = { accumulation: 0, expansion: 1, distribution: 2, correction: 3 }[phaseStr.toLowerCase()] ?? 1;
-            const isActive = i === phaseIndex;
-            const isCompleted = i < phaseIndex;
-            
-            return (
-              <div key={p} className="relative group flex flex-col items-center">
-                <div 
-                  className={`w-full h-2 rounded-full transition-all duration-700 ${
-                    isActive 
-                      ? "bg-blue-600 shadow-[0_0_12px_rgba(37,99,235,0.4)] scale-y-125" 
-                      : isCompleted 
-                        ? "bg-slate-300 dark:bg-slate-700" 
-                        : "bg-[var(--color-border-subtle)] dark:bg-slate-800"
-                  }`} 
-                />
-                <div className={`mt-3 text-[9px] font-black uppercase tracking-[0.15em] transition-colors whitespace-nowrap ${
-                  isActive ? "text-blue-600 dark:text-blue-400" : isCompleted ? "text-muted dark:text-slate-400" : "text-slate-300 dark:text-slate-600"
-                }`}>
-                  {p}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
 
       {isEditing && (
          <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 p-4 rounded-2xl animate-in fade-in zoom-in duration-300">

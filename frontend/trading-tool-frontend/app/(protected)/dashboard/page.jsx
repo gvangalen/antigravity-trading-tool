@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3,
   LineChart,
+  Activity,
 } from "lucide-react";
 
 import TradingViewChart from "@/components/charts/TradingViewChart";
@@ -15,6 +16,7 @@ import TableTabs from "@/components/dashboard/TableTabs";
 import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import FINNIntelligenceFeed from "@/components/dashboard/FINNIntelligenceFeed";
+import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
 
 // Table Components
 import TechnicalDayTableForDashboard from "@/components/technical/TechnicalDayTableForDashboard";
@@ -128,6 +130,17 @@ export default function DashboardPage() {
              <CompactGauges symbol={activeSymbol} />
            </DashboardErrorBoundary>
         </div>
+      </div>
+
+      {/* 🌐 GLOBAL MARKET TELEMETRY (STANDALONE TERMINAL INTELLIGENCE) */}
+      <div className="mt-8">
+        <DashboardErrorBoundary>
+          <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl transition-all duration-300 overflow-hidden shadow-sm">
+            <div className="card-p p-6 sm:p-10">
+              <GlobalMarketDecisionCard symbol={activeSymbol} />
+            </div>
+          </div>
+        </DashboardErrorBoundary>
       </div>
 
       {/* 🔮 LIVE INTELLIGENCE TERMINAL (V3.0) */}
