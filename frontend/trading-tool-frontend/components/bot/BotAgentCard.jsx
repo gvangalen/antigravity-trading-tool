@@ -9,6 +9,7 @@ import BotSettingsMenu from "@/components/bot/BotSettingsMenu";
 import TradePlanCard from "@/components/bot/TradePlanCard";
 import MarketDecisionCard from "@/components/bot/MarketDecisionCard";
 import GuardrailsPanel from "@/components/bot/GuardrailsPanel";
+import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
 
 import {
   Bot,
@@ -87,6 +88,12 @@ export default function BotAgentCard({
     safeDecision?.confidence_label ||
     safeDecision?.confidence ||
     "LOW";
+
+  /* ================= DYNAMIC BOT BRAIN ================= */
+  const {
+    data: botMarketIntelligence,
+    loading: loadingBotMarketIntelligence,
+  } = useMarketIntelligence(symbol);
 
   /* ================= BOT STATE ================= */
   const normalizedAction = String(safeDecision?.action || "").toLowerCase();
@@ -754,13 +761,13 @@ export default function BotAgentCard({
 
             {/* Module 2: Market Intelligence (THE BRAIN) */}
             <div className="bg-card rounded-[2rem] border border-slate-200 p-6 lg:p-8 shadow-sm">
-              {loadingMarketIntelligence ? (
+              {loadingBotMarketIntelligence ? (
                 <div className="flex items-center gap-3 text-xs font-black text-secondary uppercase tracking-widest p-10 justify-center">
                   <div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-[var(--primary)] animate-spin" />
                   Syncing Brain...
                 </div>
               ) : (
-                <MarketDecisionCard data={marketIntelligence} />
+                <MarketDecisionCard data={botMarketIntelligence} />
               )}
             </div>
 
