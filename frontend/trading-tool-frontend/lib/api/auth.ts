@@ -112,7 +112,9 @@ async function fetchAuthInternal(
     error.body = text;
     error.path = path;
 
-    console.error(`❌ fetchAuth ${path} failed:`, res.status, text);
+    if (res.status !== 401) {
+      console.error(`❌ fetchAuth ${path} failed:`, res.status, text);
+    }
     throw error;
   }
 

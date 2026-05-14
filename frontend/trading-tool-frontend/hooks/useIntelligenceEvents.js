@@ -19,7 +19,9 @@ export default function useIntelligenceEvents() {
       setEvents(data || []);
       setError(null);
     } catch (err) {
-      console.error("❌ Failed to fetch intelligence events:", err);
+      if (!err?.message?.includes("401")) {
+        console.error("❌ Failed to fetch intelligence events:", err);
+      }
       setError("Fout bij ophalen live intelligence");
     } finally {
       setLoading(false);

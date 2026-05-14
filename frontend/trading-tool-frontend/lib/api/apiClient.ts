@@ -20,7 +20,9 @@ export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error(`❌ API GET ${url} failed:`, res.status, text);
+    if (res.status !== 401) {
+      console.error(`❌ API GET ${url} failed:`, res.status, text);
+    }
     throw new Error(`API GET failed (${res.status})`);
   }
 
@@ -51,7 +53,9 @@ export async function apiPost<T>(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error(`❌ API POST ${url} failed:`, res.status, text);
+    if (res.status !== 401) {
+      console.error(`❌ API POST ${url} failed:`, res.status, text);
+    }
     throw new Error(`API POST failed (${res.status})`);
   }
 
@@ -82,7 +86,9 @@ export async function apiPut<T>(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error(`❌ API PUT ${url} failed:`, res.status, text);
+    if (res.status !== 401) {
+      console.error(`❌ API PUT ${url} failed:`, res.status, text);
+    }
     throw new Error(`API PUT failed (${res.status})`);
   }
 
@@ -108,7 +114,9 @@ export async function apiDelete<T>(path: string, init?: RequestInit): Promise<T>
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error(`❌ API DELETE ${url} failed:`, res.status, text);
+    if (res.status !== 401) {
+      console.error(`❌ API DELETE ${url} failed:`, res.status, text);
+    }
     throw new Error(`API DELETE failed (${res.status})`);
   }
 
