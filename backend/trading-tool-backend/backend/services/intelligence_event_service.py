@@ -249,7 +249,7 @@ class IntelligenceEventService:
                         title = f"TM Alert: {ev.title}"
                         message = ev.description
                         # notify_user stuurt notificatie naar zowel web push (PWA) als expo push tokens (Native Mobile)
-                        await push_service.notify_user(self.session, user_id, title, message)
+                        await push_service.notify_user_async(self.session, user_id, title, message)
                         logger.info(f"📱 Proactieve push notification verzonden voor kritiek event: {ev.title} (User: {user_id})")
                     except Exception as ex:
                         logger.error(f"⚠️ Push notification dispatch mislukt: {ex}")

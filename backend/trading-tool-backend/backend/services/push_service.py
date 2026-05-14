@@ -174,4 +174,119 @@ class PushService:
 
         return success_count
 
+    async def send_expo_notification_async(self, token: str, title: str, body: str, data: Optional[dict] = None, db_session = None) -> bool:
+        """Async version of send_expo_notification for FastAPI."""
+        token_str = str(token).strip()
+        if not (token_str.startswith("ExponentPushToken[") or token_str.startswith("ExpoPushToken[")) or not token_str.endswith("]"):
+            logger.warning(f"📱 [PushService] Invalid Expo token format detected: '{token_str}'. Skipping dispatch.")
+            if db_session:
+                await self._delete_dead_token_async(db_session, token_str)
+            return False
+
+        payload = {
+            "to": token_str,
+            "sound": "default",
+            "title": title,
+            "body": body,
+            "data": data or {}
+        }
+        url = "https://exp.host/--/api/v2/push/send"
+        
+        import asyncio
+        retries = 3
+        backoff_seconds = 1.0
+        response = None
+        
+        async with httpx.AsyncClient() as client:
+            for attempt in range(retries):
+                try:
+                    response = await client.post(url, json=payload, timeout=5.0)
+                    if response.status_code == 429:
+                        await asyncio.sleep(backoff_seconds)
+                        backoff_seconds *= 2
+                        continue
+                    elif response.status_code >= 500:
+                        await asyncio.sleep(backoff_seconds)
+                        backoff_seconds *= 2
+                        continue
+                    break
+                except (httpx.NetworkError, httpx.TimeoutException) as net_ex:
+                    if attempt == retries - 1:
+                        return False
+                    await asyncio.sleep(backoff_seconds)
+                    backoff_seconds *= 2
+
+        if not response:
+            return False
+
+        if response.status_code == 200:
+            resp_json = response.json()
+            data_res = resp_json.get("data")
+            is_dead = False
+            error_message = ""
+            
+            if isinstance(data_res, dict):
+                if data_res.get("status") == "error":
+                    error_message = data_res.get("message") or ""
+                    details = data_res.get("details") or {}
+                    if details.get("error") == "DeviceNotRegistered" or "DeviceNotRegistered" in error_message:
+                        is_dead = True
+            elif isinstance(data_res, list) and len(data_res) > 0:
+                item = data_res[0]
+                if item.get("status") == "error":
+                    error_message = item.get("message") or ""
+                    details = item.get("details") or {}
+                    if details.get("error") == "DeviceNotRegistered" or "DeviceNotRegistered" in error_message:
+                        is_dead = True
+
+            if is_dead:
+                logger.warning(f"🧹 [PushService] Expo reported DeviceNotRegistered for token: {token_str}. Error message: {error_message}")
+                if db_session:
+                    await self._delete_dead_token_async(db_session, token_str)
+                return False
+
+            logger.info(f"📱 Expo push notification successfully sent: {resp_json}")
+            return True
+        else:
+            logger.error(f"📱 Failed to send push via Expo. Status: {response.status_code}, Body: {response.text}")
+            return False
+
+    async def _delete_dead_token_async(self, db_session, token_str: str):
+        try:
+            from sqlalchemy import delete
+            await db_session.execute(delete(MobilePushToken).where(MobilePushToken.push_token == token_str))
+            await db_session.commit()
+            logger.warning(f"🧹 [PushService] Database cleanup: Removed dead mobile push token: {token_str}")
+        except Exception as ex:
+            logger.error(f"❌ [PushService] Failed to delete dead push token {token_str} from database: {ex}")
+
+    async def notify_user_async(self, db, user_id: int, title: str, message: str, url: Optional[str] = None) -> int:
+        """Async version of notify_user for FastAPI AsyncSession."""
+        success_count = 0
+        from sqlalchemy import select
+        
+        res = await db.execute(select(PushSubscription).where(PushSubscription.user_id == user_id))
+        subscriptions = res.scalars().all()
+        if subscriptions:
+            payload = {
+                "title": title,
+                "body": message,
+                "icon": "/icons/icon-192x192.png",
+                "badge": "/icons/badge-72x72.png",
+                "data": {"url": url or "/dashboard"}
+            }
+            for sub in subscriptions:
+                if self.send_notification(sub, payload):
+                    success_count += 1
+        
+        mob_res = await db.execute(select(MobilePushToken).where(MobilePushToken.user_id == user_id))
+        mobile_tokens = mob_res.scalars().all()
+        if mobile_tokens:
+            extra_data = {"url": url or "/dashboard"}
+            for mob in mobile_tokens:
+                if await self.send_expo_notification_async(mob.push_token, title, message, extra_data, db_session=db):
+                    success_count += 1
+        
+        return success_count
+
 push_service = PushService()
