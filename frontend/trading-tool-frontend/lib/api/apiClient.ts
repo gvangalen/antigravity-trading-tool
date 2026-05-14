@@ -1,16 +1,17 @@
 import { API_BASE_URL } from "@/lib/config";
+import { apiRefresh, clearUserLocal } from "@/lib/api/auth";
 
 //----------------------------------------------------------
 // 📡 GET
 //----------------------------------------------------------
 
-export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiGet<T>(path: string, init?: RequestInit & { _retry?: boolean }): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
 
   const res = await fetch(url, {
     ...init,
     method: "GET",
-    credentials: "include",       // ⬅️ COOKIE MEEGEVEN
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers || {}),
@@ -19,6 +20,19 @@ export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
+    if (res.status === 401 && !init?._retry) {
+      console.warn(`⚠️ 401 Unauthorized op apiGet(${path}). Probeer token te refreshen...`);
+      const refreshResult = await apiRefresh();
+      if (refreshResult.success) {
+        return apiGet(path, { ...init, _retry: true });
+      } else {
+        clearUserLocal();
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+      }
+    }
+
     const text = await res.text().catch(() => "");
     if (res.status !== 401) {
       console.error(`❌ API GET ${url} failed:`, res.status, text);
@@ -36,14 +50,14 @@ export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
 export async function apiPost<T>(
   path: string,
   body?: any,
-  init?: RequestInit
+  init?: RequestInit & { _retry?: boolean }
 ): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
 
   const res = await fetch(url, {
     ...init,
     method: "POST",
-    credentials: "include",        // ⬅️ COOKIE MEEGEVEN
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers || {}),
@@ -52,6 +66,19 @@ export async function apiPost<T>(
   });
 
   if (!res.ok) {
+    if (res.status === 401 && !init?._retry) {
+      console.warn(`⚠️ 401 Unauthorized op apiPost(${path}). Probeer token te refreshen...`);
+      const refreshResult = await apiRefresh();
+      if (refreshResult.success) {
+        return apiPost(path, body, { ...init, _retry: true });
+      } else {
+        clearUserLocal();
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+      }
+    }
+
     const text = await res.text().catch(() => "");
     if (res.status !== 401) {
       console.error(`❌ API POST ${url} failed:`, res.status, text);
@@ -69,7 +96,7 @@ export async function apiPost<T>(
 export async function apiPut<T>(
   path: string,
   body?: any,
-  init?: RequestInit
+  init?: RequestInit & { _retry?: boolean }
 ): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
 
@@ -85,6 +112,19 @@ export async function apiPut<T>(
   });
 
   if (!res.ok) {
+    if (res.status === 401 && !init?._retry) {
+      console.warn(`⚠️ 401 Unauthorized op apiPut(${path}). Probeer token te refreshen...`);
+      const refreshResult = await apiRefresh();
+      if (refreshResult.success) {
+        return apiPut(path, body, { ...init, _retry: true });
+      } else {
+        clearUserLocal();
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+      }
+    }
+
     const text = await res.text().catch(() => "");
     if (res.status !== 401) {
       console.error(`❌ API PUT ${url} failed:`, res.status, text);
@@ -99,7 +139,7 @@ export async function apiPut<T>(
 // 📡 DELETE
 //----------------------------------------------------------
 
-export async function apiDelete<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiDelete<T>(path: string, init?: RequestInit & { _retry?: boolean }): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
 
   const res = await fetch(url, {
@@ -113,6 +153,19 @@ export async function apiDelete<T>(path: string, init?: RequestInit): Promise<T>
   });
 
   if (!res.ok) {
+    if (res.status === 401 && !init?._retry) {
+      console.warn(`⚠️ 401 Unauthorized op apiDelete(${path}). Probeer token te refreshen...`);
+      const refreshResult = await apiRefresh();
+      if (refreshResult.success) {
+        return apiDelete(path, { ...init, _retry: true });
+      } else {
+        clearUserLocal();
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+      }
+    }
+
     const text = await res.text().catch(() => "");
     if (res.status !== 401) {
       console.error(`❌ API DELETE ${url} failed:`, res.status, text);
@@ -120,7 +173,6 @@ export async function apiDelete<T>(path: string, init?: RequestInit): Promise<T>
     throw new Error(`API DELETE failed (${res.status})`);
   }
 
-  // Sommige deletes hebben geen JSON body
   try {
     return await res.json();
   } catch {
