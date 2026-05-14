@@ -262,6 +262,7 @@ class DashboardService:
                 raw_intel_events = results[3] or []
 
         # 5. PRIORITEIT 1: Process watchlist scores dynamically via standard score engine
+        from backend.services.intelligence_semantics import get_macro_semantics, get_technical_semantics, get_market_semantics
         watchlist_items = []
         for sym in symbols:
             try:
@@ -271,14 +272,25 @@ class DashboardService:
                 scores = {}
 
             price_info = prices_data.get(sym, {}) if isinstance(prices_data, dict) else {}
+            macro_val = float(scores.get("macro_score", 0))
+            tech_val = float(scores.get("technical_score", 0))
+            mkt_val = float(scores.get("market_score", 0))
+
+            macro_sem = get_macro_semantics(macro_val)
+            tech_sem = get_technical_semantics(tech_val)
+            mkt_sem = get_market_semantics(mkt_val)
+
             watchlist_items.append(MobileAssetWatchlistSchema(
                 symbol=sym,
                 price=price_info.get("price"),
                 change_24h=price_info.get("change_24h"),
-                macro_score=float(scores.get("macro_score", 0)),
-                technical_score=float(scores.get("technical_score", 0)),
-                market_score=float(scores.get("market_score", 0)),
-                setup_score=float(scores.get("setup_score", 0))
+                macro_score=macro_val,
+                technical_score=tech_val,
+                market_score=mkt_val,
+                setup_score=float(scores.get("setup_score", 0)),
+                macro_label=macro_sem["regime"],
+                technical_label=tech_sem["structure"],
+                market_label=mkt_sem["posture"]
             ))
 
         # 6. PRIORITEIT 2: Portfolio & Bot aggregations with full boundary guards

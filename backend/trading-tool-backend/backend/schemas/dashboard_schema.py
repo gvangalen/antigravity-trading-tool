@@ -53,6 +53,9 @@ class MobileAssetWatchlistSchema(BaseModel):
     technical_score: float
     market_score: float
     setup_score: float
+    macro_label: Optional[str] = None
+    technical_label: Optional[str] = None
+    market_label: Optional[str] = None
 
 class MobileActiveBotSchema(BaseModel):
     bot_id: int
