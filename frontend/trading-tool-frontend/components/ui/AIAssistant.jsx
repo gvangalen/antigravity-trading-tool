@@ -523,6 +523,21 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           </div>
         </div>
 
+        {/* PERSONALIZED GREETING */}
+        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-blue-50/40 dark:bg-blue-900/10 animate-fade-in">
+          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-4 border-blue-500 pl-3 py-1">
+            "{insight?.greeting || 
+              (context.page_type === "Onboarding" 
+                ? `Hallo ${preferences?.first_name || 'Henk'}, de onboarding protocollen zijn geladen. Laten we je cockpit startklaar maken.`
+                : (insightLoading 
+                  ? `Hallo ${preferences?.first_name || 'Henk'}, bezig met synchroniseren van ${context.symbol}...` 
+                  : `Hallo ${preferences?.first_name || 'Henk'}, alle ${context.symbol} feeds en portfolio operaties draaien stabiel.`
+                )
+              )
+            }"
+          </p>
+        </div>
+
         {/* SECTION 2 — FINN Live Intelligence Terminal */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f172a] space-y-4">
           <div className="flex items-center justify-between mb-2">

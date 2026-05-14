@@ -211,6 +211,13 @@ export function FinnScreen() {
           <LoadingSkeletonCard />
         ) : (
           <View style={styles.hudContainer}>
+            {/* PERSONALIZED GREETING */}
+            <View style={[styles.greetingBox, { backgroundColor: appearance === 'light' ? '#EFF6FF' : theme.colors.accentSoft, borderColor: appearance === 'light' ? '#BFDBFE' : '#3B82F644' }]}>
+              <Text style={[styles.quoteText, { color: colors.text }]}>
+                "{(insightResource.data as any)?.greeting || `Hallo ${user?.first_name || 'Henk'}, alle ${briefing.asset} feeds en portfolio operaties draaien stabiel.`}"
+              </Text>
+            </View>
+
             {/* Section 3 — FINN Briefing */}
             <View style={[styles.briefingBox, { backgroundColor: colors.surface, borderColor: colors.borderStrong }]}>
               <View style={styles.hudSectionHeader}>
@@ -399,6 +406,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   briefingBox: {
+    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
+  },
+  greetingBox: {
     borderWidth: 1,
     borderRadius: theme.radius.lg,
     padding: theme.spacing.lg,
