@@ -319,10 +319,10 @@ def compute_market_intelligence(
 
     setup_score = round(
         _clamp(
-            float(scores.get("setup_score", 10)) / 100.0,
+            float(scores.get("setup_score", 10)),
             0.0,
-            1.0,
-        ) * 100.0
+            100.0,
+        )
     )
 
     # -------------------------------------------------

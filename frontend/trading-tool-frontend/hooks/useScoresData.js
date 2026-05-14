@@ -54,51 +54,64 @@ export function useScoresData(symbol = "BTC") {
     const mkData = master?.domains?.market || {};
     const sData = master?.domains?.setup || {};
 
+    const macroScore = daily.macro?.score ?? mData.score ?? 0;
+    const technicalScore = daily.technical?.score ?? tData.score ?? 0;
+    const marketScore = daily.market?.score ?? mkData.score ?? 0;
+    const setupScore = daily.setup?.score ?? sData.score ?? 0;
+
+    const weights = master?.weights || { macro: 0.25, market: 0.25, technical: 0.25, setup: 0.25 };
+    const calculatedMasterScore = Math.round(
+      macroScore * (weights.macro ?? 0.25) +
+      technicalScore * (weights.technical ?? 0.25) +
+      marketScore * (weights.market ?? 0.25) +
+      setupScore * (weights.setup ?? 0.25)
+    );
+
     setScores({
       macro: {
-        score: mData.score ?? daily.macro?.score ?? 0,
+        score: macroScore,
         trend: mData.trend ?? 'Stable',
         bias: mData.bias ?? daily.macro?.advies ?? 'Neutral',
         risk: mData.risk ?? 'Low',
         uitleg: daily.macro?.interpretation ?? 'Geen uitleg beschikbaar',
-        advies: getAdvies(mData.score ?? daily.macro?.score ?? 0),
+        advies: getAdvies(macroScore),
         top_contributors: normalizeArray(daily.macro?.top_contributors),
       },
       technical: {
-        score: tData.score ?? daily.technical?.score ?? 0,
+        score: technicalScore,
         trend: tData.trend ?? 'Stable',
         bias: tData.bias ?? daily.technical?.advies ?? 'Neutral',
         risk: tData.risk ?? 'Low',
         uitleg: daily.technical?.interpretation ?? 'Geen uitleg beschikbaar',
-        advies: getAdvies(tData.score ?? daily.technical?.score ?? 0),
+        advies: getAdvies(technicalScore),
         top_contributors: normalizeArray(daily.technical?.top_contributors),
       },
       market: {
-        score: mkData.score ?? daily.market?.score ?? 0,
+        score: marketScore,
         trend: mkData.trend ?? 'Stable',
         bias: mkData.bias ?? daily.market?.advies ?? 'Neutral',
         risk: mkData.risk ?? 'Low',
         uitleg: daily.market?.interpretation ?? 'Geen uitleg beschikbaar',
-        advies: getAdvies(mkData.score ?? daily.market?.score ?? 0),
+        advies: getAdvies(marketScore),
         top_contributors: normalizeArray(daily.market?.top_contributors),
       },
       setup: {
-        score: sData.score ?? daily.setup?.score ?? 0,
+        score: setupScore,
         trend: sData.trend ?? 'Stable',
         bias: sData.bias ?? daily.setup?.advies ?? 'Neutral',
         risk: sData.risk ?? 'Low',
         uitleg: daily.setup?.interpretation ?? 'Geen uitleg beschikbaar',
-        advies: getAdvies(sData.score ?? daily.setup?.score ?? 0),
+        advies: getAdvies(setupScore),
         top_contributors: normalizeArray(daily.setup?.top_contributors),
       },
       master: {
-        score: master?.master_score ?? 0,
+        score: calculatedMasterScore,
         trend: master?.master_trend ?? '–',
         bias: master?.master_bias ?? '–',
         risk: master?.master_risk ?? '–',
         outlook: master?.outlook ?? 'Geen outlook',
         summary: master?.summary ?? 'Geen samenvatting beschikbaar',
-        weights: master?.weights || { macro: 0.25, market: 0.25, technical: 0.25, setup: 0.25 }
+        weights
       },
       history
     });
