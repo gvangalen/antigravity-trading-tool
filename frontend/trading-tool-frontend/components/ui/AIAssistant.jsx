@@ -568,18 +568,9 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">{contextMetric.symbol} · {contextMetric.timeframe}</span>
               </div>
             </div>
-            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-2 border-blue-500 pl-3 py-0.5 my-3">
+            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-2 border-blue-500 pl-3 py-0.5 my-2 mb-0">
               "{getMetricAnalysisText(contextMetric.metric, contextMetric.symbol, contextMetric.timeframe)}"
             </p>
-            <button 
-              onClick={() => {
-                const q = `Wat is de diepere kwantitatieve analyse achter de ${getMetricTitle(contextMetric.metric)} voor ${contextMetric.symbol}?`;
-                handleChat(q, true);
-              }}
-              className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 dark:text-blue-400 hover:underline tracking-wider uppercase mt-1"
-            >
-              <MessageSquare size={12} /> Bespreek met FINN
-            </button>
           </div>
         )}
         {/* SECTION 1 — FINN POSTURE & BRIEFING */}
@@ -656,17 +647,9 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                     <span className="text-xs font-black text-slate-900 dark:text-slate-100">{ev.title}</span>
                     {ev.symbol && <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">{ev.symbol}</span>}
                   </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug font-medium">
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug font-medium mb-0.5">
                     {ev.description}
                   </p>
-                  <div className="flex pt-1">
-                    <button 
-                      onClick={() => handleChat(`Wat kan ik concreet doen aan het event: "${ev.title}" voor ${ev.symbol || "portfolio"}?`, true)}
-                      className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 dark:text-blue-400 hover:underline tracking-wider uppercase"
-                    >
-                      <MessageSquare size={12} /> Bespreek met FINN
-                    </button>
-                  </div>
                 </div>
               ))
             )}
