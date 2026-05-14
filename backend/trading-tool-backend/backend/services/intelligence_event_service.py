@@ -278,5 +278,6 @@ class IntelligenceEventService:
                         logger.info(f"📱 Proactieve push notification verzonden voor kritiek event: {ev.title} (User: {user_id})")
                     except Exception as ex:
                         logger.error(f"⚠️ Push notification dispatch mislukt: {ex}")
+                        await self.session.rollback()
 
         return new_events

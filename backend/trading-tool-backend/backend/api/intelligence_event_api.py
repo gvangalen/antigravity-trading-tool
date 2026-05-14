@@ -31,7 +31,11 @@ async def get_assistant_events(
     
     try:
         # Trigger realtime evaluatie
-        await service.evaluate_and_generate_events(user_id)
+        try:
+            await service.evaluate_and_generate_events(user_id)
+        except Exception as eval_err:
+            logger.warning(f"⚠️ Fout tijdens evaluate_and_generate_events (geïsoleerd): {eval_err}")
+            await session.rollback()
         
         # Haal actieve events op
         events = await service.get_active_events(user_id)

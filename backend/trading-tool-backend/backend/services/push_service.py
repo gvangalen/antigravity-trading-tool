@@ -259,6 +259,7 @@ class PushService:
             logger.warning(f"🧹 [PushService] Database cleanup: Removed dead mobile push token: {token_str}")
         except Exception as ex:
             logger.error(f"❌ [PushService] Failed to delete dead push token {token_str} from database: {ex}")
+            await db_session.rollback()
 
     async def notify_user_async(self, db, user_id: int, title: str, message: str, url: Optional[str] = None) -> int:
         """Async version of notify_user for FastAPI AsyncSession."""
