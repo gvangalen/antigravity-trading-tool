@@ -6,7 +6,8 @@ import {
   Target,
   Zap,
   TrendingUp,
-  Layers
+  Layers,
+  Sparkles
 } from "lucide-react";
 
 /* =====================================================
@@ -100,8 +101,7 @@ function Bar({ icon, label, value, color, getLabel, onClick }) {
 
   return (
     <div 
-      onClick={onClick}
-      className="flex items-center gap-6 text-[10px] w-full group py-2.5 transition-all cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-800/50 px-3 rounded-xl hover:scale-[1.005]"
+      className="flex items-center gap-6 text-[10px] w-full group py-2.5 transition-all hover:bg-slate-100/50 dark:hover:bg-slate-800/50 px-3 rounded-xl"
     >
 
       {/* icon */}
@@ -135,7 +135,16 @@ function Bar({ icon, label, value, color, getLabel, onClick }) {
       </div>
 
       {/* status badge */}
-      <div className="w-48 flex justify-end">
+      <div className="w-64 flex items-center justify-end gap-2">
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onClick) onClick();
+          }}
+          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all hover:scale-105 active:scale-95 shadow-sm"
+        >
+          <Sparkles size={10} /> Ask FINN
+        </button>
         <span className="px-3 py-1 rounded-lg bg-card dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-[9px] font-black uppercase tracking-widest text-muted shadow-sm group-hover:border-blue-600/30 group-hover:text-blue-600 transition-all">
           {status}
         </span>

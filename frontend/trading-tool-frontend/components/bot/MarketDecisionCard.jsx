@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  Sparkles
 } from "lucide-react";
 
 import MarketConditionsPanel from "@/components/bot/MarketConditionsPanel";
@@ -105,17 +106,25 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
 
       {/* 🧩 MARKET CYCLE PROGRESSOR */}
       <div 
-        onClick={() => {
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent('finn-action-trigger', {
-              detail: { metric: 'structural_cycle', symbol, timeframe: '1W' }
-            }));
-          }
-        }}
-        className="space-y-4 cursor-pointer group/cycle p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-all hover:scale-[1.002]"
+        className="space-y-4 group/cycle p-3 rounded-2xl transition-all"
       >
         <div className="flex items-center justify-between">
-          <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] group-hover/cycle:text-blue-600 transition-colors">Structural Cycle Phase</div>
+          <div className="flex items-center gap-2">
+            <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Structural Cycle Phase</div>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(new CustomEvent('finn-action-trigger', {
+                    detail: { metric: 'structural_cycle', symbol, timeframe: '1W' }
+                  }));
+                }
+              }}
+              className="opacity-0 group-hover/cycle:opacity-100 flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all hover:scale-105 active:scale-95 shadow-sm"
+            >
+              <Sparkles size={10} /> Ask FINN
+            </button>
+          </div>
           <div className="text-[10px] font-black text-[var(--primary)] uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-md border border-blue-100 dark:border-blue-800">
              Active: {macroData.regime}
           </div>

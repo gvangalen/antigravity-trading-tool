@@ -1,7 +1,7 @@
 "use client";
 
 import { useScoresData } from "@/hooks/useScoresData";
-import { Globe2, LineChart, DollarSign, Settings2, Sliders, Save, X } from "lucide-react";
+import { Globe2, LineChart, DollarSign, Settings2, Sliders, Save, X, Sparkles } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { GaugeSkeleton } from "./DashboardSkeleton";
 import { useState, useEffect } from "react";
@@ -65,13 +65,10 @@ export default function CompactGauges({ symbol = "BTC" }) {
      const keys = Object.keys(localWeights);
      const otherKeys = keys.filter(k => k !== key);
      
-     // Als we de enige zijn, kunnen we niet balansen (zou niet moeten gebeuren bij 4)
      if (otherKeys.length === 0) return;
 
      const newWeights = { ...localWeights, [key]: newValue };
      
-     // Bereken hoeveel we van de anderen moeten afhalen/toevoegen
-     // We doen dit proportioneel aan hun huidige waarde om de ratio's te behouden
      const currentOthersSum = otherKeys.reduce((sum, k) => sum + localWeights[k], 0);
      
      if (currentOthersSum > 0) {
@@ -81,13 +78,11 @@ export default function CompactGauges({ symbol = "BTC" }) {
            newWeights[k] = Math.max(0, Math.min(1, adjusted));
         });
      } else {
-        // Als de anderen 0 zijn, verdeel het dan gelijkmatig
         otherKeys.forEach(k => {
            newWeights[k] = Math.max(0, (1 - newValue) / otherKeys.length);
         });
      }
 
-     // Final normalization to exactly 1.0 due to floating point errors
      const finalSum = Object.values(newWeights).reduce((a, b) => a + b, 0);
      if (finalSum > 0) {
         const factor = 1.0 / finalSum;
@@ -164,7 +159,7 @@ export default function CompactGauges({ symbol = "BTC" }) {
 
           return (
             <div key={idx} className="space-y-2">
-               <div className={`flex items-center justify-between px-3 sm:px-4 py-2.5 rounded-xl border ${borderClass} ${bgClass} shadow-sm transition-all hover:shadow-md ${isEditing ? 'ring-2 ring-blue-500/20 border-blue-500/40' : ''}`}>
+               <div className={`group flex items-center justify-between px-3 sm:px-4 py-2.5 rounded-xl border ${borderClass} ${bgClass} shadow-sm transition-all hover:shadow-md ${isEditing ? 'ring-2 ring-blue-500/20 border-blue-500/40' : ''}`}>
                   <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                     <div className={`shrink-0 p-2 rounded-lg bg-card dark:bg-slate-800 shadow-sm ${colorClass} border border-slate-50 dark:border-slate-700`}>
                        {item.icon}
@@ -180,9 +175,22 @@ export default function CompactGauges({ symbol = "BTC" }) {
                   </div>
                   
                   <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                  <span className={`text-xs sm:text-sm font-black font-mono ${colorClass}`}>
-                     {score}%
-                  </span>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (typeof window !== "undefined") {
+                          window.dispatchEvent(new CustomEvent('finn-action-trigger', {
+                            detail: { metric: item.id === 'macro' ? 'structural_cycle' : item.id === 'setup' ? 'setup_quality' : 'transition_risk', symbol, timeframe: '1W' }
+                          }));
+                        }
+                      }}
+                      className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all hover:scale-105 active:scale-95 shadow-sm"
+                    >
+                      <Sparkles size={10} /> Ask FINN
+                    </button>
+                    <span className={`text-xs sm:text-sm font-black font-mono ${colorClass}`}>
+                       {score}%
+                    </span>
                   </div>
                </div>
 
