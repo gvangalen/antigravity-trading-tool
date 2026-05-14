@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { assistantChat, fetchAssistantInsight, getAssistantPreferences, assistantChatStream, executePendingAction } from "@/lib/api/ai";
-import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks } from "lucide-react";
+import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles } from "lucide-react";
+import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { ChatSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { useAsset } from "@/app/providers/AssetProvider";
@@ -25,6 +26,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   const router = useRouter();
   const watchlist = useWatchlist();
   const { openConfirm, showSnackbar } = useModal();
+  const { events, loading: eventsLoading, archiveEvent } = useIntelligenceEvents();
   
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -508,33 +510,79 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar scroll-smooth" ref={scrollRef}>
-        {/* ACTIVE CONTEXT CHIP */}
-        <div className="px-6 py-4 border-b border-slate-50 dark:border-slate-800">
-          <div className="flex items-center gap-3 p-3 bg-card dark:bg-slate-900 rounded-xl border border-blue-50/50 dark:border-blue-900/30 shadow-sm transition-colors">
+        {/* SECTION 1 — Active Context */}
+        <div className="px-6 py-4 border-b border-slate-50 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20">
+          <div className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-sm">
              <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-                <Activity size={14} className="text-blue-500" />
+                <Activity size={14} className="text-blue-600 dark:text-blue-400" />
              </div>
              <div>
-                <span className="text-[9px] font-black text-blue-300 uppercase tracking-widest block leading-none mb-1">Active Context</span>
-                <span className="text-[11px] font-bold text-dim dark:text-slate-300 block leading-none">{context.page_type} • {context.symbol} • {context.timeframe}</span>
+                <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest block leading-none mb-1">Active Context</span>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block leading-none">{context.page_type} • {context.symbol} • {context.timeframe}</span>
              </div>
           </div>
         </div>
 
-        {/* INSIGHT BLOCKS */}
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800 space-y-6">
+        {/* SECTION 2 — FINN Live Intelligence Terminal */}
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f172a] space-y-4">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-[10px] font-black text-secondary dark:text-slate-500 tracking-[0.2em] uppercase flex items-center gap-2">
-              <Zap size={12} className="text-amber-500 animate-pulse" />
-              Live Intelligence
+            <h3 className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
+              <Terminal size={14} className="text-blue-600" />
+              FINN Live Intelligence Terminal
             </h3>
-            <div className="flex items-center gap-2">
-               {insightLoading && <Loader2 size={12} className="animate-spin text-slate-300 dark:text-slate-600" />}
-               {!insightLoading && lastUpdated && <span className="text-[9px] font-bold text-slate-300 dark:text-slate-600 uppercase">{lastUpdated}</span>}
-            </div>
+            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">Mission Control</span>
           </div>
 
-          {/* 🧭 SETUP GUIDE (ONLY DURING ONBOARDING) */}
+          <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
+            {eventsLoading && events.length === 0 ? (
+              <div className="py-8 flex flex-col items-center justify-center gap-2 text-center">
+                <Sparkles size={16} className="text-blue-500 animate-spin" />
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Radar synchroniseren...</span>
+              </div>
+            ) : events.length === 0 ? (
+              <div className="py-8 text-center bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 p-4">
+                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest italic">
+                  Geen actieve risico-meldingen. Cockpit draait stabiel.
+                </p>
+              </div>
+            ) : (
+              events.map(ev => (
+                <div key={ev.id} className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 relative flex flex-col gap-2 transition-all hover:border-blue-500/50">
+                  <button 
+                    onClick={() => archiveEvent(ev.id)}
+                    className="absolute top-2.5 right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    <X size={14} />
+                  </button>
+                  <div className="flex items-center gap-2 pr-6">
+                    <span className="text-xs font-black text-slate-900 dark:text-slate-100">{ev.title}</span>
+                    {ev.symbol && <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">{ev.symbol}</span>}
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug font-medium">
+                    {ev.description}
+                  </p>
+                  <div className="flex pt-1">
+                    <button 
+                      onClick={() => handleChat(`Wat kan ik concreet doen aan het event: "${ev.title}" voor ${ev.symbol || "portfolio"}?`, true)}
+                      className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 dark:text-blue-400 hover:underline tracking-wider uppercase"
+                    >
+                      <MessageSquare size={12} /> Bespreek met FINN
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* SECTION 3 — FINN Briefing */}
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/10 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-blue-600 text-white rounded-lg">
+              <Shield size={12} />
+            </div>
+            <span className="text-[10px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest">FINN Briefing</span>
+          </div>
           {isOnboarding ? (
             <div className="p-4 bg-blue-600/5 dark:bg-blue-600/10 border-2 border-blue-600/20 rounded-2xl animate-in slide-in-from-right-4 duration-500">
                <div className="flex items-center gap-2.5 mb-3">
@@ -546,11 +594,9 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                
                <div className="space-y-3">
                   <p className="text-sm font-bold text-foreground dark:text-slate-100 leading-snug">
-                    {/* 🎖️ CELEBRATION MODE */}
-                    {status?.[`has_${pathname.split('/').pop()}`] ? (
+                    {stepStatus?.[`has_${pathname.split('/').pop()}`] ? (
                       `Excellent. The ${pathname.split('/').pop()} data stream is now stabilized and streaming high-fidelity intelligence to your cockpit. Return to the Launch Center for the next protocol.`
                     ) : (
-                      /* 🧭 GUIDE MODE */
                       pathname.includes("market") ? "Market data is required to monitor live price action. Search for BTC and add it to your monitor." :
                       pathname.includes("macro") ? "Macro indicators track global liquidity and dollar strength. Search for DXY and add it to your monitor." :
                       pathname.includes("technical") ? "Technical signals identify price momentum and trends. Search for RSI and add it to your monitor." :
@@ -559,124 +605,40 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                       "I will guide you through the 5 steps to activate your system. Once initialized, your dashboard will be fully operational with live data and AI insights."
                     )}
                   </p>
-                  <div className="flex gap-2">
-                     <div className="px-3 py-1.5 bg-blue-600 rounded-xl text-[9px] font-black text-white uppercase tracking-widest">
-                       Action: {pathname.includes("market") ? "Add BTC" :
-                                pathname.includes("macro") ? "Add DXY" :
-                                pathname.includes("technical") ? "Add RSI" :
-                                pathname.includes("setup") ? "Create Setup" :
-                                pathname.includes("strategy") ? "Generate Strategy" :
-                                "Choose Module"}
-                     </div>
-                  </div>
                </div>
             </div>
           ) : (
-            <>
-              {/* GREETING */}
-              <div className="animate-fade-in group">
-                <p className="text-sm font-medium text-foreground dark:text-slate-200 leading-relaxed italic border-l-4 border-blue-500 pl-4 py-3 bg-blue-50/40 dark:bg-blue-900/10 rounded-xl transition-all group-hover:bg-blue-50/60 dark:group-hover:bg-blue-900/20 shadow-sm border border-blue-100/30 dark:border-blue-900/20">
-                  "{insight?.greeting || 
-                    (context.page_type === "Onboarding" 
-                      ? `Hello ${preferences?.first_name || 'Henk'}, I have initialized the Launch Protocol. Please complete the modules to activate your cockpit.`
-                      : (insightLoading 
-                        ? `Hello ${preferences?.first_name || 'Henk'}, analyzing ${context.symbol}...` 
-                        : `Hello ${preferences?.first_name || 'Henk'}, monitoring ${context.symbol} market.`
-                      )
-                    )
-                  }"
-                </p>
-              </div>
-
-              <div className="space-y-6 animate-fade-in">
-                {/* 🛡️ COACH */}
-                <div className="group">
-                  <div className="flex items-center gap-2.5 mb-2.5">
-                    <div className="p-1.5 bg-amber-50 dark:bg-amber-900/20 rounded-lg group-hover:bg-amber-100 dark:group-hover:bg-amber-900/30 transition-colors">
-                      <Shield size={14} className="text-amber-600 dark:text-amber-300" />
-                    </div>
-                    <span className="text-[10px] font-black text-foreground dark:text-slate-100 tracking-widest uppercase">COACH</span>
-                  </div>
-                  <div className="pl-9 space-y-2.5">
-                    <p className="text-sm font-bold text-foreground dark:text-slate-100 leading-snug">
-                      {getInsightField('bot_insight', 'conclusion') || (insightLoading ? "Analyzing..." : "No strategy data found")}
-                    </p>
-                    <div className="flex">
-                      <span className="text-xs font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-2 rounded-xl border border-blue-100 dark:border-blue-900/40 shadow-sm transition-all hover:bg-white dark:hover:bg-slate-800 hover:shadow-md cursor-default leading-tight">
-                        {getInsightField('bot_insight', 'action') || (insightLoading ? "Waiting..." : "Add a setup to start")}
-                      </span>
-                    </div>
-                    {showReasoning && getInsightField('bot_insight', 'why') && (
-                      <div className="mt-2 p-3 bg-slate-100/50 dark:bg-slate-900/50 rounded-lg border border-slate-200/50 dark:border-slate-800 animate-in slide-in-from-top-1 duration-200">
-                        <p className="text-xs font-medium text-muted dark:text-slate-400 leading-relaxed italic">
-                          "{getInsightField('bot_insight', 'why')}"
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 📈 MARKET */}
-                <div className="group">
-                  <div className="flex items-center gap-2.5 mb-2.5">
-                    <div className="p-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
-                      <BarChart3 size={14} className="text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <span className="text-[10px] font-black text-foreground dark:text-slate-100 tracking-widest uppercase">MARKET</span>
-                  </div>
-                  <div className="pl-9 space-y-2.5">
-                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-snug">
-                      {getInsightField('market_insight', 'conclusion') || (insightLoading ? "Scanning..." : "Analyzing market trend...")}
-                    </p>
-                    <div className="inline-block">
-                      <span className="text-xs font-bold text-muted dark:text-slate-400 bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-2.5 py-1.5 rounded-xl inline-block transition-all hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm">
-                        {getInsightField('market_insight', 'action') || (insightLoading ? "Processing..." : "Monitor trend")}
-                      </span>
-                    </div>
-                    {showReasoning && getInsightField('market_insight', 'why') && (
-                      <div className="mt-2 p-3 bg-slate-100/50 dark:bg-slate-900/50 rounded-lg border border-slate-200/50 dark:border-slate-800 animate-in slide-in-from-top-1 duration-200">
-                        <p className="text-xs font-medium text-muted dark:text-slate-400 leading-relaxed italic">
-                          "{getInsightField('market_insight', 'why')}"
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* TOGGLE BUTTON */}
-              <div className="pt-2">
-                <button 
-                  onClick={() => setShowReasoning(!showReasoning)}
-                  className="group flex items-center gap-2 text-[10px] font-black text-secondary dark:text-slate-500 hover:text-blue-500 dark:hover:text-blue-400 uppercase tracking-[0.2em] transition-all"
-                >
-                  <div className={`transition-transform duration-200 ${showReasoning ? 'rotate-180' : ''}`}>
-                    <ChevronDown size={12} />
-                  </div>
-                  {showReasoning ? "Quick Glance" : "Deep Analysis"}
-                </button>
-              </div>
-            </>
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm group hover:border-blue-500/30 transition-all">
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic">
+                "{getInsightField('bot_insight', 'conclusion') || getInsightField('market_insight', 'conclusion') || "BTC bevindt zich momenteel in een consolidatiefase met verhoogd correctierisico zolang volume achterblijft. FINN handhaaft een defensieve posture."}"
+              </p>
+            </div>
           )}
         </div>
 
-        {/* CHIP NAVIGATION */}
-        <div className="px-6 py-4 flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-slate-800">
-          {[
-            { id: "chat", icon: <MessageSquare size={14} />, label: "Chat" },
-            { id: "analyst", icon: <Brain size={14} />, label: "Analysis" },
-            { id: "coach", icon: <Target size={14} />, label: "Coach" },
-            { id: "report", icon: <FileText size={14} />, label: "Report" },
-          ].map(chip => (
-            <button 
-              key={chip.id}
-              onClick={() => handleChat(`Analyze my current ${chip.label} status/context`, true)}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-card dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-widest text-muted dark:text-slate-400 hover:border-blue-600 dark:hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-300 hover:shadow-sm transition-all whitespace-nowrap"
-            >
-              {chip.icon}
-              {chip.label}
-            </button>
-          ))}
+        {/* SECTION 4 — Recent Conversations */}
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 space-y-4 bg-white dark:bg-[#0f172a]">
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 block">Recent Conversations</span>
+          <div className="space-y-2">
+            {[
+              { id: 1, title: "BTC correction review", query: "Vat de laatste BTC correctie en steunniveaus samen" },
+              { id: 2, title: "Weekly portfolio report", query: "Analyseer de wekelijkse portfolio prestaties en allocatierisico" },
+              { id: 3, title: "SOL setup analysis", query: "Beoordeel de huidige SOL setup en DCA drempelwaarden" },
+              { id: 4, title: "Macro contraction discussion", query: "Bespreek de macro contractie en impact op liquiditeit" },
+            ].map(conv => (
+              <button 
+                key={conv.id}
+                onClick={() => handleChat(conv.query, true)}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-600 dark:hover:border-blue-400 hover:shadow-sm transition-all group text-left"
+              >
+                <div className="flex items-center gap-3 truncate">
+                  <MessageSquare size={14} className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 shrink-0" />
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 truncate">{conv.title}</span>
+                </div>
+                <span className="text-[10px] font-bold text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400">→</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* MESSAGES AREA */}

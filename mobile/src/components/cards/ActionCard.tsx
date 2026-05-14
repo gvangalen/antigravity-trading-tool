@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { StatusTone, statusTones, theme } from '../../constants/theme';
 import { triggerHaptic } from '../../utils/haptics';
 import { CardShell } from './CardShell';
@@ -25,16 +26,18 @@ export function ActionCard({
   onPrimary,
   onSecondary,
 }: ActionCardProps) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const palette = statusTones[tone];
 
   return (
     <CardShell>
       <Text style={[styles.label, { color: palette.color }]}>Suggested action</Text>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.reason}>{reason}</Text>
+      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+      <Text style={[styles.reason, { color: colors.textMuted }]}>{reason}</Text>
       <View style={[styles.impactBox, { backgroundColor: palette.background, borderColor: palette.border }]}>
         <Text style={[styles.impactLabel, { color: palette.color }]}>Impact</Text>
-        <Text style={styles.impactText}>{impact}</Text>
+        <Text style={[styles.impactText, { color: colors.textSoft }]}>{impact}</Text>
       </View>
       <View style={styles.actions}>
         <Pressable
@@ -51,9 +54,9 @@ export function ActionCard({
             await triggerHaptic('selection');
             onSecondary?.();
           }}
-          style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.secondaryButton, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderStrong }, pressed && styles.pressed]}
         >
-          <Text style={styles.secondaryText}>{secondaryAction}</Text>
+          <Text style={[styles.secondaryText, { color: colors.textSoft }]}>{secondaryAction}</Text>
         </Pressable>
       </View>
     </CardShell>

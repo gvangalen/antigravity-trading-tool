@@ -48,6 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const response = await authApi.login(email.trim(), password);
+      if (!response.success || !response.access_token || !response.refresh_token) {
+        throw new Error('Login response is incomplete');
+      }
       await saveTokens(response.access_token, response.refresh_token);
       setUser(response.user);
       return true;

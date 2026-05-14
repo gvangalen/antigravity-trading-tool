@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { StatusTone, statusTones, theme } from '../../constants/theme';
 import { triggerHaptic } from '../../utils/haptics';
 import { StatusChip } from '../layout/StatusChip';
@@ -14,6 +15,7 @@ type BotDecisionCardProps = {
   reason: string;
   tone?: StatusTone;
   onConfirm?: () => void;
+  onAskWhy?: () => void;
 };
 
 export function BotDecisionCard({
@@ -25,7 +27,10 @@ export function BotDecisionCard({
   reason,
   tone = 'warning',
   onConfirm,
+  onAskWhy,
 }: BotDecisionCardProps) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const palette = statusTones[tone];
 
   return (
@@ -33,41 +38,47 @@ export function BotDecisionCard({
       <View style={styles.header}>
         <View style={styles.heading}>
           <Text style={styles.label}>Bot decision</Text>
-          <Text style={styles.botName}>{botName}</Text>
+          <Text style={[styles.botName, { color: colors.text }]}>{botName}</Text>
         </View>
         <StatusChip label={action} tone={tone} />
       </View>
       <View style={styles.summaryRow}>
-        <Metric label="Confidence" value={`${confidence}`} color={palette.color} />
-        <Metric label="Amount" value={amount} color={palette.color} />
+        <Metric label="Confidence" value={`${confidence}`} color={palette.color} colors={colors} />
+        <Metric label="Amount" value={amount} color={palette.color} colors={colors} />
       </View>
       <View style={[styles.guardrail, { backgroundColor: palette.background, borderColor: palette.border }]}>
         <Text style={[styles.guardrailLabel, { color: palette.color }]}>Guardrail</Text>
-        <Text style={styles.guardrailText}>{guardrail}</Text>
+        <Text style={[styles.guardrailText, { color: colors.textSoft }]}>{guardrail}</Text>
       </View>
-      <Text style={styles.reason}>{reason}</Text>
+      <Text style={[styles.reason, { color: colors.textMuted }]}>{reason}</Text>
       <View style={styles.actions}>
         <Pressable
           onPress={async () => {
             await triggerHaptic('impact');
             onConfirm?.();
           }}
-          style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderStrong }, pressed && styles.pressed]}
         >
           <Text style={styles.primaryText}>Review action</Text>
         </Pressable>
-        <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}>
-          <Text style={styles.secondaryText}>Ask why</Text>
+        <Pressable
+          onPress={async () => {
+            await triggerHaptic('selection');
+            onAskWhy?.();
+          }}
+          style={({ pressed }) => [styles.secondaryButton, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderStrong }, pressed && styles.pressed]}
+        >
+          <Text style={[styles.secondaryText, { color: colors.textSoft }]}>Ask why</Text>
         </Pressable>
       </View>
     </CardShell>
   );
 }
 
-function Metric({ label, value, color }: { label: string; value: string; color: string }) {
+function Metric({ label, value, color, colors }: { label: string; value: string; color: string; colors: ReturnType<typeof preferenceColors> }) {
   return (
-    <View style={styles.metric}>
-      <Text style={styles.metricLabel}>{label}</Text>
+    <View style={[styles.metric, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+      <Text style={[styles.metricLabel, { color: colors.textDim }]}>{label}</Text>
       <Text style={[styles.metricValue, { color }]}>{value}</Text>
     </View>
   );
@@ -147,14 +158,16 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.accent,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.borderStrong,
+    borderWidth: 1,
     borderRadius: theme.radius.button,
     flex: 1,
     justifyContent: 'center',
     minHeight: 48,
   },
   primaryText: {
-    color: theme.colors.white,
+    color: theme.colors.accent,
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 1.2,

@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { theme } from '../../constants/theme';
 import { triggerHaptic } from '../../utils/haptics';
 import { StatusChip } from '../layout/StatusChip';
@@ -28,6 +29,9 @@ export function StrategyStatusCard({
   explanation,
   onPress,
 }: StrategyStatusCardProps) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
     <Pressable
       onPress={async () => {
@@ -40,33 +44,33 @@ export function StrategyStatusCard({
         <View style={styles.header}>
           <View>
             <Text style={styles.label}>Active strategy</Text>
-            <Text style={styles.symbol}>{symbol}</Text>
-            <Text style={styles.bias}>{bias}</Text>
+            <Text style={[styles.symbol, { color: colors.text }]}>{symbol}</Text>
+            <Text style={[styles.bias, { color: colors.textDim }]}>{bias}</Text>
           </View>
-          <View style={styles.confidence}>
-            <Text style={styles.confidenceValue}>{confidence}</Text>
-            <Text style={styles.confidenceLabel}>confidence</Text>
+          <View style={[styles.confidence, { backgroundColor: appearance === 'light' ? '#EFF6FF' : theme.colors.accentSoft }]}>
+            <Text style={[styles.confidenceValue, { color: colors.text }]}>{confidence}</Text>
+            <Text style={[styles.confidenceLabel, { color: colors.textDim }]}>confidence</Text>
           </View>
         </View>
         <View style={styles.statusRow}>
           <StatusChip label={status} tone="warning" />
         </View>
         <View style={styles.grid}>
-          <Metric label="Entry" value={entryZone} />
-          <Metric label="Targets" value={targets.join(' / ')} />
-          <Metric label="Invalidation" value={invalidation} />
+          <Metric label="Entry" value={entryZone} colors={colors} />
+          <Metric label="Targets" value={targets.join(' / ')} colors={colors} />
+          <Metric label="Invalidation" value={invalidation} colors={colors} />
         </View>
-        <Text style={styles.explanation}>{explanation}</Text>
+        <Text style={[styles.explanation, { color: colors.textMuted }]}>{explanation}</Text>
       </CardShell>
     </Pressable>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, colors }: { label: string; value: string; colors: ReturnType<typeof preferenceColors> }) {
   return (
-    <View style={styles.metric}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
+    <View style={[styles.metric, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+      <Text style={[styles.metricLabel, { color: colors.textDim }]}>{label}</Text>
+      <Text style={[styles.metricValue, { color: colors.text }]}>{value}</Text>
     </View>
   );
 }

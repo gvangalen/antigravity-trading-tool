@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { theme } from '../../constants/theme';
+import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 
 type CardShellProps = {
   children: ReactNode;
@@ -9,12 +10,18 @@ type CardShellProps = {
 };
 
 export function CardShell({ children, emphasis = 'standard' }: CardShellProps) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
     <View
       style={[
         styles.card,
+        { backgroundColor: colors.surface, borderColor: colors.border },
         emphasis === 'primary' && styles.primary,
+        emphasis === 'primary' && { backgroundColor: colors.surfaceElevated, borderColor: colors.borderStrong },
         emphasis === 'muted' && styles.muted,
+        emphasis === 'muted' && { backgroundColor: colors.backgroundSoft },
       ]}
     >
       {children}

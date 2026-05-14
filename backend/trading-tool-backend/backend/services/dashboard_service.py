@@ -34,6 +34,12 @@ class DashboardService:
         self.session = db_session
         self.repository = DashboardRepository(db_session)
 
+    @classmethod
+    def invalidate_cache(cls, user_id: int):
+        if user_id in cls._overview_cache:
+            del cls._overview_cache[user_id]
+            logger.info(f"🗑️ [MobileOverview] Cache explicitly invalidated for user_id={user_id}")
+
     async def get_dashboard_data(self, user_id: int, symbol: str = "BTC") -> DashboardResponse:
         try:
             # Parallel Database Queries

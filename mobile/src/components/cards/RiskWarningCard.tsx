@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { theme } from '../../constants/theme';
 import { triggerHaptic } from '../../utils/haptics';
 import { StatusChip } from '../layout/StatusChip';
@@ -14,23 +15,26 @@ type RiskWarningCardProps = {
 };
 
 export function RiskWarningCard({ severity, title, body, nextStep, onExplain }: RiskWarningCardProps) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
     <CardShell>
       <StatusChip label={severity} tone="warning" />
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.body}>{body}</Text>
-      <View style={styles.nextBox}>
+      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+      <Text style={[styles.body, { color: colors.textMuted }]}>{body}</Text>
+      <View style={[styles.nextBox, { backgroundColor: appearance === 'light' ? '#FEF3C7' : theme.colors.warningSoft }]}>
         <Text style={styles.nextLabel}>Safe next step</Text>
-        <Text style={styles.nextText}>{nextStep}</Text>
+        <Text style={[styles.nextText, { color: colors.textSoft }]}>{nextStep}</Text>
       </View>
       <Pressable
         onPress={async () => {
           await triggerHaptic('warning');
           onExplain?.();
         }}
-        style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.button, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderStrong }, pressed && styles.pressed]}
       >
-        <Text style={styles.buttonText}>Ask assistant why</Text>
+        <Text style={[styles.buttonText, { color: colors.textSoft }]}>Ask assistant why</Text>
       </Pressable>
     </CardShell>
   );

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -14,18 +14,42 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/AuthProvider';
 import { CardShell } from '../components/cards/CardShell';
 import { StatusChip } from '../components/layout/StatusChip';
+import { authApi } from '../services/authApi';
 import { API_BASE_URL } from '../services/apiClient';
 import { theme } from '../constants/theme';
+import { triggerHaptic } from '../utils/haptics';
+
+type HealthState = 'checking' | 'online' | 'offline';
 
 export function LoginScreen() {
   const { error, loading, login } = useAuth();
+  const [healthState, setHealthState] = useState<HealthState>('checking');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
 
   const canSubmit = email.trim().length > 3 && password.length > 0 && !loading;
 
+  useEffect(() => {
+    let mounted = true;
+
+    authApi
+      .health()
+      .then(() => {
+        if (mounted) setHealthState('online');
+      })
+      .catch(() => {
+        if (mounted) setHealthState('offline');
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   async function handleLogin() {
     if (!canSubmit) return;
+    await triggerHaptic('selection');
     await login(email, password);
   }
 
@@ -37,7 +61,14 @@ export function LoginScreen() {
       >
         <View style={styles.container}>
           <View>
-            <StatusChip label="Tradamind Mobile" tone="accent" />
+            <View style={styles.topRow}>
+              <StatusChip label="Tradamind Mobile" tone="accent" />
+              <StatusChip
+                compact
+                label={healthState === 'checking' ? 'Syncing' : healthState === 'online' ? 'API live' : 'API offline'}
+                tone={healthState === 'online' ? 'success' : healthState === 'offline' ? 'danger' : 'warning'}
+              />
+            </View>
             <Text style={styles.title}>Welkom terug bij FINN.</Text>
             <Text style={styles.subtitle}>
               Log in om je assistant, watchlist, setups, portfolio en reports met echte backenddata te laden.
@@ -51,24 +82,40 @@ export function LoginScreen() {
               autoComplete="email"
               keyboardType="email-address"
               onChangeText={setEmail}
+              onSubmitEditing={() => password.length > 0 && handleLogin()}
               placeholder="you@tradamind.com"
               placeholderTextColor={theme.colors.textDim}
+              returnKeyType="next"
               style={styles.input}
               textContentType="username"
               value={email}
             />
 
             <Text style={styles.formLabel}>Password</Text>
-            <TextInput
-              autoCapitalize="none"
-              onChangeText={setPassword}
-              placeholder="Password"
-              placeholderTextColor={theme.colors.textDim}
-              secureTextEntry
-              style={styles.input}
-              textContentType="password"
-              value={password}
-            />
+            <View style={styles.passwordRow}>
+              <TextInput
+                autoCapitalize="none"
+                onChangeText={setPassword}
+                onSubmitEditing={handleLogin}
+                placeholder="Password"
+                placeholderTextColor={theme.colors.textDim}
+                returnKeyType="done"
+                secureTextEntry={!passwordVisible}
+                style={styles.passwordInput}
+                textContentType="password"
+                value={password}
+              />
+              <Pressable
+                accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+                onPress={async () => {
+                  await triggerHaptic('selection');
+                  setPasswordVisible((visible) => !visible);
+                }}
+                style={({ pressed }) => [styles.passwordToggle, pressed && styles.pressed]}
+              >
+                <Text style={styles.toggleText}>{passwordVisible ? 'Hide' : 'Show'}</Text>
+              </Pressable>
+            </View>
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -84,9 +131,17 @@ export function LoginScreen() {
               {loading ? (
                 <ActivityIndicator color={theme.colors.white} />
               ) : (
-                <Text style={styles.buttonText}>Log in</Text>
+                <Text style={styles.buttonText}>{healthState === 'offline' ? 'Retry login' : 'Log in'}</Text>
               )}
             </Pressable>
+
+            <View style={styles.securityRow}>
+              <Text style={styles.securityText}>Bearer auth</Text>
+              <Text style={styles.securityDivider}>·</Text>
+              <Text style={styles.securityText}>Secure token storage</Text>
+              <Text style={styles.securityDivider}>·</Text>
+              <Text style={styles.securityText}>Auto refresh</Text>
+            </View>
           </CardShell>
 
           <Text style={styles.meta}>API: {API_BASE_URL}</Text>
@@ -157,6 +212,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
+  passwordInput: {
+    color: theme.colors.text,
+    flex: 1,
+    fontSize: theme.typography.body,
+    fontWeight: '700',
+    minHeight: 50,
+    paddingHorizontal: theme.spacing.md,
+  },
+  passwordRow: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.backgroundSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+  },
+  passwordToggle: {
+    alignItems: 'center',
+    borderLeftColor: theme.colors.border,
+    borderLeftWidth: 1,
+    justifyContent: 'center',
+    minHeight: 50,
+    paddingHorizontal: theme.spacing.md,
+  },
   pressed: {
     opacity: 0.86,
     transform: [{ scale: 0.99 }],
@@ -172,11 +251,38 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     marginTop: theme.spacing.md,
   },
+  securityDivider: {
+    color: theme.colors.textDim,
+    fontSize: theme.typography.small,
+    fontWeight: '900',
+  },
+  securityRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+  },
+  securityText: {
+    color: theme.colors.textDim,
+    fontSize: theme.typography.small,
+    fontWeight: '800',
+  },
+  toggleText: {
+    color: theme.colors.accent,
+    fontSize: theme.typography.small,
+    fontWeight: '900',
+  },
   title: {
     color: theme.colors.text,
     fontSize: 34,
     fontWeight: '900',
     lineHeight: 39,
     marginTop: theme.spacing.md,
+  },
+  topRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
   },
 });

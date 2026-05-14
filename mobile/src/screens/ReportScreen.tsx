@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NavigationProp, RouteProp } from '@react-navigation/native';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CardShell } from '../components/cards/CardShell';
@@ -11,6 +13,8 @@ import { StatusChip } from '../components/layout/StatusChip';
 import { StatusTone, theme } from '../constants/theme';
 import { mockBriefing, mockReportHighlights } from '../data/mockFoundation';
 import { useApiResource } from '../hooks/useApiResource';
+import type { MainTabParamList } from '../navigation/MainTabNavigator';
+import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import { MobileReportHighlight, MobileReportResponse, ReportResponse, intelligenceApi } from '../services/tradamindApi';
 import { triggerHaptic } from '../utils/haptics';
 
@@ -71,7 +75,13 @@ const periods: Array<{ id: ReportPeriod; label: string; short: string }> = [
 ];
 
 export function ReportScreen() {
+  const navigation = useNavigation<NavigationProp<MainTabParamList>>();
+  const route = useRoute<RouteProp<MainTabParamList, 'Report'>>();
   const [period, setPeriod] = useState<ReportPeriod>('daily');
+  const activeSymbol = route.params?.symbol ?? 'BTC';
+  const notificationType = route.params?.notificationType;
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
 
   const fetchReport = useCallback(async (): Promise<ReportPayload> => {
     if (period === 'weekly') {
@@ -97,11 +107,11 @@ export function ReportScreen() {
     }
 
     const [mobile, full] = await Promise.all([
-      intelligenceApi.latestDailyReport('BTC', 'mobile'),
-      intelligenceApi.latestDailyReportFull('BTC'),
+      intelligenceApi.latestDailyReport(activeSymbol, 'mobile'),
+      intelligenceApi.latestDailyReportFull(activeSymbol),
     ]);
     return { full, mobile };
-  }, [period]);
+  }, [activeSymbol, period]);
 
   const reportResource = useApiResource<ReportPayload>({
     fallbackData: {},
@@ -123,24 +133,37 @@ export function ReportScreen() {
       refreshing={reportResource.refreshing}
       onRefresh={reportResource.refresh}
     >
-      <AssetContextHeader asset="BTC" context="Reports intelligence" updatedAt={report.updatedAt} />
+      <AssetContextHeader asset={activeSymbol} context="Reports intelligence" updatedAt={report.updatedAt} />
       <SectionHeader
         label="Report"
         title="Tradamind intelligence"
         description="Compacte conclusie bovenin, volledige report reader eronder voor de desktop-inhoud op mobiel."
       />
 
+      {notificationType ? (
+        <ReportNotificationCard
+          notificationType={notificationType}
+          symbol={activeSymbol}
+          onAskFinn={() =>
+            navigation.navigate('FINN', {
+              prefill: `Leg uit wat belangrijk is in het ${period} rapport voor ${activeSymbol}. Geef conclusie, risico en veilige volgende stap.`,
+              source: `push-${notificationType}`,
+            })
+          }
+        />
+      ) : null}
+
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodTabs}>
         {periods.map((item) => (
           <Pressable
             key={item.id}
             onPress={() => changePeriod(item.id)}
-            style={[styles.periodTab, item.id === period && styles.periodTabActive]}
+            style={[styles.periodTab, { backgroundColor: colors.surface, borderColor: colors.border }, item.id === period && [styles.periodTabActive, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderStrong }]]}
           >
-            <View style={[styles.periodShortcut, item.id === period && styles.periodShortcutActive]}>
+            <View style={[styles.periodShortcut, { backgroundColor: colors.surfaceMuted }, item.id === period && styles.periodShortcutActive]}>
               <Text style={[styles.periodShortcutText, item.id === period && styles.periodShortcutTextActive]}>{item.short}</Text>
             </View>
-            <Text style={[styles.periodText, item.id === period && styles.periodTextActive]}>{item.label}</Text>
+            <Text style={[styles.periodText, { color: colors.textMuted }, item.id === period && [styles.periodTextActive, { color: colors.text }]]}>{item.label}</Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -154,7 +177,7 @@ export function ReportScreen() {
       <View style={styles.readerHeader}>
         <View>
           <Text style={styles.sectionLabel}>Full report</Text>
-          <Text style={styles.sectionTitle}>Leesmodus</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Leesmodus</Text>
         </View>
         <StatusChip label={`${report.fullSections.length} secties · ${report.readingMinutes} min`} tone="accent" />
       </View>
@@ -219,23 +242,63 @@ type MappedReport = {
 };
 
 function ReportHero({ report }: { report: MappedReport }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
     <CardShell emphasis="primary">
       <View style={styles.heroTop}>
         <View>
           <Text style={styles.heroLabel}>System rapportage</Text>
-          <Text style={styles.heroTitle}>{report.periodLabel}</Text>
+          <Text style={[styles.heroTitle, { color: colors.text }]}>{report.periodLabel}</Text>
         </View>
         <StatusChip label={report.overallTone === 'danger' ? 'Review' : 'Ready'} tone={report.overallTone} />
       </View>
 
-      <Text style={styles.heroHeadline}>{report.headline}</Text>
-      <Text style={styles.heroDate}>Periode: {report.dateLabel}</Text>
+      <Text style={[styles.heroHeadline, { color: colors.text }]}>{report.headline}</Text>
+      <Text style={[styles.heroDate, { color: colors.textMuted }]}>Periode: {report.dateLabel}</Text>
 
-      <View style={styles.heroFooter}>
-        <Text style={styles.integrity}>Integrity check voltooid</Text>
-        <Text style={styles.generated}>Update: {report.generatedLabel}</Text>
+      <View style={[styles.heroFooter, { borderTopColor: colors.border }]}>
+        <Text style={[styles.integrity, { color: colors.textDim }]}>Integrity check voltooid</Text>
+        <Text style={[styles.generated, { color: colors.textDim }]}>Update: {report.generatedLabel}</Text>
       </View>
+    </CardShell>
+  );
+}
+
+function ReportNotificationCard({
+  notificationType,
+  onAskFinn,
+  symbol,
+}: {
+  notificationType: string;
+  onAskFinn: () => void;
+  symbol: string;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <CardShell emphasis="primary">
+      <View style={styles.heroTop}>
+        <View>
+          <Text style={styles.heroLabel}>Push context</Text>
+          <Text style={[styles.notificationTitle, { color: colors.text }]}>{notificationType === 'report_ready' ? 'Rapport staat klaar' : 'Rapport context'}</Text>
+        </View>
+        <StatusChip label={symbol} tone="accent" />
+      </View>
+      <Text style={[styles.notificationBody, { color: colors.textMuted }]}>
+        Open dit rapport als context, niet als alarm. FINN kan de conclusie, risico's en volgende stap kort duiden.
+      </Text>
+      <Pressable
+        onPress={async () => {
+          await triggerHaptic('selection');
+          onAskFinn();
+        }}
+        style={({ pressed }) => [styles.notificationButton, pressed && styles.pressed]}
+      >
+        <Text style={styles.notificationButtonText}>Vraag FINN om uitleg</Text>
+      </Pressable>
     </CardShell>
   );
 }
@@ -245,16 +308,19 @@ function HighlightCard({
 }: {
   highlight: MappedReport['highlights'][number];
 }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
     <CardShell>
       <View style={styles.highlightTop}>
         <View>
-          <Text style={styles.highlightCategory}>{highlight.category}</Text>
-          <Text style={styles.highlightName}>{highlight.name}</Text>
+          <Text style={[styles.highlightCategory, { color: colors.textDim }]}>{highlight.category}</Text>
+          <Text style={[styles.highlightName, { color: colors.text }]}>{highlight.name}</Text>
         </View>
         {highlight.score === null ? null : <StatusChip label={String(highlight.score)} tone={highlight.tone} />}
       </View>
-      <Text style={styles.highlightText}>{highlight.interpretation}</Text>
+      <Text style={[styles.highlightText, { color: colors.textMuted }]}>{highlight.interpretation}</Text>
     </CardShell>
   );
 }
@@ -264,19 +330,22 @@ function ReportSectionCard({
 }: {
   section: MappedReport['fullSections'][number];
 }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
     <CardShell>
       <View style={styles.reportSectionHeader}>
         <View>
-          <Text style={styles.reportSectionLabel}>{section.label}</Text>
-          <Text style={styles.reportSectionTitle}>{section.title}</Text>
+          <Text style={[styles.reportSectionLabel, { color: colors.textDim }]}>{section.label}</Text>
+          <Text style={[styles.reportSectionTitle, { color: colors.text }]}>{section.title}</Text>
         </View>
         <StatusChip label="Read" tone={section.tone} />
       </View>
 
       <View style={styles.paragraphs}>
         {section.paragraphs.map((paragraph, index) => (
-          <Text key={`${section.title}-${index}`} style={styles.reportParagraph}>
+          <Text key={`${section.title}-${index}`} style={[styles.reportParagraph, { color: colors.textMuted }]}>
             {paragraph}
           </Text>
         ))}
@@ -302,14 +371,17 @@ function ReportCompanionCard({ companion }: { companion: ReportCompanion }) {
 }
 
 function MarketCompanionCard({ companion }: { companion: Extract<ReportCompanion, { type: 'market' }> }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
-    <View style={styles.companionCard}>
-      <Text style={styles.companionTitle}>Marktanalyse</Text>
+    <View style={[styles.companionCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+      <Text style={[styles.companionTitle, { color: colors.text }]}>Marktanalyse</Text>
 
       <View style={styles.marketBlock}>
-        <Text style={styles.metricLabel}>Bitcoin prijs</Text>
+        <Text style={[styles.metricLabel, { color: colors.textDim }]}>Bitcoin prijs</Text>
         <View style={styles.marketPriceRow}>
-          <Text style={styles.marketPrice}>{formatCurrency(companion.price)}</Text>
+          <Text style={[styles.marketPrice, { color: colors.text }]}>{formatCurrency(companion.price)}</Text>
           <Text style={[styles.marketChange, { color: companion.change >= 0 ? theme.colors.success : theme.colors.danger }]}>
             {formatSignedPercent(companion.change)}
           </Text>
@@ -317,14 +389,14 @@ function MarketCompanionCard({ companion }: { companion: Extract<ReportCompanion
       </View>
 
       <View style={styles.marketBlock}>
-        <Text style={styles.metricLabel}>Totaal volume</Text>
-        <Text style={styles.metricValue}>{formatFullNumber(companion.volume)}</Text>
+        <Text style={[styles.metricLabel, { color: colors.textDim }]}>Totaal volume</Text>
+        <Text style={[styles.metricValue, { color: colors.text }]}>{formatFullNumber(companion.volume)}</Text>
       </View>
 
-      <View style={styles.companionScoreGrid}>
+      <View style={[styles.companionScoreGrid, { borderTopColor: colors.border }]}>
         {companion.scores.map((score) => (
-          <View key={score.label} style={styles.companionScoreTile}>
-            <Text style={styles.metricLabel}>{score.label}</Text>
+          <View key={score.label} style={[styles.companionScoreTile, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
+            <Text style={[styles.metricLabel, { color: colors.textDim }]}>{score.label}</Text>
             <Text style={[styles.companionScoreValue, { color: colorForTone(score.tone) }]}>{score.value}</Text>
           </View>
         ))}
@@ -334,17 +406,20 @@ function MarketCompanionCard({ companion }: { companion: Extract<ReportCompanion
 }
 
 function IndicatorCompanionCard({ companion }: { companion: Extract<ReportCompanion, { type: 'indicators' }> }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
-    <View style={styles.companionCard}>
-      <Text style={styles.companionTitle}>{companion.title}</Text>
+    <View style={[styles.companionCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+      <Text style={[styles.companionTitle, { color: colors.text }]}>{companion.title}</Text>
       <View style={styles.indicatorList}>
         {companion.items.map((item, index) => (
-          <View key={`${item.name}-${index}`} style={styles.indicatorItem}>
+          <View key={`${item.name}-${index}`} style={[styles.indicatorItem, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
             <View style={styles.indicatorTop}>
-              <Text style={styles.indicatorName}>{item.name}</Text>
+              <Text style={[styles.indicatorName, { color: colors.text }]}>{item.name}</Text>
               {item.score === null ? null : <Text style={[styles.indicatorScore, { color: colorForTone(item.tone) }]}>{item.score}</Text>}
             </View>
-            <Text style={styles.indicatorText}>{item.interpretation}</Text>
+            <Text style={[styles.indicatorText, { color: colors.textMuted }]}>{item.interpretation}</Text>
           </View>
         ))}
       </View>
@@ -353,33 +428,36 @@ function IndicatorCompanionCard({ companion }: { companion: Extract<ReportCompan
 }
 
 function SetupCompanionCard({ companion }: { companion: Extract<ReportCompanion, { type: 'setup' }> }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
-    <View style={styles.companionCard}>
-      <Text style={styles.companionTitle}>Optimale Setup</Text>
-      <View style={styles.companionInner}>
+    <View style={[styles.companionCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+      <Text style={[styles.companionTitle, { color: colors.text }]}>Optimale Setup</Text>
+      <View style={[styles.companionInner, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
         <View style={styles.companionRow}>
-          <Text style={styles.companionMeta}>{companion.matchLabel}</Text>
+          <Text style={[styles.companionMeta, { color: colors.textMuted }]}>{companion.matchLabel}</Text>
           <StatusChip label={`${Math.round(companion.score)}%`} tone={toneForScore(companion.score)} />
         </View>
-        <Text style={styles.companionPrimary}>{companion.name}</Text>
-        <Text style={styles.companionSub}>{companion.symbol} · {companion.timeframe}</Text>
-        <View style={styles.progressTrack}>
+        <Text style={[styles.companionPrimary, { color: colors.text }]}>{companion.name}</Text>
+        <Text style={[styles.companionSub, { color: colors.textDim }]}>{companion.symbol} · {companion.timeframe}</Text>
+        <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
           <View style={[styles.progressFill, { backgroundColor: colorForTone(toneForScore(companion.score)), width: `${Math.max(0, Math.min(100, companion.score))}%` }]} />
         </View>
       </View>
 
       {companion.topSetups.length > 0 ? (
-        <View style={styles.companionList}>
+        <View style={[styles.companionList, { borderTopColor: colors.border }]}>
           {companion.topSetups.slice(0, 3).map((setup) => (
             <View key={setup.id} style={styles.companionListRow}>
-              <Text style={styles.companionListName}>{setup.name}</Text>
-              <Text style={styles.companionListValue}>{Math.round(setup.score)}%</Text>
+              <Text style={[styles.companionListName, { color: colors.textMuted }]}>{setup.name}</Text>
+              <Text style={[styles.companionListValue, { color: colors.text }]}>{Math.round(setup.score)}%</Text>
             </View>
           ))}
         </View>
       ) : null}
 
-      <Text style={styles.companionNote}>
+      <Text style={[styles.companionNote, { color: colors.textMuted }]}>
         Geselecteerd op basis van huidige macro-, markt- en setupcondities.
       </Text>
     </View>
@@ -387,35 +465,38 @@ function SetupCompanionCard({ companion }: { companion: Extract<ReportCompanion,
 }
 
 function StrategyCompanionCard({ companion }: { companion: Extract<ReportCompanion, { type: 'strategy' }> }) {
-  return (
-    <View style={styles.companionCard}>
-      <Text style={styles.companionTitle}>Actieve Strategie</Text>
-      <Text style={styles.companionPrimary}>{companion.name}</Text>
-      <Text style={styles.companionSub}>{companion.symbol} · {companion.timeframe}</Text>
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
 
-      <View style={styles.metricPanel}>
-        <Text style={styles.metricLabel}>{companion.entry === null ? 'Referentieprijs' : 'Instapprijs'}</Text>
-        <Text style={styles.metricValue}>{formatCurrency(companion.entry ?? 0)}</Text>
+  return (
+    <View style={[styles.companionCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+      <Text style={[styles.companionTitle, { color: colors.text }]}>Actieve Strategie</Text>
+      <Text style={[styles.companionPrimary, { color: colors.text }]}>{companion.name}</Text>
+      <Text style={[styles.companionSub, { color: colors.textDim }]}>{companion.symbol} · {companion.timeframe}</Text>
+
+      <View style={[styles.metricPanel, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
+        <Text style={[styles.metricLabel, { color: colors.textDim }]}>{companion.entry === null ? 'Referentieprijs' : 'Instapprijs'}</Text>
+        <Text style={[styles.metricValue, { color: colors.text }]}>{formatCurrency(companion.entry ?? 0)}</Text>
       </View>
 
       {companion.targets.length > 0 ? (
         <View style={styles.targetWrap}>
           {companion.targets.slice(0, 4).map((target, index) => (
-            <View key={`${target}-${index}`} style={styles.targetChip}>
-              <Text style={styles.targetText}>{target}</Text>
+            <View key={`${target}-${index}`} style={[styles.targetChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.targetText, { color: colors.textMuted }]}>{target}</Text>
             </View>
           ))}
         </View>
       ) : null}
 
-      <View style={styles.companionSplit}>
+      <View style={[styles.companionSplit, { borderTopColor: colors.border }]}>
         <View>
-          <Text style={styles.metricLabel}>Stop-loss</Text>
-          <Text style={styles.splitValue}>{formatCurrency(companion.stopLoss ?? 0)}</Text>
+          <Text style={[styles.metricLabel, { color: colors.textDim }]}>Stop-loss</Text>
+          <Text style={[styles.splitValue, { color: colors.text }]}>{formatCurrency(companion.stopLoss ?? 0)}</Text>
         </View>
         <View style={styles.alignRight}>
-          <Text style={styles.metricLabel}>Vertrouwen</Text>
-          <Text style={styles.splitValue}>{companion.confidence === null ? '-' : `${Math.round(companion.confidence)}%`}</Text>
+          <Text style={[styles.metricLabel, { color: colors.textDim }]}>Vertrouwen</Text>
+          <Text style={[styles.splitValue, { color: colors.text }]}>{companion.confidence === null ? '-' : `${Math.round(companion.confidence)}%`}</Text>
         </View>
       </View>
     </View>
@@ -423,36 +504,38 @@ function StrategyCompanionCard({ companion }: { companion: Extract<ReportCompani
 }
 
 function BotCompanionCard({ companion }: { companion: Extract<ReportCompanion, { type: 'bot' }> }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const actionTone = companion.action === 'buy' ? 'success' : companion.action === 'sell' ? 'danger' : 'neutral';
 
   return (
-    <View style={styles.companionCard}>
-      <Text style={styles.companionTitle}>Handelsactie</Text>
-      <Text style={styles.companionPrimary}>{companion.botName}</Text>
+    <View style={[styles.companionCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+      <Text style={[styles.companionTitle, { color: colors.text }]}>Handelsactie</Text>
+      <Text style={[styles.companionPrimary, { color: colors.text }]}>{companion.botName}</Text>
 
       <View style={[styles.actionPanel, { borderColor: colorForTone(actionTone), backgroundColor: softBackgroundForTone(actionTone) }]}>
         <View>
-          <Text style={styles.metricLabel}>Actie</Text>
+          <Text style={[styles.metricLabel, { color: colors.textDim }]}>Actie</Text>
           <Text style={[styles.actionValue, { color: colorForTone(actionTone) }]}>{companion.action.toUpperCase()}</Text>
         </View>
         <View style={styles.alignRight}>
-          <Text style={styles.metricLabel}>Vertrouwen</Text>
-          <Text style={styles.splitValue}>{companion.confidence === null ? '-' : `${Math.round(companion.confidence)}%`}</Text>
+          <Text style={[styles.metricLabel, { color: colors.textDim }]}>Vertrouwen</Text>
+          <Text style={[styles.splitValue, { color: colors.text }]}>{companion.confidence === null ? '-' : `${Math.round(companion.confidence)}%`}</Text>
         </View>
       </View>
 
-      <View style={styles.companionSplit}>
+      <View style={[styles.companionSplit, { borderTopColor: colors.border }]}>
         <View>
-          <Text style={styles.metricLabel}>Ordergrootte</Text>
-          <Text style={styles.splitValue}>{companion.amount === null ? '-' : `EUR ${formatCompactNumber(companion.amount)}`}</Text>
+          <Text style={[styles.metricLabel, { color: colors.textDim }]}>Ordergrootte</Text>
+          <Text style={[styles.splitValue, { color: colors.text }]}>{companion.amount === null ? '-' : `EUR ${formatCompactNumber(companion.amount)}`}</Text>
         </View>
         <View style={styles.alignRight}>
-          <Text style={styles.metricLabel}>Setup match</Text>
-          <Text style={styles.splitValue}>{companion.setupMatch === null ? '-' : `${Math.round(companion.setupMatch)}%`}</Text>
+          <Text style={[styles.metricLabel, { color: colors.textDim }]}>Setup match</Text>
+          <Text style={[styles.splitValue, { color: colors.text }]}>{companion.setupMatch === null ? '-' : `${Math.round(companion.setupMatch)}%`}</Text>
         </View>
       </View>
 
-      <Text style={styles.companionNote}>{companion.reason}</Text>
+      <Text style={[styles.companionNote, { color: colors.textMuted }]}>{companion.reason}</Text>
     </View>
   );
 }
@@ -1348,6 +1431,36 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     marginTop: theme.spacing.sm,
   },
+  notificationBody: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.body,
+    fontWeight: '600',
+    lineHeight: 22,
+    marginTop: theme.spacing.md,
+  },
+  notificationButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.button,
+    justifyContent: 'center',
+    marginTop: theme.spacing.lg,
+    minHeight: 48,
+    paddingHorizontal: theme.spacing.md,
+  },
+  notificationButtonText: {
+    color: theme.colors.white,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  notificationTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title,
+    fontWeight: '900',
+    lineHeight: 28,
+    marginTop: 4,
+  },
   progressFill: {
     borderRadius: theme.radius.pill,
     height: '100%',
@@ -1359,6 +1472,10 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
     overflow: 'hidden',
     width: '100%',
+  },
+  pressed: {
+    opacity: 0.86,
+    transform: [{ scale: 0.995 }],
   },
   reader: {
     gap: theme.spacing.md,

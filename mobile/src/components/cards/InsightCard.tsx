@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { StatusTone, statusTones, theme } from '../../constants/theme';
 import { triggerHaptic } from '../../utils/haptics';
 import { CardShell } from './CardShell';
@@ -14,6 +15,8 @@ type InsightCardProps = {
 };
 
 export function InsightCard({ label, title, body, tone = 'neutral', cta, onPress }: InsightCardProps) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const palette = statusTones[tone];
 
   return (
@@ -29,8 +32,8 @@ export function InsightCard({ label, title, body, tone = 'neutral', cta, onPress
           <Text style={[styles.label, { color: palette.color }]}>{label}</Text>
           <View style={[styles.badge, { backgroundColor: palette.background, borderColor: palette.border }]} />
         </View>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.body}>{body}</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+        <Text style={[styles.body, { color: colors.textMuted }]}>{body}</Text>
         {cta ? <Text style={[styles.cta, { color: palette.color }]}>{cta}</Text> : null}
       </CardShell>
     </Pressable>

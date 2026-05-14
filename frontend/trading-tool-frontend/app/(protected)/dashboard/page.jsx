@@ -15,7 +15,6 @@ import TradingBrain from "@/components/dashboard/TradingBrain";
 import TableTabs from "@/components/dashboard/TableTabs";
 import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
-import FINNIntelligenceFeed from "@/components/dashboard/FINNIntelligenceFeed";
 import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
 
 // Table Components
@@ -140,13 +139,6 @@ export default function DashboardPage() {
               <GlobalMarketDecisionCard symbol={activeSymbol} />
             </div>
           </div>
-        </DashboardErrorBoundary>
-      </div>
-
-      {/* 🔮 LIVE INTELLIGENCE TERMINAL (V3.0) */}
-      <div className="mt-12">
-        <DashboardErrorBoundary>
-          <FINNIntelligenceFeed />
         </DashboardErrorBoundary>
       </div>
 

@@ -9,6 +9,10 @@ export type AssistantInsightResponse = {
   suggested_actions?: string[];
 };
 
+export type AssistantPreferencesResponse = {
+  preferences: Record<string, string | number | boolean | null | undefined>;
+};
+
 export type MobileOverviewAsset = {
   symbol: string;
   price?: number | null;
@@ -17,6 +21,9 @@ export type MobileOverviewAsset = {
   technical_score: number;
   market_score: number;
   setup_score: number;
+  macro_label?: string | null;
+  technical_label?: string | null;
+  market_label?: string | null;
 };
 
 export type MobileOverviewBot = {
@@ -83,6 +90,27 @@ export type SetupResponse = Record<string, unknown> | Record<string, unknown>[];
 export type StrategyResponse = Record<string, unknown> | Record<string, unknown>[];
 export type BotResponse = Record<string, unknown> | Record<string, unknown>[];
 export type PortfolioResponse = Record<string, unknown> | Record<string, unknown>[];
+export type OrderPreviewRequest = {
+  bot_id: number;
+  symbol: string;
+  side: 'buy' | 'sell';
+  quantity: number;
+  price: number;
+  value_eur?: number;
+};
+export type OrderPreviewResponse = {
+  symbol: string;
+  side: string;
+  price: number;
+  gross_eur: number;
+  fee_eur: number;
+  fee_rate: number;
+  net_eur: number;
+  quantity: number;
+  is_live: boolean;
+  guardrails?: Record<string, unknown>;
+  draft?: Record<string, unknown>;
+};
 export type MobileReportHighlight = {
   category?: string | null;
   name?: string | null;
@@ -114,6 +142,10 @@ export type ReportResponse = Record<string, unknown>;
 export const assistantApi = {
   insight(context: AssistantRuntimeContext) {
     return apiClient.post<AssistantInsightResponse>('/api/assistant/insight', context);
+  },
+
+  preferences() {
+    return apiClient.get<AssistantPreferencesResponse>('/api/assistant/preferences');
   },
 
   chat(query: string, context: AssistantRuntimeContext, history?: AssistantHistoryMessage[]) {
@@ -194,6 +226,10 @@ export const intelligenceApi = {
 
   balanceHistory(options?: { bucket?: string; limit?: number; is_live?: boolean | null }) {
     return apiClient.get<PortfolioResponse>('/api/portfolio/balance-history', options);
+  },
+
+  previewOrder(payload: OrderPreviewRequest) {
+    return apiClient.post<OrderPreviewResponse>('/api/orders/preview', payload);
   },
 
   latestDailyReport(symbol?: string, format?: 'mobile') {

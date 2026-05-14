@@ -1,4 +1,6 @@
 import { useCallback, useState, useEffect } from 'react';
+import { useRoute } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -43,16 +45,21 @@ import {
   mapMobileOverviewPortfolio,
   mapMobileOverviewPrompts,
 } from '../services/dataMappers';
+import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import { AssistantInsightResponse, MobileOverviewResponse, MobileIntelligenceEvent, assistantApi, mobileApi } from '../services/tradamindApi';
 import { apiClient } from '../services/apiClient';
 import { AssistantFeedItem } from '../types/assistant';
 import { triggerHaptic } from '../utils/haptics';
 import { useAuth } from '../auth/AuthProvider';
+import type { MainTabParamList } from '../navigation/MainTabNavigator';
 
 type SheetType = 'risk' | 'confirm' | 'draft' | null;
 
 export function FinnScreen() {
+  const route = useRoute<RouteProp<MainTabParamList, 'FINN'>>();
   const { logout, user } = useAuth();
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const [query, setQuery] = useState('');
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -88,6 +95,13 @@ export function FinnScreen() {
       setLocalEvents(overviewResource.data.intelligence_events);
     }
   }, [overviewResource.data?.intelligence_events]);
+
+  useEffect(() => {
+    const prefill = route.params?.prefill;
+    if (prefill) {
+      setQuery(prefill);
+    }
+  }, [route.params?.prefill]);
 
   const handleArchiveEvent = useCallback((eventId: number) => {
     // Optimistic UI updates - remove instantly from view
@@ -169,7 +183,7 @@ export function FinnScreen() {
       style={styles.keyboard}
     >
       <ScreenContainer
-        contentInsetBottom={260}
+        contentInsetBottom={120}
         refreshing={overviewResource.refreshing || insightResource.refreshing}
         onRefresh={() => {
           overviewResource.refresh();
@@ -196,139 +210,45 @@ export function FinnScreen() {
         {overviewResource.loading ? (
           <LoadingSkeletonCard />
         ) : (
-          <AssistantBriefingCard
-            status={briefing.status}
-            summary={briefing.summary}
-            risk={briefing.risk}
-            nextAction={briefing.nextAction}
-          />
+          <View style={styles.hudContainer}>
+            {/* Section 3 — FINN Briefing */}
+            <View style={[styles.briefingBox, { backgroundColor: colors.surface, borderColor: colors.borderStrong }]}>
+              <View style={styles.hudSectionHeader}>
+                <Text style={styles.hudSectionIcon}>🛡️</Text>
+                <Text style={[styles.hudSectionTitle, { color: colors.textDim }]}>FINN BRIEFING</Text>
+              </View>
+              <Text style={[styles.quoteText, { color: colors.text }]}>
+                "{briefing.summary || insightCard.body || 'BTC bevindt zich momenteel in een consolidatiefase met verhoogd correctierisico zolang volume achterblijft. FINN handhaaft een defensieve posture.'}"
+              </Text>
+            </View>
+
+            {/* Section 4 — Recent Conversations */}
+            <View style={[styles.recentSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.recentHeader, { color: colors.textDim }]}>RECENT CONVERSATIONS</Text>
+              {[
+                { id: 1, title: 'BTC correction review', query: 'Vat de laatste BTC correctie en steunniveaus samen' },
+                { id: 2, title: 'Weekly portfolio report', query: 'Analyseer de wekelijkse portfolio prestaties en allocatierisico' },
+                { id: 3, title: 'SOL setup analysis', query: 'Beoordeel de huidige SOL setup en DCA drempelwaarden' },
+                { id: 4, title: 'Macro contraction discussion', query: 'Bespreek de macro contractie en impact op liquiditeit' },
+              ].map((conv) => (
+                <Pressable
+                  key={conv.id}
+                  onPress={() => setQuery(conv.query)}
+                  style={({ pressed }) => [
+                    styles.recentRow,
+                    { backgroundColor: colors.surfaceMuted, borderColor: colors.border },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={[styles.recentTitle, { color: colors.text }]} numberOfLines={1}>
+                    💬 {conv.title}
+                  </Text>
+                  <Text style={[styles.recentArrow, { color: theme.colors.accent }]}>→</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
         )}
-
-        {overviewResource.isStale ? (
-          <InsightCard
-            label="Stale fallback"
-            title="FINN gebruikt tijdelijk fallback context voor de mobile overview."
-            body="De FINN mobile-bundel kon niet live laden. Chat en mock fallback blijven beschikbaar, maar portfolio/watchlist/bot context kan stale zijn."
-            cta="Retry mobile overview"
-            onPress={overviewResource.refresh}
-            tone="warning"
-          />
-        ) : null}
-
-        <SuggestedPromptChips prompts={prompts} onSelect={setQuery} />
-
-        <MasterDecisionCard
-          score={masterDecision.score}
-          state={masterDecision.state}
-          reason={masterDecision.reason}
-        />
-
-        <MarketSnapshotCard
-          symbol={marketSnapshot.symbol}
-          price={marketSnapshot.price}
-          change24h={marketSnapshot.change24h}
-          volume={marketSnapshot.volume}
-          interpretation={marketSnapshot.interpretation}
-          tone={marketSnapshot.tone}
-        />
-
-        <InsightCard
-          label="FINN insight"
-          title={insightCard.title}
-          body={insightCard.body}
-          cta="Open context"
-          tone="accent"
-        />
-
-        <BotDecisionCard
-          action={botDecision.action}
-          amount={botDecision.amount}
-          botName={botDecision.botName}
-          confidence={botDecision.confidence}
-          guardrail={botDecision.guardrail}
-          reason={botDecision.reason}
-          tone={botDecision.tone}
-          onConfirm={() => setSheet('confirm')}
-        />
-
-        <InsightCard
-          label="Portfolio context"
-          title={portfolio.totalValue}
-          body={`${portfolio.pnl}. ${portfolio.exposure}. ${portfolio.botStatus}.`}
-          tone={overviewResource.data && overviewResource.data.portfolio.total_profit_pct < 0 ? 'warning' : 'accent'}
-        />
-
-        {watchlistSummary ? (
-          <InsightCard
-            label="Watchlist context"
-            title="FINN heeft de mobile watchlist geladen"
-            body={watchlistSummary}
-            tone="neutral"
-          />
-        ) : null}
-
-        <ActionCard
-          title="Continue on desktop"
-          reason="FINN heeft je authenticated mobile context geladen. Je kunt dezelfde analyse op desktop verder uitwerken zonder mobile execution."
-          impact="Mobile blijft read-only: briefing, chat, risk context en voorbereiden. Desktop blijft de plek voor volledige configuratie en uitvoering."
-          primaryAction="Ask FINN"
-          secondaryAction="Refresh"
-          tone="accent"
-          onPrimary={() => setQuery('Maak een korte desktop handoff van mijn huidige FINN context')}
-          onSecondary={() => {
-            overviewResource.refresh();
-            insightResource.refresh();
-          }}
-        />
-
-        {insightDetails.market ? (
-          <InsightCard
-            label="Market insight"
-            title="Market context from backend"
-            body={insightDetails.market}
-            tone="accent"
-          />
-        ) : null}
-
-        {insightDetails.bot ? (
-          <InsightCard
-            label="Bot insight"
-            title="Bot context from backend"
-            body={insightDetails.bot}
-            tone="warning"
-          />
-        ) : null}
-
-        {insightResource.error ? (
-          <InsightCard
-            label="FINN error"
-            title="AI insight kon niet live laden."
-            body={insightResource.error.message}
-            cta="Retry"
-            tone="danger"
-            onPress={insightResource.refresh}
-          />
-        ) : null}
-
-        {overviewResource.error ? (
-          <InsightCard
-            label="Mobile API error"
-            title="FINN mobile overview kon niet live laden."
-            body={overviewResource.error.message}
-            cta="Retry overview"
-            tone="danger"
-            onPress={overviewResource.refresh}
-          />
-        ) : null}
-
-        <InsightCard
-          label="Session"
-          title={`Ingelogd als ${user?.email ?? 'mobile user'}`}
-          body="Mobile gebruikt nu bearer auth met secure token storage. De backend blijft tegelijk web-cookie compatible."
-          cta="Log out"
-          tone="neutral"
-          onPress={logout}
-        />
 
         <AssistantFeedRenderer
           items={feedItems}
@@ -351,15 +271,15 @@ export function FinnScreen() {
         ) : null}
       </ScreenContainer>
 
-      <View style={styles.composerWrap}>
-        <View style={styles.composer}>
+      <View style={[styles.composerWrap, { backgroundColor: appearance === 'light' ? '#FFFFFF' : '#020617F2', borderTopColor: colors.border }]}>
+        <View style={[styles.composer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <TextInput
             multiline
             maxLength={240}
             onChangeText={setQuery}
             placeholder="Vraag iets aan Tradamind..."
-            placeholderTextColor={theme.colors.textDim}
-            style={styles.input}
+            placeholderTextColor={colors.textDim}
+            style={[styles.input, { color: colors.text }]}
             value={query}
           />
           <Pressable
@@ -390,6 +310,130 @@ export function FinnScreen() {
 }
 
 const styles = StyleSheet.create({
+  hudContainer: {
+    gap: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+  },
+  quoteBox: {
+    backgroundColor: theme.colors.accentSoft,
+    borderColor: '#3B82F644',
+    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.lg,
+  },
+  quoteLabel: {
+    color: theme.colors.accent,
+    fontSize: theme.typography.label,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginBottom: theme.spacing.sm,
+  },
+  quoteText: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+    fontStyle: 'italic',
+    lineHeight: 24,
+  },
+  hudSection: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.lg,
+  },
+  hudSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  hudSectionIcon: {
+    fontSize: 16,
+  },
+  hudSectionTitle: {
+    color: theme.colors.textDim,
+    fontSize: theme.typography.label,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  hudSectionBody: {
+    color: theme.colors.textSoft,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 22,
+    marginBottom: theme.spacing.md,
+  },
+  hudChip: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.borderStrong,
+    borderWidth: 1,
+    borderRadius: theme.radius.button,
+    paddingVertical: 10,
+    paddingHorizontal: theme.spacing.md,
+    alignSelf: 'flex-start',
+  },
+  hudChipText: {
+    color: theme.colors.accent,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  actionPillsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  actionPill: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.borderStrong,
+    borderWidth: 1,
+    borderRadius: theme.radius.button,
+    paddingVertical: 10,
+    paddingHorizontal: theme.spacing.md,
+  },
+  actionPillText: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  briefingBox: {
+    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
+  },
+  recentSection: {
+    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.sm,
+  },
+  recentHeader: {
+    fontSize: theme.typography.label,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginBottom: theme.spacing.xs,
+  },
+  recentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+  },
+  recentTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: theme.spacing.sm,
+  },
+  recentArrow: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
   composer: {
     alignItems: 'flex-end',
     backgroundColor: theme.colors.surface,
@@ -405,7 +449,7 @@ const styles = StyleSheet.create({
     backgroundColor: `${theme.colors.background}F2`,
     borderTopColor: theme.colors.border,
     borderTopWidth: 1,
-    bottom: 84,
+    bottom: 0,
     left: 0,
     padding: theme.spacing.md,
     position: 'absolute',

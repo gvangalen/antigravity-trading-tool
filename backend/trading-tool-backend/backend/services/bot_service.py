@@ -15,6 +15,7 @@ from backend.schemas.bot_schema import (
 )
 from backend.infrastructure.repositories.bot_repository import BotRepository
 from backend.infrastructure.repositories.exchange_repository import ExchangeRepository
+from backend.engine.guardrails_engine import apply_guardrails
 from backend.services.exchange_service import ExchangeService
 
 logger = logging.getLogger(__name__)
@@ -382,7 +383,8 @@ class BotService:
     # ==========================
     async def preview_manual_order(self, payload: BotManualOrderSchema, user_id: int):
         """
-        Provides a real-time preview of a manual order with fees.
+        Provides a real-time preview of a manual order with fees and guardrails.
+        This endpoint never executes or persists an order.
         """
         bot = await self.repository.get_bot_config(user_id, payload.bot_id)
         if not bot:
@@ -393,6 +395,14 @@ class BotService:
         amount_eur = payload.value_eur or (payload.quantity * payload.price)
         fee_rate = 0.0025 # Default Bitvavo taker fee
         fee_eur = amount_eur * fee_rate
+        stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
+
+        if not price or price <= 0:
+            market_price = await self.repository.get_market_price(payload.symbol)
+            if market_price:
+                price = market_price
+            else:
+                raise HTTPException(400, "Geen geldige prijs beschikbaar voor order preview.")
 
         if bot.get("is_live"):
             keys = await self.exchange_repo.get_active_keys(user_id)
@@ -431,6 +441,55 @@ class BotService:
              gross_eur = amount_eur
              net_eur = amount_eur - fee_eur
 
+        invested = abs(float(stats.get("executed_cash", 0) or 0))
+        today_allocated = float(stats.get("today_spent", 0) or 0) + float(stats.get("today_reserved", 0) or 0)
+        current_asset_value = max(float(stats.get("net_qty", 0) or 0), 0.0) * price
+        total_budget = float(bot.get("budget_total_eur", 0) or 0)
+        cash_balance = max(total_budget - invested, 0.0) if total_budget > 0 else max(amount_eur, 0.0)
+        portfolio_value = max(total_budget, current_asset_value, invested, amount_eur)
+        guardrails = apply_guardrails(
+            proposed_amount_eur=gross_eur if payload.side == "buy" else 0.0,
+            portfolio_value_eur=portfolio_value,
+            current_asset_value_eur=current_asset_value,
+            invested_eur=invested,
+            today_allocated_eur=today_allocated,
+            cash_balance_eur=cash_balance,
+            kill_switch=bool(bot.get("is_active", True)),
+            max_trade_risk_eur=bot.get("budget_max_order_eur"),
+            daily_allocation_eur=bot.get("budget_daily_limit_eur"),
+            max_asset_exposure_pct=bot.get("max_asset_exposure_pct"),
+            total_budget_eur=bot.get("budget_total_eur"),
+            min_order_eur=bot.get("budget_min_order_eur"),
+        )
+
+        if payload.side == "sell":
+            current_qty = max(float(stats.get("net_qty", 0) or 0), 0.0)
+            sell_allowed = payload.quantity > 0 and payload.quantity <= current_qty
+            guardrails = {
+                "allowed": sell_allowed,
+                "adjusted_amount_eur": round(gross_eur if sell_allowed else 0.0, 2),
+                "original_amount_eur": round(gross_eur, 2),
+                "warnings": [] if sell_allowed else ["insufficient_position"],
+                "blocked_by": None if sell_allowed else "insufficient_position",
+                "reason": None if sell_allowed else "Niet genoeg positie om dit aantal te verkopen",
+                "debug_code": None if sell_allowed else "insufficient_position",
+                "guardrails": {
+                    "current_qty": round(current_qty, 8),
+                    "requested_qty": round(payload.quantity, 8),
+                },
+            }
+
+        draft = {
+            "type": "manual_order_preview",
+            "bot_id": payload.bot_id,
+            "bot_name": bot.get("name"),
+            "symbol": payload.symbol,
+            "side": payload.side,
+            "paper_or_live": "live" if bot.get("is_live", False) else "paper",
+            "requires_explicit_confirmation": True,
+            "not_persisted": True,
+        }
+
         return {
             "symbol": payload.symbol,
             "side": payload.side,
@@ -440,7 +499,9 @@ class BotService:
             "fee_rate": fee_rate,
             "net_eur": round(net_eur, 2),
             "quantity": round(quantity, 8),
-            "is_live": bot.get("is_live", False)
+            "is_live": bot.get("is_live", False),
+            "guardrails": guardrails,
+            "draft": draft,
         }
 
     async def create_manual_order(self, payload: BotManualOrderSchema, user_id: int) -> dict:

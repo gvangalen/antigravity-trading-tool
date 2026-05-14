@@ -11,6 +11,7 @@ import { StatusChip } from '../components/layout/StatusChip';
 import { StatusTone, theme } from '../constants/theme';
 import { mockWatchlistAssets } from '../data/mockFoundation';
 import { useApiResource } from '../hooks/useApiResource';
+import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import {
   MarketChartPoint,
   MarketLatestResponse,
@@ -108,31 +109,12 @@ export function WatchlistScreen() {
         loading={chartResource.loading}
       />
 
-      <View style={styles.scannerHeader}>
-        <View>
-          <Text style={styles.scannerLabel}>TradingView-style scanner</Text>
-          <Text style={styles.scannerTitle}>Crypto watchlist</Text>
-        </View>
-        <StatusChip label={overviewResource.isStale ? 'Stale' : 'Live'} tone={overviewResource.isStale ? 'warning' : 'success'} />
-      </View>
-
-      <View style={styles.scanner}>
-        <View style={styles.scannerColumns}>
-          <Text style={[styles.columnLabel, styles.columnAsset]}>Asset</Text>
-          <Text style={[styles.columnLabel, styles.columnPrice]}>Price</Text>
-          <Text style={[styles.columnLabel, styles.columnChange]}>24h</Text>
-          <Text style={[styles.columnLabel, styles.columnSetup]}>Setup</Text>
-          <Text style={[styles.columnLabel, styles.columnState]}>AI State</Text>
-        </View>
-        {assets.map((asset) => (
-          <ScannerRow
-            asset={asset}
-            key={asset.symbol}
-            selected={asset.symbol === selectedSymbol}
-            onPress={() => selectAsset(asset.symbol)}
-          />
-        ))}
-      </View>
+      <WatchlistIntelligenceTerminal
+        assets={assets}
+        selectedSymbol={selectedSymbol}
+        stale={overviewResource.isStale}
+        onSelect={selectAsset}
+      />
 
       {overviewResource.error ? (
         <InsightCard
@@ -177,6 +159,9 @@ type AssetIntelligence = {
 };
 
 function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntelligence }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
     <CardShell emphasis="primary">
       <View style={styles.intelTop}>
@@ -184,15 +169,15 @@ function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntell
           <AssetIcon symbol={intelligence.symbol} />
           <View>
             <Text style={styles.intelLabel}>Selected asset</Text>
-            <Text style={styles.intelSymbol}>{intelligence.symbol}</Text>
+            <Text style={[styles.intelSymbol, { color: colors.text }]}>{intelligence.symbol}</Text>
           </View>
         </View>
         <StatusChip label={intelligence.change} tone={intelligence.changeTone} />
       </View>
 
-      <Text style={styles.price}>{intelligence.price}</Text>
-      <Text style={styles.intelHeadline}>{intelligence.headline}</Text>
-      <Text style={styles.finnSummary}>{intelligence.finnSummary}</Text>
+      <Text style={[styles.price, { color: colors.text }]}>{intelligence.price}</Text>
+      <Text style={[styles.intelHeadline, { color: colors.text }]}>{intelligence.headline}</Text>
+      <Text style={[styles.finnSummary, { color: colors.textMuted }]}>{intelligence.finnSummary}</Text>
 
       <View style={styles.intelChips}>
         <StatusChip label={intelligence.marketPosture} tone={intelligence.marketPostureTone} />
@@ -224,12 +209,15 @@ function CompactLiveChart({
   symbol: string;
   timeframe: Timeframe;
 }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
     <CardShell>
       <View style={styles.chartHeader}>
         <View>
           <Text style={styles.chartLabel}>Compact live chart</Text>
-          <Text style={styles.chartTitle}>{symbol}USD</Text>
+          <Text style={[styles.chartTitle, { color: colors.text }]}>{symbol}USD</Text>
         </View>
         <StatusChip label="RSI · MA200 · VOL" tone="accent" />
       </View>
@@ -242,10 +230,10 @@ function CompactLiveChart({
               await triggerHaptic('selection');
               onTimeframeChange(item);
             }}
-            style={[styles.timeframeButton, item === timeframe && styles.timeframeActive]}
+            style={[styles.timeframeButton, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }, item === timeframe && styles.timeframeActive]}
           >
             <View style={[styles.timeframePulse, item === timeframe && styles.timeframePulseActive]} />
-            <Text style={[styles.timeframeText, item === timeframe && styles.timeframeTextActive]}>{item}</Text>
+            <Text style={[styles.timeframeText, { color: colors.textDim }, item === timeframe && styles.timeframeTextActive]}>{item}</Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -273,19 +261,21 @@ type ChartOverlay = {
 };
 
 function NativeCandleChart({ overlays, points }: { overlays: ChartOverlay[]; points: ChartPoint[] }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const visible = points.slice(-28);
   const min = Math.min(...visible.map((point) => point.low));
   const max = Math.max(...visible.map((point) => point.high));
   const maxVolume = Math.max(...visible.map((point) => point.volume));
 
   return (
-    <View style={styles.chartCanvas}>
+    <View style={[styles.chartCanvas, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
       <View style={styles.priceGrid}>
-        <Text style={styles.axisText}>{formatCompact(max)}</Text>
-        <Text style={styles.axisText}>{formatCompact((max + min) / 2)}</Text>
-        <Text style={styles.axisText}>{formatCompact(min)}</Text>
+        <Text style={[styles.axisText, { color: colors.textDim }]}>{formatCompact(max)}</Text>
+        <Text style={[styles.axisText, { color: colors.textDim }]}>{formatCompact((max + min) / 2)}</Text>
+        <Text style={[styles.axisText, { color: colors.textDim }]}>{formatCompact(min)}</Text>
       </View>
-      <View style={styles.candleRow}>
+      <View style={[styles.candleRow, { borderBottomColor: colors.border }]}>
         <ChartOverlays overlays={overlays} min={min} max={max} />
         {visible.map((point, index) => {
           const bullish = point.close >= point.open;
@@ -360,6 +350,9 @@ function NativeCandleChart({ overlays, points }: { overlays: ChartOverlay[]; poi
 }
 
 function ChartOverlays({ max, min, overlays }: { max: number; min: number; overlays: ChartOverlay[] }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
     <View pointerEvents="none" style={styles.overlayLayer}>
       {overlays.map((overlay) => {
@@ -367,7 +360,7 @@ function ChartOverlays({ max, min, overlays }: { max: number; min: number; overl
         const color = colorForTone(overlay.tone);
         return (
           <View key={overlay.id} style={[styles.overlayLine, { borderColor: color, top }]}>
-            <Text style={[styles.overlayLabel, { color }]}>{overlay.label}</Text>
+            <Text style={[styles.overlayLabel, { backgroundColor: colors.backgroundSoft, color }]}>{overlay.label}</Text>
           </View>
         );
       })}
@@ -384,20 +377,22 @@ function ScannerRow({
   onPress: () => void;
   selected: boolean;
 }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const score = compositeScore(asset);
   const change = typeof asset.change_24h === 'number' ? asset.change_24h : 0;
   const tone = change >= 0 ? 'success' : 'danger';
   const state = stateForAsset(asset);
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, selected && styles.rowSelected, pressed && styles.pressed]}>
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, { borderBottomColor: colors.borderSubtle }, selected && [styles.rowSelected, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderStrong }], pressed && styles.pressed]}>
       <View style={styles.rowAsset}>
         <AssetIcon symbol={asset.symbol} compact />
         <View style={styles.rowAssetText}>
-          <Text style={styles.rowSymbol}>{asset.symbol}</Text>
+          <Text style={[styles.rowSymbol, { color: colors.text }]}>{asset.symbol}</Text>
         </View>
       </View>
-      <Text style={styles.rowPrice}>{typeof asset.price === 'number' ? formatShortPrice(asset.price) : 'n/a'}</Text>
+      <Text style={[styles.rowPrice, { color: colors.text }]}>{typeof asset.price === 'number' ? formatShortPrice(asset.price) : 'n/a'}</Text>
       <Text style={[styles.rowChange, { color: tone === 'success' ? theme.colors.success : theme.colors.danger }]}>
         {change >= 0 ? '+' : ''}
         {change.toFixed(2)}%
@@ -407,6 +402,127 @@ function ScannerRow({
         {state}
       </Text>
     </Pressable>
+  );
+}
+
+function WatchlistIntelligenceTerminal({
+  assets,
+  onSelect,
+  selectedSymbol,
+  stale,
+}: {
+  assets: MobileOverviewAsset[];
+  onSelect: (symbol: string) => void;
+  selectedSymbol: string;
+  stale: boolean;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <View style={styles.terminal}>
+      <View style={styles.terminalHeader}>
+        <View style={styles.terminalTitleRow}>
+          <Text style={styles.terminalStar}>★</Text>
+          <View>
+            <Text style={styles.terminalLabel}>Intelligence Terminal</Text>
+            <Text style={[styles.terminalSubtitle, { color: colors.textMuted }]}>Desktop watchlist logic</Text>
+          </View>
+        </View>
+        <StatusChip label={stale ? 'Stale' : 'Live'} tone={stale ? 'warning' : 'success'} />
+      </View>
+
+      <View style={[styles.terminalList, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+        {assets.map((asset) => (
+          <TerminalAssetCard
+            asset={asset}
+            key={asset.symbol}
+            selected={asset.symbol === selectedSymbol}
+            onPress={() => onSelect(asset.symbol)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function TerminalAssetCard({
+  asset,
+  onPress,
+  selected,
+}: {
+  asset: MobileOverviewAsset;
+  onPress: () => void;
+  selected: boolean;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const intel = desktopLikeIntelligence(asset);
+  const riskTone = riskToneForTerminal(intel.riskState);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.terminalCard,
+        { backgroundColor: colors.surface, borderColor: selected ? theme.colors.accent : 'transparent' },
+        selected && styles.terminalCardActive,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.terminalAssetTop}>
+        <View style={styles.terminalAssetIdentity}>
+          <View style={[styles.terminalDot, selected ? styles.terminalDotActive : [styles.terminalDotIdle, { backgroundColor: colors.borderStrong }]]} />
+          <Text style={[styles.terminalAssetSymbol, { color: colors.text }]}>{asset.symbol}</Text>
+        </View>
+        <View style={styles.terminalPriceBlock}>
+          <Text style={[styles.terminalPrice, { color: colors.text }]}>{typeof asset.price === 'number' ? formatShortPrice(asset.price) : 'n/a'}</Text>
+          <Text style={[styles.terminalChange, { color: colorForTone(intel.changeTone) }]}>
+            {intel.change}
+          </Text>
+        </View>
+      </View>
+
+      <View style={[styles.terminalMetrics, { borderTopColor: colors.border }]}>
+        <TerminalMetric label="Posture" value={intel.posture} />
+        <TerminalMetric label="Structure" value={intel.structure} />
+        <TerminalMetric label="Conviction" value={`${intel.conviction}%`} tone="accent" />
+        <TerminalMetric label="Risk State" value={intel.riskState} tone={riskTone} strong />
+      </View>
+    </Pressable>
+  );
+}
+
+function TerminalMetric({
+  label,
+  strong = false,
+  tone = 'neutral',
+  value,
+}: {
+  label: string;
+  strong?: boolean;
+  tone?: StatusTone;
+  value: string;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <View style={styles.terminalMetric}>
+      <Text style={[styles.terminalMetricLabel, { color: colors.textDim }]}>{label}</Text>
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.terminalMetricValue,
+          { color: colors.textMuted },
+          strong && styles.terminalMetricStrong,
+          tone !== 'neutral' && { color: colorForTone(tone) },
+        ]}
+      >
+        {value}
+      </Text>
+    </View>
   );
 }
 
@@ -420,6 +536,8 @@ function AssetIcon({ compact = false, symbol }: { compact?: boolean; symbol: str
 }
 
 function MiniMetric({ label, tone, value }: { label: string; tone: StatusTone; value: string }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const color =
     tone === 'success'
       ? theme.colors.success
@@ -430,8 +548,8 @@ function MiniMetric({ label, tone, value }: { label: string; tone: StatusTone; v
       : theme.colors.accent;
 
   return (
-    <View style={styles.metric}>
-      <Text style={styles.metricLabel}>{label}</Text>
+    <View style={[styles.metric, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+      <Text style={[styles.metricLabel, { color: colors.textDim }]}>{label}</Text>
       <Text style={[styles.metricValue, { color }]}>{value}</Text>
     </View>
   );
@@ -563,6 +681,45 @@ function stateForAsset(asset: MobileOverviewAsset) {
   if (asset.setup_score >= 65 && asset.technical_score >= 60) return 'Constructive';
   if (asset.setup_score < 45 || asset.technical_score < 45) return 'Weak Structure';
   return 'Neutral';
+}
+
+function desktopLikeIntelligence(asset: MobileOverviewAsset) {
+  const conviction = compositeScore(asset);
+  const change = typeof asset.change_24h === 'number' ? asset.change_24h : 0;
+  return {
+    change: `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`,
+    changeTone: change >= 0 ? 'success' as StatusTone : 'danger' as StatusTone,
+    conviction,
+    posture: terminalPostureForAsset(asset, change),
+    riskState: terminalRiskForAsset(asset, change),
+    structure: terminalStructureForAsset(asset),
+  };
+}
+
+function terminalPostureForAsset(asset: MobileOverviewAsset, change: number) {
+  if (asset.setup_score >= 80 && asset.technical_score >= 65) return 'Momentum Rising';
+  if (asset.technical_score >= 70 && change >= 0) return 'Compression';
+  if (asset.technical_score < 45 || change < -3) return 'Expansion';
+  if (asset.market_score >= 65) return 'Compression';
+  return 'Rangebound';
+}
+
+function terminalStructureForAsset(asset: MobileOverviewAsset) {
+  if (asset.setup_score >= 65 && asset.technical_score >= 60) return 'Bullish Structure';
+  if (asset.setup_score < 45 || asset.technical_score < 45) return 'Weak Structure';
+  return 'Neutral Structure';
+}
+
+function terminalRiskForAsset(asset: MobileOverviewAsset, change: number) {
+  if (asset.setup_score < 45 || asset.technical_score < 45 || change <= -3) return 'Risk Elevated';
+  if (asset.setup_score >= 70 && asset.technical_score >= 60) return 'Laag / Stabiel';
+  return 'Gematigd';
+}
+
+function riskToneForTerminal(value: string): StatusTone {
+  if (value.includes('Laag')) return 'success';
+  if (value.includes('Risk')) return 'danger';
+  return 'warning';
 }
 
 function postureForAsset(asset: MobileOverviewAsset, change: number) {
@@ -1024,6 +1181,129 @@ const styles = StyleSheet.create({
     color: theme.colors.textSoft,
     fontSize: 11,
     fontWeight: '900',
+  },
+  terminal: {
+    gap: theme.spacing.md,
+  },
+  terminalAssetIdentity: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  terminalAssetSymbol: {
+    color: theme.colors.text,
+    fontSize: 25,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  terminalAssetTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  terminalCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: 'transparent',
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+  },
+  terminalCardActive: {
+    borderWidth: 2,
+  },
+  terminalChange: {
+    fontSize: theme.typography.small,
+    fontWeight: '900',
+    marginTop: 2,
+    textAlign: 'right',
+  },
+  terminalDot: {
+    borderRadius: theme.radius.pill,
+    height: 11,
+    width: 11,
+  },
+  terminalDotActive: {
+    backgroundColor: theme.colors.accent,
+  },
+  terminalDotIdle: {
+    backgroundColor: theme.colors.borderStrong,
+  },
+  terminalHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  terminalLabel: {
+    color: theme.colors.textDim,
+    fontSize: theme.typography.label,
+    fontWeight: '900',
+    letterSpacing: 3,
+    lineHeight: 15,
+    textTransform: 'uppercase',
+  },
+  terminalList: {
+    backgroundColor: theme.colors.backgroundSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    gap: theme.spacing.xs,
+    padding: theme.spacing.xs,
+  },
+  terminalMetric: {
+    minWidth: '45%',
+    flex: 1,
+  },
+  terminalMetricLabel: {
+    color: theme.colors.textDim,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
+  },
+  terminalMetricStrong: {
+    fontWeight: '900',
+  },
+  terminalMetricValue: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 5,
+  },
+  terminalMetrics: {
+    borderTopColor: theme.colors.border,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+  },
+  terminalPrice: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  terminalPriceBlock: {
+    alignItems: 'flex-end',
+  },
+  terminalStar: {
+    color: theme.colors.warning,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  terminalSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+    marginTop: 3,
+    textTransform: 'uppercase',
+  },
+  terminalTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
   },
   timeframeActive: {
     backgroundColor: theme.colors.accent,

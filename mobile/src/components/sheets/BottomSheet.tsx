@@ -1,8 +1,9 @@
 import { ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { theme } from '../../constants/theme';
+import { preferenceColors, preferenceLabels, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { triggerHaptic } from '../../utils/haptics';
 
 type BottomSheetProps = {
@@ -14,15 +15,27 @@ type BottomSheetProps = {
 
 export function BottomSheet({ visible, title, children, onClose }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
+  const { appearance, language } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const labels = preferenceLabels(language);
 
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, theme.spacing.lg) }]}>
-          <View style={styles.handle} />
+        <View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              paddingBottom: Math.max(insets.bottom, theme.spacing.lg),
+            },
+          ]}
+        >
+          <View style={[styles.handle, { backgroundColor: colors.borderStrong }]} />
           <View style={styles.header}>
-            <Text style={styles.title}>{title}</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
             <Pressable
               onPress={async () => {
                 await triggerHaptic('selection');
@@ -30,10 +43,16 @@ export function BottomSheet({ visible, title, children, onClose }: BottomSheetPr
               }}
               style={({ pressed }) => [styles.close, pressed && styles.pressed]}
             >
-              <Text style={styles.closeText}>Close</Text>
+              <Text style={[styles.closeText, { color: colors.textSoft }]}>{labels.close}</Text>
             </Pressable>
           </View>
-          <View style={styles.content}>{children}</View>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {children}
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -88,6 +107,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderWidth: 1,
+    maxHeight: '88%',
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
     ...theme.shadows.sheet,

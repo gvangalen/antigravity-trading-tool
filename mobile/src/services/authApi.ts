@@ -25,6 +25,13 @@ export type RefreshResponse = {
 };
 
 export const authApi = {
+  health() {
+    return apiClient.request<{ message: string; status: string }>('/api/health', {
+      skipAuth: true,
+      skipRefresh: true,
+    });
+  },
+
   login(email: string, password: string) {
     return apiClient.request<LoginResponse>('/api/auth/login', {
       body: { email, password },

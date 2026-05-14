@@ -1,6 +1,6 @@
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.setup_service import SetupService
 from backend.services.strategy_service import StrategyService
 from backend.services.bot_service import BotService
+from backend.services.dashboard_service import DashboardService
 
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
 from backend.schemas.bot_schema import BotConfigCreateSchema
@@ -37,7 +38,7 @@ class AiActionEngine:
         Registers a proposed action in the database with status 'pending' and returns a unique action_id.
         """
         action_id = f"act_{uuid.uuid4().hex[:12]}"
-        created_at = datetime.utcnow()
+        created_at = datetime.now(timezone.utc)
         expires_at = created_at + timedelta(seconds=ttl_seconds)
 
         new_action = AiPendingAction(
@@ -77,7 +78,7 @@ class AiActionEngine:
             raise HTTPException(status_code=400, detail=f"Deze actie is al verwerkt (status: {action_record.status}).")
 
         # Check expiration
-        if datetime.utcnow() > action_record.expires_at:
+        if datetime.now(timezone.utc) > action_record.expires_at:
             action_record.status = "expired"
             await self.session.commit()
             logger.warning(f"🚨 Action {action_id} has expired.")
@@ -156,6 +157,10 @@ class AiActionEngine:
             # Mark action as executed
             action_record.status = "executed"
             await self.session.commit()
+            
+            # Proactively trigger cache invalidation so mobile and web stay perfectly synchronized
+            DashboardService.invalidate_cache(user_id)
+            
             logger.info(f"✅ Successfully executed pending action: {action_id} of type: {action_type} for user: {user_id}")
             return {
                 "status": "success",

@@ -107,11 +107,12 @@ export function mapMobileOverviewDecision(overview?: MobileOverviewResponse) {
     (asset.macro_score + asset.market_score + asset.technical_score + asset.setup_score) / 4,
   );
   const state =
-    score >= 70
+    asset.macro_label ||
+    (score >= 70
       ? 'Constructive, selective'
       : score >= 50
         ? 'Neutral, wait for confirmation'
-        : 'Defensive, review risk';
+        : 'Defensive, review risk');
 
   return {
     reason: `${asset.symbol} blends macro ${Math.round(asset.macro_score)}, market ${Math.round(asset.market_score)}, technical ${Math.round(asset.technical_score)} and setup ${Math.round(asset.setup_score)} from the mobile overview.`,
@@ -268,17 +269,23 @@ export function mapBotDecision(botSource?: unknown) {
 
   const action = readString(bot, ['action', 'decision', 'recommendation'], mockBotDecision.action);
   const confidence = clampScore(readNumber(bot, ['confidence', 'confidence_score'], mockBotDecision.confidence));
+  const reasons = readArray(bot, ['reasons', 'reason_json']).map(String).filter(Boolean);
+  const amount = readNumber(bot, ['amount_eur', 'final_amount_eur', 'requested_amount_eur'], NaN);
+  const amountLabel =
+    readString(bot, ['amount', 'final_amount', 'requested_amount'], '') ||
+    (Number.isFinite(amount) ? formatMoney(amount, 'EUR') : mockBotDecision.amount);
 
   return {
     action,
-    amount: readString(bot, ['amount', 'final_amount', 'requested_amount'], mockBotDecision.amount),
+    amount: amountLabel,
     botName: readString(bot, ['bot_name', 'name', 'strategy_name'], mockBotDecision.botName),
     confidence,
     guardrail:
-      readString(bot, ['guardrail', 'guardrail_result', 'guardrails'], '') ||
+      readString(bot, ['guardrail', 'guardrails_result', 'guardrail_result', 'guardrail_reason', 'guardrails'], '') ||
       'Read-only mobile review. No execution is available in this client.',
     reason:
       readString(bot, ['reason', 'summary', 'explanation'], '') ||
+      reasons.slice(0, 2).join(' ') ||
       mockBotDecision.reason,
     tone: toneForAction(action, confidence),
   };

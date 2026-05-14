@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { theme } from '../../constants/theme';
 
 type SectionHeaderProps = {
@@ -9,13 +10,16 @@ type SectionHeaderProps = {
 };
 
 export function SectionHeader({ label, title, description }: SectionHeaderProps) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
     <View style={styles.container}>
       <View style={styles.labelRow}>
         <View style={styles.marker} />
         <Text style={styles.label}>{label}</Text>
       </View>
-      {title ? <Text style={styles.title}>{title}</Text> : null}
+      {title ? <Text style={[styles.title, { color: colors.text }]}>{title}</Text> : null}
       {description ? <Text style={styles.description}>{description}</Text> : null}
     </View>
   );

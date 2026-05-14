@@ -3,6 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { theme } from '../../constants/theme';
+import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { triggerHaptic } from '../../utils/haptics';
 
 type ScreenContainerProps = {
@@ -22,6 +23,8 @@ export function ScreenContainer({
   refreshing: externalRefreshing,
   onRefresh,
 }: ScreenContainerProps) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshing = externalRefreshing ?? refreshing;
 
@@ -39,14 +42,14 @@ export function ScreenContainer({
 
   if (!scroll) {
     return (
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
-        <View style={styles.staticContent}>{children}</View>
+    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
+        <View style={[styles.staticContent, { backgroundColor: colors.background }]}>{children}</View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView edges={['top']} style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: contentInsetBottom }]}
         keyboardShouldPersistTaps="handled"

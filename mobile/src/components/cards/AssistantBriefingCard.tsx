@@ -43,16 +43,18 @@ export function AssistantBriefingCard({
 const styles = StyleSheet.create({
   button: {
     alignItems: 'center',
-    backgroundColor: theme.colors.accent,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.borderStrong,
+    borderWidth: 1,
     borderRadius: theme.radius.button,
     marginTop: theme.spacing.lg,
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   buttonText: {
-    color: theme.colors.white,
+    color: theme.colors.accent,
     fontSize: 12,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
   header: {

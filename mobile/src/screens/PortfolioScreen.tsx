@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NavigationProp } from '@react-navigation/native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CardShell } from '../components/cards/CardShell';
 import { InsightCard } from '../components/cards/InsightCard';
@@ -8,15 +10,25 @@ import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
 import { SectionHeader } from '../components/layout/SectionHeader';
 import { StatusChip } from '../components/layout/StatusChip';
+import { BottomSheet } from '../components/sheets/BottomSheet';
 import { StatusTone, theme } from '../constants/theme';
 import { useApiResource } from '../hooks/useApiResource';
-import { MobileOverviewResponse, intelligenceApi, mobileApi } from '../services/tradamindApi';
+import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
+import type { MainTabParamList } from '../navigation/MainTabNavigator';
+import {
+  MobileOverviewResponse,
+  OrderPreviewResponse,
+  intelligenceApi,
+  mobileApi,
+} from '../services/tradamindApi';
 import { triggerHaptic } from '../utils/haptics';
 
 type UnknownRecord = Record<string, unknown>;
 type EnvFilter = 'all' | 'paper' | 'live';
 type RangeKey = '1D' | '1W' | '1M' | '1Y' | 'ALL';
 type MetricKey = 'equity' | 'cash' | 'btc_value' | 'btc_qty' | 'invested' | 'unrealized_pnl';
+type TradeMode = 'buy' | 'sell' | 'dca' | 'bot';
+type AmountUnit = 'EUR' | 'BTC';
 
 type PortfolioBot = {
   id: number;
@@ -63,9 +75,19 @@ const metrics: Array<{ key: MetricKey; label: string }> = [
 ];
 
 export function PortfolioScreen() {
+  const navigation = useNavigation<NavigationProp<MainTabParamList>>();
   const [envFilter, setEnvFilter] = useState<EnvFilter>('all');
   const [range, setRange] = useState<RangeKey>('1W');
   const [metric, setMetric] = useState<MetricKey>('equity');
+  const [tradeSheetOpen, setTradeSheetOpen] = useState(false);
+  const [tradeMode, setTradeMode] = useState<TradeMode>('buy');
+  const [executionExpanded, setExecutionExpanded] = useState(false);
+  const [amountUnit, setAmountUnit] = useState<AmountUnit>('EUR');
+  const [amountValue, setAmountValue] = useState('');
+  const [amountPreset, setAmountPreset] = useState(0);
+  const [tradePreview, setTradePreview] = useState<OrderPreviewResponse | null>(null);
+  const [tradePreviewError, setTradePreviewError] = useState('');
+  const [tradePreviewLoading, setTradePreviewLoading] = useState(false);
 
   const rangeConfig = ranges.find((item) => item.key === range) ?? ranges[1];
   const isLiveFilter = envFilter === 'all' ? undefined : envFilter === 'live';
@@ -126,6 +148,8 @@ export function PortfolioScreen() {
   );
   const performance = useMemo(() => getPerformance(history, metric, aggregate), [aggregate, history, metric]);
   const activeAsset = overviewResource.data?.watchlist[0]?.symbol ?? filteredBots[0]?.symbol ?? 'BTC';
+  const activeOverviewAsset = overviewResource.data?.watchlist.find((asset) => asset.symbol === activeAsset);
+  const primaryBot = filteredBots.find((bot) => bot.symbol === activeAsset && bot.isActive) ?? filteredBots.find((bot) => bot.isActive) ?? filteredBots[0];
   const loading =
     overviewResource.loading ||
     portfoliosResource.loading ||
@@ -154,82 +178,198 @@ export function PortfolioScreen() {
     setMetric(next);
   }
 
+  async function openTradeSheet() {
+    await triggerHaptic('selection');
+    setTradeSheetOpen(true);
+  }
+
+  async function askFinnTradeCheck() {
+    await triggerHaptic('selection');
+    setTradeSheetOpen(false);
+    navigation.navigate('FINN', {
+      prefill: buildTradePrefill({
+        activeAsset,
+        amountUnit,
+        amountValue,
+        bot: primaryBot,
+        exchangeSummary,
+        mode: tradeMode,
+        overview: activeOverviewAsset,
+      }),
+      source: 'portfolio_trade_sheet',
+    });
+  }
+
+  async function requestTradePreview() {
+    await triggerHaptic('selection');
+    setTradePreviewError('');
+    setTradePreview(null);
+
+    if (!primaryBot) {
+      setTradePreviewError('Geen actieve bot gevonden voor deze trade preview.');
+      return;
+    }
+
+    const payload = buildOrderPreviewPayload({
+      activeAsset,
+      amountUnit,
+      amountValue,
+      bot: primaryBot,
+      mode: tradeMode,
+      overview: activeOverviewAsset,
+    });
+
+    if (!payload) {
+      setTradePreviewError('Vul eerst een geldig bedrag in voor de preview.');
+      return;
+    }
+
+    setTradePreviewLoading(true);
+    try {
+      const preview = await intelligenceApi.previewOrder(payload);
+      setTradePreview(preview);
+    } catch (error) {
+      setTradePreviewError(error instanceof Error ? error.message : 'Order preview is mislukt.');
+    } finally {
+      setTradePreviewLoading(false);
+    }
+  }
+
+  function updateTradeMode(next: TradeMode) {
+    setTradeMode(next);
+    setTradePreview(null);
+    setTradePreviewError('');
+  }
+
+  function updateAmountUnit(next: AmountUnit) {
+    setAmountUnit(next);
+    setTradePreview(null);
+    setTradePreviewError('');
+  }
+
+  function updateAmountValue(next: string) {
+    setAmountValue(next);
+    setTradePreview(null);
+    setTradePreviewError('');
+  }
+
   return (
-    <ScreenContainer
-      refreshing={
-        overviewResource.refreshing ||
-        portfoliosResource.refreshing ||
-        configsResource.refreshing ||
-        exchangeResource.refreshing ||
-        historyResource.refreshing
-      }
-      onRefresh={() => {
-        overviewResource.refresh();
-        portfoliosResource.refresh();
-        configsResource.refresh();
-        exchangeResource.refresh();
-        historyResource.refresh();
-      }}
-    >
-      <AssetContextHeader asset={activeAsset} context="Portfolio command center" updatedAt={portfolioUpdatedAt([
-        overviewResource.updatedAt,
-        portfoliosResource.updatedAt,
-        historyResource.updatedAt,
-      ])} />
-      <SectionHeader
-        label="System control"
-        title="Portfolio"
-        description="Geaggregeerd overzicht van budget, posities en botstatus vanuit de backend."
-      />
-
-      {loading && bots.length === 0 ? (
-        <LoadingSkeletonCard />
-      ) : (
-        <>
-          <EnvironmentAnalytics overview={overviewResource.data} stale={isStale} />
-
-          <PortfolioPerformanceCard
-            delta={performance.delta}
-            metric={metric}
-            onMetricChange={changeMetric}
-            onRangeChange={changeRange}
-            points={history}
-            range={range}
-            total={performance.last}
-          />
-
-          <BotPortfolioOverviewCard
-            aggregate={aggregate}
-            bots={filteredBots}
-            envFilter={envFilter}
-            exchangeSummary={exchangeSummary}
-            onEnvFilterChange={changeEnv}
-          />
-
-          <MyBotsSection bots={filteredBots} totalBots={bots.length} />
-        </>
-      )}
-
-      {portfoliosResource.error || configsResource.error || exchangeResource.error || historyResource.error ? (
-        <InsightCard
-          label="Portfolio sync"
-          title="Een deel van de portfolio-data is stale."
-          body={
-            portfoliosResource.error?.message ||
-            configsResource.error?.message ||
-            exchangeResource.error?.message ||
-            historyResource.error?.message ||
-            'Controleer backend/API status.'
-          }
-          tone="warning"
-          cta="Pull to refresh"
+    <View style={styles.screenWrap}>
+      <ScreenContainer
+        contentInsetBottom={170}
+        refreshing={
+          overviewResource.refreshing ||
+          portfoliosResource.refreshing ||
+          configsResource.refreshing ||
+          exchangeResource.refreshing ||
+          historyResource.refreshing
+        }
+        onRefresh={() => {
+          overviewResource.refresh();
+          portfoliosResource.refresh();
+          configsResource.refresh();
+          exchangeResource.refresh();
+          historyResource.refresh();
+        }}
+      >
+        <AssetContextHeader asset={activeAsset} context="Portfolio command center" updatedAt={portfolioUpdatedAt([
+          overviewResource.updatedAt,
+          portfoliosResource.updatedAt,
+          historyResource.updatedAt,
+        ])} />
+        <SectionHeader
+          label="System control"
+          title="Portfolio"
+          description="Geaggregeerd overzicht van budget, posities en botstatus vanuit de backend."
         />
-      ) : null}
-    </ScreenContainer>
+
+        {loading && bots.length === 0 ? (
+          <LoadingSkeletonCard />
+        ) : (
+          <>
+            <EnvironmentAnalytics overview={overviewResource.data} stale={isStale} />
+
+            <PortfolioPerformanceCard
+              delta={performance.delta}
+              metric={metric}
+              onMetricChange={changeMetric}
+              onRangeChange={changeRange}
+              points={history}
+              range={range}
+              total={performance.last}
+            />
+
+            <BotPortfolioOverviewCard
+              aggregate={aggregate}
+              bots={filteredBots}
+              envFilter={envFilter}
+              exchangeSummary={exchangeSummary}
+              onEnvFilterChange={changeEnv}
+            />
+
+            <MyBotsSection bots={filteredBots} totalBots={bots.length} />
+          </>
+        )}
+
+        {portfoliosResource.error || configsResource.error || exchangeResource.error || historyResource.error ? (
+          <InsightCard
+            label="Portfolio sync"
+            title="Een deel van de portfolio-data is stale."
+            body={
+              portfoliosResource.error?.message ||
+              configsResource.error?.message ||
+              exchangeResource.error?.message ||
+              historyResource.error?.message ||
+              'Controleer backend/API status.'
+            }
+            tone="warning"
+            cta="Pull to refresh"
+          />
+        ) : null}
+      </ScreenContainer>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open trade flow"
+        onPress={openTradeSheet}
+        style={({ pressed }) => [styles.tradeFab, pressed && styles.pressed]}
+      >
+        <View style={styles.tradeFabStatus} />
+        <Text style={styles.tradeFabOrb}>AI</Text>
+        <Text style={styles.tradeFabText}>Trade</Text>
+      </Pressable>
+
+      <BottomSheet visible={tradeSheetOpen} title="AI trade flow" onClose={() => setTradeSheetOpen(false)}>
+        <TradeActionSheet
+          activeAsset={activeAsset}
+          amountPreset={amountPreset}
+          amountUnit={amountUnit}
+          amountValue={amountValue}
+          bot={primaryBot}
+          executionExpanded={executionExpanded}
+          exchangeSummary={exchangeSummary}
+          mode={tradeMode}
+          overview={activeOverviewAsset}
+          preview={tradePreview}
+          previewError={tradePreviewError}
+          previewLoading={tradePreviewLoading}
+          stale={isStale}
+          onAmountPresetChange={setAmountPreset}
+          onAmountUnitChange={updateAmountUnit}
+          onAmountValueChange={updateAmountValue}
+          onAskFinn={askFinnTradeCheck}
+          onExecutionExpandedChange={setExecutionExpanded}
+          onModeChange={updateTradeMode}
+          onPreview={requestTradePreview}
+        />
+      </BottomSheet>
+    </View>
   );
 }
 
 function EnvironmentAnalytics({ overview, stale }: { overview?: MobileOverviewResponse; stale: boolean }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const asset = overview?.watchlist[0];
   const scores = [
     { label: 'Macro index', value: asset?.macro_score },
@@ -243,7 +383,7 @@ function EnvironmentAnalytics({ overview, stale }: { overview?: MobileOverviewRe
       <View style={styles.sectionTop}>
         <View>
           <Text style={styles.kicker}>Environment analytics</Text>
-          <Text style={styles.cardTitle}>System health & market scopes</Text>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>System health & market scopes</Text>
         </View>
         <StatusChip label={stale ? 'Stale' : 'Live'} tone={stale ? 'warning' : 'success'} />
       </View>
@@ -251,8 +391,8 @@ function EnvironmentAnalytics({ overview, stale }: { overview?: MobileOverviewRe
         {scores.map((score) => {
           const value = clampScore(score.value);
           return (
-            <View key={score.label} style={[styles.scoreTile, value >= 70 && styles.scoreTileStrong]}>
-              <Text style={styles.scoreLabel}>{score.label}</Text>
+            <View key={score.label} style={[styles.scoreTile, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }, value >= 70 && styles.scoreTileStrong]}>
+              <Text style={[styles.scoreLabel, { color: colors.textDim }]}>{score.label}</Text>
               <Text style={[styles.scoreValue, { color: colorForScore(value) }]}>{value}</Text>
             </View>
           );
@@ -279,6 +419,8 @@ function PortfolioPerformanceCard({
   range: RangeKey;
   total: number;
 }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const isDown = delta.absolute < 0;
   const accentColor = metric === 'unrealized_pnl' ? (isDown ? theme.colors.danger : theme.colors.success) : theme.colors.accent;
 
@@ -287,15 +429,15 @@ function PortfolioPerformanceCard({
       <View style={styles.performanceHeader}>
         <View>
           <Text style={styles.kicker}>Portfolio overview</Text>
-          <Text style={styles.performanceTitle}>Global equity performance</Text>
-          <Text style={styles.performanceValue}>{formatMetric(total, metric)}</Text>
+          <Text style={[styles.performanceTitle, { color: colors.text }]}>Global equity performance</Text>
+          <Text style={[styles.performanceValue, { color: colors.text }]}>{formatMetric(total, metric)}</Text>
           <View style={styles.deltaRow}>
             <View style={[styles.deltaBadge, { borderColor: isDown ? theme.colors.danger : theme.colors.success }]}>
               <Text style={[styles.deltaText, { color: isDown ? theme.colors.danger : theme.colors.success }]}>
                 {isDown ? 'Down' : 'Up'} {delta.percent === null ? 'n/a' : formatPercent(delta.percent)}
               </Text>
             </View>
-            <Text style={styles.deltaAbsolute}>{formatMetric(delta.absolute, metric)}</Text>
+            <Text style={[styles.deltaAbsolute, { color: colors.textDim }]}>{formatMetric(delta.absolute, metric)}</Text>
           </View>
         </View>
         <StatusChip label={range} tone="accent" />
@@ -333,6 +475,8 @@ function BotPortfolioOverviewCard({
   exchangeSummary: ReturnType<typeof summarizeExchange>;
   onEnvFilterChange: (value: EnvFilter) => void;
 }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const usedPct = aggregate.totalBudget > 0 ? Math.min(100, (aggregate.invested / aggregate.totalBudget) * 100) : 0;
 
   return (
@@ -341,10 +485,10 @@ function BotPortfolioOverviewCard({
         <View style={styles.leftRail} />
         <View style={styles.heroContent}>
           <Text style={styles.kicker}>Systeem overzicht</Text>
-          <Text style={styles.heroTitle}>
+          <Text style={[styles.heroTitle, { color: colors.text }]}>
             Portfolio <Text style={styles.heroDash}>-</Text> {envFilter === 'all' ? 'Alle bots' : envFilter === 'live' ? 'Live' : 'Paper'}
           </Text>
-          <Text style={styles.heroBody}>Budget en posities over de geselecteerde omgeving.</Text>
+          <Text style={[styles.heroBody, { color: colors.textMuted }]}>Budget en posities over de geselecteerde omgeving.</Text>
         </View>
       </View>
 
@@ -354,32 +498,32 @@ function BotPortfolioOverviewCard({
         onChange={(value) => onEnvFilterChange(value as EnvFilter)}
       />
 
-      <View style={styles.activeBotTile}>
-        <Text style={styles.metricLabel}>Actieve bots</Text>
-        <Text style={styles.activeBotCount}>{bots.filter((bot) => bot.isActive).length}</Text>
+      <View style={[styles.activeBotTile, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+        <Text style={[styles.metricLabel, { color: colors.textDim }]}>Actieve bots</Text>
+        <Text style={[styles.activeBotCount, { color: colors.text }]}>{bots.filter((bot) => bot.isActive).length}</Text>
       </View>
 
       {exchangeSummary.count > 0 && envFilter !== 'paper' ? (
-        <View style={styles.exchangePanel}>
+        <View style={[styles.exchangePanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={styles.kicker}>Exchange balances</Text>
-          <Text style={styles.exchangeSubtitle}>Live wallet context vanuit de backend</Text>
+          <Text style={[styles.exchangeSubtitle, { color: colors.textDim }]}>Live wallet context vanuit de backend</Text>
           <View style={styles.exchangeGrid}>
             <SmallStat label="Exchanges" value={String(exchangeSummary.count)} />
             <SmallStat label="Totaal waarde" value={formatEUR(exchangeSummary.totalEur)} />
             <SmallStat label="Vrij EUR" value={formatEUR(exchangeSummary.freeEur)} />
           </View>
           {exchangeSummary.names.length > 0 ? (
-            <Text style={styles.exchangeNames}>{exchangeSummary.names.join('  -  ')}</Text>
+            <Text style={[styles.exchangeNames, { color: colors.textSoft }]}>{exchangeSummary.names.join('  -  ')}</Text>
           ) : null}
         </View>
       ) : null}
 
-      <View style={styles.budgetCard}>
+      <View style={[styles.budgetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={styles.kicker}>Gebruik van totaal budget</Text>
-        <Text style={styles.budgetSub}>Single source of truth: backend</Text>
+        <Text style={[styles.budgetSub, { color: colors.textDim }]}>Single source of truth: backend</Text>
         <View style={styles.budgetLine}>
-          <Text style={styles.budgetLabel}>Alle bots gecombineerd</Text>
-          <Text style={styles.budgetValue}>
+          <Text style={[styles.budgetLabel, { color: colors.text }]}>Alle bots gecombineerd</Text>
+          <Text style={[styles.budgetValue, { color: colors.text }]}>
             {formatEUR(aggregate.invested)} / {formatEUR(aggregate.totalBudget)}
           </Text>
         </View>
@@ -387,8 +531,8 @@ function BotPortfolioOverviewCard({
           <View style={[styles.progressFill, { width: `${usedPct}%` }]} />
         </View>
         <View style={styles.budgetLine}>
-          <Text style={styles.budgetLabel}>Beschikbaar</Text>
-          <Text style={styles.budgetValue}>{formatEUR(Math.max(aggregate.totalBudget - aggregate.invested, 0))}</Text>
+          <Text style={[styles.budgetLabel, { color: colors.text }]}>Beschikbaar</Text>
+          <Text style={[styles.budgetValue, { color: colors.text }]}>{formatEUR(Math.max(aggregate.totalBudget - aggregate.invested, 0))}</Text>
         </View>
         <View style={styles.inlineStats}>
           <SmallStat label="Vandaag besteed" value={formatEUR(aggregate.todaySpent)} />
@@ -408,13 +552,13 @@ function BotPortfolioOverviewCard({
         <View style={styles.assetBreakdown}>
           <Text style={styles.kicker}>Breakdown per asset</Text>
           {aggregate.assetRows.map((row) => (
-            <View key={row.symbol} style={styles.assetRow}>
+            <View key={row.symbol} style={[styles.assetRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View>
-                <Text style={styles.assetSymbol}>{row.symbol}</Text>
-                <Text style={styles.assetQty}>{row.netQty.toFixed(6)} {row.symbol}</Text>
+                <Text style={[styles.assetSymbol, { color: colors.text }]}>{row.symbol}</Text>
+                <Text style={[styles.assetQty, { color: colors.textDim }]}>{row.netQty.toFixed(6)} {row.symbol}</Text>
               </View>
               <View style={styles.assetValueBlock}>
-                <Text style={styles.assetValue}>{formatEUR(row.positionValue)}</Text>
+                <Text style={[styles.assetValue, { color: colors.text }]}>{formatEUR(row.positionValue)}</Text>
                 <Text style={[styles.assetPnl, { color: row.pnl >= 0 ? theme.colors.success : theme.colors.danger }]}>
                   {formatEUR(row.pnl)} {formatPercent(row.pnlPct)}
                 </Text>
@@ -428,11 +572,14 @@ function BotPortfolioOverviewCard({
 }
 
 function MyBotsSection({ bots, totalBots }: { bots: PortfolioBot[]; totalBots: number }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
     <View style={styles.myBots}>
       <View>
-        <Text style={styles.myBotsTitle}>My Bots</Text>
-        <Text style={styles.myBotsSubtitle}>Overzicht van actieve handelsstrategieen.</Text>
+        <Text style={[styles.myBotsTitle, { color: colors.text }]}>My Bots</Text>
+        <Text style={[styles.myBotsSubtitle, { color: colors.textMuted }]}>Overzicht van actieve handelsstrategieen.</Text>
       </View>
       <View style={styles.filterPills}>
         <StatusChip label={`All ${totalBots}`} tone="accent" />
@@ -453,6 +600,8 @@ function MyBotsSection({ bots, totalBots }: { bots: PortfolioBot[]; totalBots: n
 }
 
 function BotCard({ bot }: { bot: PortfolioBot }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
   const pnl = bot.positionValue - bot.invested;
   const pnlPct = bot.invested > 0 ? (pnl / bot.invested) * 100 : 0;
 
@@ -464,10 +613,10 @@ function BotCard({ bot }: { bot: PortfolioBot }) {
         </View>
         <View style={styles.botTitleBlock}>
           <View style={styles.botNameRow}>
-            <Text style={styles.botName}>{bot.name}</Text>
+            <Text style={[styles.botName, { color: colors.text }]}>{bot.name}</Text>
             <View style={[styles.statusDot, { backgroundColor: bot.isActive ? theme.colors.warning : theme.colors.neutral }]} />
           </View>
-          <Text style={styles.botMeta}>
+          <Text style={[styles.botMeta, { color: colors.textDim }]}>
             {bot.symbol}  -  {bot.timeframe}  -  {bot.strategy}
           </Text>
         </View>
@@ -484,7 +633,7 @@ function BotCard({ bot }: { bot: PortfolioBot }) {
         <BotMetric label="Telemetry sync" value="Backend" tone="neutral" />
       </View>
       <View style={styles.botFooter}>
-        <Text style={styles.botFooterText}>Invested {formatEUR(bot.invested)}</Text>
+        <Text style={[styles.botFooterText, { color: colors.textDim }]}>Invested {formatEUR(bot.invested)}</Text>
         <Text style={[styles.botFooterText, { color: pnl >= 0 ? theme.colors.success : theme.colors.danger }]}>
           PnL {formatEUR(pnl)} {formatPercent(pnlPct)}
         </Text>
@@ -504,8 +653,11 @@ function SegmentedControl({
   onChange: (value: string) => void;
   selected: string;
 }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
-    <View style={[styles.segmented, compact && styles.segmentedCompact]}>
+    <View style={[styles.segmented, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }, compact && styles.segmentedCompact]}>
       {items.map((item) => {
         const active = selected === item.key;
         return (
@@ -513,9 +665,9 @@ function SegmentedControl({
             accessibilityRole="button"
             key={item.key}
             onPress={() => onChange(item.key)}
-            style={[styles.segment, compact && styles.segmentCompact, active && styles.segmentActive]}
+            style={[styles.segment, compact && styles.segmentCompact, active && [styles.segmentActive, { backgroundColor: colors.surface, borderColor: colors.border }]]}
           >
-            <Text style={[styles.segmentText, active && styles.segmentTextActive]} numberOfLines={1}>
+            <Text style={[styles.segmentText, { color: colors.textDim }, active && [styles.segmentTextActive, { color: colors.text }]]} numberOfLines={1}>
               {item.label}
             </Text>
           </Pressable>
@@ -571,19 +723,25 @@ function SparkChart({
 }
 
 function SmallStat({ label, value }: { label: string; value: string }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
     <View style={styles.smallStat}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.smallStatValue}>{value}</Text>
+      <Text style={[styles.metricLabel, { color: colors.textDim }]}>{label}</Text>
+      <Text style={[styles.smallStatValue, { color: colors.text }]}>{value}</Text>
     </View>
   );
 }
 
 function BigStat({ label, tone, value }: { label: string; tone?: StatusTone; value: string }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
-    <View style={styles.bigStat}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={[styles.bigStatValue, tone && { color: toneColor(tone) }]}>{value}</Text>
+    <View style={[styles.bigStat, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+      <Text style={[styles.metricLabel, { color: colors.textDim }]}>{label}</Text>
+      <Text style={[styles.bigStatValue, { color: colors.text }, tone && { color: toneColor(tone) }]}>{value}</Text>
     </View>
   );
 }
@@ -597,12 +755,391 @@ function Tag({ label, tone }: { label: string; tone: StatusTone }) {
 }
 
 function BotMetric({ label, tone, value }: { label: string; tone: StatusTone; value: string }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
-    <View style={styles.botMetric}>
-      <Text style={styles.metricLabel}>{label}</Text>
+    <View style={[styles.botMetric, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+      <Text style={[styles.metricLabel, { color: colors.textDim }]}>{label}</Text>
       <Text style={[styles.botMetricValue, { color: toneColor(tone) }]}>{value}</Text>
     </View>
   );
+}
+
+function TradeActionSheet({
+  activeAsset,
+  amountPreset,
+  amountUnit,
+  amountValue,
+  bot,
+  executionExpanded,
+  exchangeSummary,
+  mode,
+  overview,
+  preview,
+  previewError,
+  previewLoading,
+  stale,
+  onAmountPresetChange,
+  onAmountUnitChange,
+  onAmountValueChange,
+  onAskFinn,
+  onExecutionExpandedChange,
+  onModeChange,
+  onPreview,
+}: {
+  activeAsset: string;
+  amountPreset: number;
+  amountUnit: AmountUnit;
+  amountValue: string;
+  bot?: PortfolioBot;
+  executionExpanded: boolean;
+  exchangeSummary: ExchangeSummary;
+  mode: TradeMode;
+  overview?: MobileOverviewResponse['watchlist'][number];
+  preview: OrderPreviewResponse | null;
+  previewError: string;
+  previewLoading: boolean;
+  stale: boolean;
+  onAmountPresetChange: (value: number) => void;
+  onAmountUnitChange: (value: AmountUnit) => void;
+  onAmountValueChange: (value: string) => void;
+  onAskFinn: () => void;
+  onExecutionExpandedChange: (value: boolean) => void;
+  onModeChange: (value: TradeMode) => void;
+  onPreview: () => void;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  const actionItems: Array<{ key: TradeMode; label: string; body: string }> = [
+    { key: 'buy', label: 'Buy', body: 'Maak een gecontroleerde koopdraft.' },
+    { key: 'sell', label: 'Sell', body: 'Controleer exit, positie en risico.' },
+    { key: 'dca', label: 'DCA', body: 'Past bij botbudget en cadence.' },
+    { key: 'bot', label: 'Bot Action', body: 'Laat FINN de botactie wegen.' },
+  ];
+  const setupScore = clampScore(overview?.setup_score);
+  const conviction = Math.round(
+    (clampScore(overview?.macro_score) +
+      clampScore(overview?.market_score) +
+      clampScore(overview?.technical_score) +
+      setupScore) /
+      4,
+  );
+  const exposurePct = bot?.budgetTotal ? Math.min(100, (bot.positionValue / bot.budgetTotal) * 100) : 0;
+  const riskTone: StatusTone = stale || exposurePct > 75 ? 'warning' : setupScore >= 55 && conviction >= 55 ? 'success' : 'neutral';
+  const riskLabel = stale ? 'Data stale' : exposurePct > 75 ? 'Exposure hoog' : setupScore >= 55 ? 'Guardrails ok' : 'Setup zwak';
+  const livePrice = Number.isFinite(overview?.price ?? NaN) ? Number(overview?.price) : 0;
+  const estimatedBtc =
+    amountUnit === 'BTC'
+      ? Number(amountValue.replace(',', '.')) || 0
+      : livePrice > 0
+        ? (Number(amountValue.replace(',', '.')) || 0) / livePrice
+        : 0;
+
+  return (
+    <View style={styles.tradeSheet}>
+      <View style={styles.tradeHero}>
+        <View style={styles.tradeIcon}>
+          <Text style={styles.tradeIconText}>AI</Text>
+        </View>
+        <View style={styles.tradeHeroCopy}>
+          <Text style={styles.kicker}>Handelen met</Text>
+          <Text style={[styles.tradeHeroTitle, { color: colors.text }]}>{bot?.name || `${activeAsset} trade flow`}</Text>
+          <Text style={[styles.tradeHeroMeta, { color: colors.textDim }]}>
+            {activeAsset}  -  {bot?.isLive ? 'Live context' : 'Paper-safe'}  -  FINN check voor execution
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.tradeStep}>
+        <Text style={styles.tradeStepLabel}>Stap 1</Text>
+        <Text style={[styles.tradeStepTitle, { color: colors.text }]}>Kies de actie</Text>
+        <View style={styles.tradeModeGrid}>
+          {actionItems.map((item) => {
+            const active = mode === item.key;
+            return (
+              <Pressable
+                accessibilityRole="button"
+                key={item.key}
+                onPress={async () => {
+                  await triggerHaptic('selection');
+                  onModeChange(item.key);
+                  onExecutionExpandedChange(false);
+                }}
+                style={[styles.tradeModeTile, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }, active && styles.tradeModeTileActive]}
+              >
+                <Text style={[styles.tradeModeLabel, { color: colors.textDim }, active && styles.tradeModeLabelActive]}>{item.label}</Text>
+                <Text style={[styles.tradeModeBody, { color: colors.textMuted }]}>{item.body}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={styles.tradeStep}>
+        <View style={styles.tradeStepHeader}>
+          <View>
+            <Text style={styles.tradeStepLabel}>Stap 2</Text>
+            <Text style={[styles.tradeStepTitle, { color: colors.text }]}>FINN context</Text>
+          </View>
+          <StatusChip label={riskLabel} tone={riskTone} />
+        </View>
+        <View style={styles.tradeContextGrid}>
+          <TradeContextStat label="Exposure" value={`${Math.round(exposurePct)}%`} tone={exposurePct > 75 ? 'warning' : 'accent'} />
+          <TradeContextStat label="Risk" value={riskLabel} tone={riskTone} />
+          <TradeContextStat label="Setup active" value={setupScore > 0 ? `${setupScore}` : 'n/a'} tone={setupScore >= 60 ? 'success' : 'warning'} />
+          <TradeContextStat label="Conviction" value={`${conviction}`} tone={conviction >= 70 ? 'success' : conviction >= 50 ? 'warning' : 'danger'} />
+        </View>
+        <View style={[styles.tradeWarning, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }, stale && styles.tradeWarningStrong]}>
+          <Text style={[styles.tradeWarningTitle, { color: colors.text }]}>{stale ? 'Ververs voordat je bevestigt.' : 'Geen one-tap execution.'}</Text>
+          <Text style={[styles.tradeWarningBody, { color: colors.textMuted }]}>
+            Deze sheet maakt alleen een gecontroleerde trade-draft. FINN checkt exposure, setup en botcontext voordat je iets uitvoert.
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.tradeStep}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={async () => {
+            await triggerHaptic('selection');
+            onExecutionExpandedChange(!executionExpanded);
+          }}
+          style={styles.executionToggle}
+        >
+          <View>
+            <Text style={styles.tradeStepLabel}>Stap 3</Text>
+            <Text style={[styles.tradeStepTitle, { color: colors.text }]}>{executionExpanded ? 'Execution draft' : 'Execution uitklappen'}</Text>
+          </View>
+          <Text style={[styles.executionToggleIcon, { color: colors.text }]}>{executionExpanded ? '-' : '+'}</Text>
+        </Pressable>
+
+        {executionExpanded ? (
+          <View style={styles.executionPanel}>
+            <View style={[styles.sideSwitch, { backgroundColor: colors.surfaceMuted }]}>
+              {(['buy', 'sell'] as const).map((side) => {
+                const active = mode === side;
+                return (
+                  <Pressable
+                    key={side}
+                    onPress={async () => {
+                      await triggerHaptic('selection');
+                      onModeChange(side);
+                    }}
+                    style={[styles.sideButton, active && (side === 'buy' ? styles.sideButtonBuy : styles.sideButtonSell)]}
+                  >
+                    <Text style={[styles.sideButtonText, { color: colors.textDim }, active && styles.sideButtonTextActive]}>
+                      {side === 'buy' ? 'Kopen' : 'Verkopen'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.executionField}>
+              <View style={styles.executionFieldHeader}>
+                <Text style={[styles.metricLabel, { color: colors.textDim }]}>Order prijs</Text>
+                <Text style={[styles.executionLive, { color: colors.textDim }]}>{livePrice > 0 ? `Live: ${formatEUR(livePrice)}` : 'Live: n/a'}</Text>
+              </View>
+              <View style={[styles.readOnlyInput, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+                <Text style={[styles.readOnlyInputText, { color: colors.text }]}>{livePrice > 0 ? livePrice.toFixed(2).replace('.', ',') : '-'}</Text>
+              </View>
+            </View>
+
+            <View style={styles.executionField}>
+              <View style={styles.executionFieldHeader}>
+                <Text style={[styles.metricLabel, { color: colors.textDim }]}>Aantal</Text>
+                <View style={styles.unitSwitch}>
+                  {(['EUR', 'BTC'] as const).map((unit) => (
+                    <Pressable
+                      key={unit}
+                      onPress={async () => {
+                        await triggerHaptic('selection');
+                        onAmountUnitChange(unit);
+                      }}
+                      style={[styles.unitButton, { backgroundColor: colors.surfaceMuted }, amountUnit === unit && styles.unitButtonActive]}
+                    >
+                      <Text style={[styles.unitButtonText, { color: colors.textDim }, amountUnit === unit && styles.unitButtonTextActive]}>{unit}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+              <TextInput
+                keyboardType="decimal-pad"
+                onChangeText={onAmountValueChange}
+                placeholder={amountUnit === 'EUR' ? 'Bedrag in EUR' : 'Aantal BTC'}
+                placeholderTextColor={colors.textDim}
+                style={[styles.amountInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                value={amountValue}
+              />
+              <View style={styles.presetRail}>
+                {[0, 25, 50, 75, 100].map((preset) => (
+                  <Pressable
+                    key={preset}
+                    onPress={async () => {
+                      await triggerHaptic('selection');
+                      onAmountPresetChange(preset);
+                    }}
+                    style={styles.presetItem}
+                  >
+                    <View style={[styles.presetDot, { backgroundColor: colors.border }, amountPreset === preset && styles.presetDotActive]} />
+                    <Text style={[styles.presetLabel, { color: colors.textDim }]}>{preset}%</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <View style={[styles.expectationBox, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+              <SmallStat label="Verwacht" value={`${estimatedBtc.toFixed(6)} BTC`} />
+              <SmallStat label="Beschikbaar" value={formatEUR(exchangeSummary.freeEur)} />
+              <SmallStat label="Max order" value={formatEUR(bot?.budgetMaxOrder ?? 0)} />
+            </View>
+
+            {preview ? <OrderPreviewCard preview={preview} /> : null}
+            {previewError ? (
+              <View style={[styles.tradeWarning, styles.tradeWarningStrong]}>
+                <Text style={[styles.tradeWarningTitle, { color: colors.text }]}>Preview niet beschikbaar</Text>
+                <Text style={[styles.tradeWarningBody, { color: colors.textMuted }]}>{previewError}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={executionExpanded ? onPreview : onAskFinn}
+        style={[styles.tradePrimaryButton, previewLoading && styles.tradePrimaryButtonDisabled]}
+      >
+        <Text style={styles.tradePrimaryText}>
+          {previewLoading
+            ? 'Preview laden...'
+            : executionExpanded
+              ? 'Maak veilige backend preview'
+              : 'Vraag FINN om trade check'}
+        </Text>
+      </Pressable>
+      {preview ? (
+        <Pressable accessibilityRole="button" onPress={onAskFinn} style={[styles.tradeSecondaryButton, { borderColor: colors.borderStrong }]}>
+          <Text style={[styles.tradeSecondaryText, { color: colors.textSoft }]}>Vraag FINN om uitleg</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function OrderPreviewCard({ preview }: { preview: OrderPreviewResponse }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const guardrails = isRecord(preview.guardrails) ? preview.guardrails : undefined;
+  const allowed = readBool(guardrails, ['allowed'], false);
+  const reason = readString(guardrails, ['reason'], allowed ? 'Guardrails akkoord' : 'Preview geblokkeerd');
+  const warnings = Array.isArray(guardrails?.warnings) ? guardrails.warnings.map(String) : [];
+
+  return (
+    <View style={[styles.previewCard, { backgroundColor: colors.surface, borderColor: colors.border }, allowed ? styles.previewCardAllowed : styles.previewCardBlocked]}>
+      <View style={styles.tradeStepHeader}>
+        <View>
+          <Text style={[styles.tradeStepLabel, { color: colors.textDim }]}>Backend preview</Text>
+          <Text style={[styles.previewTitle, { color: colors.text }]}>{allowed ? 'Conceptorder is mogelijk' : 'Niet uitvoeren'}</Text>
+        </View>
+        <StatusChip label={preview.is_live ? 'Live' : 'Paper'} tone={preview.is_live ? 'warning' : 'accent'} />
+      </View>
+      <View style={styles.previewGrid}>
+        <SmallStat label="Side" value={preview.side.toUpperCase()} />
+        <SmallStat label="Prijs" value={formatEUR(preview.price)} />
+        <SmallStat label="Netto" value={formatEUR(preview.net_eur)} />
+        <SmallStat label="Fee" value={formatEUR(preview.fee_eur)} />
+        <SmallStat label="Aantal" value={`${preview.quantity.toFixed(8)} ${preview.symbol}`} />
+      </View>
+      <View style={[styles.previewReason, { borderTopColor: colors.border }]}>
+        <Text style={[styles.tradeWarningTitle, { color: colors.text }]}>{reason}</Text>
+        <Text style={[styles.tradeWarningBody, { color: colors.textMuted }]}>
+          {warnings.length > 0
+            ? `Warnings: ${warnings.join(', ')}`
+            : 'Dit is alleen een preview. Er is nog niets geplaatst of opgeslagen.'}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function TradeContextStat({ label, tone, value }: { label: string; tone: StatusTone; value: string }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <View style={[styles.tradeContextTile, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+      <Text style={[styles.metricLabel, { color: colors.textDim }]}>{label}</Text>
+      <Text style={[styles.tradeContextValue, { color: toneColor(tone) }]}>{value}</Text>
+    </View>
+  );
+}
+
+function buildTradePrefill({
+  activeAsset,
+  amountUnit,
+  amountValue,
+  bot,
+  exchangeSummary,
+  mode,
+  overview,
+}: {
+  activeAsset: string;
+  amountUnit: AmountUnit;
+  amountValue: string;
+  bot?: PortfolioBot;
+  exchangeSummary: ExchangeSummary;
+  mode: TradeMode;
+  overview?: MobileOverviewResponse['watchlist'][number];
+}) {
+  const scoreLine = overview
+    ? `macro ${clampScore(overview.macro_score)}, market ${clampScore(overview.market_score)}, technical ${clampScore(overview.technical_score)}, setup ${clampScore(overview.setup_score)}`
+    : 'geen scoredata beschikbaar';
+  const requestedAmount = amountValue.trim() ? `${amountValue.trim()} ${amountUnit}` : 'nog geen bedrag gekozen';
+
+  return [
+    `Check deze mobiele trade-draft voor ${activeAsset}.`,
+    `Actie: ${mode.toUpperCase()}. Bedrag: ${requestedAmount}.`,
+    `Botcontext: ${bot?.name ?? 'geen actieve bot'} (${bot?.isLive ? 'live' : 'paper/unknown'}).`,
+    `Beschikbaar EUR: ${formatEUR(exchangeSummary.freeEur)}. Max order: ${formatEUR(bot?.budgetMaxOrder ?? 0)}.`,
+    `Scores: ${scoreLine}.`,
+    'Geef eerst conclusie, risico, guardrail-status en veilige volgende stap. Maak niets automatisch aan zonder bevestiging.',
+  ].join('\n');
+}
+
+function buildOrderPreviewPayload({
+  activeAsset,
+  amountUnit,
+  amountValue,
+  bot,
+  mode,
+  overview,
+}: {
+  activeAsset: string;
+  amountUnit: AmountUnit;
+  amountValue: string;
+  bot: PortfolioBot;
+  mode: TradeMode;
+  overview?: MobileOverviewResponse['watchlist'][number];
+}) {
+  const numericAmount = Number(amountValue.replace(',', '.'));
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) return null;
+
+  const price = Number.isFinite(overview?.price ?? NaN) ? Number(overview?.price) : 0;
+  const side: 'buy' | 'sell' = mode === 'sell' ? 'sell' : 'buy';
+  const quantity = amountUnit === 'BTC' ? numericAmount : price > 0 ? numericAmount / price : 0;
+  const valueEur = amountUnit === 'EUR' ? numericAmount : numericAmount * price;
+
+  return {
+    bot_id: bot.id,
+    price,
+    quantity,
+    side,
+    symbol: activeAsset,
+    value_eur: Number.isFinite(valueEur) ? valueEur : undefined,
+  };
 }
 
 function mapBots(portfolios: UnknownRecord[], configs: UnknownRecord[]): PortfolioBot[] {
@@ -831,6 +1368,53 @@ function portfolioUpdatedAt(values: string[]) {
 }
 
 const styles = StyleSheet.create({
+  amountInput: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.borderStrong,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    color: theme.colors.text,
+    fontSize: 26,
+    fontWeight: '900',
+    minHeight: 72,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  tradePrimaryButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.md,
+    justifyContent: 'center',
+    minHeight: 58,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  tradePrimaryButtonDisabled: {
+    opacity: 0.72,
+  },
+  tradePrimaryText: {
+    color: theme.colors.white,
+    fontSize: theme.typography.small,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  tradeSecondaryButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.borderStrong,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 52,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  tradeSecondaryText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.small,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
   activeBotCount: {
     color: theme.colors.text,
     fontSize: 28,
@@ -1221,6 +1805,67 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.md,
   },
+  pressed: {
+    opacity: 0.86,
+    transform: [{ scale: 0.98 }],
+  },
+  previewCard: {
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+  },
+  previewCardAllowed: {
+    backgroundColor: theme.colors.successSoft,
+    borderColor: '#10B98155',
+  },
+  previewCardBlocked: {
+    backgroundColor: theme.colors.warningSoft,
+    borderColor: '#F59E0B55',
+  },
+  previewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.lg,
+  },
+  previewReason: {
+    borderTopColor: theme.colors.border,
+    borderTopWidth: 1,
+    paddingTop: theme.spacing.md,
+  },
+  previewTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.cardTitle,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  presetDot: {
+    backgroundColor: theme.colors.surfaceElevated,
+    borderColor: theme.colors.borderStrong,
+    borderRadius: theme.radius.pill,
+    borderWidth: 2,
+    height: 24,
+    width: 24,
+  },
+  presetDotActive: {
+    borderColor: theme.colors.success,
+    borderWidth: 3,
+  },
+  presetItem: {
+    alignItems: 'center',
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  presetLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.small,
+    fontWeight: '800',
+  },
+  presetRail: {
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+  },
   progressFill: {
     backgroundColor: theme.colors.warning,
     borderRadius: theme.radius.pill,
@@ -1263,6 +1908,10 @@ const styles = StyleSheet.create({
     fontSize: 31,
     fontWeight: '900',
     marginTop: theme.spacing.sm,
+  },
+  screenWrap: {
+    backgroundColor: theme.colors.background,
+    flex: 1,
   },
   sectionTop: {
     alignItems: 'flex-start',
@@ -1323,6 +1972,100 @@ const styles = StyleSheet.create({
     height: 10,
     width: 10,
   },
+  expectationBox: {
+    backgroundColor: theme.colors.backgroundSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.lg,
+    padding: theme.spacing.lg,
+  },
+  executionField: {
+    backgroundColor: theme.colors.backgroundSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+  },
+  executionFieldHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  executionLive: {
+    color: '#93C5FD',
+    fontSize: theme.typography.small,
+    fontWeight: '900',
+  },
+  executionPanel: {
+    gap: theme.spacing.lg,
+    marginTop: theme.spacing.lg,
+  },
+  executionToggle: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.backgroundSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: theme.spacing.lg,
+  },
+  executionToggleIcon: {
+    color: theme.colors.textDim,
+    fontSize: 30,
+    fontWeight: '900',
+    lineHeight: 32,
+  },
+  readOnlyInput: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.borderStrong,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 72,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  readOnlyInputText: {
+    color: theme.colors.text,
+    fontSize: 28,
+    fontWeight: '900',
+  },
+  sideButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.md,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 58,
+  },
+  sideButtonBuy: {
+    backgroundColor: theme.colors.success,
+  },
+  sideButtonSell: {
+    backgroundColor: theme.colors.danger,
+  },
+  sideButtonText: {
+    color: theme.colors.textDim,
+    fontSize: theme.typography.small,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  sideButtonTextActive: {
+    color: theme.colors.white,
+  },
+  sideSwitch: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.xs,
+  },
   tag: {
     backgroundColor: theme.colors.backgroundSoft,
     borderRadius: theme.radius.pill,
@@ -1335,5 +2078,208 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+  },
+  tradeContextGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  tradeContextTile: {
+    backgroundColor: theme.colors.backgroundSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    minHeight: 80,
+    padding: theme.spacing.md,
+    width: '48%',
+  },
+  tradeContextValue: {
+    fontSize: 20,
+    fontWeight: '900',
+    lineHeight: 24,
+    marginTop: theme.spacing.sm,
+  },
+  tradeFab: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.black,
+    borderColor: theme.colors.borderStrong,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    bottom: 106,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    minHeight: 58,
+    paddingHorizontal: theme.spacing.md,
+    position: 'absolute',
+    right: theme.spacing.lg,
+    ...theme.shadows.sheet,
+  },
+  tradeFabOrb: {
+    color: theme.colors.white,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  tradeFabStatus: {
+    backgroundColor: theme.colors.success,
+    borderColor: theme.colors.black,
+    borderRadius: theme.radius.pill,
+    borderWidth: 2,
+    height: 16,
+    position: 'absolute',
+    right: 2,
+    top: 0,
+    width: 16,
+  },
+  tradeFabText: {
+    color: theme.colors.text,
+    fontSize: theme.typography.small,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  tradeHero: {
+    alignItems: 'center',
+    borderBottomColor: theme.colors.border,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    paddingBottom: theme.spacing.lg,
+  },
+  tradeHeroCopy: {
+    flex: 1,
+  },
+  tradeHeroMeta: {
+    color: theme.colors.textDim,
+    fontSize: theme.typography.label,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    lineHeight: 16,
+    marginTop: 6,
+    textTransform: 'uppercase',
+  },
+  tradeHeroTitle: {
+    color: theme.colors.text,
+    fontSize: 22,
+    fontWeight: '900',
+    lineHeight: 27,
+    marginTop: 5,
+  },
+  tradeIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    height: 62,
+    justifyContent: 'center',
+    width: 62,
+  },
+  tradeIconText: {
+    color: theme.colors.accent,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  tradeModeBody: {
+    color: theme.colors.textDim,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 16,
+    marginTop: theme.spacing.xs,
+  },
+  tradeModeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  tradeModeLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.small,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  tradeModeLabelActive: {
+    color: theme.colors.accent,
+  },
+  tradeModeTile: {
+    backgroundColor: theme.colors.backgroundSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    minHeight: 96,
+    padding: theme.spacing.md,
+    width: '48%',
+  },
+  tradeModeTileActive: {
+    backgroundColor: theme.colors.accentSoft,
+    borderColor: '#2563EB88',
+  },
+  tradeSheet: {
+    gap: theme.spacing.lg,
+  },
+  tradeStep: {
+    gap: theme.spacing.md,
+  },
+  tradeStepHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  tradeStepLabel: {
+    color: theme.colors.accent,
+    fontSize: theme.typography.label,
+    fontWeight: '900',
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+  },
+  tradeStepTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.cardTitle,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  tradeWarning: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    padding: theme.spacing.md,
+  },
+  tradeWarningBody: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.small,
+    fontWeight: '700',
+    lineHeight: 20,
+    marginTop: theme.spacing.xs,
+  },
+  tradeWarningStrong: {
+    backgroundColor: theme.colors.warningSoft,
+    borderColor: '#F59E0B55',
+  },
+  tradeWarningTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.small,
+    fontWeight: '900',
+  },
+  unitButton: {
+    backgroundColor: theme.colors.surfaceMuted,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  unitButtonActive: {
+    backgroundColor: theme.colors.accent,
+  },
+  unitButtonText: {
+    color: theme.colors.textDim,
+    fontSize: theme.typography.label,
+    fontWeight: '900',
+  },
+  unitButtonTextActive: {
+    color: theme.colors.white,
+  },
+  unitSwitch: {
+    borderRadius: theme.radius.sm,
+    flexDirection: 'row',
+    overflow: 'hidden',
   },
 });

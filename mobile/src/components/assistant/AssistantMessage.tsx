@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { theme } from '../../constants/theme';
 
 type AssistantMessageProps = {
@@ -9,10 +10,19 @@ type AssistantMessageProps = {
 };
 
 export function AssistantMessage({ author, text, isUser = false }: AssistantMessageProps) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
   return (
-    <View style={[styles.message, isUser ? styles.userMessage : styles.aiMessage]}>
-      <Text style={styles.messageAuthor}>{author}</Text>
-      <Text style={styles.messageText}>{text}</Text>
+    <View
+      style={[
+        styles.message,
+        isUser ? styles.userMessage : styles.aiMessage,
+        { backgroundColor: isUser ? (appearance === 'light' ? '#EFF6FF' : theme.colors.accentSoft) : colors.surface, borderColor: colors.border },
+      ]}
+    >
+      <Text style={[styles.messageAuthor, { color: colors.textDim }]}>{author}</Text>
+      <Text style={[styles.messageText, { color: colors.text }]}>{text}</Text>
     </View>
   );
 }
