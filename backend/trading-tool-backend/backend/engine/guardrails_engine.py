@@ -71,6 +71,7 @@ def apply_guardrails(
     total_budget_eur: Optional[float] = None,
     min_order_eur: Optional[float] = None,
     backtest_mode: bool = False,
+    global_macro_score: Optional[float] = None,
 ) -> Dict[str, Any]:
 
     original_amount = max(_safe_float(proposed_amount_eur, 0.0), 0.0)
@@ -101,7 +102,7 @@ def apply_guardrails(
             total_budget = None
 
     logger.info(
-        "Guardrails input | proposed=%s portfolio=%s asset=%s daily=%s max_trade=%s daily_limit=%s max_exposure=%s total_budget=%s",
+        "Guardrails input | proposed=%s portfolio=%s asset=%s daily=%s max_trade=%s daily_limit=%s max_exposure=%s total_budget=%s macro=%s",
         original_amount,
         portfolio_value,
         current_asset_value,
@@ -110,6 +111,7 @@ def apply_guardrails(
         daily_allocation,
         max_asset_exposure,
         total_budget,
+        global_macro_score,
     )
     
     # -----------------------------------------------------
@@ -162,6 +164,15 @@ def apply_guardrails(
         if adjusted_amount > cash_balance:
             adjusted_amount = cash_balance
             warnings.append("cash_balance_trimmed")
+
+    # -----------------------------------------------------
+    # 1C. Global Macro Circuit Breaker (DEFENSIVE OVERRIDE)
+    # -----------------------------------------------------
+    if not backtest_mode and global_macro_score is not None and global_macro_score < 35.0:
+        logger.warning(f"🛡️ GLOBAL CIRCUIT BREAKER TRIGGERED: Macro score ({global_macro_score}) < 35. Enforcing defensive position sizing.")
+        adjusted_amount = _round_money(adjusted_amount * 0.2)
+        warnings.append("defensive_macro_override_active")
+
 
 
     # -----------------------------------------------------

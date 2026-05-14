@@ -15,6 +15,28 @@ from backend.celery_task.quarterly_report_task import generate_quarterly_report
 
 logger = logging.getLogger(__name__)
 
+def _get_structure_label(score: Optional[float], category: str) -> str:
+    val = 0.0 if score is None else float(score)
+    if category == "macro":
+        if val >= 70: return f"Expansion Regime · Conviction {int(val)}%"
+        if val >= 45: return f"Recovery Phase · Conviction {int(val)}%"
+        if val >= 30: return f"Stagflation Risk · Conviction {int(val)}%"
+        return f"Contraction Regime · Conviction {int(val)}%"
+    elif category == "technical":
+        if val >= 70: return f"Bullish Expansion · Conviction {int(val)}%"
+        if val >= 50: return f"Bullish Recovery · Conviction {int(val)}%"
+        if val >= 30: return f"Consolidation · Conviction {int(val)}%"
+        return f"Bearish Structure · Conviction {int(val)}%"
+    elif category == "market":
+        if val >= 70: return f"Capital Inflow · Conviction {int(val)}%"
+        if val >= 50: return f"Stable Participation · Conviction {int(val)}%"
+        if val >= 30: return f"Liquidity Divergence · Conviction {int(val)}%"
+        return f"Risk Aversion · Conviction {int(val)}%"
+    else: # setup
+        if val >= 70: return f"Premium Alignment · Conviction {int(val)}%"
+        if val >= 50: return f"Standard Setup · Conviction {int(val)}%"
+        return f"Sub-optimal Alignment · Conviction {int(val)}%"
+
 class ReportService:
     def __init__(self, repository: ReportRepository):
         self.repository = repository
@@ -54,43 +76,57 @@ class ReportService:
 
         # Build composite highlights/narratives
         if meta and isinstance(meta, dict):
-            # For weekly/monthly/quarterly, unpack sections from meta
             exec_summary = safe_json_parse(meta.get("executive_summary") or report.get("executive_summary") or report.get("summary") or "Status ok.")
             market_analysis = safe_json_parse(meta.get("market_analysis") or meta.get("market_overview") or report.get("market_overview") or "")
             outlook = safe_json_parse(meta.get("outlook") or report.get("outlook") or "")
             
+            macro_sc = meta.get("macro_score") or report.get("macro_score")
+            tech_sc = meta.get("technical_score") or report.get("technical_score")
+            mkt_sc = meta.get("market_score") or report.get("market_score")
+            stp_sc = meta.get("setup_score") or report.get("setup_score")
+            
             kpi_metrics = {
-                "macro_score": meta.get("macro_score") or report.get("macro_score"),
-                "technical_score": meta.get("technical_score") or report.get("technical_score"),
-                "market_score": meta.get("market_score") or report.get("market_score"),
-                "setup_score": meta.get("setup_score") or report.get("setup_score"),
+                "macro_score": macro_sc,
+                "macro_label": _get_structure_label(macro_sc, "macro"),
+                "technical_score": tech_sc,
+                "technical_label": _get_structure_label(tech_sc, "technical"),
+                "market_score": mkt_sc,
+                "market_label": _get_structure_label(mkt_sc, "market"),
+                "setup_score": stp_sc,
+                "setup_label": _get_structure_label(stp_sc, "setup"),
                 "price": meta.get("price") or report.get("price"),
                 "change_24h": meta.get("change_24h") or report.get("change_24h"),
                 "volume": meta.get("volume") or report.get("volume"),
             }
             
-            # Watchlist
             watchlist = safe_json_parse(meta.get("watchlist") or report.get("watchlist") or [])
             best_setup = safe_json_parse(meta.get("best_setup") or report.get("best_setup"))
             top_setups = safe_json_parse(meta.get("top_setups") or report.get("top_setups") or [])
             bot_snapshot = safe_json_parse(meta.get("bot_snapshot") or report.get("bot_snapshot"))
             active_strategy = safe_json_parse(meta.get("active_strategy") or report.get("active_strategy"))
             
-            # Highlights
             market_ind = safe_json_parse(meta.get("market_indicator_highlights") or report.get("market_indicator_highlights") or [])
             macro_ind = safe_json_parse(meta.get("macro_indicator_highlights") or report.get("macro_indicator_highlights") or [])
             tech_ind = safe_json_parse(meta.get("technical_indicator_highlights") or report.get("technical_indicator_highlights") or [])
         else:
-            # Daily report format
             exec_summary = safe_json_parse(report.get("executive_summary") or report.get("summary") or "Status ok.")
             market_analysis = safe_json_parse(report.get("market_analysis") or report.get("market_overview") or "")
             outlook = safe_json_parse(report.get("outlook") or "")
             
+            macro_sc = report.get("macro_score")
+            tech_sc = report.get("technical_score")
+            mkt_sc = report.get("market_score")
+            stp_sc = report.get("setup_score")
+            
             kpi_metrics = {
-                "macro_score": report.get("macro_score"),
-                "technical_score": report.get("technical_score"),
-                "market_score": report.get("market_score"),
-                "setup_score": report.get("setup_score"),
+                "macro_score": macro_sc,
+                "macro_label": _get_structure_label(macro_sc, "macro"),
+                "technical_score": tech_sc,
+                "technical_label": _get_structure_label(tech_sc, "technical"),
+                "market_score": mkt_sc,
+                "market_label": _get_structure_label(mkt_sc, "market"),
+                "setup_score": stp_sc,
+                "setup_label": _get_structure_label(stp_sc, "setup"),
                 "price": report.get("price"),
                 "change_24h": report.get("change_24h"),
                 "volume": report.get("volume"),
@@ -178,22 +214,15 @@ class ReportService:
                 return {"_status": "pending"}
                 
         if table_name == "daily_reports":
-            import json
             from backend.infrastructure.repositories.score_repository import ScoreRepository
             score_repo = ScoreRepository(self.repository.db)
             target_symbol = symbol or "BTC"
-            master = await score_repo.get_master_score(user_id, symbol=target_symbol)
-            if master and master.top_signals:
-                meta = master.top_signals
-                if isinstance(meta, str):
-                    try: meta = json.loads(meta)
-                    except: meta = {}
-                domains = meta.get("domains", {})
-                if domains:
-                    if "macro" in domains: row["macro_score"] = domains["macro"].get("score", row.get("macro_score"))
-                    if "technical" in domains: row["technical_score"] = domains["technical"].get("score", row.get("technical_score"))
-                    if "market" in domains: row["market_score"] = domains["market"].get("score", row.get("market_score"))
-                    if "setup" in domains: row["setup_score"] = domains["setup"].get("score", row.get("setup_score"))
+            daily_scores = await score_repo.fetch_daily_scores(user_id, symbol=target_symbol)
+            if daily_scores:
+                row["macro_score"] = daily_scores.get("macro_score", row.get("macro_score"))
+                row["technical_score"] = daily_scores.get("technical_score", row.get("technical_score"))
+                row["market_score"] = daily_scores.get("market_score", row.get("market_score"))
+                row["setup_score"] = daily_scores.get("setup_score", row.get("setup_score"))
 
         # Format for mobile if requested
         if format_type == "mobile":
@@ -210,21 +239,14 @@ class ReportService:
             raise ValueError(f"Report niet gevonden voor {date_str}")
 
         if table_name == "daily_reports":
-            import json
             from backend.infrastructure.repositories.score_repository import ScoreRepository
             score_repo = ScoreRepository(self.repository.db)
-            master = await score_repo.get_master_score(user_id, symbol="BTC")
-            if master and master.top_signals:
-                meta = master.top_signals
-                if isinstance(meta, str):
-                    try: meta = json.loads(meta)
-                    except: meta = {}
-                domains = meta.get("domains", {})
-                if domains:
-                    if "macro" in domains: row["macro_score"] = domains["macro"].get("score", row.get("macro_score"))
-                    if "technical" in domains: row["technical_score"] = domains["technical"].get("score", row.get("technical_score"))
-                    if "market" in domains: row["market_score"] = domains["market"].get("score", row.get("market_score"))
-                    if "setup" in domains: row["setup_score"] = domains["setup"].get("score", row.get("setup_score"))
+            daily_scores = await score_repo.fetch_daily_scores(user_id, symbol="BTC")
+            if daily_scores:
+                row["macro_score"] = daily_scores.get("macro_score", row.get("macro_score"))
+                row["technical_score"] = daily_scores.get("technical_score", row.get("technical_score"))
+                row["market_score"] = daily_scores.get("market_score", row.get("market_score"))
+                row["setup_score"] = daily_scores.get("setup_score", row.get("setup_score"))
 
         # Format for mobile if requested
         if format_type == "mobile":

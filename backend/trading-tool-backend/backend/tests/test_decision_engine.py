@@ -1,6 +1,6 @@
 import pytest
 
-from backend.engine.decision_engine import decide_amount, evaluate_curve
+from backend.engine.decision_engine import decide_amount
 from backend.engine.decision_presets import (
     DCA_CONTRARIAN,
     DCA_TREND_FOLLOWING,
@@ -13,9 +13,9 @@ def test_fixed_mode():
         "base_amount": 100,
     }
 
-    scores = {"market_score": 50}
+    scores = {"market_score": 50, "setup_score": 50}
 
-    assert decide_amount(setup, scores) == 100.00
+    assert decide_amount(setup, scores)["final_amount"] == 100.00
 
 
 def test_contrarian_low_score():
@@ -25,8 +25,8 @@ def test_contrarian_low_score():
         "decision_curve": DCA_CONTRARIAN,
     }
 
-    scores = {"market_score": 20}
-    assert decide_amount(setup, scores) == 150.00
+    scores = {"market_score": 20, "setup_score": 50}
+    assert decide_amount(setup, scores)["final_amount"] == 150.00
 
 
 def test_contrarian_high_score():
@@ -36,8 +36,8 @@ def test_contrarian_high_score():
         "decision_curve": DCA_CONTRARIAN,
     }
 
-    scores = {"market_score": 90}
-    assert decide_amount(setup, scores) == 0.00
+    scores = {"market_score": 90, "setup_score": 50}
+    assert decide_amount(setup, scores)["final_amount"] == 5.00
 
 
 def test_trend_following_strong_market():
@@ -47,8 +47,8 @@ def test_trend_following_strong_market():
         "decision_curve": DCA_TREND_FOLLOWING,
     }
 
-    scores = {"market_score": 80}
-    assert decide_amount(setup, scores) == 140.00
+    scores = {"market_score": 80, "setup_score": 50}
+    assert decide_amount(setup, scores)["final_amount"] == 140.00
 
 
 def test_interpolation_mid_point():
@@ -66,10 +66,10 @@ def test_interpolation_mid_point():
         "decision_curve": curve,
     }
 
-    scores = {"market_score": 50}
+    scores = {"market_score": 50, "setup_score": 50}
 
     # exact midden → 1.1
-    assert decide_amount(setup, scores) == 110.00
+    assert decide_amount(setup, scores)["final_amount"] == 110.00
 
 
 def test_invalid_setup_raises():

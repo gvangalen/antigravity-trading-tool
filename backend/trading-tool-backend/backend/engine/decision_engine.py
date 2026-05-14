@@ -64,6 +64,8 @@ def decide_amount(
             base_amount=base_amount,
             curve=curve,
             score=score_value,
+            min_multiplier=curve.get("min_multiplier", 0.1),
+            max_multiplier=curve.get("max_multiplier", 3.0),
         )
 
     else:

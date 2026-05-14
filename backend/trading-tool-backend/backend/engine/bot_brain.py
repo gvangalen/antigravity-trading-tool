@@ -503,6 +503,7 @@ def run_bot_brain(
             total_budget_eur=_safe_float(portfolio_context.get("total_budget_eur"), None),
             min_order_eur=_safe_float(portfolio_context.get("min_order_eur"), None),
             backtest_mode=backtest_mode,
+            global_macro_score=float(normalized_scores.get("macro_score", 50.0)),
         )
 
     except Exception as e:
