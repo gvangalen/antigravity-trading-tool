@@ -178,7 +178,12 @@ class AiAssistantService:
                 explicit_symbol = sym.upper()
                 break
                 
-        page_symbol = context_data.get("symbol") if context_data else None
+        page_symbol = None
+        if context_data:
+            if hasattr(context_data, "symbol"):
+                page_symbol = getattr(context_data, "symbol", None)
+            elif hasattr(context_data, "get"):
+                page_symbol = context_data.get("symbol")
         
         start_db = time.perf_counter()
         
@@ -680,7 +685,12 @@ class AiAssistantService:
                 explicit_symbol = sym.upper()
                 break
                 
-        page_symbol = context_data.get("symbol") if context_data else None
+        page_symbol = None
+        if context_data:
+            if hasattr(context_data, "symbol"):
+                page_symbol = getattr(context_data, "symbol", None)
+            elif hasattr(context_data, "get"):
+                page_symbol = context_data.get("symbol")
         
         start_db = time.perf_counter()
         

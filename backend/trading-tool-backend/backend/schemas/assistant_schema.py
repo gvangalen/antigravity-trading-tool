@@ -49,7 +49,7 @@ class AssistantInsightResponse(BaseModel):
     greeting: str
     bot_insight: Optional[Dict[str, str]] = None
     market_insight: Optional[Dict[str, str]] = None
-    context_detected: Optional[Dict[str, str]] = None
+    context_detected: Optional[Dict[str, Any]] = None
     suggested_actions: Optional[List[str]] = None  # Server-Driven proactive action chips
 
 # =====================================================
