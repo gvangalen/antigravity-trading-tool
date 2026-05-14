@@ -100,6 +100,31 @@ class IntelligenceEventService:
         total_budget = sum(b.get("budget_total", 0.0) for b in bots)
 
         # ----------------------------------------------------------------------
+        # RULE 0: Macro Defensive Override (Contraction Regime < 35)
+        # ----------------------------------------------------------------------
+        daily_scores = await self.score_repo.fetch_daily_scores(user_id, symbol="BTC")
+        if daily_scores and daily_scores.get("macro_score") is not None:
+            macro_val = float(daily_scores.get("macro_score"))
+            if macro_val < 35.0:
+                event_type = "defensive_posture"
+                if not await self.is_cooldown_active(user_id, "BTC", event_type):
+                    event = AiIntelligenceEvent(
+                        user_id=user_id,
+                        type=event_type,
+                        symbol="BTC",
+                        title="Macro Regime Override",
+                        description=f"Macro environment entered contraction regime (Score {macro_val:.0f} < 35). Portfolio switched to defensive posture with 0.2x position sizing constraints.",
+                        severity="critical",
+                        payload={
+                            "macro_score": macro_val,
+                            "multiplier": 0.2,
+                            "affected_bots": len(bots)
+                        }
+                    )
+                    self.session.add(event)
+                    new_events.append(event)
+
+        # ----------------------------------------------------------------------
         # RULE 1: Drawdown Alerts (Als een bot >10% verlies heeft op zijn budget)
         # ----------------------------------------------------------------------
         for b in bots:

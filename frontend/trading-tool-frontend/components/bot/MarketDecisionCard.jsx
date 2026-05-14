@@ -2,10 +2,10 @@
 
 import {
   Activity,
-  Thermometer,
 } from "lucide-react";
 
 import MarketConditionsPanel from "@/components/bot/MarketConditionsPanel";
+import { useIntelligenceSemantics } from "@/hooks/useIntelligenceSemantics";
 
 export default function MarketDecisionCard({ data }) {
   if (!data) return null;
@@ -27,11 +27,13 @@ export default function MarketDecisionCard({ data }) {
   const positionSize = 0.5;
 
   /* ======================================
-     MARKET STRUCTURE
+     MARKET STRUCTURE (CENTRAL SEMANTICS)
   ====================================== */
+  const { getMacroSemantics, getMarketSemantics } = useIntelligenceSemantics();
+  const macroData = getMacroSemantics(data?.scores?.macro_score ?? 65);
+  const marketData = getMarketSemantics(data?.scores?.market_score ?? 60);
 
   const phase = data?.cycle || "expansion";
-  const temperature = data?.temperature || "warm";
 
   /* ======================================
      TRENDS
@@ -69,15 +71,6 @@ export default function MarketDecisionCard({ data }) {
       correction: 3,
     }[phase?.toLowerCase()] ?? 1;
 
-  const temperatureColor =
-    temperature === "cold"
-      ? "text-blue-500"
-      : temperature === "warm"
-      ? "text-emerald-500"
-      : temperature === "hot"
-      ? "text-orange-500"
-      : "text-red-500";
-
   /* ======================================
      DEBUG (BELANGRIJK)
   ====================================== */
@@ -102,11 +95,10 @@ export default function MarketDecisionCard({ data }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-border-subtle)] shadow-sm">
-          <Thermometer size={14} className="text-muted" />
-          <span className="text-[9px] font-black text-muted uppercase tracking-tighter">Temp:</span>
-          <span className={`text-[10px] font-black uppercase tracking-widest ${temperatureColor}`}>
-            {temperature}
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border shadow-sm ${macroData.badgeClass}`}>
+          <span className="text-[9px] font-black uppercase tracking-tighter opacity-70">Risk State:</span>
+          <span className="text-[10px] font-black uppercase tracking-widest">
+            {macroData.riskState}
           </span>
         </div>
       </div>
@@ -116,7 +108,7 @@ export default function MarketDecisionCard({ data }) {
         <div className="flex items-center justify-between">
           <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Structural Cycle Phase</div>
           <div className="text-[10px] font-black text-[var(--primary)] uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-             Active: {phase}
+             Active: {macroData.regime}
           </div>
         </div>
 
@@ -144,6 +136,10 @@ export default function MarketDecisionCard({ data }) {
               </div>
             );
           })}
+        </div>
+
+        <div className="text-[11px] text-muted italic pt-1">
+          {macroData.explanation}
         </div>
       </div>
 

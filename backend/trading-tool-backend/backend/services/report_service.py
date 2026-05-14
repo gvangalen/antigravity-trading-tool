@@ -15,24 +15,20 @@ from backend.celery_task.quarterly_report_task import generate_quarterly_report
 
 logger = logging.getLogger(__name__)
 
+from backend.services.intelligence_semantics import get_macro_semantics, get_technical_semantics, get_market_semantics
+
 def _get_structure_label(score: Optional[float], category: str) -> str:
-    val = 0.0 if score is None else float(score)
     if category == "macro":
-        if val >= 70: return f"Expansion Regime · Conviction {int(val)}%"
-        if val >= 45: return f"Recovery Phase · Conviction {int(val)}%"
-        if val >= 30: return f"Stagflation Risk · Conviction {int(val)}%"
-        return f"Contraction Regime · Conviction {int(val)}%"
+        res = get_macro_semantics(score)
+        return f"{res['regime']} · Conviction {res['conviction']}%"
     elif category == "technical":
-        if val >= 70: return f"Bullish Expansion · Conviction {int(val)}%"
-        if val >= 50: return f"Bullish Recovery · Conviction {int(val)}%"
-        if val >= 30: return f"Consolidation · Conviction {int(val)}%"
-        return f"Bearish Structure · Conviction {int(val)}%"
+        res = get_technical_semantics(score)
+        return f"{res['structure']} · Conviction {res['conviction']}%"
     elif category == "market":
-        if val >= 70: return f"Capital Inflow · Conviction {int(val)}%"
-        if val >= 50: return f"Stable Participation · Conviction {int(val)}%"
-        if val >= 30: return f"Liquidity Divergence · Conviction {int(val)}%"
-        return f"Risk Aversion · Conviction {int(val)}%"
+        res = get_market_semantics(score)
+        return f"{res['posture']} · Conviction {res['conviction']}%"
     else: # setup
+        val = 0.0 if score is None else float(score)
         if val >= 70: return f"Premium Alignment · Conviction {int(val)}%"
         if val >= 50: return f"Standard Setup · Conviction {int(val)}%"
         return f"Sub-optimal Alignment · Conviction {int(val)}%"
