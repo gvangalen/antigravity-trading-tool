@@ -91,18 +91,18 @@ const getExposureColor = (v) => {
    BAR COMPONENT
 ===================================================== */
 
-function Bar({ icon, label, value, color, getLabel }) {
+function Bar({ icon, label, value, color, getLabel, onClick }) {
 
   const blocks = 10;
   const safeValue = clamp(value);
   const filled = Math.round((safeValue / 100) * blocks);
   const status = getLabel(safeValue);
 
-  // ✅ NO DYNAMIC STRINGS (Tailwind JIT fix)
-  // We'll use the color passed in directly, which is already a full Tailwind class.
-
   return (
-    <div className="flex items-center gap-6 text-[10px] w-full group py-2.5 transition-all">
+    <div 
+      onClick={onClick}
+      className="flex items-center gap-6 text-[10px] w-full group py-2.5 transition-all cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-800/50 px-3 rounded-xl hover:scale-[1.005]"
+    >
 
       {/* icon */}
       <span className="w-6 flex items-center justify-center text-secondary group-hover:text-blue-600 transition-colors">
@@ -110,7 +110,7 @@ function Bar({ icon, label, value, color, getLabel }) {
       </span>
 
       {/* label */}
-      <span className="w-48 font-black uppercase tracking-widest text-muted group-hover:text-slate-900 transition-colors leading-none">
+      <span className="w-48 font-black uppercase tracking-widest text-muted group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors leading-none">
         {label}
       </span>
 
@@ -122,7 +122,7 @@ function Bar({ icon, label, value, color, getLabel }) {
             className={`flex-1 h-full rounded-[1px] transition-all duration-300 ${
               i < filled
                 ? `${color} opacity-100 shadow-sm shadow-blue-900/10`
-                : "bg-slate-200/50"
+                : "bg-slate-200/50 dark:bg-slate-800"
             }`}
           />
         ))}
@@ -131,12 +131,12 @@ function Bar({ icon, label, value, color, getLabel }) {
       {/* score */}
       <div className="w-24 text-right font-mono font-black tabular-nums">
         <span className="text-foreground text-sm">{safeValue.toString().padStart(2, '0')}</span>
-        <span className="text-slate-300 text-[10px] ml-1.5 opacity-40">/ 100</span>
+        <span className="text-slate-300 dark:text-slate-600 text-[10px] ml-1.5 opacity-40">/ 100</span>
       </div>
 
       {/* status badge */}
       <div className="w-48 flex justify-end">
-        <span className="px-3 py-1 rounded-lg bg-card border-2 border-slate-100 text-[9px] font-black uppercase tracking-widest text-muted shadow-sm group-hover:border-blue-600/10 group-hover:text-blue-600 transition-all">
+        <span className="px-3 py-1 rounded-lg bg-card dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-[9px] font-black uppercase tracking-widest text-muted shadow-sm group-hover:border-blue-600/30 group-hover:text-blue-600 transition-all">
           {status}
         </span>
       </div>
@@ -156,6 +156,7 @@ export default function MarketConditionsInline({
   volatility = 50,
   trendStrength = 50,
   multiplier = 1,
+  symbol = "BTC",
 }) {
 
   const safeHealth = clamp(health);
@@ -171,9 +172,17 @@ export default function MarketConditionsInline({
   /* multiplier → score schaal */
   const exposureScore = clamp(safeMulti * 100);
 
+  const triggerAI = (metric) => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent('finn-action-trigger', {
+        detail: { metric, symbol, timeframe: '1W' }
+      }));
+    }
+  };
+
   return (
 
-    <div className="flex flex-col gap-3 w-full">
+    <div className="flex flex-col gap-2 w-full">
 
       {/* MARKET PRESSURE */}
 
@@ -183,6 +192,7 @@ export default function MarketConditionsInline({
         value={safePressure}
         color="bg-blue-500"
         getLabel={getPressureLabel}
+        onClick={() => triggerAI('market_pressure')}
       />
 
       {/* TRANSITION RISK */}
@@ -193,6 +203,7 @@ export default function MarketConditionsInline({
         value={safeRisk}
         color="bg-orange-500"
         getLabel={getTransitionRiskLabel}
+        onClick={() => triggerAI('transition_risk')}
       />
 
       {/* SETUP QUALITY */}
@@ -203,6 +214,7 @@ export default function MarketConditionsInline({
         value={safeHealth}
         color="bg-emerald-500"
         getLabel={getSetupQualityLabel}
+        onClick={() => triggerAI('setup_quality')}
       />
 
       {/* MARKET VOLATILITY */}
@@ -213,6 +225,7 @@ export default function MarketConditionsInline({
         value={safeVolatility}
         color="bg-purple-500"
         getLabel={getVolatilityLabel}
+        onClick={() => triggerAI('market_volatility')}
       />
 
       {/* TREND STRENGTH */}
@@ -223,6 +236,7 @@ export default function MarketConditionsInline({
         value={safeTrend}
         color="bg-indigo-500"
         getLabel={getTrendStrengthLabel}
+        onClick={() => triggerAI('trend_strength')}
       />
 
       {/* POSITION SIZE (UPDATED) */}
@@ -233,6 +247,7 @@ export default function MarketConditionsInline({
         value={exposureScore}
         color={exposureColor}
         getLabel={() => exposureLabel}
+        onClick={() => triggerAI('position_size')}
       />
 
     </div>

@@ -7,7 +7,7 @@ import {
 import MarketConditionsPanel from "@/components/bot/MarketConditionsPanel";
 import { useIntelligenceSemantics } from "@/hooks/useIntelligenceSemantics";
 
-export default function MarketDecisionCard({ data }) {
+export default function MarketDecisionCard({ data, symbol = "BTC" }) {
   if (!data) return null;
 
   /* ======================================
@@ -84,7 +84,7 @@ export default function MarketDecisionCard({ data }) {
   return (
     <div className="space-y-8">
       {/* 🚀 MARKET INTELLIGENCE HEADER */}
-      <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+      <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-600/10 text-blue-600">
             <Activity size={18} />
@@ -104,10 +104,19 @@ export default function MarketDecisionCard({ data }) {
       </div>
 
       {/* 🧩 MARKET CYCLE PROGRESSOR */}
-      <div className="space-y-4">
+      <div 
+        onClick={() => {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent('finn-action-trigger', {
+              detail: { metric: 'structural_cycle', symbol, timeframe: '1W' }
+            }));
+          }
+        }}
+        className="space-y-4 cursor-pointer group/cycle p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-all hover:scale-[1.002]"
+      >
         <div className="flex items-center justify-between">
-          <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Structural Cycle Phase</div>
-          <div className="text-[10px] font-black text-[var(--primary)] uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+          <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] group-hover/cycle:text-blue-600 transition-colors">Structural Cycle Phase</div>
+          <div className="text-[10px] font-black text-[var(--primary)] uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-md border border-blue-100 dark:border-blue-800">
              Active: {macroData.regime}
           </div>
         </div>
@@ -124,12 +133,12 @@ export default function MarketDecisionCard({ data }) {
                     isActive 
                       ? "bg-blue-600 shadow-[0_0_12px_rgba(37,99,235,0.4)] scale-y-125" 
                       : isCompleted 
-                        ? "bg-slate-300" 
-                        : "bg-[var(--color-border-subtle)]"
+                        ? "bg-slate-300 dark:bg-slate-700" 
+                        : "bg-[var(--color-border-subtle)] dark:bg-slate-800"
                   }`} 
                 />
                 <div className={`mt-3 text-[9px] font-black uppercase tracking-[0.15em] transition-colors whitespace-nowrap ${
-                  isActive ? "text-blue-600" : isCompleted ? "text-muted" : "text-slate-300"
+                  isActive ? "text-blue-600" : isCompleted ? "text-muted" : "text-slate-300 dark:text-slate-600"
                 }`}>
                   {p}
                 </div>
@@ -155,7 +164,7 @@ export default function MarketDecisionCard({ data }) {
           const dotClass = val === 'bullish' ? 'bg-green-500' : val === 'bearish' ? 'bg-red-500' : 'bg-slate-400';
 
           return (
-            <div key={t.label} className="p-4 rounded-2xl bg-[var(--color-border-subtle)] border border-slate-100 flex flex-col justify-center">
+            <div key={t.label} className="p-4 rounded-2xl bg-[var(--color-border-subtle)] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-center">
               <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">
                 {t.label} Trend
               </div>
@@ -177,6 +186,7 @@ export default function MarketDecisionCard({ data }) {
           volatility={volatility}
           trendStrength={trendStrength}
           multiplier={positionSize}
+          symbol={symbol}
         />
       </div>
     </div>

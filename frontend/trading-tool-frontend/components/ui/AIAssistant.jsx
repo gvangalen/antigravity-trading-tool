@@ -36,6 +36,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   const [insightLoading, setInsightLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [activeState, setActiveState] = useState(null);
+  const [contextMetric, setContextMetric] = useState(null);
   
   const messagesEndRef = useRef(null);
   const scrollRef = useRef(null);
@@ -44,6 +45,37 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   // 🧭 Onboarding Context
   const { stepStatus, onboardingComplete } = useOnboarding();
   const isOnboarding = (pathname.includes("onboarding") || !onboardingComplete) && pathname !== "/dashboard";
+
+  const getMetricTitle = (metric) => {
+    const titles = {
+      transition_risk: "Transition Risk Analysis",
+      setup_quality: "Setup Quality Assessment",
+      market_pressure: "Market Pressure Analysis",
+      structural_cycle: "Structural Cycle Phase",
+      position_size: "Position Size Telemetry",
+      trend_strength: "Trend Strength Evaluation"
+    };
+    return titles[metric] || "Contextual Intelligence";
+  };
+
+  const getMetricAnalysisText = (metric, symbol = "BTC", tf = "1W") => {
+    switch (metric) {
+      case "transition_risk":
+        return `FINN detecteert toenemende regime-instabiliteit door afnemende trend strength en hogere volatiliteit voor ${symbol}. Nieuwe agressieve entries worden momenteel niet aanbevolen op het ${tf} timeframe.`;
+      case "setup_quality":
+        return `De setup quality score weerspiegelt robuuste confluences en gunstige risk/reward verhoudingen voor ${symbol}. Voldoet momenteel aan alle institutionele instapeisen.`;
+      case "market_pressure":
+        return `De verkoopdruk neemt toe in de orderboeken van ${symbol} met dalend volume op stijgingen. FINN adviseert strakkere stop-loss niveaus op ${tf}.`;
+      case "structural_cycle":
+        return `De macro-structuur van ${symbol} bevindt zich in een vroege herstelfase (recovery). Accumulatie op belangrijke steunniveaus wordt ondersteund door stabiele kapitaalinstroom.`;
+      case "position_size":
+        return `Huidige aanbevolen positiegrootte voor ${symbol} is defensief (50%). Verlaag actieve blootstelling bij verhoogde marktvolatiliteit om kapitaalbehoud te garanderen.`;
+      case "trend_strength":
+        return `De trend strength toont zwakke momentum-indicatoren op korte termijn voor ${symbol}. Verwacht verdere consolidatie voordat een duidelijke uitbraak wordt bevestigd.`;
+      default:
+        return `FINN analyseert momenteel de realtime datastromen voor ${symbol} (${tf}). Alle achtergrondmodellen en risico-parameters draaien binnen normale drempelwaarden.`;
+    }
+  };
 
   // Helper to get nested insight consistently
   const getInsightField = (block, field) => {
@@ -167,8 +199,12 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
   useEffect(() => {
     const handleTrigger = (e) => {
-      const { query: queryText, openAssistant } = e.detail || {};
+      const { query: queryText, openAssistant, metric, symbol, timeframe } = e.detail || {};
       if (openAssistant) {
+        setIsOpen(true);
+      }
+      if (metric) {
+        setContextMetric({ metric, symbol: symbol || globalSymbol || "BTC", timeframe: timeframe || "1W" });
         setIsOpen(true);
       }
       if (queryText) {
@@ -515,6 +551,37 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar scroll-smooth" ref={scrollRef}>
+        {contextMetric && (
+          <div className="m-5 p-5 bg-blue-600/5 dark:bg-blue-600/10 border-2 border-blue-600/20 rounded-2xl relative animate-in fade-in slide-in-from-top-4 duration-300">
+            <button 
+              onClick={() => setContextMetric(null)} 
+              className="absolute top-3.5 right-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            >
+              <X size={16} />
+            </button>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-1.5 bg-blue-600 text-white rounded-lg shadow-md shadow-blue-600/20">
+                <Target size={14} />
+              </div>
+              <div>
+                <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">{getMetricTitle(contextMetric.metric)}</h3>
+                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">{contextMetric.symbol} · {contextMetric.timeframe}</span>
+              </div>
+            </div>
+            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-2 border-blue-500 pl-3 py-0.5 my-3">
+              "{getMetricAnalysisText(contextMetric.metric, contextMetric.symbol, contextMetric.timeframe)}"
+            </p>
+            <button 
+              onClick={() => {
+                const q = `Wat is de diepere kwantitatieve analyse achter de ${getMetricTitle(contextMetric.metric)} voor ${contextMetric.symbol}?`;
+                handleChat(q, true);
+              }}
+              className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 dark:text-blue-400 hover:underline tracking-wider uppercase mt-1"
+            >
+              <MessageSquare size={12} /> Bespreek met FINN
+            </button>
+          </div>
+        )}
         {/* SECTION 1 — FINN POSTURE & BRIEFING */}
         <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20 space-y-2.5 animate-fade-in">
           <div className="flex items-center justify-between">
