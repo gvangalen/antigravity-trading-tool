@@ -1111,7 +1111,8 @@ class AiAssistantService:
                         "current_flow": "strategy_creation",
                         "slots": {
                             "symbol": resolved_symbol,
-                            "setup_id": symbol_setups[0]["id"]
+                            "setup_id": symbol_setups[0]["id"],
+                            "setup_type": symbol_setups[0].get("setup_type", "trade")
                         },
                         "status": "collecting"
                     }
@@ -1132,7 +1133,8 @@ class AiAssistantService:
                             "current_flow": "strategy_creation",
                             "slots": {
                                 "symbol": resolved_symbol,
-                                "setup_id": symbol_setups[0]["id"]
+                                "setup_id": symbol_setups[0]["id"],
+                                "setup_type": symbol_setups[0].get("setup_type", "trade")
                             },
                             "status": "collecting",
                             "redirect_reason": "no_strategy"

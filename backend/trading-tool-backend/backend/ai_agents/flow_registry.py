@@ -87,6 +87,10 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "assistant_role": "Strategie Architect",
         "required_slots": ["symbol", "setup_type", "base_amount", "risk_profile"],
         "conditional_slots": {
+            "dca_mode": {
+                "depends_on": "setup_type",
+                "equals_value": "dca"
+            },
             "entry": {
                 "depends_on": "setup_type",
                 "equals_value": "trade"
@@ -115,6 +119,11 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "slot": "base_amount",
                 "question_beginner": "Basisbedrag?",
                 "question_advanced": "Basisbedrag?"
+            },
+            {
+                "slot": "dca_mode",
+                "question_beginner": "Wil je een standaard DCA (vast bedrag) of een custom DCA (Smart DCA met custom rules voor slim kopen)?",
+                "question_advanced": "Standaard of Custom (Smart) DCA?"
             },
             {
                 "slot": "risk_profile",
