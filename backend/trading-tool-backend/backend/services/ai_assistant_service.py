@@ -771,7 +771,8 @@ class AiAssistantService:
             history_str = "\n".join(history_lines)
 
         # Build Portfolio Context
-        portfolio_context_str = self._bui        # Route Agent (Select Role)
+        portfolio_context_str = await self._build_context(user_id, intent)
+        # Route Agent (Select Role)
         role_key = self._route_role(intent)
         
         # Get User Preferences

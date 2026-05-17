@@ -1,5 +1,5 @@
-import { useCallback, useState, useEffect } from 'react';
-import { useRoute } from '@react-navigation/native';
+import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import {
   KeyboardAvoidingView,
@@ -31,32 +31,43 @@ import {
   RiskExplanationSheetContent,
 } from '../components/sheets/SheetContent';
 import { theme } from '../constants/theme';
-import { mockAssistantEnvelope } from '../data/mockAssistantEnvelope';
-import { mockBriefing } from '../data/mockFoundation';
 import { useApiResource } from '../hooks/useApiResource';
 import { mapAssistantEnvelopeToFeedItems } from '../services/assistantEnvelopeMapper';
 import {
   mapAssistantInsightCard,
   mapAssistantInsightDetails,
   mapMobileOverviewBotDecision,
-  mapMobileOverviewBriefing,
   mapMobileOverviewDecision,
   mapMobileOverviewMarket,
   mapMobileOverviewPortfolio,
   mapMobileOverviewPrompts,
 } from '../services/dataMappers';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
-import { AssistantInsightResponse, MobileOverviewResponse, MobileIntelligenceEvent, assistantApi, mobileApi } from '../services/tradamindApi';
+import { AssistantInsightResponse, MobileOverviewAsset, MobileOverviewResponse, MobileIntelligenceEvent, assistantApi, mobileApi, intelligenceApi } from '../services/tradamindApi';
 import { apiClient } from '../services/apiClient';
-import { AssistantFeedItem } from '../types/assistant';
+import { AssistantFeedItem, AssistantDraft } from '../types/assistant';
 import { triggerHaptic } from '../utils/haptics';
+import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
 import { useAuth } from '../auth/AuthProvider';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 
 type SheetType = 'risk' | 'confirm' | 'draft' | null;
 
-export function FinnScreen() {
-  const route = useRoute<RouteProp<MainTabParamList, 'FINN'>>();
+export function FinnScreen({
+  isOverlay = false,
+  prefill,
+  source,
+  contextMetric,
+  symbol,
+  onClose,
+}: {
+  isOverlay?: boolean;
+  prefill?: string;
+  source?: string;
+  contextMetric?: string;
+  symbol?: string;
+  onClose?: () => void;
+} = {}) {
   const { logout, user } = useAuth();
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
@@ -65,23 +76,20 @@ export function FinnScreen() {
   const [chatError, setChatError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetType>(null);
   const [localEvents, setLocalEvents] = useState<MobileIntelligenceEvent[]>([]);
-  const [feedItems, setFeedItems] = useState<AssistantFeedItem[]>(() => [
-    {
-      id: 'intro-1',
-      type: 'message',
-      role: 'assistant',
-      text: 'Ik hou de briefing bovenaan vast. Stel je vraag, of kies een prompt om een card-context te openen.',
-    },
-  ]);
+  const [feedItems, setFeedItems] = useState<AssistantFeedItem[]>([]);
+  const [currentDraft, setCurrentDraft] = useState<AssistantDraft | null>(null);
+  const [activeState, setActiveState] = useState<any>(null);
+  const isActionFlow = source?.startsWith('strategy-') || source?.startsWith('setup-') || source?.startsWith('bot-');
 
-  const context = {
+  const { context, updateContext } = useIntelligenceContext();
+  const apiContext = useMemo(() => ({
     page_type: 'FINN',
-    symbol: mockBriefing.asset,
-    timeframe: 'Daily',
-  };
+    symbol: context.asset,
+    timeframe: context.timeframe,
+  }), [context.asset, context.timeframe]);
 
   const fetchOverview = useCallback(() => mobileApi.overview(), []);
-  const fetchInsight = useCallback(() => assistantApi.insight(context), []);
+  const fetchInsight = useCallback(() => assistantApi.insight(apiContext), [apiContext]);
   const overviewResource = useApiResource<MobileOverviewResponse | undefined>({
     fallbackData: undefined,
     fetcher: fetchOverview,
@@ -96,49 +104,134 @@ export function FinnScreen() {
     }
   }, [overviewResource.data?.intelligence_events]);
 
-  useEffect(() => {
-    const prefill = route.params?.prefill;
-    if (prefill) {
-      setQuery(prefill);
+  const getMetricTitle = (metric: string) => {
+    const titles: Record<string, string> = {
+      transition_risk: 'Transition Risk Analysis',
+      setup_quality: 'Setup Quality Assessment',
+      market_pressure: 'Market Pressure Analysis',
+      structural_cycle: 'Structural Cycle Phase',
+      position_size: 'Position Size Telemetry',
+      trend_strength: 'Trend Strength Evaluation',
+    };
+    return titles[metric] || 'Contextual Intelligence';
+  };
+
+  const getMetricAnalysisText = (metric: string, symbol = 'BTC', tf = '1W') => {
+    switch (metric) {
+      case 'transition_risk':
+        return `FINN detecteert toenemende regime-instabiliteit door afnemende trend strength en hogere volatiliteit voor ${symbol}. Nieuwe agressieve entries worden momenteel niet aanbevolen op het ${tf} timeframe.`;
+      case 'setup_quality':
+        return `De setup quality score weerspiegelt robuuste confluences en gunstige risk/reward verhoudingen voor ${symbol}. Voldoet momenteel aan alle institutionele instapeisen.`;
+      case 'market_pressure':
+        return `De verkoopdruk neemt toe in de orderboeken van ${symbol} met dalend volume op stijgingen. FINN adviseert strakkere stop-loss niveaus op ${tf}.`;
+      case 'structural_cycle':
+        return `De macro-structuur van ${symbol} bevindt zich in een vroege herstelfase (recovery). Accumulatie op belangrijke steunniveaus wordt ondersteund door stabiele kapitaalinstroom.`;
+      case 'position_size':
+        return `Huidige aanbevolen positiegrootte voor ${symbol} is defensief (50%). Verlaag actieve blootstelling bij verhoogde marktvolatiliteit om kapitaalbehoud te garanderen.`;
+      case 'trend_strength':
+        return `De trend strength toont zwakke momentum-indicatoren op korte termijn voor ${symbol}. Verwacht verdere consolidatie voordat een duidelijke uitbraak wordt bevestigd.`;
+      default:
+        return `FINN analyseert momenteel de realtime datastromen voor ${symbol} (${tf}). Alle achtergrondmodellen en risico-parameters draaien binnen normale drempelwaarden.`;
     }
-  }, [route.params?.prefill]);
+  };
+
+  useEffect(() => {
+    const routePrefill = prefill;
+    const routeContextMetric = contextMetric;
+    const routeSymbol = symbol;
+
+    if (routeSymbol && routeSymbol !== context.asset) {
+      updateContext({ asset: routeSymbol, screen: 'FINN' });
+    }
+    const currentAsset = routeSymbol || context.asset;
+
+    if (routeContextMetric) {
+      const autoMessage = `Verklaar de ${getMetricTitle(contextMetric)} voor ${currentAsset}.`;
+      setFeedItems((current) => [
+        ...current,
+        {
+          id: `user-${Date.now()}`,
+          type: 'message',
+          role: 'user',
+          text: autoMessage,
+        },
+      ]);
+      
+      // Simulate exact desktop behavior
+      setTimeout(() => {
+        setFeedItems((current) => [
+          ...current,
+          {
+            id: `assistant-${Date.now()}`,
+            type: 'message',
+            role: 'assistant',
+            text: getMetricAnalysisText(contextMetric, currentAsset, context.timeframe),
+          },
+        ]);
+      }, 600);
+    } else if (prefill) {
+      setQuery(prefill);
+      setSending(true);
+      setTimeout(() => {
+        handleSendPrefill(prefill);
+      }, 500);
+    }
+  }, [prefill, contextMetric, symbol]);
+
+  async function handleSendPrefill(textToSend: string) {
+    if (sending) return;
+    await triggerHaptic('selection');
+    setSending(true);
+    setChatError(null);
+    setQuery('');
+
+    try {
+      const envelope = await assistantApi.chat(textToSend, apiContext);
+      setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope)]);
+      if (envelope.draft) {
+        setCurrentDraft(envelope.draft);
+      }
+      if (envelope.state && envelope.state.status === "collecting" && envelope.state.current_flow !== "none") {
+        setActiveState(envelope.state);
+      } else {
+        setActiveState(null);
+      }
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : 'FINN chat request failed');
+      setFeedItems((current) => [
+        ...current,
+        {
+          id: `error-${Date.now()}`,
+          type: 'message',
+          role: 'assistant',
+          text: 'Kon FINN niet bereiken: ' + (error instanceof Error ? error.message : 'Unknown error'),
+        },
+      ]);
+    } finally {
+      setSending(false);
+    }
+  }
 
   const handleArchiveEvent = useCallback((eventId: number) => {
-    // Optimistic UI updates - remove instantly from view
     setLocalEvents((prev) => prev.filter((e) => e.id !== eventId));
-    
-    // Background dispatch
     apiClient.post(`/api/assistant/events/${eventId}/archive`).catch((err) => {
       console.error(`[FinnScreen] Failed to archive event ${eventId}:`, err);
     });
   }, []);
 
   const handleDiscussEvent = useCallback((event: MobileIntelligenceEvent) => {
-    // Automatically set query content to trigger an instant chat discussion
     setQuery(`Bespreek live melding: "${event.title}" - ${event.description}`);
   }, []);
-  const briefing = mapMobileOverviewBriefing(overviewResource.data, insightResource.data);
-  const masterDecision = mapMobileOverviewDecision(overviewResource.data);
-  const marketSnapshot = mapMobileOverviewMarket(overviewResource.data, briefing.asset);
-  const botDecision = mapMobileOverviewBotDecision(overviewResource.data);
-  const portfolio = mapMobileOverviewPortfolio(overviewResource.data);
-  const prompts = mapMobileOverviewPrompts(overviewResource.data);
-  const watchlistSummary =
-    overviewResource.data?.watchlist
-      .slice(0, 3)
-      .map((asset) => {
-        const score = Math.round(
-          (asset.macro_score + asset.market_score + asset.technical_score + asset.setup_score) / 4,
-        );
-        const change =
-          typeof asset.change_24h === 'number'
-            ? `${asset.change_24h >= 0 ? '+' : ''}${asset.change_24h.toFixed(2)}%`
-            : 'n/a';
-        return `${asset.symbol}: score ${score}, 24h ${change}`;
-      })
-      .join(' · ') || '';
-  const insightCard = mapAssistantInsightCard(insightResource.data);
-  const insightDetails = mapAssistantInsightDetails(insightResource.data);
+
+  const insightMatchesActiveAsset = insightResource.data?.context_detected?.symbol === context.asset;
+  const activeInsight = insightMatchesActiveAsset ? insightResource.data : undefined;
+  const activeBotDecision = mapMobileOverviewBotDecision(overviewResource.data);
+  const activeAssetOverview = overviewResource.data?.watchlist.find((asset) => asset.symbol === context.asset);
+  const activeBriefingText = buildActiveBriefingText(context.asset, activeInsight, activeAssetOverview);
+  
+  // Mapping helpers for sheets
+  const activeSetup = { macro: 80, market: 75, tech: 60, setup: 70 };
+  const mapDecisionState = (data: any, decision: any, colors: any) => ({ color: colors.accent, label: 'BULLISH' });
 
   async function handleSend() {
     const trimmed = query.trim();
@@ -159,143 +252,196 @@ export function FinnScreen() {
     setQuery('');
 
     try {
-      const envelope = await assistantApi.chat(trimmed, context);
+      const envelope = await assistantApi.chat(trimmed, apiContext);
       setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope)]);
+      if (envelope.draft) {
+        setCurrentDraft(envelope.draft);
+      }
+      if (envelope.state && envelope.state.status === "collecting" && envelope.state.current_flow !== "none") {
+        setActiveState(envelope.state);
+      } else {
+        setActiveState(null);
+      }
     } catch (error) {
       setChatError(error instanceof Error ? error.message : 'FINN chat request failed');
       setFeedItems((current) => [
         ...current,
-        ...mapAssistantEnvelopeToFeedItems({
-          ...mockAssistantEnvelope,
-          trace_id: `fallback-${Date.now()}`,
-          response:
-            'Ik kan de backend nu niet bereiken of de mobiele sessie is nog niet ingelogd. Ik toon tijdelijk een stale voorbeeld-envelope zodat de flow testbaar blijft.',
-        }),
+        {
+          id: `error-${Date.now()}`,
+          type: 'message',
+          role: 'assistant',
+          text: 'Kon FINN niet bereiken: ' + (error instanceof Error ? error.message : 'Unknown error'),
+        },
       ]);
     } finally {
       setSending(false);
     }
   }
 
+  const getFlowProgress = (state: any) => {
+    if (!state || !state.current_flow || state.current_flow === "none") return null;
+    
+    const flowSlots: Record<string, string[]> = {
+      user_onboarding: ["experience_level", "risk_profile", "investment_goals"],
+      setup_creation: ["symbol", "setup_type", "market_condition", "name"],
+      strategy_creation: ["symbol", "setup_type", "base_amount", "risk_profile"],
+      bot_creation: ["name", "budget_total_eur", "budget_daily_limit_eur"],
+    };
+
+    const slots = flowSlots[state.current_flow] || [];
+    if (slots.length === 0) return null;
+
+    const filledSlots = slots.filter(k => state.slots && state.slots[k] !== undefined && state.slots[k] !== null && state.slots[k] !== "");
+    
+    let totalSlots = slots.length;
+    const setupType = state.slots?.setup_type;
+    if (state.current_flow === "strategy_creation" && setupType === "dca") {
+      totalSlots = 3; // symbol, setup_type, base_amount
+    }
+
+    const percentage = Math.min(Math.round((filledSlots.length / totalSlots) * 100), 100);
+    return {
+      filled: filledSlots.length,
+      total: totalSlots,
+      percentage,
+      flowLabel: state.current_flow.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+    };
+  };
+
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.keyboard}
-    >
-      <ScreenContainer
-        contentInsetBottom={120}
-        refreshing={overviewResource.refreshing || insightResource.refreshing}
-        onRefresh={() => {
-          overviewResource.refresh();
-          insightResource.refresh();
-        }}
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {isOverlay && (
+        <View style={styles.overlayHeader}>
+          <View style={styles.dragHandle} />
+          <View style={styles.overlayHeaderRow}>
+            <Text style={[styles.overlayTitle, { color: colors.text }]}>FINN</Text>
+            <Pressable onPress={onClose} style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}>
+              <Text style={styles.closeBtnText}>SLUITEN</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? (isOverlay ? 0 : 90) : 0}
       >
-        <View style={styles.compactHeader}>
-          <View style={styles.headerTitleRow}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>FINN</Text>
-            <View style={styles.headerBadge}>
-              <Text style={styles.headerBadgeText}>Chief of Staff</Text>
+        <ScreenContainer
+          contentInsetBottom={120}
+          refreshing={overviewResource.refreshing || insightResource.refreshing}
+          onRefresh={() => {
+            overviewResource.refresh();
+            insightResource.refresh();
+          }}
+        >
+          <View style={styles.compactHeader}>
+            <View style={styles.headerTitleRow}>
+              <View style={styles.botIconBox}>
+                <Text style={styles.botIconText}>🤖</Text>
+              </View>
+              <Text style={[styles.headerTitle, { color: colors.text }]}>FINN</Text>
+              <View style={styles.headerBadge}>
+                <Text style={styles.headerBadgeText}>CHIEF OF STAFF</Text>
+              </View>
+            </View>
+            <View style={styles.headerSubRow}>
+              <View style={styles.greenDot} />
+              <Text style={[styles.headerContextText, { color: colors.textDim }]}>
+                STRATEGIES · {context.asset} · {context.timeframe?.toUpperCase() ?? 'DAILY'}
+              </Text>
             </View>
           </View>
-          <Text style={[styles.headerContextText, { color: colors.textDim }]}>
-            {briefing.asset} · Active Operating Layer
-          </Text>
-        </View>
 
-        <View style={[styles.postureBox, { backgroundColor: appearance === 'light' ? '#EFF6FF' : theme.colors.accentSoft, borderColor: appearance === 'light' ? '#BFDBFE' : '#3B82F644' }]}>
-          <View style={styles.hudSectionHeader}>
-            <Text style={styles.hudSectionIcon}>🛡️</Text>
-            <Text style={[styles.hudSectionTitle, { color: colors.textDim }]}>ACTIEVE BRIEFING</Text>
-          </View>
-          <Text style={[styles.quoteText, { color: colors.text }]}>
-            "{(insightResource.data as any)?.greeting || `Hallo ${user?.first_name || 'Henk'}, alle ${briefing.asset} feeds draaien stabiel.`} {briefing.summary || insightCard.body || 'BTC bevindt zich in een consolidatiefase met verhoogd correctierisico zolang volume achterblijft.'}"
-          </Text>
-        </View>
-
-        <MobileFINNFeed
-          events={localEvents}
-          onArchive={handleArchiveEvent}
-          onDiscuss={handleDiscussEvent}
-        />
-
-        {overviewResource.loading ? (
-          <LoadingSkeletonCard />
-        ) : (
-          <View style={styles.hudContainer}>
-
-            {/* Section 4 — Recent Conversations */}
-            <View style={[styles.recentSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.recentHeader, { color: colors.textDim }]}>RECENT CONVERSATIONS</Text>
-              {[
-                { id: 1, title: 'BTC correction review', query: 'Vat de laatste BTC correctie en steunniveaus samen' },
-                { id: 2, title: 'Weekly portfolio report', query: 'Analyseer de wekelijkse portfolio prestaties en allocatierisico' },
-                { id: 3, title: 'SOL setup analysis', query: 'Beoordeel de huidige SOL setup en DCA drempelwaarden' },
-                { id: 4, title: 'Macro contraction discussion', query: 'Bespreek de macro contractie en impact op liquiditeit' },
-              ].map((conv) => (
-                <Pressable
-                  key={conv.id}
-                  onPress={() => setQuery(conv.query)}
-                  style={({ pressed }) => [
-                    styles.recentRow,
-                    { backgroundColor: colors.surfaceMuted, borderColor: colors.border },
-                    pressed && { opacity: 0.7 },
-                  ]}
-                >
-                  <Text style={[styles.recentTitle, { color: colors.text }]} numberOfLines={1}>
-                    💬 {conv.title}
-                  </Text>
-                  <Text style={[styles.recentArrow, { color: theme.colors.accent }]}>→</Text>
-                </Pressable>
-              ))}
+          {!isActionFlow && (
+            <View style={styles.postureBox}>
+              <View style={styles.hudSectionHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.hudSectionIcon}>🛡️</Text>
+                  <Text style={[styles.hudSectionTitle, { color: colors.text }]}>ACTIEVE BRIEFING</Text>
+                </View>
+                <View style={styles.posturePill}>
+                  <Text style={styles.posturePillText}>Defensieve Posture</Text>
+                </View>
+              </View>
+              <Text style={[styles.quoteText, { color: colors.text }]}>
+                "{activeBriefingText}"
+              </Text>
             </View>
+          )}
+
+          {!isActionFlow && (
+            <MobileFINNFeed
+              events={localEvents}
+              onArchive={handleArchiveEvent}
+              onDiscuss={handleDiscussEvent}
+            />
+          )}
+
+          <AssistantFeedRenderer
+            items={isActionFlow ? feedItems.filter(item => item.type !== 'reasoning') : feedItems}
+            onActionPress={() => setSheet('confirm')}
+            onDraftPress={() => setSheet('draft')}
+            onRiskPress={() => setSheet('risk')}
+          />
+
+          {activeState && activeState.current_flow && activeState.current_flow !== "none" && (() => {
+            const progress = getFlowProgress(activeState);
+            if (!progress) return null;
+            return (
+              <View style={{ marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: '#F8FAFC', borderRadius: 12, borderLeftWidth: 4, borderLeftColor: '#2563EB' }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '900', color: '#0F172A' }}>{progress.flowLabel.toUpperCase()}</Text>
+                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#2563EB' }}>{progress.percentage}%</Text>
+                </View>
+                <View style={{ height: 4, backgroundColor: '#E2E8F0', borderRadius: 2, overflow: 'hidden' }}>
+                  <View style={{ height: 4, backgroundColor: '#2563EB', width: `${progress.percentage}%` }} />
+                </View>
+                <Text style={{ fontSize: 10, color: '#64748B', marginTop: 4 }}>
+                  {progress.filled} van de {progress.total} stappen voltooid
+                </Text>
+              </View>
+            );
+          })()}
+
+          {sending ? <LoadingSkeletonCard /> : null}
+
+          {chatError ? (
+            <InsightCard
+              label="Chat error"
+              title="FINN kon je vraag niet live beantwoorden."
+              body={chatError}
+              cta="Probeer opnieuw"
+              tone="danger"
+              onPress={() => setQuery(query || 'Vat mijn huidige context samen')}
+            />
+          ) : null}
+        </ScreenContainer>
+
+        <View style={[styles.composerWrap, { backgroundColor: appearance === 'light' ? '#FFFFFF' : '#020617F2', borderTopColor: colors.border }]}>
+          <View style={[styles.composer, { backgroundColor: appearance === 'light' ? '#F1F5F9' : '#1E293B', borderColor: 'transparent' }]}>
+            <TextInput
+              multiline
+              maxLength={240}
+              onChangeText={setQuery}
+              placeholder="Ask a question..."
+              placeholderTextColor={colors.textDim}
+              style={[styles.input, { color: colors.text }]}
+              value={query}
+            />
+            <Pressable
+              disabled={!query.trim() || sending}
+              onPress={handleSend}
+              style={({ pressed }) => [
+                styles.sendButton,
+                (!query.trim() || sending) && styles.sendDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              {sending ? <Text style={styles.sendIcon}>⏳</Text> : <Text style={styles.sendIcon}>➤</Text>}
+            </Pressable>
           </View>
-        )}
-
-        <AssistantFeedRenderer
-          items={feedItems}
-          onActionPress={() => setSheet('confirm')}
-          onDraftPress={() => setSheet('draft')}
-          onRiskPress={() => setSheet('risk')}
-        />
-
-        {sending ? <LoadingSkeletonCard /> : null}
-
-        {chatError ? (
-          <InsightCard
-            label="Chat error"
-            title="FINN kon je vraag niet live beantwoorden."
-            body={chatError}
-            cta="Probeer opnieuw"
-            tone="danger"
-            onPress={() => setQuery(query || 'Vat mijn huidige context samen')}
-          />
-        ) : null}
-      </ScreenContainer>
-
-      <View style={[styles.composerWrap, { backgroundColor: appearance === 'light' ? '#FFFFFF' : '#020617F2', borderTopColor: colors.border }]}>
-        <View style={[styles.composer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <TextInput
-            multiline
-            maxLength={240}
-            onChangeText={setQuery}
-            placeholder="Vraag iets aan Tradamind..."
-            placeholderTextColor={colors.textDim}
-            style={[styles.input, { color: colors.text }]}
-            value={query}
-          />
-          <Pressable
-            disabled={!query.trim() || sending}
-            onPress={handleSend}
-            style={({ pressed }) => [
-              styles.sendButton,
-              (!query.trim() || sending) && styles.sendDisabled,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={styles.sendText}>{sending ? '...' : 'Send'}</Text>
-          </Pressable>
         </View>
-      </View>
+      </KeyboardAvoidingView>
 
       <BottomSheet visible={sheet === 'risk'} title="Risk explanation" onClose={() => setSheet(null)}>
         <RiskExplanationSheetContent />
@@ -304,10 +450,77 @@ export function FinnScreen() {
         <ConfirmActionSheetContent onDone={() => setSheet(null)} />
       </BottomSheet>
       <BottomSheet visible={sheet === 'draft'} title="Draft review" onClose={() => setSheet(null)}>
-        <DraftReviewSheetContent />
+        <DraftReviewSheetContent
+          draft={currentDraft}
+          onConfirm={async () => {
+            setSheet(null);
+            if (currentDraft && currentDraft.type === 'strategy') {
+              try {
+                const payload = currentDraft.payload;
+                if (payload.strategy_id) {
+                  await intelligenceApi.updateStrategy(Number(payload.strategy_id), payload);
+                } else {
+                  await intelligenceApi.createStrategy(payload);
+                }
+              } catch (error) {
+                console.error('Failed to save strategy:', error);
+              }
+            }
+          }}
+        />
       </BottomSheet>
-    </KeyboardAvoidingView>
+    </View>
   );
+}
+
+function buildActiveBriefingText(
+  symbol: string,
+  insight?: AssistantInsightResponse,
+  asset?: MobileOverviewAsset,
+) {
+  const greeting = withoutSurroundingQuotes(insight?.greeting ?? '');
+  const marketInsight = conciseInsightText(insight?.market_insight);
+  const botInsight = conciseInsightText(insight?.bot_insight);
+
+  if (greeting || marketInsight || botInsight) {
+    return [greeting, marketInsight || botInsight]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+  }
+
+  if (!asset) {
+    return `Hoi Henk, ${symbol} is nu de actieve context. Ik laad de briefing opnieuw zodat mijn analyse op deze asset aansluit.`;
+  }
+
+  const score = Math.round((asset.macro_score + asset.market_score + asset.technical_score + asset.setup_score) / 4);
+  const change =
+    typeof asset.change_24h === 'number'
+      ? `${asset.change_24h >= 0 ? '+' : ''}${asset.change_24h.toFixed(2)}%`
+      : 'n/a';
+  const risk =
+    asset.setup_score < 45 || asset.technical_score < 45
+      ? 'De structuur is nog zwak, dus ik zou wachten op bevestiging.'
+      : 'De context is bruikbaar, maar ik blijf risico en setup-validiteit bewaken.';
+
+  return `Hoi Henk, ${symbol} is nu actief. Composite score ${score}, 24h ${change}. ${risk}`;
+}
+
+function conciseInsightText(value?: Record<string, string> | null) {
+  if (!value) return '';
+  return Object.values(value)
+    .filter(Boolean)
+    .join(' ')
+    .replace(/^Hello[^,.]*[,.]\s*/i, '')
+    .split(/[.!?]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('. ');
+}
+
+function withoutSurroundingQuotes(value: string) {
+  return value.trim().replace(/^["“]+|["”]+$/g, '');
 }
 
 const styles = StyleSheet.create({
@@ -347,15 +560,14 @@ const styles = StyleSheet.create({
   hudSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
     marginBottom: theme.spacing.sm,
   },
   hudSectionIcon: {
-    fontSize: 16,
+    fontSize: 14,
   },
   hudSectionTitle: {
-    color: theme.colors.textDim,
-    fontSize: theme.typography.label,
+    fontSize: 11,
     fontWeight: '900',
     letterSpacing: 1.5,
   },
@@ -408,38 +620,72 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
+  botIconBox: {
+    backgroundColor: theme.colors.accent,
+    borderRadius: 8,
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  botIconText: {
+    fontSize: 16,
+  },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
     letterSpacing: -0.5,
   },
   headerBadge: {
-    backgroundColor: '#3B82F622',
+    backgroundColor: '#EFF6FF',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   headerBadgeText: {
     color: '#3B82F6',
     fontSize: 10,
     fontWeight: '900',
-    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  headerSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    paddingLeft: 36, // align with text
+  },
+  greenDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.success,
   },
   headerContextText: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
   postureBox: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    marginBottom: theme.spacing.md,
+  },
+  posturePill: {
+    backgroundColor: '#ECFDF5', // theme.colors.successSoft
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
     borderWidth: 1,
-    borderRadius: theme.radius.lg,
-    padding: theme.spacing.lg,
-    marginBottom: theme.spacing.sm,
+    borderColor: '#A7F3D0',
+  },
+  posturePillText: {
+    color: '#059669', // theme.colors.success
+    fontSize: 9,
+    fontWeight: '900',
   },
   recentSection: {
-    borderWidth: 1,
-    borderRadius: theme.radius.lg,
-    padding: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xs,
     gap: theme.spacing.sm,
   },
   recentHeader: {
@@ -453,14 +699,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: theme.spacing.md,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
+  },
+  recentRowIcon: {
+    fontSize: 16,
+    opacity: 0.6,
   },
   recentTitle: {
     fontSize: 13,
     fontWeight: '700',
     flex: 1,
-    marginRight: theme.spacing.sm,
   },
   recentArrow: {
     fontSize: 14,
@@ -468,13 +717,9 @@ const styles = StyleSheet.create({
   },
   composer: {
     alignItems: 'flex-end',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
+    borderRadius: 24,
     flexDirection: 'row',
-    gap: theme.spacing.sm,
-    padding: theme.spacing.sm,
+    padding: 6,
     width: '100%',
   },
   composerWrap: {
@@ -491,11 +736,11 @@ const styles = StyleSheet.create({
   input: {
     color: theme.colors.text,
     flex: 1,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '500',
     maxHeight: 104,
-    minHeight: 42,
-    paddingHorizontal: theme.spacing.sm,
+    minHeight: 36,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: 10,
   },
   keyboard: {
@@ -507,20 +752,54 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.accent,
-    borderRadius: theme.radius.button,
-    height: 42,
+    backgroundColor: theme.colors.textDim,
+    borderRadius: 20,
+    height: 40,
     justifyContent: 'center',
-    paddingHorizontal: theme.spacing.md,
+    width: 40,
   },
   sendDisabled: {
-    opacity: 0.45,
+    opacity: 0.3,
   },
-  sendText: {
+  sendIcon: {
     color: theme.colors.white,
-    fontSize: 12,
+    fontSize: 16,
+  },
+  overlayHeader: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  dragHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: theme.colors.borderStrong,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  overlayHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  overlayTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  closeBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.pill,
+  },
+  closeBtnText: {
+    color: theme.colors.textSoft,
+    fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
-    textTransform: 'uppercase',
   },
 });
