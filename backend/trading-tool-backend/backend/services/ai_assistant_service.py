@@ -1385,6 +1385,10 @@ class AiAssistantService:
                 payload["entry"] = slots.get("entry", 100.0)
                 payload["targets"] = slots.get("targets", [110.0, 120.0])
                 payload["stop_loss"] = slots.get("stop_loss", 90.0)
+            elif slots.get("setup_type") == "dca":
+                payload["dca_mode"] = slots.get("dca_mode", "standard")
+                if slots.get("dca_mode") == "custom":
+                    payload["buy_score_threshold"] = slots.get("buy_score_threshold", 30.0)
             return {
                 "type": "strategy",
                 "payload": payload
@@ -1702,7 +1706,8 @@ class AiAssistantService:
                 f"3. ZERO FILLER: Do NOT use polite conversational fillers or pleasantries (e.g., do NOT say 'Prima, we gaan...', 'Laten we de nieuwe...', 'Goed idee...').\n"
                 f"4. NO REPETITION: Do NOT repeat back any context, existing setups, or fields the user already provided. Just state the next prompt.\n"
                 f"5. ONLY 1 QUESTION: Ask EXACTLY ONE question to gather the next missing slot. Do NOT just say 'voorbeid' if there are still missing slots!\n"
-                f"6. NO DISCLAIMERS: Under no circumstances output any disclaimer, safety note, or 'not financial advice' warning. Keep responses strictly concise and direct.\n\n"
+                f"6. NO DISCLAIMERS: Under no circumstances output any disclaimer, safety note, or 'not financial advice' warning. Keep responses strictly concise and direct.\n"
+                f"7. FALLBACKS: If the user is unsure or gives an invalid answer for a slot (e.g., 'geen idee' or 'weet ik niet'), you MUST suggest a reasonable default and ask for confirmation (e.g., 'Zal ik hem op balanced zetten?').\n\n"
                 f"CRITICAL INSTRUCTIONS:\n"
                 f"1. You MUST continue this flow. Keep 'draft' as null until ALL required slots (and conditional slots if applicable) are collected.\n"
                 f"2. SLOT EXTRACTION (MANDATORY): You must extract the value for the current missing slot from the user's latest query (USER QUERY) and add/update it in 'state.slots'.\n"

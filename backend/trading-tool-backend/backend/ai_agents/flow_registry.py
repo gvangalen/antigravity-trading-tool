@@ -68,8 +68,8 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             },
             {
                 "slot": "name",
-                "question_beginner": "Welke herkenbare naam wil je deze setup geven? (bijv. 'SOL Fear Accumulator')",
-                "question_advanced": "Setup naam?"
+                "question_beginner": "Welke naam wil je deze setup geven? Ik stel voor: '{symbol} Blueprint'. Akkoord of wil je een andere naam?",
+                "question_advanced": "Setup naam? (Suggestie: {symbol} Blueprint)"
             }
         ],
         "draft_type": "setup",
@@ -90,6 +90,10 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "dca_mode": {
                 "depends_on": "setup_type",
                 "equals_value": "dca"
+            },
+            "buy_score_threshold": {
+                "depends_on": "dca_mode",
+                "equals_value": "custom"
             },
             "entry": {
                 "depends_on": "setup_type",
@@ -124,6 +128,11 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "slot": "dca_mode",
                 "question_beginner": "Wil je een standaard DCA (vast bedrag) of een custom DCA (Smart DCA met custom rules voor slim kopen)?",
                 "question_advanced": "Standaard of Custom (Smart) DCA?"
+            },
+            {
+                "slot": "buy_score_threshold",
+                "question_beginner": "Bij welke marktscore wil je extra bijkopen? (bijv. onder de 30)",
+                "question_advanced": "Koop-score drempel?"
             },
             {
                 "slot": "risk_profile",
