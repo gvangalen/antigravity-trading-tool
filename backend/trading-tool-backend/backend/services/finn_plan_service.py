@@ -480,6 +480,21 @@ class FinnPlanService:
                 "invalid_fields": validation["invalid_fields"],
             })
 
+        # Step 9: Autonomie Levels
+        from backend.infrastructure.models import User
+        from sqlalchemy import select
+        
+        result = await self.session.execute(select(User).where(User.id == user_id))
+        user = result.scalars().first()
+        preferences = getattr(user, "ai_preferences", {}) or {}
+        autonomy_level = preferences.get("autonomy_level", 2) # Default to level 2
+        
+        if autonomy_level < 2:
+            raise HTTPException(403, f"Jouw autonomie-level ({autonomy_level}) staat het automatisch aanmaken van plannen niet toe.")
+            
+        if autonomy_level < 3 and draft["bot"].get("is_live"):
+            raise HTTPException(403, f"Jouw autonomie-level ({autonomy_level}) staat het aanmaken van LIVE bots niet toe. Pas dit aan in je profiel.")
+
         setup_payload = self._setup_payload(draft)
         setup_service = SetupService(self.session)
         setup_result = await setup_service.save_setup(
