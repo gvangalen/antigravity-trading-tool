@@ -54,6 +54,8 @@ def empty_plan_draft() -> Dict[str, Any]:
             "frequency": None,
             "day": None,
             "month_day": None,
+            "dca_mode": "standard",
+            "buy_score_threshold": None,
         },
         "bot": {
             "create_bot": False,
@@ -140,6 +142,9 @@ class FinnPlanService:
         q = (query or "").strip()
         q_lower = q.lower()
 
+        unsure_patterns = [r"\bgeen\s+idee\b", r"\bweet\s+ik\s+niet\b", r"\bwat\s+denk\s+jij\b"]
+        is_unsure = any(re.search(pattern, q_lower) for pattern in unsure_patterns)
+
         cancel_patterns = [
             r"\bannuleer\b",
             r"\bvergeet\b",
@@ -165,6 +170,22 @@ class FinnPlanService:
 
         validation = self._validate(draft)
         message = self._build_message(draft, validation)
+        
+        if is_unsure:
+            next_q = validation["next_question"]
+            if next_q == "bot.risk_profile":
+                message = "Zal ik hem op 'balanced' zetten?"
+                draft["bot"]["risk_profile"] = "balanced"
+                validation = self._validate(draft)
+            elif next_q == "strategy.base_amount_eur":
+                message = "Zal ik als basisbedrag €100 gebruiken?"
+                draft["strategy"]["base_amount_eur"] = 100.0
+                validation = self._validate(draft)
+            elif next_q == "setup.name":
+                asset = draft.get("asset") or "Asset"
+                message = f"Ik stel voor om het '{asset} Blueprint' te noemen. Akkoord?"
+                draft["setup"]["name"] = f"{asset} Blueprint"
+                validation = self._validate(draft)
         actions = []
         if validation["can_confirm"]:
             actions.append({
@@ -233,6 +254,15 @@ class FinnPlanService:
             patch["dca"]["month_day"] = int(month_day.group(1))
             if not patch["dca"]["frequency"]:
                 patch["dca"]["frequency"] = "monthly"
+
+        if "custom" in q or "smart" in q or "slim" in q:
+            patch["dca"]["dca_mode"] = "custom"
+        elif "standaard" in q or "standard" in q:
+            patch["dca"]["dca_mode"] = "standard"
+
+        threshold = re.search(r"(?:onder|below|score)\s*(\d{1,2})", q)
+        if threshold:
+            patch["dca"]["buy_score_threshold"] = int(threshold.group(1))
 
         amount = re.search(r"(?:€|eur|euro)\s*([0-9][0-9.,]*)|([0-9][0-9.,]*)\s*(?:€|eur|euro)", q)
         if amount:
@@ -340,6 +370,10 @@ class FinnPlanService:
                 elif not isinstance(month_day, int) or month_day < 1 or month_day > 28:
                     invalid.append({"field": "dca.month_day", "reason": "gebruik dag 1 t/m 28 voor maandelijkse DCA"})
 
+            if draft["dca"].get("dca_mode") == "custom":
+                if draft["dca"].get("buy_score_threshold") is None:
+                    missing.append("dca.buy_score_threshold")
+
         if draft.get("plan_type") == "trade":
             entry = draft["strategy"].get("entry")
             stop_loss = draft["strategy"].get("stop_loss")
@@ -392,6 +426,8 @@ class FinnPlanService:
             return "Op welke weekdag wil je deze DCA uitvoeren?"
         if next_question == "dca.month_day":
             return "Op welke dag van de maand wil je kopen? Gebruik dag 1 t/m 28."
+        if next_question == "dca.buy_score_threshold":
+            return "Bij welke marktscore wil je extra bijkopen? (bijv. onder de 30)"
         if next_question == "strategy.entry":
             return "Welke entry-prijs hoort bij deze trade?"
         if next_question == "strategy.stop_loss":
@@ -513,6 +549,11 @@ class FinnPlanService:
                 "entry": strategy.get("entry"),
                 "stop_loss": strategy.get("stop_loss"),
                 "targets": strategy.get("targets"),
+            })
+        elif draft["plan_type"] == "dca":
+            payload.update({
+                "dca_mode": draft["dca"].get("dca_mode") or "standard",
+                "buy_score_threshold": draft["dca"].get("buy_score_threshold"),
             })
         return payload
 
