@@ -391,3 +391,67 @@ class SetupService:
                 "setup_explanation": best_setup.get("explanation"),
             }
         }
+
+    async def explain_setup_status(self, setup_id: int, user_id: int) -> dict:
+        from backend.ai_agents.setup_ai_agent import score_overlap
+        from sqlalchemy import text
+        
+        setup = await self.get_setup_by_id(setup_id, user_id)
+        symbol = setup["symbol"]
+        
+        query_scores = text("""
+            SELECT macro_score, technical_score, market_score
+            FROM daily_scores
+            WHERE user_id = :user_id AND symbol = :symbol
+            ORDER BY report_date DESC LIMIT 1
+        """)
+        res_scores = await self.session.execute(query_scores, {"user_id": user_id, "symbol": symbol})
+        row_scores = res_scores.fetchone()
+        
+        macro = float(row_scores[0]) if row_scores and row_scores[0] is not None else 50.0
+        technical = float(row_scores[1]) if row_scores and row_scores[1] is not None else 50.0
+        market = float(row_scores[2]) if row_scores and row_scores[2] is not None else 50.0
+
+        reasons = []
+        is_active = True
+        
+        if setup.get("min_macro_score") is not None and macro < float(setup["min_macro_score"]):
+            reasons.append(f"macro score ({macro}) onder minimum ({setup['min_macro_score']})")
+            is_active = False
+        if setup.get("max_macro_score") is not None and macro > float(setup["max_macro_score"]):
+            reasons.append(f"macro score ({macro}) boven maximum ({setup['max_macro_score']})")
+            is_active = False
+            
+        if setup.get("min_technical_score") is not None and technical < float(setup["min_technical_score"]):
+            reasons.append(f"technical score ({technical}) onder minimum ({setup['min_technical_score']})")
+            is_active = False
+        if setup.get("max_technical_score") is not None and technical > float(setup["max_technical_score"]):
+            reasons.append(f"technical score ({technical}) boven maximum ({setup['max_technical_score']})")
+            is_active = False
+            
+        if setup.get("min_market_score") is not None and market < float(setup["min_market_score"]):
+            reasons.append(f"market score ({market}) onder minimum ({setup['min_market_score']})")
+            is_active = False
+        if setup.get("max_market_score") is not None and market > float(setup["max_market_score"]):
+            reasons.append(f"market score ({market}) boven maximum ({setup['max_market_score']})")
+            is_active = False
+
+        m_overlap = score_overlap(macro, setup.get("min_macro_score"), setup.get("max_macro_score"))
+        t_overlap = score_overlap(technical, setup.get("min_technical_score"), setup.get("max_technical_score"))
+        mk_overlap = score_overlap(market, setup.get("min_market_score"), setup.get("max_market_score"))
+        
+        match_pct = round((m_overlap + t_overlap + mk_overlap) / 3)
+        
+        advice = "Niet kopen volgens je eigen plan" if not is_active else "Plan is actief, je kunt kopen."
+        
+        return {
+            "status": "active" if is_active else "inactive",
+            "match_percentage": match_pct,
+            "reasons": reasons if not is_active else ["Alle scores vallen binnen de ranges."],
+            "advice": advice,
+            "current_scores": {
+                "macro": macro,
+                "technical": technical,
+                "market": market
+            }
+        }
