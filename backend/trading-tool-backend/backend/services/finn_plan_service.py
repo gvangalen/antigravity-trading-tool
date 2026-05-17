@@ -61,7 +61,7 @@ def empty_plan_draft() -> Dict[str, Any]:
             "create_bot": False,
             "mode": "manual",
             "is_live": False,
-            "risk_profile": "balanced",
+            "risk_profile": None,
             "total_budget_eur": 0,
             "daily_limit_eur": 0,
             "min_order_eur": 0,
@@ -384,6 +384,8 @@ class FinnPlanService:
                 missing.append("strategy.stop_loss")
             if not targets:
                 missing.append("strategy.targets")
+            if not draft["bot"].get("risk_profile"):
+                missing.append("bot.risk_profile")
             if isinstance(entry, (int, float)) and isinstance(stop_loss, (int, float)):
                 if stop_loss >= entry:
                     invalid.append({"field": "strategy.stop_loss", "reason": "voor long trades moet stop-loss lager zijn dan entry"})
@@ -434,6 +436,8 @@ class FinnPlanService:
             return "Welke stop-loss hoort bij deze trade?"
         if next_question == "strategy.targets":
             return "Welke target(s) wil je gebruiken? Je mag meerdere targets met komma's geven."
+        if next_question == "bot.risk_profile":
+            return "Welk risicoprofiel wil je hanteren voor deze trade? (conservative, balanced of aggressive)"
 
         summary = self._summary(draft)
         return f"Ik heb je plan klaarstaan. Controleer dit even en bevestig als het klopt:\n\n{summary}"
