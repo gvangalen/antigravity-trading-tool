@@ -17,6 +17,7 @@ from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
+from backend.services.setup_service import SetupService
 
 logger = logging.getLogger(__name__)
 
@@ -712,6 +713,25 @@ class AiAssistantService:
             behavioral_signals = await self.bot_repo.get_user_behavioral_signals(user_id)
             user = await self.user_repo.get_by_id(user_id)
         
+        # Step 8: Finn Coach
+        setup_service = SetupService(self.state_repo.session)
+        active_setup_res = await setup_service.get_active_setup(user_id, resolved_symbol)
+        active_setup = active_setup_res.get("active")
+        
+        coach_context_str = "No active setup for this asset."
+        if active_setup:
+            status_explanation = await setup_service.explain_setup_status(active_setup["setup_id"], user_id)
+            import json
+            coach_context_str = (
+                f"FINN COACH CONTEXT (Current Setup Status):\n"
+                f"Setup Name: {active_setup['name']}\n"
+                f"Status: {status_explanation['status']}\n"
+                f"Match Percentage: {status_explanation['match_percentage']}%\n"
+                f"Reasons: {json.dumps(status_explanation['reasons'])}\n"
+                f"Advice: {status_explanation['advice']}\n"
+                f"Current Scores: {json.dumps(status_explanation['current_scores'])}\n"
+            )
+        
         self.db_duration_ms = (time.perf_counter() - start_db) * 1000
         logger.info(f"⚡ [Ai-Assistant-Service] SEQUENTIAL DATABASE CONTEXT GATHER (Stream) took {self.db_duration_ms:.2f}ms (Resolved Asset: {resolved_symbol})")
 
@@ -829,6 +849,7 @@ class AiAssistantService:
             f"REAL-TIME PORTFOLIO CONTEXT:\n{portfolio_context_str}\n\n"
             f"CHRONOLOGICAL CONTINUITY & EVENT MEMORY:\n{continuity_str}\n\n"
             f"ADAPTIVE INTELLIGENCE CONTEXT:\n{adaptive_profile_str}\n\n"
+            f"FINN COACH CONTEXT:\n{coach_context_str}\n\n"
             f"FRONTEND METADATA:\n{context_data}"
         )
 
