@@ -1,14 +1,17 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 class AssistantContextSchema(BaseModel):
     page: Optional[str] = None
+    page_type: Optional[str] = None
     symbol: Optional[str] = None
     timeframe: Optional[str] = None
     bot_id: Optional[int] = None
     setup_id: Optional[int] = None
     strategy_id: Optional[int] = None
+    setup_name: Optional[str] = None
+    finn_draft: Optional[Dict[str, Any]] = None
 
 class AssistantChatRequest(BaseModel):
     query: str
@@ -33,6 +36,23 @@ class AssistantChatResponse(BaseModel):
     trace_id: Optional[str] = None
     suggested_actions: Optional[List[str]] = None
     session_id: Optional[str] = None  # Return session ID to the client
+    flow: Optional[str] = None
+    missing_fields: List[str] = Field(default_factory=list)
+    invalid_fields: List[Dict[str, Any]] = Field(default_factory=list)
+    next_question: Optional[str] = None
+    can_confirm: bool = False
+    actions: List[Dict[str, Any]] = Field(default_factory=list)
+
+class AssistantActionExecuteRequest(BaseModel):
+    action: Dict[str, Any]
+
+class AssistantActionExecuteResponse(BaseModel):
+    ok: bool
+    message: str
+    setup_id: Optional[int] = None
+    strategy_id: Optional[int] = None
+    bot_id: Optional[int] = None
+    draft: Optional[Dict[str, Any]] = None
 
 class AssistantPreferenceUpdate(BaseModel):
     report_style: Optional[str]
@@ -80,4 +100,3 @@ class ChatMessageResponse(BaseModel):
 class ChatSessionDetailResponse(BaseModel):
     session: ChatSessionResponse
     messages: List[ChatMessageResponse]
-

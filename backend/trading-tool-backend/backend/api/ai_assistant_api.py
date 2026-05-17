@@ -33,11 +33,19 @@ from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
 from backend.infrastructure.models import ChatSession, ChatMessage
 from backend.schemas.assistant_schema import (
-    AssistantChatRequest, AssistantChatResponse, AssistantPreferences, 
-    AssistantPreferenceUpdate, AssistantInsightResponse, ChatSessionResponse, 
-    ChatMessageResponse, ChatSessionDetailResponse
+    AssistantActionExecuteRequest,
+    AssistantActionExecuteResponse,
+    AssistantChatRequest,
+    AssistantChatResponse,
+    AssistantPreferences,
+    AssistantPreferenceUpdate,
+    AssistantInsightResponse,
+    ChatSessionResponse,
+    ChatMessageResponse,
+    ChatSessionDetailResponse,
 )
 from backend.services.ai_assistant_service import AiAssistantService
+from backend.services.finn_plan_service import FinnPlanService
 from backend.services.ai_gateway import AiGateway
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.infrastructure.repositories.setup_repository import SetupRepository
@@ -73,7 +81,8 @@ async def assistant_chat(
     raw_request: Request,
     x_trace_id: Optional[str] = Header(None),
     current_user: dict = Depends(get_current_user),
-    service: AiAssistantService = Depends(get_assistant_service)
+    service: AiAssistantService = Depends(get_assistant_service),
+    db: AsyncSession = Depends(get_db),
 ):
     trace_id = x_trace_id or f"trdm-trace-{uuid.uuid4().hex[:8]}-{hex(int(time.time()))[2:]}"
     try:
@@ -83,6 +92,11 @@ async def assistant_chat(
         # Apply Rate Limiting
         chat_rate_limiter.check_rate_limit(f"user_{user_id}")
         chat_rate_limiter.check_rate_limit(f"ip_{ip_addr}")
+        context_payload = request.context.dict(exclude_none=True) if hasattr(request.context, "dict") else (request.context or {})
+        finn = FinnPlanService(db)
+        if finn.looks_like_plan_request(request.query, context_payload.get("finn_draft")):
+            return AssistantChatResponse(**finn.build_response(request.query, context_payload))
+
         response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
             user_id, request.query, request.history, request.context, trace_id=trace_id, session_id=request.session_id
         )
@@ -113,7 +127,6 @@ async def assistant_chat(
     except Exception as e:
         logger.error(f"❌ AI Assistant Chat Error: {e} | Trace: {trace_id}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij AI Assistant")
-
 
 # =====================================================
 # Chat Sessions REST endpoints
@@ -298,12 +311,22 @@ async def get_ai_action_engine(db: AsyncSession = Depends(get_db)):
 async def execute_pending_action(
     payload: dict,
     current_user: dict = Depends(get_current_user),
-    engine: AiActionEngine = Depends(get_ai_action_engine)
+    db: AsyncSession = Depends(get_db),
+    engine: AiActionEngine = Depends(get_ai_action_engine),
 ):
+    if payload.get("action"):
+        try:
+            finn = FinnPlanService(db)
+            return await finn.execute_action(current_user["id"], payload["action"])
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ AI Assistant Action Error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Fout bij Finn action")
+
     action_id = payload.get("action_id")
     if not action_id:
         raise HTTPException(status_code=400, detail="Action ID is verplicht.")
     
     user_id = current_user["id"]
     return await engine.execute_pending_action(action_id, user_id)
-

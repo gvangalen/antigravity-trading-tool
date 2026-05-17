@@ -49,6 +49,13 @@ export const assistantChat = (query, context = {}, history = []) => {
   });
 };
 
+export const executeAssistantAction = (action) => {
+  return fetchAuth(`/api/assistant/actions/execute`, {
+    method: 'POST',
+    body: JSON.stringify({ action }),
+  });
+};
+
 // ========================================
 // ⚙️ 5. AI Assistant Preferences
 // ========================================

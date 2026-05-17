@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, fetchAssistantInsight, getAssistantPreferences, assistantChatStream, executePendingAction } from "@/lib/api/ai";
-import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles } from "lucide-react";
+import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, assistantChatStream, executePendingAction } from "@/lib/api/ai";
+import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2 } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { ChatSkeleton } from "@/components/dashboard/DashboardSkeleton";
@@ -37,6 +37,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [activeState, setActiveState] = useState(null);
   const [contextMetric, setContextMetric] = useState(null);
+  const [finnDraft, setFinnDraft] = useState(null);
+  const [executingAction, setExecutingAction] = useState(false);
   
   const messagesEndRef = useRef(null);
   const scrollRef = useRef(null);
@@ -124,7 +126,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       setup_id: activeSetup?.id || activeSetup?.setup_id || null,
       bot_id: activeBot?.id || activeBot?.bot_id || focusedBotId || null,
       strategy_id: activeSetup?.strategy_id || null,
-      setup_name: searchParams.get("name") || activeSetup?.name || "No specific setup"
+      setup_name: searchParams.get("name") || activeSetup?.name || "No specific setup",
+      finn_draft: finnDraft,
     };
   };
 
@@ -327,11 +330,23 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
               lastMsg.intent = envelope.intent;
               lastMsg.action = envelope.action;
               lastMsg.draft = envelope.draft;
+              lastMsg.actions = Array.isArray(envelope.actions)
+                ? envelope.actions
+                : envelope.action
+                  ? [envelope.action]
+                  : [];
+              lastMsg.missingFields = envelope.missing_fields || [];
+              lastMsg.invalidFields = envelope.invalid_fields || [];
+              lastMsg.canConfirm = envelope.can_confirm;
               lastMsg.reasoning = envelope.reasoning;
               lastMsg.isComplete = true;
             }
             return copy;
           });
+
+          if (envelope.flow === "plan_creation" || envelope.intent === "plan_creation_cancelled") {
+            setFinnDraft(envelope.draft || null);
+          }
 
           if (envelope.state && envelope.state.status === "collecting" && envelope.state.current_flow !== "none") {
             setActiveState(envelope.state);
@@ -507,6 +522,87 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     }
   };
 
+  const handleExecuteAction = async (action) => {
+    if (!action) return;
+    setExecutingAction(true);
+
+    try {
+      const res = await executeAssistantAction(action);
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        text: `Aangemaakt: setup #${res.setup_id}, strategy #${res.strategy_id}${res.bot_id ? `, bot #${res.bot_id}` : ""}.`,
+        intent: "plan_created",
+      }]);
+      setFinnDraft(null);
+      await loadInsight();
+    } catch (err) {
+      console.error("Finn action failed", err);
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        text: "Ik kon dit plan nog niet aanmaken. Controleer de velden en probeer opnieuw.",
+        isError: true,
+      }]);
+    } finally {
+      setExecutingAction(false);
+    }
+  };
+
+  const renderDraftCard = (message) => {
+    const draft = message.draft;
+    if (!draft || !message.actions?.length) return null;
+
+    const setup = draft.setup || {};
+    const strategy = draft.strategy || {};
+    const dca = draft.dca || {};
+    const bot = draft.bot || {};
+    const isDca = draft.plan_type === "dca";
+    const isTrade = draft.plan_type === "trade";
+
+    const rows = [
+      ["Type", draft.plan_type],
+      ["Asset", draft.asset],
+      ["Naam", setup.name],
+      ["Timeframe", setup.timeframe],
+      ["Bedrag", strategy.base_amount_eur ? `€${strategy.base_amount_eur}` : null],
+      ["Macro", Array.isArray(setup.macro_score_range) ? setup.macro_score_range.join(" - ") : null],
+      ["Technical", Array.isArray(setup.technical_score_range) ? setup.technical_score_range.join(" - ") : null],
+      ["Market", Array.isArray(setup.market_score_range) ? setup.market_score_range.join(" - ") : null],
+      isDca ? ["DCA", [dca.frequency, dca.day || dca.month_day].filter(Boolean).join(" · ")] : null,
+      isTrade ? ["Entry", strategy.entry] : null,
+      isTrade ? ["Stop", strategy.stop_loss] : null,
+      isTrade ? ["Targets", Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
+      bot.create_bot ? ["Bot", `${bot.is_live ? "Live" : "Paper"} · ${bot.mode} · ${bot.risk_profile}`] : null,
+    ].filter(Boolean);
+
+    return (
+      <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-4">
+        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-300">
+          <ListChecks size={13} />
+          Finn Plan Draft
+        </div>
+        <div className="grid grid-cols-1 gap-2">
+          {rows.map(([label, value]) => (
+            <div key={label} className="flex items-center justify-between gap-4 border-b border-blue-100/70 dark:border-blue-900/30 pb-2 last:border-b-0 last:pb-0">
+              <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{label}</span>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-100 text-right">{value || "—"}</span>
+            </div>
+          ))}
+        </div>
+        {message.actions.map((action, index) => (
+          <button
+            key={`${action.type}-${index}`}
+            onClick={() => handleExecuteAction(action)}
+            disabled={executingAction}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/15"
+          >
+            {executingAction ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+            {action.label || "Bevestigen"}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -592,6 +688,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                </div>
                <div className="space-y-3">
                   <p className="text-sm font-bold text-foreground dark:text-slate-100 leading-snug">
+                    {/* 🎖️ CELEBRATION MODE */}
                     {stepStatus?.[`has_${pathname.split('/').pop()}`] ? (
                       `Excellent. The ${pathname.split('/').pop()} data stream is now stabilized and streaming high-fidelity intelligence to your cockpit. Return to the Launch Center for the next protocol.`
                     ) : (
@@ -753,6 +850,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                     ✓ Concept Succesvol Opgeslagen!
                   </div>
                 )}
+                {renderDraftCard(m)}
                 {m.isError && (
                   <button 
                     onClick={() => handleChat(messages[i-1]?.text)} 
