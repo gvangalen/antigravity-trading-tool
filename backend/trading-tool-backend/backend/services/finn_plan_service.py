@@ -495,6 +495,23 @@ class FinnPlanService:
         if autonomy_level < 3 and draft["bot"].get("is_live"):
             raise HTTPException(403, f"Jouw autonomie-level ({autonomy_level}) staat het aanmaken van LIVE bots niet toe. Pas dit aan in je profiel.")
 
+        # Step 10: Guardrails
+        from backend.infrastructure.repositories.bot_repository import BotRepository
+        bot_repo = BotRepository(self.session)
+        portfolio_ctx = await bot_repo.get_portfolio_intelligence_context(user_id)
+        
+        # Guardrail 1: Max open trades (bots)
+        active_bots = [b for b in portfolio_ctx["bots"] if b["is_active"]]
+        if len(active_bots) >= 5:
+            raise HTTPException(403, f"Guardrail geschonden: Je hebt al het maximale aantal actieve bots (5).")
+            
+        # Guardrail 2: Max exposure per asset (20%)
+        allocations = portfolio_ctx["global"]["allocations_pct"]
+        asset = draft.get("asset")
+        current_alloc = allocations.get(asset, 0.0)
+        if current_alloc > 20.0:
+            raise HTTPException(403, f"Guardrail geschonden: Je hebt al {current_alloc}% exposure in {asset} (max 20%).")
+
         setup_payload = self._setup_payload(draft)
         setup_service = SetupService(self.session)
         setup_result = await setup_service.save_setup(
