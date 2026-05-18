@@ -11,13 +11,16 @@ import { MainTabNavigator, MainTabParamList } from './src/navigation/MainTabNavi
 import { AppPreferencesProvider, preferenceColors, useAppPreferences } from './src/preferences/AppPreferencesProvider';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { normalizeNotificationData, routeForNotification } from './src/services/pushNotifications';
+import { ActiveIntelligenceProvider } from './src/contexts/ActiveIntelligenceContext';
 
 export default function App() {
   return (
     <SafeAreaProvider>
       <AppPreferencesProvider>
         <AuthProvider>
-          <AppShell />
+          <ActiveIntelligenceProvider>
+            <AppShell />
+          </ActiveIntelligenceProvider>
         </AuthProvider>
       </AppPreferencesProvider>
     </SafeAreaProvider>
