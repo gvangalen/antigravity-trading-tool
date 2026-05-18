@@ -152,6 +152,20 @@ def test_trade_invalid_draft_can_be_corrected_in_follow_up():
     assert corrected["actions"][0]["type"] == "create_plan"
 
 
+def test_cancel_request_returns_clear_state_envelope_for_trade_draft():
+    service = _service()
+    first = service.build_response("Koop ETH bij 3000 stop 2800 target 3600 met 100 euro op 4H")
+
+    cancelled = service.build_response("annuleer", {"finn_draft": first["draft"]})
+
+    assert service.is_cancel_request("annuleer") is True
+    assert cancelled["intent"] == "plan_creation_cancelled"
+    assert cancelled["flow"] is None
+    assert cancelled["can_confirm"] is False
+    assert cancelled["actions"] == []
+    assert cancelled["draft"]["plan_type"] is None
+
+
 def test_monthly_dca_day_above_28_is_invalid():
     result = _service().build_response("Maak een maandelijkse BTC DCA op dag 31 van 100 euro")
 

@@ -190,6 +190,16 @@ class FinnPlanService:
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
 
+    def is_cancel_request(self, query: str) -> bool:
+        q = (query or "").lower()
+        cancel_patterns = [
+            r"\bannuleer\b",
+            r"\bvergeet\b",
+            r"\bcancel\b",
+            r"\bstop\s+(?:hiermee|dit|deze|plan|setup|trade|dca)\b",
+        ]
+        return any(re.search(pattern, q) for pattern in cancel_patterns)
+
     async def hydrate_context(self, user_id: int, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         hydrated = dict(context or {})
         if hydrated.get("finn_draft") or not self.session:
@@ -287,13 +297,7 @@ class FinnPlanService:
         unsure_patterns = [r"\bgeen\s+idee\b", r"\bweet\s+ik\s+niet\b", r"\bwat\s+denk\s+jij\b"]
         is_unsure = any(re.search(pattern, q_lower) for pattern in unsure_patterns)
 
-        cancel_patterns = [
-            r"\bannuleer\b",
-            r"\bvergeet\b",
-            r"\bcancel\b",
-            r"\bstop\s+(?:hiermee|dit|deze|plan|setup)\b",
-        ]
-        if any(re.search(pattern, q_lower) for pattern in cancel_patterns):
+        if self.is_cancel_request(q_lower):
             return {
                 "response": "Prima, ik heb deze plan-aanmaak gestopt. Er is niets aangemaakt.",
                 "intent": "plan_creation_cancelled",
