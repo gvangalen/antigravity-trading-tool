@@ -65,6 +65,7 @@ def empty_plan_draft() -> Dict[str, Any]:
             "base_amount_eur": None,
             "execution_mode": "fixed",
             "decision_curve": None,
+            "direction": "long",
             "entry": None,
             "stop_loss": None,
             "targets": None,
@@ -105,6 +106,7 @@ def empty_plan_patch() -> Dict[str, Any]:
             "base_amount_eur": None,
             "execution_mode": None,
             "decision_curve": None,
+            "direction": None,
             "entry": None,
             "stop_loss": None,
             "targets": None,
@@ -418,7 +420,7 @@ class FinnPlanService:
             "dagelijks", "maandelijks", "elke week", "iedere week",
             "elke dag", "iedere dag", "elke maand", "iedere maand",
         ])
-        has_trade_language = any(word in q for word in ["trade", "entry", "stop loss", "stoploss", "target", "breakout", "swing"])
+        has_trade_language = any(word in q for word in ["trade", "entry", "stop loss", "stoploss", "target", "breakout", "swing", "short"])
 
         if has_dca_language or re.search(r"\b(?:toch|bedoel|bedoelde|nee)\s+(?:een\s+)?dca\b", q):
             patch["plan_type"] = "dca"
@@ -427,12 +429,24 @@ class FinnPlanService:
         if has_dca_language and has_trade_language:
             patch["plan_type"] = None
 
+        if re.search(r"\bshort\b", q):
+            patch["plan_type"] = "trade"
+            patch["strategy"]["direction"] = "short"
+            patch["_clarification"] = {
+                "field": "strategy.direction",
+                "reason": "short trades worden nog niet ondersteund; kies long of annuleer deze trade",
+            }
+        elif re.search(r"\blong\b", q):
+            patch["strategy"]["direction"] = "long"
+            patch["_clarification"] = False
+
         found_symbols = _asset_mentions(query)
         supported_symbols = [symbol for symbol in found_symbols if symbol in SUPPORTED_ASSETS]
         unsupported_symbols = [symbol for symbol in found_symbols if symbol not in SUPPORTED_ASSETS]
         if len(found_symbols) == 1 and supported_symbols:
             patch["asset"] = supported_symbols[0]
-            patch["_clarification"] = False
+            if not isinstance(patch.get("_clarification"), dict):
+                patch["_clarification"] = False
         elif found_symbols:
             patch["_clarification"] = {
                 "field": "asset",
@@ -540,6 +554,8 @@ class FinnPlanService:
             draft["asset"] = str(draft["asset"]).upper()
         if draft.get("plan_type") in {"dca", "trade"} and draft["bot"].get("create_bot") is None:
             draft["bot"]["create_bot"] = True
+        if draft.get("plan_type") == "trade" and not draft["strategy"].get("direction"):
+            draft["strategy"]["direction"] = "long"
         if not draft["setup"].get("timeframe"):
             draft["setup"]["timeframe"] = "1W" if draft.get("plan_type") == "dca" else None
         draft["setup"]["macro_score_range"] = draft["setup"].get("macro_score_range") or [30, 70]
@@ -654,6 +670,14 @@ class FinnPlanService:
                     missing.append("dca.buy_score_threshold")
 
         if draft.get("plan_type") == "trade":
+            is_long_trade = draft["strategy"].get("direction") == "long"
+            if not is_long_trade:
+                invalid.append({
+                    "field": "strategy.direction",
+                    "reason": clarification.get("reason", "alleen long trades worden nu ondersteund")
+                    if clarification.get("field") == "strategy.direction"
+                    else "alleen long trades worden nu ondersteund",
+                })
             entry = draft["strategy"].get("entry")
             stop_loss = draft["strategy"].get("stop_loss")
             targets = draft["strategy"].get("targets")
@@ -665,13 +689,21 @@ class FinnPlanService:
                 missing.append("strategy.targets")
             if not draft["bot"].get("risk_profile"):
                 missing.append("bot.risk_profile")
-            if isinstance(entry, (int, float)) and isinstance(stop_loss, (int, float)):
+            if is_long_trade and isinstance(entry, (int, float)) and isinstance(stop_loss, (int, float)):
                 if stop_loss >= entry:
                     invalid.append({"field": "strategy.stop_loss", "reason": "voor long trades moet stop-loss lager zijn dan entry"})
-            if isinstance(entry, (int, float)) and isinstance(targets, list):
+            if is_long_trade and isinstance(entry, (int, float)) and isinstance(targets, list):
                 bad_targets = [t for t in targets if isinstance(t, (int, float)) and t <= entry]
                 if bad_targets:
                     invalid.append({"field": "strategy.targets", "reason": "voor long trades moeten targets boven entry liggen"})
+                numeric_targets = [t for t in targets if isinstance(t, (int, float))]
+                if len(numeric_targets) > 1 and any(numeric_targets[i] >= numeric_targets[i + 1] for i in range(len(numeric_targets) - 1)):
+                    invalid.append({"field": "strategy.targets", "reason": "targets moeten oplopend zijn"})
+                if isinstance(stop_loss, (int, float)) and stop_loss < entry:
+                    risk = entry - stop_loss
+                    reward = max(numeric_targets or [entry]) - entry
+                    if risk > 0 and reward / risk < 1:
+                        invalid.append({"field": "strategy.risk_reward", "reason": "risk/reward moet minimaal 1:1 zijn"})
 
         amount = draft["strategy"].get("base_amount_eur")
         if amount is None:

@@ -101,6 +101,57 @@ def test_trade_rejects_stop_above_entry_and_targets_below_entry():
     assert result["actions"] == []
 
 
+def test_trade_rejects_non_ascending_targets():
+    result = _service().build_response(
+        "Maak een BTC trade 4H met 100 euro entry 100 stop 90 targets 130 en 120"
+    )
+
+    assert result["can_confirm"] is False
+    assert {"field": "strategy.targets", "reason": "targets moeten oplopend zijn"} in result["invalid_fields"]
+    assert result["actions"] == []
+
+
+def test_trade_rejects_weak_risk_reward():
+    result = _service().build_response(
+        "Maak een BTC trade 4H met 100 euro entry 100 stop 90 target 105"
+    )
+
+    assert result["can_confirm"] is False
+    assert {"field": "strategy.risk_reward", "reason": "risk/reward moet minimaal 1:1 zijn"} in result["invalid_fields"]
+    assert result["actions"] == []
+
+
+def test_trade_rejects_short_until_supported():
+    result = _service().build_response(
+        "Maak een short BTC trade 4H met 100 euro entry 100 stop 110 targets 80"
+    )
+
+    assert result["can_confirm"] is False
+    assert result["draft"]["strategy"]["direction"] == "short"
+    assert {"field": "strategy.direction", "reason": "short trades worden nog niet ondersteund; kies long of annuleer deze trade"} in result["invalid_fields"]
+    assert result["actions"] == []
+
+
+def test_trade_invalid_draft_can_be_corrected_in_follow_up():
+    service = _service()
+    first = service.build_response(
+        "Maak een BTC trade 4H met 100 euro entry 100 stop 110 targets 90 en 120"
+    )
+
+    assert first["can_confirm"] is False
+
+    corrected = service.build_response(
+        "Stop 90 en targets 130 en 150",
+        {"finn_draft": first["draft"]},
+    )
+
+    assert corrected["can_confirm"] is True
+    assert corrected["invalid_fields"] == []
+    assert corrected["draft"]["strategy"]["stop_loss"] == 90
+    assert corrected["draft"]["strategy"]["targets"] == [130, 150]
+    assert corrected["actions"][0]["type"] == "create_plan"
+
+
 def test_monthly_dca_day_above_28_is_invalid():
     result = _service().build_response("Maak een maandelijkse BTC DCA op dag 31 van 100 euro")
 
