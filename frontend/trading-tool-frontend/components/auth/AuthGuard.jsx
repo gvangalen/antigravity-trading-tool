@@ -20,15 +20,18 @@ export default function AuthGuard({ children }) {
   // Routes that don't need auth
   const publicRoutes = ["/", "/login", "/register", "/print", "/daily-report"];
   const isPublicRoute = publicRoutes.some(route => pathname === route || pathname.startsWith("/public/"));
+  const debug = (...args) => {
+    if (process.env.NODE_ENV === "development") console.log(...args);
+  };
 
   useEffect(() => {
-    console.log("🛡️ AuthGuard check:", { user: !!user, loading, sessionChecked, pathname });
+    debug("🛡️ AuthGuard check:", { user: !!user, loading, sessionChecked, pathname });
     if (loading || !sessionChecked) return;
 
     // 1. Check Authentication
     if (!user && !isPublicRoute) {
-      console.log("🔒 AuthGuard: Geen gebruiker -> naar login");
-      router.push("/login");
+      debug("🔒 AuthGuard: Geen gebruiker -> naar login");
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
       return;
     }
 
@@ -40,7 +43,7 @@ export default function AuthGuard({ children }) {
       } else {
         // If already complete, we just need to make sure we aren't stuck on /onboarding
         if (pathname.startsWith("/onboarding")) {
-          console.log("✅ AuthGuard: Onboarding al klaar -> naar dashboard");
+          debug("✅ AuthGuard: Onboarding al klaar -> naar dashboard");
           router.push("/dashboard");
         }
         setCheckingOnboarding(false);
@@ -61,7 +64,7 @@ export default function AuthGuard({ children }) {
       });
 
       if (res.status === 401) {
-        router.push("/login");
+        router.push(`/login?next=${encodeURIComponent(pathname)}`);
         return;
       }
 
@@ -76,7 +79,7 @@ export default function AuthGuard({ children }) {
         status?.has_strategy
       );
 
-      console.log("🧭 AuthGuard Onboarding Sync:", { isComplete, pathname });
+      debug("🧭 AuthGuard Onboarding Sync:", { isComplete, pathname });
       setOnboardingComplete(isComplete);
 
       // Redirect logic
@@ -87,10 +90,10 @@ export default function AuthGuard({ children }) {
           !pathname.startsWith("/macro") && 
           !pathname.startsWith("/market") && 
           !pathname.startsWith("/strategy")) {
-        console.log("🚧 AuthGuard: Onboarding niet compleet -> naar /onboarding");
+        debug("🚧 AuthGuard: Onboarding niet compleet -> naar /onboarding");
         router.push("/onboarding");
       } else if (isComplete && pathname.startsWith("/onboarding")) {
-        console.log("✅ AuthGuard: Onboarding al klaar -> naar dashboard");
+        debug("✅ AuthGuard: Onboarding al klaar -> naar dashboard");
         router.push("/dashboard");
       }
 
@@ -103,7 +106,7 @@ export default function AuthGuard({ children }) {
 
   // Show nothing while loading session ONLY for protected routes
   if ((loading || !sessionChecked) && !isPublicRoute) {
-    console.log("🛡️ AuthGuard showing loading spinner...", { loading, sessionChecked, isPublicRoute });
+    debug("🛡️ AuthGuard showing loading spinner...", { loading, sessionChecked, isPublicRoute });
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

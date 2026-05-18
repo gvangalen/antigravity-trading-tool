@@ -162,7 +162,12 @@ export async function apiLogin(email: string, password: string) {
     return { success: true, user };
   } catch (err) {
     console.error("❌ apiLogin error:", err);
-    return { success: false, message: "Serverfout" };
+    return {
+      success: false,
+      message: typeof navigator !== "undefined" && !navigator.onLine
+        ? "Je lijkt offline. Controleer je internetverbinding."
+        : "Kan de server niet bereiken. Probeer opnieuw.",
+    };
   }
 }
 

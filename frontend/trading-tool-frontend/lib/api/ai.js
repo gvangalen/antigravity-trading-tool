@@ -56,6 +56,12 @@ export const executeAssistantAction = (action) => {
   });
 };
 
+export const fetchFinnState = () => {
+  return fetchAuth(`/api/assistant/finn/state`, {
+    method: 'GET',
+  });
+};
+
 // ========================================
 // ⚙️ 5. AI Assistant Preferences
 // ========================================
@@ -219,4 +225,3 @@ export const assistantChatStream = async (query, context = {}, history = [], onC
     }
   }
 };
-

@@ -133,19 +133,69 @@ class BotRepository:
     # ==========================
     # MANUAL ORDER / LEDGER
     # ==========================
-    async def create_manual_order(self, user_id: int, bot_id: int, symbol: str, side: str, quantity: float, price: float) -> int:
+    async def create_manual_order(
+        self,
+        user_id: int,
+        bot_id: int,
+        symbol: str,
+        side: str,
+        quantity: float,
+        price: float,
+        *,
+        idempotency_key: Optional[str] = None,
+        quote_amount_eur: Optional[float] = None,
+        status: str = "filled",
+    ) -> tuple[int, bool]:
         query = text("""
             INSERT INTO bot_orders (
                 user_id, bot_id, decision_id, symbol, side, order_type,
-                quantity, limit_price, status, source, created_at, updated_at
+                quantity, limit_price, quote_amount_eur, status, source, idempotency_key, created_at, updated_at
             )
-            VALUES (:user_id,:bot_id,NULL,:symbol,:side,'market',:quantity,:price,'filled','manual',NOW(),NOW())
+            VALUES (:user_id,:bot_id,NULL,:symbol,:side,'market',:quantity,:price,:quote_amount_eur,:status,'manual',:idempotency_key,NOW(),NOW())
+            ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
             RETURNING id
         """)
         result = await self.session.execute(query, {
-            "user_id": user_id, "bot_id": bot_id, "symbol": symbol, "side": side, "quantity": quantity, "price": price
+            "user_id": user_id,
+            "bot_id": bot_id,
+            "symbol": symbol,
+            "side": side,
+            "quantity": quantity,
+            "price": price,
+            "quote_amount_eur": quote_amount_eur,
+            "status": status,
+            "idempotency_key": idempotency_key,
         })
-        return result.fetchone()[0]
+        row = result.fetchone()
+        if row:
+            return row[0], True
+
+        if not idempotency_key:
+            raise RuntimeError("Manual order insert failed without idempotency conflict.")
+
+        existing = await self.get_manual_order_by_idempotency_key(user_id, idempotency_key)
+        if not existing:
+            raise RuntimeError("Manual order idempotency conflict occurred but existing order was not found.")
+        return int(existing["id"]), False
+
+    async def get_manual_order_by_idempotency_key(self, user_id: int, idempotency_key: str) -> Optional[dict]:
+        query = text("""
+            SELECT id, bot_id, symbol, side, quantity, limit_price, quote_amount_eur, status, source, created_at
+            FROM bot_orders
+            WHERE user_id = :user_id AND idempotency_key = :idempotency_key
+            LIMIT 1
+        """)
+        result = await self.session.execute(query, {"user_id": user_id, "idempotency_key": idempotency_key})
+        row = result.fetchone()
+        return dict(row._mapping) if row else None
+
+    async def update_manual_order_status(self, user_id: int, order_id: int, status: str) -> None:
+        query = text("""
+            UPDATE bot_orders
+            SET status = :status, updated_at = NOW()
+            WHERE id = :order_id AND user_id = :user_id
+        """)
+        await self.session.execute(query, {"user_id": user_id, "order_id": order_id, "status": status})
 
     async def create_bot_execution(self, user_id: int, order_id: int, quantity: float, price: float) -> int:
         query = text("""
@@ -227,11 +277,11 @@ class BotRepository:
     async def create_bot_config(self, payload: dict) -> int:
         query = text("""
             INSERT INTO bot_configs (
-                user_id, name, strategy_id, mode, risk_profile, cadence,
+                user_id, name, strategy_id, mode, is_live, risk_profile, cadence,
                 budget_total_eur, budget_daily_limit_eur, budget_min_order_eur,
                 budget_max_order_eur, max_asset_exposure_pct, base_currency, symbol, created_at, updated_at
             )
-            VALUES (:user_id, :name, :strategy_id, :mode, :risk_profile, :cadence,
+            VALUES (:user_id, :name, :strategy_id, :mode, :is_live, :risk_profile, :cadence,
                     :budget_total_eur, :budget_daily_limit_eur, :budget_min_order_eur,
                     :budget_max_order_eur, :max_asset_exposure_pct, :base_currency, :symbol, NOW(), NOW())
             RETURNING id
@@ -612,5 +662,3 @@ class BotRepository:
             "total_custom_configs": total_actions,
             "behavioral_level": behavioral_level
         }
-
-

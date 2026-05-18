@@ -62,6 +62,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def fail_fast_database_config():
+    from backend.infrastructure.database import validate_database_connection
+    await validate_database_connection()
+    logger.info("✅ Database connection validated before serving auth/Finn routes.")
+
 # ------------------------------------------------------------
 # 📂 Static files
 # ------------------------------------------------------------
@@ -258,6 +264,19 @@ async def database_migrations():
             """))
             await session.execute(text("""
                 CREATE INDEX IF NOT EXISTS idx_ai_intelligence_events_status ON ai_intelligence_events(status);
+            """))
+            await session.execute(text("""
+                ALTER TABLE bot_configs
+                ADD COLUMN IF NOT EXISTS symbol VARCHAR;
+            """))
+            await session.execute(text("""
+                ALTER TABLE bot_orders
+                ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+            """))
+            await session.execute(text("""
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_bot_orders_user_idempotency_key
+                ON bot_orders (user_id, idempotency_key)
+                WHERE idempotency_key IS NOT NULL;
             """))
 
             await session.commit()

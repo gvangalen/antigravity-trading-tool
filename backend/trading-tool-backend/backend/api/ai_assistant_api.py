@@ -92,10 +92,17 @@ async def assistant_chat(
         # Apply Rate Limiting
         chat_rate_limiter.check_rate_limit(f"user_{user_id}")
         chat_rate_limiter.check_rate_limit(f"ip_{ip_addr}")
-        context_payload = request.context.dict(exclude_none=True) if hasattr(request.context, "dict") else (request.context or {})
         finn = FinnPlanService(db)
+        context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
+        if finn.looks_like_status_request(request.query):
+            finn_response = await finn.build_status_response(user_id, request.query, context_payload)
+            finn_response["trace_id"] = trace_id
+            return AssistantChatResponse(**finn_response)
         if finn.looks_like_plan_request(request.query, context_payload.get("finn_draft")):
-            return AssistantChatResponse(**finn.build_response(request.query, context_payload))
+            finn_response = finn.build_response(request.query, context_payload)
+            finn_response["trace_id"] = trace_id
+            await finn.persist_response_state(user_id, finn_response)
+            return AssistantChatResponse(**finn_response)
 
         response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
             user_id, request.query, request.history, request.context, trace_id=trace_id, session_id=request.session_id
@@ -206,6 +213,20 @@ async def delete_chat_session(
 from fastapi.responses import StreamingResponse
 import json
 
+
+def _assistant_context_payload(context) -> dict:
+    if hasattr(context, "dict"):
+        return context.dict(exclude_none=True)
+    return context or {}
+
+
+def _sse_event(event_name: str, data_val) -> str:
+    if isinstance(data_val, dict):
+        data_str = json.dumps(data_val)
+    else:
+        data_str = str(data_val)
+    return f"event: {event_name}\ndata: {data_str}\n\n"
+
 @router.post("/assistant/chat/stream")
 async def assistant_chat_stream(
     request: AssistantChatRequest,
@@ -213,7 +234,8 @@ async def assistant_chat_stream(
     raw_request: Request,
     x_trace_id: Optional[str] = Header(None),
     current_user: dict = Depends(get_current_user),
-    service: AiAssistantService = Depends(get_assistant_service)
+    service: AiAssistantService = Depends(get_assistant_service),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     ⚡ Real-Time SSE Stream for AI Assistant Chat (Fase 3 Lightweight)
@@ -229,6 +251,21 @@ async def assistant_chat_stream(
 
     async def event_generator():
         try:
+            finn = FinnPlanService(db)
+            context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
+            if finn.looks_like_status_request(request.query):
+                envelope = await finn.build_status_response(user_id, request.query, context_payload)
+                envelope["trace_id"] = trace_id
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_plan_request(request.query, context_payload.get("finn_draft")):
+                envelope = finn.build_response(request.query, context_payload)
+                envelope["trace_id"] = trace_id
+                await finn.persist_response_state(user_id, envelope)
+                yield _sse_event("envelope", envelope)
+                return
+
             async for chunk in service.get_chat_response_stream(
                 user_id, request.query, request.history, request.context,
                 trace_id=trace_id, background_tasks=background_tasks
@@ -244,13 +281,8 @@ async def assistant_chat_stream(
                 # Inject trace_id into envelope payload so frontend has it immediately
                 if event_name == "envelope" and isinstance(data_val, dict):
                     data_val["trace_id"] = trace_id
-                
-                if isinstance(data_val, dict):
-                    data_str = json.dumps(data_val)
-                else:
-                    data_str = str(data_val)
-                    
-                yield f"event: {event_name}\ndata: {data_str}\n\n"
+
+                yield _sse_event(event_name, data_val)
         except Exception as e:
             logger.error(f"❌ Error in SSE assistant stream generator | Trace: {trace_id}: {e}", exc_info=True)
             err_payload = json.dumps({"response": "⚠️ Externe stream fout opgetreden. Klik op retry.", "trace_id": trace_id})
@@ -330,3 +362,11 @@ async def execute_pending_action(
     
     user_id = current_user["id"]
     return await engine.execute_pending_action(action_id, user_id)
+
+@router.get("/assistant/finn/state")
+async def get_finn_state(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    finn = FinnPlanService(db)
+    return await finn.get_open_plan_state(current_user["id"])

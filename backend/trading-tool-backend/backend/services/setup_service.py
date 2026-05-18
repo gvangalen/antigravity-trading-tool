@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from fastapi import HTTPException
 from datetime import datetime
 import asyncio
@@ -80,6 +81,18 @@ class SetupService:
                 raise HTTPException(400, "Symbool is verplicht.")
             if len(symbol) < 2 or len(symbol) > 10:
                 raise HTTPException(400, "Symbool moet tussen 2 en 10 karakters lang zijn.")
+            if not symbol.strip().replace("-", "").isalnum():
+                raise HTTPException(400, "Symbool mag alleen letters, cijfers of '-' bevatten.")
+
+        if not is_update or "timeframe" in raw_payload:
+            timeframe = raw_payload.get("timeframe")
+            if timeframe is not None:
+                allowed_timeframes = {
+                    "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M",
+                    "1M", "5M", "15M", "30M", "1H", "4H", "1D", "1W",
+                }
+                if not isinstance(timeframe, str) or timeframe.strip() not in allowed_timeframes:
+                    raise HTTPException(400, "Ongeldige timeframe.")
 
         # 2. Setup type validation
         setup_type = raw_payload.get("setup_type")
@@ -124,18 +137,18 @@ class SetupService:
             if mn is not None:
                 try:
                     mn_val = float(mn)
-                    if mn_val < -100 or mn_val > 100:
+                    if mn_val < 0 or mn_val > 100:
                         raise ValueError()
                 except (ValueError, TypeError):
-                    raise HTTPException(400, f"min_{cat}_score moet een getal tussen -100 en 100 zijn.")
+                    raise HTTPException(400, f"min_{cat}_score moet een getal tussen 0 en 100 zijn.")
             
             if mx is not None:
                 try:
                     mx_val = float(mx)
-                    if mx_val < -100 or mx_val > 100:
+                    if mx_val < 0 or mx_val > 100:
                         raise ValueError()
                 except (ValueError, TypeError):
-                    raise HTTPException(400, f"max_{cat}_score moet een getal tussen -100 en 100 zijn.")
+                    raise HTTPException(400, f"max_{cat}_score moet een getal tussen 0 en 100 zijn.")
 
             if mn is not None and mx is not None:
                 if float(mn) > float(mx):
@@ -278,6 +291,17 @@ class SetupService:
         return {"message": "Setup bijgewerkt"}
 
     async def delete_setup(self, setup_id: int, user_id: int) -> dict:
+        dependents = await self.session.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM strategies s
+                WHERE s.setup_id = :setup_id AND s.user_id = :user_id
+            """),
+            {"setup_id": setup_id, "user_id": user_id},
+        )
+        if (dependents.scalar() or 0) > 0:
+            raise HTTPException(409, "Setup wordt nog gebruikt door een strategie. Verwijder eerst de gekoppelde strategie.")
+
         deleted = await self.repository.delete_setup(setup_id, user_id)
         if deleted == 0:
             raise HTTPException(404, "Niet gevonden of geen toegang")

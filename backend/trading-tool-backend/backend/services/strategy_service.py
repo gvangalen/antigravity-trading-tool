@@ -7,6 +7,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
@@ -147,10 +148,7 @@ class StrategyService:
             raise HTTPException(400, "Ongeldig setup_type")
 
         if setup_type == "trade":
-            if raw_data.get("entry") is None or raw_data.get("stop_loss") is None:
-                raise HTTPException(400, "entry en stop_loss verplicht voor trade")
-            if not raw_data.get("targets"):
-                raise HTTPException(400, "targets verplicht voor trade")
+            self._validate_trade_strategy(raw_data)
 
         exists = await self.repository.check_strategy_exists(payload.setup_id, user_id)
         if exists:
@@ -246,10 +244,7 @@ class StrategyService:
 
         setup_type = (existing.get("existing_setup_type") or "").lower()
         if setup_type == "trade":
-            if raw_data.get("entry") is None or raw_data.get("stop_loss") is None:
-                raise HTTPException(400, "entry en stop_loss verplicht")
-            if not raw_data.get("targets"):
-                raise HTTPException(400, "targets verplicht")
+            self._validate_trade_strategy(raw_data)
 
         updated_count = await self.repository.update_strategy(strategy_id, user_id, raw_data, setup_type, raw_data)
         if updated_count == 0:
@@ -275,6 +270,17 @@ class StrategyService:
         }
 
     async def delete_strategy(self, strategy_id: int, user_id: int) -> dict:
+        dependents = await self.session.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM bot_configs
+                WHERE strategy_id = :strategy_id AND user_id = :user_id
+            """),
+            {"strategy_id": strategy_id, "user_id": user_id},
+        )
+        if (dependents.scalar() or 0) > 0:
+            raise HTTPException(409, "Strategie wordt nog gebruikt door een bot. Verwijder of wijzig eerst die bot.")
+
         deleted = await self.repository.delete_strategy(strategy_id, user_id)
         if deleted == 0:
             raise HTTPException(404, "Strategie niet gevonden")
@@ -336,8 +342,12 @@ class StrategyService:
         return await self.repository.get_execution_curves(user_id)
 
     async def get_active_strategy_today(self, user_id: int) -> dict:
-        now = datetime.utcnow()
-        weekday = now.strftime("%A").lower()
+        try:
+            from zoneinfo import ZoneInfo
+            now = datetime.now(ZoneInfo("Europe/Amsterdam"))
+        except Exception:
+            now = datetime.utcnow()
+        weekday = now.isoweekday()
         month_day = now.day
 
         rows = await self.repository.get_active_strategies_with_setup(user_id)
@@ -348,10 +358,34 @@ class StrategyService:
                 continue
 
             freq = (row.get("dca_frequency") or "").lower()
-            day = (row.get("dca_day") or "").lower()
+            try:
+                day = int(row.get("dca_day")) if row.get("dca_day") is not None else None
+            except (TypeError, ValueError):
+                day = None
             md = row.get("dca_month_day")
 
             if freq == "daily" or (freq == "weekly" and day == weekday) or (freq == "monthly" and md == month_day):
                 return {"active": True, "strategy": self._format_strategy_row(row)}
 
         return {"active": False}
+
+    def _validate_trade_strategy(self, raw_data: dict) -> None:
+        entry = normalize_number(raw_data.get("entry"))
+        stop_loss = normalize_number(raw_data.get("stop_loss"))
+        targets = normalize_targets(raw_data.get("targets"))
+
+        if entry is None or stop_loss is None:
+            raise HTTPException(400, "entry en stop_loss verplicht voor trade")
+        if entry <= 0 or stop_loss <= 0:
+            raise HTTPException(400, "entry en stop_loss moeten groter zijn dan 0")
+        if stop_loss >= entry:
+            raise HTTPException(400, "Voor long trades moet stop_loss lager zijn dan entry.")
+        if not targets:
+            raise HTTPException(400, "targets verplicht voor trade")
+        invalid_targets = [target for target in targets if target is None or float(target) <= entry]
+        if invalid_targets:
+            raise HTTPException(400, "Voor long trades moeten alle targets hoger zijn dan entry.")
+
+        base_amount = normalize_number(raw_data.get("base_amount"))
+        if base_amount is not None and base_amount <= 0:
+            raise HTTPException(400, "base_amount moet groter zijn dan 0.")

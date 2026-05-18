@@ -14,8 +14,8 @@ def get_db_connection():
     db_config = {
         "host": os.getenv("DB_HOST", "127.0.0.1"),  # ✅ fallback = localhost
         "database": os.getenv("DB_NAME", "market_dashboard"),
-        "user": os.getenv("DB_USER", "dashboard_user"),
-        "password": os.getenv("DB_PASS", "password"),
+        "user": os.getenv("DB_USER") or os.getenv("PGUSER") or "postgres",
+        "password": os.getenv("DB_PASS") or os.getenv("DB_PASSWORD") or os.getenv("PGPASSWORD") or "postgres",
         "port": int(os.getenv("DB_PORT", 5432)),
     }
 

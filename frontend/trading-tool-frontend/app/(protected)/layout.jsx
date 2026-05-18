@@ -2,8 +2,6 @@
 
 import NavBar from "@/components/ui/NavBar";
 import TopBar from "@/components/ui/TopBar";
-import AuthGuard from "@/components/auth/AuthGuard";
-import AppProviders from "@/app/providers/AppProviders";
 import AIAssistant from "@/components/ui/AIAssistant";
 import AIFloatingButton from "@/components/ui/AIFloatingButton";
 import ScrollToTop from "@/components/ui/ScrollToTop";

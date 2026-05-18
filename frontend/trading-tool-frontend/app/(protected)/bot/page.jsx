@@ -46,6 +46,7 @@ function BotPageInner() {
     decisionsByBot = {},
     tradesByBot = {},
     loading,
+    error,
 
     createBot,
     updateBot,
@@ -286,6 +287,12 @@ function BotPageInner() {
         
         {/* 🕋 LEFT: MAIN COMMAND CENTER */}
         <div className="flex-1 min-w-0 space-y-12">
+          {error && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
+              Bot data laden mislukt: {error}
+            </div>
+          )}
+
           {/* ... existing content ... */}
           <div className="space-y-6">
             <BotScores scores={dailyScores} loading={loading?.today} />

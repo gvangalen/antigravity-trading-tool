@@ -185,7 +185,7 @@ export const fetchStrategyBySetup = async (setupId) => {
   });
 
   if (!res || res?.exists === false) return null;
-  return res.strategy ?? null;
+  return res.strategy ?? res;
 };
 
 //

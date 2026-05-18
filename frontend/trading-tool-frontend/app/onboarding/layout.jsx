@@ -1,25 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import AuthGuard from "@/components/auth/AuthGuard";
-import AppProviders from "@/app/providers/AppProviders";
 import AIAssistant from "@/components/ui/AIAssistant";
 import AIFloatingButton from "@/components/ui/AIFloatingButton";
 import Link from "next/link";
-import { Bot, Rocket } from "lucide-react";
+import { Rocket } from "lucide-react";
 
 export default function OnboardingLayout({ children }) {
-  const [isAIOpen, setIsAIOpen] = useState(true); // Default OPEN during onboarding
+  const [isAIOpen, setIsAIOpen] = useState(false);
 
   return (
-    <AppProviders>
-      <AuthGuard>
-        
+    <>
         {/* 🧱 ONBOARDING FOCUS SHELL */}
         <div 
           className="min-h-screen bg-[#020617] text-slate-100 transition-all duration-300 relative overflow-hidden"
           style={{ 
-            paddingRight: isAIOpen ? "400px" : "0px" 
+            paddingRight: isAIOpen ? (typeof window !== "undefined" && window.innerWidth < 1024 ? "0px" : "400px") : "0px"
           }}
         >
           {/* ✨ BACKGROUND TREATMENT (CSS GRID) */}
@@ -70,8 +66,6 @@ export default function OnboardingLayout({ children }) {
         {!isAIOpen && (
           <AIFloatingButton isOpen={isAIOpen} onClick={() => setIsAIOpen(true)} />
         )}
-
-      </AuthGuard>
-    </AppProviders>
+    </>
   );
 }

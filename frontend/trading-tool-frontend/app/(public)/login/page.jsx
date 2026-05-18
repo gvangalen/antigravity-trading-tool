@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Mail, Lock, LogIn, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
@@ -9,8 +9,10 @@ import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, isAuthenticated, loading, sessionChecked } = useAuth();
   const { showSnackbar } = useModal();
+  const nextPath = searchParams.get("next") || "/dashboard";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,9 +28,9 @@ export default function LoginPage() {
   useEffect(() => {
     if (sessionChecked && isAuthenticated && !redirected.current) {
       redirected.current = true;
-      router.push("/dashboard");
+      router.push(nextPath);
     }
-  }, [isAuthenticated, sessionChecked]);
+  }, [isAuthenticated, sessionChecked, nextPath, router]);
 
   /* -------------------------------------------------------
      LOGIN HANDLER
@@ -51,7 +53,7 @@ export default function LoginPage() {
     showSnackbar("Welkom terug! ✔", "success");
 
     // 🔥 HARD REDIRECT: Zorgt dat middleware direct de nieuwe cookies ziet
-    router.push("/dashboard");
+    router.push(nextPath);
   };
 
   return (

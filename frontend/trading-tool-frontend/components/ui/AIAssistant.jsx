@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, assistantChatStream, executePendingAction } from "@/lib/api/ai";
+import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2 } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -12,7 +12,7 @@ import { useWatchlist } from "@/hooks/useWatchlist";
 import { useModal } from "@/components/modal/ModalProvider";
 import { saveNewSetup, fetchSetups } from "@/lib/api/setups";
 import { createStrategy, fetchStrategies } from "@/lib/api/strategy";
-import { createBotConfig } from "@/lib/api/botApi";
+import { createBotConfig, fetchBotConfigs } from "@/lib/api/botApi";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import SetupForm from "@/components/setup/SetupForm";
@@ -42,6 +42,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   
   const messagesEndRef = useRef(null);
   const scrollRef = useRef(null);
+  const loadedFinnStateRef = useRef(false);
   const [showReasoning, setShowReasoning] = useState(false);
   
   // 🧭 Onboarding Context
@@ -222,11 +223,46 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   useEffect(() => {
     if (isOpen) {
       loadInsight();
+      loadFinnState();
       if (Object.keys(preferences).length === 0) {
         getAssistantPreferences().then(res => setPreferences(res.preferences || {}));
       }
+    } else {
+      loadedFinnStateRef.current = false;
     }
   }, [isOpen, pathname, searchParams, globalSymbol]);
+
+  async function loadFinnState() {
+    if (loadedFinnStateRef.current) return;
+    loadedFinnStateRef.current = true;
+    try {
+      const envelope = await fetchFinnState();
+      if (!envelope?.has_draft || !envelope.draft) return;
+
+      setFinnDraft(envelope.draft);
+      setActiveState(envelope.state || null);
+      setMessages(prev => {
+        const alreadyVisible = prev.some(m => m.intent === "plan_creation" && m.draft);
+        if (alreadyVisible) return prev;
+        return [...prev, {
+          role: "assistant",
+          text: envelope.response,
+          intent: envelope.intent,
+          draft: envelope.draft,
+          actions: Array.isArray(envelope.actions) ? envelope.actions : [],
+          missingFields: envelope.missing_fields || [],
+          invalidFields: envelope.invalid_fields || [],
+          nextQuestion: envelope.next_question || null,
+          canConfirm: envelope.can_confirm,
+          reasoning: envelope.reasoning,
+          restoredFinnDraft: true,
+          isComplete: true,
+        }];
+      });
+    } catch (err) {
+      console.error("Finn state herstellen mislukt", err);
+    }
+  }
 
   async function loadInsight() {
     setInsightLoading(true);
@@ -337,6 +373,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                   : [];
               lastMsg.missingFields = envelope.missing_fields || [];
               lastMsg.invalidFields = envelope.invalid_fields || [];
+              lastMsg.nextQuestion = envelope.next_question || null;
               lastMsg.canConfirm = envelope.can_confirm;
               lastMsg.reasoning = envelope.reasoning;
               lastMsg.isComplete = true;
@@ -528,9 +565,25 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
     try {
       const res = await executeAssistantAction(action);
+      if (!res?.ok || !res?.verified?.setup || !res?.verified?.strategy || (res.bot_id && !res?.verified?.bot)) {
+        throw new Error("Read-after-write verificatie faalde.");
+      }
+
+      const [setups, strategies, bots] = await Promise.all([
+        fetchSetups(),
+        fetchStrategies(),
+        fetchBotConfigs(),
+      ]);
+      const setupFound = setups.some((setup) => Number(setup.id || setup.setup_id) === Number(res.setup_id));
+      const strategyFound = strategies.some((strategy) => Number(strategy.id) === Number(res.strategy_id));
+      const botFound = !res.bot_id || bots.some((bot) => Number(bot.id || bot.bot_id) === Number(res.bot_id));
+      if (!setupFound || !strategyFound || !botFound) {
+        throw new Error("Aangemaakte objecten zijn nog niet terugleesbaar via de API.");
+      }
+
       setMessages(prev => [...prev, {
         role: "assistant",
-        text: `Aangemaakt: setup #${res.setup_id}, strategy #${res.strategy_id}${res.bot_id ? `, bot #${res.bot_id}` : ""}.`,
+        text: `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Aangemaakt en geverifieerd: setup #${res.setup_id}, strategy #${res.strategy_id}${res.bot_id ? `, bot #${res.bot_id}` : ""}.`,
         intent: "plan_created",
       }]);
       setFinnDraft(null);
@@ -549,7 +602,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
   const renderDraftCard = (message) => {
     const draft = message.draft;
-    if (!draft || !message.actions?.length) return null;
+    const isFinnPlan = message.intent === "plan_creation" || message.flow === "plan_creation" || draft?.plan_type;
+    if (!draft || !isFinnPlan) return null;
 
     const setup = draft.setup || {};
     const strategy = draft.strategy || {};
@@ -588,7 +642,40 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             </div>
           ))}
         </div>
-        {message.actions.map((action, index) => (
+        {(message.missingFields?.length > 0 || message.invalidFields?.length > 0 || message.nextQuestion) && (
+          <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-950/20 p-3 space-y-2">
+            {message.missingFields?.length > 0 && (
+              <div>
+                <div className="text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Ontbreekt nog</div>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {message.missingFields.map((field) => (
+                    <span key={field} className="px-2 py-1 rounded-lg bg-white/80 dark:bg-slate-950/50 text-[10px] font-bold text-amber-800 dark:text-amber-200 border border-amber-100 dark:border-amber-900/40">
+                      {field}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {message.invalidFields?.length > 0 && (
+              <div>
+                <div className="text-[9px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-300">Ongeldig</div>
+                <div className="mt-1 space-y-1">
+                  {message.invalidFields.map((item, index) => (
+                    <div key={`${item.field}-${index}`} className="text-[11px] font-semibold text-rose-700 dark:text-rose-200">
+                      {item.field}: {item.reason}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {message.nextQuestion && (
+              <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                {message.nextQuestion}
+              </div>
+            )}
+          </div>
+        )}
+        {message.actions?.map((action, index) => (
           <button
             key={`${action.type}-${index}`}
             onClick={() => handleExecuteAction(action)}
@@ -829,10 +916,10 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                   }
                   return null;
                 })()}
-                {m.action && m.action.type !== "action_card" && m.isComplete !== false && (
+                {m.action && m.action.type !== "action_card" && !m.draft?.plan_type && m.isComplete !== false && (
                   <ActionCard action={m.action} onAction={handleActionClick} />
                 )}
-                {m.draft && m.draft.type !== "action_card" && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
+                {m.draft && !m.draft?.plan_type && m.draft.type !== "action_card" && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
                   <DraftCard 
                     draft={m.draft} 
                     onCancel={() => handleCancelDraft(i)} 
@@ -864,7 +951,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           ))}
 
           {/* LIVE INTERACTIVE CONCEPT CARD */}
-          {activeState && activeState.current_flow && activeState.current_flow !== "none" && (() => {
+          {activeState && activeState.current_flow && activeState.current_flow !== "none" && activeState.current_flow !== "plan_creation" && (() => {
             const flow = activeState.current_flow;
             const slots = activeState.slots || {};
             let shouldShowCard = false;

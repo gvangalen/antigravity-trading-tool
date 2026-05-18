@@ -1,10 +1,17 @@
+import hashlib
+import json
 import re
+import asyncio
 from copy import deepcopy
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
+from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.schemas.bot_schema import BotConfigCreateSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
 from backend.services.bot_service import BotService
@@ -13,6 +20,7 @@ from backend.services.strategy_service import StrategyService
 
 
 SUPPORTED_ASSETS = {"BTC", "ETH", "SOL"}
+FINN_STATE_VERSION = 2
 WEEKDAYS = {
     "maandag": "monday",
     "dinsdag": "tuesday",
@@ -28,6 +36,15 @@ WEEKDAYS = {
     "friday": "friday",
     "saturday": "saturday",
     "sunday": "sunday",
+}
+WEEKDAY_NUMBERS = {
+    "monday": 1,
+    "tuesday": 2,
+    "wednesday": 3,
+    "thursday": 4,
+    "friday": 5,
+    "saturday": 6,
+    "sunday": 7,
 }
 
 
@@ -58,7 +75,7 @@ def empty_plan_draft() -> Dict[str, Any]:
             "buy_score_threshold": None,
         },
         "bot": {
-            "create_bot": False,
+            "create_bot": None,
             "mode": "manual",
             "is_live": False,
             "risk_profile": None,
@@ -67,6 +84,44 @@ def empty_plan_draft() -> Dict[str, Any]:
             "min_order_eur": 0,
             "max_order_eur": 0,
             "max_asset_exposure_pct": 100,
+        },
+    }
+
+
+def empty_plan_patch() -> Dict[str, Any]:
+    return {
+        "plan_type": None,
+        "asset": None,
+        "setup": {
+            "name": None,
+            "timeframe": None,
+            "macro_score_range": None,
+            "technical_score_range": None,
+            "market_score_range": None,
+        },
+        "strategy": {
+            "base_amount_eur": None,
+            "execution_mode": None,
+            "decision_curve": None,
+            "entry": None,
+            "stop_loss": None,
+            "targets": None,
+        },
+        "dca": {
+            "frequency": None,
+            "day": None,
+            "month_day": None,
+        },
+        "bot": {
+            "create_bot": None,
+            "mode": None,
+            "is_live": None,
+            "risk_profile": None,
+            "total_budget_eur": None,
+            "daily_limit_eur": None,
+            "min_order_eur": None,
+            "max_order_eur": None,
+            "max_asset_exposure_pct": None,
         },
     }
 
@@ -117,6 +172,51 @@ class FinnPlanService:
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
 
+    async def hydrate_context(self, user_id: int, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        hydrated = dict(context or {})
+        if hydrated.get("finn_draft") or not self.session:
+            return hydrated
+
+        state = await ConversationStateRepository(self.session).get_state(user_id)
+        slots = (state or {}).get("slots") or {}
+        draft = slots.get("draft")
+        if state and state.get("current_flow") == "plan_creation" and isinstance(draft, dict):
+            hydrated["finn_draft"] = draft
+            hydrated["finn_state"] = {
+                "version": slots.get("version"),
+                "updated_at": slots.get("updated_at"),
+            }
+        return hydrated
+
+    async def persist_response_state(self, user_id: int, response: Dict[str, Any]) -> None:
+        if not self.session:
+            return
+        repo = ConversationStateRepository(self.session)
+        if response.get("intent") == "plan_creation_cancelled":
+            await repo.clear_state(user_id)
+            return
+        if response.get("flow") != "plan_creation" or not isinstance(response.get("draft"), dict):
+            return
+
+        draft = response["draft"]
+        await repo.save_state(
+            user_id,
+            current_flow="plan_creation",
+            asset=draft.get("asset"),
+            slots={
+                "version": FINN_STATE_VERSION,
+                "draft": draft,
+                "missing_fields": response.get("missing_fields", []),
+                "invalid_fields": response.get("invalid_fields", []),
+                "can_confirm": response.get("can_confirm", False),
+                "updated_at": datetime.utcnow().isoformat(),
+            },
+        )
+
+    async def clear_state(self, user_id: int) -> None:
+        if self.session:
+            await ConversationStateRepository(self.session).clear_state(user_id)
+
     def looks_like_plan_request(self, query: str, draft: Optional[Dict[str, Any]] = None) -> bool:
         q = (query or "").lower()
         if draft and draft.get("plan_type"):
@@ -133,6 +233,17 @@ class FinnPlanService:
             "iedere maand", "kopen", "koop",
         ]
         return any(word in q for word in intent_words) and any(word in q for word in plan_words)
+
+    def looks_like_status_request(self, query: str) -> bool:
+        q = (query or "").lower()
+        has_status = any(word in q for word in [
+            "actief", "active", "inactive", "inactief", "waarom koopt",
+            "waarom niet", "moet ik kopen", "mag ik kopen", "plan actief",
+        ])
+        has_market_or_plan = any(word in q for word in [
+            "setup", "plan", "bot", "trade", "dca", "markt", "market", "btc", "eth", "sol",
+        ])
+        return has_status and has_market_or_plan
 
     def build_response(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
@@ -188,11 +299,17 @@ class FinnPlanService:
                 validation = self._validate(draft)
         actions = []
         if validation["can_confirm"]:
+            action_payload = deepcopy(draft)
+            action_id = self._action_id(action_payload)
             actions.append({
+                "id": action_id,
                 "type": "create_plan",
                 "label": "Plan aanmaken",
-                "payload": draft,
-                "risk_level": "medium",
+                "payload": action_payload,
+                "risk_level": self._action_risk(draft),
+                "requires_confirmation": True,
+                "autonomy_level": "confirm_required",
+                "guardrails": self._guardrails(draft),
             })
 
         return {
@@ -200,6 +317,8 @@ class FinnPlanService:
             "intent": "plan_creation",
             "flow": "plan_creation",
             "draft": draft,
+            "state": self._flow_state(draft, validation),
+            "reasoning": self._reasoning(draft, validation),
             "missing_fields": validation["missing_fields"],
             "invalid_fields": validation["invalid_fields"],
             "next_question": validation["next_question"],
@@ -207,9 +326,63 @@ class FinnPlanService:
             "actions": actions,
         }
 
+    async def build_status_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        q = (query or "").upper()
+        asset = None
+        for symbol in SUPPORTED_ASSETS:
+            if re.search(rf"\b{symbol}\b", q):
+                asset = symbol
+                break
+        draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else None
+        if not asset and draft:
+            asset = draft.get("asset")
+        asset = asset or "BTC"
+
+        daily_scores = None
+        active_setups = []
+        if self.session:
+            score_repo = ScoreRepository(self.session)
+            daily_scores = await score_repo.fetch_daily_scores(user_id, asset)
+            active_setups = await score_repo.fetch_active_setups(user_id)
+
+        if draft and draft.get("asset") == asset:
+            analysis = self._evaluate_draft_against_scores(draft, daily_scores)
+            response = self._status_message(asset, analysis, source="draft")
+        else:
+            matching_setups = [s for s in active_setups if str(s.get("symbol", "")).upper() == asset]
+            best_setup = next((s for s in matching_setups if s.get("is_active")), None) or (matching_setups[0] if matching_setups else None)
+            analysis = self._evaluate_setup_row(best_setup, daily_scores)
+            response = self._status_message(asset, analysis, source="saved_setup")
+
+        return {
+            "response": response,
+            "intent": "plan_status",
+            "flow": "plan_status",
+            "draft": draft,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "status": "answered",
+                "current_flow": "plan_status",
+                "asset": asset,
+                "analysis": analysis,
+                "autonomy_level": "advice_only",
+            },
+            "reasoning": {
+                "confidence_score": 0.55 if analysis.get("confidence") == "medium" else 0.25,
+                "risk_detected": not bool(analysis.get("is_active")),
+                "reasons": self._analysis_reasons(analysis),
+                "coaching_level": "plan_check",
+            },
+        }
+
     def _extract_from_query(self, query: str) -> Dict[str, Any]:
         q = query.lower()
-        patch = empty_plan_draft()
+        patch = empty_plan_patch()
 
         has_dca_language = any(word in q for word in [
             "dca", "accumuleer", "accumuleren", "periodiek", "wekelijks",
@@ -218,9 +391,9 @@ class FinnPlanService:
         ])
         has_trade_language = any(word in q for word in ["trade", "entry", "stop loss", "stoploss", "target", "breakout", "swing"])
 
-        if has_dca_language:
+        if has_dca_language or re.search(r"\b(?:toch|bedoel|bedoelde|nee)\s+(?:een\s+)?dca\b", q):
             patch["plan_type"] = "dca"
-        if has_trade_language:
+        if has_trade_language or re.search(r"\b(?:toch|bedoel|bedoelde|nee)\s+(?:een\s+)?trade\b", q):
             patch["plan_type"] = "trade"
         if has_dca_language and has_trade_language:
             patch["plan_type"] = None
@@ -303,6 +476,8 @@ class FinnPlanService:
 
         if "bot" in q:
             patch["bot"]["create_bot"] = True
+        if "geen bot" in q or "zonder bot" in q or "niet automatisch" in q:
+            patch["bot"]["create_bot"] = False
         if "live" in q:
             patch["bot"]["create_bot"] = True
             patch["bot"]["is_live"] = True
@@ -319,6 +494,8 @@ class FinnPlanService:
     def _apply_defaults(self, draft: Dict[str, Any]) -> None:
         if draft.get("asset"):
             draft["asset"] = str(draft["asset"]).upper()
+        if draft.get("plan_type") in {"dca", "trade"} and draft["bot"].get("create_bot") is None:
+            draft["bot"]["create_bot"] = True
         if not draft["setup"].get("timeframe"):
             draft["setup"]["timeframe"] = "1W" if draft.get("plan_type") == "dca" else None
         draft["setup"]["macro_score_range"] = draft["setup"].get("macro_score_range") or [30, 70]
@@ -329,6 +506,60 @@ class FinnPlanService:
             draft["setup"]["name"] = f"{draft['asset']} {label}"
         if draft.get("plan_type") == "dca" and draft["dca"].get("frequency") == "weekly" and not draft["dca"].get("day"):
             draft["dca"]["day"] = "monday"
+        if draft["bot"].get("create_bot") and not draft["bot"].get("risk_profile"):
+            draft["bot"]["risk_profile"] = "balanced"
+
+    def _action_id(self, payload: Dict[str, Any]) -> str:
+        normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return f"finn-plan-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:24]}"
+
+    def _action_risk(self, draft: Dict[str, Any]) -> str:
+        if draft.get("bot", {}).get("is_live"):
+            return "high"
+        if draft.get("plan_type") == "trade":
+            return "medium"
+        return "low"
+
+    def _guardrails(self, draft: Dict[str, Any]) -> Dict[str, Any]:
+        bot = draft.get("bot") or {}
+        return {
+            "requires_confirmation": True,
+            "execution_allowed": "paper_or_manual_only" if not bot.get("is_live") else "live_requires_explicit_user_confirm",
+            "live_trading": bool(bot.get("is_live")),
+            "can_execute_without_user": False,
+            "budget": {
+                "total_eur": float(bot.get("total_budget_eur") or 0),
+                "daily_limit_eur": float(bot.get("daily_limit_eur") or 0),
+                "max_asset_exposure_pct": float(bot.get("max_asset_exposure_pct") or 100),
+            },
+        }
+
+    def _flow_state(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "status": "ready_for_confirmation" if validation["can_confirm"] else "collecting",
+            "current_flow": "plan_creation",
+            "asset": draft.get("asset"),
+            "plan_type": draft.get("plan_type"),
+            "next_question": validation["next_question"],
+            "autonomy_level": "confirm_required",
+            "guardrails": self._guardrails(draft),
+            "version": FINN_STATE_VERSION,
+        }
+
+    def _reasoning(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> Dict[str, Any]:
+        reasons = []
+        if validation["missing_fields"]:
+            reasons.append(f"Ontbrekende velden: {', '.join(validation['missing_fields'])}")
+        if validation["invalid_fields"]:
+            reasons.append(f"Ongeldige velden: {', '.join(item['field'] for item in validation['invalid_fields'])}")
+        if not reasons:
+            reasons.append("Alle verplichte planvelden zijn aanwezig en validatie is geslaagd.")
+        return {
+            "confidence_score": 0.9 if validation["can_confirm"] else 0.55,
+            "risk_detected": bool(validation["invalid_fields"]) or bool(draft.get("bot", {}).get("is_live")),
+            "reasons": reasons,
+            "coaching_level": "plan_creation",
+        }
 
     def _validate_range(self, field: str, value: Any, invalid: List[Dict[str, str]]) -> None:
         if not isinstance(value, list) or len(value) != 2:
@@ -442,6 +673,140 @@ class FinnPlanService:
         summary = self._summary(draft)
         return f"Ik heb je plan klaarstaan. Controleer dit even en bevestig als het klopt:\n\n{summary}"
 
+    def _score_value(self, daily_scores: Optional[Dict[str, Any]], key: str) -> Optional[float]:
+        if not daily_scores:
+            return None
+        value = daily_scores.get(f"{key}_score")
+        return float(value) if value is not None else None
+
+    def _json_value(self, value: Any, fallback: Any) -> Any:
+        if value is None:
+            return fallback
+        if isinstance(value, (dict, list)):
+            return value
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except Exception:
+                return fallback
+        return fallback
+
+    def _in_range(self, score: Optional[float], score_range: Optional[List[int]]) -> Optional[bool]:
+        if score is None or not score_range:
+            return None
+        return score_range[0] <= score <= score_range[1]
+
+    def _evaluate_draft_against_scores(
+        self,
+        draft: Dict[str, Any],
+        daily_scores: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        setup = draft.get("setup") or {}
+        checks = {
+            "macro": {
+                "score": self._score_value(daily_scores, "macro"),
+                "range": setup.get("macro_score_range"),
+                "interpretation": (daily_scores or {}).get("macro_interpretation"),
+                "top_contributors": self._json_value((daily_scores or {}).get("macro_top_contributors"), []),
+            },
+            "technical": {
+                "score": self._score_value(daily_scores, "technical"),
+                "range": setup.get("technical_score_range"),
+                "interpretation": (daily_scores or {}).get("technical_interpretation"),
+                "top_contributors": self._json_value((daily_scores or {}).get("technical_top_contributors"), []),
+            },
+            "market": {
+                "score": self._score_value(daily_scores, "market"),
+                "range": setup.get("market_score_range"),
+                "interpretation": (daily_scores or {}).get("market_interpretation"),
+                "top_contributors": self._json_value((daily_scores or {}).get("market_top_contributors"), []),
+            },
+        }
+        for check in checks.values():
+            check["pass"] = self._in_range(check["score"], check["range"])
+        known = [c["pass"] for c in checks.values() if c["pass"] is not None]
+        is_active = bool(known) and all(known)
+        return {
+            "is_active": is_active,
+            "confidence": "low" if len(known) < 3 else "medium",
+            "checks": checks,
+            "has_scores": bool(daily_scores),
+        }
+
+    def _evaluate_setup_row(
+        self,
+        setup: Optional[Dict[str, Any]],
+        daily_scores: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        if not setup:
+            return {
+                "is_active": False,
+                "confidence": "low",
+                "checks": {},
+                "has_scores": bool(daily_scores),
+                "reason": "Ik vond nog geen opgeslagen setup voor dit asset.",
+            }
+        breakdown = self._json_value(setup.get("breakdown"), {})
+        return {
+            "is_active": bool(setup.get("is_active")),
+            "confidence": "medium" if daily_scores else "low",
+            "checks": breakdown if isinstance(breakdown, dict) else {},
+            "has_scores": bool(daily_scores),
+            "setup": {
+                "id": setup.get("id"),
+                "name": setup.get("name"),
+                "score": float(setup.get("score") or 0),
+            },
+        }
+
+    def _analysis_reasons(self, analysis: Dict[str, Any]) -> List[str]:
+        if analysis.get("reason"):
+            return [analysis["reason"]]
+        checks = analysis.get("checks") or {}
+        if isinstance(checks, dict) and all(label in checks for label in ["macro", "technical", "market"]):
+            reasons = []
+            for label in ["macro", "technical", "market"]:
+                check = checks.get(label) or {}
+                status = "binnen range" if check.get("pass") else "buiten range"
+                reasons.append(f"{label}: {check.get('score')} is {status}")
+            return reasons
+        setup = analysis.get("setup")
+        if setup:
+            return [f"Setup-score: {setup.get('score')}"]
+        return ["Onvoldoende scoredata voor betrouwbare uitleg."]
+
+    def _status_message(self, asset: str, analysis: Dict[str, Any], source: str) -> str:
+        if not analysis.get("has_scores"):
+            return (
+                f"Ik kan nog niet betrouwbaar zeggen of {asset} actief is, omdat ik geen scores van vandaag vind. "
+                "Zodra macro, technical en market scores beschikbaar zijn kan ik dit onderbouwen."
+            )
+
+        active_text = "actief" if analysis.get("is_active") else "niet actief"
+        if source == "draft":
+            lines = [f"Je conceptplan voor {asset} is nu {active_text} op basis van de huidige scores."]
+            checks = analysis.get("checks") or {}
+            for label in ["macro", "technical", "market"]:
+                check = checks.get(label) or {}
+                score = check.get("score")
+                score_range = check.get("range")
+                passed = check.get("pass")
+                status = "binnen range" if passed else "buiten range"
+                lines.append(f"- {label}: {score} versus {score_range} ({status})")
+                contributors = check.get("top_contributors") or []
+                if contributors:
+                    preview = ", ".join(str(item) for item in contributors[:2])
+                    lines.append(f"  Belangrijkste signalen: {preview}")
+            return "\n".join(lines)
+
+        setup = analysis.get("setup")
+        if not setup:
+            return analysis.get("reason") or f"Ik vond geen actieve {asset} setup."
+        return (
+            f"Je opgeslagen setup '{setup.get('name')}' voor {asset} is nu {active_text}. "
+            f"De setup-score staat op {setup.get('score')}. Gebruik dit als plan-check, niet als losse emotionele trigger."
+        )
+
     def _summary(self, draft: Dict[str, Any]) -> str:
         lines = [
             f"- Type: {draft.get('plan_type')}",
@@ -472,8 +837,22 @@ class FinnPlanService:
 
         draft = _deep_merge(empty_plan_draft(), action.get("payload") or {})
         self._apply_defaults(draft)
+        action_id = f"{action.get('id') or self._action_id(draft)}-u{user_id}"
+        acquired = await self._try_create_pending_action(user_id, action_id, action)
+        if not acquired:
+            existing_result = await self._wait_for_action_result(user_id, action_id)
+            if existing_result:
+                return existing_result
+            raise HTTPException(409, "Deze Finn actie wordt al verwerkt. Probeer zo opnieuw.")
+
         validation = self._validate(draft)
         if not validation["can_confirm"]:
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={
+                "ok": False,
+                "message": "Plan is nog niet geldig",
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+            })
             raise HTTPException(422, {
                 "message": "Plan is nog niet geldig",
                 "missing_fields": validation["missing_fields"],
@@ -512,39 +891,266 @@ class FinnPlanService:
         if current_alloc > 20.0:
             raise HTTPException(403, f"Guardrail geschonden: Je hebt al {current_alloc}% exposure in {asset} (max 20%).")
 
-        setup_payload = self._setup_payload(draft)
         setup_service = SetupService(self.session)
-        setup_result = await setup_service.save_setup(
-            SetupCreateSchema(**setup_payload),
-            setup_payload,
-            user_id,
-        )
-        setup_id = setup_result["setup_id"]
-
-        strategy_payload = self._strategy_payload(draft, setup_id)
         strategy_service = StrategyService(self.session)
-        strategy_result = await strategy_service.save_strategy(
-            StrategyCreateSchema(**strategy_payload),
-            strategy_payload,
-            user_id,
-        )
-        strategy_id = strategy_result["id"]
-
+        bot_service = BotService(self.session)
+        setup_id = None
+        strategy_id = None
         bot_id = None
-        if draft["bot"].get("create_bot"):
-            bot_payload = self._bot_payload(draft, strategy_id)
-            bot_service = BotService(self.session)
-            bot_result = await bot_service.create_bot_config(BotConfigCreateSchema(**bot_payload), user_id)
-            bot_id = bot_result.get("id")
 
-        return {
+        try:
+            draft["setup"]["name"] = await self._unique_setup_name(setup_service, draft["setup"]["name"], user_id)
+            setup_payload = self._setup_payload(draft)
+            setup_result = await setup_service.save_setup(
+                SetupCreateSchema(**setup_payload),
+                setup_payload,
+                user_id,
+            )
+            setup_id = setup_result["setup_id"]
+
+            strategy_payload = self._strategy_payload(draft, setup_id)
+            strategy_result = await strategy_service.save_strategy(
+                StrategyCreateSchema(**strategy_payload),
+                strategy_payload,
+                user_id,
+            )
+            strategy_id = strategy_result["id"]
+
+            if draft["bot"].get("create_bot"):
+                bot_payload = self._bot_payload(draft, strategy_id)
+                bot_result = await bot_service.create_bot_config(BotConfigCreateSchema(**bot_payload), user_id)
+                bot_id = bot_result.get("id")
+
+            verified = await self._verify_created_objects(user_id, setup_id, strategy_id, bot_id)
+        except Exception:
+            await self.session.rollback()
+            await self._cleanup_created(user_id, setup_id=setup_id, strategy_id=strategy_id, bot_id=bot_id)
+            await self._upsert_action_audit(
+                user_id,
+                action_id,
+                action,
+                status="failed",
+                result={
+                    "ok": False,
+                    "setup_id": setup_id,
+                    "strategy_id": strategy_id,
+                    "bot_id": bot_id,
+                },
+            )
+            raise
+
+        result = {
             "ok": True,
             "message": "Plan aangemaakt",
             "setup_id": setup_id,
             "strategy_id": strategy_id,
             "bot_id": bot_id,
             "draft": draft,
+            "action_id": action_id,
+            "verified": verified,
         }
+        await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
+        await self._log_intelligence_event(user_id, draft, result)
+        await self.clear_state(user_id)
+        return result
+
+    async def get_open_plan_state(self, user_id: int) -> Dict[str, Any]:
+        context = await self.hydrate_context(user_id, {})
+        draft = context.get("finn_draft")
+        if not isinstance(draft, dict) or not draft.get("plan_type"):
+            return {"ok": True, "has_draft": False}
+
+        validation = self._validate(draft)
+        message = self._build_message(draft, validation)
+        actions = []
+        if validation["can_confirm"]:
+            action_payload = deepcopy(draft)
+            action_id = self._action_id(action_payload)
+            actions.append({
+                "id": action_id,
+                "type": "create_plan",
+                "label": "Plan aanmaken",
+                "payload": action_payload,
+                "risk_level": self._action_risk(draft),
+                "requires_confirmation": True,
+                "autonomy_level": "confirm_required",
+                "guardrails": self._guardrails(draft),
+            })
+        return {
+            "ok": True,
+            "has_draft": True,
+            "response": message,
+            "intent": "plan_creation",
+            "flow": "plan_creation",
+            "draft": draft,
+            "state": self._flow_state(draft, validation),
+            "reasoning": self._reasoning(draft, validation),
+            "missing_fields": validation["missing_fields"],
+            "invalid_fields": validation["invalid_fields"],
+            "next_question": validation["next_question"],
+            "can_confirm": validation["can_confirm"],
+            "actions": actions,
+        }
+
+    async def _try_create_pending_action(self, user_id: int, action_id: str, action: Dict[str, Any]) -> bool:
+        if not self.session:
+            return True
+        payload = {
+            "action": action,
+            "result": None,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        row = await self.session.execute(text("""
+            INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at)
+            VALUES (:id, :user_id, 'finn_create_plan', CAST(:payload AS JSONB), 'pending', :expires_at)
+            ON CONFLICT (id) DO NOTHING
+            RETURNING id
+        """), {
+            "id": action_id,
+            "user_id": user_id,
+            "payload": json.dumps(payload),
+            "expires_at": datetime.utcnow() + timedelta(days=7),
+        })
+        acquired = row.fetchone() is not None
+        await self.session.commit()
+        return acquired
+
+    async def _wait_for_action_result(self, user_id: int, action_id: str) -> Optional[Dict[str, Any]]:
+        for _ in range(24):
+            result = await self._get_executed_action_result(user_id, action_id)
+            if result:
+                return result
+            await asyncio.sleep(0.25)
+        return await self._get_executed_action_result(user_id, action_id)
+
+    async def _get_executed_action_result(self, user_id: int, action_id: str) -> Optional[Dict[str, Any]]:
+        if not self.session:
+            return None
+        row = await self.session.execute(text("""
+            SELECT payload
+            FROM ai_pending_actions
+            WHERE id = :id AND user_id = :user_id AND status = 'executed'
+            LIMIT 1
+        """), {"id": action_id, "user_id": user_id})
+        existing = row.mappings().first()
+        if not existing:
+            return None
+        payload = existing["payload"] or {}
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        result = payload.get("result")
+        return result if isinstance(result, dict) else None
+
+    async def _upsert_action_audit(
+        self,
+        user_id: int,
+        action_id: str,
+        action: Dict[str, Any],
+        *,
+        status: str,
+        result: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        if not self.session:
+            return
+        payload = {
+            "action": action,
+            "result": result,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        await self.session.execute(text("""
+            INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at)
+            VALUES (:id, :user_id, 'finn_create_plan', CAST(:payload AS JSONB), :status, :expires_at)
+            ON CONFLICT (id) DO UPDATE SET
+                payload = EXCLUDED.payload,
+                status = EXCLUDED.status
+            WHERE ai_pending_actions.user_id = EXCLUDED.user_id
+        """), {
+            "id": action_id,
+            "user_id": user_id,
+            "payload": json.dumps(payload),
+            "status": status,
+            "expires_at": datetime.utcnow() + timedelta(days=7),
+        })
+        await self.session.commit()
+
+    async def _verify_created_objects(
+        self,
+        user_id: int,
+        setup_id: Optional[int],
+        strategy_id: Optional[int],
+        bot_id: Optional[int],
+    ) -> Dict[str, bool]:
+        setup_found = bool(setup_id and await SetupService(self.session).repository.get_setup_by_id(setup_id, user_id))
+        strategy_found = bool(strategy_id and await StrategyService(self.session).repository.get_raw_strategy_with_setup(strategy_id, user_id))
+        bot_found = True
+        if bot_id:
+            bot_found = bool(await BotService(self.session).repository.get_bot_config(user_id, bot_id))
+
+        verified = {
+            "setup": setup_found,
+            "strategy": strategy_found,
+            "bot": bot_found,
+        }
+        if not all(verified.values()):
+            raise HTTPException(500, f"Read-after-write verificatie faalde: {verified}")
+        return verified
+
+    async def _log_intelligence_event(self, user_id: int, draft: Dict[str, Any], result: Dict[str, Any]) -> None:
+        if not self.session:
+            return
+        await self.session.execute(text("""
+            INSERT INTO ai_intelligence_events (user_id, type, symbol, title, description, severity, payload, status)
+            VALUES (
+                :user_id,
+                'finn_plan_created',
+                :symbol,
+                :title,
+                :description,
+                'info',
+                CAST(:payload AS JSONB),
+                'active'
+            )
+        """), {
+            "user_id": user_id,
+            "symbol": draft.get("asset"),
+            "title": f"Finn heeft {draft.get('asset')} {draft.get('plan_type')} plan aangemaakt",
+            "description": "Setup, strategy en optioneel bot zijn via bevestigde Finn-actie aangemaakt.",
+            "payload": json.dumps({"draft": draft, "result": result}, default=str),
+        })
+        await self.session.commit()
+
+    async def _unique_setup_name(self, setup_service: SetupService, base_name: str, user_id: int) -> str:
+        name = (base_name or "Finn Plan").strip()
+        if not (await setup_service.check_name(name, user_id)).get("exists"):
+            return name
+
+        for suffix in range(2, 50):
+            candidate = f"{name} #{suffix}"
+            if not (await setup_service.check_name(candidate, user_id)).get("exists"):
+                return candidate
+        raise HTTPException(409, "Setupnaam bestaat al te vaak. Kies een andere naam.")
+
+    async def _cleanup_created(
+        self,
+        user_id: int,
+        *,
+        setup_id: Optional[int],
+        strategy_id: Optional[int],
+        bot_id: Optional[int],
+    ) -> None:
+        cleanup_steps = []
+        if bot_id:
+            cleanup_steps.append((BotService(self.session).delete_bot_config, bot_id))
+        if strategy_id:
+            cleanup_steps.append((StrategyService(self.session).delete_strategy, strategy_id))
+        if setup_id:
+            cleanup_steps.append((SetupService(self.session).delete_setup, setup_id))
+
+        for cleanup, object_id in cleanup_steps:
+            try:
+                await cleanup(object_id, user_id)
+            except Exception:
+                pass
 
     def _setup_payload(self, draft: Dict[str, Any]) -> Dict[str, Any]:
         setup = draft["setup"]
@@ -556,7 +1162,7 @@ class FinnPlanService:
             "setup_type": plan_type,
             "timeframe": setup["timeframe"],
             "dca_frequency": dca.get("frequency") if plan_type == "dca" else None,
-            "dca_day": dca.get("day") if plan_type == "dca" and dca.get("frequency") == "weekly" else None,
+            "dca_day": str(WEEKDAY_NUMBERS.get(str(dca.get("day") or "").lower(), dca.get("day"))) if plan_type == "dca" and dca.get("frequency") == "weekly" and dca.get("day") is not None else None,
             "dca_month_day": dca.get("month_day") if plan_type == "dca" and dca.get("frequency") == "monthly" else None,
             "min_macro_score": setup["macro_score_range"][0],
             "max_macro_score": setup["macro_score_range"][1],
@@ -608,4 +1214,5 @@ class FinnPlanService:
             "max_asset_exposure_pct": float(bot.get("max_asset_exposure_pct") or 100),
             "cadence": "daily",
             "base_currency": "EUR",
+            "symbol": draft["asset"],
         }

@@ -72,7 +72,12 @@ export default function RegisterPage() {
       router.replace("/dashboard");
     } catch (err) {
       console.error("❌ Register fout:", err);
-      showSnackbar("Serverfout bij account aanmaken", "danger");
+      showSnackbar(
+        typeof navigator !== "undefined" && !navigator.onLine
+          ? "Je lijkt offline. Controleer je internetverbinding."
+          : "Kan de server niet bereiken. Probeer opnieuw.",
+        "danger"
+      );
     } finally {
       setLoading(false);
     }

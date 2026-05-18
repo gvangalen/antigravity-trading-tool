@@ -139,12 +139,18 @@ class BotService:
         strategy_id = raw_payload.get("strategy_id")
         if strategy_id is not None:
             strategy_query = text("""
-                SELECT id FROM strategies
-                WHERE id = :strategy_id AND user_id = :user_id
+                SELECT s.id, COALESCE(st.symbol, raw.data->>'symbol') AS symbol
+                FROM strategies s
+                LEFT JOIN setups st ON st.id = s.setup_id
+                LEFT JOIN LATERAL (SELECT s.data::jsonb AS data) raw ON TRUE
+                WHERE s.id = :strategy_id AND s.user_id = :user_id
             """)
             res_strat = await self.session.execute(strategy_query, {"strategy_id": strategy_id, "user_id": user_id})
-            if not res_strat.fetchone():
+            strategy_row = res_strat.fetchone()
+            if not strategy_row:
                 raise HTTPException(400, f"De opgegeven strategy_id ({strategy_id}) bestaat niet of is niet van jou.")
+            if not raw_payload.get("symbol") and strategy_row[1]:
+                raw_payload["symbol"] = str(strategy_row[1]).upper()
 
         # 3. Budget checks
         budget_total = raw_payload.get("budget_total_eur", 0.0)
@@ -168,17 +174,47 @@ class BotService:
                     raise HTTPException(400, f"{label} moet een positief getal (of 0) zijn.")
 
         # Logical budget consistency validations
+        budget_total_num = float(budget_total or 0)
+        budget_daily_num = float(budget_daily or 0)
+        budget_min_num = float(budget_min or 0)
+        budget_max_num = float(budget_max or 0)
+
         if budget_total and budget_daily:
-            if float(budget_daily) > float(budget_total):
+            if budget_daily_num > budget_total_num:
                 raise HTTPException(400, "Daglimiet (budget_daily_limit_eur) mag niet groter zijn dan het totaal budget.")
 
         if budget_min and budget_max:
-            if float(budget_min) > float(budget_max):
+            if budget_min_num > budget_max_num:
                 raise HTTPException(400, "budget_min_order_eur mag niet groter zijn dan budget_max_order_eur.")
 
         if budget_max and budget_total:
-            if float(budget_max) > float(budget_total):
+            if budget_max_num > budget_total_num:
                 raise HTTPException(400, "budget_max_order_eur mag niet groter zijn dan het totaal budget.")
+
+        is_live = bool(raw_payload.get("is_live"))
+        mode_value = str(raw_payload.get("mode") or "manual").lower()
+        is_active = bool(raw_payload.get("is_active", True))
+        requires_budget = is_live or (is_active and mode_value in {"semi-auto", "auto"})
+        if requires_budget:
+            missing = [
+                label for label, value in [
+                    ("budget_total_eur", budget_total_num),
+                    ("budget_daily_limit_eur", budget_daily_num),
+                    ("budget_min_order_eur", budget_min_num),
+                    ("budget_max_order_eur", budget_max_num),
+                ]
+                if value <= 0
+            ]
+            if missing:
+                raise HTTPException(
+                    400,
+                    f"Live of automatische bots vereisen expliciete budgetlimieten: {', '.join(missing)}."
+                )
+
+        if is_live:
+            keys = await self.exchange_repo.get_active_keys(user_id)
+            if not keys:
+                raise HTTPException(400, "Live bot vereist actieve exchange keys voordat hij kan worden opgeslagen.")
 
         # 4. Exposure check
         exposure = raw_payload.get("max_asset_exposure_pct")
@@ -198,6 +234,9 @@ class BotService:
 
         mode = raw_payload.get("mode")
         if mode is not None:
+            if str(mode).lower() == "semi":
+                raw_payload["mode"] = "semi-auto"
+                mode = "semi-auto"
             if str(mode).lower() not in ["manual", "semi-auto", "auto"]:
                 raise HTTPException(400, "mode moet één van 'manual', 'semi-auto', of 'auto' zijn.")
 
@@ -209,6 +248,8 @@ class BotService:
     async def create_bot_config(self, payload: BotConfigCreateSchema, user_id: int) -> dict:
         data = payload.dict()
         data["user_id"] = user_id
+        data.setdefault("is_live", False)
+        data.setdefault("symbol", None)
 
         # Meticulously validate payload
         await self.validate_bot_payload(data, user_id, is_update=False)
@@ -390,6 +431,8 @@ class BotService:
         if not bot:
             raise HTTPException(404, "Bot niet gevonden.")
 
+        self._validate_manual_order_payload(payload)
+
         # Default values from payload
         price = payload.price
         amount_eur = payload.value_eur or (payload.quantity * payload.price)
@@ -505,8 +548,7 @@ class BotService:
         }
 
     async def create_manual_order(self, payload: BotManualOrderSchema, user_id: int) -> dict:
-        from datetime import date
-        from fastapi import HTTPException
+        self._validate_manual_order_payload(payload)
 
         # 1. Fetch bot config to get limits
         bot = await self.repository.get_bot_config(user_id, payload.bot_id)
@@ -516,8 +558,14 @@ class BotService:
         # 2. Fetch current stats
         stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
         
-        # 3. Guardrail check for BUY orders
+        # 3. Guardrail check for BUY and SELL orders
         notional = round(payload.quantity * payload.price, 2)
+        if notional <= 0:
+            raise HTTPException(400, "Orderwaarde moet groter zijn dan 0.")
+
+        min_order = float(bot.get("budget_min_order_eur", 0) or 0)
+        if min_order > 0 and notional < (min_order - 0.01):
+            raise HTTPException(400, f"Minimale ordergrootte niet gehaald (Min {min_order} EUR)")
         
         if payload.side == "buy":
             # Total Budget Check
@@ -536,6 +584,55 @@ class BotService:
             max_order = float(bot.get("budget_max_order_eur", 0))
             if max_order > 0 and notional > (max_order + 0.01):
                 raise HTTPException(400, f"Maximale ordergrootte overschreden (Max {max_order} EUR)")
+
+            guardrails = apply_guardrails(
+                proposed_amount_eur=notional,
+                portfolio_value_eur=max(total_budget, invested, notional),
+                current_asset_value_eur=max(float(stats.get("net_qty", 0) or 0), 0.0) * payload.price,
+                invested_eur=invested,
+                today_allocated_eur=today_spent,
+                cash_balance_eur=max(total_budget - invested, 0.0) if total_budget > 0 else notional,
+                kill_switch=bool(bot.get("is_active", True)),
+                max_trade_risk_eur=bot.get("budget_max_order_eur"),
+                daily_allocation_eur=bot.get("budget_daily_limit_eur"),
+                max_asset_exposure_pct=bot.get("max_asset_exposure_pct"),
+                total_budget_eur=bot.get("budget_total_eur"),
+                min_order_eur=bot.get("budget_min_order_eur"),
+            )
+            if not guardrails.get("allowed", False):
+                raise HTTPException(400, guardrails.get("reason") or "Order geblokkeerd door bot guardrails.")
+        else:
+            current_qty = max(float(stats.get("net_qty", 0) or 0), 0.0)
+            if payload.quantity > (current_qty + 1e-12):
+                raise HTTPException(
+                    400,
+                    f"Niet genoeg positie om te verkopen. Beschikbaar: {round(current_qty, 8)} {payload.symbol}."
+                )
+
+        order_id, is_new_order = await self.repository.create_manual_order(
+            user_id,
+            payload.bot_id,
+            payload.symbol,
+            payload.side,
+            payload.quantity,
+            payload.price,
+            idempotency_key=payload.idempotency_key,
+            quote_amount_eur=notional,
+            status="pending" if bot.get("is_live") else "filled",
+        )
+        if not is_new_order:
+            existing = await self.repository.get_manual_order_by_idempotency_key(user_id, payload.idempotency_key)
+            return {
+                "ok": True,
+                "duplicate": True,
+                "order_id": order_id,
+                "symbol": existing.get("symbol") if existing else payload.symbol,
+                "side": existing.get("side") if existing else payload.side,
+                "quantity": float(existing.get("quantity")) if existing and existing.get("quantity") is not None else payload.quantity,
+                "price": float(existing.get("limit_price")) if existing and existing.get("limit_price") is not None else payload.price,
+                "notional_eur": float(existing.get("quote_amount_eur")) if existing and existing.get("quote_amount_eur") is not None else notional,
+                "mode": "manual",
+            }
 
         if payload.side == "buy":
             cash_delta = -notional
@@ -586,14 +683,26 @@ class BotService:
                 # Update payload values for internal ledger consistency
                 payload.quantity = final_qty
                 payload.price = final_price
+            except HTTPException:
+                await self.repository.update_manual_order_status(user_id, order_id, "failed")
+                await self.session.commit()
+                raise
             except Exception as e:
+                await self.repository.update_manual_order_status(user_id, order_id, "failed")
+                await self.session.commit()
                 logger.error(f"❌ Exchange Order Failed: {str(e)}")
                 raise HTTPException(500, f"Order bij exchange mislukt: {str(e)}")
 
-        order_id = await self.repository.create_manual_order(
-            user_id, payload.bot_id, payload.symbol, payload.side, payload.quantity, payload.price
-        )
-        
+        if bot.get("is_live"):
+            notional = round(payload.quantity * payload.price, 2)
+            if payload.side == "buy":
+                cash_delta = -notional
+                qty_delta = payload.quantity
+            else:
+                cash_delta = notional
+                qty_delta = -payload.quantity
+            await self.repository.update_manual_order_status(user_id, order_id, "filled")
+
         await self.repository.create_bot_execution(user_id, order_id, payload.quantity, payload.price)
         await self.repository.insert_bot_ledger(user_id, payload.bot_id, order_id, payload.symbol, cash_delta, qty_delta, payload.price)
         
@@ -602,8 +711,35 @@ class BotService:
         
         return {
             "ok": True, "order_id": order_id, "symbol": payload.symbol, "side": payload.side,
-            "quantity": payload.quantity, "price": payload.price, "notional_eur": notional, "mode": "manual"
+            "quantity": payload.quantity,
+            "price": payload.price,
+            "notional_eur": notional,
+            "mode": "manual",
+            "duplicate": False,
         }
+
+    def _validate_manual_order_payload(self, payload: BotManualOrderSchema) -> None:
+        side = str(payload.side or "").lower().strip()
+        if side not in {"buy", "sell"}:
+            raise HTTPException(400, "side moet 'buy' of 'sell' zijn.")
+        payload.side = side
+
+        symbol = str(payload.symbol or "").strip().upper()
+        if len(symbol) < 2 or len(symbol) > 20:
+            raise HTTPException(400, "symbol is verplicht en moet 2-20 karakters lang zijn.")
+        payload.symbol = symbol
+
+        if payload.quantity is None or float(payload.quantity) <= 0:
+            raise HTTPException(400, "quantity moet groter zijn dan 0.")
+        if payload.price is None or float(payload.price) <= 0:
+            raise HTTPException(400, "price moet groter zijn dan 0.")
+        if payload.value_eur is not None and float(payload.value_eur) <= 0:
+            raise HTTPException(400, "value_eur moet groter zijn dan 0 wanneer meegegeven.")
+        if payload.idempotency_key is not None:
+            key = str(payload.idempotency_key).strip()
+            if len(key) < 8 or len(key) > 120:
+                raise HTTPException(400, "idempotency_key moet tussen 8 en 120 karakters lang zijn.")
+            payload.idempotency_key = key
 
     async def skip_bot_today(self, bot_id: int, report_date_str: Optional[str], user_id: int) -> dict:
         report_date = date.fromisoformat(report_date_str) if report_date_str else date.today()

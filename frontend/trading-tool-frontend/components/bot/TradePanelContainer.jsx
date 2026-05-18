@@ -187,8 +187,14 @@ export default function TradePanelContainer({
   ===================================================== */
 
   async function handleOrderRequest(order) {
-    setDraftOrder(order);
-    await refreshPreview(order);
+    const idempotencyKey =
+      order.idempotency_key ||
+      (typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const safeOrder = { ...order, idempotency_key: idempotencyKey };
+    setDraftOrder(safeOrder);
+    await refreshPreview(safeOrder);
     setShowPreview(true);
   }
 
@@ -228,6 +234,7 @@ export default function TradePanelContainer({
         quantity: previewData.quantity,
         price: previewData.price,
         value_eur: previewData.gross_eur,
+        idempotency_key: draftOrder.idempotency_key,
       });
 
       /* ---------- REFRESH LOCAL BALANCE ---------- */

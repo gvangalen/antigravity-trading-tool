@@ -151,9 +151,12 @@ export function AuthProvider({ children }) {
       });
 
       if (!res.ok) {
+        const body = await res.json().catch(() => null);
         return {
           success: false,
-          message: "Ongeldige inloggegevens",
+          message: res.status === 401
+            ? "E-mail of wachtwoord klopt niet."
+            : body?.detail || "Login server reageert niet goed. Probeer opnieuw.",
         };
       }
 
@@ -171,7 +174,9 @@ export function AuthProvider({ children }) {
       console.error("❌ Login fout:", err);
       return {
         success: false,
-        message: "Serverfout",
+        message: typeof navigator !== "undefined" && !navigator.onLine
+          ? "Je lijkt offline. Controleer je internetverbinding."
+          : "Kan de server niet bereiken. Probeer opnieuw.",
       };
     }
   }, [loadSession]);

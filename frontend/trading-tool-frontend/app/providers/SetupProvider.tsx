@@ -25,22 +25,25 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
     async function loadActiveSetup() {
       // 🛑 Only fetch if we have a definitive session and a user
       if (!sessionChecked || !user) {
+        if (sessionChecked && !user) setActiveSetup(null);
         if (sessionChecked) setSetupLoading(false);
         return;
       }
 
+      setSetupLoading(true);
       try {
-        const resActive = await fetchAuth('/api/setups/active', { method: 'GET' }).catch(() => null);
+        const resActive = await fetchAuth('/api/setups/active', { method: 'GET' });
         const active = resActive?.active ?? null;
         if (active) {
           setActiveSetup(active);
         } else {
-          const resLast = await fetchAuth('/api/setups/last', { method: 'GET' }).catch(() => null);
+          const resLast = await fetchAuth('/api/setups/last', { method: 'GET' });
           const last = resLast?.setup ?? null;
           setActiveSetup(last || null);
         }
       } catch (err) {
         console.error("❌ SetupProvider initial setup error:", err);
+        setActiveSetup(null);
       } finally {
         setSetupLoading(false);
       }

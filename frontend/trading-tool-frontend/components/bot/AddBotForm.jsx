@@ -40,6 +40,11 @@ export default function AddBotForm({
     is_live: false,
     risk_profile: "balanced",
     base_currency: "EUR",
+    budget_total_eur: 0,
+    budget_daily_limit_eur: 0,
+    budget_min_order_eur: 0,
+    budget_max_order_eur: 0,
+    max_asset_exposure_pct: 100,
   });
 
   /* =====================================================
@@ -60,6 +65,11 @@ export default function AddBotForm({
       is_live: initialData.is_live ?? false,
       risk_profile: initialData.risk_profile ?? "balanced",
       base_currency: initialData.base_currency ?? "EUR",
+      budget_total_eur: initialData.budget_total_eur ?? initialData.budget?.total_eur ?? 0,
+      budget_daily_limit_eur: initialData.budget_daily_limit_eur ?? initialData.budget?.daily_limit_eur ?? 0,
+      budget_min_order_eur: initialData.budget_min_order_eur ?? initialData.budget?.min_order_eur ?? 0,
+      budget_max_order_eur: initialData.budget_max_order_eur ?? initialData.budget?.max_order_eur ?? 0,
+      max_asset_exposure_pct: initialData.max_asset_exposure_pct ?? initialData.budget?.max_asset_exposure_pct ?? 100,
     });
   }, [initialData]);
 
@@ -212,7 +222,7 @@ export default function AddBotForm({
               }
             >
               <option value="manual">Manual Approval</option>
-              <option value="semi">Semi-Autonomous</option>
+              <option value="semi-auto">Semi-Autonomous</option>
               <option value="auto">Full-Autonomous</option>
             </select>
             <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
@@ -274,6 +284,31 @@ export default function AddBotForm({
           </div>
         </div>
       </div>
+
+      {(form.is_live || form.mode !== "manual") && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            ["budget_total_eur", "Total Budget"],
+            ["budget_daily_limit_eur", "Daily Limit"],
+            ["budget_min_order_eur", "Min Order"],
+            ["budget_max_order_eur", "Max Order"],
+          ].map(([key, label]) => (
+            <div key={key} className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                {label}
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="w-full bg-card border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 text-sm font-bold text-foreground focus:border-blue-600 transition-all outline-none"
+                value={form[key]}
+                onChange={(e) => setForm((s) => ({ ...s, [key]: Number(e.target.value) }))}
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* PROFILE DESCRIPTION */}
       <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border-2 border-slate-100 dark:border-slate-800 flex items-center gap-4 transition-all hover:bg-slate-100">

@@ -90,7 +90,7 @@ export default function LandingPage() {
                     <ArrowRight size={16} />
                   </Link>
                   <Link 
-                    href="/dashboard" 
+                    href="/login?next=/dashboard"
                     className="w-full sm:w-auto px-10 py-5 rounded-2xl border-2 border-[var(--color-border)] hover:border-blue-600/30 text-[12px] font-black uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 active:scale-95"
                   >
                     View Dashboard

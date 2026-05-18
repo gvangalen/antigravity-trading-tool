@@ -302,6 +302,8 @@ export const createManualOrder = async ({
   side,
   quantity,
   price,
+  value_eur,
+  idempotency_key,
 }) => {
   if (!bot_id) throw new Error("bot_id is verplicht");
   if (!side) throw new Error("side is verplicht");
@@ -321,6 +323,8 @@ export const createManualOrder = async ({
         side,
         quantity: qty,
         price: pr,
+        value_eur: toNumber(value_eur, undefined),
+        idempotency_key,
       }),
     })
   );

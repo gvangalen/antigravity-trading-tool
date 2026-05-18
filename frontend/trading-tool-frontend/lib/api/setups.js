@@ -20,7 +20,7 @@ export const fetchSetups = async ({ setup_type = '' } = {}) => {
   } catch (err) {
     console.error('❌ [fetchSetups] Fout:', err);
     toast.error('Setups laden mislukt.');
-    return [];
+    throw err;
   }
 };
 

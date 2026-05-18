@@ -15,6 +15,7 @@ class BotConfigCreateSchema(BaseModel):
     max_asset_exposure_pct: float = 100.0
     cadence: str = "daily"
     base_currency: str = "EUR"
+    symbol: Optional[str] = None
 
 class BotConfigUpdateSchema(BaseModel):
     name: Optional[str] = None
@@ -43,6 +44,7 @@ class BotManualOrderSchema(BaseModel):
     quantity: float
     price: float
     value_eur: Optional[float] = None
+    idempotency_key: Optional[str] = None
 
 class TradePlanUpsertSchema(BaseModel):
     entry_plan: List[Dict[str, Any]] = []
