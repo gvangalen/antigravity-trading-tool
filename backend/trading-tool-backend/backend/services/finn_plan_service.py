@@ -21,6 +21,7 @@ from backend.services.strategy_service import StrategyService
 
 SUPPORTED_ASSETS = {"BTC", "ETH", "SOL"}
 KNOWN_ASSET_CANDIDATES = ("BTC", "ETH", "SOL", "DOGE", "XRP", "ADA", "BNB", "AVAX", "LINK", "MATIC", "PEPE")
+NUMBER_WITH_DELIMITER = r"([0-9][0-9.,]*)(?=\s|,|/|$)"
 FINN_STATE_VERSION = 2
 WEEKDAYS = {
     "maandag": "monday",
@@ -158,11 +159,16 @@ def _extract_score_range(text: str, label: str) -> Optional[List[int]]:
 
 
 def _extract_targets(text: str) -> Optional[List[float]]:
-    target_match = re.search(r"(?:targets?|tp)\s*(?:op|van|=|:)?\s*([0-9.,\s/]+)", text, re.IGNORECASE)
+    target_match = re.search(
+        r"(?:targets?|tp)\s*(?:op|van|=|:)?\s*([0-9][0-9.,]*(?:\s*(?:,|/|\ben\b|\band\b|\s)\s*[0-9][0-9.,]*)*)",
+        text,
+        re.IGNORECASE,
+    )
     if not target_match:
         return None
     targets = []
-    for raw in re.split(r"[,/\s]+", target_match.group(1).strip()):
+    normalized = re.sub(r"\b(?:en|and)\b", ",", target_match.group(1), flags=re.IGNORECASE)
+    for raw in re.split(r"[,/\s]+", normalized.strip()):
         value = _number(raw)
         if value is not None:
             targets.append(value)
@@ -474,14 +480,21 @@ class FinnPlanService:
             if value:
                 patch["strategy"]["base_amount_eur"] = value
 
-        entry = re.search(r"entry\s*(?:op|=|:)?\s*([0-9][0-9.,]*)", q)
+        entry = re.search(rf"entry\s*(?:op|=|:)?\s*{NUMBER_WITH_DELIMITER}", q)
         if entry:
             patch["strategy"]["entry"] = _number(entry.group(1))
+        elif has_trade_language:
+            entry_hint = re.search(
+                rf"(?:breakout\s+)?(?:boven|above|bij|rond)\s*{NUMBER_WITH_DELIMITER}",
+                q,
+            )
+            if entry_hint:
+                patch["strategy"]["entry"] = _number(entry_hint.group(1))
 
-        stop = re.search(r"stop\s*loss|stoploss", q)
+        stop = re.search(r"stop\s*(?:loss)?|stoploss", q)
         if stop:
             after = q[stop.end():]
-            value_match = re.search(r"(?:op|=|:)?\s*([0-9][0-9.,]*)", after)
+            value_match = re.search(rf"(?:op|=|:)?\s*{NUMBER_WITH_DELIMITER}", after)
             if value_match:
                 patch["strategy"]["stop_loss"] = _number(value_match.group(1))
 

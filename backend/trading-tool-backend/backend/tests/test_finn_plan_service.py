@@ -54,6 +54,53 @@ def test_trade_plan_with_entry_stop_and_targets_is_confirmable():
     assert result["draft"]["strategy"]["targets"] == [180, 200]
 
 
+def test_trade_plan_understands_natural_breakout_language():
+    result = _service().build_response(
+        "Ik wil SOL kopen bij breakout boven 180 op 4H met stop 160 targets 210 en 240 voor 100 euro"
+    )
+
+    assert result["can_confirm"] is True
+    assert result["draft"]["plan_type"] == "trade"
+    assert result["draft"]["asset"] == "SOL"
+    assert result["draft"]["setup"]["timeframe"] == "4H"
+    assert result["draft"]["strategy"]["entry"] == 180
+    assert result["draft"]["strategy"]["stop_loss"] == 160
+    assert result["draft"]["strategy"]["targets"] == [210, 240]
+    assert result["actions"][0]["type"] == "create_plan"
+
+
+def test_trade_follow_up_completes_ambiguous_buy_intent():
+    service = _service()
+    first = service.build_response("Koop agressief ETH")
+
+    assert first["can_confirm"] is False
+    assert first["next_question"] == "plan_type"
+
+    second = service.build_response(
+        "Maak er een trade van op 4H met entry 3000 stop 2800 target 3600 voor 100 euro",
+        {"finn_draft": first["draft"]},
+    )
+
+    assert second["can_confirm"] is True
+    assert second["draft"]["plan_type"] == "trade"
+    assert second["draft"]["asset"] == "ETH"
+    assert second["draft"]["bot"]["risk_profile"] == "aggressive"
+    assert second["draft"]["strategy"]["entry"] == 3000
+    assert second["draft"]["strategy"]["stop_loss"] == 2800
+    assert second["draft"]["strategy"]["targets"] == [3600]
+
+
+def test_trade_rejects_stop_above_entry_and_targets_below_entry():
+    result = _service().build_response(
+        "Maak een BTC trade 4H met 100 euro entry 100 stop 110 targets 90 en 120"
+    )
+
+    assert result["can_confirm"] is False
+    assert {"field": "strategy.stop_loss", "reason": "voor long trades moet stop-loss lager zijn dan entry"} in result["invalid_fields"]
+    assert {"field": "strategy.targets", "reason": "voor long trades moeten targets boven entry liggen"} in result["invalid_fields"]
+    assert result["actions"] == []
+
+
 def test_monthly_dca_day_above_28_is_invalid():
     result = _service().build_response("Maak een maandelijkse BTC DCA op dag 31 van 100 euro")
 
