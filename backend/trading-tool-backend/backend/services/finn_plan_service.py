@@ -992,7 +992,15 @@ class FinnPlanService:
     async def get_open_plan_state(self, user_id: int) -> Dict[str, Any]:
         context = await self.hydrate_context(user_id, {})
         draft = context.get("finn_draft")
-        if not isinstance(draft, dict) or not draft.get("plan_type"):
+        has_recoverable_draft = (
+            isinstance(draft, dict)
+            and (
+                draft.get("plan_type")
+                or draft.get("asset")
+                or isinstance(draft.get("_clarification"), dict)
+            )
+        )
+        if not has_recoverable_draft:
             return {"ok": True, "has_draft": False}
 
         validation = self._validate(draft)

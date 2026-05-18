@@ -1,3 +1,5 @@
+import asyncio
+
 from backend.services.finn_plan_service import FinnPlanService
 
 
@@ -118,6 +120,31 @@ def test_vague_btc_intent_asks_for_plan_type():
     assert result["draft"]["asset"] == "BTC"
     assert result["next_question"] == "plan_type"
     assert result["actions"] == []
+
+
+def test_open_plan_state_restores_pre_plan_clarifying_drafts():
+    service = _service()
+    cases = [
+        ("Koop agressief ETH", "plan_type", "ETH"),
+        ("Misschien BTC of DOGE", "asset", None),
+        ("Ik wil iets met BTC doen", "plan_type", "BTC"),
+    ]
+
+    async def hydrate_context(_user_id, _context):
+        return {"finn_draft": current_draft}
+
+    service.hydrate_context = hydrate_context
+
+    for prompt, next_question, asset in cases:
+        current_draft = service.build_response(prompt)["draft"]
+
+        state = asyncio.run(service.get_open_plan_state(1))
+
+        assert state["has_draft"] is True
+        assert state["can_confirm"] is False
+        assert state["next_question"] == next_question
+        assert state["draft"]["asset"] == asset
+        assert state["actions"] == []
 
 
 def test_user_can_correct_asset_and_amount_in_follow_up():
