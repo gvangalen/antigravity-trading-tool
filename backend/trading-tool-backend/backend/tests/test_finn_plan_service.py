@@ -74,6 +74,52 @@ def test_mixed_dca_and_trade_language_asks_for_plan_type():
     assert result["actions"] == []
 
 
+def test_aggressive_eth_buy_enters_clarifying_plan_flow():
+    service = _service()
+
+    assert service.looks_like_plan_request("Koop agressief ETH") is True
+
+    result = service.build_response("Koop agressief ETH")
+
+    assert result["intent"] == "plan_creation"
+    assert result["can_confirm"] is False
+    assert result["draft"]["asset"] == "ETH"
+    assert result["draft"]["bot"]["risk_profile"] == "aggressive"
+    assert result["next_question"] == "plan_type"
+    assert "plan_type" in result["missing_fields"]
+    assert result["actions"] == []
+
+
+def test_multiple_or_unsupported_assets_ask_for_asset_clarification():
+    service = _service()
+
+    assert service.looks_like_plan_request("Misschien BTC of DOGE") is True
+
+    result = service.build_response("Misschien BTC of DOGE")
+
+    assert result["can_confirm"] is False
+    assert result["next_question"] == "asset"
+    assert "asset" in result["missing_fields"]
+    assert result["invalid_fields"] == [
+        {"field": "asset", "reason": "kies één ondersteund asset: BTC, ETH of SOL"}
+    ]
+    assert "BTC, ETH en SOL" in result["response"]
+    assert result["actions"] == []
+
+
+def test_vague_btc_intent_asks_for_plan_type():
+    service = _service()
+
+    assert service.looks_like_plan_request("Ik wil iets met BTC doen") is True
+
+    result = service.build_response("Ik wil iets met BTC doen")
+
+    assert result["can_confirm"] is False
+    assert result["draft"]["asset"] == "BTC"
+    assert result["next_question"] == "plan_type"
+    assert result["actions"] == []
+
+
 def test_user_can_correct_asset_and_amount_in_follow_up():
     service = _service()
     first = service.build_response("Maak een wekelijkse BTC DCA van 100 euro")

@@ -20,6 +20,7 @@ from backend.services.strategy_service import StrategyService
 
 
 SUPPORTED_ASSETS = {"BTC", "ETH", "SOL"}
+KNOWN_ASSET_CANDIDATES = ("BTC", "ETH", "SOL", "DOGE", "XRP", "ADA", "BNB", "AVAX", "LINK", "MATIC", "PEPE")
 FINN_STATE_VERSION = 2
 WEEKDAYS = {
     "maandag": "monday",
@@ -168,6 +169,15 @@ def _extract_targets(text: str) -> Optional[List[float]]:
     return targets or None
 
 
+def _asset_mentions(text: str) -> List[str]:
+    seen = []
+    upper = (text or "").upper()
+    for symbol in KNOWN_ASSET_CANDIDATES:
+        if re.search(rf"\b{re.escape(symbol)}\b", upper) and symbol not in seen:
+            seen.append(symbol)
+    return seen
+
+
 class FinnPlanService:
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
@@ -221,18 +231,31 @@ class FinnPlanService:
         q = (query or "").lower()
         if draft and draft.get("plan_type"):
             return True
+        if self.looks_like_status_request(query):
+            return False
         intent_words = [
             "maak", "aanmaken", "creeer", "creeër", "bouw", "instellen",
             "ik wil", "wil een", "wil elke", "wil iedere", "maak een",
+            "misschien", "twijfel", "iets met",
         ]
         plan_words = [
             "setup", "strategie", "strategy", "dca", "trade", "traden",
             "entry", "stop loss", "stoploss", "target", "accumuleren",
             "wekelijks", "dagelijks", "maandelijks", "elke week",
             "iedere week", "elke dag", "iedere dag", "elke maand",
-            "iedere maand", "kopen", "koop",
+            "iedere maand", "kopen", "koop", "buy", "long", "short",
+            "agressief", "aggressive", "breakout",
         ]
-        return any(word in q for word in intent_words) and any(word in q for word in plan_words)
+        if any(word in q for word in intent_words) and any(word in q for word in plan_words):
+            return True
+
+        asset_mentions = _asset_mentions(query)
+        vague_asset_words = ["misschien", "twijfel", "iets met"]
+        return bool(asset_mentions) and (
+            any(word in q for word in plan_words)
+            or any(word in q for word in vague_asset_words)
+            or len(asset_mentions) > 1
+        )
 
     def looks_like_status_request(self, query: str) -> bool:
         q = (query or "").lower()
@@ -398,11 +421,19 @@ class FinnPlanService:
         if has_dca_language and has_trade_language:
             patch["plan_type"] = None
 
-        found_symbols = re.findall(r"\b[A-Z]{2,5}\b", query.upper())
-        for symbol in found_symbols:
-            if symbol in SUPPORTED_ASSETS:
-                patch["asset"] = symbol
-                break
+        found_symbols = _asset_mentions(query)
+        supported_symbols = [symbol for symbol in found_symbols if symbol in SUPPORTED_ASSETS]
+        unsupported_symbols = [symbol for symbol in found_symbols if symbol not in SUPPORTED_ASSETS]
+        if len(found_symbols) == 1 and supported_symbols:
+            patch["asset"] = supported_symbols[0]
+            patch["_clarification"] = False
+        elif found_symbols:
+            patch["_clarification"] = {
+                "field": "asset",
+                "reason": "kies één ondersteund asset: BTC, ETH of SOL",
+                "mentions": found_symbols,
+                "unsupported": unsupported_symbols,
+            }
 
         timeframe = re.search(r"\b(1M|1W|1D|4H|1H|15M|5M)\b", query.upper())
         if timeframe:
@@ -572,6 +603,8 @@ class FinnPlanService:
     def _validate(self, draft: Dict[str, Any]) -> Dict[str, Any]:
         missing: List[str] = []
         invalid: List[Dict[str, str]] = []
+        clarification = draft.get("_clarification") if isinstance(draft.get("_clarification"), dict) else {}
+        priority_question = clarification.get("field") if clarification else None
 
         if draft.get("plan_type") not in {"dca", "trade"}:
             missing.append("plan_type")
@@ -579,6 +612,8 @@ class FinnPlanService:
             missing.append("asset")
         elif draft["asset"] not in SUPPORTED_ASSETS:
             invalid.append({"field": "asset", "reason": "asset wordt nog niet ondersteund"})
+        if clarification.get("field") == "asset":
+            invalid.append({"field": "asset", "reason": clarification.get("reason", "asset moet verduidelijkt worden")})
         if not draft["setup"].get("name"):
             missing.append("setup.name")
         if not draft["setup"].get("timeframe"):
@@ -631,7 +666,7 @@ class FinnPlanService:
         elif not isinstance(amount, (int, float)) or amount <= 0:
             invalid.append({"field": "strategy.base_amount_eur", "reason": "bedrag moet groter dan 0 zijn"})
 
-        next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
+        next_question = priority_question or (missing[0] if missing else (invalid[0]["field"] if invalid else None))
         return {
             "missing_fields": missing,
             "invalid_fields": invalid,
@@ -640,15 +675,15 @@ class FinnPlanService:
         }
 
     def _build_message(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> str:
+        next_question = validation["next_question"]
+        if next_question == "asset":
+            return "Voor welk asset wil je dit plan maken? Ik ondersteun nu BTC, ETH en SOL."
         if validation["invalid_fields"]:
             issue = validation["invalid_fields"][0]
             return f"Ik zie een probleem met {issue['field']}: {issue['reason']}. Wat wil je hiervoor instellen?"
 
-        next_question = validation["next_question"]
         if next_question == "plan_type":
             return "Bedoel je een DCA-plan om periodiek te accumuleren, of een trade-plan met entry, stop-loss en targets?"
-        if next_question == "asset":
-            return "Voor welk asset wil je dit plan maken? Ik ondersteun nu BTC, ETH en SOL."
         if next_question == "setup.timeframe":
             return "Welke timeframe hoort bij dit plan? Bijvoorbeeld 1W voor DCA of 4H/1D voor een trade."
         if next_question == "strategy.base_amount_eur":
