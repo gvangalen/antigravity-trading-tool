@@ -919,7 +919,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 {m.action && m.action.type !== "action_card" && !m.draft?.plan_type && m.isComplete !== false && (
                   <ActionCard action={m.action} onAction={handleActionClick} />
                 )}
-                {m.draft && !m.draft?.plan_type && m.draft.type !== "action_card" && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
+                {m.draft && m.intent !== "plan_creation" && m.flow !== "plan_creation" && !m.draft?.plan_type && m.draft.type !== "action_card" && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
                   <DraftCard 
                     draft={m.draft} 
                     onCancel={() => handleCancelDraft(i)} 
