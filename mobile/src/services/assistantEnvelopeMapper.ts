@@ -111,7 +111,7 @@ function describeAction(action: AssistantAction) {
 }
 
 export function describeDraft(draft: AssistantDraft) {
-  const payload = draft.payload;
+  const payload = draft.payload || {};
   const symbol = typeof payload.symbol === 'string' ? payload.symbol : 'Asset';
   const title =
     typeof payload.name === 'string'
