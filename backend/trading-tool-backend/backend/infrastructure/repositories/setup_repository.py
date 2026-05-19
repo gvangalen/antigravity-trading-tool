@@ -8,6 +8,9 @@ class SetupRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    def _as_optional_text(self, value):
+        return str(value) if value is not None else None
+
     async def check_name_exists(self, name: str, user_id: int) -> bool:
         query = text("""
             SELECT id FROM setups
@@ -56,8 +59,8 @@ class SetupRepository:
             "setup_type": payload.get("setup_type"),
             
             "dca_frequency": payload.get("dca_frequency"),
-            "dca_day": payload.get("dca_day"),
-            "dca_month_day": payload.get("dca_month_day"),
+            "dca_day": self._as_optional_text(payload.get("dca_day")),
+            "dca_month_day": self._as_optional_text(payload.get("dca_month_day")),
             
             "account_type": payload.get("account_type"),
             "min_investment": payload.get("min_investment"),

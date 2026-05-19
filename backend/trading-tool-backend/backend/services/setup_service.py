@@ -8,6 +8,30 @@ import asyncio
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.schemas.trading_schema import SetupCreateSchema
 
+WEEKDAY_TO_NUMBER = {
+    "1": 1,
+    "monday": 1,
+    "maandag": 1,
+    "2": 2,
+    "tuesday": 2,
+    "dinsdag": 2,
+    "3": 3,
+    "wednesday": 3,
+    "woensdag": 3,
+    "4": 4,
+    "thursday": 4,
+    "donderdag": 4,
+    "5": 5,
+    "friday": 5,
+    "vrijdag": 5,
+    "6": 6,
+    "saturday": 6,
+    "zaterdag": 6,
+    "7": 7,
+    "sunday": 7,
+    "zondag": 7,
+}
+
 # =========================================================
 # SYNCHRONOUS WRAPPERS FOR LEGACY COMPONENTS
 # =========================================================
@@ -20,6 +44,58 @@ class SetupService:
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
         self.repository = SetupRepository(db_session)
+
+    def _normalize_dca_day(self, value: Any) -> str:
+        if value is None or value == "":
+            raise ValueError()
+        key = str(value).strip().lower()
+        day = WEEKDAY_TO_NUMBER.get(key)
+        if day is None:
+            day = int(value)
+        if day < 1 or day > 7:
+            raise ValueError()
+        return str(day)
+
+    def _normalize_dca_month_day(self, value: Any) -> str:
+        if value is None or value == "":
+            raise ValueError()
+        month_day = int(value)
+        if month_day < 1 or month_day > 31:
+            raise ValueError()
+        return str(month_day)
+
+    def normalize_dca_fields(self, raw_payload: dict) -> None:
+        setup_type = str(raw_payload.get("setup_type") or "").lower()
+        dca_freq = str(raw_payload.get("dca_frequency") or "").lower()
+
+        if setup_type != "dca":
+            raw_payload["dca_frequency"] = None
+            raw_payload["dca_day"] = None
+            raw_payload["dca_month_day"] = None
+            return
+
+        if "dca_frequency" in raw_payload and raw_payload.get("dca_frequency") is not None:
+            raw_payload["dca_frequency"] = dca_freq
+
+        if dca_freq == "weekly":
+            dca_day = raw_payload.get("dca_day")
+            if dca_day is not None:
+                try:
+                    raw_payload["dca_day"] = self._normalize_dca_day(dca_day)
+                except (ValueError, TypeError):
+                    raise HTTPException(400, "dca_day moet een getal tussen 1 (maandag) en 7 (zondag) zijn voor wekelijkse DCA.")
+            raw_payload["dca_month_day"] = None
+        elif dca_freq == "monthly":
+            dca_month_day = raw_payload.get("dca_month_day")
+            if dca_month_day is not None:
+                try:
+                    raw_payload["dca_month_day"] = self._normalize_dca_month_day(dca_month_day)
+                except (ValueError, TypeError):
+                    raise HTTPException(400, "dca_month_day moet een getal tussen 1 en 31 zijn voor maandelijkse DCA.")
+            raw_payload["dca_day"] = None
+        elif dca_freq == "daily":
+            raw_payload["dca_day"] = None
+            raw_payload["dca_month_day"] = None
 
     def _format_setup(self, item: dict) -> dict:
         if not item:
@@ -67,6 +143,8 @@ class SetupService:
         Validates a setup payload meticulously for logical consistency, correct ranges,
         and missing fields. Raises an HTTPException(400) with descriptive messages.
         """
+        self.normalize_dca_fields(raw_payload)
+
         # 1. Non-empty string validations for name and symbol
         if not is_update or "name" in raw_payload:
             name = raw_payload.get("name")
@@ -174,12 +252,6 @@ class SetupService:
 
         setup_type = payload.setup_type.lower()
 
-        # Trade cleanup
-        if setup_type == "trade":
-            raw_payload["dca_frequency"] = None
-            raw_payload["dca_day"] = None
-            raw_payload["dca_month_day"] = None
-
         exists = await self.repository.check_name_exists(payload.name, user_id)
         if exists:
             raise HTTPException(409, "Setup met deze naam bestaat al")
@@ -247,6 +319,9 @@ class SetupService:
             merged_payload[k] = v
 
         self.validate_setup_payload(merged_payload, is_update=True)
+        for field in ("setup_type", "dca_frequency", "dca_day", "dca_month_day"):
+            if field in raw_payload and field in merged_payload:
+                raw_payload[field] = merged_payload[field]
 
         # Normalize uppercase symbol if being updated
         if "symbol" in raw_payload:

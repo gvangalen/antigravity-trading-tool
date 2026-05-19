@@ -21,6 +21,43 @@ from backend.utils.data_normalizers import (
 
 logger = logging.getLogger(__name__)
 
+WEEKDAY_TO_NUMBER = {
+    "1": 1,
+    "monday": 1,
+    "maandag": 1,
+    "2": 2,
+    "tuesday": 2,
+    "dinsdag": 2,
+    "3": 3,
+    "wednesday": 3,
+    "woensdag": 3,
+    "4": 4,
+    "thursday": 4,
+    "donderdag": 4,
+    "5": 5,
+    "friday": 5,
+    "vrijdag": 5,
+    "6": 6,
+    "saturday": 6,
+    "zaterdag": 6,
+    "7": 7,
+    "sunday": 7,
+    "zondag": 7,
+}
+
+
+def normalize_weekday(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    key = str(value).strip().lower()
+    if key in WEEKDAY_TO_NUMBER:
+        return WEEKDAY_TO_NUMBER[key]
+    try:
+        day = int(value)
+        return day if 1 <= day <= 7 else None
+    except (TypeError, ValueError):
+        return None
+
 # =========================================================
 # SYNCHRONOUS WRAPPERS FOR LEGACY COMPONENTS
 # =========================================================
@@ -370,11 +407,11 @@ class StrategyService:
                 continue
 
             freq = (row.get("dca_frequency") or "").lower()
+            day = normalize_weekday(row.get("dca_day"))
             try:
-                day = int(row.get("dca_day")) if row.get("dca_day") is not None else None
+                md = int(row.get("dca_month_day")) if row.get("dca_month_day") is not None else None
             except (TypeError, ValueError):
-                day = None
-            md = row.get("dca_month_day")
+                md = None
 
             if freq == "daily" or (freq == "weekly" and day == weekday) or (freq == "monthly" and md == month_day):
                 return {"active": True, "strategy": self._format_strategy_row(row)}
