@@ -1054,7 +1054,7 @@ class FinnPlanService:
         changes = []
         for field, before in existing_map.items():
             after = strategy.get(field)
-            if before in (None, "") and after in (None, "", [], {}):
+            if self._is_emptyish(before) and self._is_emptyish(after):
                 continue
             if self._normalized_compare_value(before) != self._normalized_compare_value(after):
                 changes.append({"field": field, "from": before, "to": after})
@@ -1075,6 +1075,9 @@ class FinnPlanService:
             if value is not None and value != "":
                 return value
         return None
+
+    def _is_emptyish(self, value: Any) -> bool:
+        return value is None or value == "" or value == [] or value == {}
 
     def _normalized_compare_value(self, value: Any) -> Any:
         if isinstance(value, float):

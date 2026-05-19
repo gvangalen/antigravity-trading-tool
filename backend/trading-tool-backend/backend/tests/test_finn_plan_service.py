@@ -1,4 +1,5 @@
 import asyncio
+from decimal import Decimal
 
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.strategy_service import StrategyService
@@ -542,6 +543,41 @@ def test_strategy_formatter_reads_base_amount_from_data_when_column_is_empty():
     })
 
     assert formatted["base_amount"] == 100
+
+
+def test_strategy_formatter_keeps_decimal_database_values_for_diff():
+    formatted = StrategyService(db_session=None)._format_strategy_row({
+        "id": 114,
+        "setup_id": 89,
+        "setup_type": "dca",
+        "execution_mode": "fixed",
+        "base_amount": Decimal("100"),
+        "data": {"base_amount": 100, "symbol": "BTC", "timeframe": "1W"},
+    })
+
+    assert formatted["base_amount"] == 100
+
+
+def test_strategy_update_changes_skip_empty_target_noise():
+    service = _service()
+    draft = service.build_strategy_response(
+        "Pas strategie 114 aan naar 150 euro",
+        {"setup_id": 89, "setup_type": "dca", "setup_symbol": "BTC", "setup_timeframe": "1W"},
+    )["draft"]
+    existing = {
+        "id": 114,
+        "setup_id": 89,
+        "setup_type": "dca",
+        "symbol": "BTC",
+        "timeframe": "1W",
+        "base_amount": Decimal("100"),
+        "execution_mode": "fixed",
+        "targets": [],
+    }
+
+    changes = service._strategy_changes(existing, draft)
+
+    assert changes == [{"field": "base_amount_eur", "from": Decimal("100"), "to": 150}]
 
 
 def test_strategy_rejects_absurd_amount_and_price_levels():

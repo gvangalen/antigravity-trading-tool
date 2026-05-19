@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ def normalize_number(value: Any, default: Optional[float] = None) -> Optional[fl
         if value is None:
             return default
 
-        if isinstance(value, (int, float)):
+        if isinstance(value, (int, float, Decimal)):
             return float(value)
 
         if isinstance(value, str):
