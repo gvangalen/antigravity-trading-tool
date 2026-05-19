@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
+from backend.infrastructure.repositories.exchange_repository import ExchangeRepository
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
@@ -1280,7 +1281,7 @@ class FinnPlanService:
         draft["_live_exchange_ready"] = True
         if not bot.get("is_live") or not self.session:
             return
-        keys = await self.exchange_repo.get_active_keys(user_id)
+        keys = await ExchangeRepository(self.session).get_active_keys(user_id)
         draft["_live_exchange_ready"] = bool(keys)
 
     def _bot_snapshot(self, bot_row: Dict[str, Any]) -> Dict[str, Any]:
