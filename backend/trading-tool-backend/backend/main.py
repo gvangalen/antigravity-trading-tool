@@ -37,26 +37,55 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Market Dashboard API", version="1.0")
 
 # 🌍 CORS — Dynamic Configuration
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+frontend_urls = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("FRONTEND_URL", "http://localhost:3000").split(",")
+    if origin.strip()
+]
+extra_cors_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
 allow_origins = [
+    "http://localhost",
     "http://localhost:3000",
+    "http://localhost:5002",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:5002",
+    "http://143.47.186.148:5002",
+    "https://143.47.186.148",
     "https://tradamind.com",
     "https://www.tradamind.com",
-    frontend_url,
+    "capacitor://localhost",
+    "ionic://localhost",
 ]
+allow_origins.extend(frontend_urls)
+allow_origins.extend(extra_cors_origins)
+allow_origins = list(dict.fromkeys(origin for origin in allow_origins if origin))
+
+default_allow_origin_regex = (
+    r"^https://(www\.)?tradamind\.com$|"
+    r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|"
+    r"^https?://143\.47\.186\.148(:\d+)?$|"
+    r"^(capacitor|ionic)://localhost$"
+)
+allow_origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", default_allow_origin_regex)
 
 # Ensure both www and non-www versions are allowed for production
-if "://" in frontend_url:
-    proto, domain = frontend_url.split("://")
-    if domain.startswith("www."):
-        allow_origins.append(f"{proto}://{domain[4:]}")
-    else:
-        allow_origins.append(f"{proto}://www.{domain}")
+for frontend_url in frontend_urls:
+    if "://" in frontend_url:
+        proto, domain = frontend_url.split("://", 1)
+        if domain.startswith("www."):
+            allow_origins.append(f"{proto}://{domain[4:]}")
+        else:
+            allow_origins.append(f"{proto}://www.{domain}")
+allow_origins = list(dict.fromkeys(origin for origin in allow_origins if origin))
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,     # ⭐ Cookies toestaan
     allow_methods=["*"],
     allow_headers=["*"],
