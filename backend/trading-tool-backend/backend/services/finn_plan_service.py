@@ -711,6 +711,11 @@ class FinnPlanService:
                 "actions": [],
             }
 
+        if previous and self._is_new_bot_start_without_target(q):
+            draft = empty_bot_draft()
+            if context.get("strategy_id"):
+                draft["strategy_id"] = context.get("strategy_id")
+
         if draft.get("existing_bot_id") and any(word in q_lower for word in ["ja", "ok", "prima", "bijwerken", "update", "aanpassen"]):
             draft["operation"] = "update"
             draft["bot_id"] = draft.get("existing_bot_id")
@@ -1704,6 +1709,16 @@ class FinnPlanService:
     def _strategy_action_id(self, payload: Dict[str, Any]) -> str:
         normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return f"finn-strategy-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:24]}"
+
+    def _is_new_bot_start_without_target(self, query: str) -> bool:
+        q = (query or "").lower()
+        if not re.search(r"\bbot\b", q):
+            return False
+        if re.search(r"\bstrateg(?:ie|y)\s*#?\s*\d+\b", q) or re.search(r"\bbot\s*#?\s*\d+\b", q):
+            return False
+        if any(word in q for word in ["pas", "wijzig", "update", "bijwerk", "bijwerken", "verander", "aanpassen"]):
+            return False
+        return any(word in q for word in ["maak", "aanmaken", "creeer", "creeër", "bouw", "instellen", "wil"])
 
     def _validate_bot_draft(self, draft: Dict[str, Any]) -> Dict[str, Any]:
         missing: List[str] = []

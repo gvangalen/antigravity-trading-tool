@@ -748,6 +748,35 @@ def test_bot_strategy_selection_only_asks_for_strategy_first():
     assert result["next_question"] == "strategy_id"
 
 
+def test_new_generic_bot_start_resets_open_bot_draft_to_strategy_selection():
+    service = _service()
+    first = service.build_bot_response("Maak een auto bot voor strategie 126")
+
+    restarted = service.build_bot_response("Maak een paper bot", {"finn_draft": first["draft"]})
+
+    assert restarted["can_confirm"] is False
+    assert restarted["draft"]["strategy_id"] is None
+    assert restarted["draft"]["existing_bot_id"] is None
+    assert restarted["draft"]["bot"]["mode"] == "manual"
+    assert restarted["draft"]["bot"]["is_live"] is False
+    assert restarted["missing_fields"] == ["strategy_id"]
+    assert restarted["next_question"] == "strategy_id"
+
+
+def test_budget_follow_up_keeps_existing_open_bot_draft():
+    service = _service()
+    first = service.build_bot_response("Maak een auto bot voor strategie 126")
+
+    completed = service.build_bot_response(
+        "budget 1000 daglimiet 100 min order 10 max order 50",
+        {"finn_draft": first["draft"]},
+    )
+
+    assert completed["draft"]["strategy_id"] == 126
+    assert completed["draft"]["bot"]["mode"] == "auto"
+    assert completed["draft"]["bot"]["budget_total_eur"] == 1000
+
+
 def test_bot_update_intent_with_bot_id_builds_update_draft():
     result = _service().build_bot_response("Pas bot 38 aan naar auto budget 1000 daglimiet 100 min order 10 max order 50")
 
