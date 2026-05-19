@@ -49,9 +49,11 @@ def test_trade_plan_with_entry_stop_and_targets_is_confirmable():
     assert result["draft"]["plan_type"] == "trade"
     assert result["draft"]["asset"] == "SOL"
     assert result["draft"]["setup"]["timeframe"] == "4H"
+    assert result["draft"]["strategy"]["entry_type"] == "limit"
     assert result["draft"]["strategy"]["entry"] == 160
     assert result["draft"]["strategy"]["stop_loss"] == 145
     assert result["draft"]["strategy"]["targets"] == [180, 200]
+    assert result["draft"]["bot"]["automation"] == "bot_assisted"
 
 
 def test_trade_plan_understands_natural_breakout_language():
@@ -63,10 +65,45 @@ def test_trade_plan_understands_natural_breakout_language():
     assert result["draft"]["plan_type"] == "trade"
     assert result["draft"]["asset"] == "SOL"
     assert result["draft"]["setup"]["timeframe"] == "4H"
+    assert result["draft"]["strategy"]["entry_type"] == "breakout"
     assert result["draft"]["strategy"]["entry"] == 180
     assert result["draft"]["strategy"]["stop_loss"] == 160
     assert result["draft"]["strategy"]["targets"] == [210, 240]
     assert result["actions"][0]["type"] == "create_plan"
+
+
+def test_trade_plan_supports_market_execution_mode():
+    result = _service().build_response(
+        "Maak een market order ETH trade op 4H met entry 3000 stop 2800 target 3600 voor 100 euro"
+    )
+
+    assert result["can_confirm"] is True
+    assert result["draft"]["plan_type"] == "trade"
+    assert result["draft"]["strategy"]["entry_type"] == "market"
+    assert result["actions"][0]["payload"]["strategy"]["entry_type"] == "market"
+
+
+def test_trade_plan_supports_manual_only_without_bot():
+    result = _service().build_response(
+        "Maak een handmatige BTC trade zonder bot op 4H met entry 100 stop 90 targets 130 voor 100 euro"
+    )
+
+    assert result["can_confirm"] is True
+    assert result["draft"]["bot"]["create_bot"] is False
+    assert result["draft"]["bot"]["automation"] == "manual_only"
+    assert "Bot:" not in result["response"]
+    assert "Automatisering: manual_only" in result["response"]
+
+
+def test_trade_plan_supports_bot_assisted_modes():
+    result = _service().build_response(
+        "Maak een BTC trade met bot semi-auto op 4H met entry 100 stop 90 targets 130 voor 100 euro"
+    )
+
+    assert result["can_confirm"] is True
+    assert result["draft"]["bot"]["create_bot"] is True
+    assert result["draft"]["bot"]["automation"] == "bot_assisted"
+    assert result["draft"]["bot"]["mode"] == "semi-auto"
 
 
 def test_trade_follow_up_completes_ambiguous_buy_intent():

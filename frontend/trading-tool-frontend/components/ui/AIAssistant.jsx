@@ -622,9 +622,11 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       ["Technical", Array.isArray(setup.technical_score_range) ? setup.technical_score_range.join(" - ") : null],
       ["Market", Array.isArray(setup.market_score_range) ? setup.market_score_range.join(" - ") : null],
       isDca ? ["DCA", [dca.frequency, dca.day || dca.month_day].filter(Boolean).join(" · ")] : null,
+      isTrade ? ["Uitvoering", strategy.entry_type || strategy.trade_execution_mode || "limit"] : null,
       isTrade ? ["Entry", strategy.entry] : null,
       isTrade ? ["Stop", strategy.stop_loss] : null,
       isTrade ? ["Targets", Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
+      ["Automatisering", bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only")],
       bot.create_bot ? ["Bot", `${bot.is_live ? "Live" : "Paper"} · ${bot.mode} · ${bot.risk_profile}`] : null,
     ].filter(Boolean);
 

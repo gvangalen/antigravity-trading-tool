@@ -66,6 +66,7 @@ def empty_plan_draft() -> Dict[str, Any]:
             "execution_mode": "fixed",
             "decision_curve": None,
             "direction": "long",
+            "entry_type": None,
             "entry": None,
             "stop_loss": None,
             "targets": None,
@@ -79,6 +80,7 @@ def empty_plan_draft() -> Dict[str, Any]:
         },
         "bot": {
             "create_bot": None,
+            "automation": None,
             "mode": "manual",
             "is_live": False,
             "risk_profile": None,
@@ -107,6 +109,7 @@ def empty_plan_patch() -> Dict[str, Any]:
             "execution_mode": None,
             "decision_curve": None,
             "direction": None,
+            "entry_type": None,
             "entry": None,
             "stop_loss": None,
             "targets": None,
@@ -118,6 +121,7 @@ def empty_plan_patch() -> Dict[str, Any]:
         },
         "bot": {
             "create_bot": None,
+            "automation": None,
             "mode": None,
             "is_live": None,
             "risk_profile": None,
@@ -424,7 +428,10 @@ class FinnPlanService:
             "dagelijks", "maandelijks", "elke week", "iedere week",
             "elke dag", "iedere dag", "elke maand", "iedere maand",
         ])
-        has_trade_language = any(word in q for word in ["trade", "entry", "stop loss", "stoploss", "target", "breakout", "swing", "short"])
+        has_trade_language = any(word in q for word in [
+            "trade", "entry", "stop loss", "stoploss", "target", "breakout",
+            "swing", "short", "market order", "markt order", "limiet", "limit",
+        ])
 
         if has_dca_language or re.search(r"\b(?:toch|bedoel|bedoelde|nee)\s+(?:een\s+)?dca\b", q):
             patch["plan_type"] = "dca"
@@ -432,6 +439,15 @@ class FinnPlanService:
             patch["plan_type"] = "trade"
         if has_dca_language and has_trade_language:
             patch["plan_type"] = None
+
+        if any(word in q for word in ["market order", "markt order", "market execution", "direct kopen", "nu kopen"]):
+            patch["plan_type"] = "trade"
+            patch["strategy"]["entry_type"] = "market"
+        elif "breakout" in q:
+            patch["plan_type"] = "trade"
+            patch["strategy"]["entry_type"] = "breakout"
+        elif any(word in q for word in ["limit", "limiet", "entry"]) or re.search(r"\b(?:bij|rond)\s*\d", q):
+            patch["strategy"]["entry_type"] = "limit"
 
         if re.search(r"\bshort\b", q):
             patch["plan_type"] = "trade"
@@ -536,15 +552,28 @@ class FinnPlanService:
             if 2 <= len(name) <= 80:
                 patch["setup"]["name"] = name
 
-        if "bot" in q:
+        if "bot" in q or "bot-assisted" in q or "bot assisted" in q or "met bot" in q:
             patch["bot"]["create_bot"] = True
-        if "geen bot" in q or "zonder bot" in q or "niet automatisch" in q:
+            patch["bot"]["automation"] = "bot_assisted"
+        if "semi-auto" in q or "semi auto" in q or "semi automatisch" in q:
+            patch["bot"]["create_bot"] = True
+            patch["bot"]["automation"] = "bot_assisted"
+            patch["bot"]["mode"] = "semi-auto"
+        if re.search(r"\bauto(?:matisch)?\b", q) and "niet automatisch" not in q and not any(word in q for word in ["semi-auto", "semi auto", "semi automatisch"]):
+            patch["bot"]["create_bot"] = True
+            patch["bot"]["automation"] = "bot_assisted"
+            patch["bot"]["mode"] = "auto"
+        if any(word in q for word in ["geen bot", "zonder bot", "niet automatisch", "manual only", "manual-only", "handmatig", "alleen handmatig"]):
             patch["bot"]["create_bot"] = False
+            patch["bot"]["automation"] = "manual_only"
+            patch["bot"]["mode"] = "manual"
         if "live" in q:
             patch["bot"]["create_bot"] = True
+            patch["bot"]["automation"] = "bot_assisted"
             patch["bot"]["is_live"] = True
         if "paper" in q:
             patch["bot"]["create_bot"] = True
+            patch["bot"]["automation"] = "bot_assisted"
             patch["bot"]["is_live"] = False
         if "agressief" in q or "aggressive" in q:
             patch["bot"]["risk_profile"] = "aggressive"
@@ -560,6 +589,10 @@ class FinnPlanService:
             draft["bot"]["create_bot"] = True
         if draft.get("plan_type") == "trade" and not draft["strategy"].get("direction"):
             draft["strategy"]["direction"] = "long"
+        if draft.get("plan_type") == "trade" and not draft["strategy"].get("entry_type"):
+            draft["strategy"]["entry_type"] = "limit"
+        if draft["bot"].get("automation") is None:
+            draft["bot"]["automation"] = "bot_assisted" if draft["bot"].get("create_bot") else "manual_only"
         if not draft["setup"].get("timeframe"):
             draft["setup"]["timeframe"] = "1W" if draft.get("plan_type") == "dca" else None
         draft["setup"]["macro_score_range"] = draft["setup"].get("macro_score_range") or [30, 70]
@@ -682,6 +715,8 @@ class FinnPlanService:
                     if clarification.get("field") == "strategy.direction"
                     else "alleen long trades worden nu ondersteund",
                 })
+            if draft["strategy"].get("entry_type") not in {"limit", "breakout", "market"}:
+                missing.append("strategy.entry_type")
             entry = draft["strategy"].get("entry")
             stop_loss = draft["strategy"].get("stop_loss")
             targets = draft["strategy"].get("targets")
@@ -691,7 +726,7 @@ class FinnPlanService:
                 missing.append("strategy.stop_loss")
             if not targets:
                 missing.append("strategy.targets")
-            if not draft["bot"].get("risk_profile"):
+            if draft["bot"].get("create_bot") and not draft["bot"].get("risk_profile"):
                 missing.append("bot.risk_profile")
             if is_long_trade and isinstance(entry, (int, float)) and isinstance(stop_loss, (int, float)):
                 if stop_loss >= entry:
@@ -906,10 +941,12 @@ class FinnPlanService:
             lines.append(f"- DCA: {draft['dca'].get('frequency')} {draft['dca'].get('day') or draft['dca'].get('month_day') or ''}".strip())
         if draft.get("plan_type") == "trade":
             lines.extend([
+                f"- Uitvoering: {draft['strategy'].get('entry_type')}",
                 f"- Entry: {draft['strategy'].get('entry')}",
                 f"- Stop-loss: {draft['strategy'].get('stop_loss')}",
                 f"- Targets: {draft['strategy'].get('targets')}",
             ])
+        lines.append(f"- Automatisering: {draft['bot'].get('automation') or ('bot_assisted' if draft['bot'].get('create_bot') else 'manual_only')}")
         if draft["bot"].get("create_bot"):
             env = "live" if draft["bot"].get("is_live") else "paper"
             lines.append(f"- Bot: {env}, {draft['bot'].get('mode')}, {draft['bot'].get('risk_profile')}")
@@ -1280,6 +1317,10 @@ class FinnPlanService:
         }
         if draft["plan_type"] == "trade":
             payload.update({
+                "direction": strategy.get("direction") or "long",
+                "entry_type": strategy.get("entry_type") or "limit",
+                "trade_execution_mode": strategy.get("entry_type") or "limit",
+                "automation": draft["bot"].get("automation") or ("bot_assisted" if draft["bot"].get("create_bot") else "manual_only"),
                 "entry": strategy.get("entry"),
                 "stop_loss": strategy.get("stop_loss"),
                 "targets": strategy.get("targets"),
