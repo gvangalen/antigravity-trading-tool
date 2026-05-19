@@ -52,14 +52,46 @@ export function ConfirmActionSheetContent({ onDone }: { onDone: () => void }) {
   );
 }
 
-export function DraftReviewSheetContent() {
+export function DraftReviewSheetContent({ draft, onConfirm }: { draft: any; onConfirm: () => void }) {
+  if (!draft) {
+    return (
+      <View style={styles.block}>
+        <StatusChip label="Draft review" tone="accent" />
+        <Text style={styles.title}>Geen concept geladen</Text>
+        <Text style={styles.body}>Er is geen concept gevonden om te beoordelen.</Text>
+      </View>
+    );
+  }
+
+  const payload = draft.payload || {};
+  const isUpdate = draft.type === 'strategy' && payload.strategy_id;
+
   return (
     <View style={styles.block}>
-      <StatusChip label="Draft review" tone="accent" />
-      <Text style={styles.title}>Assistant drafts stay review-first.</Text>
-      <Text style={styles.body}>
-        Future API drafts will map into this sheet for confirm, edit, cancel, and ask-why flows.
-      </Text>
+      <StatusChip label={isUpdate ? "Update Review" : "Draft Review"} tone="warning" />
+      <Text style={styles.title}>{payload.name || `${draft.type} Concept`}</Text>
+      
+      <View style={{ gap: 8, marginTop: theme.spacing.sm }}>
+        {Object.entries(payload).map(([key, value]) => {
+          if (['name', 'strategy_id'].includes(key)) return null;
+          return (
+            <View key={key} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ color: theme.colors.textDim, fontSize: 13 }}>{key}</Text>
+              <Text style={{ color: theme.colors.text, fontWeight: '600', fontSize: 13 }}>{String(value)}</Text>
+            </View>
+          );
+        })}
+      </View>
+
+      <Pressable
+        onPress={async () => {
+          await triggerHaptic('success');
+          onConfirm();
+        }}
+        style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+      >
+        <Text style={styles.buttonText}>{isUpdate ? "Bevestig Update" : "Bevestig Opslaan"}</Text>
+      </Pressable>
     </View>
   );
 }

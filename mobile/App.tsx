@@ -12,25 +12,31 @@ import { AppPreferencesProvider, preferenceColors, useAppPreferences } from './s
 import { LoginScreen } from './src/screens/LoginScreen';
 import { normalizeNotificationData, routeForNotification } from './src/services/pushNotifications';
 import { ActiveIntelligenceProvider } from './src/contexts/ActiveIntelligenceContext';
+import { FinnOverlayProvider } from './src/contexts/FinnOverlayContext';
 
 export default function App() {
   return (
     <SafeAreaProvider>
       <AppPreferencesProvider>
-        <AuthProvider>
-          <ActiveIntelligenceProvider>
-            <AppShell />
-          </ActiveIntelligenceProvider>
-        </AuthProvider>
+        <ActiveIntelligenceProvider>
+          <AuthProvider>
+            <FinnOverlayProvider>
+              <AppShell />
+            </FinnOverlayProvider>
+          </AuthProvider>
+        </ActiveIntelligenceProvider>
       </AppPreferencesProvider>
     </SafeAreaProvider>
   );
 }
 
+import { useFinnOverlay } from './src/contexts/FinnOverlayContext';
+
 function AppShell() {
   const navigationRef = useNavigationContainerRef<MainTabParamList>();
   const { appearance } = useAppPreferences();
   const { user } = useAuth();
+  const { openFinn } = useFinnOverlay();
   const colors = preferenceColors(appearance);
 
   useEffect(() => {
@@ -42,7 +48,7 @@ function AppShell() {
       const rawData = response.notification.request.content.data as Record<string, unknown> | undefined;
       const route = routeForNotification(normalizeNotificationData(rawData));
       if (route.screen === 'FINN') {
-        navigationRef.navigate('FINN', route.params);
+        openFinn(route.params);
       } else if (route.screen === 'Setup') {
         navigationRef.navigate('Setup', route.params);
       } else if (route.screen === 'Report') {

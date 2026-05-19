@@ -56,6 +56,11 @@ class MobileAssetWatchlistSchema(BaseModel):
     macro_label: Optional[str] = None
     technical_label: Optional[str] = None
     market_label: Optional[str] = None
+    # Desktop Parity Fields
+    posture: Optional[str] = None
+    structure: Optional[str] = None
+    conviction: Optional[float] = None
+    risk_state: Optional[str] = None
 
 class MobileActiveBotSchema(BaseModel):
     bot_id: int

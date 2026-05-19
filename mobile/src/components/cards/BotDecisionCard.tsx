@@ -34,7 +34,7 @@ export function BotDecisionCard({
   const palette = statusTones[tone];
 
   return (
-    <CardShell emphasis="primary">
+    <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
       <View style={styles.header}>
         <View style={styles.heading}>
           <Text style={styles.label}>Bot decision</Text>
@@ -46,9 +46,9 @@ export function BotDecisionCard({
         <Metric label="Confidence" value={`${confidence}`} color={palette.color} colors={colors} />
         <Metric label="Amount" value={amount} color={palette.color} colors={colors} />
       </View>
-      <View style={[styles.guardrail, { backgroundColor: palette.background, borderColor: palette.border }]}>
-        <Text style={[styles.guardrailLabel, { color: palette.color }]}>Guardrail</Text>
-        <Text style={[styles.guardrailText, { color: colors.textSoft }]}>{guardrail}</Text>
+      <View style={{ marginTop: theme.spacing.md, gap: 4 }}>
+        <Text style={{ fontSize: 11, color: colors.warning, fontWeight: '700', letterSpacing: 0.5 }}>GUARDRAIL</Text>
+        <Text style={{ fontSize: 13, color: colors.textSoft, fontWeight: '600' }}>{guardrail}</Text>
       </View>
       <Text style={[styles.reason, { color: colors.textMuted }]}>{reason}</Text>
       <View style={styles.actions}>
@@ -61,25 +61,16 @@ export function BotDecisionCard({
         >
           <Text style={styles.primaryText}>Review action</Text>
         </Pressable>
-        <Pressable
-          onPress={async () => {
-            await triggerHaptic('selection');
-            onAskWhy?.();
-          }}
-          style={({ pressed }) => [styles.secondaryButton, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderStrong }, pressed && styles.pressed]}
-        >
-          <Text style={[styles.secondaryText, { color: colors.textSoft }]}>Ask why</Text>
-        </Pressable>
       </View>
-    </CardShell>
+    </View>
   );
 }
 
-function Metric({ label, value, color, colors }: { label: string; value: string; color: string; colors: ReturnType<typeof preferenceColors> }) {
+function Metric({ label, value, colors }: { label: string; value: string; color: string; colors: ReturnType<typeof preferenceColors> }) {
   return (
-    <View style={[styles.metric, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
-      <Text style={[styles.metricLabel, { color: colors.textDim }]}>{label}</Text>
-      <Text style={[styles.metricValue, { color }]}>{value}</Text>
+    <View style={{ flex: 1, gap: 2 }}>
+      <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>{label.toUpperCase()}</Text>
+      <Text style={{ fontSize: 16, color: colors.text, fontWeight: '700' }}>{value}</Text>
     </View>
   );
 }
@@ -93,7 +84,7 @@ const styles = StyleSheet.create({
   botName: {
     color: theme.colors.text,
     fontSize: theme.typography.cardTitle,
-    fontWeight: '900',
+    fontWeight: '700',
     lineHeight: 22,
     marginTop: 4,
   },
@@ -158,19 +149,20 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.borderStrong,
-    borderWidth: 1,
-    borderRadius: theme.radius.button,
-    flex: 1,
     justifyContent: 'center',
-    minHeight: 48,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: theme.radius.pill,
+    borderWidth: 0.5,
+    borderColor: theme.colors.border,
+    backgroundColor: 'transparent',
+    flex: 1,
   },
   primaryText: {
     color: theme.colors.accent,
     fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.2,
+    fontWeight: '700',
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   reason: {
@@ -182,18 +174,18 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.borderStrong,
-    borderRadius: theme.radius.button,
-    borderWidth: 1,
     justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: theme.radius.pill,
+    borderWidth: 0.5,
+    borderColor: theme.colors.border,
+    backgroundColor: 'transparent',
   },
   secondaryText: {
     color: theme.colors.textSoft,
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   summaryRow: {
     flexDirection: 'row',

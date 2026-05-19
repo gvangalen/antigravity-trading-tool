@@ -23,7 +23,7 @@ export type MobileNotificationData = {
 };
 
 export type NotificationRoute =
-  | { screen: 'FINN'; params?: MainTabParamList['FINN'] }
+  | { screen: 'FINN'; params?: { prefill?: string; source?: string; contextMetric?: string; symbol?: string } }
   | { screen: 'Setup'; params?: MainTabParamList['Setup'] }
   | { screen: 'Report'; params?: MainTabParamList['Report'] }
   | { screen: 'Watchlist'; params?: MainTabParamList['Watchlist'] };

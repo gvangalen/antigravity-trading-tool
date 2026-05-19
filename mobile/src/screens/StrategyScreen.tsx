@@ -4,20 +4,29 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { StrategyCard } from '../components/StrategyCard';
 import { theme } from '../constants/theme';
-import { getActiveStrategy } from '../services/mockDataService';
+import { useApiResource } from '../hooks/useApiResource';
+import { intelligenceApi } from '../services/tradamindApi';
+import { mapStrategy } from '../services/dataMappers';
+import { useCallback } from 'react';
 import { Strategy } from '../types/strategy';
 
 export function StrategyScreen() {
-  const [strategy, setStrategy] = useState<Strategy | null>(null);
-
-  useEffect(() => {
-    async function loadStrategy() {
-      const activeStrategy = await getActiveStrategy();
-      setStrategy(activeStrategy);
-    }
-
-    loadStrategy();
-  }, []);
+    const fetchStrategy = useCallback(() => intelligenceApi.activeStrategyToday(), []);
+  const { data, loading, error } = useApiResource({
+    fetcher: fetchStrategy,
+    fallbackData: undefined
+  });
+  
+  const rawStrategy = mapStrategy(data);
+  const strategy = data ? {
+    symbol: rawStrategy.symbol,
+    bias: rawStrategy.bias,
+    entryZone: rawStrategy.entryZone,
+    targets: rawStrategy.targets,
+    stopLoss: rawStrategy.invalidation,
+    confidenceScore: rawStrategy.confidence,
+    aiExplanation: rawStrategy.explanation
+  } : null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -25,7 +34,7 @@ export function StrategyScreen() {
         <Text style={styles.title}>Strategy</Text>
         <Text style={styles.subtitle}>Actieve strategie, samengevat voor mobiel gebruik.</Text>
 
-        {!strategy ? (
+        {loading || !strategy ? (
           <View style={styles.loading}>
             <ActivityIndicator color={theme.colors.accent} />
           </View>

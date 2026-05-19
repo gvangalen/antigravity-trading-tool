@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { StatusTone, statusTones, theme } from '../../constants/theme';
+import { StatusTone, theme } from '../../constants/theme';
+import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 
 type StatusChipProps = {
   label: string;
@@ -9,18 +10,26 @@ type StatusChipProps = {
 };
 
 export function StatusChip({ label, tone = 'neutral', compact = false }: StatusChipProps) {
-  const palette = statusTones[tone];
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  // Fallback to textDim if tone is neutral, or accent if tone is not found
+  const baseColor = tone === 'neutral' ? colors.textDim : (colors[tone] || colors.accent);
+  
+  // Create light backgrounds and borders dynamically
+  const background = `${baseColor}15`; // ~8% opacity
+  const border = `${baseColor}30`; // ~19% opacity
 
   return (
     <View
       style={[
         styles.chip,
         compact && styles.compact,
-        { backgroundColor: palette.background, borderColor: palette.border },
+        { backgroundColor: background, borderColor: border },
       ]}
     >
-      <View style={[styles.dot, { backgroundColor: palette.color }]} />
-      <Text style={[styles.label, { color: palette.color }]} numberOfLines={1}>
+      <View style={[styles.dot, { backgroundColor: baseColor }]} />
+      <Text style={[styles.label, { color: baseColor }]} numberOfLines={1}>
         {label}
       </Text>
     </View>

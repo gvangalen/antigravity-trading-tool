@@ -13,6 +13,7 @@ type ScreenContainerProps = {
   contentInsetBottom?: number;
   refreshing?: boolean;
   onRefresh?: () => Promise<void> | void;
+  edgeToEdge?: boolean;
 };
 
 export function ScreenContainer({
@@ -22,6 +23,7 @@ export function ScreenContainer({
   contentInsetBottom = 112,
   refreshing: externalRefreshing,
   onRefresh,
+  edgeToEdge = false,
 }: ScreenContainerProps) {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
@@ -43,7 +45,7 @@ export function ScreenContainer({
   if (!scroll) {
     return (
     <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
-        <View style={[styles.staticContent, { backgroundColor: colors.background }]}>{children}</View>
+        <View style={[styles.staticContent, { backgroundColor: colors.background }, edgeToEdge && { paddingHorizontal: 0 }]}>{children}</View>
       </SafeAreaView>
     );
   }
@@ -51,7 +53,7 @@ export function ScreenContainer({
   return (
     <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: contentInsetBottom }]}
+        contentContainerStyle={[styles.content, { paddingBottom: contentInsetBottom }, edgeToEdge && { paddingHorizontal: 0 }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl

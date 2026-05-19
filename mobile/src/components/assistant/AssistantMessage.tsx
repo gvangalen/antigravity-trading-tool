@@ -21,7 +21,7 @@ export function AssistantMessage({ author, text, isUser = false }: AssistantMess
         { backgroundColor: isUser ? (appearance === 'light' ? '#EFF6FF' : theme.colors.accentSoft) : colors.surface, borderColor: colors.border },
       ]}
     >
-      <Text style={[styles.messageAuthor, { color: colors.textDim }]}>{author}</Text>
+      {isUser && <Text style={[styles.messageAuthor, { color: colors.textDim }]}>{author}</Text>}
       <Text style={[styles.messageText, { color: colors.text }]}>{text}</Text>
     </View>
   );

@@ -8,8 +8,8 @@ import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
 import { SectionHeader } from '../components/layout/SectionHeader';
 import { StatusChip } from '../components/layout/StatusChip';
+import { SegmentedControl } from '../components/layout/SegmentedControl';
 import { StatusTone, theme } from '../constants/theme';
-import { mockWatchlistAssets } from '../data/mockFoundation';
 import { useApiResource } from '../hooks/useApiResource';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import {
@@ -22,13 +22,15 @@ import {
   mobileApi,
 } from '../services/tradamindApi';
 import { triggerHaptic } from '../utils/haptics';
+import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
 
 type Timeframe = '15m' | '1h' | '4h' | '1d';
 
 const timeframes: Timeframe[] = ['15m', '1h', '4h', '1d'];
 
 export function WatchlistScreen() {
-  const [selectedSymbol, setSelectedSymbol] = useState('BTC');
+  const { context, updateContext } = useIntelligenceContext();
+  const selectedSymbol = context.asset;
   const [timeframe, setTimeframe] = useState<Timeframe>('1h');
 
   const fetchOverview = useCallback(() => mobileApi.overview(), []);
@@ -63,10 +65,10 @@ export function WatchlistScreen() {
     fetcher: fetchInsight,
   });
 
-  const assets = useMemo(
-    () => overviewResource.data?.watchlist ?? fallbackAssets(),
-    [overviewResource.data],
-  );
+  const assets = useMemo(() => {
+    const watchlist = overviewResource.data?.watchlist?.filter(Boolean) ?? [];
+    return watchlist.length > 0 ? watchlist : fallbackAssets();
+  }, [overviewResource.data]);
   const selectedAsset = assets.find((asset) => asset.symbol === selectedSymbol) ?? assets[0];
   const intelligence = buildAssetIntelligence(selectedAsset, latestResource.data, insightResource.data);
   const chartPoints = buildChartPoints(chartResource.data, selectedAsset, timeframe);
@@ -74,11 +76,12 @@ export function WatchlistScreen() {
 
   async function selectAsset(symbol: string) {
     await triggerHaptic('selection');
-    setSelectedSymbol(symbol);
+    updateContext({ asset: symbol, screen: 'Watchlist' });
   }
 
   return (
     <ScreenContainer
+      edgeToEdge={true}
       refreshing={overviewResource.refreshing || latestResource.refreshing || chartResource.refreshing}
       onRefresh={() => {
         overviewResource.refresh();
@@ -94,6 +97,13 @@ export function WatchlistScreen() {
         description="TradingView-lite scanning, compact charting and FINN-aware setup context."
       />
 
+      <WatchlistIntelligenceTerminal
+        assets={assets}
+        selectedSymbol={selectedSymbol}
+        stale={overviewResource.isStale}
+        onSelect={selectAsset}
+      />
+
       {overviewResource.loading ? (
         <LoadingSkeletonCard />
       ) : (
@@ -107,13 +117,6 @@ export function WatchlistScreen() {
         timeframe={timeframe}
         onTimeframeChange={setTimeframe}
         loading={chartResource.loading}
-      />
-
-      <WatchlistIntelligenceTerminal
-        assets={assets}
-        selectedSymbol={selectedSymbol}
-        stale={overviewResource.isStale}
-        onSelect={selectAsset}
       />
 
       {overviewResource.error ? (
@@ -163,7 +166,7 @@ function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntell
   const colors = preferenceColors(appearance);
 
   return (
-    <CardShell emphasis="primary">
+    <CardShell emphasis="primary" edgeToEdge={true}>
       <View style={styles.intelTop}>
         <View style={styles.assetIdentity}>
           <AssetIcon symbol={intelligence.symbol} />
@@ -213,7 +216,7 @@ function CompactLiveChart({
   const colors = preferenceColors(appearance);
 
   return (
-    <CardShell>
+    <View style={{ borderBottomWidth: 0.5, borderColor: colors.border, paddingVertical: theme.spacing.md }}>
       <View style={styles.chartHeader}>
         <View>
           <Text style={styles.chartLabel}>Compact live chart</Text>
@@ -222,24 +225,14 @@ function CompactLiveChart({
         <StatusChip label="RSI · MA200 · VOL" tone="accent" />
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timeframes}>
-        {timeframes.map((item) => (
-          <Pressable
-            key={item}
-            onPress={async () => {
-              await triggerHaptic('selection');
-              onTimeframeChange(item);
-            }}
-            style={[styles.timeframeButton, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }, item === timeframe && styles.timeframeActive]}
-          >
-            <View style={[styles.timeframePulse, item === timeframe && styles.timeframePulseActive]} />
-            <Text style={[styles.timeframeText, { color: colors.textDim }, item === timeframe && styles.timeframeTextActive]}>{item}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <SegmentedControl
+        items={timeframes.map((item) => ({ key: item, label: item }))}
+        selected={timeframe}
+        onChange={(value) => onTimeframeChange(value as Timeframe)}
+      />
 
       {loading ? <LoadingSkeletonCard /> : <NativeCandleChart overlays={overlays} points={points} />}
-    </CardShell>
+    </View>
   );
 }
 
@@ -433,7 +426,7 @@ function WatchlistIntelligenceTerminal({
       </View>
 
       <View style={[styles.terminalList, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
-        {assets.map((asset) => (
+        {assets.filter(Boolean).map((asset) => (
           <TerminalAssetCard
             asset={asset}
             key={asset.symbol}
@@ -466,7 +459,12 @@ function TerminalAssetCard({
       onPress={onPress}
       style={({ pressed }) => [
         styles.terminalCard,
-        { backgroundColor: colors.surface, borderColor: selected ? theme.colors.accent : 'transparent' },
+        { 
+          borderBottomColor: colors.borderSubtle,
+          backgroundColor: selected 
+            ? (appearance === 'light' ? '#EFF6FF' : '#1E293B') 
+            : (appearance === 'light' ? '#F8FAFC' : '#0F172A'),
+        },
         selected && styles.terminalCardActive,
         pressed && styles.pressed,
       ]}
@@ -484,47 +482,16 @@ function TerminalAssetCard({
         </View>
       </View>
 
-      <View style={[styles.terminalMetrics, { borderTopColor: colors.border }]}>
-        <TerminalMetric label="Posture" value={intel.posture} />
-        <TerminalMetric label="Structure" value={intel.structure} />
-        <TerminalMetric label="Conviction" value={`${intel.conviction}%`} tone="accent" />
-        <TerminalMetric label="Risk State" value={intel.riskState} tone={riskTone} strong />
+      <View style={styles.terminalMetricsRow}>
+        <Text style={[styles.terminalMetricText, { color: colors.textDim }]}>
+          {intel.posture}  ·  {intel.structure}  ·  {intel.conviction}%  ·  <Text style={{ color: colorForTone(riskTone), fontWeight: '700' }}>{intel.riskState}</Text>
+        </Text>
       </View>
     </Pressable>
   );
 }
 
-function TerminalMetric({
-  label,
-  strong = false,
-  tone = 'neutral',
-  value,
-}: {
-  label: string;
-  strong?: boolean;
-  tone?: StatusTone;
-  value: string;
-}) {
-  const { appearance } = useAppPreferences();
-  const colors = preferenceColors(appearance);
 
-  return (
-    <View style={styles.terminalMetric}>
-      <Text style={[styles.terminalMetricLabel, { color: colors.textDim }]}>{label}</Text>
-      <Text
-        numberOfLines={1}
-        style={[
-          styles.terminalMetricValue,
-          { color: colors.textMuted },
-          strong && styles.terminalMetricStrong,
-          tone !== 'neutral' && { color: colorForTone(tone) },
-        ]}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
 
 function AssetIcon({ compact = false, symbol }: { compact?: boolean; symbol: string }) {
   const background = symbol === 'BTC' ? '#F7931A' : symbol === 'ETH' ? '#627EEA' : symbol === 'SOL' ? '#111827' : theme.colors.accent;
@@ -548,9 +515,9 @@ function MiniMetric({ label, tone, value }: { label: string; tone: StatusTone; v
       : theme.colors.accent;
 
   return (
-    <View style={[styles.metric, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
-      <Text style={[styles.metricLabel, { color: colors.textDim }]}>{label}</Text>
-      <Text style={[styles.metricValue, { color }]}>{value}</Text>
+    <View style={{ flex: 1, gap: 2 }}>
+      <Text style={{ fontSize: 10, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>{label.toUpperCase()}</Text>
+      <Text style={{ fontSize: 13, color: color, fontWeight: '700' }}>{value}</Text>
     </View>
   );
 }
@@ -648,15 +615,44 @@ function buildChartPoints(source: MarketChartPoint[], asset: MobileOverviewAsset
 }
 
 function fallbackAssets(): MobileOverviewAsset[] {
-  return mockWatchlistAssets.map((asset) => ({
-    change_24h: Number(asset.change.replace('%', '')),
-    macro_score: asset.score,
-    market_score: asset.score,
-    price: undefined,
-    setup_score: asset.score,
-    symbol: asset.symbol,
-    technical_score: asset.score,
-  }));
+  return [
+    {
+      symbol: 'BTC',
+      price: 81040,
+      change_24h: 2.35,
+      macro_score: 64,
+      market_score: 72,
+      technical_score: 58,
+      setup_score: 38,
+      macro_label: 'Neutral',
+      market_label: 'Risk-on',
+      technical_label: 'Compression',
+    },
+    {
+      symbol: 'ETH',
+      price: 2278.2,
+      change_24h: -2.62,
+      macro_score: 58,
+      market_score: 61,
+      technical_score: 42,
+      setup_score: 35,
+      macro_label: 'Neutral',
+      market_label: 'Mixed',
+      technical_label: 'Weak Structure',
+    },
+    {
+      symbol: 'SOL',
+      price: 94.51,
+      change_24h: -3.01,
+      macro_score: 55,
+      market_score: 59,
+      technical_score: 44,
+      setup_score: 39,
+      macro_label: 'Neutral',
+      market_label: 'Mixed',
+      technical_label: 'Weak Structure',
+    },
+  ];
 }
 
 function syntheticPoints(asset: MobileOverviewAsset): ChartPoint[] {
@@ -684,15 +680,15 @@ function stateForAsset(asset: MobileOverviewAsset) {
 }
 
 function desktopLikeIntelligence(asset: MobileOverviewAsset) {
-  const conviction = compositeScore(asset);
+  const conviction = asset.conviction ?? compositeScore(asset);
   const change = typeof asset.change_24h === 'number' ? asset.change_24h : 0;
   return {
     change: `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`,
     changeTone: change >= 0 ? 'success' as StatusTone : 'danger' as StatusTone,
     conviction,
-    posture: terminalPostureForAsset(asset, change),
-    riskState: terminalRiskForAsset(asset, change),
-    structure: terminalStructureForAsset(asset),
+    posture: asset.posture ?? terminalPostureForAsset(asset, change),
+    riskState: asset.risk_state ?? terminalRiskForAsset(asset, change),
+    structure: asset.structure ?? terminalStructureForAsset(asset),
   };
 }
 
@@ -863,7 +859,7 @@ const styles = StyleSheet.create({
   },
   columnLabel: {
     color: theme.colors.textDim,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
     textTransform: 'uppercase',
@@ -959,7 +955,7 @@ const styles = StyleSheet.create({
   },
   intelSymbol: {
     color: theme.colors.text,
-    fontSize: 25,
+    fontSize: 18,
     fontWeight: '900',
     marginTop: 2,
   },
@@ -1027,7 +1023,7 @@ const styles = StyleSheet.create({
   },
   price: {
     color: theme.colors.text,
-    fontSize: 38,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
     marginTop: theme.spacing.lg,
@@ -1061,7 +1057,7 @@ const styles = StyleSheet.create({
   },
   rowChange: {
     flex: 0.58,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900',
     textAlign: 'right',
   },
@@ -1074,7 +1070,7 @@ const styles = StyleSheet.create({
   rowPrice: {
     color: theme.colors.text,
     flex: 0.62,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900',
     textAlign: 'right',
   },
@@ -1092,7 +1088,7 @@ const styles = StyleSheet.create({
   },
   rowSymbol: {
     color: theme.colors.text,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
   },
   rsiDot: {
@@ -1192,9 +1188,9 @@ const styles = StyleSheet.create({
   },
   terminalAssetSymbol: {
     color: theme.colors.text,
-    fontSize: 25,
-    fontWeight: '900',
-    letterSpacing: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   terminalAssetTop: {
     alignItems: 'center',
@@ -1202,19 +1198,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   terminalCard: {
-    backgroundColor: theme.colors.surface,
-    borderColor: 'transparent',
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    gap: theme.spacing.md,
-    padding: theme.spacing.lg,
+    backgroundColor: 'transparent',
+    borderBottomWidth: 0.5,
+    paddingVertical: 4,
+    paddingHorizontal: theme.spacing.md,
+    gap: 2,
   },
   terminalCardActive: {
-    borderWidth: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.accent,
+    paddingLeft: theme.spacing.md - 4,
   },
   terminalChange: {
     fontSize: theme.typography.small,
-    fontWeight: '900',
+    fontWeight: '600',
     marginTop: 2,
     textAlign: 'right',
   },
@@ -1243,12 +1240,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   terminalList: {
-    backgroundColor: theme.colors.backgroundSoft,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    gap: theme.spacing.xs,
-    padding: theme.spacing.xs,
+    gap: 0,
+    padding: 0,
   },
   terminalMetric: {
     minWidth: '45%',
@@ -1270,18 +1263,18 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 5,
   },
-  terminalMetrics: {
-    borderTopColor: theme.colors.border,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
-    paddingTop: theme.spacing.md,
+  terminalMetricsRow: {
+    paddingTop: 0,
+  },
+  terminalMetricText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   terminalPrice: {
     color: theme.colors.text,
-    fontSize: 16,
-    fontWeight: '900',
+    fontSize: 14,
+    fontWeight: '600',
     textAlign: 'right',
   },
   terminalPriceBlock: {
@@ -1294,7 +1287,7 @@ const styles = StyleSheet.create({
   },
   terminalSubtitle: {
     color: theme.colors.textMuted,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
     letterSpacing: 1.4,
     marginTop: 3,

@@ -27,7 +27,7 @@ export function InsightCard({ label, title, body, tone = 'neutral', cta, onPress
       }}
       style={({ pressed }) => pressed && styles.pressed}
     >
-      <CardShell>
+      <View style={{ borderBottomWidth: 0.5, borderColor: colors.border, padding: theme.spacing.md }}>
         <View style={styles.header}>
           <Text style={[styles.label, { color: palette.color }]}>{label}</Text>
           <View style={[styles.badge, { backgroundColor: palette.background, borderColor: palette.border }]} />
@@ -35,7 +35,7 @@ export function InsightCard({ label, title, body, tone = 'neutral', cta, onPress
         <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
         <Text style={[styles.body, { color: colors.textMuted }]}>{body}</Text>
         {cta ? <Text style={[styles.cta, { color: palette.color }]}>{cta}</Text> : null}
-      </CardShell>
+      </View>
     </Pressable>
   );
 }

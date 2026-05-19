@@ -10,13 +10,14 @@ import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
 import { SectionHeader } from '../components/layout/SectionHeader';
 import { StatusChip } from '../components/layout/StatusChip';
+import { SegmentedControl } from '../components/layout/SegmentedControl';
 import { StatusTone, theme } from '../constants/theme';
-import { mockBriefing, mockReportHighlights } from '../data/mockFoundation';
+import { triggerHaptic } from '../utils/haptics';
+import { useFinnOverlay } from '../contexts/FinnOverlayContext';
 import { useApiResource } from '../hooks/useApiResource';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import { MobileReportHighlight, MobileReportResponse, ReportResponse, intelligenceApi } from '../services/tradamindApi';
-import { triggerHaptic } from '../utils/haptics';
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly';
 type ReportPayload = { full?: ReportResponse; mobile?: MobileReportResponse };
@@ -77,6 +78,7 @@ const periods: Array<{ id: ReportPeriod; label: string; short: string }> = [
 export function ReportScreen() {
   const navigation = useNavigation<NavigationProp<MainTabParamList>>();
   const route = useRoute<RouteProp<MainTabParamList, 'Report'>>();
+  const { openFinn } = useFinnOverlay();
   const [period, setPeriod] = useState<ReportPeriod>('daily');
   const activeSymbol = route.params?.symbol ?? 'BTC';
   const notificationType = route.params?.notificationType;
@@ -130,6 +132,7 @@ export function ReportScreen() {
 
   return (
     <ScreenContainer
+      edgeToEdge={true}
       refreshing={reportResource.refreshing}
       onRefresh={reportResource.refresh}
     >
@@ -145,7 +148,7 @@ export function ReportScreen() {
           notificationType={notificationType}
           symbol={activeSymbol}
           onAskFinn={() =>
-            navigation.navigate('FINN', {
+            openFinn({
               prefill: `Leg uit wat belangrijk is in het ${period} rapport voor ${activeSymbol}. Geef conclusie, risico en veilige volgende stap.`,
               source: `push-${notificationType}`,
             })
@@ -153,20 +156,11 @@ export function ReportScreen() {
         />
       ) : null}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodTabs}>
-        {periods.map((item) => (
-          <Pressable
-            key={item.id}
-            onPress={() => changePeriod(item.id)}
-            style={[styles.periodTab, { backgroundColor: colors.surface, borderColor: colors.border }, item.id === period && [styles.periodTabActive, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderStrong }]]}
-          >
-            <View style={[styles.periodShortcut, { backgroundColor: colors.surfaceMuted }, item.id === period && styles.periodShortcutActive]}>
-              <Text style={[styles.periodShortcutText, item.id === period && styles.periodShortcutTextActive]}>{item.short}</Text>
-            </View>
-            <Text style={[styles.periodText, { color: colors.textMuted }, item.id === period && [styles.periodTextActive, { color: colors.text }]]}>{item.label}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <SegmentedControl
+        items={periods.map((item) => ({ key: item.id, label: item.label }))}
+        selected={period}
+        onChange={(value) => changePeriod(value as ReportPeriod)}
+      />
 
       {reportResource.loading ? (
         <LoadingSkeletonCard />
@@ -246,7 +240,7 @@ function ReportHero({ report }: { report: MappedReport }) {
   const colors = preferenceColors(appearance);
 
   return (
-    <CardShell emphasis="primary">
+    <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
       <View style={styles.heroTop}>
         <View>
           <Text style={styles.heroLabel}>System rapportage</Text>
@@ -262,7 +256,7 @@ function ReportHero({ report }: { report: MappedReport }) {
         <Text style={[styles.integrity, { color: colors.textDim }]}>Integrity check voltooid</Text>
         <Text style={[styles.generated, { color: colors.textDim }]}>Update: {report.generatedLabel}</Text>
       </View>
-    </CardShell>
+    </View>
   );
 }
 
@@ -279,7 +273,7 @@ function ReportNotificationCard({
   const colors = preferenceColors(appearance);
 
   return (
-    <CardShell emphasis="primary">
+    <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
       <View style={styles.heroTop}>
         <View>
           <Text style={styles.heroLabel}>Push context</Text>
@@ -299,7 +293,7 @@ function ReportNotificationCard({
       >
         <Text style={styles.notificationButtonText}>Vraag FINN om uitleg</Text>
       </Pressable>
-    </CardShell>
+    </View>
   );
 }
 
@@ -312,7 +306,7 @@ function HighlightCard({
   const colors = preferenceColors(appearance);
 
   return (
-    <CardShell>
+    <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
       <View style={styles.highlightTop}>
         <View>
           <Text style={[styles.highlightCategory, { color: colors.textDim }]}>{highlight.category}</Text>
@@ -321,7 +315,7 @@ function HighlightCard({
         {highlight.score === null ? null : <StatusChip label={String(highlight.score)} tone={highlight.tone} />}
       </View>
       <Text style={[styles.highlightText, { color: colors.textMuted }]}>{highlight.interpretation}</Text>
-    </CardShell>
+    </View>
   );
 }
 
@@ -334,7 +328,7 @@ function ReportSectionCard({
   const colors = preferenceColors(appearance);
 
   return (
-    <CardShell>
+    <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
       <View style={styles.reportSectionHeader}>
         <View>
           <Text style={[styles.reportSectionLabel, { color: colors.textDim }]}>{section.label}</Text>
@@ -358,7 +352,7 @@ function ReportSectionCard({
           ))}
         </View>
       ) : null}
-    </CardShell>
+    </View>
   );
 }
 
@@ -375,13 +369,19 @@ function MarketCompanionCard({ companion }: { companion: Extract<ReportCompanion
   const colors = preferenceColors(appearance);
 
   return (
-    <View style={[styles.companionCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+    <View style={{ 
+      paddingVertical: theme.spacing.md, 
+      borderBottomWidth: 0.5,
+      borderColor: colors.border,
+      marginTop: theme.spacing.md,
+      marginHorizontal: theme.spacing.lg,
+    }}>
       <Text style={[styles.companionTitle, { color: colors.text }]}>Marktanalyse</Text>
 
       <View style={styles.marketBlock}>
-        <Text style={[styles.metricLabel, { color: colors.textDim }]}>Bitcoin prijs</Text>
+        <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>BITCOIN PRIJS</Text>
         <View style={styles.marketPriceRow}>
-          <Text style={[styles.marketPrice, { color: colors.text }]}>{formatCurrency(companion.price)}</Text>
+          <Text style={{ fontSize: 24, color: colors.text, fontWeight: '700' }}>{formatCurrency(companion.price)}</Text>
           <Text style={[styles.marketChange, { color: companion.change >= 0 ? theme.colors.success : theme.colors.danger }]}>
             {formatSignedPercent(companion.change)}
           </Text>
@@ -389,15 +389,15 @@ function MarketCompanionCard({ companion }: { companion: Extract<ReportCompanion
       </View>
 
       <View style={styles.marketBlock}>
-        <Text style={[styles.metricLabel, { color: colors.textDim }]}>Totaal volume</Text>
-        <Text style={[styles.metricValue, { color: colors.text }]}>{formatFullNumber(companion.volume)}</Text>
+        <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>TOTAAL VOLUME</Text>
+        <Text style={{ fontSize: 18, color: colors.text, fontWeight: '700' }}>{formatFullNumber(companion.volume)}</Text>
       </View>
 
       <View style={[styles.companionScoreGrid, { borderTopColor: colors.border }]}>
         {companion.scores.map((score) => (
-          <View key={score.label} style={[styles.companionScoreTile, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
-            <Text style={[styles.metricLabel, { color: colors.textDim }]}>{score.label}</Text>
-            <Text style={[styles.companionScoreValue, { color: colorForTone(score.tone) }]}>{score.value}</Text>
+          <View key={score.label} style={{ flex: 1, minWidth: '45%', gap: 2 }}>
+            <Text style={{ fontSize: 10, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>{score.label.toUpperCase()}</Text>
+            <Text style={{ fontSize: 14, color: colorForTone(score.tone), fontWeight: '700' }}>{score.value}</Text>
           </View>
         ))}
       </View>
@@ -410,11 +410,17 @@ function IndicatorCompanionCard({ companion }: { companion: Extract<ReportCompan
   const colors = preferenceColors(appearance);
 
   return (
-    <View style={[styles.companionCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+    <View style={{ 
+      paddingVertical: theme.spacing.md, 
+      borderBottomWidth: 0.5,
+      borderColor: colors.border,
+      marginTop: theme.spacing.md,
+      marginHorizontal: theme.spacing.lg,
+    }}>
       <Text style={[styles.companionTitle, { color: colors.text }]}>{companion.title}</Text>
       <View style={styles.indicatorList}>
         {companion.items.map((item, index) => (
-          <View key={`${item.name}-${index}`} style={[styles.indicatorItem, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
+          <View key={`${item.name}-${index}`} style={{ paddingVertical: 8, gap: 2 }}>
             <View style={styles.indicatorTop}>
               <Text style={[styles.indicatorName, { color: colors.text }]}>{item.name}</Text>
               {item.score === null ? null : <Text style={[styles.indicatorScore, { color: colorForTone(item.tone) }]}>{item.score}</Text>}
@@ -432,18 +438,22 @@ function SetupCompanionCard({ companion }: { companion: Extract<ReportCompanion,
   const colors = preferenceColors(appearance);
 
   return (
-    <View style={[styles.companionCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+    <View style={{ 
+      paddingVertical: theme.spacing.md, 
+      borderBottomWidth: 0.5,
+      borderColor: colors.border,
+      marginTop: theme.spacing.md,
+      marginHorizontal: theme.spacing.lg,
+    }}>
       <Text style={[styles.companionTitle, { color: colors.text }]}>Optimale Setup</Text>
-      <View style={[styles.companionInner, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
-        <View style={styles.companionRow}>
-          <Text style={[styles.companionMeta, { color: colors.textMuted }]}>{companion.matchLabel}</Text>
+      
+      <View style={{ paddingVertical: 8, gap: 2 }}>
+        <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>BESTE MATCH</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ fontSize: 24, color: colors.text, fontWeight: '700' }}>{companion.name}</Text>
           <StatusChip label={`${Math.round(companion.score)}%`} tone={toneForScore(companion.score)} />
         </View>
-        <Text style={[styles.companionPrimary, { color: colors.text }]}>{companion.name}</Text>
-        <Text style={[styles.companionSub, { color: colors.textDim }]}>{companion.symbol} · {companion.timeframe}</Text>
-        <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
-          <View style={[styles.progressFill, { backgroundColor: colorForTone(toneForScore(companion.score)), width: `${Math.max(0, Math.min(100, companion.score))}%` }]} />
-        </View>
+        <Text style={{ fontSize: 13, color: colors.textDim }}>{companion.symbol} · {companion.timeframe}</Text>
       </View>
 
       {companion.topSetups.length > 0 ? (
@@ -469,34 +479,40 @@ function StrategyCompanionCard({ companion }: { companion: Extract<ReportCompani
   const colors = preferenceColors(appearance);
 
   return (
-    <View style={[styles.companionCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+    <View style={{ 
+      paddingVertical: theme.spacing.md, 
+      borderBottomWidth: 0.5,
+      borderColor: colors.border,
+      marginTop: theme.spacing.md,
+      marginHorizontal: theme.spacing.lg,
+    }}>
       <Text style={[styles.companionTitle, { color: colors.text }]}>Actieve Strategie</Text>
       <Text style={[styles.companionPrimary, { color: colors.text }]}>{companion.name}</Text>
       <Text style={[styles.companionSub, { color: colors.textDim }]}>{companion.symbol} · {companion.timeframe}</Text>
 
-      <View style={[styles.metricPanel, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
-        <Text style={[styles.metricLabel, { color: colors.textDim }]}>{companion.entry === null ? 'Referentieprijs' : 'Instapprijs'}</Text>
-        <Text style={[styles.metricValue, { color: colors.text }]}>{formatCurrency(companion.entry ?? 0)}</Text>
+      <View style={{ paddingVertical: 8, gap: 2 }}>
+        <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>{companion.entry === null ? 'REFERENTIEPRIJS' : 'INSTAPPRYS'}</Text>
+        <Text style={{ fontSize: 18, color: colors.text, fontWeight: '700' }}>{formatCurrency(companion.entry ?? 0)}</Text>
       </View>
 
       {companion.targets.length > 0 ? (
-        <View style={styles.targetWrap}>
+        <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
           {companion.targets.slice(0, 4).map((target, index) => (
-            <View key={`${target}-${index}`} style={[styles.targetChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.targetText, { color: colors.textMuted }]}>{target}</Text>
+            <View key={`${target}-${index}`} style={{ paddingVertical: 2, paddingHorizontal: 6, borderRadius: theme.radius.pill, borderWidth: 0.5, borderColor: colors.border }}>
+              <Text style={{ fontSize: 11, color: colors.textMuted }}>{target}</Text>
             </View>
           ))}
         </View>
       ) : null}
 
-      <View style={[styles.companionSplit, { borderTopColor: colors.border }]}>
+      <View style={[styles.companionSplit, { borderTopColor: colors.border, marginTop: 12 }]}>
         <View>
-          <Text style={[styles.metricLabel, { color: colors.textDim }]}>Stop-loss</Text>
-          <Text style={[styles.splitValue, { color: colors.text }]}>{formatCurrency(companion.stopLoss ?? 0)}</Text>
+          <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>STOP-LOSS</Text>
+          <Text style={{ fontSize: 14, color: colors.text, fontWeight: '700' }}>{formatCurrency(companion.stopLoss ?? 0)}</Text>
         </View>
         <View style={styles.alignRight}>
-          <Text style={[styles.metricLabel, { color: colors.textDim }]}>Vertrouwen</Text>
-          <Text style={[styles.splitValue, { color: colors.text }]}>{companion.confidence === null ? '-' : `${Math.round(companion.confidence)}%`}</Text>
+          <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>VERTROUWEN</Text>
+          <Text style={{ fontSize: 14, color: colorForTone(toneForScore(companion.confidence ?? 0)), fontWeight: '700' }}>{companion.confidence === null ? '-' : `${Math.round(companion.confidence)}%`}</Text>
         </View>
       </View>
     </View>
@@ -509,29 +525,35 @@ function BotCompanionCard({ companion }: { companion: Extract<ReportCompanion, {
   const actionTone = companion.action === 'buy' ? 'success' : companion.action === 'sell' ? 'danger' : 'neutral';
 
   return (
-    <View style={[styles.companionCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+    <View style={{ 
+      paddingVertical: theme.spacing.md, 
+      borderBottomWidth: 0.5,
+      borderColor: colors.border,
+      marginTop: theme.spacing.md,
+      marginHorizontal: theme.spacing.lg,
+    }}>
       <Text style={[styles.companionTitle, { color: colors.text }]}>Handelsactie</Text>
       <Text style={[styles.companionPrimary, { color: colors.text }]}>{companion.botName}</Text>
 
-      <View style={[styles.actionPanel, { borderColor: colorForTone(actionTone), backgroundColor: softBackgroundForTone(actionTone) }]}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 }}>
         <View>
-          <Text style={[styles.metricLabel, { color: colors.textDim }]}>Actie</Text>
-          <Text style={[styles.actionValue, { color: colorForTone(actionTone) }]}>{companion.action.toUpperCase()}</Text>
+          <Text style={{ fontSize: 10, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>ACTIE</Text>
+          <Text style={{ fontSize: 18, color: colorForTone(actionTone), fontWeight: '700' }}>{companion.action.toUpperCase()}</Text>
         </View>
         <View style={styles.alignRight}>
-          <Text style={[styles.metricLabel, { color: colors.textDim }]}>Vertrouwen</Text>
-          <Text style={[styles.splitValue, { color: colors.text }]}>{companion.confidence === null ? '-' : `${Math.round(companion.confidence)}%`}</Text>
+          <Text style={{ fontSize: 10, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>VERTROUWEN</Text>
+          <Text style={{ fontSize: 18, color: colorForTone(toneForScore(companion.confidence ?? 0)), fontWeight: '700' }}>{companion.confidence === null ? '-' : `${Math.round(companion.confidence)}%`}</Text>
         </View>
       </View>
 
       <View style={[styles.companionSplit, { borderTopColor: colors.border }]}>
         <View>
-          <Text style={[styles.metricLabel, { color: colors.textDim }]}>Ordergrootte</Text>
-          <Text style={[styles.splitValue, { color: colors.text }]}>{companion.amount === null ? '-' : `EUR ${formatCompactNumber(companion.amount)}`}</Text>
+          <Text style={{ fontSize: 10, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>ORDERGROOTTE</Text>
+          <Text style={{ fontSize: 14, color: colors.text, fontWeight: '700' }}>{companion.amount === null ? '-' : `EUR ${formatCompactNumber(companion.amount)}`}</Text>
         </View>
         <View style={styles.alignRight}>
-          <Text style={[styles.metricLabel, { color: colors.textDim }]}>Setup match</Text>
-          <Text style={[styles.splitValue, { color: colors.text }]}>{companion.setupMatch === null ? '-' : `${Math.round(companion.setupMatch)}%`}</Text>
+          <Text style={{ fontSize: 10, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>SETUP MATCH</Text>
+          <Text style={{ fontSize: 14, color: colorForTone(toneForScore(companion.setupMatch ?? 0)), fontWeight: '700' }}>{companion.setupMatch === null ? '-' : `${Math.round(companion.setupMatch)}%`}</Text>
         </View>
       </View>
 
@@ -576,13 +598,7 @@ function mapMobileReport(
 }
 
 function fallbackReport(period: ReportPeriod): MappedReport {
-  const highlights = mockReportHighlights.map((item) => ({
-    category: item.title,
-    interpretation: item.value,
-    name: item.title,
-    score: null,
-    tone: item.tone,
-  }));
+  const highlights = [{ category: 'System', name: 'Geen data', score: null, interpretation: 'Geen report data beschikbaar', tone: 'neutral' as const }];
 
   return {
     conclusionTitle: 'Geduld blijft de hoofdactie',
@@ -634,7 +650,7 @@ function fallbackReport(period: ReportPeriod): MappedReport {
         tone: 'warning',
       },
     ],
-    generatedLabel: mockBriefing.updatedAt,
+    generatedLabel: new Date().toLocaleTimeString(),
     headline: 'Constructive, not urgent',
     highlights,
     isFallback: true,
@@ -651,7 +667,7 @@ function fallbackReport(period: ReportPeriod): MappedReport {
     ],
     summary:
       'The morning read favors patience: market structure is supportive, setup confirmation is incomplete, and portfolio exposure is already meaningful.',
-    updatedAt: mockBriefing.updatedAt,
+    updatedAt: new Date().toLocaleTimeString(),
   };
 }
 
@@ -687,13 +703,7 @@ function normalizeHighlights(highlights?: MobileReportHighlight[]) {
 
   if (normalized.length > 0) return normalized;
 
-  return mockReportHighlights.map((item) => ({
-    category: item.title,
-    interpretation: item.value,
-    name: item.title,
-    score: null,
-    tone: item.tone,
-  }));
+  return [{ category: 'System', name: 'Geen data', score: null, interpretation: 'Geen data', tone: 'neutral' as const }];
 }
 
 function fullReportSections(fullReport: ReportResponse | undefined, mobileReport: MobileReportResponse) {
@@ -1208,7 +1218,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.borderSubtle,
     borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    borderWidth: 0.5,
     flexBasis: '45%',
     flexGrow: 1,
     padding: theme.spacing.sm,
@@ -1241,10 +1251,10 @@ const styles = StyleSheet.create({
   },
   heroHeadline: {
     color: theme.colors.text,
-    fontSize: 29,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
-    lineHeight: 34,
+    lineHeight: 22,
     marginTop: theme.spacing.lg,
   },
   heroLabel: {
@@ -1300,7 +1310,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.borderSubtle,
     borderRadius: theme.radius.md,
-    borderWidth: 1,
+    borderWidth: 0.5,
     padding: theme.spacing.md,
   },
   indicatorList: {
@@ -1344,16 +1354,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: theme.colors.surfaceMuted,
     borderRadius: theme.radius.sm,
-    height: 22,
+    height: 18,
     justifyContent: 'center',
-    width: 22,
+    width: 18,
   },
   periodShortcutActive: {
     backgroundColor: theme.colors.accent,
   },
   periodShortcutText: {
     color: theme.colors.textMuted,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
   },
   periodShortcutTextActive: {
@@ -1367,8 +1377,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
   },
   periodTabActive: {
     backgroundColor: theme.colors.surfaceElevated,
@@ -1379,7 +1389,7 @@ const styles = StyleSheet.create({
   },
   periodText: {
     color: theme.colors.textMuted,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
   },
   periodTextActive: {
@@ -1400,13 +1410,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.borderSubtle,
     borderRadius: theme.radius.md,
-    borderWidth: 1,
+    borderWidth: 0.5,
     marginTop: theme.spacing.lg,
     padding: theme.spacing.md,
   },
   metricValue: {
     color: theme.colors.text,
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
     marginTop: theme.spacing.sm,
@@ -1420,7 +1430,7 @@ const styles = StyleSheet.create({
   },
   marketPrice: {
     color: theme.colors.text,
-    fontSize: 34,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
   },
@@ -1440,18 +1450,20 @@ const styles = StyleSheet.create({
   },
   notificationButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.accent,
-    borderRadius: theme.radius.button,
     justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: theme.radius.pill,
+    borderWidth: 0.5,
+    borderColor: theme.colors.border,
+    backgroundColor: 'transparent',
     marginTop: theme.spacing.lg,
-    minHeight: 48,
-    paddingHorizontal: theme.spacing.md,
   },
   notificationButtonText: {
-    color: theme.colors.white,
+    color: theme.colors.accent,
     fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1,
+    fontWeight: '700',
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   notificationTitle: {

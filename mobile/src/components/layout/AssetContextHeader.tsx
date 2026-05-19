@@ -23,7 +23,7 @@ export function AssetContextHeader({ asset, context, updatedAt }: AssetContextHe
   const initials = userInitials(user?.first_name, user?.last_name, user?.email);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <View style={[styles.container, { borderColor: colors.border }]}>
       <View style={styles.titleBlock}>
         <Text style={styles.label}>Active context</Text>
         <Text style={[styles.title, { color: colors.text }]}>{context}</Text>
@@ -31,7 +31,11 @@ export function AssetContextHeader({ asset, context, updatedAt }: AssetContextHe
       <View style={styles.actions}>
         <Pressable
           onPress={() => triggerHaptic('selection')}
-          style={({ pressed }) => [styles.assetButton, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.assetButton,
+            { backgroundColor: colors.backgroundSoft, borderColor: colors.border },
+            pressed && styles.pressed
+          ]}
         >
           <Text style={[styles.asset, { color: colors.text }]}>{asset}</Text>
         </Pressable>
@@ -47,7 +51,7 @@ export function AssetContextHeader({ asset, context, updatedAt }: AssetContextHe
             pressed && styles.pressed,
           ]}
         >
-          <Text style={styles.avatarText}>{initials}</Text>
+          <Text style={[styles.avatarText, { color: colors.text }]}>{initials}</Text>
         </Pressable>
       </View>
       <View style={styles.freshness}>
@@ -72,16 +76,16 @@ const styles = StyleSheet.create({
   },
   asset: {
     color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '700',
   },
   assetButton: {
-    backgroundColor: theme.colors.accentSoft,
-    borderColor: '#1D4ED880',
+    backgroundColor: theme.colors.backgroundSoft,
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    borderWidth: 0.5,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
   },
   avatarButton: {
     alignItems: 'center',
@@ -89,21 +93,19 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderStrong,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    height: 40,
+    height: 32,
     justifyContent: 'center',
-    width: 40,
+    width: 32,
   },
   avatarText: {
     color: theme.colors.textSoft,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '900',
   },
   container: {
     alignItems: 'flex-start',
-    backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.card,
-    borderWidth: 1,
+    borderBottomWidth: 0.5,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.md,

@@ -1,16 +1,16 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { theme } from '../constants/theme';
-import { FinnScreen } from '../screens/FinnScreen';
+import { Feather } from '@expo/vector-icons';
 import { PortfolioScreen } from '../screens/PortfolioScreen';
 import { ReportScreen } from '../screens/ReportScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SetupScreen } from '../screens/SetupScreen';
 import { WatchlistScreen } from '../screens/WatchlistScreen';
+import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 
 export type MainTabParamList = {
-  FINN: { prefill?: string; source?: string } | undefined;
   Watchlist: undefined;
   Setup: { notificationType?: string; symbol?: string } | undefined;
   Portfolio: undefined;
@@ -20,58 +20,45 @@ export type MainTabParamList = {
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-const tabIcons: Record<keyof MainTabParamList, string> = {
-  FINN: 'FN',
-  Watchlist: 'WL',
-  Setup: 'SU',
-  Portfolio: 'PF',
-  Report: 'RP',
-  Settings: 'ST',
-};
-
-import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
-
 export function MainTabNavigator() {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
     <Tab.Navigator
-      initialRouteName="FINN"
+      initialRouteName="Watchlist"
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: theme.colors.accent,
+        tabBarActiveTintColor: colors.text,
         tabBarInactiveTintColor: colors.textDim,
-        tabBarIcon: ({ color, focused }) => (
-          <View
-            style={[
-              styles.iconBadge,
-              focused && { backgroundColor: appearance === 'light' ? '#EFF6FF' : theme.colors.accentSoft },
-              focused && { borderColor: theme.colors.accent },
-            ]}
-          >
-            <Text style={[styles.iconText, { color }]}>{tabIcons[route.name]}</Text>
-          </View>
-        ),
+        tabBarIcon: ({ color, size }) => {
+          let iconName: "list" | "sliders" | "briefcase" | "bar-chart-2" = 'list';
+          if (route.name === 'Watchlist') iconName = 'list';
+          else if (route.name === 'Setup') iconName = 'sliders';
+          else if (route.name === 'Portfolio') iconName = 'briefcase';
+          else if (route.name === 'Report') iconName = 'bar-chart-2';
+          
+          return <Feather name={iconName} size={20} color={color} />;
+        },
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '900',
+          fontSize: 10,
+          fontWeight: '700',
           letterSpacing: 0,
+          marginTop: 2,
         },
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 84,
-          paddingBottom: 12,
-          paddingTop: 10,
+          height: 80,
+          paddingBottom: 24,
+          paddingTop: 8,
         },
         tabBarItemStyle: {
-          paddingVertical: 2,
+          justifyContent: 'center',
         },
       })}
     >
-      <Tab.Screen name="FINN" component={FinnScreen} />
       <Tab.Screen name="Watchlist" component={WatchlistScreen} />
       <Tab.Screen name="Setup" component={SetupScreen} />
       <Tab.Screen name="Portfolio" component={PortfolioScreen} />
@@ -88,21 +75,4 @@ export function MainTabNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
-  iconBadge: {
-    alignItems: 'center',
-    borderColor: 'transparent',
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
-    height: 28,
-    justifyContent: 'center',
-    width: 34,
-  },
-  iconBadgeActive: {
-    backgroundColor: theme.colors.accentSoft,
-  },
-  iconText: {
-    fontSize: 10,
-    fontWeight: '900',
-  },
-});
+const styles = StyleSheet.create({});

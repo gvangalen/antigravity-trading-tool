@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import type { NavigationProp } from '@react-navigation/native';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 import { CardShell } from '../components/cards/CardShell';
 import { InsightCard } from '../components/cards/InsightCard';
@@ -10,6 +11,7 @@ import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
 import { SectionHeader } from '../components/layout/SectionHeader';
 import { StatusChip } from '../components/layout/StatusChip';
+import { SegmentedControl } from '../components/layout/SegmentedControl';
 import { BottomSheet } from '../components/sheets/BottomSheet';
 import { StatusTone, theme } from '../constants/theme';
 import { useApiResource } from '../hooks/useApiResource';
@@ -22,6 +24,8 @@ import {
   mobileApi,
 } from '../services/tradamindApi';
 import { triggerHaptic } from '../utils/haptics';
+import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
+import { useFinnOverlay } from '../contexts/FinnOverlayContext';
 
 type UnknownRecord = Record<string, unknown>;
 type EnvFilter = 'all' | 'paper' | 'live';
@@ -76,6 +80,7 @@ const metrics: Array<{ key: MetricKey; label: string }> = [
 
 export function PortfolioScreen() {
   const navigation = useNavigation<NavigationProp<MainTabParamList>>();
+  const { openFinn } = useFinnOverlay();
   const [envFilter, setEnvFilter] = useState<EnvFilter>('all');
   const [range, setRange] = useState<RangeKey>('1W');
   const [metric, setMetric] = useState<MetricKey>('equity');
@@ -147,7 +152,8 @@ export function PortfolioScreen() {
     [aggregate, historyResource.data, rangeConfig.limit],
   );
   const performance = useMemo(() => getPerformance(history, metric, aggregate), [aggregate, history, metric]);
-  const activeAsset = overviewResource.data?.watchlist[0]?.symbol ?? filteredBots[0]?.symbol ?? 'BTC';
+  const { context, updateContext } = useIntelligenceContext();
+  const activeAsset = context.asset;
   const activeOverviewAsset = overviewResource.data?.watchlist.find((asset) => asset.symbol === activeAsset);
   const primaryBot = filteredBots.find((bot) => bot.symbol === activeAsset && bot.isActive) ?? filteredBots.find((bot) => bot.isActive) ?? filteredBots[0];
   const loading =
@@ -186,7 +192,7 @@ export function PortfolioScreen() {
   async function askFinnTradeCheck() {
     await triggerHaptic('selection');
     setTradeSheetOpen(false);
-    navigation.navigate('FINN', {
+    openFinn({
       prefill: buildTradePrefill({
         activeAsset,
         amountUnit,
@@ -256,6 +262,7 @@ export function PortfolioScreen() {
   return (
     <View style={styles.screenWrap}>
       <ScreenContainer
+        edgeToEdge={true}
         contentInsetBottom={170}
         refreshing={
           overviewResource.refreshing ||
@@ -307,7 +314,7 @@ export function PortfolioScreen() {
               onEnvFilterChange={changeEnv}
             />
 
-            <MyBotsSection bots={filteredBots} totalBots={bots.length} />
+            <MyBotsSection bots={filteredBots} totalBots={bots.length} onOpenTrade={openTradeSheet} />
           </>
         )}
 
@@ -328,16 +335,7 @@ export function PortfolioScreen() {
         ) : null}
       </ScreenContainer>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Open trade flow"
-        onPress={openTradeSheet}
-        style={({ pressed }) => [styles.tradeFab, pressed && styles.pressed]}
-      >
-        <View style={styles.tradeFabStatus} />
-        <Text style={styles.tradeFabOrb}>AI</Text>
-        <Text style={styles.tradeFabText}>Trade</Text>
-      </Pressable>
+
 
       <BottomSheet visible={tradeSheetOpen} title="AI trade flow" onClose={() => setTradeSheetOpen(false)}>
         <TradeActionSheet
@@ -379,7 +377,7 @@ function EnvironmentAnalytics({ overview, stale }: { overview?: MobileOverviewRe
   ];
 
   return (
-    <CardShell>
+    <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
       <View style={styles.sectionTop}>
         <View>
           <Text style={styles.kicker}>Environment analytics</Text>
@@ -387,18 +385,18 @@ function EnvironmentAnalytics({ overview, stale }: { overview?: MobileOverviewRe
         </View>
         <StatusChip label={stale ? 'Stale' : 'Live'} tone={stale ? 'warning' : 'success'} />
       </View>
-      <View style={styles.scoreGrid}>
+      <View style={{ gap: 8, marginTop: theme.spacing.md }}>
         {scores.map((score) => {
           const value = clampScore(score.value);
           return (
-            <View key={score.label} style={[styles.scoreTile, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }, value >= 70 && styles.scoreTileStrong]}>
-              <Text style={[styles.scoreLabel, { color: colors.textDim }]}>{score.label}</Text>
-              <Text style={[styles.scoreValue, { color: colorForScore(value) }]}>{value}</Text>
+            <View key={score.label} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 }}>
+              <Text style={{ fontSize: 13, color: colors.textDim }}>{score.label}</Text>
+              <Text style={{ fontSize: 13, color: colorForScore(value), fontWeight: '600' }}>{value}</Text>
             </View>
           );
         })}
       </View>
-    </CardShell>
+    </View>
   );
 }
 
@@ -425,7 +423,7 @@ function PortfolioPerformanceCard({
   const accentColor = metric === 'unrealized_pnl' ? (isDown ? theme.colors.danger : theme.colors.success) : theme.colors.accent;
 
   return (
-    <CardShell emphasis="primary">
+    <CardShell emphasis="primary" edgeToEdge={true}>
       <View style={styles.performanceHeader}>
         <View>
           <Text style={styles.kicker}>Portfolio overview</Text>
@@ -480,7 +478,8 @@ function BotPortfolioOverviewCard({
   const usedPct = aggregate.totalBudget > 0 ? Math.min(100, (aggregate.invested / aggregate.totalBudget) * 100) : 0;
 
   return (
-    <CardShell>
+    <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
+      {/* Hero */}
       <View style={styles.portfolioHero}>
         <View style={styles.leftRail} />
         <View style={styles.heroContent}>
@@ -498,93 +497,148 @@ function BotPortfolioOverviewCard({
         onChange={(value) => onEnvFilterChange(value as EnvFilter)}
       />
 
-      <View style={[styles.activeBotTile, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
-        <Text style={[styles.metricLabel, { color: colors.textDim }]}>Actieve bots</Text>
-        <Text style={[styles.activeBotCount, { color: colors.text }]}>{bots.filter((bot) => bot.isActive).length}</Text>
+      {/* Actieve bots */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, marginTop: theme.spacing.md }}>
+        <Text style={{ fontSize: 13, color: colors.textDim }}>Actieve bots</Text>
+        <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{bots.filter((bot) => bot.isActive).length}</Text>
       </View>
 
+      {/* Exchange balances */}
       {exchangeSummary.count > 0 && envFilter !== 'paper' ? (
-        <View style={[styles.exchangePanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={{ marginTop: theme.spacing.md }}>
           <Text style={styles.kicker}>Exchange balances</Text>
           <Text style={[styles.exchangeSubtitle, { color: colors.textDim }]}>Live wallet context vanuit de backend</Text>
-          <View style={styles.exchangeGrid}>
-            <SmallStat label="Exchanges" value={String(exchangeSummary.count)} />
-            <SmallStat label="Totaal waarde" value={formatEUR(exchangeSummary.totalEur)} />
-            <SmallStat label="Vrij EUR" value={formatEUR(exchangeSummary.freeEur)} />
+          <View style={{ gap: 8, marginTop: theme.spacing.md }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 13, color: colors.textDim }}>Exchanges</Text>
+              <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{String(exchangeSummary.count)}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 13, color: colors.textDim }}>Totaal waarde</Text>
+              <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(exchangeSummary.totalEur)}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 13, color: colors.textDim }}>Vrij EUR</Text>
+              <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(exchangeSummary.freeEur)}</Text>
+            </View>
           </View>
           {exchangeSummary.names.length > 0 ? (
-            <Text style={[styles.exchangeNames, { color: colors.textSoft }]}>{exchangeSummary.names.join('  -  ')}</Text>
+            <Text style={{ fontSize: 11, color: colors.textSoft, marginTop: 8, letterSpacing: 0.5 }}>{exchangeSummary.names.join('  -  ').toUpperCase()}</Text>
           ) : null}
         </View>
       ) : null}
 
-      <View style={[styles.budgetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      {/* Budget */}
+      <View style={{ marginTop: theme.spacing.md }}>
         <Text style={styles.kicker}>Gebruik van totaal budget</Text>
         <Text style={[styles.budgetSub, { color: colors.textDim }]}>Single source of truth: backend</Text>
-        <View style={styles.budgetLine}>
-          <Text style={[styles.budgetLabel, { color: colors.text }]}>Alle bots gecombineerd</Text>
-          <Text style={[styles.budgetValue, { color: colors.text }]}>
-            {formatEUR(aggregate.invested)} / {formatEUR(aggregate.totalBudget)}
+        
+        <View style={{ gap: 8, marginTop: theme.spacing.md }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 13, color: colors.text }}>Alle bots gecombineerd</Text>
+            <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>
+              {formatEUR(aggregate.invested)} / {formatEUR(aggregate.totalBudget)}
+            </Text>
+          </View>
+          
+          <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+            <View style={[styles.progressFill, { width: `${usedPct}%`, backgroundColor: colors.accent }]} />
+          </View>
+          
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 13, color: colors.text }}>Beschikbaar</Text>
+            <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(Math.max(aggregate.totalBudget - aggregate.invested, 0))}</Text>
+          </View>
+        </View>
+        
+        <View style={{ gap: 8, marginTop: theme.spacing.md }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 13, color: colors.textDim }}>Vandaag besteed</Text>
+            <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(aggregate.todaySpent)}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 13, color: colors.textDim }}>Daglimiet</Text>
+            <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(aggregate.dailyLimit)}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 13, color: colors.textDim }}>Som max/trade</Text>
+            <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(aggregate.maxOrder)}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Big Stats */}
+      <View style={{ gap: 8, marginTop: theme.spacing.md }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={{ fontSize: 13, color: colors.textDim }}>Posities</Text>
+          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{String(aggregate.assetRows.length)}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={{ fontSize: 13, color: colors.textDim }}>Totale waarde</Text>
+          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(aggregate.positionValue)}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={{ fontSize: 13, color: colors.textDim }}>Invested exec</Text>
+          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(aggregate.invested)}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={{ fontSize: 13, color: colors.textDim }}>PNL totaal</Text>
+          <Text style={{ fontSize: 13, color: aggregate.pnl >= 0 ? theme.colors.success : theme.colors.danger, fontWeight: '600' }}>
+            {formatEUR(aggregate.pnl)} {formatPercent(aggregate.pnlPct)}
           </Text>
         </View>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${usedPct}%` }]} />
-        </View>
-        <View style={styles.budgetLine}>
-          <Text style={[styles.budgetLabel, { color: colors.text }]}>Beschikbaar</Text>
-          <Text style={[styles.budgetValue, { color: colors.text }]}>{formatEUR(Math.max(aggregate.totalBudget - aggregate.invested, 0))}</Text>
-        </View>
-        <View style={styles.inlineStats}>
-          <SmallStat label="Vandaag besteed" value={formatEUR(aggregate.todaySpent)} />
-          <SmallStat label="Daglimiet" value={formatEUR(aggregate.dailyLimit)} />
-          <SmallStat label="Som max/trade" value={formatEUR(aggregate.maxOrder)} />
-        </View>
       </View>
 
-      <View style={styles.bigStatsGrid}>
-        <BigStat label="Posities" value={String(aggregate.assetRows.length)} />
-        <BigStat label="Totale waarde" value={formatEUR(aggregate.positionValue)} />
-        <BigStat label="Invested exec" value={formatEUR(aggregate.invested)} />
-        <BigStat label="PNL totaal" value={`${formatEUR(aggregate.pnl)} ${formatPercent(aggregate.pnlPct)}`} tone={aggregate.pnl >= 0 ? 'success' : 'danger'} />
-      </View>
-
+      {/* Asset Breakdown */}
       {aggregate.assetRows.length > 0 ? (
-        <View style={styles.assetBreakdown}>
+        <View style={{ marginTop: theme.spacing.md }}>
           <Text style={styles.kicker}>Breakdown per asset</Text>
-          {aggregate.assetRows.map((row) => (
-            <View key={row.symbol} style={[styles.assetRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View>
-                <Text style={[styles.assetSymbol, { color: colors.text }]}>{row.symbol}</Text>
-                <Text style={[styles.assetQty, { color: colors.textDim }]}>{row.netQty.toFixed(6)} {row.symbol}</Text>
+          <View style={{ marginTop: theme.spacing.sm }}>
+            {aggregate.assetRows.map((row) => (
+              <View key={row.symbol} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: colors.border }}>
+                <View>
+                  <Text style={{ fontSize: 14, color: colors.text, fontWeight: '600' }}>{row.symbol}</Text>
+                  <Text style={{ fontSize: 12, color: colors.textDim }}>{row.netQty.toFixed(6)} {row.symbol}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ fontSize: 14, color: colors.text, fontWeight: '600' }}>{formatEUR(row.positionValue)}</Text>
+                  <Text style={{ fontSize: 12, color: row.pnl >= 0 ? theme.colors.success : theme.colors.danger }}>
+                    {formatEUR(row.pnl)} {formatPercent(row.pnlPct)}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.assetValueBlock}>
-                <Text style={[styles.assetValue, { color: colors.text }]}>{formatEUR(row.positionValue)}</Text>
-                <Text style={[styles.assetPnl, { color: row.pnl >= 0 ? theme.colors.success : theme.colors.danger }]}>
-                  {formatEUR(row.pnl)} {formatPercent(row.pnlPct)}
-                </Text>
-              </View>
-            </View>
-          ))}
+            ))}
+          </View>
         </View>
       ) : null}
-    </CardShell>
+    </View>
   );
 }
 
-function MyBotsSection({ bots, totalBots }: { bots: PortfolioBot[]; totalBots: number }) {
+function MyBotsSection({ bots, totalBots, onOpenTrade }: { bots: PortfolioBot[]; totalBots: number; onOpenTrade: () => void }) {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
     <View style={styles.myBots}>
-      <View>
+      <View style={{ paddingHorizontal: theme.spacing.lg }}>
         <Text style={[styles.myBotsTitle, { color: colors.text }]}>My Bots</Text>
         <Text style={[styles.myBotsSubtitle, { color: colors.textMuted }]}>Overzicht van actieve handelsstrategieen.</Text>
       </View>
-      <View style={styles.filterPills}>
+      <View style={[styles.filterPills, { paddingHorizontal: theme.spacing.lg }]}>
         <StatusChip label={`All ${totalBots}`} tone="accent" />
         <StatusChip label={`Active ${bots.filter((bot) => bot.isActive).length}`} tone="success" />
       </View>
+      <Pressable
+        onPress={onOpenTrade}
+        style={({ pressed }) => [
+          styles.inlineTradeButton,
+          { backgroundColor: colors.backgroundSoft, borderColor: colors.border },
+          pressed && { opacity: 0.8 }
+        ]}
+      >
+        <Text style={[styles.inlineTradeButtonText, { color: colors.text }]}>Open AI Trade Flow</Text>
+      </Pressable>
       {bots.length === 0 ? (
         <InsightCard
           label="Bots"
@@ -606,7 +660,7 @@ function BotCard({ bot }: { bot: PortfolioBot }) {
   const pnlPct = bot.invested > 0 ? (pnl / bot.invested) * 100 : 0;
 
   return (
-    <CardShell>
+    <View style={[styles.botRow, { borderBottomColor: colors.borderSubtle }]}>
       <View style={styles.botTop}>
         <View style={styles.botIcon}>
           <Text style={styles.botIconText}>BT</Text>
@@ -638,44 +692,11 @@ function BotCard({ bot }: { bot: PortfolioBot }) {
           PnL {formatEUR(pnl)} {formatPercent(pnlPct)}
         </Text>
       </View>
-    </CardShell>
-  );
-}
-
-function SegmentedControl({
-  compact = false,
-  items,
-  onChange,
-  selected,
-}: {
-  compact?: boolean;
-  items: Array<{ key: string; label: string }>;
-  onChange: (value: string) => void;
-  selected: string;
-}) {
-  const { appearance } = useAppPreferences();
-  const colors = preferenceColors(appearance);
-
-  return (
-    <View style={[styles.segmented, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }, compact && styles.segmentedCompact]}>
-      {items.map((item) => {
-        const active = selected === item.key;
-        return (
-          <Pressable
-            accessibilityRole="button"
-            key={item.key}
-            onPress={() => onChange(item.key)}
-            style={[styles.segment, compact && styles.segmentCompact, active && [styles.segmentActive, { backgroundColor: colors.surface, borderColor: colors.border }]]}
-          >
-            <Text style={[styles.segmentText, { color: colors.textDim }, active && [styles.segmentTextActive, { color: colors.text }]]} numberOfLines={1}>
-              {item.label}
-            </Text>
-          </Pressable>
-        );
-      })}
     </View>
   );
 }
+
+
 
 function SparkChart({
   accentColor,
@@ -689,35 +710,89 @@ function SparkChart({
   const values = points.map((point) => readNumber(point, [metric], 0));
   const visible = values.slice(Math.max(0, values.length - 52));
   const max = Math.max(...visible, 1);
-  const min = Math.min(...visible, 0);
+  const min = Math.min(...visible);
   const span = Math.max(max - min, 1);
 
-  return (
-    <View style={styles.chartBox}>
-      <View style={styles.chartGridLine} />
-      {visible.length > 0 ? (
-        <View style={styles.chartBars}>
-          {visible.map((value, index) => {
-            const heightPct = 14 + ((value - min) / span) * 78;
-            return (
-              <View key={`${index}-${value}`} style={styles.chartColumn}>
-                <View
-                  style={[
-                    styles.chartBar,
-                    {
-                      backgroundColor: accentColor,
-                      height: `${heightPct}%`,
-                      opacity: 0.35 + (index / Math.max(visible.length - 1, 1)) * 0.55,
-                    },
-                  ]}
-                />
-              </View>
-            );
-          })}
-        </View>
-      ) : (
+  if (visible.length === 0) {
+    return (
+      <View style={styles.chartBox}>
         <Text style={styles.emptyChartText}>Geen balance history beschikbaar</Text>
-      )}
+      </View>
+    );
+  }
+
+  const stepX = 100 / Math.max(visible.length - 1, 1);
+  
+  // Construct path points
+  const pathPoints = visible.map((value, index) => {
+    const x = index * stepX;
+    const heightPct = 14 + ((value - min) / span) * 78;
+    const y = 100 - heightPct;
+    return { x, y };
+  });
+
+  // Construct Line Path
+  const linePath = pathPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+  // Construct Area Path
+  const areaPath = `${linePath} L 100 100 L 0 100 Z`;
+
+  // Get timestamps for visible points (fallback to mock dates if missing)
+  const visiblePoints = points.slice(Math.max(0, points.length - 52));
+  
+  const formatDataDate = (ts: string | undefined) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short' });
+  };
+
+  // Calculate 5 points for X-axis
+  const len = visiblePoints.length;
+  const firstDate = formatDataDate(visiblePoints[0]?.ts as string);
+  const lastDate = formatDataDate(visiblePoints[len - 1]?.ts as string);
+  const p25Date = formatDataDate(visiblePoints[Math.floor(len * 0.25)]?.ts as string);
+  const p50Date = formatDataDate(visiblePoints[Math.floor(len * 0.50)]?.ts as string);
+  const p75Date = formatDataDate(visiblePoints[Math.floor(len * 0.75)]?.ts as string);
+
+  return (
+    <View style={[styles.chartBox, { paddingBottom: 30, paddingLeft: 55, paddingTop: 10 }]}>
+      
+      {/* Y-Axis Labels (5 labels) */}
+      <View style={{ position: 'absolute', left: 5, top: 10, bottom: 40, justifyContent: 'space-between', alignItems: 'flex-end', width: 45 }}>
+        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{formatEUR(max)}</Text>
+        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{formatEUR(min + span * 0.75)}</Text>
+        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{formatEUR(min + span * 0.5)}</Text>
+        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{formatEUR(min + span * 0.25)}</Text>
+        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{formatEUR(min)}</Text>
+      </View>
+
+      {/* Chart Area */}
+      <View style={{ flex: 1, paddingRight: theme.spacing.sm }}>
+        <Svg width="100%" height="100%" viewBox="0 0 100 100">
+          {/* Area Fill */}
+          <Path
+            d={areaPath}
+            fill={accentColor}
+            opacity={0.15}
+          />
+          {/* Smooth Line */}
+          <Path
+            d={linePath}
+            stroke={accentColor}
+            strokeWidth={2}
+            fill="none"
+          />
+        </Svg>
+      </View>
+
+      {/* X-Axis Labels (5 labels) */}
+      <View style={{ position: 'absolute', bottom: 10, left: 55, right: 10, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{firstDate}</Text>
+        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{p25Date}</Text>
+        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{p50Date}</Text>
+        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{p75Date}</Text>
+        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{lastDate}</Text>
+      </View>
     </View>
   );
 }
@@ -759,7 +834,7 @@ function BotMetric({ label, tone, value }: { label: string; tone: StatusTone; va
   const colors = preferenceColors(appearance);
 
   return (
-    <View style={[styles.botMetric, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+    <View style={styles.botMetric}>
       <Text style={[styles.metricLabel, { color: colors.textDim }]}>{label}</Text>
       <Text style={[styles.botMetricValue, { color: toneColor(tone) }]}>{value}</Text>
     </View>
@@ -867,7 +942,7 @@ function TradeActionSheet({
                   onModeChange(item.key);
                   onExecutionExpandedChange(false);
                 }}
-                style={[styles.tradeModeTile, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }, active && styles.tradeModeTileActive]}
+                style={[styles.tradeModeTile, { borderColor: colors.border }, active && styles.tradeModeTileActive]}
               >
                 <Text style={[styles.tradeModeLabel, { color: colors.textDim }, active && styles.tradeModeLabelActive]}>{item.label}</Text>
                 <Text style={[styles.tradeModeBody, { color: colors.textMuted }]}>{item.body}</Text>
@@ -891,7 +966,7 @@ function TradeActionSheet({
           <TradeContextStat label="Setup active" value={setupScore > 0 ? `${setupScore}` : 'n/a'} tone={setupScore >= 60 ? 'success' : 'warning'} />
           <TradeContextStat label="Conviction" value={`${conviction}`} tone={conviction >= 70 ? 'success' : conviction >= 50 ? 'warning' : 'danger'} />
         </View>
-        <View style={[styles.tradeWarning, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }, stale && styles.tradeWarningStrong]}>
+        <View style={[styles.tradeWarning, { borderColor: colors.border }, stale && styles.tradeWarningStrong]}>
           <Text style={[styles.tradeWarningTitle, { color: colors.text }]}>{stale ? 'Ververs voordat je bevestigt.' : 'Geen one-tap execution.'}</Text>
           <Text style={[styles.tradeWarningBody, { color: colors.textMuted }]}>
             Deze sheet maakt alleen een gecontroleerde trade-draft. FINN checkt exposure, setup en botcontext voordat je iets uitvoert.
@@ -990,7 +1065,7 @@ function TradeActionSheet({
               </View>
             </View>
 
-            <View style={[styles.expectationBox, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+            <View style={[styles.expectationBox, { borderColor: colors.border }]}>
               <SmallStat label="Verwacht" value={`${estimatedBtc.toFixed(6)} BTC`} />
               <SmallStat label="Beschikbaar" value={formatEUR(exchangeSummary.freeEur)} />
               <SmallStat label="Max order" value={formatEUR(bot?.budgetMaxOrder ?? 0)} />
@@ -1038,7 +1113,7 @@ function OrderPreviewCard({ preview }: { preview: OrderPreviewResponse }) {
   const warnings = Array.isArray(guardrails?.warnings) ? guardrails.warnings.map(String) : [];
 
   return (
-    <View style={[styles.previewCard, { backgroundColor: colors.surface, borderColor: colors.border }, allowed ? styles.previewCardAllowed : styles.previewCardBlocked]}>
+    <View style={[styles.previewCard, { borderColor: colors.border }, allowed ? styles.previewCardAllowed : styles.previewCardBlocked]}>
       <View style={styles.tradeStepHeader}>
         <View>
           <Text style={[styles.tradeStepLabel, { color: colors.textDim }]}>Backend preview</Text>
@@ -1070,7 +1145,7 @@ function TradeContextStat({ label, tone, value }: { label: string; tone: StatusT
   const colors = preferenceColors(appearance);
 
   return (
-    <View style={[styles.tradeContextTile, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+    <View style={[styles.tradeContextTile, { borderColor: colors.border }]}>
       <Text style={[styles.metricLabel, { color: colors.textDim }]}>{label}</Text>
       <Text style={[styles.tradeContextValue, { color: toneColor(tone) }]}>{value}</Text>
     </View>
@@ -1368,6 +1443,27 @@ function portfolioUpdatedAt(values: string[]) {
 }
 
 const styles = StyleSheet.create({
+  inlineTradeButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 0.5,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'center',
+    marginHorizontal: theme.spacing.lg,
+    marginVertical: theme.spacing.sm,
+    paddingVertical: 10,
+  },
+  inlineTradeButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  botRow: {
+    borderBottomWidth: 0.5,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.md,
+  },
   amountInput: {
     backgroundColor: theme.colors.surfaceMuted,
     borderColor: theme.colors.borderStrong,
@@ -1514,7 +1610,7 @@ const styles = StyleSheet.create({
   },
   botIcon: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: 'transparent',
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: 1,
@@ -1536,20 +1632,15 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   botMetric: {
-    backgroundColor: theme.colors.backgroundSoft,
-    borderRadius: theme.radius.md,
     flex: 1,
     minWidth: '45%',
-    padding: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
   },
   botMetricGrid: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.lg,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.lg,
-    padding: theme.spacing.sm,
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.md,
   },
   botMetricValue: {
     fontSize: theme.typography.body,
@@ -1560,9 +1651,9 @@ const styles = StyleSheet.create({
   botName: {
     color: theme.colors.text,
     flex: 1,
-    fontSize: 24,
-    fontWeight: '900',
-    lineHeight: 28,
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 22,
   },
   botNameRow: {
     alignItems: 'center',
@@ -1616,20 +1707,17 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   chartBar: {
-    borderRadius: theme.radius.pill,
     minHeight: 4,
-    width: 4,
+    width: '100%',
   },
   chartBars: {
     alignItems: 'flex-end',
     flexDirection: 'row',
-    gap: 2,
     height: '100%',
-    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.sm,
   },
   chartBox: {
-    backgroundColor: theme.colors.backgroundSoft,
+    backgroundColor: 'transparent',
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: 1,
@@ -1660,7 +1748,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   deltaBadge: {
-    backgroundColor: theme.colors.backgroundSoft,
+    backgroundColor: 'transparent',
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     paddingHorizontal: theme.spacing.sm,
@@ -1731,10 +1819,10 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: theme.colors.text,
-    fontSize: 31,
-    fontWeight: '900',
+    fontSize: 20,
+    fontWeight: '700',
     letterSpacing: 0,
-    lineHeight: 36,
+    lineHeight: 24,
     marginTop: 5,
     textTransform: 'uppercase',
   },
@@ -1777,9 +1865,9 @@ const styles = StyleSheet.create({
   },
   myBotsTitle: {
     color: theme.colors.text,
-    fontSize: 34,
+    fontSize: 18,
     fontWeight: '900',
-    lineHeight: 38,
+    lineHeight: 22,
   },
   performanceHeader: {
     alignItems: 'flex-start',
@@ -1796,7 +1884,7 @@ const styles = StyleSheet.create({
   },
   performanceValue: {
     color: theme.colors.text,
-    fontSize: 41,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
     marginTop: theme.spacing.xs,
@@ -1811,9 +1899,9 @@ const styles = StyleSheet.create({
   },
   previewCard: {
     borderRadius: theme.radius.lg,
-    borderWidth: 1,
+    borderWidth: 0.5,
     gap: theme.spacing.md,
-    padding: theme.spacing.lg,
+    padding: theme.spacing.md,
   },
   previewCardAllowed: {
     backgroundColor: theme.colors.successSoft,
@@ -1905,7 +1993,7 @@ const styles = StyleSheet.create({
     borderColor: '#10B98144',
   },
   scoreValue: {
-    fontSize: 31,
+    fontSize: 18,
     fontWeight: '900',
     marginTop: theme.spacing.sm,
   },
@@ -1920,16 +2008,14 @@ const styles = StyleSheet.create({
   },
   segment: {
     alignItems: 'center',
-    borderRadius: theme.radius.sm,
+    borderRadius: theme.radius.pill,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 38,
+    paddingVertical: 6,
     paddingHorizontal: theme.spacing.sm,
   },
   segmentActive: {
-    backgroundColor: theme.colors.surfaceElevated,
-    borderColor: theme.colors.borderStrong,
-    borderWidth: 1,
+    backgroundColor: theme.colors.surfaceMuted,
   },
   segmentCompact: {
     flex: 0,
@@ -1937,23 +2023,20 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     color: theme.colors.textDim,
-    fontSize: theme.typography.label,
-    fontWeight: '900',
-    letterSpacing: 1.2,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   segmentTextActive: {
     color: theme.colors.accent,
   },
   segmented: {
-    backgroundColor: theme.colors.backgroundSoft,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
+    backgroundColor: 'transparent',
     flexDirection: 'row',
-    gap: theme.spacing.xs,
-    marginTop: theme.spacing.lg,
-    padding: theme.spacing.xs,
+    gap: 4,
+    marginTop: theme.spacing.md,
+    padding: 2,
   },
   segmentedCompact: {
     alignSelf: 'flex-start',
@@ -1973,22 +2056,21 @@ const styles = StyleSheet.create({
     width: 10,
   },
   expectationBox: {
-    backgroundColor: theme.colors.backgroundSoft,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
-    borderWidth: 1,
+    borderWidth: 0.5,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.lg,
-    padding: theme.spacing.lg,
+    padding: theme.spacing.md,
   },
   executionField: {
     backgroundColor: theme.colors.backgroundSoft,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.lg,
-    borderWidth: 1,
+    borderWidth: 0.5,
     gap: theme.spacing.md,
-    padding: theme.spacing.lg,
+    padding: theme.spacing.md,
   },
   executionFieldHeader: {
     alignItems: 'center',
@@ -2031,7 +2113,7 @@ const styles = StyleSheet.create({
   },
   readOnlyInputText: {
     color: theme.colors.text,
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: '900',
   },
   sideButton: {
@@ -2067,7 +2149,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xs,
   },
   tag: {
-    backgroundColor: theme.colors.backgroundSoft,
+    backgroundColor: 'transparent',
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     paddingHorizontal: theme.spacing.md,
@@ -2085,7 +2167,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   tradeContextTile: {
-    backgroundColor: theme.colors.backgroundSoft,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: 1,
@@ -2094,9 +2175,9 @@ const styles = StyleSheet.create({
     width: '48%',
   },
   tradeContextValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
-    lineHeight: 24,
+    lineHeight: 22,
     marginTop: theme.spacing.sm,
   },
   tradeFab: {
@@ -2159,9 +2240,9 @@ const styles = StyleSheet.create({
   },
   tradeHeroTitle: {
     color: theme.colors.text,
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
-    lineHeight: 27,
+    lineHeight: 22,
     marginTop: 5,
   },
   tradeIcon: {
@@ -2202,7 +2283,6 @@ const styles = StyleSheet.create({
     color: theme.colors.accent,
   },
   tradeModeTile: {
-    backgroundColor: theme.colors.backgroundSoft,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: 1,
@@ -2239,7 +2319,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   tradeWarning: {
-    backgroundColor: theme.colors.surfaceMuted,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: 1,

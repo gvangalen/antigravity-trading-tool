@@ -24,6 +24,11 @@ export type MobileOverviewAsset = {
   macro_label?: string | null;
   technical_label?: string | null;
   market_label?: string | null;
+  // Desktop Parity Fields
+  posture?: string | null;
+  structure?: string | null;
+  conviction?: number | null;
+  risk_state?: string | null;
 };
 
 export type MobileOverviewBot = {
@@ -198,6 +203,26 @@ export const intelligenceApi = {
 
   lastStrategy() {
     return apiClient.get<StrategyResponse>('/api/strategies/last');
+  },
+
+  getStrategyBySetup(setupId: number) {
+    return apiClient.get<StrategyResponse>(`/api/strategies/by_setup/${setupId}`);
+  },
+
+  queryStrategies(filters: Record<string, unknown> = {}) {
+    return apiClient.post<StrategyResponse[]>('/api/strategies/query?format=mobile', filters);
+  },
+
+  createStrategy(data: Record<string, unknown>) {
+    return apiClient.post<StrategyResponse>('/api/strategies', data);
+  },
+
+  updateStrategy(strategyId: number, data: Record<string, unknown>) {
+    return apiClient.put<StrategyResponse>(`/api/strategies/${strategyId}`, data);
+  },
+
+  deleteStrategy(strategyId: number) {
+    return apiClient.delete<Record<string, unknown>>(`/api/strategies/${strategyId}`);
   },
 
   botToday(symbol: string) {

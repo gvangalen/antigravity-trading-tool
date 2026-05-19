@@ -40,37 +40,40 @@ export function StrategyStatusCard({
       }}
       style={({ pressed }) => pressed && styles.pressed}
     >
-      <CardShell>
+      <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
         <View style={styles.header}>
           <View>
             <Text style={styles.label}>Active strategy</Text>
             <Text style={[styles.symbol, { color: colors.text }]}>{symbol}</Text>
             <Text style={[styles.bias, { color: colors.textDim }]}>{bias}</Text>
           </View>
-          <View style={[styles.confidence, { backgroundColor: appearance === 'light' ? '#EFF6FF' : theme.colors.accentSoft }]}>
-            <Text style={[styles.confidenceValue, { color: colors.text }]}>{confidence}</Text>
-            <Text style={[styles.confidenceLabel, { color: colors.textDim }]}>confidence</Text>
+          <View style={{ alignItems: 'flex-end', gap: 2 }}>
+            <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>CONFIDENCE</Text>
+            <Text style={{ fontSize: 16, color: colors.text, fontWeight: '700' }}>{confidence}</Text>
           </View>
         </View>
+        
         <View style={styles.statusRow}>
           <StatusChip label={status} tone="warning" />
         </View>
-        <View style={styles.grid}>
+
+        <View style={{ gap: 4, marginTop: 8 }}>
           <Metric label="Entry" value={entryZone} colors={colors} />
           <Metric label="Targets" value={targets.join(' / ')} colors={colors} />
           <Metric label="Invalidation" value={invalidation} colors={colors} />
         </View>
+
         <Text style={[styles.explanation, { color: colors.textMuted }]}>{explanation}</Text>
-      </CardShell>
+      </View>
     </Pressable>
   );
 }
 
 function Metric({ label, value, colors }: { label: string; value: string; colors: ReturnType<typeof preferenceColors> }) {
   return (
-    <View style={[styles.metric, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
-      <Text style={[styles.metricLabel, { color: colors.textDim }]}>{label}</Text>
-      <Text style={[styles.metricValue, { color: colors.text }]}>{value}</Text>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 }}>
+      <Text style={{ fontSize: 13, color: colors.textDim }}>{label}</Text>
+      <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{value}</Text>
     </View>
   );
 }
@@ -150,12 +153,12 @@ const styles = StyleSheet.create({
     opacity: 0.86,
   },
   statusRow: {
-    marginTop: theme.spacing.md,
+    marginTop: 8,
   },
   symbol: {
     color: theme.colors.text,
-    fontSize: 28,
-    fontWeight: '900',
+    fontSize: 20,
+    fontWeight: '700',
     marginTop: 5,
   },
 });

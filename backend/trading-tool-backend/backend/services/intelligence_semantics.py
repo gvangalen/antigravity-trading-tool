@@ -11,7 +11,7 @@ def get_macro_semantics(score: Optional[float]) -> Dict[str, Any]:
         return {
             "regime": "Expansion Regime",
             "posture": "Aggressive Growth",
-            "risk_state": "Minimal Macro Risk",
+            "risk_state": "Laag / Stabiel",
             "conviction": conviction,
             "explanation": "Markt toont sterke trendcontinuatie, gezonde liquiditeit en gunstige macro-economische condities."
         }
@@ -19,7 +19,7 @@ def get_macro_semantics(score: Optional[float]) -> Dict[str, Any]:
         return {
             "regime": "Recovery Phase",
             "posture": "Constructive Alignment",
-            "risk_state": "Controlled Risk",
+            "risk_state": "Gematigd",
             "conviction": conviction,
             "explanation": "Macro-indicatoren stabiliseren na een correctie met toenemende kapitaalinstroom."
         }
@@ -27,7 +27,7 @@ def get_macro_semantics(score: Optional[float]) -> Dict[str, Any]:
         return {
             "regime": "Stagflation Risk",
             "posture": "Cautious Stance",
-            "risk_state": "Elevated Uncertainty",
+            "risk_state": "Risk Elevated",
             "conviction": conviction,
             "explanation": "Tegenstrijdige signalen in inflatie en rentebeleid vereisen een verlaagde handelsfrequentie."
         }
@@ -46,28 +46,28 @@ def get_technical_semantics(score: Optional[float]) -> Dict[str, Any]:
     
     if val >= 70:
         return {
-            "structure": "Bullish Expansion",
+            "structure": "Bullish Structure",
             "conviction": conviction,
             "momentum": "Strong Upward Bias",
             "explanation": "Prijsactie en voortschrijdende gemiddelden wijzen op krachtig institutioneel opwaarts momentum."
         }
     elif val >= 50:
         return {
-            "structure": "Bullish Recovery",
+            "structure": "Bullish Structure",
             "conviction": conviction,
             "momentum": "Positive Divergence",
             "explanation": "Technische structuur herstelt van oversold condities en bouwt hogere bodems op."
         }
     elif val >= 30:
         return {
-            "structure": "Consolidation",
+            "structure": "Neutral Structure",
             "conviction": conviction,
             "momentum": "Neutral / Sideways",
             "explanation": "Prijs beweegt in een krappe bandbreedte zonder duidelijke richting. Uitbraak wordt afgewacht."
         }
     else:
         return {
-            "structure": "Bearish Structure",
+            "structure": "Weak Structure",
             "conviction": conviction,
             "momentum": "Downward Pressure",
             "explanation": "Dominante neerwaartse trend met zwakke koopkracht. Short-posities of cash-allocatie aanbevolen."
@@ -79,28 +79,28 @@ def get_market_semantics(score: Optional[float]) -> Dict[str, Any]:
     
     if val >= 70:
         return {
-            "posture": "Capital Inflow",
+            "posture": "Momentum Rising",
             "conviction": conviction,
             "liquidity": "Premium Liquidity",
             "explanation": "Hoge handelsvolumes en brede marktparticipatie bevestigen robuuste institutionele steun."
         }
     elif val >= 50:
         return {
-            "posture": "Stable Participation",
+            "posture": "Compression",
             "conviction": conviction,
             "liquidity": "Standard Volume",
             "explanation": "Gemiddelde liquiditeit en orderboekdiepte ondersteunen reguliere DCA-uitvoering."
         }
     elif val >= 30:
         return {
-            "posture": "Liquidity Divergence",
+            "posture": "Rangebound",
             "conviction": conviction,
             "liquidity": "Thin Orderbooks",
             "explanation": "Afnemend volume en oplopende spreads duiden op verminderde institutionele interesse."
         }
     else:
         return {
-            "posture": "Risk Aversion",
+            "posture": "Expansion",
             "conviction": conviction,
             "liquidity": "Capital Flight",
             "explanation": "Kapitaalvlucht waargenomen met verhoogde marktbrede volatiliteit en verkoopdruk."

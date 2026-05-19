@@ -4,7 +4,6 @@ import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { theme } from '../../constants/theme';
 import { MobileIntelligenceEvent } from '../../services/tradamindApi';
 import { triggerHaptic } from '../../utils/haptics';
-import { CardShell } from '../cards/CardShell';
 
 type MobileFINNFeedProps = {
   events: MobileIntelligenceEvent[];
@@ -33,10 +32,6 @@ export function MobileFINNFeed({ events, onArchive, onDiscuss }: MobileFINNFeedP
     ).start();
   }, [pulseAnim]);
 
-  if (!events || events.length === 0) {
-    return null;
-  }
-
   // Prioritize Critical, then Warning, then Info events
   const severityOrder: Record<string, number> = { critical: 1, warning: 2, info: 3 };
   const sortedEvents = [...events].sort((a, b) => {
@@ -48,61 +43,65 @@ export function MobileFINNFeed({ events, onArchive, onDiscuss }: MobileFINNFeedP
   return (
     <View style={styles.container}>
       <View style={styles.feedHeader}>
-        <Animated.View style={[styles.radarDot, { opacity: pulseAnim }]} />
-        <Text style={styles.feedTitle}>LIVE INTELLIGENCE COCKPIT</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ color: theme.colors.accent, fontWeight: '900' }}>{'>_'}</Text>
+          <Text style={styles.feedTitle}>FINN LIVE INTELLIGENCE TERMINAL</Text>
+        </View>
+        <Text style={styles.feedSubtitle}>MISSION CONTROL</Text>
       </View>
 
       <View style={styles.eventList}>
-        {sortedEvents.map((item) => {
-          // Resolve severity colors
-          let severityColor = theme.colors.success;
-          let severityBg = theme.colors.successSoft;
-          let severityLabel = 'INFO';
+        {!events || events.length === 0 ? (
+          <View style={styles.emptyStateBox}>
+            <Text style={styles.emptyStateText}>Geen actieve risico-meldingen. Cockpit draait stabiel.</Text>
+          </View>
+        ) : (
+          sortedEvents.map((item, index) => {
+            // Resolve severity colors
+            let severityColor = theme.colors.success;
+            let severityBg = theme.colors.successSoft;
+            let severityLabel = 'INFO';
 
-          if (item.severity === 'critical') {
-            severityColor = theme.colors.danger;
-            severityBg = theme.colors.dangerSoft;
-            severityLabel = 'CRITICAL';
-          } else if (item.severity === 'warning') {
-            severityColor = theme.colors.warning;
-            severityBg = theme.colors.warningSoft;
-            severityLabel = 'WARNING';
-          } else if (item.severity === 'info') {
-            severityColor = theme.colors.accent;
-            severityBg = theme.colors.accentSoft;
-          }
+            if (item.severity === 'critical') {
+              severityColor = theme.colors.danger;
+              severityBg = theme.colors.dangerSoft;
+              severityLabel = 'CRITICAL';
+            } else if (item.severity === 'warning') {
+              severityColor = theme.colors.warning;
+              severityBg = theme.colors.warningSoft;
+              severityLabel = 'WARNING';
+            } else if (item.severity === 'info') {
+              severityColor = theme.colors.accent;
+              severityBg = theme.colors.accentSoft;
+            }
 
-          return (
-            <CardShell key={item.id} emphasis="primary">
-              <View style={styles.cardHeader}>
-                <View style={[styles.badge, { backgroundColor: severityBg }]}>
-                  <Text style={[styles.badgeText, { color: severityColor }]}>
-                    {severityLabel} {item.symbol ? `· ${item.symbol}` : ''}
-                  </Text>
+            return (
+              <View key={`${item.id}-${index}`} style={styles.terminalCard}>
+                <View style={styles.terminalCardHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <Text style={styles.terminalCardTitle} numberOfLines={1}>{item.title}</Text>
+                    {item.symbol && (
+                      <View style={styles.terminalSymbolBadge}>
+                        <Text style={styles.terminalSymbolText}>{item.symbol}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Pressable
+                    onPress={async () => {
+                      await triggerHaptic('selection');
+                      onArchive(item.id);
+                    }}
+                    style={({ pressed }) => [styles.archiveBtn, pressed && styles.pressed]}
+                  >
+                    <Text style={styles.archiveText}>✕</Text>
+                  </Pressable>
                 </View>
 
-                {/* Dismiss / Archive Button */}
-                <Pressable
-                  onPress={async () => {
-                    await triggerHaptic('selection');
-                    onArchive(item.id);
-                  }}
-                  style={({ pressed }) => [styles.archiveBtn, pressed && styles.pressed]}
-                >
-                  <Text style={styles.archiveText}>×</Text>
-                </Pressable>
-              </View>
+                <Text style={styles.description} numberOfLines={2}>
+                  {item.description}
+                </Text>
 
-              <Text style={styles.title} numberOfLines={1}>
-                {item.title}
-              </Text>
-              
-              <Text style={styles.description} numberOfLines={1}>
-                {item.description}
-              </Text>
-
-              {/* Action Chip Container */}
-              <View style={styles.actionContainer}>
+                {/* Discuss Button */}
                 <Pressable
                   onPress={async () => {
                     await triggerHaptic('selection');
@@ -110,24 +109,51 @@ export function MobileFINNFeed({ events, onArchive, onDiscuss }: MobileFINNFeedP
                   }}
                   style={({ pressed }) => [
                     styles.discussButton,
-                    { borderColor: `${severityColor}80` },
                     pressed && styles.pressed,
                   ]}
                 >
-                  <Text style={[styles.discussText, { color: severityColor }]}>
-                    Bespreek met FINN
-                  </Text>
+                  <Text style={styles.discussText}>💬 Bespreek met FINN</Text>
                 </Pressable>
               </View>
-            </CardShell>
-          );
-        })}
+            );
+          })
+        )}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  terminalCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.md,
+  },
+  terminalCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.xs,
+  },
+  terminalCardTitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  terminalSymbolBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  terminalSymbolText: {
+    color: '#3B82F6',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
   actionContainer: {
     flexDirection: 'row',
     marginTop: theme.spacing.sm,
@@ -164,6 +190,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.md,
     marginTop: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.xs,
   },
   description: {
     color: theme.colors.textSoft,
@@ -191,14 +218,39 @@ const styles = StyleSheet.create({
   feedHeader: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: theme.spacing.xs,
-    paddingLeft: theme.spacing.xxs,
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.spacing.xs,
+    marginBottom: 4,
   },
   feedTitle: {
     color: theme.colors.textDim,
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 2,
+  },
+  feedSubtitle: {
+    color: theme.colors.textDim,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  emptyStateBox: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    color: theme.colors.textDim,
+    fontSize: 11,
+    fontWeight: '700',
+    fontStyle: 'italic',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    textAlign: 'center',
   },
   pressed: {
     opacity: 0.75,

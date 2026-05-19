@@ -1,31 +1,20 @@
 import { StatusTone } from '../constants/theme';
-import {
-  DomainScore,
-  mockBotDecision,
-  mockBriefing,
-  mockDomainScores,
-  mockMarketSnapshot,
-  mockPortfolioStatus,
-  mockPrompts,
-  mockReportHighlights,
-  mockStrategy,
-  mockWatchlistAssets,
-} from '../data/mockFoundation';
+import { DomainScore } from '../types/scores';
 import { AssistantInsightResponse, MobileOverviewResponse } from './tradamindApi';
 
 type UnknownRecord = Record<string, unknown>;
 
 export function mapAssistantInsightToBriefing(insight?: AssistantInsightResponse) {
-  if (!insight) return mockBriefing;
+  if (!insight) return { asset: 'BTC', status: 'Wachten op data', summary: 'Geen actieve intelligence context beschikbaar.', risk: '', nextAction: 'Pull to refresh', updatedAt: nowLabel() };
 
   const marketInsight = insightText(insight.market_insight);
   const botInsight = insightText(insight.bot_insight);
   const context = insightText(insight.context_detected);
 
   return {
-    asset: insight.context_detected?.symbol || mockBriefing.asset,
+    asset: insight.context_detected?.symbol || 'BTC',
     status: context || 'Live FINN context',
-    summary: insight.greeting || marketInsight || mockBriefing.summary,
+    summary: insight.greeting || marketInsight || 'Geen summary beschikbaar.',
     risk: botInsight || 'No execution action is taken from mobile. Review context before acting.',
     nextAction: 'Ask FINN',
     updatedAt: nowLabel(),
@@ -37,7 +26,7 @@ export function mapAssistantInsightCard(insight?: AssistantInsightResponse) {
   const botInsight = insightText(insight?.bot_insight);
 
   return {
-    body: marketInsight || botInsight || mockBriefing.summary,
+    body: marketInsight || botInsight || 'Geen summary beschikbaar.',
     title: insight?.greeting || 'FINN is reading your current trading context.',
   };
 }
@@ -53,7 +42,7 @@ export function mapAssistantInsightDetails(insight?: AssistantInsightResponse) {
 export function mapMobileOverviewBriefing(overview?: MobileOverviewResponse, insight?: AssistantInsightResponse) {
   if (!overview) return mapAssistantInsightToBriefing(insight);
 
-  const activeAsset = overview.watchlist[0]?.symbol || insight?.context_detected?.symbol || mockBriefing.asset;
+  const activeAsset = overview.watchlist[0]?.symbol || insight?.context_detected?.symbol || 'BTC';
   const activeBots = overview.portfolio.active_bots_count;
   const totalProfit = overview.portfolio.total_profit_pct;
   const risk =
@@ -73,7 +62,7 @@ export function mapMobileOverviewBriefing(overview?: MobileOverviewResponse, ins
 
 export function mapMobileOverviewPrompts(overview?: MobileOverviewResponse) {
   const actions = overview?.finn_briefing.suggested_actions.filter(Boolean) ?? [];
-  return actions.length > 0 ? actions.slice(0, 4) : mockPrompts;
+  return actions.length > 0 ? actions.slice(0, 4) : ['Leg mijn setup uit', 'Wat is het grootste risico?'];
 }
 
 export function mapMobileOverviewMarket(overview?: MobileOverviewResponse, symbol?: string) {
@@ -81,7 +70,7 @@ export function mapMobileOverviewMarket(overview?: MobileOverviewResponse, symbo
     overview?.watchlist.find((item) => item.symbol === symbol) ??
     overview?.watchlist[0];
 
-  if (!asset) return mockMarketSnapshot;
+  if (!asset) return { change24h: 'n/a', interpretation: 'Geen data', price: 'n/a', symbol: symbol || 'BTC', tone: 'neutral' as StatusTone, volume: 'n/a' };
 
   const change = asset.change_24h;
   const tone = typeof change === 'number' ? (change >= 0 ? 'success' : 'warning') : 'neutral';
@@ -123,7 +112,7 @@ export function mapMobileOverviewDecision(overview?: MobileOverviewResponse) {
 
 export function mapMobileOverviewBotDecision(overview?: MobileOverviewResponse) {
   const bot = overview?.active_bots.find((item) => item.is_active) ?? overview?.active_bots[0];
-  if (!bot) return mockBotDecision;
+  if (!bot) return { action: 'Geen actie', amount: 'n/a', botName: 'Geen actieve bot', confidence: 0, guardrail: 'Geen data.', reason: 'Geen bot geconfigureerd.', tone: 'neutral' as StatusTone };
 
   const liveLabel = bot.is_live ? 'Live bot' : 'Paper/read-only bot';
   const profit = typeof bot.profit_pct === 'number' ? `${bot.profit_pct >= 0 ? '+' : ''}${bot.profit_pct.toFixed(2)}%` : 'n/a';
@@ -140,7 +129,7 @@ export function mapMobileOverviewBotDecision(overview?: MobileOverviewResponse) 
 }
 
 export function mapMobileOverviewPortfolio(overview?: MobileOverviewResponse) {
-  if (!overview) return mockPortfolioStatus;
+  if (!overview) return { activeTrades: 'Geen data', botStatus: 'Geen data', cash: 'n/a', exposure: 'n/a', pnl: 'n/a', totalValue: 'n/a' };
 
   const invested = overview.portfolio.total_invested_eur;
   const balance = overview.portfolio.total_balance_eur;
@@ -182,7 +171,7 @@ export function mapDailyScores(scores?: UnknownRecord): DomainScore[] {
 
   return domains.map(([label, keys], index) => {
     const raw = firstRecord(scores, keys);
-    const fallback = mockDomainScores[index];
+    const fallback = { score: 0, summary: 'Geen data', trend: 'n/a' };
     const value = clampScore(
       readNumber(raw, ['score', 'value', 'normalized_score'], readNumber(scores, keys, fallback.score)),
     );
@@ -205,27 +194,27 @@ export function mapMarketSnapshot(symbol: string, latest?: UnknownRecord) {
   const price = readNumber(latest, ['price', 'close', 'last_price', 'current_price'], NaN);
   const change = readNumber(latest, ['change_24h', 'percent_change_24h', 'price_change_percentage_24h'], NaN);
   const volume = readNumber(latest, ['volume', 'volume_24h', 'total_volume'], NaN);
-  const tone = Number.isFinite(change) ? (change >= 0 ? 'success' : 'warning') : mockMarketSnapshot.tone;
+  const tone = Number.isFinite(change) ? (change >= 0 ? 'success' : 'warning') : 'neutral';
 
   return {
-    change24h: Number.isFinite(change) ? `${change >= 0 ? '+' : ''}${change.toFixed(2)}%` : mockMarketSnapshot.change24h,
+    change24h: Number.isFinite(change) ? `${change >= 0 ? '+' : ''}${change.toFixed(2)}%` : 'n/a',
     interpretation:
       readString(latest, ['interpretation', 'summary'], '') ||
       `${symbol} market context is loaded from the backend when available.`,
-    price: Number.isFinite(price) ? formatMoney(price) : mockMarketSnapshot.price,
+    price: Number.isFinite(price) ? formatMoney(price) : 'n/a',
     symbol,
     tone: tone as StatusTone,
-    volume: Number.isFinite(volume) ? compactNumber(volume) : mockMarketSnapshot.volume,
+    volume: Number.isFinite(volume) ? compactNumber(volume) : 'n/a',
   };
 }
 
 export function mapWatchlistAssets(symbols?: string[], scores?: UnknownRecord, latest?: UnknownRecord) {
-  const list = symbols && symbols.length > 0 ? symbols : mockWatchlistAssets.map((asset) => asset.symbol);
+  const list = symbols && symbols.length > 0 ? symbols : ['BTC'];
   const master = mapMasterDecision(scores);
   const change = mapMarketSnapshot(list[0] ?? 'BTC', latest).change24h;
 
   return list.slice(0, 6).map((symbol, index) => {
-    const fallback = mockWatchlistAssets[index] ?? mockWatchlistAssets[0];
+    const fallback = { change: 'n/a', score: 0, setup: 'Geen data', tone: 'neutral' as StatusTone };
     return {
       change: index === 0 ? change : fallback.change,
       score: index === 0 ? master.score : fallback.score,
@@ -238,47 +227,47 @@ export function mapWatchlistAssets(symbols?: string[], scores?: UnknownRecord, l
 
 export function mapStrategy(strategySource?: unknown, setupSource?: unknown) {
   const strategy = firstObject(strategySource) ?? firstObject(setupSource);
-  if (!strategy) return mockStrategy;
+  if (!strategy) return { bias: 'n/a', confidence: 0, entryZone: 'n/a', explanation: 'Geen strategie gevonden.', invalidation: 'n/a', status: 'n/a', symbol: 'BTC', targets: [] };
 
-  const symbol = readString(strategy, ['symbol', 'asset', 'ticker'], mockStrategy.symbol);
+  const symbol = readString(strategy, ['symbol', 'asset', 'ticker'], 'BTC');
   const targets = readArray(strategy, ['targets', 'take_profit_targets', 'take_profits']).map(String);
-  const confidence = clampScore(readNumber(strategy, ['confidence', 'confidence_score', 'score'], mockStrategy.confidence));
+  const confidence = clampScore(readNumber(strategy, ['confidence', 'confidence_score', 'score'], 0));
 
   return {
-    bias: readString(strategy, ['bias', 'direction', 'market_bias'], mockStrategy.bias),
+    bias: readString(strategy, ['bias', 'direction', 'market_bias'], 'n/a'),
     confidence,
     entryZone:
       readString(strategy, ['entry_zone', 'entry', 'entry_price'], '') ||
       rangeLabel(strategy, ['entry_min', 'entry_low'], ['entry_max', 'entry_high']) ||
-      mockStrategy.entryZone,
+      'n/a',
     explanation:
       readString(strategy, ['explanation', 'summary', 'reasoning', 'description'], '') ||
-      mockStrategy.explanation,
+      'Geen strategie gevonden.',
     invalidation:
       readString(strategy, ['invalidation', 'stop_loss', 'stop'], '') ||
-      mockStrategy.invalidation,
-    status: readString(strategy, ['status', 'state'], mockStrategy.status),
+      'n/a',
+    status: readString(strategy, ['status', 'state'], 'n/a'),
     symbol,
-    targets: targets.length > 0 ? targets : mockStrategy.targets,
+    targets: targets.length > 0 ? targets : [],
   };
 }
 
 export function mapBotDecision(botSource?: unknown) {
   const bot = firstObject(botSource);
-  if (!bot) return mockBotDecision;
+  if (!bot) return { action: 'Geen actie', amount: 'n/a', botName: 'Geen actieve bot', confidence: 0, guardrail: 'Geen data.', reason: 'Geen bot geconfigureerd.', tone: 'neutral' as StatusTone };
 
-  const action = readString(bot, ['action', 'decision', 'recommendation'], mockBotDecision.action);
-  const confidence = clampScore(readNumber(bot, ['confidence', 'confidence_score'], mockBotDecision.confidence));
+  const action = readString(bot, ['action', 'decision', 'recommendation'], 'Geen actie');
+  const confidence = clampScore(readNumber(bot, ['confidence', 'confidence_score'], 0));
   const reasons = readArray(bot, ['reasons', 'reason_json']).map(String).filter(Boolean);
   const amount = readNumber(bot, ['amount_eur', 'final_amount_eur', 'requested_amount_eur'], NaN);
   const amountLabel =
     readString(bot, ['amount', 'final_amount', 'requested_amount'], '') ||
-    (Number.isFinite(amount) ? formatMoney(amount, 'EUR') : mockBotDecision.amount);
+    (Number.isFinite(amount) ? formatMoney(amount, 'EUR') : 'n/a');
 
   return {
     action,
     amount: amountLabel,
-    botName: readString(bot, ['bot_name', 'name', 'strategy_name'], mockBotDecision.botName),
+    botName: readString(bot, ['bot_name', 'name', 'strategy_name'], 'Bot'),
     confidence,
     guardrail:
       readString(bot, ['guardrail', 'guardrails_result', 'guardrail_result', 'guardrail_reason', 'guardrails'], '') ||
@@ -286,7 +275,7 @@ export function mapBotDecision(botSource?: unknown) {
     reason:
       readString(bot, ['reason', 'summary', 'explanation'], '') ||
       reasons.slice(0, 2).join(' ') ||
-      mockBotDecision.reason,
+      'Geen reden gevonden.',
     tone: toneForAction(action, confidence),
   };
 }
@@ -299,7 +288,7 @@ export function mapPortfolioStatus(portfolios?: unknown, balances?: unknown, bot
   const cash = sumFields(balanceItems, ['cash', 'cash_eur', 'available_eur', 'free']);
 
   if (total <= 0 && portfolioItems.length === 0 && balanceItems.length === 0) {
-    return mockPortfolioStatus;
+    return { activeTrades: 'Geen data', botStatus: 'Geen data', cash: 'n/a', exposure: 'n/a', pnl: 'n/a', totalValue: 'n/a' };
   }
 
   const exposure = total > 0 && cash > 0 ? Math.max(0, Math.round(((total - cash) / total) * 100)) : null;
@@ -307,9 +296,9 @@ export function mapPortfolioStatus(portfolios?: unknown, balances?: unknown, bot
   return {
     activeTrades: `${readNumber(firstObject(portfolioItems), ['active_trades', 'trades_count'], portfolioItems.length)} active trades`,
     botStatus: `${botItems.length || 0} bot${botItems.length === 1 ? '' : 's'} configured, read-only status`,
-    cash: cash > 0 ? `${formatMoney(cash)} cash` : mockPortfolioStatus.cash,
-    exposure: exposure === null ? mockPortfolioStatus.exposure : `${exposure}% exposure`,
-    pnl: readString(firstObject(portfolioItems), ['pnl_label', 'daily_pnl'], mockPortfolioStatus.pnl),
+    cash: cash > 0 ? `${formatMoney(cash)} cash` : 'n/a',
+    exposure: exposure === null ? 'n/a' : `${exposure}% exposure`,
+    pnl: readString(firstObject(portfolioItems), ['pnl_label', 'daily_pnl'], 'n/a'),
     totalValue: formatMoney(total),
   };
 }
@@ -319,7 +308,7 @@ export function mapReport(report?: UnknownRecord) {
     return {
       body:
         'The morning read favors patience: market structure is supportive, setup confirmation is incomplete, and portfolio exposure is already meaningful.',
-      highlights: mockReportHighlights,
+      highlights: [],
       title: 'BTC remains constructive, but not urgent.',
     };
   }
@@ -457,7 +446,7 @@ function sumFields(items: UnknownRecord[], fields: string[]) {
 }
 
 function formatMoney(value: number, currency?: 'EUR' | 'USD') {
-  if (!Number.isFinite(value) || value <= 0) return mockPortfolioStatus.totalValue;
+  if (!Number.isFinite(value) || value <= 0) return 'n/a';
   const currencyCode = currency ?? (value > 1000 ? 'EUR' : 'USD');
   return new Intl.NumberFormat('nl-NL', {
     currency: currencyCode,

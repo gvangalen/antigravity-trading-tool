@@ -7,9 +7,11 @@ import { preferenceColors, useAppPreferences } from '../../preferences/AppPrefer
 type CardShellProps = {
   children: ReactNode;
   emphasis?: 'primary' | 'standard' | 'muted';
+  flat?: boolean;
+  edgeToEdge?: boolean;
 };
 
-export function CardShell({ children, emphasis = 'standard' }: CardShellProps) {
+export function CardShell({ children, emphasis = 'standard', flat = false, edgeToEdge = false }: CardShellProps) {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
@@ -17,11 +19,13 @@ export function CardShell({ children, emphasis = 'standard' }: CardShellProps) {
     <View
       style={[
         styles.card,
-        { backgroundColor: colors.surface, borderColor: colors.border },
+        { borderColor: colors.border },
         emphasis === 'primary' && styles.primary,
-        emphasis === 'primary' && { backgroundColor: colors.surfaceElevated, borderColor: colors.borderStrong },
+        emphasis === 'primary' && { borderColor: colors.borderStrong },
         emphasis === 'muted' && styles.muted,
-        emphasis === 'muted' && { backgroundColor: colors.backgroundSoft },
+        emphasis === 'muted' && { borderColor: colors.borderSubtle },
+        flat && styles.flat,
+        edgeToEdge && styles.edgeToEdge,
       ]}
     >
       {children}
@@ -31,18 +35,31 @@ export function CardShell({ children, emphasis = 'standard' }: CardShellProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
     borderColor: theme.colors.border,
     borderRadius: theme.radius.card,
-    borderWidth: 1,
-    padding: theme.spacing.lg,
+    borderWidth: 0.5,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
   },
   muted: {
-    backgroundColor: theme.colors.backgroundSoft,
+    backgroundColor: 'transparent',
   },
   primary: {
-    backgroundColor: theme.colors.surfaceElevated,
-    borderColor: theme.colors.borderStrong,
-    borderWidth: 1.5,
+    backgroundColor: 'transparent',
+    borderColor: theme.colors.border,
+    borderWidth: 0.5,
+  },
+  flat: {
+    borderWidth: 0,
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+  },
+  edgeToEdge: {
+    borderRadius: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
+    paddingHorizontal: theme.spacing.md,
   },
 });

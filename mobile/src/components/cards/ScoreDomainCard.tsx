@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { DomainScore } from '../../data/mockFoundation';
 import { statusTones, theme } from '../../constants/theme';
+import { DomainScore } from '../../types/scores';
 import { triggerHaptic } from '../../utils/haptics';
 
 type ScoreDomainCardProps = {

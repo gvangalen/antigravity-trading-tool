@@ -1,6 +1,6 @@
 import { clearTokens, getAccessToken, getRefreshToken, saveAccessToken } from './tokenStorage';
 
-const DEFAULT_API_BASE_URL = 'http://localhost:8000';
+const DEFAULT_API_BASE_URL = 'https://tradamind.com';
 
 declare const process: {
   env?: Record<string, string | undefined>;

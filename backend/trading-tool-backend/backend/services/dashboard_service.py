@@ -3,6 +3,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from fastapi import HTTPException
 
 from backend.infrastructure.repositories.dashboard_repository import DashboardRepository
@@ -164,7 +165,13 @@ class DashboardService:
         logger.info(f"🔄 [MobileOverview] Cache MISS/Bypass for user_id={user_id}. Executing hardened composition...")
 
         # 2. Setup symbols and default fallback structs
-        symbols = ["BTC", "ETH", "SOL"]
+        # Fetch real watchlist for user from database
+        query = text("SELECT symbol FROM watchlists WHERE user_id = :user_id")
+        result = await self.session.execute(query, {"user_id": user_id})
+        symbols = [row.symbol.upper() for row in result.fetchall()]
+        if not symbols:
+            symbols = ["BTC", "ETH", "SOL"]
+            
         prices_task = self.repository.get_latest_prices_and_changes(user_id, symbols)
         
         # We declare safe defaults for all sub-components so they are populated even under failure
@@ -296,7 +303,12 @@ class DashboardService:
                 setup_score=float(scores.get("setup_score", 0)),
                 macro_label=macro_sem["regime"],
                 technical_label=tech_sem["structure"],
-                market_label=mkt_sem["posture"]
+                market_label=mkt_sem["posture"],
+                # Desktop Parity Fields
+                posture=mkt_sem["posture"],
+                structure=tech_sem["structure"],
+                conviction=float(int((macro_val + tech_val + mkt_val) / 3)),
+                risk_state=macro_sem["risk_state"]
             ))
 
         # 6. PRIORITEIT 2: Portfolio & Bot aggregations with full boundary guards

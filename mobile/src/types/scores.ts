@@ -10,3 +10,11 @@ export type TodayScores = {
   scores: Score[];
   aiSummary: string;
 };
+
+export type DomainScore = {
+  label: ScoreCategory;
+  score: number;
+  trend: string;
+  summary: string;
+  tone: 'success' | 'warning' | 'danger' | 'accent' | 'neutral';
+};

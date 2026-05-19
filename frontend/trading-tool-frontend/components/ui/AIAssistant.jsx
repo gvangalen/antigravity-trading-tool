@@ -700,6 +700,9 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     scrollToBottom();
   }, [messages, loading, activeState]);
 
+  const progress = activeState ? getFlowProgress(activeState) : null;
+  const activeStep = progress ? Math.min(progress.filled + 1, progress.total) : 1;
+
   if (!isOpen) return null;
 
   return (
@@ -1014,25 +1017,20 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
       {/* INPUT AREA */}
       <div className="p-6 bg-card dark:bg-[#0f172a] border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] relative z-10 flex-shrink-0">
-        {pathname?.includes("/admin") && activeState && activeState.current_flow && activeState.current_flow !== "none" && (() => {
-          const progress = getFlowProgress(activeState);
-          if (!progress) return null;
-          const activeStep = Math.min(progress.filled + 1, progress.total);
-          return (
-            <div className="mb-4 p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-2xl flex flex-col gap-2.5">
-              <div className="flex items-center justify-between text-xs font-medium text-slate-700 dark:text-slate-300">
-                <span className="font-semibold">{progress.flowLabel === "Setup Creation" ? "Setup Wizard" : progress.flowLabel}</span>
-                <span className="text-slate-400 dark:text-slate-500">Stap {activeStep} van {progress.total}</span>
-              </div>
-              <div className="w-full h-1 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-blue-600 dark:bg-blue-500 rounded-full transition-all duration-500 ease-out"
-                  style={{ width: `${progress.percentage}%` }}
-                />
-              </div>
+        {pathname?.includes("/admin") && activeState && activeState.current_flow && activeState.current_flow !== "none" && progress && (
+          <div className="mb-4 p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-2xl flex flex-col gap-2.5">
+            <div className="flex items-center justify-between text-xs font-medium text-slate-700 dark:text-slate-300">
+              <span className="font-semibold">{progress.flowLabel === "Setup Creation" ? "Setup Wizard" : progress.flowLabel}</span>
+              <span className="text-slate-400 dark:text-slate-500">Stap {activeStep} van {progress.total}</span>
             </div>
-          );
-        })()}
+            <div className="w-full h-1 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-blue-600 dark:bg-blue-500 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${progress.percentage}%` }}
+              />
+            </div>
+          </div>
+        )}
         <div className="relative group">
           <input 
             type="text" 

@@ -20,11 +20,13 @@ import {
   unregisterMobilePushToken,
 } from '../services/pushNotifications';
 import { triggerHaptic } from '../utils/haptics';
+import { useFinnOverlay } from '../contexts/FinnOverlayContext';
 
 type SettingsSheet = 'profile' | 'language' | 'theme' | 'push' | 'session' | null;
 
 export function SettingsScreen() {
   const navigation = useNavigation<NavigationProp<MainTabParamList>>();
+  const { openFinn } = useFinnOverlay();
   const { loading, logout, refreshUser, user } = useAuth();
   const { appearance, language, setAppearance, setLanguage } = useAppPreferences();
   const [sheet, setSheet] = useState<SettingsSheet>(null);
@@ -93,7 +95,7 @@ export function SettingsScreen() {
         <Pressable
           onPress={async () => {
             await triggerHaptic('selection');
-            navigation.navigate('FINN');
+            openFinn();
           }}
           style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
         >

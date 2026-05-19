@@ -7,20 +7,21 @@ type SectionHeaderProps = {
   label: string;
   title?: string;
   description?: string;
+  compact?: boolean;
 };
 
-export function SectionHeader({ label, title, description }: SectionHeaderProps) {
+export function SectionHeader({ label, title, description, compact = false }: SectionHeaderProps) {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, compact && styles.compactContainer]}>
       <View style={styles.labelRow}>
-        <View style={styles.marker} />
-        <Text style={styles.label}>{label}</Text>
+        <View style={[styles.marker, compact && styles.compactMarker]} />
+        <Text style={[styles.label, compact && styles.compactLabel]}>{label}</Text>
       </View>
-      {title ? <Text style={[styles.title, { color: colors.text }]}>{title}</Text> : null}
-      {description ? <Text style={styles.description}>{description}</Text> : null}
+      {title ? <Text style={[styles.title, { color: colors.text }, compact && styles.compactTitle]}>{title}</Text> : null}
+      {description && !compact ? <Text style={styles.description}>{description}</Text> : null}
     </View>
   );
 }
@@ -28,6 +29,12 @@ export function SectionHeader({ label, title, description }: SectionHeaderProps)
 const styles = StyleSheet.create({
   container: {
     gap: theme.spacing.xs,
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  compactContainer: {
+    gap: 2,
+    marginBottom: theme.spacing.sm,
   },
   description: {
     color: theme.colors.textDim,
@@ -42,6 +49,10 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
+  compactLabel: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+  },
   labelRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -53,11 +64,19 @@ const styles = StyleSheet.create({
     height: 16,
     width: 4,
   },
+  compactMarker: {
+    height: 12,
+    width: 3,
+  },
   title: {
     color: theme.colors.text,
     fontSize: theme.typography.screenTitle,
     fontWeight: '900',
     letterSpacing: 0,
     lineHeight: 36,
+  },
+  compactTitle: {
+    fontSize: 20,
+    lineHeight: 26,
   },
 });

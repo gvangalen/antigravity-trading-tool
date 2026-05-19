@@ -139,6 +139,10 @@ export function preferenceColors(appearance: AppAppearance) {
       textDim: '#94A3B8',
       textMuted: '#CBD5E1',
       textSoft: '#E2E8F0',
+      accent: '#2563EB',
+      success: '#10B981',
+      warning: '#F59E0B',
+      danger: '#F43F5E',
     };
   }
 
@@ -155,5 +159,9 @@ export function preferenceColors(appearance: AppAppearance) {
     textDim: '#64748B',
     textMuted: '#475569',
     textSoft: '#1E293B',
+    accent: '#2563EB',
+    success: '#10B981',
+    warning: '#F59E0B',
+    danger: '#E11D48',
   };
 }
