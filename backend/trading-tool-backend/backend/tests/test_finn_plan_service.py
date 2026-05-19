@@ -342,6 +342,21 @@ def test_strategy_creation_cancel_returns_clear_state_envelope():
     assert cancelled["draft"]["draft_kind"] == "strategy"
 
 
+def test_read_after_write_marks_absent_bot_as_not_verified_but_valid():
+    result = asyncio.run(_service()._verify_created_objects(
+        user_id=1,
+        setup_id=None,
+        strategy_id=None,
+        bot_id=None,
+    ))
+
+    assert result == {
+        "setup": True,
+        "strategy": True,
+        "bot": False,
+    }
+
+
 def test_vague_btc_intent_asks_for_plan_type():
     service = _service()
 

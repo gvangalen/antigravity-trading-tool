@@ -1580,7 +1580,7 @@ class FinnPlanService:
     ) -> Dict[str, bool]:
         setup_found = True if setup_id is None else bool(await SetupService(self.session).repository.get_setup_by_id(setup_id, user_id))
         strategy_found = True if strategy_id is None else bool(await StrategyService(self.session).repository.get_raw_strategy_with_setup(strategy_id, user_id))
-        bot_found = True
+        bot_found = False
         if bot_id:
             bot_found = bool(await BotService(self.session).repository.get_bot_config(user_id, bot_id))
 
@@ -1589,7 +1589,8 @@ class FinnPlanService:
             "strategy": strategy_found,
             "bot": bot_found,
         }
-        if not all(verified.values()):
+        required_verified = setup_found and strategy_found and (bot_found if bot_id else True)
+        if not required_verified:
             raise HTTPException(500, f"Read-after-write verificatie faalde: {verified}")
         return verified
 
