@@ -48,6 +48,7 @@ WEEKDAY_NUMBERS = {
     "saturday": 6,
     "sunday": 7,
 }
+NO_BOT_PHRASES = ("geen bot", "zonder bot", "niet automatisch", "manual only", "manual-only", "alleen handmatig")
 
 
 def empty_plan_draft() -> Dict[str, Any]:
@@ -409,6 +410,8 @@ class FinnPlanService:
             return True
         if self.looks_like_status_request(query):
             return False
+        if any(phrase in q for phrase in NO_BOT_PHRASES):
+            return False
         has_bot_word = bool(re.search(r"\bbot\b", q))
         has_strategy_ref = bool(context.get("strategy_id")) or bool(re.search(r"\bstrateg(?:ie|y)\s*#?\s*\d+\b", q))
         has_create_intent = any(word in q for word in ["maak", "aanmaken", "creeer", "creeër", "bouw", "instellen", "wil"])
@@ -704,7 +707,10 @@ class FinnPlanService:
 
         strategy_id_match = re.search(r"\bstrateg(?:ie|y)\s*#?\s*(\d+)\b", q, re.IGNORECASE)
         if strategy_id_match:
-            draft["strategy_id"] = int(strategy_id_match.group(1))
+            new_strategy_id = int(strategy_id_match.group(1))
+            if draft.get("strategy_id") and int(draft["strategy_id"]) != new_strategy_id:
+                self._reset_bot_strategy_binding(draft)
+            draft["strategy_id"] = new_strategy_id
 
         bot = draft["bot"]
         name_match = re.search(r"(?:noem|naam|heet)\s+(?:hem|deze)?\s*[\"']?([^\"'.]+)[\"']?", q, re.IGNORECASE)
@@ -747,9 +753,7 @@ class FinnPlanService:
         if amount and "budget" in q_lower and not bot.get("budget_total_eur"):
             bot["budget_total_eur"] = _number(amount.group(1) or amount.group(2))
 
-        if not bot.get("name") and draft.get("strategy_id"):
-            env = "Live" if bot.get("is_live") else "Paper"
-            bot["name"] = f"Finn Strategy {draft['strategy_id']} {env} Bot"
+        self._apply_bot_name_default(draft)
 
         validation = self._validate_bot_draft(draft)
         actions = []
@@ -1188,14 +1192,47 @@ class FinnPlanService:
         if not strategy:
             draft["_strategy_lookup_error"] = "strategie niet gevonden"
             return
+        draft.pop("_strategy_lookup_error", None)
         data = json.loads(strategy.get("data")) if isinstance(strategy.get("data"), str) else (strategy.get("data") or {})
         draft["asset"] = str(strategy.get("setup_symbol") or data.get("symbol") or "").upper() or None
         draft["setup_type"] = (strategy.get("setup_type") or strategy.get("existing_setup_type") or data.get("setup_type") or "").lower() or None
         draft["timeframe"] = strategy.get("setup_timeframe") or data.get("timeframe")
-        if not draft["bot"].get("name"):
-            env = "Live" if draft["bot"].get("is_live") else "Paper"
-            symbol = draft.get("asset") or "Strategy"
-            draft["bot"]["name"] = f"Finn {symbol} {env} Bot"
+        self._apply_bot_name_default(draft)
+
+    def _reset_bot_strategy_binding(self, draft: Dict[str, Any]) -> None:
+        draft["existing_bot_id"] = None
+        draft["asset"] = None
+        draft["setup_type"] = None
+        draft["timeframe"] = None
+        draft.pop("_strategy_lookup_error", None)
+        bot = draft.get("bot") or {}
+        bot["name"] = None
+
+    def _bot_name_label(self, bot: Dict[str, Any]) -> str:
+        mode = str(bot.get("mode") or "manual").lower()
+        if bot.get("is_live"):
+            return "Live"
+        if mode == "auto":
+            return "Auto"
+        if mode == "semi-auto":
+            return "Semi-Auto"
+        return "Paper"
+
+    def _is_generated_bot_name(self, name: Any) -> bool:
+        if not isinstance(name, str):
+            return False
+        return bool(re.match(r"^Finn (?:Strategy \d+|[A-Z0-9-]{2,10}) (?:Paper|Live|Auto|Semi-Auto) Bot$", name.strip()))
+
+    def _apply_bot_name_default(self, draft: Dict[str, Any]) -> None:
+        bot = draft.get("bot") or {}
+        if not draft.get("strategy_id"):
+            return
+        current_name = bot.get("name")
+        if current_name and not self._is_generated_bot_name(current_name):
+            return
+        label = self._bot_name_label(bot)
+        subject = draft.get("asset") or f"Strategy {draft['strategy_id']}"
+        bot["name"] = f"Finn {subject} {label} Bot"
 
     async def _existing_bot_for_strategy(self, user_id: int, strategy_id: Optional[int]) -> Optional[Dict[str, Any]]:
         if not self.session or not strategy_id:
@@ -1565,7 +1602,7 @@ class FinnPlanService:
             missing.append("strategy_id")
         if draft.get("_strategy_lookup_error"):
             invalid.append({"field": "strategy_id", "reason": draft["_strategy_lookup_error"]})
-        if not bot.get("name"):
+        if draft.get("strategy_id") and not bot.get("name"):
             missing.append("bot.name")
 
         mode = str(bot.get("mode") or "manual").lower()

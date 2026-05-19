@@ -710,11 +710,42 @@ def test_user_can_correct_asset_and_amount_in_follow_up():
 
 
 def test_user_can_disable_bot_explicitly():
-    result = _service().build_response("Maak een wekelijkse BTC DCA van 100 euro zonder bot")
+    service = _service()
+
+    assert service.looks_like_bot_request("Maak een wekelijkse BTC DCA van 100 euro zonder bot") is False
+
+    result = service.build_response("Maak een wekelijkse BTC DCA van 100 euro zonder bot")
 
     assert result["can_confirm"] is True
     assert result["draft"]["bot"]["create_bot"] is False
     assert "Bot:" not in result["response"]
+
+
+def test_bot_strategy_switch_resets_previous_bot_state():
+    service = _service()
+    first = service.build_bot_response("Maak een paper bot voor strategie 121")
+    first["draft"]["existing_bot_id"] = 38
+    first["draft"]["asset"] = "BTC"
+    first["draft"]["setup_type"] = "dca"
+    first["draft"]["timeframe"] = "1W"
+
+    second = service.build_bot_response("Maak een auto bot voor strategie 122", {"finn_draft": first["draft"]})
+
+    assert second["draft"]["strategy_id"] == 122
+    assert second["draft"]["existing_bot_id"] is None
+    assert second["draft"]["asset"] is None
+    assert second["draft"]["setup_type"] is None
+    assert second["draft"]["timeframe"] is None
+    assert second["draft"]["bot"]["mode"] == "auto"
+    assert second["draft"]["bot"]["name"] == "Finn Strategy 122 Auto Bot"
+
+
+def test_bot_strategy_selection_only_asks_for_strategy_first():
+    result = _service().build_bot_response("Maak een paper bot")
+
+    assert result["can_confirm"] is False
+    assert result["missing_fields"] == ["strategy_id"]
+    assert result["next_question"] == "strategy_id"
 
 
 def test_status_request_is_detected_without_starting_plan_creation():
