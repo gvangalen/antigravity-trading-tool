@@ -125,6 +125,9 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       symbol: searchParams.get("symbol") || searchParams.get("asset") || globalSymbol || "BTC",
       timeframe: searchParams.get("tf") || searchParams.get("interval") || (pathname.includes("dashboard") || pathname === "/" ? "Weekly" : "Daily"),
       setup_id: activeSetup?.id || activeSetup?.setup_id || null,
+      setup_type: activeSetup?.setup_type || activeSetup?.type || null,
+      setup_symbol: activeSetup?.symbol || null,
+      setup_timeframe: activeSetup?.timeframe || null,
       bot_id: activeBot?.id || activeBot?.bot_id || focusedBotId || null,
       strategy_id: activeSetup?.strategy_id || null,
       setup_name: searchParams.get("name") || activeSetup?.name || "No specific setup",
@@ -242,7 +245,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       setFinnDraft(envelope.draft);
       setActiveState(envelope.state || null);
       setMessages(prev => {
-        const alreadyVisible = prev.some(m => m.intent === "plan_creation" && m.draft);
+        const alreadyVisible = prev.some(m => (m.intent === envelope.intent || m.flow === envelope.flow) && m.draft);
         if (alreadyVisible) return prev;
         return [...prev, {
           role: "assistant",
@@ -381,7 +384,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             return copy;
           });
 
-          if (envelope.flow === "plan_creation" || envelope.intent === "plan_creation_cancelled") {
+          if (["plan_creation", "strategy_creation"].includes(envelope.flow) || ["plan_creation_cancelled", "strategy_creation_cancelled"].includes(envelope.intent)) {
             setFinnDraft(envelope.draft || null);
           }
 
@@ -581,10 +584,13 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         throw new Error("Aangemaakte objecten zijn nog niet terugleesbaar via de API.");
       }
 
+      const isStrategyOnly = res?.draft?.draft_kind === "strategy";
       setMessages(prev => [...prev, {
         role: "assistant",
-        text: `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Aangemaakt en geverifieerd: setup #${res.setup_id}, strategy #${res.strategy_id}${res.bot_id ? `, bot #${res.bot_id}` : ""}.`,
-        intent: "plan_created",
+        text: isStrategyOnly
+          ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Strategie aangemaakt en geverifieerd: strategy #${res.strategy_id} voor setup #${res.setup_id}.`
+          : `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Aangemaakt en geverifieerd: setup #${res.setup_id}, strategy #${res.strategy_id}${res.bot_id ? `, bot #${res.bot_id}` : ""}.`,
+        intent: isStrategyOnly ? "strategy_created" : "plan_created",
       }]);
       setFinnDraft(null);
       await loadInsight();
@@ -603,38 +609,42 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   const renderDraftCard = (message) => {
     const draft = message.draft;
     const isFinnPlan = message.intent === "plan_creation" || message.flow === "plan_creation" || draft?.plan_type;
-    if (!draft || !isFinnPlan) return null;
+    const isFinnStrategy = message.intent === "strategy_creation" || message.flow === "strategy_creation" || draft?.draft_kind === "strategy";
+    if (!draft || (!isFinnPlan && !isFinnStrategy)) return null;
 
     const setup = draft.setup || {};
     const strategy = draft.strategy || {};
     const dca = draft.dca || {};
     const bot = draft.bot || {};
-    const isDca = draft.plan_type === "dca";
-    const isTrade = draft.plan_type === "trade";
+    const draftType = isFinnStrategy ? draft.setup_type : draft.plan_type;
+    const isDca = draftType === "dca";
+    const isTrade = draftType === "trade";
 
     const rows = [
-      ["Type", draft.plan_type],
+      ["Type", isFinnStrategy ? "strategy" : draft.plan_type],
+      isFinnStrategy ? ["Setup", draft.setup_id ? `#${draft.setup_id}` : null] : null,
+      isFinnStrategy ? ["Setup type", draft.setup_type] : null,
       ["Asset", draft.asset],
-      ["Naam", setup.name],
-      ["Timeframe", setup.timeframe],
+      !isFinnStrategy ? ["Naam", setup.name] : null,
+      ["Timeframe", isFinnStrategy ? draft.timeframe : setup.timeframe],
       ["Bedrag", strategy.base_amount_eur ? `€${strategy.base_amount_eur}` : null],
-      ["Macro", Array.isArray(setup.macro_score_range) ? setup.macro_score_range.join(" - ") : null],
-      ["Technical", Array.isArray(setup.technical_score_range) ? setup.technical_score_range.join(" - ") : null],
-      ["Market", Array.isArray(setup.market_score_range) ? setup.market_score_range.join(" - ") : null],
-      isDca ? ["DCA", [dca.frequency, dca.day || dca.month_day].filter(Boolean).join(" · ")] : null,
+      !isFinnStrategy ? ["Macro", Array.isArray(setup.macro_score_range) ? setup.macro_score_range.join(" - ") : null] : null,
+      !isFinnStrategy ? ["Technical", Array.isArray(setup.technical_score_range) ? setup.technical_score_range.join(" - ") : null] : null,
+      !isFinnStrategy ? ["Market", Array.isArray(setup.market_score_range) ? setup.market_score_range.join(" - ") : null] : null,
+      isDca && !isFinnStrategy ? ["DCA", [dca.frequency, dca.day || dca.month_day].filter(Boolean).join(" · ")] : null,
       isTrade ? ["Uitvoering", strategy.entry_type || strategy.trade_execution_mode || "limit"] : null,
       isTrade ? ["Entry", strategy.entry] : null,
       isTrade ? ["Stop", strategy.stop_loss] : null,
       isTrade ? ["Targets", Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
-      ["Automatisering", bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only")],
-      bot.create_bot ? ["Bot", `${bot.is_live ? "Live" : "Paper"} · ${bot.mode} · ${bot.risk_profile}`] : null,
+      ["Automatisering", isFinnStrategy ? strategy.automation : (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only"))],
+      !isFinnStrategy && bot.create_bot ? ["Bot", `${bot.is_live ? "Live" : "Paper"} · ${bot.mode} · ${bot.risk_profile}`] : null,
     ].filter(Boolean);
 
     return (
       <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-4">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-300">
           <ListChecks size={13} />
-          Finn Plan Draft
+          {isFinnStrategy ? "Finn Strategy Draft" : "Finn Plan Draft"}
         </div>
         <div className="grid grid-cols-1 gap-2">
           {rows.map(([label, value]) => (
@@ -924,7 +934,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 {m.action && m.action.type !== "action_card" && !m.draft?.plan_type && m.isComplete !== false && (
                   <ActionCard action={m.action} onAction={handleActionClick} />
                 )}
-                {m.draft && m.intent !== "plan_creation" && m.flow !== "plan_creation" && !m.draft?.plan_type && m.draft.type !== "action_card" && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
+                {m.draft && m.intent !== "plan_creation" && m.flow !== "plan_creation" && m.intent !== "strategy_creation" && m.flow !== "strategy_creation" && !m.draft?.plan_type && m.draft?.draft_kind !== "strategy" && m.draft.type !== "action_card" && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
                   <DraftCard 
                     draft={m.draft} 
                     onCancel={() => handleCancelDraft(i)} 
@@ -956,7 +966,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           ))}
 
           {/* LIVE INTERACTIVE CONCEPT CARD */}
-          {activeState && activeState.current_flow && activeState.current_flow !== "none" && activeState.current_flow !== "plan_creation" && (() => {
+          {activeState && activeState.current_flow && activeState.current_flow !== "none" && activeState.current_flow !== "plan_creation" && activeState.current_flow !== "strategy_creation" && (() => {
             const flow = activeState.current_flow;
             const slots = activeState.slots || {};
             let shouldShowCard = false;

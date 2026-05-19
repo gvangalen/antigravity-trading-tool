@@ -67,6 +67,8 @@ class StrategyService:
         timeframe = normalize_string(row.get("setup_timeframe") or data.get("timeframe"))
         explanation = normalize_string(row.get("explanation") or data.get("explanation"))
         risk_profile = normalize_string(row.get("risk_profile") or data.get("risk_profile"))
+        entry_type = normalize_string(data.get("entry_type") or data.get("trade_execution_mode"))
+        automation = normalize_string(data.get("automation"))
 
         tags = normalize_array(data.get("tags"))
         favorite = bool(data.get("favorite", False))
@@ -116,6 +118,8 @@ class StrategyService:
             "timeframe": timeframe,
 
             "entry": entry,
+            "entry_type": entry_type,
+            "trade_execution_mode": entry_type,
             "targets": targets,
             "stop_loss": stop_loss,
             "risk_reward": risk_reward,
@@ -124,6 +128,7 @@ class StrategyService:
             "ai_explanation": data.get("ai_explanation"),
 
             "risk_profile": risk_profile,
+            "automation": automation,
 
             "tags": tags,
             "favorite": favorite,
@@ -207,12 +212,15 @@ class StrategyService:
             "symbol": strategy.get("symbol"),
             "timeframe": strategy.get("timeframe"),
             "entry": strategy.get("entry"),
+            "entry_type": strategy.get("entry_type"),
+            "trade_execution_mode": strategy.get("trade_execution_mode"),
             "targets": strategy.get("targets"),
             "stop_loss": strategy.get("stop_loss"),
             "risk_reward": strategy.get("risk_reward"),
             "explanation": strategy.get("explanation"),
             "ai_explanation": strategy.get("ai_explanation"),
             "risk_profile": strategy.get("risk_profile"),
+            "automation": strategy.get("automation"),
             "tags": strategy.get("tags"),
             "favorite": strategy.get("favorite"),
             "created_at": strategy.get("created_at"),

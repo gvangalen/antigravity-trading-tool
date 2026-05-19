@@ -95,13 +95,21 @@ async def assistant_chat(
         finn = FinnPlanService(db)
         context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
         if finn.is_cancel_request(request.query) and context_payload.get("finn_draft"):
-            finn_response = finn.build_response(request.query, context_payload)
+            if (context_payload.get("finn_draft") or {}).get("draft_kind") == "strategy":
+                finn_response = finn.build_strategy_response(request.query, context_payload)
+            else:
+                finn_response = finn.build_response(request.query, context_payload)
             finn_response["trace_id"] = trace_id
             await finn.persist_response_state(user_id, finn_response)
             return AssistantChatResponse(**finn_response)
         if finn.looks_like_status_request(request.query):
             finn_response = await finn.build_status_response(user_id, request.query, context_payload)
             finn_response["trace_id"] = trace_id
+            return AssistantChatResponse(**finn_response)
+        if finn.looks_like_strategy_request(request.query, context_payload):
+            finn_response = finn.build_strategy_response(request.query, context_payload)
+            finn_response["trace_id"] = trace_id
+            await finn.persist_response_state(user_id, finn_response)
             return AssistantChatResponse(**finn_response)
         if finn.looks_like_plan_request(request.query, context_payload.get("finn_draft")):
             finn_response = finn.build_response(request.query, context_payload)
@@ -259,7 +267,10 @@ async def assistant_chat_stream(
             finn = FinnPlanService(db)
             context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
             if finn.is_cancel_request(request.query) and context_payload.get("finn_draft"):
-                envelope = finn.build_response(request.query, context_payload)
+                if (context_payload.get("finn_draft") or {}).get("draft_kind") == "strategy":
+                    envelope = finn.build_strategy_response(request.query, context_payload)
+                else:
+                    envelope = finn.build_response(request.query, context_payload)
                 envelope["trace_id"] = trace_id
                 await finn.persist_response_state(user_id, envelope)
                 yield _sse_event("envelope", envelope)
@@ -268,6 +279,13 @@ async def assistant_chat_stream(
             if finn.looks_like_status_request(request.query):
                 envelope = await finn.build_status_response(user_id, request.query, context_payload)
                 envelope["trace_id"] = trace_id
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_strategy_request(request.query, context_payload):
+                envelope = finn.build_strategy_response(request.query, context_payload)
+                envelope["trace_id"] = trace_id
+                await finn.persist_response_state(user_id, envelope)
                 yield _sse_event("envelope", envelope)
                 return
 

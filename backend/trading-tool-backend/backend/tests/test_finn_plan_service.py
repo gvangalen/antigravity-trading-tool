@@ -258,6 +258,90 @@ def test_multiple_or_unsupported_assets_ask_for_asset_clarification():
     assert result["actions"] == []
 
 
+def test_strategy_creation_for_active_dca_setup_is_confirmable():
+    service = _service()
+    context = {
+        "setup_id": 12,
+        "setup_type": "dca",
+        "setup_symbol": "BTC",
+        "setup_timeframe": "1W",
+    }
+
+    result = service.build_strategy_response("Maak een strategie met 100 euro", context)
+
+    assert result["intent"] == "strategy_creation"
+    assert result["can_confirm"] is True
+    assert result["draft"]["draft_kind"] == "strategy"
+    assert result["draft"]["setup_id"] == 12
+    assert result["draft"]["setup_type"] == "dca"
+    assert result["draft"]["asset"] == "BTC"
+    assert result["draft"]["strategy"]["base_amount_eur"] == 100
+    assert result["actions"][0]["type"] == "create_strategy"
+
+
+def test_strategy_creation_for_trade_setup_requires_missing_timeframe_then_recovers():
+    service = _service()
+    context = {
+        "setup_id": 55,
+        "setup_type": "trade",
+        "setup_symbol": "ETH",
+    }
+
+    first = service.build_strategy_response(
+        "Maak een strategie entry 3000 stop 2800 target 3600 met 100 euro",
+        context,
+    )
+
+    assert first["can_confirm"] is False
+    assert first["next_question"] == "timeframe"
+
+    second = service.build_strategy_response("4H", {"finn_draft": first["draft"]})
+
+    assert second["can_confirm"] is True
+    assert second["draft"]["timeframe"] == "4H"
+    assert second["draft"]["strategy"]["entry"] == 3000
+    assert second["actions"][0]["type"] == "create_strategy"
+
+
+def test_strategy_creation_trade_invalid_values_can_be_corrected():
+    service = _service()
+    context = {
+        "setup_id": 55,
+        "setup_type": "trade",
+        "setup_symbol": "ETH",
+        "setup_timeframe": "4H",
+    }
+    first = service.build_strategy_response(
+        "Maak een strategie met entry 3000 stop 3200 target 2800 en 100 euro",
+        context,
+    )
+
+    assert first["can_confirm"] is False
+    assert {"field": "strategy.stop_loss", "reason": "voor long trades moet stop-loss lager zijn dan entry"} in first["invalid_fields"]
+
+    second = service.build_strategy_response("stop 2800 en target 3600", {"finn_draft": first["draft"]})
+
+    assert second["can_confirm"] is True
+    assert second["invalid_fields"] == []
+    assert second["draft"]["strategy"]["stop_loss"] == 2800
+    assert second["draft"]["strategy"]["targets"] == [3600]
+
+
+def test_strategy_creation_cancel_returns_clear_state_envelope():
+    service = _service()
+    first = service.build_strategy_response(
+        "Maak een strategie met 50 euro",
+        {"setup_id": 12, "setup_type": "dca", "setup_symbol": "BTC", "setup_timeframe": "1W"},
+    )
+
+    cancelled = service.build_strategy_response("annuleer", {"finn_draft": first["draft"]})
+
+    assert cancelled["intent"] == "strategy_creation_cancelled"
+    assert cancelled["flow"] is None
+    assert cancelled["actions"] == []
+    assert cancelled["draft"]["draft_kind"] == "strategy"
+
+
 def test_vague_btc_intent_asks_for_plan_type():
     service = _service()
 

@@ -9,6 +9,9 @@ class AssistantContextSchema(BaseModel):
     timeframe: Optional[str] = None
     bot_id: Optional[int] = None
     setup_id: Optional[int] = None
+    setup_type: Optional[str] = None
+    setup_symbol: Optional[str] = None
+    setup_timeframe: Optional[str] = None
     strategy_id: Optional[int] = None
     setup_name: Optional[str] = None
     finn_draft: Optional[Dict[str, Any]] = None

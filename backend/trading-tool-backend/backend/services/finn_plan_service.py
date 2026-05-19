@@ -134,6 +134,28 @@ def empty_plan_patch() -> Dict[str, Any]:
     }
 
 
+def empty_strategy_draft() -> Dict[str, Any]:
+    return {
+        "draft_kind": "strategy",
+        "setup_id": None,
+        "setup_type": None,
+        "asset": None,
+        "timeframe": None,
+        "strategy": {
+            "base_amount_eur": None,
+            "execution_mode": "fixed",
+            "decision_curve": None,
+            "direction": "long",
+            "entry_type": None,
+            "entry": None,
+            "stop_loss": None,
+            "targets": None,
+            "automation": "manual_only",
+            "risk_profile": "balanced",
+        },
+    }
+
+
 def _deep_merge(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
     merged = deepcopy(base)
     for key, value in (patch or {}).items():
@@ -212,11 +234,12 @@ class FinnPlanService:
         state = await ConversationStateRepository(self.session).get_state(user_id)
         slots = (state or {}).get("slots") or {}
         draft = slots.get("draft")
-        if state and state.get("current_flow") == "plan_creation" and isinstance(draft, dict):
+        if state and state.get("current_flow") in {"plan_creation", "strategy_creation"} and isinstance(draft, dict):
             hydrated["finn_draft"] = draft
             hydrated["finn_state"] = {
                 "version": slots.get("version"),
                 "updated_at": slots.get("updated_at"),
+                "current_flow": state.get("current_flow"),
             }
         return hydrated
 
@@ -224,16 +247,16 @@ class FinnPlanService:
         if not self.session:
             return
         repo = ConversationStateRepository(self.session)
-        if response.get("intent") == "plan_creation_cancelled":
+        if response.get("intent") in {"plan_creation_cancelled", "strategy_creation_cancelled"}:
             await repo.clear_state(user_id)
             return
-        if response.get("flow") != "plan_creation" or not isinstance(response.get("draft"), dict):
+        if response.get("flow") not in {"plan_creation", "strategy_creation"} or not isinstance(response.get("draft"), dict):
             return
 
         draft = response["draft"]
         await repo.save_state(
             user_id,
-            current_flow="plan_creation",
+            current_flow=response.get("flow"),
             asset=draft.get("asset"),
             slots={
                 "version": FINN_STATE_VERSION,
@@ -253,6 +276,8 @@ class FinnPlanService:
         q = (query or "").lower()
         if draft and draft.get("plan_type"):
             return True
+        if draft and draft.get("draft_kind") == "strategy":
+            return False
         if self.looks_like_status_request(query):
             return False
         intent_words = [
@@ -278,6 +303,19 @@ class FinnPlanService:
             or any(word in q for word in vague_asset_words)
             or len(asset_mentions) > 1
         )
+
+    def looks_like_strategy_request(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
+        q = (query or "").lower()
+        context = context or {}
+        draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else {}
+        if draft.get("draft_kind") == "strategy":
+            return True
+        if self.looks_like_status_request(query):
+            return False
+        has_strategy_word = any(word in q for word in ["strategie", "strategy"])
+        has_setup_ref = bool(context.get("setup_id")) or bool(re.search(r"\bsetup\s*#?\s*\d+\b", q))
+        has_create_intent = any(word in q for word in ["maak", "aanmaken", "creeer", "creeër", "bouw", "instellen", "wil"])
+        return has_strategy_word and (has_setup_ref or has_create_intent)
 
     def looks_like_status_request(self, query: str) -> bool:
         q = (query or "").lower()
@@ -358,6 +396,86 @@ class FinnPlanService:
             "draft": draft,
             "state": self._flow_state(draft, validation),
             "reasoning": self._reasoning(draft, validation),
+            "missing_fields": validation["missing_fields"],
+            "invalid_fields": validation["invalid_fields"],
+            "next_question": validation["next_question"],
+            "can_confirm": validation["can_confirm"],
+            "actions": actions,
+        }
+
+    def build_strategy_response(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        previous = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) and context["finn_draft"].get("draft_kind") == "strategy" else {}
+        draft = _deep_merge(empty_strategy_draft(), previous)
+        self._apply_strategy_context(draft, context)
+
+        q = (query or "").strip()
+        if self.is_cancel_request(q):
+            return {
+                "response": "Prima, ik heb deze strategie-aanmaak gestopt. Er is niets aangemaakt.",
+                "intent": "strategy_creation_cancelled",
+                "flow": None,
+                "draft": empty_strategy_draft(),
+                "missing_fields": [],
+                "invalid_fields": [],
+                "next_question": None,
+                "can_confirm": False,
+                "actions": [],
+            }
+
+        setup_id_match = re.search(r"\bsetup\s*#?\s*(\d+)\b", q, re.IGNORECASE)
+        if setup_id_match:
+            draft["setup_id"] = int(setup_id_match.group(1))
+
+        extracted = self._extract_from_query(q)
+        if extracted.get("plan_type"):
+            draft["setup_type"] = extracted["plan_type"]
+        if extracted.get("asset"):
+            draft["asset"] = extracted["asset"]
+        setup_patch = extracted.get("setup") or {}
+        if setup_patch.get("timeframe"):
+            draft["timeframe"] = setup_patch["timeframe"]
+        strategy_patch = extracted.get("strategy") or {}
+        for field in ["base_amount_eur", "execution_mode", "decision_curve", "direction", "entry_type", "entry", "stop_loss", "targets"]:
+            if strategy_patch.get(field) is not None:
+                draft["strategy"][field] = strategy_patch[field]
+        bot_patch = extracted.get("bot") or {}
+        if bot_patch.get("automation"):
+            draft["strategy"]["automation"] = bot_patch["automation"]
+        if bot_patch.get("risk_profile"):
+            draft["strategy"]["risk_profile"] = bot_patch["risk_profile"]
+        if bot_patch.get("create_bot") is True and not draft["strategy"].get("automation"):
+            draft["strategy"]["automation"] = "bot_assisted"
+
+        self._apply_strategy_defaults(draft)
+        validation = self._validate_strategy_draft(draft)
+        message = self._build_strategy_message(draft, validation)
+
+        actions = []
+        if validation["can_confirm"]:
+            action_payload = deepcopy(draft)
+            actions.append({
+                "id": self._strategy_action_id(action_payload),
+                "type": "create_strategy",
+                "label": "Strategie aanmaken",
+                "payload": action_payload,
+                "risk_level": "medium" if draft.get("setup_type") == "trade" else "low",
+                "requires_confirmation": True,
+                "autonomy_level": "confirm_required",
+                "guardrails": {
+                    "requires_confirmation": True,
+                    "can_execute_without_user": False,
+                    "execution_allowed": "strategy_creation_only",
+                },
+            })
+
+        return {
+            "response": message,
+            "intent": "strategy_creation",
+            "flow": "strategy_creation",
+            "draft": draft,
+            "state": self._strategy_flow_state(draft, validation),
+            "reasoning": self._strategy_reasoning(draft, validation),
             "missing_fields": validation["missing_fields"],
             "invalid_fields": validation["invalid_fields"],
             "next_question": validation["next_question"],
@@ -658,6 +776,163 @@ class FinnPlanService:
             "coaching_level": "plan_creation",
         }
 
+    def _apply_strategy_context(self, draft: Dict[str, Any], context: Dict[str, Any]) -> None:
+        if context.get("setup_id") and not draft.get("setup_id"):
+            draft["setup_id"] = context.get("setup_id")
+        if context.get("setup_type") and not draft.get("setup_type"):
+            draft["setup_type"] = str(context.get("setup_type")).lower()
+        if context.get("setup_symbol") and not draft.get("asset"):
+            draft["asset"] = str(context.get("setup_symbol")).upper()
+        elif context.get("symbol") and not draft.get("asset"):
+            draft["asset"] = str(context.get("symbol")).upper()
+        if context.get("setup_timeframe") and not draft.get("timeframe"):
+            draft["timeframe"] = context.get("setup_timeframe")
+        elif context.get("timeframe") and not draft.get("timeframe"):
+            draft["timeframe"] = context.get("timeframe")
+
+    def _apply_strategy_defaults(self, draft: Dict[str, Any]) -> None:
+        if draft.get("asset"):
+            draft["asset"] = str(draft["asset"]).upper()
+        if draft.get("setup_type"):
+            draft["setup_type"] = str(draft["setup_type"]).lower()
+        if draft.get("setup_type") == "trade" and not draft["strategy"].get("entry_type"):
+            draft["strategy"]["entry_type"] = "limit"
+        if draft.get("setup_type") == "trade" and not draft["strategy"].get("direction"):
+            draft["strategy"]["direction"] = "long"
+        if not draft["strategy"].get("automation"):
+            draft["strategy"]["automation"] = "manual_only"
+        if not draft["strategy"].get("risk_profile"):
+            draft["strategy"]["risk_profile"] = "balanced"
+
+    def _validate_strategy_draft(self, draft: Dict[str, Any]) -> Dict[str, Any]:
+        missing: List[str] = []
+        invalid: List[Dict[str, str]] = []
+
+        if not draft.get("setup_id"):
+            missing.append("setup_id")
+        if draft.get("setup_type") not in {"dca", "trade"}:
+            missing.append("setup_type")
+        if not draft.get("asset"):
+            missing.append("asset")
+        if not draft.get("timeframe"):
+            missing.append("timeframe")
+
+        strategy = draft.get("strategy") or {}
+        amount = strategy.get("base_amount_eur")
+        if amount is None:
+            missing.append("strategy.base_amount_eur")
+        elif not isinstance(amount, (int, float)) or amount <= 0:
+            invalid.append({"field": "strategy.base_amount_eur", "reason": "bedrag moet groter dan 0 zijn"})
+
+        if draft.get("setup_type") == "trade":
+            if strategy.get("direction") != "long":
+                invalid.append({"field": "strategy.direction", "reason": "alleen long trades worden nu ondersteund"})
+            if strategy.get("entry_type") not in {"limit", "breakout", "market"}:
+                missing.append("strategy.entry_type")
+            entry = strategy.get("entry")
+            stop_loss = strategy.get("stop_loss")
+            targets = strategy.get("targets")
+            if entry is None:
+                missing.append("strategy.entry")
+            if stop_loss is None:
+                missing.append("strategy.stop_loss")
+            if not targets:
+                missing.append("strategy.targets")
+            if isinstance(entry, (int, float)) and isinstance(stop_loss, (int, float)) and stop_loss >= entry:
+                invalid.append({"field": "strategy.stop_loss", "reason": "voor long trades moet stop-loss lager zijn dan entry"})
+            if isinstance(entry, (int, float)) and isinstance(targets, list):
+                numeric_targets = [t for t in targets if isinstance(t, (int, float))]
+                if [t for t in numeric_targets if t <= entry]:
+                    invalid.append({"field": "strategy.targets", "reason": "voor long trades moeten targets boven entry liggen"})
+                if len(numeric_targets) > 1 and any(numeric_targets[i] >= numeric_targets[i + 1] for i in range(len(numeric_targets) - 1)):
+                    invalid.append({"field": "strategy.targets", "reason": "targets moeten oplopend zijn"})
+                if isinstance(stop_loss, (int, float)) and stop_loss < entry:
+                    risk = entry - stop_loss
+                    reward = max(numeric_targets or [entry]) - entry
+                    if risk > 0 and reward / risk < 1:
+                        invalid.append({"field": "strategy.risk_reward", "reason": "risk/reward moet minimaal 1:1 zijn"})
+
+        next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
+        return {
+            "missing_fields": missing,
+            "invalid_fields": invalid,
+            "next_question": next_question,
+            "can_confirm": not missing and not invalid,
+        }
+
+    def _build_strategy_message(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> str:
+        next_question = validation["next_question"]
+        if validation["invalid_fields"]:
+            issue = validation["invalid_fields"][0]
+            return f"Ik zie een probleem met {issue['field']}: {issue['reason']}. Wat wil je hiervoor instellen?"
+        if next_question == "setup_id":
+            return "Voor welke setup wil je deze strategie maken? Noem bijvoorbeeld setup 12 of open eerst de setup."
+        if next_question == "setup_type":
+            return "Is deze strategie voor een DCA-setup of een gewone trade-setup?"
+        if next_question == "strategy.base_amount_eur":
+            return "Met welk basisbedrag in euro wil je deze strategie uitvoeren?"
+        if next_question == "strategy.entry_type":
+            return "Wil je een limit entry, breakout trigger of market execution gebruiken?"
+        if next_question == "strategy.entry":
+            return "Welke entry-prijs hoort bij deze strategie?"
+        if next_question == "strategy.stop_loss":
+            return "Welke stop-loss hoort bij deze strategie?"
+        if next_question == "strategy.targets":
+            return "Welke target(s) wil je gebruiken? Je mag meerdere targets met komma's geven."
+        summary = self._strategy_summary(draft)
+        return f"Ik heb je strategie klaarstaan. Controleer dit even en bevestig als het klopt:\n\n{summary}"
+
+    def _strategy_summary(self, draft: Dict[str, Any]) -> str:
+        strategy = draft.get("strategy") or {}
+        lines = [
+            "- Type: strategie",
+            f"- Setup: #{draft.get('setup_id')}",
+            f"- Setup type: {draft.get('setup_type')}",
+            f"- Asset: {draft.get('asset')}",
+            f"- Timeframe: {draft.get('timeframe')}",
+            f"- Bedrag: €{strategy.get('base_amount_eur')}",
+        ]
+        if draft.get("setup_type") == "trade":
+            lines.extend([
+                f"- Uitvoering: {strategy.get('entry_type')}",
+                f"- Entry: {strategy.get('entry')}",
+                f"- Stop-loss: {strategy.get('stop_loss')}",
+                f"- Targets: {strategy.get('targets')}",
+                f"- Automatisering: {strategy.get('automation')}",
+            ])
+        return "\n".join(lines)
+
+    def _strategy_flow_state(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "status": "ready_for_confirmation" if validation["can_confirm"] else "collecting",
+            "current_flow": "strategy_creation",
+            "asset": draft.get("asset"),
+            "setup_id": draft.get("setup_id"),
+            "setup_type": draft.get("setup_type"),
+            "next_question": validation["next_question"],
+            "autonomy_level": "confirm_required",
+            "version": FINN_STATE_VERSION,
+        }
+
+    def _strategy_reasoning(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> Dict[str, Any]:
+        reasons = []
+        if validation["missing_fields"]:
+            reasons.append(f"Ontbrekende velden: {', '.join(validation['missing_fields'])}")
+        if validation["invalid_fields"]:
+            reasons.append(f"Ongeldige velden: {', '.join(item['field'] for item in validation['invalid_fields'])}")
+        if not reasons:
+            reasons.append("Alle verplichte strategievelden zijn aanwezig en validatie is geslaagd.")
+        return {
+            "confidence_score": 0.9 if validation["can_confirm"] else 0.55,
+            "risk_detected": bool(validation["invalid_fields"]),
+            "reasons": reasons,
+            "coaching_level": "strategy_creation",
+        }
+
+    def _strategy_action_id(self, payload: Dict[str, Any]) -> str:
+        normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return f"finn-strategy-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:24]}"
+
     def _validate_range(self, field: str, value: Any, invalid: List[Dict[str, str]]) -> None:
         if not isinstance(value, list) or len(value) != 2:
             invalid.append({"field": field, "reason": "range ontbreekt of heeft geen min/max"})
@@ -953,6 +1228,8 @@ class FinnPlanService:
         return "\n".join(lines)
 
     async def execute_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        if action and action.get("type") == "create_strategy":
+            return await self._execute_strategy_action(user_id, action)
         if not action or action.get("type") != "create_plan":
             raise HTTPException(400, "Onbekende Finn action")
 
@@ -1075,9 +1352,101 @@ class FinnPlanService:
         await self.clear_state(user_id)
         return result
 
+    async def _execute_strategy_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        draft = _deep_merge(empty_strategy_draft(), action.get("payload") or {})
+        self._apply_strategy_defaults(draft)
+        action_id = f"{action.get('id') or self._strategy_action_id(draft)}-u{user_id}"
+        acquired = await self._try_create_pending_action(user_id, action_id, action)
+        if not acquired:
+            existing_result = await self._wait_for_action_result(user_id, action_id)
+            if existing_result:
+                return existing_result
+            raise HTTPException(409, "Deze Finn actie wordt al verwerkt. Probeer zo opnieuw.")
+
+        validation = self._validate_strategy_draft(draft)
+        if not validation["can_confirm"]:
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={
+                "ok": False,
+                "message": "Strategie is nog niet geldig",
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+            })
+            raise HTTPException(422, {
+                "message": "Strategie is nog niet geldig",
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+            })
+
+        strategy_service = StrategyService(self.session)
+        strategy_id = None
+        try:
+            strategy_payload = self._strategy_only_payload(draft)
+            strategy_result = await strategy_service.save_strategy(
+                StrategyCreateSchema(**strategy_payload),
+                strategy_payload,
+                user_id,
+            )
+            strategy_id = strategy_result["id"]
+            verified = await self._verify_created_objects(user_id, draft.get("setup_id"), strategy_id, None)
+        except Exception:
+            await self.session.rollback()
+            await self._upsert_action_audit(
+                user_id,
+                action_id,
+                action,
+                status="failed",
+                result={"ok": False, "strategy_id": strategy_id},
+            )
+            raise
+
+        result = {
+            "ok": True,
+            "message": "Strategie aangemaakt",
+            "setup_id": draft.get("setup_id"),
+            "strategy_id": strategy_id,
+            "bot_id": None,
+            "draft": draft,
+            "action_id": action_id,
+            "verified": verified,
+        }
+        await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
+        await self.clear_state(user_id)
+        return result
+
     async def get_open_plan_state(self, user_id: int) -> Dict[str, Any]:
         context = await self.hydrate_context(user_id, {})
         draft = context.get("finn_draft")
+        if isinstance(draft, dict) and draft.get("draft_kind") == "strategy":
+            validation = self._validate_strategy_draft(draft)
+            message = self._build_strategy_message(draft, validation)
+            actions = []
+            if validation["can_confirm"]:
+                action_payload = deepcopy(draft)
+                actions.append({
+                    "id": self._strategy_action_id(action_payload),
+                    "type": "create_strategy",
+                    "label": "Strategie aanmaken",
+                    "payload": action_payload,
+                    "risk_level": "medium" if draft.get("setup_type") == "trade" else "low",
+                    "requires_confirmation": True,
+                    "autonomy_level": "confirm_required",
+                })
+            return {
+                "ok": True,
+                "has_draft": True,
+                "response": message,
+                "intent": "strategy_creation",
+                "flow": "strategy_creation",
+                "draft": draft,
+                "state": self._strategy_flow_state(draft, validation),
+                "reasoning": self._strategy_reasoning(draft, validation),
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+                "next_question": validation["next_question"],
+                "can_confirm": validation["can_confirm"],
+                "actions": actions,
+            }
+
         has_recoverable_draft = (
             isinstance(draft, dict)
             and (
@@ -1209,8 +1578,8 @@ class FinnPlanService:
         strategy_id: Optional[int],
         bot_id: Optional[int],
     ) -> Dict[str, bool]:
-        setup_found = bool(setup_id and await SetupService(self.session).repository.get_setup_by_id(setup_id, user_id))
-        strategy_found = bool(strategy_id and await StrategyService(self.session).repository.get_raw_strategy_with_setup(strategy_id, user_id))
+        setup_found = True if setup_id is None else bool(await SetupService(self.session).repository.get_setup_by_id(setup_id, user_id))
+        strategy_found = True if strategy_id is None else bool(await StrategyService(self.session).repository.get_raw_strategy_with_setup(strategy_id, user_id))
         bot_found = True
         if bot_id:
             bot_found = bool(await BotService(self.session).repository.get_bot_config(user_id, bot_id))
@@ -1329,6 +1698,30 @@ class FinnPlanService:
             payload.update({
                 "dca_mode": draft["dca"].get("dca_mode") or "standard",
                 "buy_score_threshold": draft["dca"].get("buy_score_threshold"),
+            })
+        return payload
+
+    def _strategy_only_payload(self, draft: Dict[str, Any]) -> Dict[str, Any]:
+        strategy = draft["strategy"]
+        payload = {
+            "name": f"Finn {str(draft.get('asset') or '').upper()} Strategy".strip(),
+            "setup_id": int(draft["setup_id"]),
+            "setup_type": draft["setup_type"],
+            "execution_mode": strategy.get("execution_mode") or "fixed",
+            "base_amount": float(strategy["base_amount_eur"]),
+            "decision_curve": strategy.get("decision_curve"),
+            "risk_profile": strategy.get("risk_profile") or "balanced",
+            "automation": strategy.get("automation") or "manual_only",
+            "explanation": "Aangemaakt via Finn",
+        }
+        if draft["setup_type"] == "trade":
+            payload.update({
+                "direction": strategy.get("direction") or "long",
+                "entry_type": strategy.get("entry_type") or "limit",
+                "trade_execution_mode": strategy.get("entry_type") or "limit",
+                "entry": strategy.get("entry"),
+                "stop_loss": strategy.get("stop_loss"),
+                "targets": strategy.get("targets"),
             })
         return payload
 
