@@ -2,7 +2,7 @@ import logging
 import uuid
 import time
 import collections
-from typing import Optional
+from typing import Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,20 +12,29 @@ class InMemoryRateLimiter:
         self.window_seconds = window_seconds
         self.history = collections.defaultdict(list)
 
-    def check_rate_limit(self, identifier: str):
+    def check_rate_limit(self, identifier: str, *, limit: Optional[int] = None, window_seconds: Optional[int] = None):
         now = time.time()
+        active_limit = limit or self.requests_limit
+        active_window = window_seconds or self.window_seconds
         # Clean old timestamps
-        self.history[identifier] = [t for t in self.history[identifier] if now - t < self.window_seconds]
-        if len(self.history[identifier]) >= self.requests_limit:
+        self.history[identifier] = [t for t in self.history[identifier] if now - t < active_window]
+        if len(self.history[identifier]) >= active_limit:
             logger.warning(f"🛑 Rate limit exceeded for identifier: {identifier}")
+            retry_after = max(1, int(active_window - (now - self.history[identifier][0]))) if self.history[identifier] else active_window
             raise HTTPException(
                 status_code=429,
-                detail="Te veel verzoeken. Gelieve een minuut te wachten voor u nieuwe vragen stelt."
+                detail="Te veel verzoeken. Wacht kort en probeer opnieuw.",
+                headers={"Retry-After": str(retry_after)},
             )
         self.history[identifier].append(now)
 
-# Limit user queries to max 6 queries or streams per minute (IP and User ID bounded)
-chat_rate_limiter = InMemoryRateLimiter(requests_limit=6, window_seconds=60)
+# Primary assistant limits. Authenticated Finn users get enough room for
+# multi-turn draft repair, while anonymous/IP fallback remains stricter.
+chat_rate_limiter = InMemoryRateLimiter(requests_limit=30, window_seconds=60)
+ASSISTANT_USER_LIMIT = 30
+ASSISTANT_FINN_DRAFT_LIMIT = 45
+ASSISTANT_IP_FALLBACK_LIMIT = 20
+LOCAL_PROXY_IPS = {"127.0.0.1", "::1", "localhost"}
 
 from typing import List
 from sqlalchemy import select
@@ -60,6 +69,50 @@ from backend.infrastructure.repositories.assistant_context_repository import Ass
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
+def _client_ip(raw_request: Request) -> str:
+    forwarded = raw_request.headers.get("x-forwarded-for")
+    if forwarded:
+        first = forwarded.split(",", 1)[0].strip()
+        if first:
+            return first
+    real_ip = raw_request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    return raw_request.client.host if raw_request.client else "unknown"
+
+
+def _is_finn_transactional_request(query: str, context: dict) -> bool:
+    q = (query or "").lower()
+    draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else None
+    if draft:
+        return True
+    return any(word in q for word in [
+        "annuleer", "cancel", "setup", "strategie", "strategy", "dca",
+        "trade", "entry", "stop", "target", "koop", "kopen",
+    ])
+
+
+def _apply_assistant_rate_limit(
+    *,
+    user_id: int,
+    raw_request: Request,
+    query: str,
+    context: dict,
+    endpoint: str,
+) -> Tuple[str, int]:
+    ip_addr = _client_ip(raw_request)
+    user_limit = ASSISTANT_FINN_DRAFT_LIMIT if _is_finn_transactional_request(query, context) else ASSISTANT_USER_LIMIT
+    chat_rate_limiter.check_rate_limit(f"user_{user_id}:assistant", limit=user_limit)
+
+    # Behind nginx/PM2 the backend often sees 127.0.0.1. Do not make all real
+    # users share one localhost bucket; only use IP fallback for real client IPs.
+    if ip_addr not in LOCAL_PROXY_IPS:
+        chat_rate_limiter.check_rate_limit(f"ip_{ip_addr}:assistant", limit=ASSISTANT_IP_FALLBACK_LIMIT)
+    else:
+        logger.debug("Skipping assistant IP rate limit for local proxy IP %s on %s", ip_addr, endpoint)
+    return ip_addr, user_limit
+
 async def get_assistant_service(db: AsyncSession = Depends(get_db)):
     score_repo = ScoreRepository(db)
     setup_repo = SetupRepository(db)
@@ -87,13 +140,15 @@ async def assistant_chat(
     trace_id = x_trace_id or f"trdm-trace-{uuid.uuid4().hex[:8]}-{hex(int(time.time()))[2:]}"
     try:
         user_id = current_user["id"]
-        ip_addr = raw_request.client.host if raw_request.client else "unknown"
-        
-        # Apply Rate Limiting
-        chat_rate_limiter.check_rate_limit(f"user_{user_id}")
-        chat_rate_limiter.check_rate_limit(f"ip_{ip_addr}")
         finn = FinnPlanService(db)
         context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
+        _apply_assistant_rate_limit(
+            user_id=user_id,
+            raw_request=raw_request,
+            query=request.query,
+            context=context_payload,
+            endpoint="/assistant/chat",
+        )
         if finn.is_cancel_request(request.query):
             finn_response = await finn.build_cancel_response(user_id, context_payload)
             if finn_response:
@@ -252,11 +307,6 @@ async def assistant_chat_stream(
     ⚡ Real-Time SSE Stream for AI Assistant Chat (Fase 3 Lightweight)
     """
     user_id = current_user["id"]
-    ip_addr = raw_request.client.host if raw_request.client else "unknown"
-
-    # Apply Rate Limiting
-    chat_rate_limiter.check_rate_limit(f"user_{user_id}")
-    chat_rate_limiter.check_rate_limit(f"ip_{ip_addr}")
 
     trace_id = x_trace_id or f"trdm-trace-{uuid.uuid4().hex[:8]}-{hex(int(time.time()))[2:]}"
 
@@ -264,6 +314,13 @@ async def assistant_chat_stream(
         try:
             finn = FinnPlanService(db)
             context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
+            _apply_assistant_rate_limit(
+                user_id=user_id,
+                raw_request=raw_request,
+                query=request.query,
+                context=context_payload,
+                endpoint="/assistant/chat/stream",
+            )
             if finn.is_cancel_request(request.query):
                 envelope = await finn.build_cancel_response(user_id, context_payload)
                 if envelope:
