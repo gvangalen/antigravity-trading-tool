@@ -258,6 +258,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           nextQuestion: envelope.next_question || null,
           canConfirm: envelope.can_confirm,
           reasoning: envelope.reasoning,
+          state: envelope.state || null,
           restoredFinnDraft: true,
           isComplete: true,
         }];
@@ -379,6 +380,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
               lastMsg.nextQuestion = envelope.next_question || null;
               lastMsg.canConfirm = envelope.can_confirm;
               lastMsg.reasoning = envelope.reasoning;
+              lastMsg.state = envelope.state || null;
               lastMsg.isComplete = true;
             }
             return copy;
@@ -622,6 +624,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     const draftType = isFinnStrategy ? draft.setup_type : draft.plan_type;
     const isDca = draftType === "dca";
     const isTrade = draftType === "trade";
+    const setupOptions = message.state?.setup_options || [];
+    const changes = draft.changes || message.state?.changes || [];
 
     const rows = [
       ["Type", isFinnStrategy ? "strategy" : draft.plan_type],
@@ -638,6 +642,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       !isFinnStrategy ? ["Market", Array.isArray(setup.market_score_range) ? setup.market_score_range.join(" - ") : null] : null,
       isDca && !isFinnStrategy ? ["DCA", [dca.frequency, dca.day || dca.month_day].filter(Boolean).join(" · ")] : null,
       isTrade ? ["Uitvoering", strategy.entry_type || strategy.trade_execution_mode || "limit"] : null,
+      isTrade && strategy.entry_type === "market" ? ["Market akkoord", strategy.market_execution_ack ? "ja" : "nee"] : null,
       isTrade ? ["Entry", strategy.entry] : null,
       isTrade ? ["Stop", strategy.stop_loss] : null,
       isTrade ? ["Targets", Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
@@ -659,6 +664,38 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             </div>
           ))}
         </div>
+        {isFinnStrategy && setupOptions.length > 0 && (
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/70 dark:bg-slate-950/30 p-3 space-y-2">
+            <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">Kies setup</div>
+            <div className="grid grid-cols-1 gap-2">
+              {setupOptions.map((option) => (
+                <button
+                  key={option.id}
+                  onClick={() => handleChat(`setup ${option.id}`)}
+                  className="text-left rounded-lg border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 px-3 py-2 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
+                >
+                  <div className="text-xs font-black text-slate-800 dark:text-slate-100">{option.name || `Setup #${option.id}`}</div>
+                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-500 dark:text-blue-300">
+                    #{option.id} · {option.symbol} · {option.setup_type} · {option.timeframe}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {isFinnStrategy && changes.length > 0 && (
+          <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 p-3 space-y-2">
+            <div className="text-[9px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Wijzigingen</div>
+            <div className="space-y-1">
+              {changes.map((change, index) => (
+                <div key={`${change.field}-${index}`} className="flex items-center justify-between gap-3 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+                  <span className="font-black text-emerald-700 dark:text-emerald-300">{change.field}</span>
+                  <span className="text-right">{String(change.from ?? "—")} → {String(change.to ?? "—")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {(message.missingFields?.length > 0 || message.invalidFields?.length > 0 || message.nextQuestion) && (
           <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-950/20 p-3 space-y-2">
             {message.missingFields?.length > 0 && (

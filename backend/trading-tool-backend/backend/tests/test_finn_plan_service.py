@@ -415,6 +415,57 @@ def test_strategy_setup_options_are_rendered_in_missing_setup_question():
     assert "setup 11" in message
 
 
+def test_strategy_update_changes_are_summarized():
+    service = _service()
+    draft = service.build_strategy_response(
+        "Pas strategie 91 aan naar 150 euro",
+        {"setup_id": 12, "setup_type": "dca", "setup_symbol": "BTC", "setup_timeframe": "1W"},
+    )["draft"]
+    existing = {
+        "id": 91,
+        "setup_id": 12,
+        "setup_type": "dca",
+        "symbol": "BTC",
+        "timeframe": "1W",
+        "base_amount": 100,
+        "execution_mode": "fixed",
+        "automation": "manual_only",
+        "risk_profile": "balanced",
+    }
+
+    changes = service._strategy_changes(existing, draft)
+
+    assert {"field": "base_amount_eur", "from": 100, "to": 150} in changes
+
+
+def test_strategy_rejects_absurd_amount_and_price_levels():
+    result = _service().build_strategy_response(
+        "Maak een strategie entry 30000000 stop 2800 target 3600 met 2000000 euro",
+        {"setup_id": 55, "setup_type": "trade", "setup_symbol": "ETH", "setup_timeframe": "4H"},
+    )
+
+    assert result["can_confirm"] is False
+    assert {"field": "strategy.base_amount_eur", "reason": "bedrag is onrealistisch hoog; gebruik maximaal 1.000.000 euro"} in result["invalid_fields"]
+    assert {"field": "strategy.entry", "reason": "prijs moet groter dan 0 en realistisch zijn"} in result["invalid_fields"]
+
+
+def test_strategy_market_execution_requires_explicit_ack():
+    service = _service()
+    first = service.build_strategy_response(
+        "Maak een market order strategie entry 3000 stop 2800 target 3600 met 100 euro",
+        {"setup_id": 55, "setup_type": "trade", "setup_symbol": "ETH", "setup_timeframe": "4H"},
+    )
+
+    assert first["can_confirm"] is False
+    assert first["next_question"] == "strategy.market_execution_ack"
+    assert "strategy.market_execution_ack" in first["missing_fields"]
+
+    second = service.build_strategy_response("market akkoord", {"finn_draft": first["draft"]})
+
+    assert second["can_confirm"] is True
+    assert second["draft"]["strategy"]["market_execution_ack"] is True
+
+
 def test_read_after_write_marks_absent_bot_as_not_verified_but_valid():
     result = asyncio.run(_service()._verify_created_objects(
         user_id=1,

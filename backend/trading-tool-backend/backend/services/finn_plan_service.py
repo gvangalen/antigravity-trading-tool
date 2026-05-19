@@ -67,6 +67,7 @@ def empty_plan_draft() -> Dict[str, Any]:
             "decision_curve": None,
             "direction": "long",
             "entry_type": None,
+            "market_execution_ack": False,
             "entry": None,
             "stop_loss": None,
             "targets": None,
@@ -490,6 +491,8 @@ class FinnPlanService:
         for field in ["base_amount_eur", "execution_mode", "decision_curve", "direction", "entry_type", "entry", "stop_loss", "targets"]:
             if strategy_patch.get(field) is not None:
                 draft["strategy"][field] = strategy_patch[field]
+        if re.search(r"\b(?:bevestig|akkoord|ok|ja)\b.*\bmarket\b|\bmarket\b.*\b(?:bevestig|akkoord|ok|ja)\b", q_lower):
+            draft["strategy"]["market_execution_ack"] = True
         bot_patch = extracted.get("bot") or {}
         if bot_patch.get("automation"):
             draft["strategy"]["automation"] = bot_patch["automation"]
@@ -568,6 +571,7 @@ class FinnPlanService:
 
         if existing_strategy and draft.get("operation") == "update":
             self._merge_existing_strategy_into_draft(draft, existing_strategy)
+            draft["changes"] = self._strategy_changes(existing_strategy, draft)
             validation = self._validate_strategy_draft(draft)
 
         setup_options = []
@@ -977,6 +981,7 @@ class FinnPlanService:
             "execution_mode": existing.get("execution_mode") or "fixed",
             "direction": existing.get("direction") or "long",
             "entry_type": existing.get("entry_type") or existing.get("trade_execution_mode"),
+            "market_execution_ack": False,
             "entry": existing.get("entry"),
             "stop_loss": existing.get("stop_loss"),
             "targets": existing.get("targets"),
@@ -988,6 +993,32 @@ class FinnPlanService:
                 strategy[field] = value
         draft["strategy"] = strategy
         self._apply_strategy_defaults(draft)
+
+    def _strategy_changes(self, existing: Dict[str, Any], draft: Dict[str, Any]) -> List[Dict[str, Any]]:
+        strategy = draft.get("strategy") or {}
+        existing_map = {
+            "base_amount_eur": existing.get("base_amount"),
+            "execution_mode": existing.get("execution_mode"),
+            "entry_type": existing.get("entry_type") or existing.get("trade_execution_mode"),
+            "entry": existing.get("entry"),
+            "stop_loss": existing.get("stop_loss"),
+            "targets": existing.get("targets"),
+            "automation": existing.get("automation"),
+            "risk_profile": existing.get("risk_profile"),
+        }
+        changes = []
+        for field, before in existing_map.items():
+            after = strategy.get(field)
+            if self._normalized_compare_value(before) != self._normalized_compare_value(after):
+                changes.append({"field": field, "from": before, "to": after})
+        return changes
+
+    def _normalized_compare_value(self, value: Any) -> Any:
+        if isinstance(value, float):
+            return round(value, 8)
+        if isinstance(value, list):
+            return [self._normalized_compare_value(item) for item in value]
+        return value
 
     async def _strategy_setup_options(self, user_id: int, draft: Dict[str, Any]) -> List[Dict[str, Any]]:
         if not self.session:
@@ -1038,12 +1069,16 @@ class FinnPlanService:
             missing.append("strategy.base_amount_eur")
         elif not isinstance(amount, (int, float)) or amount <= 0:
             invalid.append({"field": "strategy.base_amount_eur", "reason": "bedrag moet groter dan 0 zijn"})
+        elif amount > 1_000_000:
+            invalid.append({"field": "strategy.base_amount_eur", "reason": "bedrag is onrealistisch hoog; gebruik maximaal 1.000.000 euro"})
 
         if draft.get("setup_type") == "trade":
             if strategy.get("direction") != "long":
                 invalid.append({"field": "strategy.direction", "reason": "alleen long trades worden nu ondersteund"})
             if strategy.get("entry_type") not in {"limit", "breakout", "market"}:
                 missing.append("strategy.entry_type")
+            if strategy.get("entry_type") == "market" and not strategy.get("market_execution_ack"):
+                missing.append("strategy.market_execution_ack")
             entry = strategy.get("entry")
             stop_loss = strategy.get("stop_loss")
             targets = strategy.get("targets")
@@ -1053,6 +1088,14 @@ class FinnPlanService:
                 missing.append("strategy.stop_loss")
             if not targets:
                 missing.append("strategy.targets")
+            for field, value in [("strategy.entry", entry), ("strategy.stop_loss", stop_loss)]:
+                if value is not None and (not isinstance(value, (int, float)) or value <= 0 or value > 10_000_000):
+                    invalid.append({"field": field, "reason": "prijs moet groter dan 0 en realistisch zijn"})
+            if isinstance(targets, list):
+                for target in targets:
+                    if not isinstance(target, (int, float)) or target <= 0 or target > 10_000_000:
+                        invalid.append({"field": "strategy.targets", "reason": "targets moeten positieve realistische prijzen zijn"})
+                        break
             if isinstance(entry, (int, float)) and isinstance(stop_loss, (int, float)) and stop_loss >= entry:
                 invalid.append({"field": "strategy.stop_loss", "reason": "voor long trades moet stop-loss lager zijn dan entry"})
             if isinstance(entry, (int, float)) and isinstance(targets, list):
@@ -1095,6 +1138,8 @@ class FinnPlanService:
             return "Met welk basisbedrag in euro wil je deze strategie uitvoeren?"
         if next_question == "strategy.entry_type":
             return "Wil je een limit entry, breakout trigger of market execution gebruiken?"
+        if next_question == "strategy.market_execution_ack":
+            return "Market execution kan direct uitvoeren zodra je bevestigt. Zeg 'market akkoord' als je dit echt zo wilt vastleggen."
         if next_question == "strategy.entry":
             return "Welke entry-prijs hoort bij deze strategie?"
         if next_question == "strategy.stop_loss":
@@ -1119,11 +1164,13 @@ class FinnPlanService:
         if draft.get("setup_type") == "trade":
             lines.extend([
                 f"- Uitvoering: {strategy.get('entry_type')}",
+                f"- Market akkoord: {'ja' if strategy.get('market_execution_ack') else 'nee'}" if strategy.get("entry_type") == "market" else None,
                 f"- Entry: {strategy.get('entry')}",
                 f"- Stop-loss: {strategy.get('stop_loss')}",
                 f"- Targets: {strategy.get('targets')}",
                 f"- Automatisering: {strategy.get('automation')}",
             ])
+            lines = [line for line in lines if line]
         return "\n".join(lines)
 
     def _strategy_flow_state(self, draft: Dict[str, Any], validation: Dict[str, Any], setup_options: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
@@ -1136,6 +1183,7 @@ class FinnPlanService:
             "operation": draft.get("operation") or "create",
             "setup_type": draft.get("setup_type"),
             "setup_options": setup_options or [],
+            "changes": draft.get("changes") or [],
             "next_question": validation["next_question"],
             "autonomy_level": "confirm_required",
             "version": FINN_STATE_VERSION,
@@ -1977,6 +2025,7 @@ class FinnPlanService:
                 "direction": strategy.get("direction") or "long",
                 "entry_type": strategy.get("entry_type") or "limit",
                 "trade_execution_mode": strategy.get("entry_type") or "limit",
+                "market_execution_ack": bool(strategy.get("market_execution_ack")),
                 "entry": strategy.get("entry"),
                 "stop_loss": strategy.get("stop_loss"),
                 "targets": strategy.get("targets"),
