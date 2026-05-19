@@ -59,7 +59,11 @@ class StrategyService:
 
         entry = normalize_number(row.get("entry") or data.get("entry"))
         stop_loss = normalize_number(row.get("stop_loss") or data.get("stop_loss"))
-        base_amount = normalize_number(row.get("base_amount"))
+        base_amount = normalize_number(
+            row.get("base_amount")
+            if row.get("base_amount") is not None
+            else data.get("base_amount", data.get("base_amount_eur"))
+        )
         targets = normalize_targets(row.get("targets") or data.get("targets"))
 
         name = normalize_string(row.get("name") or data.get("name"))

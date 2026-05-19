@@ -554,10 +554,11 @@ class FinnPlanService:
         draft = response.get("draft") if isinstance(response.get("draft"), dict) else {}
         await self._hydrate_strategy_draft_from_db(user_id, draft)
 
+        strategy_service = StrategyService(self.session)
         validation = self._validate_strategy_draft(draft)
         existing_strategy = None
         if draft.get("setup_id"):
-            existing_strategy = await StrategyService(self.session).get_strategy_by_setup(int(draft["setup_id"]), user_id)
+            existing_strategy = await strategy_service.get_strategy_by_setup(int(draft["setup_id"]), user_id)
 
         if existing_strategy and draft.get("operation") != "update":
             draft["strategy_id"] = None
@@ -586,8 +587,9 @@ class FinnPlanService:
             return response
 
         if existing_strategy and draft.get("operation") == "update":
-            self._merge_existing_strategy_into_draft(draft, existing_strategy)
-            draft["changes"] = self._strategy_changes(existing_strategy, draft)
+            existing_for_diff = await self._load_strategy_snapshot_for_diff(user_id, draft, strategy_service)
+            self._merge_existing_strategy_into_draft(draft, existing_for_diff or existing_strategy)
+            draft["changes"] = self._strategy_changes(existing_for_diff or existing_strategy, draft)
             validation = self._validate_strategy_draft(draft)
 
         setup_options = []
@@ -996,6 +998,20 @@ class FinnPlanService:
             draft["timeframe"] = setup_row.get("timeframe")
         self._apply_strategy_defaults(draft)
 
+    async def _load_strategy_snapshot_for_diff(
+        self,
+        user_id: int,
+        draft: Dict[str, Any],
+        strategy_service: StrategyService,
+    ) -> Optional[Dict[str, Any]]:
+        strategy_id = draft.get("strategy_id")
+        if not strategy_id:
+            return None
+        existing = await strategy_service.repository.get_raw_strategy_with_setup(int(strategy_id), user_id)
+        if not existing:
+            return None
+        return strategy_service._format_strategy_row(existing)
+
     def _merge_existing_strategy_into_draft(self, draft: Dict[str, Any], existing: Dict[str, Any]) -> None:
         if not existing:
             return
@@ -1026,13 +1042,14 @@ class FinnPlanService:
 
     def _strategy_changes(self, existing: Dict[str, Any], draft: Dict[str, Any]) -> List[Dict[str, Any]]:
         strategy = draft.get("strategy") or {}
+        data = self._strategy_existing_data(existing)
         existing_map = {
-            "base_amount_eur": existing.get("base_amount"),
-            "execution_mode": existing.get("execution_mode"),
-            "entry_type": existing.get("entry_type") or existing.get("trade_execution_mode"),
-            "entry": existing.get("entry"),
-            "stop_loss": existing.get("stop_loss"),
-            "targets": existing.get("targets"),
+            "base_amount_eur": self._first_present(existing.get("base_amount"), data.get("base_amount"), data.get("base_amount_eur")),
+            "execution_mode": self._first_present(existing.get("execution_mode"), data.get("execution_mode")),
+            "entry_type": self._first_present(existing.get("entry_type"), existing.get("trade_execution_mode"), data.get("entry_type"), data.get("trade_execution_mode")),
+            "entry": self._first_present(existing.get("entry"), data.get("entry")),
+            "stop_loss": self._first_present(existing.get("stop_loss"), data.get("stop_loss")),
+            "targets": self._first_present(existing.get("targets"), data.get("targets")),
         }
         changes = []
         for field, before in existing_map.items():
@@ -1042,6 +1059,22 @@ class FinnPlanService:
             if self._normalized_compare_value(before) != self._normalized_compare_value(after):
                 changes.append({"field": field, "from": before, "to": after})
         return changes
+
+    def _strategy_existing_data(self, existing: Dict[str, Any]) -> Dict[str, Any]:
+        raw_data = existing.get("data") if isinstance(existing, dict) else None
+        if isinstance(raw_data, str):
+            try:
+                parsed = json.loads(raw_data)
+                return parsed if isinstance(parsed, dict) else {}
+            except Exception:
+                return {}
+        return raw_data if isinstance(raw_data, dict) else {}
+
+    def _first_present(self, *values: Any) -> Any:
+        for value in values:
+            if value is not None and value != "":
+                return value
+        return None
 
     def _normalized_compare_value(self, value: Any) -> Any:
         if isinstance(value, float):
@@ -1730,9 +1763,10 @@ class FinnPlanService:
             await self._hydrate_strategy_draft_from_db(user_id, draft)
             validation = self._validate_strategy_draft(draft)
             message = self._build_strategy_message(draft, validation)
+            strategy_service = StrategyService(self.session)
             existing_strategy = None
             if draft.get("setup_id"):
-                existing_strategy = await StrategyService(self.session).get_strategy_by_setup(int(draft["setup_id"]), user_id)
+                existing_strategy = await strategy_service.get_strategy_by_setup(int(draft["setup_id"]), user_id)
             if existing_strategy and draft.get("operation") != "update":
                 draft["strategy_id"] = None
                 draft["existing_strategy_id"] = existing_strategy.get("id")
@@ -1761,13 +1795,19 @@ class FinnPlanService:
                     "can_confirm": duplicate_validation["can_confirm"],
                     "actions": [],
                 }
+            if existing_strategy and draft.get("operation") == "update":
+                existing_for_diff = await self._load_strategy_snapshot_for_diff(user_id, draft, strategy_service)
+                self._merge_existing_strategy_into_draft(draft, existing_for_diff or existing_strategy)
+                draft["changes"] = self._strategy_changes(existing_for_diff or existing_strategy, draft)
+                validation = self._validate_strategy_draft(draft)
+                message = self._build_strategy_message(draft, validation)
             actions = []
             if validation["can_confirm"]:
                 action_payload = deepcopy(draft)
                 actions.append({
                     "id": self._strategy_action_id(action_payload),
                     "type": "create_strategy",
-                    "label": "Strategie aanmaken",
+                    "label": "Strategie bijwerken" if draft.get("operation") == "update" else "Strategie aanmaken",
                     "payload": action_payload,
                     "risk_level": "medium" if draft.get("setup_type") == "trade" else "low",
                     "requires_confirmation": True,
