@@ -299,6 +299,15 @@ async def database_migrations():
                 ADD COLUMN IF NOT EXISTS symbol VARCHAR;
             """))
             await session.execute(text("""
+                ALTER TABLE bot_configs
+                DROP CONSTRAINT IF EXISTS bot_configs_cadence_check;
+            """))
+            await session.execute(text("""
+                ALTER TABLE bot_configs
+                ADD CONSTRAINT bot_configs_cadence_check
+                CHECK (cadence IN ('hourly', 'daily', 'weekly', 'monthly', 'custom'));
+            """))
+            await session.execute(text("""
                 ALTER TABLE bot_orders
                 ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
             """))
