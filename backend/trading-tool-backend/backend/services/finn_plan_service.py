@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.score_repository import ScoreRepository
-from backend.schemas.bot_schema import BotConfigCreateSchema
+from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
 from backend.services.bot_service import BotService
 from backend.services.setup_service import SetupService
@@ -164,8 +164,11 @@ def empty_bot_draft() -> Dict[str, Any]:
     return {
         "draft_kind": "bot",
         "operation": "create",
+        "bot_id": None,
         "strategy_id": None,
         "existing_bot_id": None,
+        "existing_bot_snapshot": None,
+        "changes": [],
         "asset": None,
         "setup_type": None,
         "timeframe": None,
@@ -173,6 +176,7 @@ def empty_bot_draft() -> Dict[str, Any]:
             "name": None,
             "mode": "manual",
             "is_live": False,
+            "live_trading_ack": False,
             "risk_profile": "balanced",
             "cadence": "daily",
             "base_currency": "EUR",
@@ -413,9 +417,11 @@ class FinnPlanService:
         if any(phrase in q for phrase in NO_BOT_PHRASES):
             return False
         has_bot_word = bool(re.search(r"\bbot\b", q))
+        has_bot_ref = bool(re.search(r"\bbot\s*#?\s*\d+\b", q))
+        has_update_intent = any(word in q for word in ["pas", "wijzig", "update", "bijwerk", "bijwerken", "verander", "aanpassen"])
         has_strategy_ref = bool(context.get("strategy_id")) or bool(re.search(r"\bstrateg(?:ie|y)\s*#?\s*\d+\b", q))
         has_create_intent = any(word in q for word in ["maak", "aanmaken", "creeer", "creeër", "bouw", "instellen", "wil"])
-        return has_bot_word and (has_strategy_ref or has_create_intent)
+        return has_bot_word and (has_bot_ref or has_strategy_ref or has_create_intent or has_update_intent)
 
     def looks_like_status_request(self, query: str) -> bool:
         q = (query or "").lower()
@@ -694,7 +700,7 @@ class FinnPlanService:
         q_lower = q.lower()
         if self.is_cancel_request(q):
             return {
-                "response": "Prima, ik heb deze bot-aanmaak gestopt. Er is niets aangemaakt.",
+                "response": "Prima, ik heb deze bot-flow gestopt. Er is niets aangemaakt of bijgewerkt.",
                 "intent": "bot_creation_cancelled",
                 "flow": None,
                 "draft": empty_bot_draft(),
@@ -705,6 +711,21 @@ class FinnPlanService:
                 "actions": [],
             }
 
+        if draft.get("existing_bot_id") and any(word in q_lower for word in ["ja", "ok", "prima", "bijwerken", "update", "aanpassen"]):
+            draft["operation"] = "update"
+            draft["bot_id"] = draft.get("existing_bot_id")
+
+        bot_id_match = re.search(r"\bbot\s*#?\s*(\d+)\b", q, re.IGNORECASE)
+        if bot_id_match:
+            new_bot_id = int(bot_id_match.group(1))
+            if draft.get("bot_id") and int(draft["bot_id"]) != new_bot_id:
+                draft = empty_bot_draft()
+            draft["operation"] = "update"
+            draft["bot_id"] = new_bot_id
+
+        if any(word in q_lower for word in ["pas", "wijzig", "update", "bijwerk", "bijwerken", "verander", "aanpassen"]):
+            draft["operation"] = "update" if draft.get("bot_id") or draft.get("existing_bot_id") else draft.get("operation", "create")
+
         strategy_id_match = re.search(r"\bstrateg(?:ie|y)\s*#?\s*(\d+)\b", q, re.IGNORECASE)
         if strategy_id_match:
             new_strategy_id = int(strategy_id_match.group(1))
@@ -713,11 +734,13 @@ class FinnPlanService:
             draft["strategy_id"] = new_strategy_id
 
         bot = draft["bot"]
+        touched_bot_fields = set(draft.get("_touched_bot_fields") or [])
         name_match = re.search(r"(?:noem|naam|heet)\s+(?:hem|deze)?\s*[\"']?([^\"'.]+)[\"']?", q, re.IGNORECASE)
         if name_match:
             name = name_match.group(1).strip()
             if 2 <= len(name) <= 80:
                 bot["name"] = name
+                touched_bot_fields.add("name")
 
         bot_patch = self._extract_from_query(q).get("bot") or {}
         for field, value in bot_patch.items():
@@ -728,16 +751,22 @@ class FinnPlanService:
                     "min_order_eur": "budget_min_order_eur",
                     "max_order_eur": "budget_max_order_eur",
                 }
-                bot[mapping.get(field, field)] = value
+                mapped_field = mapping.get(field, field)
+                bot[mapped_field] = value
+                touched_bot_fields.add(mapped_field)
 
         if "hourly" in q_lower or "elk uur" in q_lower:
             bot["cadence"] = "hourly"
+            touched_bot_fields.add("cadence")
         elif "weekly" in q_lower or "wekelijks" in q_lower:
             bot["cadence"] = "weekly"
+            touched_bot_fields.add("cadence")
         elif "monthly" in q_lower or "maandelijks" in q_lower:
             bot["cadence"] = "monthly"
+            touched_bot_fields.add("cadence")
         elif "daily" in q_lower or "dagelijks" in q_lower:
             bot["cadence"] = "daily"
+            touched_bot_fields.add("cadence")
 
         for key, pattern in [
             ("budget_total_eur", r"(?:totaal\s*)?budget\s*(?:van|=|:)?\s*(?:€|eur|euro)?\s*([0-9][0-9.,]*)"),
@@ -748,12 +777,19 @@ class FinnPlanService:
             match = re.search(pattern, q_lower)
             if match:
                 bot[key] = _number(match.group(1))
+                touched_bot_fields.add(key)
 
         amount = re.search(r"(?:€|eur|euro)\s*([0-9][0-9.,]*)|([0-9][0-9.,]*)\s*(?:€|eur|euro)", q_lower)
         if amount and "budget" in q_lower and not bot.get("budget_total_eur"):
             bot["budget_total_eur"] = _number(amount.group(1) or amount.group(2))
+            touched_bot_fields.add("budget_total_eur")
+
+        if any(phrase in q_lower for phrase in ["live akkoord", "ik bevestig live", "live bevestig", "live risico akkoord"]):
+            bot["live_trading_ack"] = True
+            touched_bot_fields.add("live_trading_ack")
 
         self._apply_bot_name_default(draft)
+        draft["_touched_bot_fields"] = sorted(touched_bot_fields)
 
         validation = self._validate_bot_draft(draft)
         actions = []
@@ -762,7 +798,7 @@ class FinnPlanService:
             actions.append({
                 "id": self._bot_action_id(action_payload),
                 "type": "create_bot",
-                "label": "Bot aanmaken",
+                "label": "Bot bijwerken" if draft.get("operation") == "update" else "Bot aanmaken",
                 "payload": action_payload,
                 "risk_level": "high" if bot.get("is_live") else "medium",
                 "requires_confirmation": True,
@@ -770,7 +806,7 @@ class FinnPlanService:
                 "guardrails": {
                     "requires_confirmation": True,
                     "can_execute_without_user": False,
-                    "execution_allowed": "bot_creation_only",
+                    "execution_allowed": "bot_update" if draft.get("operation") == "update" else "bot_creation_only",
                     "live_trading": bool(bot.get("is_live")),
                 },
             })
@@ -795,11 +831,19 @@ class FinnPlanService:
             return response
 
         draft = response.get("draft") if isinstance(response.get("draft"), dict) else {}
+        await self._hydrate_existing_bot_draft_from_db(user_id, draft)
         await self._hydrate_bot_draft_from_db(user_id, draft)
+        await self._apply_live_bot_preflight(user_id, draft)
         validation = self._validate_bot_draft(draft)
 
         existing_bot = await self._existing_bot_for_strategy(user_id, draft.get("strategy_id"))
-        if existing_bot:
+        if existing_bot and draft.get("operation") == "update":
+            draft["existing_bot_id"] = existing_bot.get("id")
+            draft["bot_id"] = draft.get("bot_id") or existing_bot.get("id")
+            await self._hydrate_existing_bot_draft_from_db(user_id, draft)
+            await self._apply_live_bot_preflight(user_id, draft)
+            validation = self._validate_bot_draft(draft)
+        elif existing_bot:
             draft["existing_bot_id"] = existing_bot.get("id")
             duplicate_validation = {
                 "missing_fields": [],
@@ -833,7 +877,7 @@ class FinnPlanService:
             actions.append({
                 "id": self._bot_action_id(action_payload),
                 "type": "create_bot",
-                "label": "Bot aanmaken",
+                "label": "Bot bijwerken" if draft.get("operation") == "update" else "Bot aanmaken",
                 "payload": action_payload,
                 "risk_level": "high" if draft["bot"].get("is_live") else "medium",
                 "requires_confirmation": True,
@@ -841,7 +885,7 @@ class FinnPlanService:
                 "guardrails": {
                     "requires_confirmation": True,
                     "can_execute_without_user": False,
-                    "execution_allowed": "bot_creation_only",
+                    "execution_allowed": "bot_update" if draft.get("operation") == "update" else "bot_creation_only",
                     "live_trading": bool(draft["bot"].get("is_live")),
                 },
             })
@@ -1198,6 +1242,73 @@ class FinnPlanService:
         draft["setup_type"] = (strategy.get("setup_type") or strategy.get("existing_setup_type") or data.get("setup_type") or "").lower() or None
         draft["timeframe"] = strategy.get("setup_timeframe") or data.get("timeframe")
         self._apply_bot_name_default(draft)
+
+    async def _hydrate_existing_bot_draft_from_db(self, user_id: int, draft: Dict[str, Any]) -> None:
+        if not self.session or not isinstance(draft, dict):
+            return
+        bot_id = draft.get("bot_id")
+        if not bot_id:
+            return
+        existing = await BotService(self.session).repository.get_bot_config(user_id, int(bot_id))
+        if not existing:
+            draft["_bot_lookup_error"] = "bot niet gevonden"
+            return
+        draft.pop("_bot_lookup_error", None)
+        bot = draft.get("bot") or {}
+        draft["operation"] = "update"
+        draft["bot_id"] = int(existing["id"])
+        draft["existing_bot_id"] = int(existing["id"])
+        draft["strategy_id"] = draft.get("strategy_id") or existing.get("strategy_id")
+        draft["asset"] = str(existing.get("symbol") or "").upper() or draft.get("asset")
+        draft["setup_type"] = existing.get("setup_type") or draft.get("setup_type")
+        draft["timeframe"] = existing.get("timeframe") or draft.get("timeframe")
+
+        snapshot = self._bot_snapshot(existing)
+        draft["existing_bot_snapshot"] = snapshot
+        for key, value in snapshot.items():
+            if key in bot and (bot.get(key) in [None, ""] or key not in draft.get("_touched_bot_fields", [])):
+                bot[key] = value
+        draft["changes"] = self._bot_changes(draft)
+
+    async def _apply_live_bot_preflight(self, user_id: int, draft: Dict[str, Any]) -> None:
+        bot = draft.get("bot") or {}
+        draft["_live_exchange_ready"] = True
+        if not bot.get("is_live") or not self.session:
+            return
+        keys = await self.exchange_repo.get_active_keys(user_id)
+        draft["_live_exchange_ready"] = bool(keys)
+
+    def _bot_snapshot(self, bot_row: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "name": bot_row.get("name"),
+            "mode": bot_row.get("mode") or "manual",
+            "is_live": bool(bot_row.get("is_live")),
+            "risk_profile": bot_row.get("risk_profile") or "balanced",
+            "cadence": bot_row.get("cadence") or "daily",
+            "base_currency": bot_row.get("base_currency") or "EUR",
+            "budget_total_eur": float(bot_row.get("budget_total_eur") or 0),
+            "budget_daily_limit_eur": float(bot_row.get("budget_daily_limit_eur") or 0),
+            "budget_min_order_eur": float(bot_row.get("budget_min_order_eur") or 0),
+            "budget_max_order_eur": float(bot_row.get("budget_max_order_eur") or 0),
+            "max_asset_exposure_pct": float(bot_row.get("max_asset_exposure_pct") or 100),
+        }
+
+    def _bot_changes(self, draft: Dict[str, Any]) -> List[Dict[str, Any]]:
+        snapshot = draft.get("existing_bot_snapshot") if isinstance(draft.get("existing_bot_snapshot"), dict) else {}
+        if not snapshot:
+            return []
+        bot = draft.get("bot") or {}
+        changes = []
+        for field in [
+            "name", "mode", "is_live", "risk_profile", "cadence", "base_currency",
+            "budget_total_eur", "budget_daily_limit_eur", "budget_min_order_eur",
+            "budget_max_order_eur", "max_asset_exposure_pct",
+        ]:
+            old = snapshot.get(field)
+            new = bot.get(field)
+            if old != new:
+                changes.append({"field": field, "from": old, "to": new})
+        return changes
 
     def _reset_bot_strategy_binding(self, draft: Dict[str, Any]) -> None:
         draft["existing_bot_id"] = None
@@ -1598,6 +1709,11 @@ class FinnPlanService:
         missing: List[str] = []
         invalid: List[Dict[str, str]] = []
         bot = draft.get("bot") or {}
+        operation = draft.get("operation") or "create"
+        if operation == "update" and not draft.get("bot_id"):
+            missing.append("bot_id")
+        if draft.get("_bot_lookup_error"):
+            invalid.append({"field": "bot_id", "reason": draft["_bot_lookup_error"]})
         if not draft.get("strategy_id"):
             missing.append("strategy_id")
         if draft.get("_strategy_lookup_error"):
@@ -1641,6 +1757,17 @@ class FinnPlanService:
                 if value <= 0:
                     missing.append(field)
 
+        if bool(bot.get("is_live")):
+            if not bot.get("live_trading_ack"):
+                missing.append("bot.live_trading_ack")
+            if draft.get("_live_exchange_ready") is False:
+                invalid.append({"field": "bot.exchange_keys", "reason": "live bot vereist actieve exchange keys"})
+
+        if operation == "update":
+            draft["changes"] = self._bot_changes(draft)
+            if not draft.get("changes") and not missing and not invalid:
+                invalid.append({"field": "bot.changes", "reason": "geen wijzigingen gevonden om bij te werken"})
+
         next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
         return {
             "missing_fields": missing,
@@ -1665,27 +1792,41 @@ class FinnPlanService:
             return "Welke naam wil je deze bot geven?"
         if next_question and next_question.startswith("bot.budget_"):
             return "Voor live of automatische bots heb ik expliciete budgetlimieten nodig: totaal budget, daglimiet, min order en max order."
+        if next_question == "bot.live_trading_ack":
+            return "Live trading kan echte orders plaatsen. Bevestig expliciet met: live akkoord."
 
         bot = draft.get("bot") or {}
         env = "live" if bot.get("is_live") else "paper"
+        operation_label = "bijwerken" if draft.get("operation") == "update" else "aanmaken"
+        change_lines = []
+        if draft.get("operation") == "update":
+            for change in draft.get("changes") or []:
+                change_lines.append(f"- {change['field']}: {change.get('from')} -> {change.get('to')}")
+            if not change_lines:
+                change_lines.append("- Geen wijzigingen gevonden")
         return (
-            "Ik heb je bot klaarstaan. Controleer dit even en bevestig als het klopt:\n\n"
+            f"Ik heb je bot klaarstaan om te {operation_label}. Controleer dit even en bevestig als het klopt:\n\n"
             f"- Bot: {bot.get('name')}\n"
+            f"- Bot ID: {draft.get('bot_id') or 'nieuw'}\n"
             f"- Strategie: #{draft.get('strategy_id')}\n"
             f"- Omgeving: {env}\n"
             f"- Mode: {bot.get('mode')}\n"
             f"- Risk: {bot.get('risk_profile')}\n"
             f"- Cadence: {bot.get('cadence')}\n"
             f"- Budget: €{bot.get('budget_total_eur')} totaal, €{bot.get('budget_daily_limit_eur')} per dag"
+            + (("\n\nWijzigingen:\n" + "\n".join(change_lines)) if draft.get("operation") == "update" else "")
         )
 
     def _bot_flow_state(self, draft: Dict[str, Any], validation: Dict[str, Any], strategy_options: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         return {
             "status": "ready_for_confirmation" if validation["can_confirm"] else "collecting",
             "current_flow": "bot_creation",
+            "operation": draft.get("operation") or "create",
+            "bot_id": draft.get("bot_id"),
             "strategy_id": draft.get("strategy_id"),
             "existing_bot_id": draft.get("existing_bot_id"),
             "asset": draft.get("asset"),
+            "changes": draft.get("changes") or [],
             "strategy_options": strategy_options or [],
             "next_question": validation["next_question"],
             "autonomy_level": "confirm_required",
@@ -2142,7 +2283,9 @@ class FinnPlanService:
                 return existing_result
             raise HTTPException(409, "Deze Finn actie wordt al verwerkt. Probeer zo opnieuw.")
 
+        await self._hydrate_existing_bot_draft_from_db(user_id, draft)
         await self._hydrate_bot_draft_from_db(user_id, draft)
+        await self._apply_live_bot_preflight(user_id, draft)
         validation = self._validate_bot_draft(draft)
         if not validation["can_confirm"]:
             await self._upsert_action_audit(user_id, action_id, action, status="failed", result={
@@ -2158,7 +2301,7 @@ class FinnPlanService:
             })
 
         existing_bot = await self._existing_bot_for_strategy(user_id, draft.get("strategy_id"))
-        if existing_bot:
+        if existing_bot and draft.get("operation") != "update":
             result = {
                 "ok": True,
                 "message": "Bot bestaat al",
@@ -2174,9 +2317,15 @@ class FinnPlanService:
 
         bot_id = None
         try:
-            bot_payload = self._bot_only_payload(draft)
-            bot_result = await BotService(self.session).create_bot_config(BotConfigCreateSchema(**bot_payload), user_id)
-            bot_id = bot_result.get("id")
+            bot_service = BotService(self.session)
+            if draft.get("operation") == "update":
+                bot_id = int(draft["bot_id"])
+                bot_payload = self._bot_update_payload(draft)
+                bot_result = await bot_service.update_bot_config(bot_id, BotConfigUpdateSchema(**bot_payload), user_id)
+            else:
+                bot_payload = self._bot_only_payload(draft)
+                bot_result = await bot_service.create_bot_config(BotConfigCreateSchema(**bot_payload), user_id)
+                bot_id = bot_result.get("id")
             verified = await self._verify_created_objects(user_id, None, None, bot_id)
         except Exception:
             await self.session.rollback()
@@ -2185,9 +2334,11 @@ class FinnPlanService:
 
         result = {
             "ok": True,
-            "message": "Bot aangemaakt",
+            "message": "Bot bijgewerkt" if draft.get("operation") == "update" else "Bot aangemaakt",
             "bot_id": bot_id,
             "strategy_id": draft.get("strategy_id"),
+            "operation": draft.get("operation") or "create",
+            "changes": draft.get("changes") or [],
             "draft": draft,
             "action_id": action_id,
             "verified": verified,
@@ -2266,10 +2417,12 @@ class FinnPlanService:
         context = await self.hydrate_context(user_id, {})
         draft = context.get("finn_draft")
         if isinstance(draft, dict) and draft.get("draft_kind") == "bot":
+            await self._hydrate_existing_bot_draft_from_db(user_id, draft)
             await self._hydrate_bot_draft_from_db(user_id, draft)
+            await self._apply_live_bot_preflight(user_id, draft)
             validation = self._validate_bot_draft(draft)
             existing_bot = await self._existing_bot_for_strategy(user_id, draft.get("strategy_id"))
-            if existing_bot:
+            if existing_bot and draft.get("operation") != "update":
                 draft["existing_bot_id"] = existing_bot.get("id")
                 validation = {
                     "missing_fields": [],
@@ -2283,7 +2436,7 @@ class FinnPlanService:
                 actions.append({
                     "id": self._bot_action_id(action_payload),
                     "type": "create_bot",
-                    "label": "Bot aanmaken",
+                    "label": "Bot bijwerken" if draft.get("operation") == "update" else "Bot aanmaken",
                     "payload": action_payload,
                     "risk_level": "high" if draft["bot"].get("is_live") else "medium",
                     "requires_confirmation": True,
@@ -2688,4 +2841,20 @@ class FinnPlanService:
             "max_asset_exposure_pct": float(bot.get("max_asset_exposure_pct") or 100),
             "base_currency": bot.get("base_currency") or "EUR",
             "symbol": draft.get("asset"),
+        }
+
+    def _bot_update_payload(self, draft: Dict[str, Any]) -> Dict[str, Any]:
+        bot = draft["bot"]
+        return {
+            "name": bot.get("name"),
+            "mode": bot.get("mode") or "manual",
+            "is_live": bool(bot.get("is_live")),
+            "risk_profile": bot.get("risk_profile") or "balanced",
+            "cadence": bot.get("cadence") or "daily",
+            "budget_total_eur": float(bot.get("budget_total_eur") or 0),
+            "budget_daily_limit_eur": float(bot.get("budget_daily_limit_eur") or 0),
+            "budget_min_order_eur": float(bot.get("budget_min_order_eur") or 0),
+            "budget_max_order_eur": float(bot.get("budget_max_order_eur") or 0),
+            "max_asset_exposure_pct": float(bot.get("max_asset_exposure_pct") or 100),
+            "base_currency": bot.get("base_currency") or "EUR",
         }

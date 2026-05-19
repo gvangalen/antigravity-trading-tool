@@ -68,6 +68,65 @@ class BotService:
         except Exception:
             return fallback
 
+    def _bot_contract(self, bot: Optional[dict]) -> dict:
+        if not bot:
+            return {
+                "bot": None,
+                "bot_id": None,
+                "strategy_id": None,
+                "verified": {"bot": False},
+            }
+
+        budget = {
+            "total_eur": float(bot.get("budget_total_eur") or 0),
+            "daily_limit_eur": float(bot.get("budget_daily_limit_eur") or 0),
+            "min_order_eur": float(bot.get("budget_min_order_eur") or 0),
+            "max_order_eur": float(bot.get("budget_max_order_eur") or 0),
+            "max_asset_exposure_pct": float(bot.get("max_asset_exposure_pct") or 100),
+        }
+        strategy = None
+        if bot.get("strategy_id"):
+            strategy = {
+                "id": bot.get("strategy_id"),
+                "name": bot.get("strategy_name"),
+                "setup_type": bot.get("setup_type"),
+                "symbol": bot.get("symbol"),
+                "timeframe": bot.get("timeframe"),
+                "setup": {
+                    "id": bot.get("setup_id"),
+                    "name": bot.get("setup_name"),
+                    "symbol": bot.get("setup_symbol") or bot.get("symbol"),
+                    "timeframe": bot.get("timeframe"),
+                },
+            }
+        normalized_bot = {
+            "id": bot.get("id"),
+            "bot_id": bot.get("id"),
+            "name": bot.get("name"),
+            "strategy_id": bot.get("strategy_id"),
+            "is_active": bool(bot.get("is_active", True)),
+            "is_live": bool(bot.get("is_live")),
+            "mode": bot.get("mode"),
+            "cadence": bot.get("cadence"),
+            "risk_profile": bot.get("risk_profile") or "balanced",
+            "base_currency": bot.get("base_currency") or "EUR",
+            "symbol": bot.get("symbol"),
+            "budget": budget,
+            "strategy": strategy,
+            "created_at": bot["created_at"].isoformat() if bot.get("created_at") else None,
+            "updated_at": bot["updated_at"].isoformat() if bot.get("updated_at") else None,
+        }
+        return {
+            "bot": normalized_bot,
+            "bot_id": bot.get("id"),
+            "strategy_id": bot.get("strategy_id"),
+            "mode": bot.get("mode"),
+            "is_live": bool(bot.get("is_live")),
+            "budget": budget,
+            "strategy": strategy,
+            "verified": {"bot": True},
+        }
+
     # ==========================
     # BOT CONFIGS
     # ==========================
@@ -90,12 +149,16 @@ class BotService:
                 }
             out.append({
                 "id": r["id"],
+                "bot_id": r["id"],
                 "name": r["name"],
                 "is_active": bool(r["is_active"]),
                 "is_live": bool(r["is_live"]),
                 "mode": r["mode"],
                 "cadence": r["cadence"],
                 "risk_profile": r["risk_profile"] or "balanced",
+                "strategy_id": r.get("strategy_id"),
+                "symbol": r.get("symbol"),
+                "base_currency": r.get("base_currency") or "EUR",
                 "last_run": r["last_run"].isoformat() if r.get("last_run") else None,
                 "budget": {
                     "total_eur": float(r["budget_total_eur"] or 0),
@@ -288,7 +351,7 @@ class BotService:
         bot_id = await self.repository.create_bot_config(data)
         await self.session.commit()
         bot = await self.repository.get_bot_config(user_id, bot_id)
-        return {"ok": True, "id": bot_id, "bot_id": bot_id, "bot": bot, "verified": {"bot": bool(bot)}}
+        return {"ok": True, "id": bot_id, **self._bot_contract(bot)}
 
     async def update_bot_config(self, bot_id: int, payload: BotConfigUpdateSchema, user_id: int) -> dict:
         existing = await self.repository.get_bot_config(user_id, bot_id)
@@ -315,7 +378,7 @@ class BotService:
             
         await self.session.commit()
         bot = await self.repository.get_bot_config(user_id, bot_id)
-        return {"ok": True, "bot_id": bot_id, "bot": bot, "verified": {"bot": bool(bot)}}
+        return {"ok": True, **self._bot_contract(bot)}
 
     async def delete_bot_config(self, bot_id: int, user_id: int) -> dict:
         deleted = await self.repository.delete_bot_config(user_id, bot_id)

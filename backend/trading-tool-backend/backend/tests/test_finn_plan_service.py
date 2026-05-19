@@ -748,6 +748,28 @@ def test_bot_strategy_selection_only_asks_for_strategy_first():
     assert result["next_question"] == "strategy_id"
 
 
+def test_bot_update_intent_with_bot_id_builds_update_draft():
+    result = _service().build_bot_response("Pas bot 38 aan naar auto budget 1000 daglimiet 100 min order 10 max order 50")
+
+    assert result["draft"]["operation"] == "update"
+    assert result["draft"]["bot_id"] == 38
+    assert result["draft"]["bot"]["mode"] == "auto"
+    assert result["draft"]["bot"]["budget_total_eur"] == 1000
+
+
+def test_live_bot_requires_explicit_live_ack():
+    result = _service().build_bot_response(
+        "Maak een live auto bot voor strategie 114 budget 1000 daglimiet 100 min order 10 max order 50"
+    )
+
+    assert result["can_confirm"] is False
+    assert "bot.live_trading_ack" in result["missing_fields"]
+
+    acknowledged = _service().build_bot_response("live akkoord", {"finn_draft": result["draft"]})
+
+    assert acknowledged["draft"]["bot"]["live_trading_ack"] is True
+
+
 def test_status_request_is_detected_without_starting_plan_creation():
     service = _service()
 

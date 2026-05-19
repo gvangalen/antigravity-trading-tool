@@ -573,7 +573,12 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
     try {
       const res = await executeAssistantAction(action);
-      if (!res?.ok || !res?.verified?.setup || !res?.verified?.strategy || (res.bot_id && !res?.verified?.bot)) {
+      const isBotOnly = res?.draft?.draft_kind === "bot";
+      const isStrategyOnly = res?.draft?.draft_kind === "strategy";
+      const verifiedOk = isBotOnly
+        ? Boolean(res?.verified?.bot)
+        : Boolean(res?.verified?.setup && res?.verified?.strategy && (!res.bot_id || res?.verified?.bot));
+      if (!res?.ok || !verifiedOk) {
         throw new Error("Read-after-write verificatie faalde.");
       }
 
@@ -582,20 +587,21 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         fetchStrategies(),
         fetchBotConfigs(),
       ]);
-      const setupFound = setups.some((setup) => Number(setup.id || setup.setup_id) === Number(res.setup_id));
-      const strategyFound = strategies.some((strategy) => Number(strategy.id) === Number(res.strategy_id));
+      const setupFound = isBotOnly || setups.some((setup) => Number(setup.id || setup.setup_id) === Number(res.setup_id));
+      const strategyFound = isBotOnly || strategies.some((strategy) => Number(strategy.id) === Number(res.strategy_id));
       const botFound = !res.bot_id || bots.some((bot) => Number(bot.id || bot.bot_id) === Number(res.bot_id));
       if (!setupFound || !strategyFound || !botFound) {
         throw new Error("Aangemaakte objecten zijn nog niet terugleesbaar via de API.");
       }
 
-      const isStrategyOnly = res?.draft?.draft_kind === "strategy";
       setMessages(prev => [...prev, {
         role: "assistant",
-        text: isStrategyOnly
+        text: isBotOnly
+          ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Bot ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en geverifieerd: bot #${res.bot_id} voor strategy #${res.strategy_id}.`
+          : isStrategyOnly
           ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Strategie ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en geverifieerd: strategy #${res.strategy_id} voor setup #${res.setup_id}.`
           : `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Aangemaakt en geverifieerd: setup #${res.setup_id}, strategy #${res.strategy_id}${res.bot_id ? `, bot #${res.bot_id}` : ""}.`,
-        intent: isStrategyOnly ? "strategy_created" : "plan_created",
+        intent: isBotOnly ? "bot_created" : (isStrategyOnly ? "strategy_created" : "plan_created"),
       }]);
       setFinnDraft(null);
       await loadInsight();
@@ -632,6 +638,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     const rows = [
       ["Type", isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type)],
       isFinnStrategy ? ["Actie", draft.operation === "update" ? "bijwerken" : "aanmaken"] : null,
+      isFinnBot ? ["Actie", draft.operation === "update" ? "bijwerken" : "aanmaken"] : null,
+      isFinnBot && draft.operation === "update" ? ["Bot ID", draft.bot_id ? `#${draft.bot_id}` : null] : null,
       isFinnBot ? ["Strategie", draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
       isFinnStrategy ? ["Setup", draft.setup_id ? `#${draft.setup_id}` : null] : null,
       isFinnStrategy && draft.operation === "update" ? ["Strategie", draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
@@ -710,7 +718,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             </div>
           </div>
         )}
-        {isFinnStrategy && changes.length > 0 && (
+        {(isFinnStrategy || isFinnBot) && changes.length > 0 && (
           <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 p-3 space-y-2">
             <div className="text-[9px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Wijzigingen</div>
             <div className="space-y-1">

@@ -92,3 +92,40 @@ def test_bot_update_allows_current_bot_strategy_link():
     asyncio.run(service.validate_bot_payload(payload, user_id=1, is_update=True, bot_id=7))
 
     assert payload["symbol"] == "BTC"
+
+
+def test_bot_contract_exposes_consistent_top_level_ids_and_nested_strategy():
+    service = BotService(_FakeSession())
+    contract = service._bot_contract({
+        "id": 9,
+        "name": "BTC Paper Bot",
+        "strategy_id": 42,
+        "strategy_name": "BTC Strategy",
+        "setup_type": "dca",
+        "setup_id": 5,
+        "setup_name": "BTC Setup",
+        "setup_symbol": "BTC",
+        "symbol": "BTC",
+        "timeframe": "1W",
+        "is_active": True,
+        "is_live": False,
+        "mode": "manual",
+        "cadence": "daily",
+        "risk_profile": "balanced",
+        "base_currency": "EUR",
+        "budget_total_eur": 1000,
+        "budget_daily_limit_eur": 100,
+        "budget_min_order_eur": 10,
+        "budget_max_order_eur": 50,
+        "max_asset_exposure_pct": 100,
+        "created_at": None,
+        "updated_at": None,
+    })
+
+    assert contract["bot_id"] == 9
+    assert contract["strategy_id"] == 42
+    assert contract["verified"]["bot"] is True
+    assert contract["bot"]["bot_id"] == 9
+    assert contract["bot"]["strategy_id"] == 42
+    assert contract["bot"]["strategy"]["id"] == 42
+    assert contract["budget"]["total_eur"] == 1000
