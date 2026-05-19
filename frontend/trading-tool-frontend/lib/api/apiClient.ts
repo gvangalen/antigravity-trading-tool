@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "@/lib/config";
-import { apiRefresh, clearUserLocal } from "@/lib/api/auth";
+import { apiRefresh, clearStoredAuth, buildAuthHeaders } from "@/lib/api/auth";
 
 //----------------------------------------------------------
 // 📡 GET
@@ -12,10 +12,12 @@ export async function apiGet<T>(path: string, init?: RequestInit & { _retry?: bo
     ...init,
     method: "GET",
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
+    headers: Object.fromEntries(
+      buildAuthHeaders({
+        "Content-Type": "application/json",
+        ...(init?.headers || {}),
+      }).entries()
+    ),
     cache: "no-store",
   });
 
@@ -26,7 +28,7 @@ export async function apiGet<T>(path: string, init?: RequestInit & { _retry?: bo
       if (refreshResult.success) {
         return apiGet(path, { ...init, _retry: true });
       } else {
-        clearUserLocal();
+        clearStoredAuth();
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }
@@ -58,10 +60,12 @@ export async function apiPost<T>(
     ...init,
     method: "POST",
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
+    headers: Object.fromEntries(
+      buildAuthHeaders({
+        "Content-Type": "application/json",
+        ...(init?.headers || {}),
+      }).entries()
+    ),
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -72,7 +76,7 @@ export async function apiPost<T>(
       if (refreshResult.success) {
         return apiPost(path, body, { ...init, _retry: true });
       } else {
-        clearUserLocal();
+        clearStoredAuth();
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }
@@ -104,10 +108,12 @@ export async function apiPut<T>(
     ...init,
     method: "PUT",
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
+    headers: Object.fromEntries(
+      buildAuthHeaders({
+        "Content-Type": "application/json",
+        ...(init?.headers || {}),
+      }).entries()
+    ),
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -118,7 +124,7 @@ export async function apiPut<T>(
       if (refreshResult.success) {
         return apiPut(path, body, { ...init, _retry: true });
       } else {
-        clearUserLocal();
+        clearStoredAuth();
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }
@@ -146,10 +152,12 @@ export async function apiDelete<T>(path: string, init?: RequestInit & { _retry?:
     ...init,
     method: "DELETE",
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
+    headers: Object.fromEntries(
+      buildAuthHeaders({
+        "Content-Type": "application/json",
+        ...(init?.headers || {}),
+      }).entries()
+    ),
   });
 
   if (!res.ok) {
@@ -159,7 +167,7 @@ export async function apiDelete<T>(path: string, init?: RequestInit & { _retry?:
       if (refreshResult.success) {
         return apiDelete(path, { ...init, _retry: true });
       } else {
-        clearUserLocal();
+        clearStoredAuth();
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }

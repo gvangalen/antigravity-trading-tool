@@ -7,6 +7,8 @@
  * (profiel info, niet voor security!)
  */
 const LOCAL_USER_KEY = "tt_current_user";
+const LOCAL_ACCESS_TOKEN_KEY = "tt_access_token";
+const LOCAL_REFRESH_TOKEN_KEY = "tt_refresh_token";
 
 /**
  * User lokaal opslaan (UI only)
@@ -41,3 +43,36 @@ export function clearUserLocal() {
   localStorage.removeItem(LOCAL_USER_KEY);
 }
 
+export function saveAccessTokenLocal(token?: string | null) {
+  if (typeof window === "undefined") return;
+  if (!token) {
+    localStorage.removeItem(LOCAL_ACCESS_TOKEN_KEY);
+    return;
+  }
+  localStorage.setItem(LOCAL_ACCESS_TOKEN_KEY, token);
+}
+
+export function loadAccessTokenLocal() {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(LOCAL_ACCESS_TOKEN_KEY);
+}
+
+export function saveRefreshTokenLocal(token?: string | null) {
+  if (typeof window === "undefined") return;
+  if (!token) {
+    localStorage.removeItem(LOCAL_REFRESH_TOKEN_KEY);
+    return;
+  }
+  localStorage.setItem(LOCAL_REFRESH_TOKEN_KEY, token);
+}
+
+export function loadRefreshTokenLocal() {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(LOCAL_REFRESH_TOKEN_KEY);
+}
+
+export function clearTokenLocal() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LOCAL_ACCESS_TOKEN_KEY);
+  localStorage.removeItem(LOCAL_REFRESH_TOKEN_KEY);
+}

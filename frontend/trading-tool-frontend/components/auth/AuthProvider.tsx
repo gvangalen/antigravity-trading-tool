@@ -13,8 +13,13 @@ import { API_BASE_URL } from "@/lib/config";
 import {
   saveUserLocal,
   loadUserLocal,
-  clearUserLocal,
 } from "@/lib/api/user";
+import {
+  buildAuthHeaders,
+  storeAuthTokens,
+  clearStoredAuth,
+  apiRefresh,
+} from "@/lib/api/auth";
 
 /* ===========================================================
    CONTEXT
@@ -39,8 +44,12 @@ async function fetchWithAuth(
   return fetch(url, {
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
+      ...Object.fromEntries(
+        buildAuthHeaders({
+          "Content-Type": "application/json",
+          ...(options.headers ?? {}),
+        }).entries()
+      ),
     },
     ...options,
   });
@@ -60,6 +69,16 @@ export function AuthProvider({ children }) {
   const sessionInFlight = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  const fetchCurrentUser = useCallback(async (signal?: AbortSignal) => {
+    return fetch(`${API_BASE_URL}/api/auth/me`, {
+      credentials: "include",
+      headers: Object.fromEntries(
+        buildAuthHeaders({ "Content-Type": "application/json" }).entries()
+      ),
+      signal,
+    });
+  }, []);
+
   /* -------------------------------------------------------
      SESSION CHECK (/me)
   ------------------------------------------------------- */
@@ -76,11 +95,14 @@ export function AuthProvider({ children }) {
     abortRef.current = controller;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-      });
+      let res = await fetchCurrentUser(controller.signal);
+
+      if (res.status === 401) {
+        const refreshed = await apiRefresh();
+        if (refreshed.success && !controller.signal.aborted) {
+          res = await fetchCurrentUser(controller.signal);
+        }
+      }
 
       if (res.ok) {
         const u = await res.json();
@@ -88,7 +110,7 @@ export function AuthProvider({ children }) {
         saveUserLocal(u);
       } else {
         setUser(null);
-        clearUserLocal();
+        clearStoredAuth();
       }
       
       // ✅ Definitive result from server
@@ -98,7 +120,7 @@ export function AuthProvider({ children }) {
       if (err?.name !== "AbortError") {
         console.error("❌ Auth /me error:", err);
         setUser(null);
-        clearUserLocal();
+        clearStoredAuth();
         setSessionChecked(true); // Fout telt ook als 'gechecked'
       }
     } finally {
@@ -108,7 +130,7 @@ export function AuthProvider({ children }) {
         setLoading(false);
       }
     }
-  }, []);
+  }, [fetchCurrentUser]);
 
   /* -------------------------------------------------------
      INIT (1x)
@@ -160,6 +182,12 @@ export function AuthProvider({ children }) {
         };
       }
 
+      const data = await res.json().catch(() => ({}));
+      storeAuthTokens({
+        access_token: data?.access_token,
+        refresh_token: data?.refresh_token,
+      });
+
       // 🔥 BELANGRIJK:
       // laad server session opnieuw zodat cookies & context sync zijn
       await loadSession();
@@ -186,7 +214,7 @@ export function AuthProvider({ children }) {
   ------------------------------------------------------- */
   const logout = useCallback(async () => {
     setUser(null);
-    clearUserLocal();
+    clearStoredAuth();
 
     try {
       await fetchWithAuth(`${API_BASE_URL}/api/auth/logout`, {

@@ -1,35 +1,56 @@
 "use client";
 
-import { API_BASE_URL } from "@/lib/config";
+import { API_BASE_URL, IS_NATIVE_APP } from "@/lib/config";
+import {
+  saveUserLocal,
+  loadUserLocal,
+  clearUserLocal,
+  saveAccessTokenLocal,
+  loadAccessTokenLocal,
+  saveRefreshTokenLocal,
+  loadRefreshTokenLocal,
+  clearTokenLocal,
+} from "@/lib/api/user";
 
 /* =======================================================
-   📌 Local Storage Helpers
+   📌 Native Token Helpers
 ======================================================= */
 
-const LOCAL_USER_KEY = "tt_current_user";
-
-export function saveUserLocal(user: any) {
-  if (!user) return;
-  if (typeof window === "undefined") return;
-  localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(user));
-}
-
-export function loadUserLocal() {
-  if (typeof window === "undefined") return null;
-
-  const raw = localStorage.getItem(LOCAL_USER_KEY);
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
+export function storeAuthTokens(tokens: {
+  access_token?: string | null;
+  refresh_token?: string | null;
+}) {
+  if (!IS_NATIVE_APP) return;
+  if (tokens.access_token !== undefined) {
+    saveAccessTokenLocal(tokens.access_token);
+  }
+  if (tokens.refresh_token !== undefined) {
+    saveRefreshTokenLocal(tokens.refresh_token);
   }
 }
 
-export function clearUserLocal() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(LOCAL_USER_KEY);
+export function loadAccessToken() {
+  return IS_NATIVE_APP ? loadAccessTokenLocal() : null;
+}
+
+export function loadRefreshToken() {
+  return IS_NATIVE_APP ? loadRefreshTokenLocal() : null;
+}
+
+export function clearStoredAuth() {
+  clearTokenLocal();
+  clearUserLocal();
+}
+
+export function buildAuthHeaders(headers?: HeadersInit) {
+  const merged = new Headers(headers || {});
+  const accessToken = loadAccessToken();
+
+  if (accessToken && !merged.has("Authorization")) {
+    merged.set("Authorization", `Bearer ${accessToken}`);
+  }
+
+  return merged;
 }
 
 /* =======================================================
@@ -83,7 +104,7 @@ async function fetchAuthInternal(
       "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
       Pragma: "no-cache",
       Expires: "0",
-      ...(options.headers || {}),
+      ...Object.fromEntries(buildAuthHeaders(options.headers).entries()),
     },
   });
 
@@ -99,7 +120,7 @@ async function fetchAuthInternal(
          return fetchAuthInternal(path, { ...options, _retry: true });
       } else {
          console.error("❌ Token refresh mislukt. Gebruiker moet opnieuw inloggen.");
-         clearUserLocal();
+         clearStoredAuth();
          if (typeof window !== "undefined") {
             window.location.href = "/login";
          }
@@ -158,6 +179,10 @@ export async function apiLogin(email: string, password: string) {
     const data = await res.json();
     const user = data.user || data;
 
+    storeAuthTokens({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+    });
     saveUserLocal(user);
     return { success: true, user };
   } catch (err) {
@@ -180,9 +205,12 @@ export async function apiLogout() {
     await fetch(`${API_BASE_URL}/api/auth/logout`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...Object.fromEntries(buildAuthHeaders().entries()),
+      },
     });
-    clearUserLocal();
+    clearStoredAuth();
     return { success: true };
   } catch (err) {
     console.error("❌ apiLogout error:", err);
@@ -196,18 +224,26 @@ export async function apiLogout() {
 
 export async function apiRefresh(refreshToken?: string) {
   try {
+    const tokenForRequest = refreshToken || loadRefreshToken();
     const res = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: refreshToken
-        ? JSON.stringify({ refresh_token: refreshToken })
+      headers: {
+        "Content-Type": "application/json",
+        ...Object.fromEntries(buildAuthHeaders().entries()),
+      },
+      body: tokenForRequest
+        ? JSON.stringify({ refresh_token: tokenForRequest })
         : undefined,
     });
 
     if (!res.ok) return { success: false };
 
     const data = await res.json().catch(() => ({}));
+    storeAuthTokens({
+      access_token: data.access_token,
+      refresh_token: tokenForRequest,
+    });
     return { success: true, ...data };
   } catch (err) {
     console.error("❌ apiRefresh error:", err);
@@ -224,11 +260,14 @@ export async function apiMe() {
     const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
       method: "GET",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...Object.fromEntries(buildAuthHeaders().entries()),
+      },
     });
 
     if (!res.ok) {
-      clearUserLocal();
+      clearStoredAuth();
       return { success: false, user: null };
     }
 

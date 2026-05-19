@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { API_BASE_URL } from "@/lib/config";
+import { getOnboardingStatus } from "@/lib/api/onboarding";
 
 /**
  * 🛡️ AuthGuard
@@ -16,6 +16,7 @@ export default function AuthGuard({ children }) {
   const pathname = usePathname();
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
   const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const onboardingCheckInFlight = useRef(false);
 
   // Routes that don't need auth
   const publicRoutes = ["/", "/login", "/register", "/print", "/daily-report"];
@@ -24,51 +25,21 @@ export default function AuthGuard({ children }) {
     if (process.env.NODE_ENV === "development") console.log(...args);
   };
 
-  useEffect(() => {
-    debug("🛡️ AuthGuard check:", { user: !!user, loading, sessionChecked, pathname });
-    if (loading || !sessionChecked) return;
-
-    // 1. Check Authentication
-    if (!user && !isPublicRoute) {
-      debug("🔒 AuthGuard: Geen gebruiker -> naar login");
-      router.push(`/login?next=${encodeURIComponent(pathname)}`);
+  const checkOnboardingStatus = useCallback(async () => {
+    if (onboardingCheckInFlight.current) return;
+    if (!user || isPublicRoute) {
+      setCheckingOnboarding(false);
+      return;
+    }
+    if (onboardingComplete && !pathname.startsWith("/onboarding")) {
+      setCheckingOnboarding(false);
       return;
     }
 
-    // 2. Check Onboarding if user exists
-    if (user && !isPublicRoute) {
-      // Only re-fetch or re-check if not already definitively complete
-      if (!onboardingComplete) {
-        checkOnboardingStatus();
-      } else {
-        // If already complete, we just need to make sure we aren't stuck on /onboarding
-        if (pathname.startsWith("/onboarding")) {
-          debug("✅ AuthGuard: Onboarding al klaar -> naar dashboard");
-          router.push("/dashboard");
-        }
-        setCheckingOnboarding(false);
-      }
-    } else {
-      setCheckingOnboarding(false);
-    }
-  }, [user, loading, sessionChecked, pathname, isPublicRoute, onboardingComplete]);
-
-  async function checkOnboardingStatus() {
-    // Avoid double-fetching
-    if (!checkingOnboarding && onboardingComplete) return;
-
+    onboardingCheckInFlight.current = true;
     setCheckingOnboarding(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/onboarding/status`, {
-        credentials: "include",
-      });
-
-      if (res.status === 401) {
-        router.push(`/login?next=${encodeURIComponent(pathname)}`);
-        return;
-      }
-
-      const status = await res.json();
+      const status = await getOnboardingStatus();
       
       // ✅ Use explicit master flag from backend if available, fallback to manual check
       const isComplete = status?.onboarding_complete ?? (
@@ -100,9 +71,44 @@ export default function AuthGuard({ children }) {
     } catch (err) {
       console.error("💥 AuthGuard: Onboarding check gefaald", err);
     } finally {
+      onboardingCheckInFlight.current = false;
       setCheckingOnboarding(false);
     }
-  }
+  }, [user, isPublicRoute, onboardingComplete, pathname, router]);
+
+  useEffect(() => {
+    debug("🛡️ AuthGuard check:", { user: !!user, loading, sessionChecked, pathname });
+    if (loading || !sessionChecked) return;
+
+    if (!user && !isPublicRoute) {
+      debug("🔒 AuthGuard: Geen gebruiker -> naar login");
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
+
+    if (user && !isPublicRoute) {
+      if (!onboardingComplete) {
+        checkOnboardingStatus();
+      } else {
+        if (pathname.startsWith("/onboarding")) {
+          debug("✅ AuthGuard: Onboarding al klaar -> naar dashboard");
+          router.push("/dashboard");
+        }
+        setCheckingOnboarding(false);
+      }
+    } else {
+      setCheckingOnboarding(false);
+    }
+  }, [
+    user,
+    loading,
+    sessionChecked,
+    pathname,
+    isPublicRoute,
+    onboardingComplete,
+    router,
+    checkOnboardingStatus,
+  ]);
 
   // Show nothing while loading session ONLY for protected routes
   if ((loading || !sessionChecked) && !isPublicRoute) {
