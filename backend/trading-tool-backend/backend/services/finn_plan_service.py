@@ -274,6 +274,48 @@ class FinnPlanService:
         if self.session:
             await ConversationStateRepository(self.session).clear_state(user_id)
 
+    async def build_cancel_response(self, user_id: int, context: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        context = context or {}
+        draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else None
+        flow = None
+
+        if draft:
+            if draft.get("draft_kind") == "strategy":
+                flow = "strategy_creation"
+            elif draft.get("plan_type") or draft.get("asset") or isinstance(draft.get("_clarification"), dict):
+                flow = "plan_creation"
+
+        if not flow and self.session:
+            state = await ConversationStateRepository(self.session).get_state(user_id)
+            if state and state.get("current_flow") in {"plan_creation", "strategy_creation"}:
+                flow = state.get("current_flow")
+
+        if flow == "strategy_creation":
+            return {
+                "response": "Prima, ik heb deze strategie-aanmaak gestopt. Er is niets aangemaakt.",
+                "intent": "strategy_creation_cancelled",
+                "flow": None,
+                "draft": None,
+                "missing_fields": [],
+                "invalid_fields": [],
+                "next_question": None,
+                "can_confirm": False,
+                "actions": [],
+            }
+        if flow == "plan_creation":
+            return {
+                "response": "Prima, ik heb deze plan-aanmaak gestopt. Er is niets aangemaakt.",
+                "intent": "plan_creation_cancelled",
+                "flow": None,
+                "draft": None,
+                "missing_fields": [],
+                "invalid_fields": [],
+                "next_question": None,
+                "can_confirm": False,
+                "actions": [],
+            }
+        return None
+
     def looks_like_plan_request(self, query: str, draft: Optional[Dict[str, Any]] = None) -> bool:
         q = (query or "").lower()
         if draft and draft.get("plan_type"):

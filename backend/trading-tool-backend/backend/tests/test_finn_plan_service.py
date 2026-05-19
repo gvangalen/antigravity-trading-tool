@@ -342,6 +342,27 @@ def test_strategy_creation_cancel_returns_clear_state_envelope():
     assert cancelled["draft"]["draft_kind"] == "strategy"
 
 
+def test_strategy_cancel_response_can_be_built_from_context_draft():
+    service = _service()
+    first = service.build_strategy_response(
+        "Maak een strategie met 50 euro",
+        {"setup_id": 12, "setup_type": "dca", "setup_symbol": "BTC", "setup_timeframe": "1W"},
+    )
+
+    cancelled = asyncio.run(service.build_cancel_response(1, {"finn_draft": first["draft"]}))
+
+    assert cancelled["intent"] == "strategy_creation_cancelled"
+    assert cancelled["flow"] is None
+    assert cancelled["draft"] is None
+    assert cancelled["actions"] == []
+
+
+def test_cancel_response_returns_none_without_transactional_state():
+    cancelled = asyncio.run(_service().build_cancel_response(1, {}))
+
+    assert cancelled is None
+
+
 def test_strategy_update_intent_requires_strategy_id_when_no_existing_context():
     result = _service().build_strategy_response(
         "Pas de strategie aan met 150 euro",

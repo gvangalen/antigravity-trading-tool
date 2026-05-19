@@ -384,7 +384,10 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             return copy;
           });
 
-          if (["plan_creation", "strategy_creation"].includes(envelope.flow) || ["plan_creation_cancelled", "strategy_creation_cancelled"].includes(envelope.intent)) {
+          if (["plan_creation_cancelled", "strategy_creation_cancelled"].includes(envelope.intent)) {
+            setFinnDraft(null);
+            setActiveState(null);
+          } else if (["plan_creation", "strategy_creation"].includes(envelope.flow)) {
             setFinnDraft(envelope.draft || null);
           }
 
