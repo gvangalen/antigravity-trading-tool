@@ -342,6 +342,58 @@ def test_strategy_creation_cancel_returns_clear_state_envelope():
     assert cancelled["draft"]["draft_kind"] == "strategy"
 
 
+def test_strategy_update_intent_requires_strategy_id_when_no_existing_context():
+    result = _service().build_strategy_response(
+        "Pas de strategie aan met 150 euro",
+        {"setup_id": 12, "setup_type": "dca", "setup_symbol": "BTC", "setup_timeframe": "1W"},
+    )
+
+    assert result["draft"]["operation"] == "update"
+    assert result["can_confirm"] is False
+    assert result["next_question"] == "strategy_id"
+    assert "strategy_id" in result["missing_fields"]
+    assert result["actions"] == []
+
+
+def test_strategy_update_context_is_confirmable():
+    result = _service().build_strategy_response(
+        "Pas strategie 91 aan naar 150 euro",
+        {
+            "setup_id": 12,
+            "setup_type": "dca",
+            "setup_symbol": "BTC",
+            "setup_timeframe": "1W",
+        },
+    )
+
+    assert result["can_confirm"] is True
+    assert result["draft"]["operation"] == "update"
+    assert result["draft"]["strategy_id"] == 91
+    assert result["draft"]["strategy"]["base_amount_eur"] == 150
+    assert result["actions"][0]["label"] == "Strategie bijwerken"
+
+
+def test_strategy_setup_options_are_rendered_in_missing_setup_question():
+    service = _service()
+    message = service._build_strategy_message(
+        service.build_strategy_response("Maak een strategie met 100 euro")["draft"],
+        {
+            "missing_fields": ["setup_id"],
+            "invalid_fields": [],
+            "next_question": "setup_id",
+            "can_confirm": False,
+        },
+        setup_options=[
+            {"id": 10, "name": "BTC DCA", "symbol": "BTC", "setup_type": "dca", "timeframe": "1W"},
+            {"id": 11, "name": "ETH Trade", "symbol": "ETH", "setup_type": "trade", "timeframe": "4H"},
+        ],
+    )
+
+    assert "setup 10" in message
+    assert "BTC DCA" in message
+    assert "setup 11" in message
+
+
 def test_read_after_write_marks_absent_bot_as_not_verified_but_valid():
     result = asyncio.run(_service()._verify_created_objects(
         user_id=1,

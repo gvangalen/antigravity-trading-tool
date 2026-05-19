@@ -107,7 +107,7 @@ async def assistant_chat(
             finn_response["trace_id"] = trace_id
             return AssistantChatResponse(**finn_response)
         if finn.looks_like_strategy_request(request.query, context_payload):
-            finn_response = finn.build_strategy_response(request.query, context_payload)
+            finn_response = await finn.build_strategy_response_for_user(user_id, request.query, context_payload)
             finn_response["trace_id"] = trace_id
             await finn.persist_response_state(user_id, finn_response)
             return AssistantChatResponse(**finn_response)
@@ -283,7 +283,7 @@ async def assistant_chat_stream(
                 return
 
             if finn.looks_like_strategy_request(request.query, context_payload):
-                envelope = finn.build_strategy_response(request.query, context_payload)
+                envelope = await finn.build_strategy_response_for_user(user_id, request.query, context_payload)
                 envelope["trace_id"] = trace_id
                 await finn.persist_response_state(user_id, envelope)
                 yield _sse_event("envelope", envelope)

@@ -588,7 +588,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       setMessages(prev => [...prev, {
         role: "assistant",
         text: isStrategyOnly
-          ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Strategie aangemaakt en geverifieerd: strategy #${res.strategy_id} voor setup #${res.setup_id}.`
+          ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Strategie ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en geverifieerd: strategy #${res.strategy_id} voor setup #${res.setup_id}.`
           : `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Aangemaakt en geverifieerd: setup #${res.setup_id}, strategy #${res.strategy_id}${res.bot_id ? `, bot #${res.bot_id}` : ""}.`,
         intent: isStrategyOnly ? "strategy_created" : "plan_created",
       }]);
@@ -622,7 +622,9 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
     const rows = [
       ["Type", isFinnStrategy ? "strategy" : draft.plan_type],
+      isFinnStrategy ? ["Actie", draft.operation === "update" ? "bijwerken" : "aanmaken"] : null,
       isFinnStrategy ? ["Setup", draft.setup_id ? `#${draft.setup_id}` : null] : null,
+      isFinnStrategy && draft.operation === "update" ? ["Strategie", draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
       isFinnStrategy ? ["Setup type", draft.setup_type] : null,
       ["Asset", draft.asset],
       !isFinnStrategy ? ["Naam", setup.name] : null,

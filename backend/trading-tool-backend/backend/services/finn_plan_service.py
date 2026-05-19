@@ -137,7 +137,9 @@ def empty_plan_patch() -> Dict[str, Any]:
 def empty_strategy_draft() -> Dict[str, Any]:
     return {
         "draft_kind": "strategy",
+        "operation": "create",
         "setup_id": None,
+        "strategy_id": None,
         "setup_type": None,
         "asset": None,
         "timeframe": None,
@@ -410,6 +412,7 @@ class FinnPlanService:
         self._apply_strategy_context(draft, context)
 
         q = (query or "").strip()
+        q_lower = q.lower()
         if self.is_cancel_request(q):
             return {
                 "response": "Prima, ik heb deze strategie-aanmaak gestopt. Er is niets aangemaakt.",
@@ -426,6 +429,12 @@ class FinnPlanService:
         setup_id_match = re.search(r"\bsetup\s*#?\s*(\d+)\b", q, re.IGNORECASE)
         if setup_id_match:
             draft["setup_id"] = int(setup_id_match.group(1))
+        strategy_id_match = re.search(r"\bstrateg(?:ie|y)\s*#?\s*(\d+)\b", q, re.IGNORECASE)
+        if strategy_id_match:
+            draft["strategy_id"] = int(strategy_id_match.group(1))
+            draft["operation"] = "update"
+        if any(word in q_lower for word in ["wijzig", "aanpassen", "pas aan", "update", "bijwerken", "verander"]) or re.search(r"\bpas\b.+\baan\b", q_lower):
+            draft["operation"] = "update"
 
         extracted = self._extract_from_query(q)
         if extracted.get("plan_type"):
@@ -457,7 +466,7 @@ class FinnPlanService:
             actions.append({
                 "id": self._strategy_action_id(action_payload),
                 "type": "create_strategy",
-                "label": "Strategie aanmaken",
+                "label": "Strategie bijwerken" if draft.get("operation") == "update" else "Strategie aanmaken",
                 "payload": action_payload,
                 "risk_level": "medium" if draft.get("setup_type") == "trade" else "low",
                 "requires_confirmation": True,
@@ -482,6 +491,77 @@ class FinnPlanService:
             "can_confirm": validation["can_confirm"],
             "actions": actions,
         }
+
+    async def build_strategy_response_for_user(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        response = self.build_strategy_response(query, context)
+        if response.get("intent") == "strategy_creation_cancelled" or not self.session:
+            return response
+
+        draft = response.get("draft") if isinstance(response.get("draft"), dict) else {}
+        await self._hydrate_strategy_draft_from_db(user_id, draft)
+
+        validation = self._validate_strategy_draft(draft)
+        existing_strategy = None
+        if draft.get("setup_id"):
+            existing_strategy = await StrategyService(self.session).get_strategy_by_setup(int(draft["setup_id"]), user_id)
+
+        if existing_strategy and draft.get("operation") != "update":
+            draft["strategy_id"] = existing_strategy.get("id")
+            response.update({
+                "response": (
+                    f"Deze setup heeft al strategie #{existing_strategy.get('id')}. "
+                    "Ik maak daarom geen tweede strategie aan. Zeg bijvoorbeeld 'pas de strategie aan met 150 euro' "
+                    "als je deze bestaande strategie wilt bijwerken."
+                ),
+                "draft": draft,
+                "state": self._strategy_flow_state(draft, validation),
+                "reasoning": self._strategy_reasoning(draft, validation),
+                "missing_fields": [],
+                "invalid_fields": [{"field": "setup_id", "reason": "voor deze setup bestaat al een strategie"}],
+                "next_question": "strategy.update_existing",
+                "can_confirm": False,
+                "actions": [],
+            })
+            return response
+
+        if existing_strategy and draft.get("operation") == "update":
+            self._merge_existing_strategy_into_draft(draft, existing_strategy)
+            validation = self._validate_strategy_draft(draft)
+
+        setup_options = []
+        if "setup_id" in validation["missing_fields"]:
+            setup_options = await self._strategy_setup_options(user_id, draft)
+
+        actions = []
+        if validation["can_confirm"]:
+            action_payload = deepcopy(draft)
+            actions.append({
+                "id": self._strategy_action_id(action_payload),
+                "type": "create_strategy",
+                "label": "Strategie bijwerken" if draft.get("operation") == "update" else "Strategie aanmaken",
+                "payload": action_payload,
+                "risk_level": "medium" if draft.get("setup_type") == "trade" else "low",
+                "requires_confirmation": True,
+                "autonomy_level": "confirm_required",
+                "guardrails": {
+                    "requires_confirmation": True,
+                    "can_execute_without_user": False,
+                    "execution_allowed": "strategy_update" if draft.get("operation") == "update" else "strategy_creation_only",
+                },
+            })
+
+        response.update({
+            "response": self._build_strategy_message(draft, validation, setup_options=setup_options),
+            "draft": draft,
+            "state": self._strategy_flow_state(draft, validation, setup_options=setup_options),
+            "reasoning": self._strategy_reasoning(draft, validation),
+            "missing_fields": validation["missing_fields"],
+            "invalid_fields": validation["invalid_fields"],
+            "next_question": validation["next_question"],
+            "can_confirm": validation["can_confirm"],
+            "actions": actions,
+        })
+        return response
 
     async def build_status_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
@@ -779,6 +859,9 @@ class FinnPlanService:
     def _apply_strategy_context(self, draft: Dict[str, Any], context: Dict[str, Any]) -> None:
         if context.get("setup_id") and not draft.get("setup_id"):
             draft["setup_id"] = context.get("setup_id")
+        if context.get("strategy_id") and not draft.get("strategy_id"):
+            draft["strategy_id"] = context.get("strategy_id")
+            draft["operation"] = "update"
         if context.get("setup_type") and not draft.get("setup_type"):
             draft["setup_type"] = str(context.get("setup_type")).lower()
         if context.get("setup_symbol") and not draft.get("asset"):
@@ -791,6 +874,8 @@ class FinnPlanService:
             draft["timeframe"] = context.get("timeframe")
 
     def _apply_strategy_defaults(self, draft: Dict[str, Any]) -> None:
+        if draft.get("operation") not in {"create", "update"}:
+            draft["operation"] = "create"
         if draft.get("asset"):
             draft["asset"] = str(draft["asset"]).upper()
         if draft.get("setup_type"):
@@ -804,10 +889,98 @@ class FinnPlanService:
         if not draft["strategy"].get("risk_profile"):
             draft["strategy"]["risk_profile"] = "balanced"
 
+    async def _hydrate_strategy_draft_from_db(self, user_id: int, draft: Dict[str, Any]) -> None:
+        if not self.session or not isinstance(draft, dict):
+            return
+        strategy_service = StrategyService(self.session)
+        strategy_id = draft.get("strategy_id")
+        if strategy_id:
+            existing = await strategy_service.repository.get_raw_strategy_with_setup(int(strategy_id), user_id)
+            if not existing:
+                draft["_strategy_lookup_error"] = "strategie niet gevonden"
+                return
+            setup_id = existing.get("setup_id")
+            if setup_id and not draft.get("setup_id"):
+                draft["setup_id"] = setup_id
+            draft["operation"] = "update"
+            self._merge_existing_strategy_into_draft(draft, strategy_service._format_strategy_row(existing) or {})
+
+        setup_id = draft.get("setup_id")
+        if not setup_id:
+            return
+        setup_row = await SetupService(self.session).repository.get_setup_by_id(int(setup_id), user_id)
+        if not setup_row:
+            draft["_setup_lookup_error"] = "setup niet gevonden"
+            return
+        if not draft.get("setup_type"):
+            draft["setup_type"] = str(setup_row.get("setup_type") or "").lower() or None
+        if not draft.get("asset"):
+            draft["asset"] = str(setup_row.get("symbol") or "").upper() or None
+        if not draft.get("timeframe"):
+            draft["timeframe"] = setup_row.get("timeframe")
+        self._apply_strategy_defaults(draft)
+
+    def _merge_existing_strategy_into_draft(self, draft: Dict[str, Any], existing: Dict[str, Any]) -> None:
+        if not existing:
+            return
+        draft["operation"] = "update"
+        draft["strategy_id"] = draft.get("strategy_id") or existing.get("id")
+        draft["setup_id"] = draft.get("setup_id") or existing.get("setup_id")
+        draft["setup_type"] = draft.get("setup_type") or existing.get("setup_type")
+        draft["asset"] = draft.get("asset") or existing.get("symbol")
+        draft["timeframe"] = draft.get("timeframe") or existing.get("timeframe")
+        strategy = draft.get("strategy") or {}
+        defaults = {
+            "base_amount_eur": existing.get("base_amount"),
+            "execution_mode": existing.get("execution_mode") or "fixed",
+            "direction": existing.get("direction") or "long",
+            "entry_type": existing.get("entry_type") or existing.get("trade_execution_mode"),
+            "entry": existing.get("entry"),
+            "stop_loss": existing.get("stop_loss"),
+            "targets": existing.get("targets"),
+            "automation": existing.get("automation") or "manual_only",
+            "risk_profile": existing.get("risk_profile") or "balanced",
+        }
+        for field, value in defaults.items():
+            if strategy.get(field) is None and value is not None:
+                strategy[field] = value
+        draft["strategy"] = strategy
+        self._apply_strategy_defaults(draft)
+
+    async def _strategy_setup_options(self, user_id: int, draft: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if not self.session:
+            return []
+        setup_type = draft.get("setup_type")
+        rows = await SetupService(self.session).repository.get_all_setups(
+            user_id,
+            setup_type if setup_type in {"dca", "trade"} else None,
+        )
+        asset = (draft.get("asset") or "").upper()
+        options = []
+        for row in rows:
+            if asset and str(row.get("symbol") or "").upper() != asset:
+                continue
+            options.append({
+                "id": row.get("id"),
+                "name": row.get("name"),
+                "symbol": row.get("symbol"),
+                "timeframe": row.get("timeframe"),
+                "setup_type": row.get("setup_type"),
+            })
+            if len(options) >= 5:
+                break
+        return options
+
     def _validate_strategy_draft(self, draft: Dict[str, Any]) -> Dict[str, Any]:
         missing: List[str] = []
         invalid: List[Dict[str, str]] = []
 
+        if draft.get("_setup_lookup_error"):
+            invalid.append({"field": "setup_id", "reason": draft["_setup_lookup_error"]})
+        if draft.get("_strategy_lookup_error"):
+            invalid.append({"field": "strategy_id", "reason": draft["_strategy_lookup_error"]})
+        if draft.get("operation") == "update" and not draft.get("strategy_id"):
+            missing.append("strategy_id")
         if not draft.get("setup_id"):
             missing.append("setup_id")
         if draft.get("setup_type") not in {"dca", "trade"}:
@@ -860,13 +1033,20 @@ class FinnPlanService:
             "can_confirm": not missing and not invalid,
         }
 
-    def _build_strategy_message(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> str:
+    def _build_strategy_message(self, draft: Dict[str, Any], validation: Dict[str, Any], setup_options: Optional[List[Dict[str, Any]]] = None) -> str:
         next_question = validation["next_question"]
         if validation["invalid_fields"]:
             issue = validation["invalid_fields"][0]
             return f"Ik zie een probleem met {issue['field']}: {issue['reason']}. Wat wil je hiervoor instellen?"
         if next_question == "setup_id":
+            if setup_options:
+                lines = ["Voor welke setup wil je deze strategie maken? Ik zie deze opties:"]
+                for option in setup_options:
+                    lines.append(f"- setup {option.get('id')}: {option.get('name')} ({option.get('symbol')} {option.get('setup_type')} {option.get('timeframe')})")
+                return "\n".join(lines)
             return "Voor welke setup wil je deze strategie maken? Noem bijvoorbeeld setup 12 of open eerst de setup."
+        if next_question == "strategy_id":
+            return "Welke bestaande strategie wil je aanpassen? Noem bijvoorbeeld strategie 12 of open eerst de strategie."
         if next_question == "setup_type":
             return "Is deze strategie voor een DCA-setup of een gewone trade-setup?"
         if next_question == "strategy.base_amount_eur":
@@ -885,13 +1065,15 @@ class FinnPlanService:
     def _strategy_summary(self, draft: Dict[str, Any]) -> str:
         strategy = draft.get("strategy") or {}
         lines = [
-            "- Type: strategie",
+            f"- Type: strategie {'bijwerken' if draft.get('operation') == 'update' else 'aanmaken'}",
             f"- Setup: #{draft.get('setup_id')}",
+            f"- Strategie: #{draft.get('strategy_id')}" if draft.get("operation") == "update" else None,
             f"- Setup type: {draft.get('setup_type')}",
             f"- Asset: {draft.get('asset')}",
             f"- Timeframe: {draft.get('timeframe')}",
             f"- Bedrag: €{strategy.get('base_amount_eur')}",
         ]
+        lines = [line for line in lines if line]
         if draft.get("setup_type") == "trade":
             lines.extend([
                 f"- Uitvoering: {strategy.get('entry_type')}",
@@ -902,13 +1084,16 @@ class FinnPlanService:
             ])
         return "\n".join(lines)
 
-    def _strategy_flow_state(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> Dict[str, Any]:
+    def _strategy_flow_state(self, draft: Dict[str, Any], validation: Dict[str, Any], setup_options: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         return {
             "status": "ready_for_confirmation" if validation["can_confirm"] else "collecting",
             "current_flow": "strategy_creation",
             "asset": draft.get("asset"),
             "setup_id": draft.get("setup_id"),
+            "strategy_id": draft.get("strategy_id"),
+            "operation": draft.get("operation") or "create",
             "setup_type": draft.get("setup_type"),
+            "setup_options": setup_options or [],
             "next_question": validation["next_question"],
             "autonomy_level": "confirm_required",
             "version": FINN_STATE_VERSION,
@@ -1381,12 +1566,16 @@ class FinnPlanService:
         strategy_id = None
         try:
             strategy_payload = self._strategy_only_payload(draft)
-            strategy_result = await strategy_service.save_strategy(
-                StrategyCreateSchema(**strategy_payload),
-                strategy_payload,
-                user_id,
-            )
-            strategy_id = strategy_result["id"]
+            if draft.get("operation") == "update":
+                strategy_id = int(draft["strategy_id"])
+                await strategy_service.update_strategy(strategy_id, strategy_payload, user_id)
+            else:
+                strategy_result = await strategy_service.save_strategy(
+                    StrategyCreateSchema(**strategy_payload),
+                    strategy_payload,
+                    user_id,
+                )
+                strategy_id = strategy_result["id"]
             verified = await self._verify_created_objects(user_id, draft.get("setup_id"), strategy_id, None)
         except Exception:
             await self.session.rollback()
@@ -1401,10 +1590,11 @@ class FinnPlanService:
 
         result = {
             "ok": True,
-            "message": "Strategie aangemaakt",
+            "message": "Strategie bijgewerkt" if draft.get("operation") == "update" else "Strategie aangemaakt",
             "setup_id": draft.get("setup_id"),
             "strategy_id": strategy_id,
             "bot_id": None,
+            "operation": draft.get("operation") or "create",
             "draft": draft,
             "action_id": action_id,
             "verified": verified,
@@ -1417,8 +1607,33 @@ class FinnPlanService:
         context = await self.hydrate_context(user_id, {})
         draft = context.get("finn_draft")
         if isinstance(draft, dict) and draft.get("draft_kind") == "strategy":
+            await self._hydrate_strategy_draft_from_db(user_id, draft)
             validation = self._validate_strategy_draft(draft)
             message = self._build_strategy_message(draft, validation)
+            existing_strategy = None
+            if draft.get("setup_id"):
+                existing_strategy = await StrategyService(self.session).get_strategy_by_setup(int(draft["setup_id"]), user_id)
+            if existing_strategy and draft.get("operation") != "update":
+                draft["strategy_id"] = existing_strategy.get("id")
+                return {
+                    "ok": True,
+                    "has_draft": True,
+                    "response": (
+                        f"Deze setup heeft al strategie #{existing_strategy.get('id')}. "
+                        "Ik maak daarom geen tweede strategie aan. Zeg bijvoorbeeld 'pas de strategie aan met 150 euro' "
+                        "als je deze bestaande strategie wilt bijwerken."
+                    ),
+                    "intent": "strategy_creation",
+                    "flow": "strategy_creation",
+                    "draft": draft,
+                    "state": self._strategy_flow_state(draft, validation),
+                    "reasoning": self._strategy_reasoning(draft, validation),
+                    "missing_fields": [],
+                    "invalid_fields": [{"field": "setup_id", "reason": "voor deze setup bestaat al een strategie"}],
+                    "next_question": "strategy.update_existing",
+                    "can_confirm": False,
+                    "actions": [],
+                }
             actions = []
             if validation["can_confirm"]:
                 action_payload = deepcopy(draft)
