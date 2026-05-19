@@ -786,6 +786,16 @@ def test_bot_update_intent_with_bot_id_builds_update_draft():
     assert result["draft"]["bot"]["budget_total_eur"] == 1000
 
 
+def test_bot_budget_update_parses_total_budget_with_aan_naar():
+    result = _service().build_bot_response("Pas bot 38 budget aan naar 1500 daglimiet 150 min order 15 max order 60")
+
+    assert result["draft"]["operation"] == "update"
+    assert result["draft"]["bot"]["budget_total_eur"] == 1500
+    assert result["draft"]["bot"]["budget_daily_limit_eur"] == 150
+    assert result["draft"]["bot"]["budget_min_order_eur"] == 15
+    assert result["draft"]["bot"]["budget_max_order_eur"] == 60
+
+
 def test_live_bot_requires_explicit_live_ack():
     result = _service().build_bot_response(
         "Maak een live auto bot voor strategie 114 budget 1000 daglimiet 100 min order 10 max order 50"

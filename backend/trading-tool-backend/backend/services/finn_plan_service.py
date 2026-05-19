@@ -774,7 +774,7 @@ class FinnPlanService:
             touched_bot_fields.add("cadence")
 
         for key, pattern in [
-            ("budget_total_eur", r"(?:totaal\s*)?budget\s*(?:van|=|:)?\s*(?:€|eur|euro)?\s*([0-9][0-9.,]*)"),
+            ("budget_total_eur", r"(?:totaal\s*)?budget\s*(?:aan\s+)?(?:van|naar|=|:)?\s*(?:€|eur|euro)?\s*([0-9][0-9.,]*)"),
             ("budget_daily_limit_eur", r"(?:daglimiet|daily limit)\s*(?:van|=|:)?\s*(?:€|eur|euro)?\s*([0-9][0-9.,]*)"),
             ("budget_min_order_eur", r"(?:min(?:imum)? order|min order)\s*(?:van|=|:)?\s*(?:€|eur|euro)?\s*([0-9][0-9.,]*)"),
             ("budget_max_order_eur", r"(?:max(?:imum)? order|max order)\s*(?:van|=|:)?\s*(?:€|eur|euro)?\s*([0-9][0-9.,]*)"),
