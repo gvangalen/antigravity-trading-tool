@@ -159,6 +159,31 @@ def empty_strategy_draft() -> Dict[str, Any]:
     }
 
 
+def empty_bot_draft() -> Dict[str, Any]:
+    return {
+        "draft_kind": "bot",
+        "operation": "create",
+        "strategy_id": None,
+        "existing_bot_id": None,
+        "asset": None,
+        "setup_type": None,
+        "timeframe": None,
+        "bot": {
+            "name": None,
+            "mode": "manual",
+            "is_live": False,
+            "risk_profile": "balanced",
+            "cadence": "daily",
+            "base_currency": "EUR",
+            "budget_total_eur": 0,
+            "budget_daily_limit_eur": 0,
+            "budget_min_order_eur": 0,
+            "budget_max_order_eur": 0,
+            "max_asset_exposure_pct": 100,
+        },
+    }
+
+
 def _deep_merge(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
     merged = deepcopy(base)
     for key, value in (patch or {}).items():
@@ -237,7 +262,7 @@ class FinnPlanService:
         state = await ConversationStateRepository(self.session).get_state(user_id)
         slots = (state or {}).get("slots") or {}
         draft = slots.get("draft")
-        if state and state.get("current_flow") in {"plan_creation", "strategy_creation"} and isinstance(draft, dict):
+        if state and state.get("current_flow") in {"plan_creation", "strategy_creation", "bot_creation"} and isinstance(draft, dict):
             hydrated["finn_draft"] = draft
             hydrated["finn_state"] = {
                 "version": slots.get("version"),
@@ -250,10 +275,10 @@ class FinnPlanService:
         if not self.session:
             return
         repo = ConversationStateRepository(self.session)
-        if response.get("intent") in {"plan_creation_cancelled", "strategy_creation_cancelled"}:
+        if response.get("intent") in {"plan_creation_cancelled", "strategy_creation_cancelled", "bot_creation_cancelled"}:
             await repo.clear_state(user_id)
             return
-        if response.get("flow") not in {"plan_creation", "strategy_creation"} or not isinstance(response.get("draft"), dict):
+        if response.get("flow") not in {"plan_creation", "strategy_creation", "bot_creation"} or not isinstance(response.get("draft"), dict):
             return
 
         draft = response["draft"]
@@ -283,14 +308,28 @@ class FinnPlanService:
         if draft:
             if draft.get("draft_kind") == "strategy":
                 flow = "strategy_creation"
+            elif draft.get("draft_kind") == "bot":
+                flow = "bot_creation"
             elif draft.get("plan_type") or draft.get("asset") or isinstance(draft.get("_clarification"), dict):
                 flow = "plan_creation"
 
         if not flow and self.session:
             state = await ConversationStateRepository(self.session).get_state(user_id)
-            if state and state.get("current_flow") in {"plan_creation", "strategy_creation"}:
+            if state and state.get("current_flow") in {"plan_creation", "strategy_creation", "bot_creation"}:
                 flow = state.get("current_flow")
 
+        if flow == "bot_creation":
+            return {
+                "response": "Prima, ik heb deze bot-aanmaak gestopt. Er is niets aangemaakt.",
+                "intent": "bot_creation_cancelled",
+                "flow": None,
+                "draft": None,
+                "missing_fields": [],
+                "invalid_fields": [],
+                "next_question": None,
+                "can_confirm": False,
+                "actions": [],
+            }
         if flow == "strategy_creation":
             return {
                 "response": "Prima, ik heb deze strategie-aanmaak gestopt. Er is niets aangemaakt.",
@@ -361,6 +400,19 @@ class FinnPlanService:
         has_setup_ref = bool(context.get("setup_id")) or bool(re.search(r"\bsetup\s*#?\s*\d+\b", q))
         has_create_intent = any(word in q for word in ["maak", "aanmaken", "creeer", "creeër", "bouw", "instellen", "wil"])
         return has_strategy_word and (has_setup_ref or has_create_intent)
+
+    def looks_like_bot_request(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
+        q = (query or "").lower()
+        context = context or {}
+        draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else {}
+        if draft.get("draft_kind") == "bot":
+            return True
+        if self.looks_like_status_request(query):
+            return False
+        has_bot_word = bool(re.search(r"\bbot\b", q))
+        has_strategy_ref = bool(context.get("strategy_id")) or bool(re.search(r"\bstrateg(?:ie|y)\s*#?\s*\d+\b", q))
+        has_create_intent = any(word in q for word in ["maak", "aanmaken", "creeer", "creeër", "bouw", "instellen", "wil"])
+        return has_bot_word and (has_strategy_ref or has_create_intent)
 
     def looks_like_status_request(self, query: str) -> bool:
         q = (query or "").lower()
@@ -619,6 +671,182 @@ class FinnPlanService:
             "draft": draft,
             "state": self._strategy_flow_state(draft, validation, setup_options=setup_options),
             "reasoning": self._strategy_reasoning(draft, validation),
+            "missing_fields": validation["missing_fields"],
+            "invalid_fields": validation["invalid_fields"],
+            "next_question": validation["next_question"],
+            "can_confirm": validation["can_confirm"],
+            "actions": actions,
+        })
+        return response
+
+    def build_bot_response(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        previous = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) and context["finn_draft"].get("draft_kind") == "bot" else {}
+        draft = _deep_merge(empty_bot_draft(), previous)
+
+        if context.get("strategy_id") and not draft.get("strategy_id"):
+            draft["strategy_id"] = context.get("strategy_id")
+
+        q = (query or "").strip()
+        q_lower = q.lower()
+        if self.is_cancel_request(q):
+            return {
+                "response": "Prima, ik heb deze bot-aanmaak gestopt. Er is niets aangemaakt.",
+                "intent": "bot_creation_cancelled",
+                "flow": None,
+                "draft": empty_bot_draft(),
+                "missing_fields": [],
+                "invalid_fields": [],
+                "next_question": None,
+                "can_confirm": False,
+                "actions": [],
+            }
+
+        strategy_id_match = re.search(r"\bstrateg(?:ie|y)\s*#?\s*(\d+)\b", q, re.IGNORECASE)
+        if strategy_id_match:
+            draft["strategy_id"] = int(strategy_id_match.group(1))
+
+        bot = draft["bot"]
+        name_match = re.search(r"(?:noem|naam|heet)\s+(?:hem|deze)?\s*[\"']?([^\"'.]+)[\"']?", q, re.IGNORECASE)
+        if name_match:
+            name = name_match.group(1).strip()
+            if 2 <= len(name) <= 80:
+                bot["name"] = name
+
+        bot_patch = self._extract_from_query(q).get("bot") or {}
+        for field, value in bot_patch.items():
+            if value is not None:
+                mapping = {
+                    "total_budget_eur": "budget_total_eur",
+                    "daily_limit_eur": "budget_daily_limit_eur",
+                    "min_order_eur": "budget_min_order_eur",
+                    "max_order_eur": "budget_max_order_eur",
+                }
+                bot[mapping.get(field, field)] = value
+
+        if "hourly" in q_lower or "elk uur" in q_lower:
+            bot["cadence"] = "hourly"
+        elif "weekly" in q_lower or "wekelijks" in q_lower:
+            bot["cadence"] = "weekly"
+        elif "monthly" in q_lower or "maandelijks" in q_lower:
+            bot["cadence"] = "monthly"
+        elif "daily" in q_lower or "dagelijks" in q_lower:
+            bot["cadence"] = "daily"
+
+        for key, pattern in [
+            ("budget_total_eur", r"(?:totaal\s*)?budget\s*(?:van|=|:)?\s*(?:€|eur|euro)?\s*([0-9][0-9.,]*)"),
+            ("budget_daily_limit_eur", r"(?:daglimiet|daily limit)\s*(?:van|=|:)?\s*(?:€|eur|euro)?\s*([0-9][0-9.,]*)"),
+            ("budget_min_order_eur", r"(?:min(?:imum)? order|min order)\s*(?:van|=|:)?\s*(?:€|eur|euro)?\s*([0-9][0-9.,]*)"),
+            ("budget_max_order_eur", r"(?:max(?:imum)? order|max order)\s*(?:van|=|:)?\s*(?:€|eur|euro)?\s*([0-9][0-9.,]*)"),
+        ]:
+            match = re.search(pattern, q_lower)
+            if match:
+                bot[key] = _number(match.group(1))
+
+        amount = re.search(r"(?:€|eur|euro)\s*([0-9][0-9.,]*)|([0-9][0-9.,]*)\s*(?:€|eur|euro)", q_lower)
+        if amount and "budget" in q_lower and not bot.get("budget_total_eur"):
+            bot["budget_total_eur"] = _number(amount.group(1) or amount.group(2))
+
+        if not bot.get("name") and draft.get("strategy_id"):
+            env = "Live" if bot.get("is_live") else "Paper"
+            bot["name"] = f"Finn Strategy {draft['strategy_id']} {env} Bot"
+
+        validation = self._validate_bot_draft(draft)
+        actions = []
+        if validation["can_confirm"]:
+            action_payload = deepcopy(draft)
+            actions.append({
+                "id": self._bot_action_id(action_payload),
+                "type": "create_bot",
+                "label": "Bot aanmaken",
+                "payload": action_payload,
+                "risk_level": "high" if bot.get("is_live") else "medium",
+                "requires_confirmation": True,
+                "autonomy_level": "confirm_required",
+                "guardrails": {
+                    "requires_confirmation": True,
+                    "can_execute_without_user": False,
+                    "execution_allowed": "bot_creation_only",
+                    "live_trading": bool(bot.get("is_live")),
+                },
+            })
+
+        return {
+            "response": self._build_bot_message(draft, validation),
+            "intent": "bot_creation",
+            "flow": "bot_creation",
+            "draft": draft,
+            "state": self._bot_flow_state(draft, validation),
+            "reasoning": self._bot_reasoning(draft, validation),
+            "missing_fields": validation["missing_fields"],
+            "invalid_fields": validation["invalid_fields"],
+            "next_question": validation["next_question"],
+            "can_confirm": validation["can_confirm"],
+            "actions": actions,
+        }
+
+    async def build_bot_response_for_user(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        response = self.build_bot_response(query, context)
+        if response.get("intent") == "bot_creation_cancelled" or not self.session:
+            return response
+
+        draft = response.get("draft") if isinstance(response.get("draft"), dict) else {}
+        await self._hydrate_bot_draft_from_db(user_id, draft)
+        validation = self._validate_bot_draft(draft)
+
+        existing_bot = await self._existing_bot_for_strategy(user_id, draft.get("strategy_id"))
+        if existing_bot:
+            draft["existing_bot_id"] = existing_bot.get("id")
+            duplicate_validation = {
+                "missing_fields": [],
+                "invalid_fields": [{"field": "strategy_id", "reason": "voor deze strategie bestaat al een bot"}],
+                "next_question": "bot.update_existing",
+                "can_confirm": False,
+            }
+            response.update({
+                "response": (
+                    f"Strategie #{draft.get('strategy_id')} heeft al bot #{existing_bot.get('id')}. "
+                    "Ik maak daarom geen tweede bot aan. Open de bot-instellingen om deze bot bij te werken."
+                ),
+                "draft": draft,
+                "state": self._bot_flow_state(draft, duplicate_validation),
+                "reasoning": self._bot_reasoning(draft, duplicate_validation),
+                "missing_fields": duplicate_validation["missing_fields"],
+                "invalid_fields": duplicate_validation["invalid_fields"],
+                "next_question": duplicate_validation["next_question"],
+                "can_confirm": False,
+                "actions": [],
+            })
+            return response
+
+        strategy_options = []
+        if "strategy_id" in validation["missing_fields"]:
+            strategy_options = await self._bot_strategy_options(user_id, draft)
+
+        actions = []
+        if validation["can_confirm"]:
+            action_payload = deepcopy(draft)
+            actions.append({
+                "id": self._bot_action_id(action_payload),
+                "type": "create_bot",
+                "label": "Bot aanmaken",
+                "payload": action_payload,
+                "risk_level": "high" if draft["bot"].get("is_live") else "medium",
+                "requires_confirmation": True,
+                "autonomy_level": "confirm_required",
+                "guardrails": {
+                    "requires_confirmation": True,
+                    "can_execute_without_user": False,
+                    "execution_allowed": "bot_creation_only",
+                    "live_trading": bool(draft["bot"].get("is_live")),
+                },
+            })
+
+        response.update({
+            "response": self._build_bot_message(draft, validation, strategy_options=strategy_options),
+            "draft": draft,
+            "state": self._bot_flow_state(draft, validation, strategy_options=strategy_options),
+            "reasoning": self._bot_reasoning(draft, validation),
             "missing_fields": validation["missing_fields"],
             "invalid_fields": validation["invalid_fields"],
             "next_question": validation["next_question"],
@@ -953,6 +1181,61 @@ class FinnPlanService:
         if not draft["strategy"].get("risk_profile"):
             draft["strategy"]["risk_profile"] = "balanced"
 
+    async def _hydrate_bot_draft_from_db(self, user_id: int, draft: Dict[str, Any]) -> None:
+        if not self.session or not isinstance(draft, dict) or not draft.get("strategy_id"):
+            return
+        strategy = await StrategyService(self.session).repository.get_raw_strategy_with_setup(int(draft["strategy_id"]), user_id)
+        if not strategy:
+            draft["_strategy_lookup_error"] = "strategie niet gevonden"
+            return
+        data = json.loads(strategy.get("data")) if isinstance(strategy.get("data"), str) else (strategy.get("data") or {})
+        draft["asset"] = str(strategy.get("setup_symbol") or data.get("symbol") or "").upper() or None
+        draft["setup_type"] = (strategy.get("setup_type") or strategy.get("existing_setup_type") or data.get("setup_type") or "").lower() or None
+        draft["timeframe"] = strategy.get("setup_timeframe") or data.get("timeframe")
+        if not draft["bot"].get("name"):
+            env = "Live" if draft["bot"].get("is_live") else "Paper"
+            symbol = draft.get("asset") or "Strategy"
+            draft["bot"]["name"] = f"Finn {symbol} {env} Bot"
+
+    async def _existing_bot_for_strategy(self, user_id: int, strategy_id: Optional[int]) -> Optional[Dict[str, Any]]:
+        if not self.session or not strategy_id:
+            return None
+        result = await self.session.execute(
+            text("""
+                SELECT id, name, mode, is_live, risk_profile
+                FROM bot_configs
+                WHERE user_id = :user_id AND strategy_id = :strategy_id
+                ORDER BY id ASC
+                LIMIT 1
+            """),
+            {"user_id": user_id, "strategy_id": int(strategy_id)},
+        )
+        row = result.fetchone()
+        return dict(row._mapping) if row else None
+
+    async def _bot_strategy_options(self, user_id: int, draft: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if not self.session:
+            return []
+        strategies = await StrategyService(self.session).query_strategies(user_id, {})
+        asset = (draft.get("asset") or "").upper()
+        options = []
+        for strategy in strategies:
+            if asset and str(strategy.get("symbol") or "").upper() != asset:
+                continue
+            existing_bot = await self._existing_bot_for_strategy(user_id, strategy.get("id"))
+            if existing_bot:
+                continue
+            options.append({
+                "id": strategy.get("id"),
+                "name": strategy.get("name"),
+                "symbol": strategy.get("symbol"),
+                "setup_type": strategy.get("setup_type"),
+                "timeframe": strategy.get("timeframe"),
+            })
+            if len(options) >= 5:
+                break
+        return options
+
     def _has_explicit_strategy_create_intent(self, q_lower: str) -> bool:
         return bool(
             re.search(r"\b(?:maak|aanmaken|creeer|creeër|bouw|instellen)\b", q_lower)
@@ -1274,6 +1557,123 @@ class FinnPlanService:
         normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return f"finn-strategy-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:24]}"
 
+    def _validate_bot_draft(self, draft: Dict[str, Any]) -> Dict[str, Any]:
+        missing: List[str] = []
+        invalid: List[Dict[str, str]] = []
+        bot = draft.get("bot") or {}
+        if not draft.get("strategy_id"):
+            missing.append("strategy_id")
+        if draft.get("_strategy_lookup_error"):
+            invalid.append({"field": "strategy_id", "reason": draft["_strategy_lookup_error"]})
+        if not bot.get("name"):
+            missing.append("bot.name")
+
+        mode = str(bot.get("mode") or "manual").lower()
+        if mode not in {"manual", "semi-auto", "auto"}:
+            invalid.append({"field": "bot.mode", "reason": "mode moet manual, semi-auto of auto zijn"})
+        risk = str(bot.get("risk_profile") or "balanced").lower()
+        if risk not in {"conservative", "balanced", "aggressive"}:
+            invalid.append({"field": "bot.risk_profile", "reason": "risk_profile moet conservative, balanced of aggressive zijn"})
+        cadence = str(bot.get("cadence") or "daily").lower()
+        if cadence not in {"hourly", "daily", "weekly", "monthly"}:
+            invalid.append({"field": "bot.cadence", "reason": "cadence moet hourly, daily, weekly of monthly zijn"})
+
+        for field in ["budget_total_eur", "budget_daily_limit_eur", "budget_min_order_eur", "budget_max_order_eur"]:
+            value = bot.get(field)
+            if value is not None and (not isinstance(value, (int, float)) or value < 0):
+                invalid.append({"field": f"bot.{field}", "reason": "budgetwaarde moet 0 of hoger zijn"})
+
+        total = float(bot.get("budget_total_eur") or 0)
+        daily = float(bot.get("budget_daily_limit_eur") or 0)
+        min_order = float(bot.get("budget_min_order_eur") or 0)
+        max_order = float(bot.get("budget_max_order_eur") or 0)
+        if daily and total and daily > total:
+            invalid.append({"field": "bot.budget_daily_limit_eur", "reason": "daglimiet mag niet hoger zijn dan totaal budget"})
+        if min_order and max_order and min_order > max_order:
+            invalid.append({"field": "bot.budget_min_order_eur", "reason": "min order mag niet hoger zijn dan max order"})
+        if max_order and total and max_order > total:
+            invalid.append({"field": "bot.budget_max_order_eur", "reason": "max order mag niet hoger zijn dan totaal budget"})
+
+        if bool(bot.get("is_live")) or mode in {"semi-auto", "auto"}:
+            for field, value in [
+                ("bot.budget_total_eur", total),
+                ("bot.budget_daily_limit_eur", daily),
+                ("bot.budget_min_order_eur", min_order),
+                ("bot.budget_max_order_eur", max_order),
+            ]:
+                if value <= 0:
+                    missing.append(field)
+
+        next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
+        return {
+            "missing_fields": missing,
+            "invalid_fields": invalid,
+            "next_question": next_question,
+            "can_confirm": not missing and not invalid,
+        }
+
+    def _build_bot_message(self, draft: Dict[str, Any], validation: Dict[str, Any], strategy_options: Optional[List[Dict[str, Any]]] = None) -> str:
+        next_question = validation["next_question"]
+        if validation["invalid_fields"]:
+            issue = validation["invalid_fields"][0]
+            return f"Ik zie een probleem met {issue['field']}: {issue['reason']}."
+        if next_question == "strategy_id":
+            if strategy_options:
+                lines = ["Welke strategie wil je aan deze bot koppelen? Kies bijvoorbeeld:"]
+                for option in strategy_options:
+                    lines.append(f"- strategy {option['id']}: {option.get('name')} ({option.get('symbol')} · {option.get('setup_type')} · {option.get('timeframe')})")
+                return "\n".join(lines)
+            return "Welke strategie moet deze bot uitvoeren? Geef bijvoorbeeld: strategy 114."
+        if next_question == "bot.name":
+            return "Welke naam wil je deze bot geven?"
+        if next_question and next_question.startswith("bot.budget_"):
+            return "Voor live of automatische bots heb ik expliciete budgetlimieten nodig: totaal budget, daglimiet, min order en max order."
+
+        bot = draft.get("bot") or {}
+        env = "live" if bot.get("is_live") else "paper"
+        return (
+            "Ik heb je bot klaarstaan. Controleer dit even en bevestig als het klopt:\n\n"
+            f"- Bot: {bot.get('name')}\n"
+            f"- Strategie: #{draft.get('strategy_id')}\n"
+            f"- Omgeving: {env}\n"
+            f"- Mode: {bot.get('mode')}\n"
+            f"- Risk: {bot.get('risk_profile')}\n"
+            f"- Cadence: {bot.get('cadence')}\n"
+            f"- Budget: €{bot.get('budget_total_eur')} totaal, €{bot.get('budget_daily_limit_eur')} per dag"
+        )
+
+    def _bot_flow_state(self, draft: Dict[str, Any], validation: Dict[str, Any], strategy_options: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        return {
+            "status": "ready_for_confirmation" if validation["can_confirm"] else "collecting",
+            "current_flow": "bot_creation",
+            "strategy_id": draft.get("strategy_id"),
+            "existing_bot_id": draft.get("existing_bot_id"),
+            "asset": draft.get("asset"),
+            "strategy_options": strategy_options or [],
+            "next_question": validation["next_question"],
+            "autonomy_level": "confirm_required",
+            "version": FINN_STATE_VERSION,
+        }
+
+    def _bot_reasoning(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> Dict[str, Any]:
+        reasons = []
+        if validation["missing_fields"]:
+            reasons.append(f"Ontbrekende velden: {', '.join(validation['missing_fields'])}")
+        if validation["invalid_fields"]:
+            reasons.append(f"Ongeldige velden: {', '.join(item['field'] for item in validation['invalid_fields'])}")
+        if not reasons:
+            reasons.append("Alle verplichte botvelden zijn aanwezig en validatie is geslaagd.")
+        return {
+            "confidence_score": 0.9 if validation["can_confirm"] else 0.55,
+            "risk_detected": bool(validation["invalid_fields"]) or bool((draft.get("bot") or {}).get("is_live")),
+            "reasons": reasons,
+            "coaching_level": "bot_creation",
+        }
+
+    def _bot_action_id(self, payload: Dict[str, Any]) -> str:
+        normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return f"finn-bot-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:24]}"
+
     def _validate_range(self, field: str, value: Any, invalid: List[Dict[str, str]]) -> None:
         if not isinstance(value, list) or len(value) != 2:
             invalid.append({"field": field, "reason": "range ontbreekt of heeft geen min/max"})
@@ -1569,6 +1969,8 @@ class FinnPlanService:
         return "\n".join(lines)
 
     async def execute_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        if action and action.get("type") == "create_bot":
+            return await self._execute_bot_action(user_id, action)
         if action and action.get("type") == "create_strategy":
             return await self._execute_strategy_action(user_id, action)
         if not action or action.get("type") != "create_plan":
@@ -1693,6 +2095,70 @@ class FinnPlanService:
         await self.clear_state(user_id)
         return result
 
+    async def _execute_bot_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        draft = _deep_merge(empty_bot_draft(), action.get("payload") or {})
+        action_id = f"{action.get('id') or self._bot_action_id(draft)}-u{user_id}"
+        acquired = await self._try_create_pending_action(user_id, action_id, action)
+        if not acquired:
+            existing_result = await self._wait_for_action_result(user_id, action_id)
+            if existing_result:
+                return existing_result
+            raise HTTPException(409, "Deze Finn actie wordt al verwerkt. Probeer zo opnieuw.")
+
+        await self._hydrate_bot_draft_from_db(user_id, draft)
+        validation = self._validate_bot_draft(draft)
+        if not validation["can_confirm"]:
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={
+                "ok": False,
+                "message": "Bot is nog niet geldig",
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+            })
+            raise HTTPException(422, {
+                "message": "Bot is nog niet geldig",
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+            })
+
+        existing_bot = await self._existing_bot_for_strategy(user_id, draft.get("strategy_id"))
+        if existing_bot:
+            result = {
+                "ok": True,
+                "message": "Bot bestaat al",
+                "bot_id": existing_bot.get("id"),
+                "strategy_id": draft.get("strategy_id"),
+                "draft": draft,
+                "action_id": action_id,
+                "verified": {"bot": True},
+            }
+            await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
+            await self.clear_state(user_id)
+            return result
+
+        bot_id = None
+        try:
+            bot_payload = self._bot_only_payload(draft)
+            bot_result = await BotService(self.session).create_bot_config(BotConfigCreateSchema(**bot_payload), user_id)
+            bot_id = bot_result.get("id")
+            verified = await self._verify_created_objects(user_id, None, None, bot_id)
+        except Exception:
+            await self.session.rollback()
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={"ok": False, "bot_id": bot_id})
+            raise
+
+        result = {
+            "ok": True,
+            "message": "Bot aangemaakt",
+            "bot_id": bot_id,
+            "strategy_id": draft.get("strategy_id"),
+            "draft": draft,
+            "action_id": action_id,
+            "verified": verified,
+        }
+        await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
+        await self.clear_state(user_id)
+        return result
+
     async def _execute_strategy_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
         draft = _deep_merge(empty_strategy_draft(), action.get("payload") or {})
         self._apply_strategy_defaults(draft)
@@ -1762,6 +2228,45 @@ class FinnPlanService:
     async def get_open_plan_state(self, user_id: int) -> Dict[str, Any]:
         context = await self.hydrate_context(user_id, {})
         draft = context.get("finn_draft")
+        if isinstance(draft, dict) and draft.get("draft_kind") == "bot":
+            await self._hydrate_bot_draft_from_db(user_id, draft)
+            validation = self._validate_bot_draft(draft)
+            existing_bot = await self._existing_bot_for_strategy(user_id, draft.get("strategy_id"))
+            if existing_bot:
+                draft["existing_bot_id"] = existing_bot.get("id")
+                validation = {
+                    "missing_fields": [],
+                    "invalid_fields": [{"field": "strategy_id", "reason": "voor deze strategie bestaat al een bot"}],
+                    "next_question": "bot.update_existing",
+                    "can_confirm": False,
+                }
+            actions = []
+            if validation["can_confirm"]:
+                action_payload = deepcopy(draft)
+                actions.append({
+                    "id": self._bot_action_id(action_payload),
+                    "type": "create_bot",
+                    "label": "Bot aanmaken",
+                    "payload": action_payload,
+                    "risk_level": "high" if draft["bot"].get("is_live") else "medium",
+                    "requires_confirmation": True,
+                    "autonomy_level": "confirm_required",
+                })
+            return {
+                "ok": True,
+                "has_draft": True,
+                "response": self._build_bot_message(draft, validation),
+                "intent": "bot_creation",
+                "flow": "bot_creation",
+                "draft": draft,
+                "state": self._bot_flow_state(draft, validation),
+                "reasoning": self._bot_reasoning(draft, validation),
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+                "next_question": validation["next_question"],
+                "can_confirm": validation["can_confirm"],
+                "actions": actions,
+            }
         if isinstance(draft, dict) and draft.get("draft_kind") == "strategy":
             await self._hydrate_strategy_draft_from_db(user_id, draft)
             validation = self._validate_strategy_draft(draft)
@@ -2128,4 +2633,22 @@ class FinnPlanService:
             "cadence": "daily",
             "base_currency": "EUR",
             "symbol": draft["asset"],
+        }
+
+    def _bot_only_payload(self, draft: Dict[str, Any]) -> Dict[str, Any]:
+        bot = draft["bot"]
+        return {
+            "name": bot["name"],
+            "strategy_id": int(draft["strategy_id"]),
+            "mode": bot.get("mode") or "manual",
+            "is_live": bool(bot.get("is_live")),
+            "risk_profile": bot.get("risk_profile") or "balanced",
+            "cadence": bot.get("cadence") or "daily",
+            "budget_total_eur": float(bot.get("budget_total_eur") or 0),
+            "budget_daily_limit_eur": float(bot.get("budget_daily_limit_eur") or 0),
+            "budget_min_order_eur": float(bot.get("budget_min_order_eur") or 0),
+            "budget_max_order_eur": float(bot.get("budget_max_order_eur") or 0),
+            "max_asset_exposure_pct": float(bot.get("max_asset_exposure_pct") or 100),
+            "base_currency": bot.get("base_currency") or "EUR",
+            "symbol": draft.get("asset"),
         }

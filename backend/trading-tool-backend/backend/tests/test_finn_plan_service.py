@@ -623,6 +623,43 @@ def test_read_after_write_marks_absent_bot_as_not_verified_but_valid():
     }
 
 
+def test_finn_bot_creation_with_strategy_reference_is_confirmable():
+    result = _service().build_bot_response("Maak een paper bot voor strategie 114")
+
+    assert result["intent"] == "bot_creation"
+    assert result["can_confirm"] is True
+    assert result["draft"]["draft_kind"] == "bot"
+    assert result["draft"]["strategy_id"] == 114
+    assert result["draft"]["bot"]["is_live"] is False
+    assert result["draft"]["bot"]["mode"] == "manual"
+    assert result["actions"][0]["type"] == "create_bot"
+
+
+def test_finn_bot_creation_requires_budget_for_auto_mode():
+    result = _service().build_bot_response("Maak een auto bot voor strategie 114")
+
+    assert result["can_confirm"] is False
+    assert "bot.budget_total_eur" in result["missing_fields"]
+    assert "bot.budget_daily_limit_eur" in result["missing_fields"]
+    assert result["actions"] == []
+
+
+def test_finn_bot_follow_up_completes_auto_budget_limits():
+    service = _service()
+    first = service.build_bot_response("Maak een auto bot voor strategie 114")
+
+    second = service.build_bot_response(
+        "budget 1000 daglimiet 100 min order 10 max order 50",
+        {"finn_draft": first["draft"]},
+    )
+
+    assert second["can_confirm"] is True
+    assert second["draft"]["bot"]["budget_total_eur"] == 1000
+    assert second["draft"]["bot"]["budget_daily_limit_eur"] == 100
+    assert second["draft"]["bot"]["budget_min_order_eur"] == 10
+    assert second["draft"]["bot"]["budget_max_order_eur"] == 50
+
+
 def test_vague_btc_intent_asks_for_plan_type():
     service = _service()
 

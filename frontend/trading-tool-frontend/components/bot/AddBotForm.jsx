@@ -25,11 +25,13 @@ const RISK_PROFILES = [
  */
 export default function AddBotForm({
   initialData = null,
+  initialValues = null,
   strategies = [],
   onChange,
 }) {
 
-  const isEdit = Boolean(initialData?.id ?? initialData?.bot_id);
+  const sourceData = initialData ?? initialValues;
+  const isEdit = Boolean(sourceData?.id ?? sourceData?.bot_id);
 
   const [form, setForm] = useState({
     id: undefined,
@@ -51,27 +53,27 @@ export default function AddBotForm({
      INIT / PREFILL
   ===================================================== */
   useEffect(() => {
-    if (!initialData) return;
+    if (!sourceData) return;
 
     setForm({
-      id: initialData.id,
-      bot_id: initialData.bot_id,
-      name: initialData.name ?? "",
+      id: sourceData.id,
+      bot_id: sourceData.bot_id,
+      name: sourceData.name ?? "",
       strategy_id:
-        typeof initialData.strategy_id === "number"
-          ? initialData.strategy_id
-          : initialData.strategy?.id ?? null,
-      mode: initialData.mode ?? "manual",
-      is_live: initialData.is_live ?? false,
-      risk_profile: initialData.risk_profile ?? "balanced",
-      base_currency: initialData.base_currency ?? "EUR",
-      budget_total_eur: initialData.budget_total_eur ?? initialData.budget?.total_eur ?? 0,
-      budget_daily_limit_eur: initialData.budget_daily_limit_eur ?? initialData.budget?.daily_limit_eur ?? 0,
-      budget_min_order_eur: initialData.budget_min_order_eur ?? initialData.budget?.min_order_eur ?? 0,
-      budget_max_order_eur: initialData.budget_max_order_eur ?? initialData.budget?.max_order_eur ?? 0,
-      max_asset_exposure_pct: initialData.max_asset_exposure_pct ?? initialData.budget?.max_asset_exposure_pct ?? 100,
+        typeof sourceData.strategy_id === "number"
+          ? sourceData.strategy_id
+          : sourceData.strategy?.id ?? null,
+      mode: sourceData.mode ?? "manual",
+      is_live: sourceData.is_live ?? false,
+      risk_profile: sourceData.risk_profile ?? "balanced",
+      base_currency: sourceData.base_currency ?? "EUR",
+      budget_total_eur: sourceData.budget_total_eur ?? sourceData.budget?.total_eur ?? 0,
+      budget_daily_limit_eur: sourceData.budget_daily_limit_eur ?? sourceData.budget?.daily_limit_eur ?? 0,
+      budget_min_order_eur: sourceData.budget_min_order_eur ?? sourceData.budget?.min_order_eur ?? 0,
+      budget_max_order_eur: sourceData.budget_max_order_eur ?? sourceData.budget?.max_order_eur ?? 0,
+      max_asset_exposure_pct: sourceData.max_asset_exposure_pct ?? sourceData.budget?.max_asset_exposure_pct ?? 100,
     });
-  }, [initialData]);
+  }, [sourceData]);
 
   /* =====================================================
      LIVE SYNC NAAR PARENT
@@ -86,10 +88,10 @@ export default function AddBotForm({
   const selectedStrategy = useMemo(() => {
     return (
       strategies.find((s) => s.id === form.strategy_id) ??
-      initialData?.strategy ??
+      sourceData?.strategy ??
       null
     );
-  }, [strategies, form.strategy_id, initialData]);
+  }, [strategies, form.strategy_id, sourceData]);
 
   const selectedRisk =
     RISK_PROFILES.find((r) => r.value === form.risk_profile) ??

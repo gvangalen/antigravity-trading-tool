@@ -120,7 +120,8 @@ class BotService:
         if name:
             if not isinstance(name, str) or not name.strip():
                 raise HTTPException(400, "Botnaam is verplicht en mag niet leeg zijn.")
-            if len(name) > 80:
+            raw_payload["name"] = name.strip()
+            if len(raw_payload["name"]) > 80:
                 raise HTTPException(400, "Botnaam mag maximaal 80 karakters bevatten.")
 
             # Check duplicate name for the user
@@ -151,6 +152,23 @@ class BotService:
                 raise HTTPException(400, f"De opgegeven strategy_id ({strategy_id}) bestaat niet of is niet van jou.")
             if not raw_payload.get("symbol") and strategy_row[1]:
                 raw_payload["symbol"] = str(strategy_row[1]).upper()
+
+            duplicate_strategy_query = text("""
+                SELECT id FROM bot_configs
+                WHERE user_id = :user_id AND strategy_id = :strategy_id
+                ORDER BY id ASC
+                LIMIT 1
+            """)
+            res_duplicate_strategy = await self.session.execute(
+                duplicate_strategy_query,
+                {"strategy_id": strategy_id, "user_id": user_id},
+            )
+            duplicate_strategy = res_duplicate_strategy.fetchone()
+            if duplicate_strategy and (not is_update or duplicate_strategy[0] != bot_id):
+                raise HTTPException(
+                    409,
+                    f"Voor strategy_id {strategy_id} bestaat al bot #{duplicate_strategy[0]}. Werk die bot bij in plaats van een tweede bot te maken."
+                )
 
         # 3. Budget checks
         budget_total = raw_payload.get("budget_total_eur", 0.0)
@@ -229,21 +247,34 @@ class BotService:
         # 5. List options validation
         cadence = raw_payload.get("cadence")
         if cadence is not None:
-            if str(cadence).lower() not in ["hourly", "daily", "weekly", "monthly"]:
+            cadence_value = str(cadence).lower()
+            if cadence_value not in ["hourly", "daily", "weekly", "monthly"]:
                 raise HTTPException(400, "cadence moet één van 'hourly', 'daily', 'weekly', of 'monthly' zijn.")
+            raw_payload["cadence"] = cadence_value
 
         mode = raw_payload.get("mode")
         if mode is not None:
-            if str(mode).lower() == "semi":
+            mode_value = str(mode).lower()
+            if mode_value == "semi":
                 raw_payload["mode"] = "semi-auto"
-                mode = "semi-auto"
-            if str(mode).lower() not in ["manual", "semi-auto", "auto"]:
+                mode_value = "semi-auto"
+            if mode_value not in ["manual", "semi-auto", "auto"]:
                 raise HTTPException(400, "mode moet één van 'manual', 'semi-auto', of 'auto' zijn.")
+            raw_payload["mode"] = mode_value
 
         risk = raw_payload.get("risk_profile")
         if risk is not None:
-            if str(risk).lower() not in ["conservative", "balanced", "aggressive"]:
+            risk_value = str(risk).lower()
+            if risk_value not in ["conservative", "balanced", "aggressive"]:
                 raise HTTPException(400, "risk_profile moet één van 'conservative', 'balanced', of 'aggressive' zijn.")
+            raw_payload["risk_profile"] = risk_value
+
+        base_currency = raw_payload.get("base_currency")
+        if base_currency is not None:
+            currency_value = str(base_currency).upper()
+            if currency_value not in {"EUR", "USD"}:
+                raise HTTPException(400, "base_currency moet EUR of USD zijn.")
+            raw_payload["base_currency"] = currency_value
 
     async def create_bot_config(self, payload: BotConfigCreateSchema, user_id: int) -> dict:
         data = payload.dict()
@@ -256,7 +287,8 @@ class BotService:
 
         bot_id = await self.repository.create_bot_config(data)
         await self.session.commit()
-        return {"ok": True, "id": bot_id}
+        bot = await self.repository.get_bot_config(user_id, bot_id)
+        return {"ok": True, "id": bot_id, "bot_id": bot_id, "bot": bot, "verified": {"bot": bool(bot)}}
 
     async def update_bot_config(self, bot_id: int, payload: BotConfigUpdateSchema, user_id: int) -> dict:
         existing = await self.repository.get_bot_config(user_id, bot_id)
@@ -282,7 +314,8 @@ class BotService:
             raise HTTPException(404, "Bot niet gevonden")
             
         await self.session.commit()
-        return {"ok": True, "bot_id": bot_id}
+        bot = await self.repository.get_bot_config(user_id, bot_id)
+        return {"ok": True, "bot_id": bot_id, "bot": bot, "verified": {"bot": bool(bot)}}
 
     async def delete_bot_config(self, bot_id: int, user_id: int) -> dict:
         deleted = await self.repository.delete_bot_config(user_id, bot_id)

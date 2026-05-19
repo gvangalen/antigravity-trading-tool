@@ -89,7 +89,7 @@ def _is_finn_transactional_request(query: str, context: dict) -> bool:
         return True
     return any(word in q for word in [
         "annuleer", "cancel", "setup", "strategie", "strategy", "dca",
-        "trade", "entry", "stop", "target", "koop", "kopen",
+        "trade", "entry", "stop", "target", "koop", "kopen", "bot",
     ])
 
 
@@ -158,6 +158,11 @@ async def assistant_chat(
         if finn.looks_like_status_request(request.query):
             finn_response = await finn.build_status_response(user_id, request.query, context_payload)
             finn_response["trace_id"] = trace_id
+            return AssistantChatResponse(**finn_response)
+        if finn.looks_like_bot_request(request.query, context_payload):
+            finn_response = await finn.build_bot_response_for_user(user_id, request.query, context_payload)
+            finn_response["trace_id"] = trace_id
+            await finn.persist_response_state(user_id, finn_response)
             return AssistantChatResponse(**finn_response)
         if finn.looks_like_strategy_request(request.query, context_payload):
             finn_response = await finn.build_strategy_response_for_user(user_id, request.query, context_payload)
@@ -332,6 +337,13 @@ async def assistant_chat_stream(
             if finn.looks_like_status_request(request.query):
                 envelope = await finn.build_status_response(user_id, request.query, context_payload)
                 envelope["trace_id"] = trace_id
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_bot_request(request.query, context_payload):
+                envelope = await finn.build_bot_response_for_user(user_id, request.query, context_payload)
+                envelope["trace_id"] = trace_id
+                await finn.persist_response_state(user_id, envelope)
                 yield _sse_event("envelope", envelope)
                 return
 

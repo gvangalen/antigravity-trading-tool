@@ -330,6 +330,7 @@ export default function useBotData() {
 
         console.error(err);
         setError(err.message);
+        throw err;
 
       } finally {
 
@@ -361,6 +362,7 @@ export default function useBotData() {
 
         console.error(err);
         setError(err.message);
+        throw err;
 
       } finally {
 
@@ -392,6 +394,7 @@ export default function useBotData() {
 
         console.error(err);
         setError(err.message);
+        throw err;
 
       } finally {
 

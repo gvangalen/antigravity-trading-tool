@@ -615,46 +615,54 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     const draft = message.draft;
     const isFinnPlan = message.intent === "plan_creation" || message.flow === "plan_creation" || draft?.plan_type;
     const isFinnStrategy = message.intent === "strategy_creation" || message.flow === "strategy_creation" || draft?.draft_kind === "strategy";
-    if (!draft || (!isFinnPlan && !isFinnStrategy)) return null;
+    const isFinnBot = message.intent === "bot_creation" || message.flow === "bot_creation" || draft?.draft_kind === "bot";
+    if (!draft || (!isFinnPlan && !isFinnStrategy && !isFinnBot)) return null;
 
     const setup = draft.setup || {};
     const strategy = draft.strategy || {};
     const dca = draft.dca || {};
     const bot = draft.bot || {};
-    const draftType = isFinnStrategy ? draft.setup_type : draft.plan_type;
+    const draftType = isFinnStrategy || isFinnBot ? draft.setup_type : draft.plan_type;
     const isDca = draftType === "dca";
     const isTrade = draftType === "trade";
     const setupOptions = message.state?.setup_options || [];
+    const strategyOptions = message.state?.strategy_options || [];
     const changes = draft.changes || message.state?.changes || [];
 
     const rows = [
-      ["Type", isFinnStrategy ? "strategy" : draft.plan_type],
+      ["Type", isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type)],
       isFinnStrategy ? ["Actie", draft.operation === "update" ? "bijwerken" : "aanmaken"] : null,
+      isFinnBot ? ["Strategie", draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
       isFinnStrategy ? ["Setup", draft.setup_id ? `#${draft.setup_id}` : null] : null,
       isFinnStrategy && draft.operation === "update" ? ["Strategie", draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
       isFinnStrategy ? ["Setup type", draft.setup_type] : null,
+      isFinnBot ? ["Bot", bot.name] : null,
+      isFinnBot ? ["Omgeving", bot.is_live ? "live" : "paper"] : null,
+      isFinnBot ? ["Mode", bot.mode] : null,
+      isFinnBot ? ["Risk", bot.risk_profile] : null,
+      isFinnBot ? ["Cadence", bot.cadence] : null,
       ["Asset", draft.asset],
-      !isFinnStrategy ? ["Naam", setup.name] : null,
-      ["Timeframe", isFinnStrategy ? draft.timeframe : setup.timeframe],
-      ["Bedrag", strategy.base_amount_eur ? `€${strategy.base_amount_eur}` : null],
-      !isFinnStrategy ? ["Macro", Array.isArray(setup.macro_score_range) ? setup.macro_score_range.join(" - ") : null] : null,
-      !isFinnStrategy ? ["Technical", Array.isArray(setup.technical_score_range) ? setup.technical_score_range.join(" - ") : null] : null,
-      !isFinnStrategy ? ["Market", Array.isArray(setup.market_score_range) ? setup.market_score_range.join(" - ") : null] : null,
-      isDca && !isFinnStrategy ? ["DCA", [dca.frequency, dca.day || dca.month_day].filter(Boolean).join(" · ")] : null,
-      isTrade ? ["Uitvoering", strategy.entry_type || strategy.trade_execution_mode || "limit"] : null,
-      isTrade && strategy.entry_type === "market" ? ["Market akkoord", strategy.market_execution_ack ? "ja" : "nee"] : null,
-      isTrade ? ["Entry", strategy.entry] : null,
-      isTrade ? ["Stop", strategy.stop_loss] : null,
-      isTrade ? ["Targets", Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
-      ["Automatisering", isFinnStrategy ? strategy.automation : (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only"))],
-      !isFinnStrategy && bot.create_bot ? ["Bot", `${bot.is_live ? "Live" : "Paper"} · ${bot.mode} · ${bot.risk_profile}`] : null,
+      !isFinnStrategy && !isFinnBot ? ["Naam", setup.name] : null,
+      ["Timeframe", isFinnStrategy || isFinnBot ? draft.timeframe : setup.timeframe],
+      ["Bedrag", isFinnBot ? (bot.budget_total_eur ? `€${bot.budget_total_eur}` : null) : (strategy.base_amount_eur ? `€${strategy.base_amount_eur}` : null)],
+      !isFinnStrategy && !isFinnBot ? ["Macro", Array.isArray(setup.macro_score_range) ? setup.macro_score_range.join(" - ") : null] : null,
+      !isFinnStrategy && !isFinnBot ? ["Technical", Array.isArray(setup.technical_score_range) ? setup.technical_score_range.join(" - ") : null] : null,
+      !isFinnStrategy && !isFinnBot ? ["Market", Array.isArray(setup.market_score_range) ? setup.market_score_range.join(" - ") : null] : null,
+      isDca && !isFinnStrategy && !isFinnBot ? ["DCA", [dca.frequency, dca.day || dca.month_day].filter(Boolean).join(" · ")] : null,
+      isTrade && !isFinnBot ? ["Uitvoering", strategy.entry_type || strategy.trade_execution_mode || "limit"] : null,
+      isTrade && !isFinnBot && strategy.entry_type === "market" ? ["Market akkoord", strategy.market_execution_ack ? "ja" : "nee"] : null,
+      isTrade && !isFinnBot ? ["Entry", strategy.entry] : null,
+      isTrade && !isFinnBot ? ["Stop", strategy.stop_loss] : null,
+      isTrade && !isFinnBot ? ["Targets", Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
+      !isFinnBot ? ["Automatisering", isFinnStrategy ? strategy.automation : (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only"))] : null,
+      !isFinnStrategy && !isFinnBot && bot.create_bot ? ["Bot", `${bot.is_live ? "Live" : "Paper"} · ${bot.mode} · ${bot.risk_profile}`] : null,
     ].filter(Boolean);
 
     return (
       <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-4">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-300">
           <ListChecks size={13} />
-          {isFinnStrategy ? "Finn Strategy Draft" : "Finn Plan Draft"}
+          {isFinnBot ? "Finn Bot Draft" : (isFinnStrategy ? "Finn Strategy Draft" : "Finn Plan Draft")}
         </div>
         <div className="grid grid-cols-1 gap-2">
           {rows.map(([label, value]) => (
@@ -675,6 +683,25 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                   className="text-left rounded-lg border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 px-3 py-2 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
                 >
                   <div className="text-xs font-black text-slate-800 dark:text-slate-100">{option.name || `Setup #${option.id}`}</div>
+                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-500 dark:text-blue-300">
+                    #{option.id} · {option.symbol} · {option.setup_type} · {option.timeframe}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {isFinnBot && strategyOptions.length > 0 && (
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/70 dark:bg-slate-950/30 p-3 space-y-2">
+            <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">Kies strategie</div>
+            <div className="grid grid-cols-1 gap-2">
+              {strategyOptions.map((option) => (
+                <button
+                  key={option.id}
+                  onClick={() => handleChat(`strategy ${option.id}`)}
+                  className="text-left rounded-lg border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 px-3 py-2 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
+                >
+                  <div className="text-xs font-black text-slate-800 dark:text-slate-100">{option.name || `Strategy #${option.id}`}</div>
                   <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-500 dark:text-blue-300">
                     #{option.id} · {option.symbol} · {option.setup_type} · {option.timeframe}
                   </div>
