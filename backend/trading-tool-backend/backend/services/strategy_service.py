@@ -105,7 +105,7 @@ class StrategyService:
             "setup_name": row.get("setup_name"),
 
             "name": name,
-            "setup_type": row.get("setup_type"),
+            "setup_type": row.get("setup_type") or row.get("existing_setup_type") or data.get("setup_type"),
 
             "execution_mode": row.get("execution_mode"),
             "base_amount": base_amount,

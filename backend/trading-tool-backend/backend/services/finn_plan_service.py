@@ -456,6 +456,8 @@ class FinnPlanService:
 
         q = (query or "").strip()
         q_lower = q.lower()
+        explicit_create_intent = self._has_explicit_strategy_create_intent(q_lower)
+        explicit_update_intent = self._has_explicit_strategy_update_intent(q_lower)
         if self.is_cancel_request(q):
             return {
                 "response": "Prima, ik heb deze strategie-aanmaak gestopt. Er is niets aangemaakt.",
@@ -469,6 +471,11 @@ class FinnPlanService:
                 "actions": [],
             }
 
+        if explicit_create_intent and not explicit_update_intent:
+            draft["operation"] = "create"
+            draft["strategy_id"] = None
+            draft.pop("changes", None)
+
         setup_id_match = re.search(r"\bsetup\s*#?\s*(\d+)\b", q, re.IGNORECASE)
         if setup_id_match:
             draft["setup_id"] = int(setup_id_match.group(1))
@@ -476,8 +483,10 @@ class FinnPlanService:
         if strategy_id_match:
             draft["strategy_id"] = int(strategy_id_match.group(1))
             draft["operation"] = "update"
-        if any(word in q_lower for word in ["wijzig", "aanpassen", "pas aan", "update", "bijwerken", "verander"]) or re.search(r"\bpas\b.+\baan\b", q_lower):
+        if explicit_update_intent:
             draft["operation"] = "update"
+            if not draft.get("strategy_id") and draft.get("existing_strategy_id"):
+                draft["strategy_id"] = draft.get("existing_strategy_id")
 
         extracted = self._extract_from_query(q)
         if extracted.get("plan_type"):
@@ -551,7 +560,14 @@ class FinnPlanService:
             existing_strategy = await StrategyService(self.session).get_strategy_by_setup(int(draft["setup_id"]), user_id)
 
         if existing_strategy and draft.get("operation") != "update":
-            draft["strategy_id"] = existing_strategy.get("id")
+            draft["strategy_id"] = None
+            draft["existing_strategy_id"] = existing_strategy.get("id")
+            duplicate_validation = {
+                "missing_fields": [],
+                "invalid_fields": [{"field": "setup_id", "reason": "voor deze setup bestaat al een strategie"}],
+                "next_question": "strategy.update_existing",
+                "can_confirm": False,
+            }
             response.update({
                 "response": (
                     f"Deze setup heeft al strategie #{existing_strategy.get('id')}. "
@@ -559,12 +575,12 @@ class FinnPlanService:
                     "als je deze bestaande strategie wilt bijwerken."
                 ),
                 "draft": draft,
-                "state": self._strategy_flow_state(draft, validation),
-                "reasoning": self._strategy_reasoning(draft, validation),
-                "missing_fields": [],
-                "invalid_fields": [{"field": "setup_id", "reason": "voor deze setup bestaat al een strategie"}],
-                "next_question": "strategy.update_existing",
-                "can_confirm": False,
+                "state": self._strategy_flow_state(draft, duplicate_validation),
+                "reasoning": self._strategy_reasoning(draft, duplicate_validation),
+                "missing_fields": duplicate_validation["missing_fields"],
+                "invalid_fields": duplicate_validation["invalid_fields"],
+                "next_question": duplicate_validation["next_question"],
+                "can_confirm": duplicate_validation["can_confirm"],
                 "actions": [],
             })
             return response
@@ -935,6 +951,20 @@ class FinnPlanService:
         if not draft["strategy"].get("risk_profile"):
             draft["strategy"]["risk_profile"] = "balanced"
 
+    def _has_explicit_strategy_create_intent(self, q_lower: str) -> bool:
+        return bool(
+            re.search(r"\b(?:maak|aanmaken|creeer|creeër|bouw|instellen)\b", q_lower)
+            or re.search(r"\b(?:nieuwe|nieuw|tweede)\s+strateg(?:ie|y)\b", q_lower)
+            or re.search(r"\bstrateg(?:ie|y)\s+(?:aanmaken|maken)\b", q_lower)
+        )
+
+    def _has_explicit_strategy_update_intent(self, q_lower: str) -> bool:
+        return bool(
+            re.search(r"\b(?:wijzig|update|bijwerken|verander)\b", q_lower)
+            or re.search(r"\b(?:aanpassen|aangepast)\b", q_lower)
+            or re.search(r"\bpas\b.+\baan\b", q_lower)
+        )
+
     async def _hydrate_strategy_draft_from_db(self, user_id: int, draft: Dict[str, Any]) -> None:
         if not self.session or not isinstance(draft, dict):
             return
@@ -1003,12 +1033,12 @@ class FinnPlanService:
             "entry": existing.get("entry"),
             "stop_loss": existing.get("stop_loss"),
             "targets": existing.get("targets"),
-            "automation": existing.get("automation"),
-            "risk_profile": existing.get("risk_profile"),
         }
         changes = []
         for field, before in existing_map.items():
             after = strategy.get(field)
+            if before in (None, "") and after in (None, "", [], {}):
+                continue
             if self._normalized_compare_value(before) != self._normalized_compare_value(after):
                 changes.append({"field": field, "from": before, "to": after})
         return changes
@@ -1704,7 +1734,14 @@ class FinnPlanService:
             if draft.get("setup_id"):
                 existing_strategy = await StrategyService(self.session).get_strategy_by_setup(int(draft["setup_id"]), user_id)
             if existing_strategy and draft.get("operation") != "update":
-                draft["strategy_id"] = existing_strategy.get("id")
+                draft["strategy_id"] = None
+                draft["existing_strategy_id"] = existing_strategy.get("id")
+                duplicate_validation = {
+                    "missing_fields": [],
+                    "invalid_fields": [{"field": "setup_id", "reason": "voor deze setup bestaat al een strategie"}],
+                    "next_question": "strategy.update_existing",
+                    "can_confirm": False,
+                }
                 return {
                     "ok": True,
                     "has_draft": True,
@@ -1716,12 +1753,12 @@ class FinnPlanService:
                     "intent": "strategy_creation",
                     "flow": "strategy_creation",
                     "draft": draft,
-                    "state": self._strategy_flow_state(draft, validation),
-                    "reasoning": self._strategy_reasoning(draft, validation),
-                    "missing_fields": [],
-                    "invalid_fields": [{"field": "setup_id", "reason": "voor deze setup bestaat al een strategie"}],
-                    "next_question": "strategy.update_existing",
-                    "can_confirm": False,
+                    "state": self._strategy_flow_state(draft, duplicate_validation),
+                    "reasoning": self._strategy_reasoning(draft, duplicate_validation),
+                    "missing_fields": duplicate_validation["missing_fields"],
+                    "invalid_fields": duplicate_validation["invalid_fields"],
+                    "next_question": duplicate_validation["next_question"],
+                    "can_confirm": duplicate_validation["can_confirm"],
                     "actions": [],
                 }
             actions = []

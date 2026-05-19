@@ -394,6 +394,52 @@ def test_strategy_update_context_is_confirmable():
     assert result["actions"][0]["label"] == "Strategie bijwerken"
 
 
+def test_strategy_create_intent_after_duplicate_warning_does_not_become_update():
+    service = _service()
+    duplicate_draft = service.build_strategy_response(
+        "Maak een strategie met 100 euro",
+        {
+            "finn_draft": {
+                "draft_kind": "strategy",
+                "operation": "create",
+                "setup_id": 12,
+                "existing_strategy_id": 91,
+                "setup_type": "dca",
+                "asset": "BTC",
+                "timeframe": "1W",
+            }
+        },
+    )["draft"]
+
+    result = service.build_strategy_response("Maak een tweede strategie met 101 euro", {"finn_draft": duplicate_draft})
+
+    assert result["draft"]["operation"] == "create"
+    assert result["draft"]["strategy_id"] is None
+    assert result["draft"]["existing_strategy_id"] == 91
+    assert result["draft"]["strategy"]["base_amount_eur"] == 101
+
+
+def test_strategy_update_intent_reuses_duplicate_reference_id():
+    result = _service().build_strategy_response(
+        "Pas de strategie aan naar 150 euro",
+        {
+            "finn_draft": {
+                "draft_kind": "strategy",
+                "operation": "create",
+                "setup_id": 12,
+                "existing_strategy_id": 91,
+                "setup_type": "dca",
+                "asset": "BTC",
+                "timeframe": "1W",
+            }
+        },
+    )
+
+    assert result["draft"]["operation"] == "update"
+    assert result["draft"]["strategy_id"] == 91
+    assert result["draft"]["strategy"]["base_amount_eur"] == 150
+
+
 def test_strategy_setup_options_are_rendered_in_missing_setup_question():
     service = _service()
     message = service._build_strategy_message(
@@ -436,6 +482,30 @@ def test_strategy_update_changes_are_summarized():
     changes = service._strategy_changes(existing, draft)
 
     assert {"field": "base_amount_eur", "from": 100, "to": 150} in changes
+
+
+def test_strategy_update_changes_use_real_existing_values_without_default_noise():
+    service = _service()
+    draft = service.build_strategy_response(
+        "Pas strategie 91 aan naar 150 euro",
+        {"setup_id": 12, "setup_type": "dca", "setup_symbol": "BTC", "setup_timeframe": "1W"},
+    )["draft"]
+    draft["strategy"]["automation"] = "manual_only"
+    existing = {
+        "id": 91,
+        "setup_id": 12,
+        "setup_type": "dca",
+        "symbol": "BTC",
+        "timeframe": "1W",
+        "base_amount": 100,
+        "execution_mode": "fixed",
+        "automation": "",
+        "risk_profile": "",
+    }
+
+    changes = service._strategy_changes(existing, draft)
+
+    assert changes == [{"field": "base_amount_eur", "from": 100, "to": 150}]
 
 
 def test_strategy_rejects_absurd_amount_and_price_levels():

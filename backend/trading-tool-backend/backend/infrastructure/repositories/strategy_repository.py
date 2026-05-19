@@ -87,7 +87,12 @@ class StrategyRepository:
 
     async def get_raw_strategy_with_setup(self, strategy_id: int, user_id: int) -> Optional[dict]:
         query = text("""
-            SELECT s.*, st.symbol as setup_symbol, st.timeframe as setup_timeframe, st.setup_type as existing_setup_type
+            SELECT
+                s.*,
+                st.symbol AS setup_symbol,
+                st.timeframe AS setup_timeframe,
+                st.name AS setup_name,
+                st.setup_type AS existing_setup_type
             FROM strategies s
             JOIN setups st ON st.id = s.setup_id
             WHERE s.id = :strategy_id AND s.user_id = :user_id
@@ -201,9 +206,14 @@ class StrategyRepository:
                 s.setup_type,
                 s.execution_mode,
                 s.base_amount,
+                s.decision_curve_id,
                 s.data,
-                s.created_at
+                s.created_at,
+                st.symbol AS setup_symbol,
+                st.timeframe AS setup_timeframe,
+                st.name AS setup_name
             FROM strategies s
+            LEFT JOIN setups st ON st.id = s.setup_id
             LEFT JOIN (
                 SELECT DISTINCT ON (strategy_id) strategy_id, entry::text as entry, targets::text as targets, stop_loss::text as stop_loss 
                 FROM active_strategy_snapshot 
