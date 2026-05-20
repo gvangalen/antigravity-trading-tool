@@ -1333,6 +1333,57 @@ def test_daily_score_fetch_uses_runtime_refresh_when_raw_scores_are_missing(monk
     refresh_scores.assert_awaited_once_with(7, "BTC")
 
 
+def test_daily_data_readiness_separates_onboarding_from_score_generation():
+    service = _service()
+    indicator_analysis = {
+        "categories": {
+            "macro": {"active_count": 0},
+            "technical": {"active_count": 1},
+            "market": {"active_count": 0},
+        }
+    }
+
+    readiness = service._build_daily_data_readiness(
+        daily_scores=None,
+        indicator_analysis=indicator_analysis,
+        onboarding_status={
+            "has_macro": False,
+            "has_technical": True,
+            "has_market": False,
+        },
+    )
+
+    assert readiness["status"] == "onboarding_incomplete"
+    assert readiness["onboarding_gaps"] == ["macro", "market"]
+    assert "Rond eerst" in readiness["suggested_actions"][0]
+    assert any("macro-indicator" in action for action in readiness["suggested_actions"])
+
+
+def test_daily_data_readiness_marks_score_generation_gap_when_config_exists():
+    service = _service()
+    indicator_analysis = {
+        "categories": {
+            "macro": {"active_count": 1},
+            "technical": {"active_count": 1},
+            "market": {"active_count": 1},
+        }
+    }
+
+    readiness = service._build_daily_data_readiness(
+        daily_scores=None,
+        indicator_analysis=indicator_analysis,
+        onboarding_status={
+            "has_macro": True,
+            "has_technical": True,
+            "has_market": True,
+        },
+    )
+
+    assert readiness["status"] == "score_generation_missing"
+    assert readiness["config_gaps"] == []
+    assert "Genereer daily scores opnieuw" in readiness["suggested_actions"][0]
+
+
 def test_daily_coach_analysis_waits_when_setup_has_blockers():
     service = _service()
     setup_analysis = service._evaluate_setup_row(

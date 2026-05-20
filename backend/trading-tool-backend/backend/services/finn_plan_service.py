@@ -1300,6 +1300,7 @@ class FinnPlanService:
         }
         active_strategy = {"active": False}
         bot_today = {"decisions": [], "scores": {}, "orders": [], "executions": []}
+        onboarding_status: Dict[str, bool] = {}
         indicator_analysis = {
             "asset": asset,
             "has_daily_scores": False,
@@ -1326,6 +1327,8 @@ class FinnPlanService:
             except Exception as exc:
                 bot_today = {"decisions": [], "scores": {}, "orders": [], "executions": [], "error": str(exc)}
 
+            onboarding_status = await self._fetch_onboarding_status(user_id)
+
             insight = await self.build_indicator_insight_response(
                 user_id,
                 f"Welke macro technical market data gebruikt Finn voor {asset} vandaag?",
@@ -1340,6 +1343,7 @@ class FinnPlanService:
             active_strategy=active_strategy,
             bot_today=bot_today,
             indicator_analysis=indicator_analysis,
+            onboarding_status=onboarding_status,
         )
         response = self._daily_coach_message(analysis)
 
@@ -1381,6 +1385,7 @@ class FinnPlanService:
         if self.session:
             score_repo = ScoreRepository(self.session)
             active_setups = await score_repo.fetch_active_setups(user_id)
+            onboarding_status = await self._fetch_onboarding_status(user_id)
             best_setups_by_asset: Dict[str, Dict[str, Any]] = {}
             for setup in active_setups:
                 symbol = str(setup.get("symbol") or "").upper()
@@ -1421,6 +1426,7 @@ class FinnPlanService:
                     active_strategy={"active": False, "portfolio_scope": True},
                     bot_today=bot_today,
                     indicator_analysis=indicator_analysis,
+                    onboarding_status=onboarding_status,
                 ))
 
         analysis = self._build_portfolio_daily_coach_analysis(asset_analyses)
@@ -2979,6 +2985,30 @@ class FinnPlanService:
         except Exception:
             return scores
 
+    async def _fetch_onboarding_status(self, user_id: int) -> Dict[str, bool]:
+        if not self.session:
+            return {}
+        try:
+            result = await self.session.execute(
+                text("""
+                    SELECT step_key, completed
+                    FROM onboarding_steps
+                    WHERE user_id = :user_id AND flow = 'default'
+                """),
+                {"user_id": user_id},
+            )
+            rows = {str(row["step_key"]): bool(row["completed"]) for row in result.mappings()}
+            return {
+                "has_market": rows.get("market", False),
+                "has_macro": rows.get("macro", False),
+                "has_technical": rows.get("technical", False),
+                "has_setup": rows.get("setup", False),
+                "has_strategy": rows.get("strategy", False),
+                "onboarding_complete": all(rows.get(k, False) for k in ["market", "macro", "technical", "setup", "strategy"]),
+            }
+        except Exception:
+            return {}
+
     def _indicator_insight_categories(self, q: str) -> List[str]:
         categories = []
         if any(word in q for word in ["macro", "macro score"]):
@@ -3231,11 +3261,17 @@ class FinnPlanService:
         active_strategy: Dict[str, Any],
         bot_today: Dict[str, Any],
         indicator_analysis: Dict[str, Any],
+        onboarding_status: Optional[Dict[str, bool]] = None,
     ) -> Dict[str, Any]:
         blockers = setup_analysis.get("blockers") or []
         decisions = bot_today.get("decisions") or []
         indicator_warnings = indicator_analysis.get("warnings") or []
         indicator_suggestions = indicator_analysis.get("suggestions") or []
+        data_readiness = self._build_daily_data_readiness(
+            daily_scores=daily_scores,
+            indicator_analysis=indicator_analysis,
+            onboarding_status=onboarding_status or {},
+        )
 
         if not daily_scores:
             stance = "wait_for_scores"
@@ -3246,7 +3282,7 @@ class FinnPlanService:
 
         reasons = []
         if not daily_scores:
-            reasons.append("Geen daily scores beschikbaar; Finn mag geen actief/inactief oordeel verzinnen.")
+            reasons.append(data_readiness.get("message") or "Geen daily scores beschikbaar; Finn mag geen actief/inactief oordeel verzinnen.")
         elif blockers:
             reasons.extend([
                 f"{b.get('category')}: {b.get('score')} buiten range {b.get('range')}"
@@ -3270,7 +3306,9 @@ class FinnPlanService:
         if stance == "plan_is_active":
             suggested_actions.append("Volg je plan en check eventuele bot-proposal voordat je uitvoert.")
         elif stance == "wait_for_scores":
-            suggested_actions.append("Haal of genereer eerst daily scores voordat je een planbeslissing neemt.")
+            suggested_actions.extend(data_readiness.get("suggested_actions") or [
+                "Haal of genereer eerst daily scores voordat je een planbeslissing neemt."
+            ])
         else:
             suggested_actions.append("Niet forceren: wacht tot de blocker-scores binnen je ranges vallen.")
         if indicator_suggestions:
@@ -3299,8 +3337,61 @@ class FinnPlanService:
                 "suggestions": indicator_suggestions,
                 "categories": indicator_analysis.get("categories") or {},
             },
+            "data_readiness": data_readiness,
             "reasons": reasons,
             "suggested_actions": suggested_actions[:5],
+        }
+
+    def _build_daily_data_readiness(
+        self,
+        *,
+        daily_scores: Optional[Dict[str, Any]],
+        indicator_analysis: Dict[str, Any],
+        onboarding_status: Dict[str, bool],
+    ) -> Dict[str, Any]:
+        categories = indicator_analysis.get("categories") or {}
+        tracked = ["macro", "technical", "market"]
+        config_gaps = [
+            category for category in tracked
+            if (categories.get(category) or {}).get("active_count", 0) == 0
+        ]
+        onboarding_gaps = [
+            category for category in tracked
+            if onboarding_status and onboarding_status.get(f"has_{category}") is False
+        ]
+
+        if daily_scores:
+            status = "ready_with_gaps" if config_gaps else "ready"
+            message = "Daily scores zijn beschikbaar."
+        elif onboarding_gaps:
+            status = "onboarding_incomplete"
+            message = f"De daily score ontbreekt omdat je onboarding nog niet volledig is voor: {', '.join(onboarding_gaps)}."
+        elif config_gaps:
+            status = "indicator_config_missing"
+            message = f"De daily score ontbreekt en deze datalagen zijn nog niet actief ingericht: {', '.join(config_gaps)}."
+        else:
+            status = "score_generation_missing"
+            message = "De configuratie lijkt aanwezig, maar de daily score is nog niet gegenereerd."
+
+        suggested_actions = []
+        if onboarding_gaps:
+            suggested_actions.append(f"Rond eerst deze onboarding-stappen af: {', '.join(onboarding_gaps)}.")
+        if "macro" in config_gaps:
+            suggested_actions.append("Laat Finn een macro-indicator toevoegen, bijvoorbeeld Bitcoin Dominance of Fear & Greed.")
+        if "technical" in config_gaps:
+            suggested_actions.append("Laat Finn een technical indicator toevoegen, bijvoorbeeld RSI of 200-day Moving Average.")
+        if "market" in config_gaps:
+            suggested_actions.append("Richt market data in of ververs de market score voor dit asset.")
+        if not daily_scores and not onboarding_gaps and not config_gaps:
+            suggested_actions.append("Genereer daily scores opnieuw voordat je een planbeslissing neemt.")
+
+        return {
+            "status": status,
+            "message": message,
+            "onboarding_gaps": onboarding_gaps,
+            "config_gaps": config_gaps,
+            "onboarding_status": onboarding_status,
+            "suggested_actions": suggested_actions[:4],
         }
 
     def _build_portfolio_daily_coach_analysis(self, asset_analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -3436,6 +3527,12 @@ class FinnPlanService:
             lines.append("Data/indicator aandacht:")
             for warning in warnings[:3]:
                 lines.append(f"- {warning}")
+
+        readiness = analysis.get("data_readiness") or {}
+        readiness_gaps = (readiness.get("onboarding_gaps") or []) + (readiness.get("config_gaps") or [])
+        if readiness_gaps:
+            lines.append("Datakwaliteit:")
+            lines.append(f"- {readiness.get('message')}")
 
         actions = analysis.get("suggested_actions") or []
         if actions:
