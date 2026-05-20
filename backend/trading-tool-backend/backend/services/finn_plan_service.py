@@ -13,7 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.exchange_repository import ExchangeRepository
 from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
+from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
+from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.infrastructure.repositories.score_repository import ScoreRepository
+from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
 from backend.services.bot_service import BotService
@@ -485,6 +488,23 @@ class FinnPlanService:
         has_config_intent = any(word in q for word in ["voeg", "toevoegen", "zet", "maak", "configureer", "config", "gebruik", "weight", "weging", "gewicht", "reset", "herstel"])
         known_indicator_hint = any(word in q for word in ["btc dominance", "bitcoin dominance", "fear", "greed", "dxy", "vix", "dominance"])
         return has_config_intent and (has_category or known_indicator_hint)
+
+    def looks_like_indicator_insight_request(self, query: str) -> bool:
+        q = (query or "").lower()
+        has_data_or_indicator = any(word in q for word in [
+            "indicator", "indicatoren", "macro", "technical", "technisch",
+            "market data", "marktdata", "market score", "macro score", "technical score",
+            "welke data",
+        ])
+        has_explain_or_coach = any(word in q for word in [
+            "waarom", "uitleg", "leg uit", "verklaar", "blokkeert", "blokkeerd",
+            "trekt", "omhoog", "omlaag", "bijdrage", "contributor", "contributors",
+            "genoeg", "mis", "mist", "ontbreekt", "kijk", "gebruikt",
+            "amper", "weinig", "raad", "advies", "aanraden", "welke", "welke data",
+        ])
+        if self.looks_like_indicator_config_request(query) and not has_explain_or_coach:
+            return False
+        return has_data_or_indicator and has_explain_or_coach
 
     def looks_like_status_request(self, query: str) -> bool:
         q = (query or "").lower()
@@ -1142,6 +1162,100 @@ class FinnPlanService:
                 "reasons": self._analysis_reasons(analysis),
                 "coaching_level": "plan_check",
             },
+        }
+
+    async def build_indicator_insight_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        q = (query or "").lower()
+        asset = self._asset_from_query_or_context(query, context)
+        categories = self._indicator_insight_categories(q)
+
+        daily_scores = None
+        macro_rows: List[Any] = []
+        technical_rows: List[Any] = []
+        market_rows: List[Any] = []
+        market_snapshot = None
+        available: Dict[str, List[Dict[str, Any]]] = {"macro": [], "technical": [], "market": []}
+        configs: Dict[str, Dict[str, Any]] = {}
+
+        if self.session:
+            score_repo = ScoreRepository(self.session)
+            macro_repo = MacroDataRepository(self.session)
+            technical_repo = TechnicalDataRepository(self.session)
+            market_repo = MarketDataRepository(self.session)
+            config_service = IndicatorConfigService(IndicatorConfigRepository(self.session))
+
+            daily_scores = await score_repo.fetch_daily_scores(user_id, asset)
+            if "macro" in categories:
+                macro_rows = await macro_repo.get_active_day_macro_data(user_id)
+                available["macro"] = self._available_indicator_options(await macro_repo.get_global_indicators("macro"))
+            if "technical" in categories:
+                technical_rows = await technical_repo.get_day_data(user_id, asset)
+                available["technical"] = self._available_indicator_options(await technical_repo.get_all_indicators())
+            if "market" in categories:
+                market_rows = await market_repo.get_active_day_indicators(user_id, asset)
+                market_snapshot = await market_repo.get_latest_market_data(asset)
+                available["market"] = self._available_indicator_options(await market_repo.get_global_indicators("market"))
+
+            for category, rows in [("macro", macro_rows), ("technical", technical_rows), ("market", market_rows)]:
+                for row in rows:
+                    name = self._indicator_name(row, category)
+                    if not name:
+                        continue
+                    key = f"{category}:{normalize_indicator_name(name)}"
+                    try:
+                        config = await config_service.get_indicator_config(category, normalize_indicator_name(name), user_id)
+                        configs[key] = {
+                            "score_mode": config.score_mode,
+                            "weight": config.weight,
+                            "rules_count": len(config.rules),
+                        }
+                    except Exception:
+                        configs[key] = {"score_mode": "unknown", "weight": None, "rules_count": 0}
+
+        analysis = self._build_indicator_insight_analysis(
+            asset=asset,
+            categories=categories,
+            daily_scores=daily_scores,
+            macro_rows=macro_rows,
+            technical_rows=technical_rows,
+            market_rows=market_rows,
+            market_snapshot=market_snapshot,
+            available=available,
+            configs=configs,
+        )
+        response = self._indicator_insight_message(asset, analysis)
+        reasons = self._indicator_insight_reasons(analysis)
+
+        return {
+            "response": response,
+            "intent": "indicator_insight",
+            "flow": "indicator_insight",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "status": "answered",
+                "current_flow": "indicator_insight",
+                "asset": asset,
+                "analysis": analysis,
+                "autonomy_level": "advice_only",
+            },
+            "reasoning": {
+                "confidence_score": 0.72 if daily_scores else 0.45,
+                "risk_detected": bool(analysis.get("warnings")),
+                "reasons": reasons,
+                "coaching_level": "indicator_insight",
+            },
+            "suggested_actions": analysis.get("suggested_actions") or [],
         }
 
     def _extract_from_query(self, query: str) -> Dict[str, Any]:
@@ -2623,6 +2737,264 @@ class FinnPlanService:
 
         summary = self._summary(draft)
         return f"Ik heb je plan klaarstaan. Controleer dit even en bevestig als het klopt:\n\n{summary}"
+
+    def _asset_from_query_or_context(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
+        q = (query or "").upper()
+        for symbol in SUPPORTED_ASSETS:
+            if re.search(rf"\b{symbol}\b", q):
+                return symbol
+        context = context or {}
+        for key in ["symbol", "setup_symbol"]:
+            value = context.get(key)
+            if value and str(value).upper() in SUPPORTED_ASSETS:
+                return str(value).upper()
+        draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else {}
+        if draft.get("asset") in SUPPORTED_ASSETS:
+            return draft["asset"]
+        return "BTC"
+
+    def _indicator_insight_categories(self, q: str) -> List[str]:
+        categories = []
+        if any(word in q for word in ["macro", "macro score"]):
+            categories.append("macro")
+        if any(word in q for word in ["technical", "technisch", "technische", "technical score"]):
+            categories.append("technical")
+        if any(word in q for word in ["market", "markt", "market data", "marktdata", "market score"]):
+            categories.append("market")
+        return categories or ["macro", "technical", "market"]
+
+    def _available_indicator_options(self, rows: Any) -> List[Dict[str, Any]]:
+        options = []
+        for row in rows or []:
+            if isinstance(row, dict):
+                name = row.get("name")
+                display_name = row.get("display_name") or name
+            else:
+                name = getattr(row, "name", None)
+                display_name = getattr(row, "display_name", None) or name
+            if name:
+                options.append({"name": str(name), "display_name": str(display_name or name)})
+        return options
+
+    def _indicator_name(self, row: Any, category: str) -> Optional[str]:
+        if isinstance(row, dict):
+            return row.get("indicator") or row.get("name")
+        if category == "technical":
+            return getattr(row, "indicator", None)
+        return getattr(row, "name", None) or getattr(row, "indicator", None)
+
+    def _indicator_value(self, row: Any, key: str, fallback: Any = None) -> Any:
+        if isinstance(row, dict):
+            return row.get(key, fallback)
+        return getattr(row, key, fallback)
+
+    def _to_float(self, value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _build_indicator_entry(self, row: Any, category: str, configs: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+        name = self._indicator_name(row, category)
+        normalized = normalize_indicator_name(name or "")
+        config = configs.get(f"{category}:{normalized}", {})
+        score = self._to_float(self._indicator_value(row, "score"))
+        value = self._to_float(self._indicator_value(row, "value"))
+        if value is None:
+            value = self._to_float(self._indicator_value(row, "waarde"))
+        interpretation = (
+            self._indicator_value(row, "interpretation")
+            or self._indicator_value(row, "uitleg")
+            or self._indicator_value(row, "advies")
+        )
+        action = self._indicator_value(row, "action") or self._indicator_value(row, "advies")
+        weight = config.get("weight")
+        impact_score = score * float(weight) if score is not None and weight is not None else score
+        return {
+            "name": name,
+            "normalized": normalized,
+            "value": value,
+            "score": score,
+            "impact_score": impact_score,
+            "trend": self._indicator_value(row, "trend"),
+            "interpretation": interpretation,
+            "action": action,
+            "score_mode": config.get("score_mode", "unknown"),
+            "weight": weight,
+            "rules_count": config.get("rules_count", 0),
+            "timestamp": str(self._indicator_value(row, "timestamp", "")),
+        }
+
+    def _category_top_contributors(self, daily_scores: Optional[Dict[str, Any]], category: str) -> List[Any]:
+        return self._json_value((daily_scores or {}).get(f"{category}_top_contributors"), [])
+
+    def _summarize_indicator_category(
+        self,
+        category: str,
+        rows: List[Any],
+        available: List[Dict[str, Any]],
+        configs: Dict[str, Dict[str, Any]],
+        daily_scores: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        indicators = [self._build_indicator_entry(row, category, configs) for row in rows or []]
+        active_names = {entry["normalized"] for entry in indicators if entry.get("normalized")}
+        missing = [
+            item for item in available or []
+            if normalize_indicator_name(item.get("name", "")) not in active_names
+        ]
+        weak = [entry for entry in indicators if entry.get("score") is not None and entry["score"] < 40]
+        neutral = [entry for entry in indicators if entry.get("score") is not None and 40 <= entry["score"] <= 60]
+        strong = [entry for entry in indicators if entry.get("score") is not None and entry["score"] > 60]
+        heavy = [entry for entry in indicators if entry.get("weight") is not None and entry["weight"] >= 2.0]
+        low_weight = [entry for entry in indicators if entry.get("weight") is not None and entry["weight"] <= 0.25]
+        no_data = [entry for entry in indicators if entry.get("score") is None]
+        by_impact = sorted(
+            indicators,
+            key=lambda item: abs((item.get("impact_score") or 0) - 50),
+            reverse=True,
+        )
+        return {
+            "category": category,
+            "score": self._score_value(daily_scores, category),
+            "interpretation": (daily_scores or {}).get(f"{category}_interpretation"),
+            "top_contributors": self._category_top_contributors(daily_scores, category),
+            "active_count": len(indicators),
+            "available_count": len(available or []),
+            "coverage_ratio": round((len(indicators) / len(available)) * 100, 1) if available else None,
+            "indicators": indicators,
+            "weak_indicators": weak,
+            "neutral_indicators": neutral,
+            "strong_indicators": strong,
+            "heavy_weight_indicators": heavy,
+            "low_weight_indicators": low_weight,
+            "no_data_indicators": no_data,
+            "unused_options": missing[:5],
+            "impact_leaders": by_impact[:3],
+        }
+
+    def _build_indicator_insight_analysis(
+        self,
+        *,
+        asset: str,
+        categories: List[str],
+        daily_scores: Optional[Dict[str, Any]],
+        macro_rows: List[Any],
+        technical_rows: List[Any],
+        market_rows: List[Any],
+        market_snapshot: Any,
+        available: Dict[str, List[Dict[str, Any]]],
+        configs: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        row_map = {"macro": macro_rows, "technical": technical_rows, "market": market_rows}
+        category_summaries = {
+            category: self._summarize_indicator_category(
+                category,
+                row_map.get(category, []),
+                available.get(category, []),
+                configs,
+                daily_scores,
+            )
+            for category in categories
+        }
+        warnings = []
+        suggestions = []
+        for category, summary in category_summaries.items():
+            if summary["active_count"] == 0:
+                warnings.append(f"{category}: geen actieve indicator-data gevonden")
+            if summary["weak_indicators"]:
+                names = ", ".join(i["name"] for i in summary["weak_indicators"][:3])
+                warnings.append(f"{category}: zwakke indicatoren: {names}")
+            if summary["heavy_weight_indicators"]:
+                names = ", ".join(i["name"] for i in summary["heavy_weight_indicators"][:3])
+                suggestions.append(f"Controleer of de hoge weging bewust is voor {category}: {names}.")
+            if summary["unused_options"]:
+                names = ", ".join(i["display_name"] for i in summary["unused_options"][:3])
+                suggestions.append(f"Je kunt {category} uitbreiden met: {names}.")
+            if summary["active_count"] <= 1 and summary["available_count"] > 1:
+                suggestions.append(f"Je {category}-laag is dun; met maar {summary['active_count']} actieve indicator is de score kwetsbaar.")
+
+        market = None
+        if market_snapshot:
+            market = {
+                "symbol": asset,
+                "price": self._to_float(getattr(market_snapshot, "price", None)),
+                "change_24h": self._to_float(getattr(market_snapshot, "change_24h", None)),
+                "volume": self._to_float(getattr(market_snapshot, "volume", None)),
+                "timestamp": str(getattr(market_snapshot, "timestamp", "")),
+            }
+
+        return {
+            "asset": asset,
+            "has_daily_scores": bool(daily_scores),
+            "categories": category_summaries,
+            "market_snapshot": market,
+            "warnings": warnings,
+            "suggestions": suggestions[:5],
+            "suggested_actions": [
+                "Vraag Finn om een ontbrekende indicator toe te voegen",
+                "Vraag waarom een specifieke indicator laag scoort",
+                "Vraag Finn om de scoring mode of weight te controleren",
+            ],
+        }
+
+    def _indicator_insight_reasons(self, analysis: Dict[str, Any]) -> List[str]:
+        reasons = []
+        for category, summary in (analysis.get("categories") or {}).items():
+            reasons.append(f"{category}: {summary.get('active_count')} actieve indicatoren, score {summary.get('score')}")
+        reasons.extend((analysis.get("warnings") or [])[:3])
+        return reasons or ["Geen indicator-data gevonden om uit te leggen."]
+
+    def _indicator_insight_message(self, asset: str, analysis: Dict[str, Any]) -> str:
+        if not analysis.get("has_daily_scores"):
+            lines = [
+                f"Ik kan de {asset} score nog niet volledig verklaren, omdat ik geen daily score van vandaag vind.",
+                "Ik kan wel kijken welke indicator-data/configuratie al actief is.",
+            ]
+        else:
+            lines = [f"Dit is wat Finn nu ziet voor {asset}, op basis van echte indicator-data en je huidige scoring-config."]
+
+        for category, summary in (analysis.get("categories") or {}).items():
+            score = summary.get("score")
+            active_count = summary.get("active_count")
+            available_count = summary.get("available_count")
+            lines.append(f"\n{category.upper()}: score {score}, {active_count}/{available_count} indicatoren actief.")
+            if summary.get("top_contributors"):
+                preview = ", ".join(str(item) for item in summary["top_contributors"][:3])
+                lines.append(f"- Belangrijkste contributors: {preview}")
+            if summary.get("impact_leaders"):
+                leaders = []
+                for item in summary["impact_leaders"][:3]:
+                    leaders.append(
+                        f"{item.get('name')} score {item.get('score')} weight {item.get('weight')} mode {item.get('score_mode')}"
+                    )
+                lines.append(f"- Meeste impact: {'; '.join(leaders)}")
+            if summary.get("weak_indicators"):
+                names = ", ".join(f"{item.get('name')} ({item.get('score')})" for item in summary["weak_indicators"][:3])
+                lines.append(f"- Trekt omlaag: {names}")
+            if summary.get("heavy_weight_indicators"):
+                names = ", ".join(f"{item.get('name')} (weight {item.get('weight')})" for item in summary["heavy_weight_indicators"][:3])
+                lines.append(f"- Hoge weging: {names}")
+            if summary.get("unused_options"):
+                names = ", ".join(item.get("display_name") for item in summary["unused_options"][:3])
+                lines.append(f"- Nog niet actief maar beschikbaar: {names}")
+            if not summary.get("indicators"):
+                lines.append("- Geen actieve indicator-data gevonden voor deze categorie.")
+
+        if analysis.get("market_snapshot"):
+            snap = analysis["market_snapshot"]
+            lines.append(
+                f"\nMARKET SNAPSHOT: {asset} prijs {snap.get('price')}, 24h change {snap.get('change_24h')}, volume {snap.get('volume')}."
+            )
+
+        suggestions = analysis.get("suggestions") or []
+        if suggestions:
+            lines.append("\nMogelijke bijsturing:")
+            for suggestion in suggestions[:4]:
+                lines.append(f"- {suggestion}")
+        lines.append("\nIk pas niets automatisch aan. Als je iets wilt toevoegen of wijzigen, maak ik daar eerst een confirmable draft van.")
+        return "\n".join(lines)
 
     def _score_value(self, daily_scores: Optional[Dict[str, Any]], key: str) -> Optional[float]:
         if not daily_scores:

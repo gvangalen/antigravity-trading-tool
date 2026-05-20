@@ -1155,3 +1155,84 @@ def test_status_message_lists_blocking_scores_for_saved_setup():
     assert "Blokkeert nu:" in message
     assert "technical: score 90.0 moet binnen [40.0, 60.0] vallen" in message
     assert "Gebruik dit als plan-check" in message
+
+
+def test_indicator_insight_request_is_detected_but_config_stays_separate():
+    service = _service()
+
+    assert service.looks_like_indicator_insight_request("Waarom is mijn macro score laag?") is True
+    assert service.looks_like_indicator_insight_request("Welke technical indicators gebruikt BTC nu?") is True
+    assert service.looks_like_indicator_insight_request("Voeg RSI toe aan technical voor BTC") is False
+    assert service.looks_like_status_request("Welke score blokkeert mijn BTC setup?") is True
+    assert service.looks_like_indicator_insight_request("Welke score blokkeert mijn BTC setup?") is False
+
+
+def test_indicator_insight_analysis_uses_real_rows_weights_and_unused_options():
+    service = _service()
+    analysis = service._build_indicator_insight_analysis(
+        asset="BTC",
+        categories=["macro"],
+        daily_scores={
+            "macro_score": 35,
+            "macro_interpretation": "Zwak",
+            "macro_top_contributors": '["btc_dominance"]',
+        },
+        macro_rows=[
+            {
+                "name": "btc_dominance",
+                "value": 58.2,
+                "score": 25,
+                "trend": "laag",
+                "interpretation": "Dominance drukt macro.",
+                "action": "Wacht op betere macro.",
+                "timestamp": "2026-05-20T10:00:00",
+            }
+        ],
+        technical_rows=[],
+        market_rows=[],
+        market_snapshot=None,
+        available={
+            "macro": [
+                {"name": "btc_dominance", "display_name": "Bitcoin Dominance"},
+                {"name": "fear_greed", "display_name": "Fear & Greed"},
+            ],
+            "technical": [],
+            "market": [],
+        },
+        configs={
+            "macro:btc_dominance": {
+                "score_mode": "contrarian",
+                "weight": 2.0,
+                "rules_count": 5,
+            }
+        },
+    )
+
+    macro = analysis["categories"]["macro"]
+    assert macro["score"] == 35.0
+    assert macro["active_count"] == 1
+    assert macro["weak_indicators"][0]["name"] == "btc_dominance"
+    assert macro["heavy_weight_indicators"][0]["weight"] == 2.0
+    assert macro["unused_options"][0]["name"] == "fear_greed"
+    assert "Je macro-laag is dun" in " ".join(analysis["suggestions"])
+
+
+def test_indicator_insight_message_is_advice_only_and_mentions_missing_data():
+    service = _service()
+    analysis = service._build_indicator_insight_analysis(
+        asset="BTC",
+        categories=["technical"],
+        daily_scores=None,
+        macro_rows=[],
+        technical_rows=[],
+        market_rows=[],
+        market_snapshot=None,
+        available={"macro": [], "technical": [{"name": "rsi", "display_name": "RSI"}], "market": []},
+        configs={},
+    )
+
+    message = service._indicator_insight_message("BTC", analysis)
+
+    assert "geen daily score van vandaag" in message
+    assert "Geen actieve indicator-data" in message
+    assert "Ik pas niets automatisch aan" in message
