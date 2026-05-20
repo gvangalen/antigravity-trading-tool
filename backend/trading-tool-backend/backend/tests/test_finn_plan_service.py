@@ -1061,3 +1061,97 @@ def test_draft_status_analysis_keeps_top_contributors():
     assert analysis["is_active"] is True
     assert analysis["checks"]["macro"]["top_contributors"] == ["DXY", "Liquidity"]
     assert "macro: 50.0 is binnen range" in service._analysis_reasons(analysis)
+
+
+def test_saved_setup_status_uses_setup_score_ranges_for_blockers():
+    service = _service()
+
+    analysis = service._evaluate_setup_row(
+        {
+            "id": 12,
+            "name": "BTC Plan",
+            "setup_type": "dca",
+            "timeframe": "1W",
+            "score": 55,
+            "is_active": True,
+            "min_macro_score": 30,
+            "max_macro_score": 70,
+            "min_technical_score": 40,
+            "max_technical_score": 60,
+            "min_market_score": 20,
+            "max_market_score": 80,
+        },
+        {
+            "macro_score": 50,
+            "technical_score": 90,
+            "market_score": 40,
+        },
+    )
+
+    assert analysis["is_active"] is False
+    assert analysis["match_percentage"] == 66.7
+    assert analysis["blockers"][0]["category"] == "technical"
+    assert analysis["blockers"][0]["score"] == 90.0
+    assert analysis["setup"]["stored_is_active"] is True
+
+
+def test_saved_setup_status_is_active_when_all_ranges_match():
+    service = _service()
+
+    analysis = service._evaluate_setup_row(
+        {
+            "id": 13,
+            "name": "ETH Plan",
+            "setup_type": "trade",
+            "timeframe": "4H",
+            "score": 72,
+            "is_active": False,
+            "min_macro_score": 30,
+            "max_macro_score": 70,
+            "min_technical_score": 40,
+            "max_technical_score": 80,
+            "min_market_score": 20,
+            "max_market_score": 80,
+        },
+        {
+            "macro_score": 50,
+            "technical_score": 65,
+            "market_score": 40,
+        },
+    )
+
+    assert analysis["is_active"] is True
+    assert analysis["blockers"] == []
+    assert analysis["match_percentage"] == 100.0
+    assert analysis["setup"]["stored_is_active"] is False
+
+
+def test_status_message_lists_blocking_scores_for_saved_setup():
+    service = _service()
+    analysis = service._evaluate_setup_row(
+        {
+            "id": 12,
+            "name": "BTC Plan",
+            "setup_type": "dca",
+            "timeframe": "1W",
+            "score": 55,
+            "is_active": False,
+            "min_macro_score": 30,
+            "max_macro_score": 70,
+            "min_technical_score": 40,
+            "max_technical_score": 60,
+            "min_market_score": 20,
+            "max_market_score": 80,
+        },
+        {
+            "macro_score": 50,
+            "technical_score": 90,
+            "market_score": 40,
+        },
+    )
+
+    message = service._status_message("BTC", analysis, source="saved_setup")
+
+    assert "Blokkeert nu:" in message
+    assert "technical: score 90.0 moet binnen [40.0, 60.0] vallen" in message
+    assert "Gebruik dit als plan-check" in message

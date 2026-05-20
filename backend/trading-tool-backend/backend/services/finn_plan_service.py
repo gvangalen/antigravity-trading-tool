@@ -491,6 +491,7 @@ class FinnPlanService:
         has_status = any(word in q for word in [
             "actief", "active", "inactive", "inactief", "waarom koopt",
             "waarom niet", "moet ik kopen", "mag ik kopen", "plan actief",
+            "blokkeert", "blokkeerd", "blocked", "score blokkeert",
         ])
         has_market_or_plan = any(word in q for word in [
             "setup", "plan", "bot", "trade", "dca", "markt", "market", "btc", "eth", "sol",
@@ -2641,10 +2642,67 @@ class FinnPlanService:
                 return fallback
         return fallback
 
-    def _in_range(self, score: Optional[float], score_range: Optional[List[int]]) -> Optional[bool]:
+    def _in_range(self, score: Optional[float], score_range: Optional[List[float]]) -> Optional[bool]:
         if score is None or not score_range:
             return None
         return score_range[0] <= score <= score_range[1]
+
+    def _score_range_from_values(self, minimum: Any, maximum: Any) -> Optional[List[float]]:
+        if minimum is None or maximum is None:
+            return None
+        try:
+            return [float(minimum), float(maximum)]
+        except (TypeError, ValueError):
+            return None
+
+    def _score_check(
+        self,
+        label: str,
+        score: Optional[float],
+        score_range: Optional[List[float]],
+        daily_scores: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        interpretation = (daily_scores or {}).get(f"{label}_interpretation")
+        contributors = self._json_value((daily_scores or {}).get(f"{label}_top_contributors"), [])
+        passed = self._in_range(score, score_range)
+        check = {
+            "score": score,
+            "range": score_range,
+            "pass": passed,
+            "interpretation": interpretation,
+            "top_contributors": contributors,
+        }
+        if passed is False:
+            check["blocker_reason"] = f"{label} score {score} valt buiten je range {score_range}"
+        if passed is None:
+            check["blocker_reason"] = f"{label} score of range ontbreekt"
+        return check
+
+    def _finalize_score_analysis(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
+        checks = analysis.get("checks") or {}
+        known = [check.get("pass") for check in checks.values() if check.get("pass") is not None]
+        failed = [
+            {"category": label, **check}
+            for label, check in checks.items()
+            if check.get("pass") is False
+        ]
+        passed = [
+            {"category": label, **check}
+            for label, check in checks.items()
+            if check.get("pass") is True
+        ]
+        missing = [
+            {"category": label, **check}
+            for label, check in checks.items()
+            if check.get("pass") is None
+        ]
+        analysis["blockers"] = failed
+        analysis["passed_checks"] = passed
+        analysis["missing_checks"] = missing
+        analysis["match_percentage"] = round((len(passed) / len(checks)) * 100, 1) if checks else 0.0
+        analysis["is_active"] = bool(known) and len(known) == len(checks) and not failed
+        analysis["confidence"] = "medium" if len(known) == len(checks) and analysis.get("has_scores") else "low"
+        return analysis
 
     def _evaluate_draft_against_scores(
         self,
@@ -2653,35 +2711,15 @@ class FinnPlanService:
     ) -> Dict[str, Any]:
         setup = draft.get("setup") or {}
         checks = {
-            "macro": {
-                "score": self._score_value(daily_scores, "macro"),
-                "range": setup.get("macro_score_range"),
-                "interpretation": (daily_scores or {}).get("macro_interpretation"),
-                "top_contributors": self._json_value((daily_scores or {}).get("macro_top_contributors"), []),
-            },
-            "technical": {
-                "score": self._score_value(daily_scores, "technical"),
-                "range": setup.get("technical_score_range"),
-                "interpretation": (daily_scores or {}).get("technical_interpretation"),
-                "top_contributors": self._json_value((daily_scores or {}).get("technical_top_contributors"), []),
-            },
-            "market": {
-                "score": self._score_value(daily_scores, "market"),
-                "range": setup.get("market_score_range"),
-                "interpretation": (daily_scores or {}).get("market_interpretation"),
-                "top_contributors": self._json_value((daily_scores or {}).get("market_top_contributors"), []),
-            },
+            "macro": self._score_check("macro", self._score_value(daily_scores, "macro"), setup.get("macro_score_range"), daily_scores),
+            "technical": self._score_check("technical", self._score_value(daily_scores, "technical"), setup.get("technical_score_range"), daily_scores),
+            "market": self._score_check("market", self._score_value(daily_scores, "market"), setup.get("market_score_range"), daily_scores),
         }
-        for check in checks.values():
-            check["pass"] = self._in_range(check["score"], check["range"])
-        known = [c["pass"] for c in checks.values() if c["pass"] is not None]
-        is_active = bool(known) and all(known)
-        return {
-            "is_active": is_active,
-            "confidence": "low" if len(known) < 3 else "medium",
+        return self._finalize_score_analysis({
             "checks": checks,
             "has_scores": bool(daily_scores),
-        }
+            "source": "draft",
+        })
 
     def _evaluate_setup_row(
         self,
@@ -2696,22 +2734,49 @@ class FinnPlanService:
                 "has_scores": bool(daily_scores),
                 "reason": "Ik vond nog geen opgeslagen setup voor dit asset.",
             }
-        breakdown = self._json_value(setup.get("breakdown"), {})
-        return {
-            "is_active": bool(setup.get("is_active")),
-            "confidence": "medium" if daily_scores else "low",
-            "checks": breakdown if isinstance(breakdown, dict) else {},
+        checks = {
+            "macro": self._score_check(
+                "macro",
+                self._score_value(daily_scores, "macro"),
+                self._score_range_from_values(setup.get("min_macro_score"), setup.get("max_macro_score")),
+                daily_scores,
+            ),
+            "technical": self._score_check(
+                "technical",
+                self._score_value(daily_scores, "technical"),
+                self._score_range_from_values(setup.get("min_technical_score"), setup.get("max_technical_score")),
+                daily_scores,
+            ),
+            "market": self._score_check(
+                "market",
+                self._score_value(daily_scores, "market"),
+                self._score_range_from_values(setup.get("min_market_score"), setup.get("max_market_score")),
+                daily_scores,
+            ),
+        }
+        return self._finalize_score_analysis({
+            "checks": checks,
             "has_scores": bool(daily_scores),
             "setup": {
                 "id": setup.get("id"),
                 "name": setup.get("name"),
+                "type": setup.get("setup_type"),
+                "timeframe": setup.get("timeframe"),
                 "score": float(setup.get("score") or 0),
+                "stored_is_active": bool(setup.get("is_active")),
             },
-        }
+            "source": "saved_setup",
+        })
 
     def _analysis_reasons(self, analysis: Dict[str, Any]) -> List[str]:
         if analysis.get("reason"):
             return [analysis["reason"]]
+        blockers = analysis.get("blockers") or []
+        if blockers:
+            return [
+                f"{blocker.get('category')}: {blocker.get('score')} buiten range {blocker.get('range')}"
+                for blocker in blockers
+            ]
         checks = analysis.get("checks") or {}
         if isinstance(checks, dict) and all(label in checks for label in ["macro", "technical", "market"]):
             reasons = []
@@ -2733,29 +2798,58 @@ class FinnPlanService:
             )
 
         active_text = "actief" if analysis.get("is_active") else "niet actief"
+        checks = analysis.get("checks") or {}
+        blockers = analysis.get("blockers") or []
+        passed_checks = analysis.get("passed_checks") or []
+        match_percentage = analysis.get("match_percentage")
+
         if source == "draft":
-            lines = [f"Je conceptplan voor {asset} is nu {active_text} op basis van de huidige scores."]
-            checks = analysis.get("checks") or {}
+            lines = [
+                f"Je conceptplan voor {asset} is nu {active_text} op basis van de huidige scores.",
+                f"Match met je plan: {match_percentage}%.",
+            ]
+            if blockers:
+                lines.append("Blokkeert nu:")
+                for blocker in blockers:
+                    lines.append(
+                        f"- {blocker.get('category')}: score {blocker.get('score')} moet binnen {blocker.get('range')} vallen"
+                    )
+            else:
+                lines.append("Geen score-blockers: macro, technical en market vallen binnen je ingestelde ranges.")
+            if passed_checks:
+                lines.append("Binnen plan:")
+                for check in passed_checks:
+                    lines.append(f"- {check.get('category')}: {check.get('score')} binnen {check.get('range')}")
             for label in ["macro", "technical", "market"]:
                 check = checks.get(label) or {}
-                score = check.get("score")
-                score_range = check.get("range")
-                passed = check.get("pass")
-                status = "binnen range" if passed else "buiten range"
-                lines.append(f"- {label}: {score} versus {score_range} ({status})")
                 contributors = check.get("top_contributors") or []
                 if contributors:
                     preview = ", ".join(str(item) for item in contributors[:2])
-                    lines.append(f"  Belangrijkste signalen: {preview}")
+                    lines.append(f"- Belangrijkste {label}-signalen: {preview}")
             return "\n".join(lines)
 
         setup = analysis.get("setup")
         if not setup:
             return analysis.get("reason") or f"Ik vond geen actieve {asset} setup."
-        return (
-            f"Je opgeslagen setup '{setup.get('name')}' voor {asset} is nu {active_text}. "
-            f"De setup-score staat op {setup.get('score')}. Gebruik dit als plan-check, niet als losse emotionele trigger."
-        )
+        lines = [
+            f"Je opgeslagen setup '{setup.get('name')}' voor {asset} is nu {active_text} op basis van je eigen ranges.",
+            f"Setup #{setup.get('id')} - {setup.get('type') or 'setup'} - timeframe {setup.get('timeframe') or 'n.v.t.'}.",
+            f"Match met je plan: {match_percentage}%. Setup-score: {setup.get('score')}.",
+        ]
+        if blockers:
+            lines.append("Blokkeert nu:")
+            for blocker in blockers:
+                lines.append(
+                    f"- {blocker.get('category')}: score {blocker.get('score')} moet binnen {blocker.get('range')} vallen"
+                )
+        else:
+            lines.append("Geen score-blockers: macro, technical en market vallen binnen je setup-ranges.")
+        if passed_checks:
+            lines.append("Binnen plan:")
+            for check in passed_checks:
+                lines.append(f"- {check.get('category')}: {check.get('score')} binnen {check.get('range')}")
+        lines.append("Gebruik dit als plan-check, niet als losse emotionele trigger.")
+        return "\n".join(lines)
 
     def _summary(self, draft: Dict[str, Any]) -> str:
         lines = [

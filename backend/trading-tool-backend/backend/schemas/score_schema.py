@@ -7,6 +7,16 @@ class ActiveSetupResponse(BaseModel):
     name: str
     symbol: str
     timeframe: str
+    setup_type: Optional[str] = None
+    dca_frequency: Optional[str] = None
+    dca_day: Optional[Any] = None
+    dca_month_day: Optional[Any] = None
+    min_macro_score: Optional[float] = None
+    max_macro_score: Optional[float] = None
+    min_technical_score: Optional[float] = None
+    max_technical_score: Optional[float] = None
+    min_market_score: Optional[float] = None
+    max_market_score: Optional[float] = None
     explanation: str
     timestamp: datetime
     score: float
