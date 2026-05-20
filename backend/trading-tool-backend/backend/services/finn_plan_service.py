@@ -420,6 +420,8 @@ class FinnPlanService:
             return True
         if draft and draft.get("draft_kind") == "strategy":
             return False
+        if self.looks_like_daily_coach_request(query):
+            return False
         if self.looks_like_status_request(query):
             return False
         intent_words = [
@@ -505,6 +507,21 @@ class FinnPlanService:
         if self.looks_like_indicator_config_request(query) and not has_explain_or_coach:
             return False
         return has_data_or_indicator and has_explain_or_coach
+
+    def looks_like_daily_coach_request(self, query: str) -> bool:
+        q = (query or "").lower()
+        has_today = any(word in q for word in [
+            "vandaag", "today", "nu", "daily", "dagelijkse", "dagcheck", "cockpit",
+        ])
+        has_decision_intent = any(phrase in q for phrase in [
+            "wat moet ik", "wat moet finn", "wat doe ik", "wat nu", "moet ik kopen",
+            "mag ik kopen", "moet mijn bot", "waar moet ik op letten", "dagelijkse check",
+            "trading coach", "coach me", "plan check",
+        ])
+        has_trading_context = any(word in q for word in [
+            "setup", "plan", "bot", "trade", "dca", "btc", "eth", "sol", "market", "markt",
+        ])
+        return has_today and (has_decision_intent or has_trading_context or "kopen" in q)
 
     def looks_like_status_request(self, query: str) -> bool:
         q = (query or "").lower()
@@ -1254,6 +1271,93 @@ class FinnPlanService:
                 "risk_detected": bool(analysis.get("warnings")),
                 "reasons": reasons,
                 "coaching_level": "indicator_insight",
+            },
+            "suggested_actions": analysis.get("suggested_actions") or [],
+        }
+
+    async def build_daily_coach_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        asset = self._asset_from_query_or_context(query, context)
+        daily_scores = None
+        setup_analysis: Dict[str, Any] = {
+            "is_active": False,
+            "confidence": "low",
+            "checks": {},
+            "has_scores": False,
+            "reason": "Geen scoredata of setup gevonden.",
+        }
+        active_strategy = {"active": False}
+        bot_today = {"decisions": [], "scores": {}, "orders": [], "executions": []}
+        indicator_analysis = {
+            "asset": asset,
+            "has_daily_scores": False,
+            "categories": {},
+            "warnings": [],
+            "suggestions": [],
+        }
+
+        if self.session:
+            score_repo = ScoreRepository(self.session)
+            daily_scores = await score_repo.fetch_daily_scores(user_id, asset)
+            active_setups = await score_repo.fetch_active_setups(user_id)
+            matching_setups = [s for s in active_setups if str(s.get("symbol", "")).upper() == asset]
+            best_setup = next((s for s in matching_setups if s.get("is_active")), None) or (matching_setups[0] if matching_setups else None)
+            setup_analysis = self._evaluate_setup_row(best_setup, daily_scores)
+
+            try:
+                active_strategy = await StrategyService(self.session).get_active_strategy_today(user_id)
+            except Exception as exc:
+                active_strategy = {"active": False, "error": str(exc)}
+
+            try:
+                bot_today = await BotService(self.session).get_bot_today(user_id, symbol=asset)
+            except Exception as exc:
+                bot_today = {"decisions": [], "scores": {}, "orders": [], "executions": [], "error": str(exc)}
+
+            insight = await self.build_indicator_insight_response(
+                user_id,
+                f"Welke macro technical market data gebruikt Finn voor {asset} vandaag?",
+                context,
+            )
+            indicator_analysis = (insight.get("state") or {}).get("analysis") or indicator_analysis
+
+        analysis = self._build_daily_coach_analysis(
+            asset=asset,
+            daily_scores=daily_scores,
+            setup_analysis=setup_analysis,
+            active_strategy=active_strategy,
+            bot_today=bot_today,
+            indicator_analysis=indicator_analysis,
+        )
+        response = self._daily_coach_message(analysis)
+
+        return {
+            "response": response,
+            "intent": "daily_coach",
+            "flow": "daily_coach",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "status": "answered",
+                "current_flow": "daily_coach",
+                "asset": asset,
+                "analysis": analysis,
+                "autonomy_level": "advice_only",
+            },
+            "reasoning": {
+                "confidence_score": 0.78 if analysis.get("has_scores") else 0.45,
+                "risk_detected": analysis.get("stance") != "plan_is_active",
+                "reasons": analysis.get("reasons") or [],
+                "coaching_level": "daily_cockpit",
             },
             "suggested_actions": analysis.get("suggested_actions") or [],
         }
@@ -2994,6 +3098,144 @@ class FinnPlanService:
             for suggestion in suggestions[:4]:
                 lines.append(f"- {suggestion}")
         lines.append("\nIk pas niets automatisch aan. Als je iets wilt toevoegen of wijzigen, maak ik daar eerst een confirmable draft van.")
+        return "\n".join(lines)
+
+    def _build_daily_coach_analysis(
+        self,
+        *,
+        asset: str,
+        daily_scores: Optional[Dict[str, Any]],
+        setup_analysis: Dict[str, Any],
+        active_strategy: Dict[str, Any],
+        bot_today: Dict[str, Any],
+        indicator_analysis: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        blockers = setup_analysis.get("blockers") or []
+        decisions = bot_today.get("decisions") or []
+        indicator_warnings = indicator_analysis.get("warnings") or []
+        indicator_suggestions = indicator_analysis.get("suggestions") or []
+
+        if not daily_scores:
+            stance = "wait_for_scores"
+        elif setup_analysis.get("is_active"):
+            stance = "plan_is_active"
+        else:
+            stance = "wait_for_plan"
+
+        reasons = []
+        if not daily_scores:
+            reasons.append("Geen daily scores beschikbaar; Finn mag geen actief/inactief oordeel verzinnen.")
+        elif blockers:
+            reasons.extend([
+                f"{b.get('category')}: {b.get('score')} buiten range {b.get('range')}"
+                for b in blockers[:3]
+            ])
+        else:
+            reasons.append("Macro, technical en market vallen binnen de setup-ranges.")
+
+        if active_strategy.get("active"):
+            strategy = active_strategy.get("strategy") or {}
+            reasons.append(f"Er is vandaag een actieve strategie: {strategy.get('name') or strategy.get('id')}.")
+        else:
+            reasons.append("Geen actieve DCA-strategie voor vandaag gevonden.")
+
+        if decisions:
+            reasons.append(f"Er staan {len(decisions)} bot-beslissing(en) voor vandaag.")
+        else:
+            reasons.append("Geen bot-beslissing voor vandaag gevonden.")
+
+        suggested_actions = []
+        if stance == "plan_is_active":
+            suggested_actions.append("Volg je plan en check eventuele bot-proposal voordat je uitvoert.")
+        elif stance == "wait_for_scores":
+            suggested_actions.append("Haal of genereer eerst daily scores voordat je een planbeslissing neemt.")
+        else:
+            suggested_actions.append("Niet forceren: wacht tot de blocker-scores binnen je ranges vallen.")
+        if indicator_suggestions:
+            suggested_actions.extend(indicator_suggestions[:2])
+        if not decisions:
+            suggested_actions.append("Vraag Finn om een bot-decision te genereren als er een bot actief hoort te zijn.")
+
+        return {
+            "asset": asset,
+            "date": datetime.utcnow().date().isoformat(),
+            "has_scores": bool(daily_scores),
+            "stance": stance,
+            "setup": setup_analysis.get("setup"),
+            "setup_active": bool(setup_analysis.get("is_active")),
+            "setup_match_percentage": setup_analysis.get("match_percentage"),
+            "blockers": blockers,
+            "passed_checks": setup_analysis.get("passed_checks") or [],
+            "active_strategy": active_strategy,
+            "bot_today": {
+                "decision_count": len(decisions),
+                "decisions": decisions[:3],
+                "error": bot_today.get("error"),
+            },
+            "indicator_summary": {
+                "warnings": indicator_warnings,
+                "suggestions": indicator_suggestions,
+                "categories": indicator_analysis.get("categories") or {},
+            },
+            "reasons": reasons,
+            "suggested_actions": suggested_actions[:5],
+        }
+
+    def _daily_coach_message(self, analysis: Dict[str, Any]) -> str:
+        asset = analysis.get("asset") or "BTC"
+        stance = analysis.get("stance")
+        if stance == "plan_is_active":
+            headline = f"Voor {asset}: je plan mag vandaag actief zijn, zolang je je eigen execution-regels volgt."
+        elif stance == "wait_for_scores":
+            headline = f"Voor {asset}: ik zou nog geen planbeslissing nemen, omdat de daily scores ontbreken."
+        else:
+            headline = f"Voor {asset}: ik zou vandaag wachten; je setup is nog niet actief volgens je eigen ranges."
+
+        lines = [headline]
+        setup = analysis.get("setup") or {}
+        if setup:
+            lines.append(
+                f"Setup: {setup.get('name')} (#{setup.get('id')}) - match {analysis.get('setup_match_percentage')}%."
+            )
+
+        blockers = analysis.get("blockers") or []
+        if blockers:
+            lines.append("Blokkeert nu:")
+            for blocker in blockers[:3]:
+                lines.append(
+                    f"- {blocker.get('category')}: score {blocker.get('score')} moet binnen {blocker.get('range')} vallen"
+                )
+        elif analysis.get("has_scores"):
+            lines.append("Geen score-blockers gevonden: macro, technical en market passen bij je setup.")
+
+        active_strategy = analysis.get("active_strategy") or {}
+        if active_strategy.get("active"):
+            strategy = active_strategy.get("strategy") or {}
+            lines.append(f"Strategie vandaag: actief ({strategy.get('name') or strategy.get('id')}).")
+        else:
+            lines.append("Strategie vandaag: geen actieve DCA-strategie gevonden.")
+
+        bot_today = analysis.get("bot_today") or {}
+        lines.append(f"Bot vandaag: {bot_today.get('decision_count', 0)} beslissing(en).")
+        for decision in bot_today.get("decisions") or []:
+            lines.append(
+                f"- Bot #{decision.get('bot_id')}: {decision.get('action')} status {decision.get('status')}"
+            )
+
+        indicator_summary = analysis.get("indicator_summary") or {}
+        warnings = indicator_summary.get("warnings") or []
+        if warnings:
+            lines.append("Data/indicator aandacht:")
+            for warning in warnings[:3]:
+                lines.append(f"- {warning}")
+
+        actions = analysis.get("suggested_actions") or []
+        if actions:
+            lines.append("Veilige volgende stap:")
+            for action in actions[:4]:
+                lines.append(f"- {action}")
+
+        lines.append("Ik voer niets automatisch uit vanuit deze check; dit is advies-only.")
         return "\n".join(lines)
 
     def _score_value(self, daily_scores: Optional[Dict[str, Any]], key: str) -> Optional[float]:

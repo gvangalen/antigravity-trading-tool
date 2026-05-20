@@ -1236,3 +1236,77 @@ def test_indicator_insight_message_is_advice_only_and_mentions_missing_data():
     assert "geen daily score van vandaag" in message
     assert "Geen actieve indicator-data" in message
     assert "Ik pas niets automatisch aan" in message
+
+
+def test_daily_coach_request_detection_is_separate_from_status_and_plan_creation():
+    service = _service()
+
+    assert service.looks_like_daily_coach_request("Wat moet ik vandaag doen met mijn BTC setup?") is True
+    assert service.looks_like_daily_coach_request("Moet ik vandaag kopen?") is True
+    assert service.looks_like_plan_request("Wat moet ik vandaag doen met mijn BTC setup?") is False
+    assert service.looks_like_status_request("Welke score blokkeert mijn BTC setup?") is True
+    assert service.looks_like_daily_coach_request("Welke score blokkeert mijn BTC setup?") is False
+
+
+def test_daily_coach_analysis_waits_when_setup_has_blockers():
+    service = _service()
+    setup_analysis = service._evaluate_setup_row(
+        {
+            "id": 12,
+            "name": "BTC Plan",
+            "setup_type": "dca",
+            "timeframe": "1W",
+            "score": 55,
+            "is_active": False,
+            "min_macro_score": 30,
+            "max_macro_score": 70,
+            "min_technical_score": 40,
+            "max_technical_score": 60,
+            "min_market_score": 20,
+            "max_market_score": 80,
+        },
+        {"macro_score": 50, "technical_score": 90, "market_score": 40},
+    )
+
+    analysis = service._build_daily_coach_analysis(
+        asset="BTC",
+        daily_scores={"macro_score": 50, "technical_score": 90, "market_score": 40},
+        setup_analysis=setup_analysis,
+        active_strategy={"active": False},
+        bot_today={"decisions": []},
+        indicator_analysis={
+            "warnings": ["technical: zwakke indicatoren: rsi"],
+            "suggestions": ["Je technical-laag is dun; voeg MA200 toe."],
+            "categories": {},
+        },
+    )
+
+    assert analysis["stance"] == "wait_for_plan"
+    assert analysis["setup_active"] is False
+    assert analysis["blockers"][0]["category"] == "technical"
+    assert "Niet forceren" in analysis["suggested_actions"][0]
+
+
+def test_daily_coach_message_is_advice_only_and_mentions_bot_decisions():
+    service = _service()
+    analysis = {
+        "asset": "BTC",
+        "stance": "plan_is_active",
+        "has_scores": True,
+        "setup": {"id": 12, "name": "BTC Plan"},
+        "setup_match_percentage": 100.0,
+        "blockers": [],
+        "active_strategy": {"active": True, "strategy": {"id": 44, "name": "Weekly DCA"}},
+        "bot_today": {
+            "decision_count": 1,
+            "decisions": [{"bot_id": 8, "action": "buy", "status": "pending"}],
+        },
+        "indicator_summary": {"warnings": []},
+        "suggested_actions": ["Volg je plan."],
+    }
+
+    message = service._daily_coach_message(analysis)
+
+    assert "je plan mag vandaag actief zijn" in message
+    assert "Bot vandaag: 1 beslissing" in message
+    assert "Ik voer niets automatisch uit" in message

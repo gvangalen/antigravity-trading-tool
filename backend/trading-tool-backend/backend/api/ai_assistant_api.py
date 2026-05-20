@@ -150,6 +150,10 @@ async def assistant_chat(
             context=context_payload,
             endpoint="/assistant/chat",
         )
+        if finn.looks_like_daily_coach_request(request.query):
+            finn_response = await finn.build_daily_coach_response(user_id, request.query, context_payload)
+            finn_response["trace_id"] = trace_id
+            return AssistantChatResponse(**finn_response)
         if finn.is_cancel_request(request.query):
             finn_response = await finn.build_cancel_response(user_id, context_payload)
             if finn_response:
@@ -336,6 +340,12 @@ async def assistant_chat_stream(
                 context=context_payload,
                 endpoint="/assistant/chat/stream",
             )
+            if finn.looks_like_daily_coach_request(request.query):
+                envelope = await finn.build_daily_coach_response(user_id, request.query, context_payload)
+                envelope["trace_id"] = trace_id
+                yield _sse_event("envelope", envelope)
+                return
+
             if finn.is_cancel_request(request.query):
                 envelope = await finn.build_cancel_response(user_id, context_payload)
                 if envelope:
