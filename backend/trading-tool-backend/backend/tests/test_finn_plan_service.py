@@ -373,6 +373,12 @@ def test_indicator_bucket_followup_is_not_treated_as_indicator_name():
     assert service._extract_indicator_name_hint("40-60=50 60-80=75 80-100=100", "macro") is None
 
 
+def test_indicator_name_hint_ignores_connector_words():
+    service = _service()
+
+    assert service._extract_indicator_name_hint("Voeg dominance toe aan macro als contrarian weight 2", "macro") == "dominance"
+
+
 def test_indicator_config_changes_include_node_activation():
     service = _service()
     draft = empty_indicator_config_draft()

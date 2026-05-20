@@ -2092,7 +2092,7 @@ class FinnPlanService:
         # Remove intent words and normalize the remaining short phrase. This is
         # only a hint; the DB lookup below remains the source of truth.
         cleaned = re.sub(
-            r"\b(?:voeg|toe|toevoegen|aan|voor|met|op|macro|technical|technische|indicator(?:en)?|node|score|scoring|configureer|config|gebruik|maak|zet|standard|standaard|contrarian|custom|weight|weging|gewicht|activeer|btc|eth|sol)\b|\b\d+(?:[.,]\d+)?\b",
+            r"\b(?:voeg|toe|toevoegen|aan|voor|met|op|als|naar|macro|technical|technisch|technische|indicator(?:en)?|node|score|scoring|configureer|config|gebruik|maak|zet|standard|standaard|contrarian|custom|weight|weging|gewicht|activeer|btc|eth|sol)\b|\b\d+(?:[.,]\d+)?\b",
             " ",
             q,
         )
@@ -2186,6 +2186,7 @@ class FinnPlanService:
                 "custom", "weight", "weging", "gewicht", "gebruik", "maak",
                 "technical", "technisch", "technische", "reset", "herstel",
                 "default", "terug", "naar", "config", "configureer",
+                "als", "met", "voor", "op", "aan",
             }
         ]
         if not tokens:
