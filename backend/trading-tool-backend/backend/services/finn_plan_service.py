@@ -12,12 +12,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.exchange_repository import ExchangeRepository
+from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
 from backend.services.bot_service import BotService
+from backend.services.indicator_config_service import IndicatorConfigService
+from backend.services.macro_data_service import MacroDataService
 from backend.services.setup_service import SetupService
 from backend.services.strategy_service import StrategyService
+from backend.services.technical_data_service import TechnicalDataService
+from backend.utils.scoring_utils import normalize_indicator_name
 
 
 SUPPORTED_ASSETS = {"BTC", "ETH", "SOL"}
@@ -190,6 +195,23 @@ def empty_bot_draft() -> Dict[str, Any]:
     }
 
 
+def empty_indicator_config_draft() -> Dict[str, Any]:
+    return {
+        "draft_kind": "indicator_config",
+        "operation": "configure",
+        "category": "macro",
+        "indicator": None,
+        "display_name": None,
+        "symbol": None,
+        "score_mode": None,
+        "weight": 1.0,
+        "activate_node": True,
+        "rules": [],
+        "indicator_options": [],
+        "changes": [],
+    }
+
+
 def _deep_merge(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
     merged = deepcopy(base)
     for key, value in (patch or {}).items():
@@ -268,7 +290,7 @@ class FinnPlanService:
         state = await ConversationStateRepository(self.session).get_state(user_id)
         slots = (state or {}).get("slots") or {}
         draft = slots.get("draft")
-        if state and state.get("current_flow") in {"plan_creation", "strategy_creation", "bot_creation"} and isinstance(draft, dict):
+        if state and state.get("current_flow") in {"plan_creation", "strategy_creation", "bot_creation", "indicator_config"} and isinstance(draft, dict):
             hydrated["finn_draft"] = draft
             hydrated["finn_state"] = {
                 "version": slots.get("version"),
@@ -281,10 +303,10 @@ class FinnPlanService:
         if not self.session:
             return
         repo = ConversationStateRepository(self.session)
-        if response.get("intent") in {"plan_creation_cancelled", "strategy_creation_cancelled", "bot_creation_cancelled"}:
+        if response.get("intent") in {"plan_creation_cancelled", "strategy_creation_cancelled", "bot_creation_cancelled", "indicator_config_cancelled"}:
             await repo.clear_state(user_id)
             return
-        if response.get("flow") not in {"plan_creation", "strategy_creation", "bot_creation"} or not isinstance(response.get("draft"), dict):
+        if response.get("flow") not in {"plan_creation", "strategy_creation", "bot_creation", "indicator_config"} or not isinstance(response.get("draft"), dict):
             return
 
         draft = response["draft"]
@@ -316,14 +338,28 @@ class FinnPlanService:
                 flow = "strategy_creation"
             elif draft.get("draft_kind") == "bot":
                 flow = "bot_creation"
+            elif draft.get("draft_kind") == "indicator_config":
+                flow = "indicator_config"
             elif draft.get("plan_type") or draft.get("asset") or isinstance(draft.get("_clarification"), dict):
                 flow = "plan_creation"
 
         if not flow and self.session:
             state = await ConversationStateRepository(self.session).get_state(user_id)
-            if state and state.get("current_flow") in {"plan_creation", "strategy_creation", "bot_creation"}:
+            if state and state.get("current_flow") in {"plan_creation", "strategy_creation", "bot_creation", "indicator_config"}:
                 flow = state.get("current_flow")
 
+        if flow == "indicator_config":
+            return {
+                "response": "Prima, ik heb deze indicator-configuratie gestopt. Er is niets aangepast.",
+                "intent": "indicator_config_cancelled",
+                "flow": None,
+                "draft": None,
+                "missing_fields": [],
+                "invalid_fields": [],
+                "next_question": None,
+                "can_confirm": False,
+                "actions": [],
+            }
         if flow == "bot_creation":
             return {
                 "response": "Prima, ik heb deze bot-aanmaak gestopt. Er is niets aangemaakt.",
@@ -423,6 +459,19 @@ class FinnPlanService:
         has_strategy_ref = bool(context.get("strategy_id")) or bool(re.search(r"\bstrateg(?:ie|y)\s*#?\s*\d+\b", q))
         has_create_intent = any(word in q for word in ["maak", "aanmaken", "creeer", "creeër", "bouw", "instellen", "wil"])
         return has_bot_word and (has_bot_ref or has_strategy_ref or has_create_intent or has_update_intent)
+
+    def looks_like_indicator_config_request(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
+        q = (query or "").lower()
+        context = context or {}
+        draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else {}
+        if draft.get("draft_kind") == "indicator_config":
+            return True
+        if self.looks_like_status_request(query):
+            return False
+        has_category = any(word in q for word in ["macro", "indicator", "indicatoren", "node", "score", "scoring", "contrarian", "standard", "standaard"])
+        has_config_intent = any(word in q for word in ["voeg", "toevoegen", "zet", "maak", "configureer", "config", "gebruik", "weight", "weging", "gewicht"])
+        known_indicator_hint = any(word in q for word in ["btc dominance", "bitcoin dominance", "fear", "greed", "dxy", "vix", "dominance"])
+        return has_config_intent and (has_category or known_indicator_hint)
 
     def looks_like_status_request(self, query: str) -> bool:
         q = (query or "").lower()
@@ -908,6 +957,91 @@ class FinnPlanService:
             "actions": actions,
         })
         return response
+
+    async def build_indicator_config_response_for_user(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        previous = (
+            context.get("finn_draft")
+            if isinstance(context.get("finn_draft"), dict) and context["finn_draft"].get("draft_kind") == "indicator_config"
+            else {}
+        )
+        draft = _deep_merge(empty_indicator_config_draft(), previous)
+
+        q = (query or "").strip()
+        q_lower = q.lower()
+        if self.is_cancel_request(q):
+            return {
+                "response": "Prima, ik heb deze indicator-configuratie gestopt. Er is niets aangepast.",
+                "intent": "indicator_config_cancelled",
+                "flow": None,
+                "draft": empty_indicator_config_draft(),
+                "missing_fields": [],
+                "invalid_fields": [],
+                "next_question": None,
+                "can_confirm": False,
+                "actions": [],
+            }
+
+        if any(word in q_lower for word in ["technical", "technisch", "technische"]):
+            draft["category"] = "technical"
+        elif "macro" in q_lower or not draft.get("category"):
+            draft["category"] = "macro"
+        if draft.get("category") == "technical" and not draft.get("symbol"):
+            draft["symbol"] = (context.get("symbol") or context.get("setup_symbol") or "BTC").upper()
+        mentioned_assets = _asset_mentions(q)
+        if draft.get("category") == "technical" and mentioned_assets:
+            draft["symbol"] = mentioned_assets[0]
+
+        mode = self._extract_indicator_score_mode(q_lower)
+        if mode:
+            draft["score_mode"] = mode
+        weight = self._extract_indicator_weight(q_lower)
+        if weight is not None:
+            draft["weight"] = weight
+        if any(word in q_lower for word in ["niet toevoegen", "niet activeren", "alleen config", "alleen instellingen"]):
+            draft["activate_node"] = False
+        elif any(word in q_lower for word in ["toevoegen", "voeg", "activeer", "node active", "node_active"]):
+            draft["activate_node"] = True
+
+        explicit_indicator = self._extract_indicator_name_hint(q, draft.get("category") or "macro")
+        if explicit_indicator:
+            draft["indicator"] = explicit_indicator
+
+        await self._hydrate_indicator_config_draft(user_id, draft, q)
+        validation = self._validate_indicator_config_draft(draft)
+
+        actions = []
+        if validation["can_confirm"]:
+            action_payload = deepcopy(draft)
+            actions.append({
+                "id": self._indicator_config_action_id(action_payload),
+                "type": "configure_indicator",
+                "label": "Indicator configureren",
+                "payload": action_payload,
+                "risk_level": "low",
+                "requires_confirmation": True,
+                "autonomy_level": "confirm_required",
+                "guardrails": {
+                    "requires_confirmation": True,
+                    "can_execute_without_user": False,
+                    "execution_allowed": "indicator_config_only",
+                    "no_ai_generated_scoring": True,
+                },
+            })
+
+        return {
+            "response": self._build_indicator_config_message(draft, validation),
+            "intent": "indicator_config",
+            "flow": "indicator_config",
+            "draft": draft,
+            "state": self._indicator_config_flow_state(draft, validation),
+            "reasoning": self._indicator_config_reasoning(draft, validation),
+            "missing_fields": validation["missing_fields"],
+            "invalid_fields": validation["invalid_fields"],
+            "next_question": validation["next_question"],
+            "can_confirm": validation["can_confirm"],
+            "actions": actions,
+        }
 
     async def build_status_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
@@ -1868,6 +2002,246 @@ class FinnPlanService:
         normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return f"finn-bot-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:24]}"
 
+    def _indicator_config_action_id(self, payload: Dict[str, Any]) -> str:
+        normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return f"finn-indicator-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:24]}"
+
+    def _extract_indicator_score_mode(self, q_lower: str) -> Optional[str]:
+        if any(word in q_lower for word in ["contrarian", "tegen de markt", "omgekeerd", "andersom", "inverse"]):
+            return "contrarian"
+        if any(word in q_lower for word in ["standard", "standaard", "normaal"]):
+            return "standard"
+        if any(word in q_lower for word in ["custom", "aangepast", "eigen regels"]):
+            return "custom"
+        return None
+
+    def _extract_indicator_weight(self, q_lower: str) -> Optional[float]:
+        match = re.search(r"(?:weight|weging|gewicht)\s*(?:van|naar|=|:)?\s*([0-9][0-9.,]*)", q_lower)
+        if not match:
+            return None
+        return _number(match.group(1))
+
+    def _extract_indicator_name_hint(self, query: str, category: str) -> Optional[str]:
+        q = (query or "").lower()
+        aliases = {
+            "bitcoin dominance": "btc_dominance",
+            "btc dominance": "btc_dominance",
+            "btc dominantie": "btc_dominance",
+            "fear and greed": "fear_greed_index",
+            "fear & greed": "fear_greed_index",
+            "fear greed": "fear_greed_index",
+            "dollar index": "dxy",
+            "dxy": "dxy",
+            "vix": "vix",
+            "rsi": "rsi",
+            "macd": "macd",
+            "ema": "ema",
+            "ma 200": "ma_200",
+            "ma200": "ma_200",
+        }
+        for phrase, indicator in aliases.items():
+            if re.search(rf"\b{re.escape(phrase)}\b", q):
+                return indicator
+
+        # Remove intent words and normalize the remaining short phrase. This is
+        # only a hint; the DB lookup below remains the source of truth.
+        cleaned = re.sub(
+            r"\b(?:voeg|toe|toevoegen|aan|voor|met|op|macro|technical|technische|indicator(?:en)?|node|score|scoring|configureer|config|gebruik|maak|zet|standard|standaard|contrarian|custom|weight|weging|gewicht|activeer|btc|eth|sol)\b|\b\d+(?:[.,]\d+)?\b",
+            " ",
+            q,
+        )
+        cleaned = re.sub(r"[^a-z0-9_&\s-]", " ", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if 2 <= len(cleaned) <= 60:
+            return normalize_indicator_name(cleaned)
+        return None
+
+    async def _hydrate_indicator_config_draft(self, user_id: int, draft: Dict[str, Any], query: str = "") -> None:
+        if not self.session:
+            return
+        category = (draft.get("category") or "macro").lower()
+        indicator = normalize_indicator_name(draft.get("indicator") or "") if draft.get("indicator") else None
+        if indicator:
+            exact = await self._find_indicator_exact(category, indicator)
+            if exact:
+                draft["indicator"] = exact["name"]
+                draft["display_name"] = exact.get("display_name") or exact["name"]
+                draft["indicator_options"] = []
+                config = await IndicatorConfigService(IndicatorConfigRepository(self.session)).get_indicator_config(category, exact["name"], user_id)
+                draft["rules"] = [rule.dict() for rule in config.rules]
+                if not draft.get("score_mode"):
+                    draft["score_mode"] = config.score_mode or "standard"
+                if draft.get("weight") is None:
+                    draft["weight"] = float(config.weight or 1.0)
+                draft["changes"] = self._indicator_config_changes(config, draft)
+                return
+            draft["_indicator_lookup_error"] = "indicator bestaat niet in de bestaande indicator registry"
+
+        options = await self._indicator_options(category, query or indicator or "")
+        draft["indicator_options"] = options
+        if not indicator and len(options) == 1:
+            draft["indicator"] = options[0]["name"]
+            draft["display_name"] = options[0].get("display_name") or options[0]["name"]
+            await self._hydrate_indicator_config_draft(user_id, draft, "")
+
+    async def _find_indicator_exact(self, category: str, indicator: str) -> Optional[Dict[str, Any]]:
+        result = await self.session.execute(text("""
+            SELECT name, display_name, category
+            FROM indicators
+            WHERE category = :category
+              AND active = TRUE
+              AND lower(name) = lower(:indicator)
+            LIMIT 1
+        """), {"category": category, "indicator": indicator})
+        row = result.mappings().first()
+        return dict(row) if row else None
+
+    async def _indicator_options(self, category: str, query: str) -> List[Dict[str, Any]]:
+        raw = (query or "").lower()
+        tokens = [
+            normalize_indicator_name(token)
+            for token in re.findall(r"[a-zA-Z0-9&]+", raw)
+            if len(token) >= 2 and token.lower() not in {
+                "voeg", "toe", "macro", "indicator", "indicatoren", "node",
+                "score", "scoring", "standard", "standaard", "contrarian",
+                "custom", "weight", "weging", "gewicht", "gebruik", "maak",
+            }
+        ]
+        if not tokens:
+            result = await self.session.execute(text("""
+                SELECT name, display_name, category
+                FROM indicators
+                WHERE category = :category AND active = TRUE
+                ORDER BY display_name ASC NULLS LAST, name ASC
+                LIMIT 5
+            """), {"category": category})
+        else:
+            like = f"%{'%'.join(tokens)}%"
+            result = await self.session.execute(text("""
+                SELECT name, display_name, category
+                FROM indicators
+                WHERE category = :category
+                  AND active = TRUE
+                  AND (
+                    lower(name) LIKE lower(:like)
+                    OR lower(coalesce(display_name, '')) LIKE lower(:like)
+                  )
+                ORDER BY display_name ASC NULLS LAST, name ASC
+                LIMIT 5
+            """), {"category": category, "like": like})
+        return [dict(row) for row in result.mappings().all()]
+
+    def _indicator_config_changes(self, current_config: Any, draft: Dict[str, Any]) -> List[Dict[str, Any]]:
+        changes = []
+        current_mode = getattr(current_config, "score_mode", None) or "standard"
+        current_weight = float(getattr(current_config, "weight", 1.0) or 1.0)
+        next_mode = draft.get("score_mode") or current_mode
+        next_weight = float(draft.get("weight") if draft.get("weight") is not None else current_weight)
+        if current_mode != next_mode:
+            changes.append({"field": "score_mode", "from": current_mode, "to": next_mode})
+        if round(current_weight, 8) != round(next_weight, 8):
+            changes.append({"field": "weight", "from": current_weight, "to": next_weight})
+        return changes
+
+    def _validate_indicator_config_draft(self, draft: Dict[str, Any]) -> Dict[str, Any]:
+        missing: List[str] = []
+        invalid: List[Dict[str, str]] = []
+
+        if draft.get("category") not in {"macro", "technical"}:
+            invalid.append({"field": "category", "reason": "category moet macro of technical zijn"})
+        if not draft.get("indicator"):
+            missing.append("indicator")
+        if draft.get("_indicator_lookup_error"):
+            invalid.append({"field": "indicator", "reason": draft["_indicator_lookup_error"]})
+        mode = draft.get("score_mode")
+        if not mode:
+            missing.append("score_mode")
+        elif mode not in {"standard", "contrarian", "custom"}:
+            invalid.append({"field": "score_mode", "reason": "score_mode moet standard, contrarian of custom zijn"})
+        weight = draft.get("weight")
+        if weight is None:
+            missing.append("weight")
+        elif not isinstance(weight, (int, float)) or float(weight) < 0 or float(weight) > 3:
+            invalid.append({"field": "weight", "reason": "weight moet tussen 0.0 en 3.0 liggen"})
+        if mode == "custom":
+            invalid.append({"field": "rules", "reason": "custom rules moeten exact via bestaande 5 score-buckets worden aangeleverd; Finn mag geen buckets verzinnen"})
+        if draft.get("category") == "technical" and draft.get("activate_node") and not draft.get("symbol"):
+            missing.append("symbol")
+
+        next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
+        return {
+            "missing_fields": missing,
+            "invalid_fields": invalid,
+            "next_question": next_question,
+            "can_confirm": not missing and not invalid,
+        }
+
+    def _build_indicator_config_message(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> str:
+        if validation["invalid_fields"]:
+            issue = validation["invalid_fields"][0]
+            if issue["field"] == "rules":
+                return "Custom scoring kan alleen met exact de bestaande 5 buckets. Geef alle bucket-scores door of kies standard/contrarian."
+            return f"Ik zie een probleem met {issue['field']}: {issue['reason']}."
+        if validation["next_question"] == "indicator":
+            options = draft.get("indicator_options") or []
+            if options:
+                category = draft.get("category") or "macro"
+                lines = [f"Welke bestaande {category}-node bedoel je? Ik vind deze opties:"]
+                for option in options:
+                    lines.append(f"- {option.get('name')}: {option.get('display_name') or option.get('name')}")
+                return "\n".join(lines)
+            category = draft.get("category") or "macro"
+            return f"Welke bestaande {category}-node wil je configureren? Bijvoorbeeld: btc_dominance, fear_greed_index of rsi."
+        if validation["next_question"] == "score_mode":
+            return "Wil je standard scoring of contrarian scoring gebruiken? Contrarian is voor situaties waarin lage waarden juist koopkans kunnen betekenen."
+        if validation["next_question"] == "weight":
+            return "Welke weight wil je deze macro-node geven? Gebruik 0.0 t/m 3.0."
+
+        scores = [rule.get("score") for rule in (draft.get("rules") or [])]
+        change_lines = [f"- {c['field']}: {c.get('from')} -> {c.get('to')}" for c in (draft.get("changes") or [])]
+        return (
+            f"Ik heb deze {draft.get('category')}-config klaarstaan. Ik gebruik alleen de bestaande indicator-node en bestaande score-buckets:\n\n"
+            f"- Node: {draft.get('display_name') or draft.get('indicator')} ({draft.get('indicator')})\n"
+            + (f"- Asset: {draft.get('symbol')}\n" if draft.get("category") == "technical" else "")
+            + f"- Mode: {draft.get('score_mode')}\n"
+            f"- Weight: {draft.get('weight')}\n"
+            f"- Buckets: {scores}\n"
+            f"- Node activeren: {'ja' if draft.get('activate_node') else 'nee'}"
+            + (("\n\nWijzigingen:\n" + "\n".join(change_lines)) if change_lines else "")
+        )
+
+    def _indicator_config_flow_state(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "status": "ready_for_confirmation" if validation["can_confirm"] else "collecting",
+            "current_flow": "indicator_config",
+            "category": draft.get("category"),
+            "indicator": draft.get("indicator"),
+            "display_name": draft.get("display_name"),
+            "symbol": draft.get("symbol"),
+            "score_mode": draft.get("score_mode"),
+            "weight": draft.get("weight"),
+            "indicator_options": draft.get("indicator_options") or [],
+            "changes": draft.get("changes") or [],
+            "next_question": validation["next_question"],
+            "autonomy_level": "confirm_required",
+            "version": FINN_STATE_VERSION,
+        }
+
+    def _indicator_config_reasoning(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> Dict[str, Any]:
+        reasons = []
+        if validation["missing_fields"]:
+            reasons.append(f"Ontbrekende velden: {', '.join(validation['missing_fields'])}")
+        if validation["invalid_fields"]:
+            reasons.append(f"Ongeldige velden: {', '.join(item['field'] for item in validation['invalid_fields'])}")
+        if not reasons:
+            reasons.append("Bestaande indicator, score-mode, weight en bucket-config zijn gevalideerd.")
+        return {
+            "confidence_score": 0.9 if validation["can_confirm"] else 0.55,
+            "risk_detected": bool(validation["invalid_fields"]),
+            "reasons": reasons,
+            "coaching_level": "indicator_config",
+        }
+
     def _validate_range(self, field: str, value: Any, invalid: List[Dict[str, str]]) -> None:
         if not isinstance(value, list) or len(value) != 2:
             invalid.append({"field": field, "reason": "range ontbreekt of heeft geen min/max"})
@@ -2163,6 +2537,8 @@ class FinnPlanService:
         return "\n".join(lines)
 
     async def execute_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        if action and action.get("type") == "configure_indicator":
+            return await self._execute_indicator_config_action(user_id, action)
         if action and action.get("type") == "create_bot":
             return await self._execute_bot_action(user_id, action)
         if action and action.get("type") == "create_strategy":
@@ -2363,6 +2739,80 @@ class FinnPlanService:
         await self.clear_state(user_id)
         return result
 
+    async def _execute_indicator_config_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        draft = _deep_merge(empty_indicator_config_draft(), action.get("payload") or {})
+        action_id = f"{action.get('id') or self._indicator_config_action_id(draft)}-u{user_id}"
+        acquired = await self._try_create_pending_action(user_id, action_id, action)
+        if not acquired:
+            existing_result = await self._wait_for_action_result(user_id, action_id)
+            if existing_result:
+                return existing_result
+            raise HTTPException(409, "Deze Finn actie wordt al verwerkt. Probeer zo opnieuw.")
+
+        await self._hydrate_indicator_config_draft(user_id, draft)
+        validation = self._validate_indicator_config_draft(draft)
+        if not validation["can_confirm"]:
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={
+                "ok": False,
+                "message": "Indicator-configuratie is nog niet geldig",
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+            })
+            raise HTTPException(422, {
+                "message": "Indicator-configuratie is nog niet geldig",
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+            })
+
+        indicator = draft["indicator"]
+        category = draft["category"]
+        try:
+            config_service = IndicatorConfigService(IndicatorConfigRepository(self.session))
+            await config_service.update_indicator_settings(
+                category=category,
+                indicator=indicator,
+                user_id=user_id,
+                score_mode=draft["score_mode"],
+                weight=float(draft["weight"]),
+            )
+            node_active = False
+            if draft.get("activate_node") and category == "macro":
+                macro_service = MacroDataService(self.session)
+                if not await macro_service.repository.check_indicator_exists(user_id, indicator):
+                    await macro_service.add_macro_indicator(user_id, indicator, None)
+                node_active = True
+            elif draft.get("activate_node") and category == "technical":
+                technical_service = TechnicalDataService(self.session)
+                symbol = draft.get("symbol") or "BTC"
+                if await technical_service.repository.check_duplicate(indicator, user_id, symbol):
+                    await technical_service.repository.ensure_user_config(user_id, indicator, "technical")
+                else:
+                    await technical_service.add_technical_indicator(indicator, user_id, symbol)
+                node_active = True
+            verified = await self._verify_indicator_config(user_id, category, indicator, node_active=node_active)
+        except Exception:
+            await self.session.rollback()
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={
+                "ok": False,
+                "indicator": indicator,
+                "category": category,
+            })
+            raise
+
+        result = {
+            "ok": True,
+            "message": "Indicator-configuratie opgeslagen",
+            "indicator": indicator,
+            "category": category,
+            "symbol": draft.get("symbol"),
+            "draft": draft,
+            "action_id": action_id,
+            "verified": verified,
+        }
+        await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
+        await self.clear_state(user_id)
+        return result
+
     async def _execute_strategy_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
         draft = _deep_merge(empty_strategy_draft(), action.get("payload") or {})
         self._apply_strategy_defaults(draft)
@@ -2432,6 +2882,36 @@ class FinnPlanService:
     async def get_open_plan_state(self, user_id: int) -> Dict[str, Any]:
         context = await self.hydrate_context(user_id, {})
         draft = context.get("finn_draft")
+        if isinstance(draft, dict) and draft.get("draft_kind") == "indicator_config":
+            await self._hydrate_indicator_config_draft(user_id, draft)
+            validation = self._validate_indicator_config_draft(draft)
+            actions = []
+            if validation["can_confirm"]:
+                action_payload = deepcopy(draft)
+                actions.append({
+                    "id": self._indicator_config_action_id(action_payload),
+                    "type": "configure_indicator",
+                    "label": "Indicator configureren",
+                    "payload": action_payload,
+                    "risk_level": "low",
+                    "requires_confirmation": True,
+                    "autonomy_level": "confirm_required",
+                })
+            return {
+                "ok": True,
+                "has_draft": True,
+                "response": self._build_indicator_config_message(draft, validation),
+                "intent": "indicator_config",
+                "flow": "indicator_config",
+                "draft": draft,
+                "state": self._indicator_config_flow_state(draft, validation),
+                "reasoning": self._indicator_config_reasoning(draft, validation),
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+                "next_question": validation["next_question"],
+                "can_confirm": validation["can_confirm"],
+                "actions": actions,
+            }
         if isinstance(draft, dict) and draft.get("draft_kind") == "bot":
             await self._hydrate_existing_bot_draft_from_db(user_id, draft)
             await self._hydrate_bot_draft_from_db(user_id, draft)
@@ -2688,6 +3168,39 @@ class FinnPlanService:
         required_verified = setup_found and strategy_found and (bot_found if bot_id else True)
         if not required_verified:
             raise HTTPException(500, f"Read-after-write verificatie faalde: {verified}")
+        return verified
+
+    async def _verify_indicator_config(self, user_id: int, category: str, indicator: str, *, node_active: bool = False) -> Dict[str, bool]:
+        config = await IndicatorConfigService(IndicatorConfigRepository(self.session)).get_indicator_config(category, indicator, user_id)
+        rules_ok = bool(config and len(config.rules) == 5)
+        table = {
+            "macro": "macro_indicator_rules",
+            "technical": "technical_indicator_rules",
+        }.get(category)
+        if not table:
+            raise HTTPException(400, "Onbekende indicator category")
+        override_rows = await self.session.execute(text("""
+            SELECT COUNT(*) AS count
+            FROM {table}
+            WHERE user_id = :user_id AND indicator = :indicator
+        """.format(table=table)), {"user_id": user_id, "indicator": indicator})
+        override_ok = int(override_rows.scalar() or 0) == 5
+        node_ok = True
+        if node_active and category == "macro":
+            node_ok = await MacroDataService(self.session).repository.check_indicator_exists(user_id, indicator)
+        elif node_active and category == "technical":
+            config_rows = await self.session.execute(text("""
+                SELECT COUNT(*) AS count
+                FROM user_indicator_configs
+                WHERE user_id = :user_id AND category = 'technical' AND indicator = :indicator
+            """), {"user_id": user_id, "indicator": indicator})
+            node_ok = int(config_rows.scalar() or 0) > 0
+        verified = {
+            "indicator_config": rules_ok and override_ok,
+            "macro_node": node_ok,
+        }
+        if not verified["indicator_config"] or not verified["macro_node"]:
+            raise HTTPException(500, f"Indicator read-after-write verificatie faalde: {verified}")
         return verified
 
     async def _log_intelligence_event(self, user_id: int, draft: Dict[str, Any], result: Dict[str, Any]) -> None:

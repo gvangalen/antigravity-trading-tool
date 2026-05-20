@@ -13,6 +13,9 @@ import { useModal } from "@/components/modal/ModalProvider";
 import { saveNewSetup, fetchSetups } from "@/lib/api/setups";
 import { createStrategy, fetchStrategies } from "@/lib/api/strategy";
 import { createBotConfig, fetchBotConfigs } from "@/lib/api/botApi";
+import { getIndicatorConfig } from "@/lib/api/indicatorConfig";
+import { fetchMacroData } from "@/lib/api/macro";
+import { technicalDataAll } from "@/lib/api/technical";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import SetupForm from "@/components/setup/SetupForm";
@@ -386,10 +389,10 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             return copy;
           });
 
-          if (["plan_creation_cancelled", "strategy_creation_cancelled"].includes(envelope.intent)) {
+          if (["plan_creation_cancelled", "strategy_creation_cancelled", "bot_creation_cancelled", "indicator_config_cancelled"].includes(envelope.intent)) {
             setFinnDraft(null);
             setActiveState(null);
-          } else if (["plan_creation", "strategy_creation"].includes(envelope.flow)) {
+          } else if (["plan_creation", "strategy_creation", "bot_creation", "indicator_config"].includes(envelope.flow)) {
             setFinnDraft(envelope.draft || null);
           }
 
@@ -575,11 +578,36 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       const res = await executeAssistantAction(action);
       const isBotOnly = res?.draft?.draft_kind === "bot";
       const isStrategyOnly = res?.draft?.draft_kind === "strategy";
+      const isIndicatorConfig = res?.draft?.draft_kind === "indicator_config";
       const verifiedOk = isBotOnly
         ? Boolean(res?.verified?.bot)
+        : isIndicatorConfig
+        ? Boolean(res?.verified?.indicator_config && res?.verified?.macro_node !== false)
         : Boolean(res?.verified?.setup && res?.verified?.strategy && (!res.bot_id || res?.verified?.bot));
       if (!res?.ok || !verifiedOk) {
         throw new Error("Read-after-write verificatie faalde.");
+      }
+
+      if (isIndicatorConfig) {
+        const [config, macroRows] = await Promise.all([
+          getIndicatorConfig(res.category, res.indicator),
+          res.category === "macro" ? fetchMacroData() : technicalDataAll(res.draft?.symbol || context.symbol || "BTC"),
+        ]);
+        const configFound = Boolean(config?.indicator === res.indicator && Array.isArray(config?.rules) && config.rules.length === 5);
+        const nodeFound = res.category === "macro"
+          ? macroRows.some((row) => String(row.name).toLowerCase() === String(res.indicator).toLowerCase())
+          : macroRows.some((row) => String(row.indicator).toLowerCase() === String(res.indicator).toLowerCase());
+        if (!configFound || !nodeFound) {
+          throw new Error("Indicator-configuratie is nog niet terugleesbaar via de API.");
+        }
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          text: `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Indicator-configuratie opgeslagen en geverifieerd: ${res.category}/${res.indicator}.`,
+          intent: "indicator_configured",
+        }]);
+        setFinnDraft(null);
+        await loadInsight();
+        return;
       }
 
       const [setups, strategies, bots] = await Promise.all([
@@ -622,7 +650,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     const isFinnPlan = message.intent === "plan_creation" || message.flow === "plan_creation" || draft?.plan_type;
     const isFinnStrategy = message.intent === "strategy_creation" || message.flow === "strategy_creation" || draft?.draft_kind === "strategy";
     const isFinnBot = message.intent === "bot_creation" || message.flow === "bot_creation" || draft?.draft_kind === "bot";
-    if (!draft || (!isFinnPlan && !isFinnStrategy && !isFinnBot)) return null;
+    const isFinnIndicator = message.intent === "indicator_config" || message.flow === "indicator_config" || draft?.draft_kind === "indicator_config";
+    if (!draft || (!isFinnPlan && !isFinnStrategy && !isFinnBot && !isFinnIndicator)) return null;
 
     const setup = draft.setup || {};
     const strategy = draft.strategy || {};
@@ -633,10 +662,17 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     const isTrade = draftType === "trade";
     const setupOptions = message.state?.setup_options || [];
     const strategyOptions = message.state?.strategy_options || [];
+    const indicatorOptions = message.state?.indicator_options || draft.indicator_options || [];
     const changes = draft.changes || message.state?.changes || [];
 
     const rows = [
-      ["Type", isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type)],
+      ["Type", isFinnIndicator ? "indicator_config" : (isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type))],
+      isFinnIndicator ? ["Categorie", draft.category] : null,
+      isFinnIndicator ? ["Node", draft.indicator ? `${draft.display_name || draft.indicator} (${draft.indicator})` : null] : null,
+      isFinnIndicator ? ["Score mode", draft.score_mode] : null,
+      isFinnIndicator ? ["Weight", draft.weight] : null,
+      isFinnIndicator ? ["Buckets", Array.isArray(draft.rules) ? draft.rules.map((rule) => rule.score).join(" / ") : null] : null,
+      isFinnIndicator ? ["Node actief", draft.activate_node ? "ja" : "nee"] : null,
       isFinnStrategy ? ["Actie", draft.operation === "update" ? "bijwerken" : "aanmaken"] : null,
       isFinnBot ? ["Actie", draft.operation === "update" ? "bijwerken" : "aanmaken"] : null,
       isFinnBot && draft.operation === "update" ? ["Bot ID", draft.bot_id ? `#${draft.bot_id}` : null] : null,
@@ -649,20 +685,20 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       isFinnBot ? ["Mode", bot.mode] : null,
       isFinnBot ? ["Risk", bot.risk_profile] : null,
       isFinnBot ? ["Cadence", bot.cadence] : null,
-      ["Asset", draft.asset],
-      !isFinnStrategy && !isFinnBot ? ["Naam", setup.name] : null,
-      ["Timeframe", isFinnStrategy || isFinnBot ? draft.timeframe : setup.timeframe],
-      ["Bedrag", isFinnBot ? (bot.budget_total_eur ? `€${bot.budget_total_eur}` : null) : (strategy.base_amount_eur ? `€${strategy.base_amount_eur}` : null)],
-      !isFinnStrategy && !isFinnBot ? ["Macro", Array.isArray(setup.macro_score_range) ? setup.macro_score_range.join(" - ") : null] : null,
-      !isFinnStrategy && !isFinnBot ? ["Technical", Array.isArray(setup.technical_score_range) ? setup.technical_score_range.join(" - ") : null] : null,
-      !isFinnStrategy && !isFinnBot ? ["Market", Array.isArray(setup.market_score_range) ? setup.market_score_range.join(" - ") : null] : null,
+      !isFinnIndicator ? ["Asset", draft.asset] : null,
+      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? ["Naam", setup.name] : null,
+      !isFinnIndicator ? ["Timeframe", isFinnStrategy || isFinnBot ? draft.timeframe : setup.timeframe] : null,
+      !isFinnIndicator ? ["Bedrag", isFinnBot ? (bot.budget_total_eur ? `€${bot.budget_total_eur}` : null) : (strategy.base_amount_eur ? `€${strategy.base_amount_eur}` : null)] : null,
+      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? ["Macro", Array.isArray(setup.macro_score_range) ? setup.macro_score_range.join(" - ") : null] : null,
+      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? ["Technical", Array.isArray(setup.technical_score_range) ? setup.technical_score_range.join(" - ") : null] : null,
+      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? ["Market", Array.isArray(setup.market_score_range) ? setup.market_score_range.join(" - ") : null] : null,
       isDca && !isFinnStrategy && !isFinnBot ? ["DCA", [dca.frequency, dca.day || dca.month_day].filter(Boolean).join(" · ")] : null,
       isTrade && !isFinnBot ? ["Uitvoering", strategy.entry_type || strategy.trade_execution_mode || "limit"] : null,
       isTrade && !isFinnBot && strategy.entry_type === "market" ? ["Market akkoord", strategy.market_execution_ack ? "ja" : "nee"] : null,
       isTrade && !isFinnBot ? ["Entry", strategy.entry] : null,
       isTrade && !isFinnBot ? ["Stop", strategy.stop_loss] : null,
       isTrade && !isFinnBot ? ["Targets", Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
-      !isFinnBot ? ["Automatisering", isFinnStrategy ? strategy.automation : (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only"))] : null,
+      !isFinnBot && !isFinnIndicator ? ["Automatisering", isFinnStrategy ? strategy.automation : (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only"))] : null,
       !isFinnStrategy && !isFinnBot && bot.create_bot ? ["Bot", `${bot.is_live ? "Live" : "Paper"} · ${bot.mode} · ${bot.risk_profile}`] : null,
     ].filter(Boolean);
 
@@ -670,7 +706,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-4">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-300">
           <ListChecks size={13} />
-          {isFinnBot ? "Finn Bot Draft" : (isFinnStrategy ? "Finn Strategy Draft" : "Finn Plan Draft")}
+          {isFinnIndicator ? "Finn Indicator Config Draft" : (isFinnBot ? "Finn Bot Draft" : (isFinnStrategy ? "Finn Strategy Draft" : "Finn Plan Draft"))}
         </div>
         <div className="grid grid-cols-1 gap-2">
           {rows.map(([label, value]) => (
@@ -718,7 +754,26 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             </div>
           </div>
         )}
-        {(isFinnStrategy || isFinnBot) && changes.length > 0 && (
+        {isFinnIndicator && indicatorOptions.length > 0 && (
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/70 dark:bg-slate-950/30 p-3 space-y-2">
+            <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">Kies macro-node</div>
+            <div className="grid grid-cols-1 gap-2">
+              {indicatorOptions.map((option) => (
+                <button
+                  key={option.name}
+                  onClick={() => handleChat(`${option.name}`)}
+                  className="text-left rounded-lg border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 px-3 py-2 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
+                >
+                  <div className="text-xs font-black text-slate-800 dark:text-slate-100">{option.display_name || option.name}</div>
+                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-500 dark:text-blue-300">
+                    {option.name} · {option.category}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {(isFinnStrategy || isFinnBot || isFinnIndicator) && changes.length > 0 && (
           <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 p-3 space-y-2">
             <div className="text-[9px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Wijzigingen</div>
             <div className="space-y-1">

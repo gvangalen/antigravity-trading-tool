@@ -2,6 +2,7 @@ import asyncio
 from decimal import Decimal
 
 from backend.services.finn_plan_service import FinnPlanService
+from backend.services.finn_plan_service import empty_indicator_config_draft
 from backend.services.strategy_service import StrategyService
 
 
@@ -258,6 +259,63 @@ def test_multiple_or_unsupported_assets_ask_for_asset_clarification():
     ]
     assert "BTC, ETH en SOL" in result["response"]
     assert result["actions"] == []
+
+
+def test_macro_indicator_config_request_is_transactional_intent():
+    service = _service()
+
+    assert service.looks_like_indicator_config_request("Voeg Bitcoin Dominance toe aan macro als contrarian weight 2") is True
+    assert service._extract_indicator_name_hint("Voeg Bitcoin Dominance toe aan macro", "macro") == "btc_dominance"
+    assert service._extract_indicator_score_mode("gebruik contrarian want ik wil tegen de markt in kopen") == "contrarian"
+    assert service._extract_indicator_weight("weight naar 2") == 2
+
+
+def test_macro_indicator_config_blocks_custom_without_bucket_rules():
+    service = _service()
+    draft = empty_indicator_config_draft()
+    draft["indicator"] = "btc_dominance"
+    draft["display_name"] = "Bitcoin Dominance"
+    draft["score_mode"] = "custom"
+    draft["weight"] = 1.0
+
+    validation = service._validate_indicator_config_draft(draft)
+
+    assert validation["can_confirm"] is False
+    assert {"field": "rules", "reason": "custom rules moeten exact via bestaande 5 score-buckets worden aangeleverd; Finn mag geen buckets verzinnen"} in validation["invalid_fields"]
+
+
+def test_macro_indicator_config_accepts_existing_standard_or_contrarian_draft():
+    service = _service()
+    draft = empty_indicator_config_draft()
+    draft["indicator"] = "btc_dominance"
+    draft["display_name"] = "Bitcoin Dominance"
+    draft["score_mode"] = "contrarian"
+    draft["weight"] = 2.0
+    draft["rules"] = [{"score": score} for score in [10, 25, 50, 75, 100]]
+
+    validation = service._validate_indicator_config_draft(draft)
+
+    assert validation["can_confirm"] is True
+    assert validation["missing_fields"] == []
+    assert validation["invalid_fields"] == []
+
+
+def test_technical_indicator_config_requires_symbol_when_activated():
+    service = _service()
+    assert service._extract_indicator_name_hint("Voeg RSI toe aan technical voor BTC met standaard scoring weight 1", "technical") == "rsi"
+
+    draft = empty_indicator_config_draft()
+    draft["category"] = "technical"
+    draft["indicator"] = "rsi"
+    draft["display_name"] = "RSI"
+    draft["score_mode"] = "standard"
+    draft["weight"] = 1.0
+    draft["symbol"] = None
+
+    validation = service._validate_indicator_config_draft(draft)
+
+    assert validation["can_confirm"] is False
+    assert "symbol" in validation["missing_fields"]
 
 
 def test_strategy_creation_for_active_dca_setup_is_confirmable():
