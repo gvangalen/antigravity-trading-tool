@@ -370,10 +370,27 @@ class DashboardService:
 
         # If AI insights succeeded, unpack them safely
         if isinstance(ai_insight, dict):
+            daily_coach = ai_insight.get("daily_coach")
+            if isinstance(daily_coach, dict):
+                stance = daily_coach.get("stance")
+                asset = daily_coach.get("asset", "BTC")
+                blockers = daily_coach.get("blockers") or []
+                if stance == "plan_is_active":
+                    summary = f"{asset}: je plan is vandaag actief volgens je eigen ranges. Review bot-proposals handmatig voor uitvoering."
+                elif stance == "wait_for_scores":
+                    summary = f"{asset}: daily scores ontbreken nog; Finn wacht met een actief/inactief oordeel."
+                elif blockers:
+                    first = blockers[0]
+                    summary = (
+                        f"{asset}: wachten. {first.get('category')} score {first.get('score')} "
+                        f"valt buiten je range {first.get('range')}."
+                    )
+                else:
+                    summary = ai_insight.get("briefing_text") or summary
             insight_market = ai_insight.get("market_insight", {})
             if isinstance(insight_market, dict):
                 insight_conclusion = insight_market.get("conclusion")
-                if insight_conclusion:
+                if insight_conclusion and not ai_insight.get("daily_coach"):
                     summary = insight_conclusion
             
             ai_suggested = ai_insight.get("suggested_actions")

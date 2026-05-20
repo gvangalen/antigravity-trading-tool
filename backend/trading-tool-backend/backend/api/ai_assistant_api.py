@@ -455,7 +455,8 @@ async def get_insight(
             greeting=insight.get("greeting", "Hoi!"),
             bot_insight=insight.get("bot_insight"),
             market_insight=insight.get("market_insight"),
-            context_detected=context
+            context_detected=insight.get("context_detected") or context,
+            suggested_actions=insight.get("suggested_actions"),
         )
     except Exception as e:
         logger.error(f"❌ AI Assistant Insight Error: {e}", exc_info=True)

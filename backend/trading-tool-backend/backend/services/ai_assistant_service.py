@@ -18,6 +18,7 @@ from backend.infrastructure.repositories.market_data_repository import MarketDat
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.services.setup_service import SetupService
+from backend.services.finn_plan_service import FinnPlanService
 
 logger = logging.getLogger(__name__)
 
@@ -1568,6 +1569,34 @@ class AiAssistantService:
     async def get_assistant_insight(self, user_id: int, context_data: Dict[str, str]) -> Dict[str, Any]:
         start_insight = time.perf_counter()
         symbol = context_data.get("symbol", "BTC")
+        page_type = context_data.get("page_type") or context_data.get("page") or "Dashboard"
+
+        if self.context_repo:
+            finn_session = self.context_repo.session
+        else:
+            finn_session = getattr(self.score_repo, "db", None)
+
+        if finn_session:
+            try:
+                finn = FinnPlanService(finn_session)
+                daily = await finn.build_daily_coach_response(
+                    user_id,
+                    f"Wat moet ik vandaag doen met mijn {symbol} setup?",
+                    {"symbol": symbol, "page": page_type},
+                )
+                analysis = (daily.get("state") or {}).get("analysis") or {}
+                briefing = self._assistant_insight_from_daily_coach(
+                    symbol=symbol,
+                    page_type=str(page_type),
+                    daily_response=daily,
+                    analysis=analysis,
+                )
+                if briefing:
+                    insight_total_duration = (time.perf_counter() - start_insight) * 1000
+                    logger.info("⏱️ [Ai-Assistant-Service] deterministic FINN insight took %.2fms", insight_total_duration)
+                    return briefing
+            except Exception as exc:
+                logger.warning("⚠️ Deterministic FINN insight fallback failed: %s", exc, exc_info=True)
         
         # 1. Fetch Contexts, Market Data, and User Preferences sequentially to prevent task collisions
         if self.context_repo:
@@ -1598,7 +1627,6 @@ class AiAssistantService:
 
         # 3. Build System Prompt (Combined role for speed/brevity)
         raw_system_role = get_role_prompt("combined_insight", preferences)
-        page_type = context_data.get("page_type", "Dashboard")
         timeframe = context_data.get("timeframe", "Snapshot")
         
         # Manually replace placeholders in the system role task description
@@ -1662,6 +1690,85 @@ class AiAssistantService:
             insight["suggested_actions"] = ["Pas bot aan", "DCA setup maken", "Risico aanpassen"]
         
         return insight
+
+    def _assistant_insight_from_daily_coach(
+        self,
+        *,
+        symbol: str,
+        page_type: str,
+        daily_response: Dict[str, Any],
+        analysis: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        if not analysis:
+            return None
+
+        stance = analysis.get("stance")
+        setup = analysis.get("setup") or {}
+        blockers = analysis.get("blockers") or []
+        bot_today = analysis.get("bot_today") or {}
+        indicator_summary = analysis.get("indicator_summary") or {}
+        warnings = indicator_summary.get("warnings") or []
+        suggestions = analysis.get("suggested_actions") or []
+
+        if stance == "plan_is_active":
+            posture = "Plan Active"
+            conclusion = f"{symbol} voldoet vandaag aan je setup-ranges."
+            action = "Volg je plan en review een bot-proposal voordat je uitvoert."
+        elif stance == "wait_for_scores":
+            posture = "Data Pending"
+            conclusion = f"{symbol} heeft nog geen volledige daily score voor een betrouwbaar oordeel."
+            action = "Wacht op scoredata voordat je een trade- of DCA-beslissing neemt."
+        else:
+            posture = "Defensive Posture"
+            conclusion = f"{symbol} is vandaag geblokkeerd volgens je eigen planregels."
+            action = "Niet forceren; wacht tot de blocker-scores binnen je ranges vallen."
+
+        if blockers:
+            blocker_text = "; ".join(
+                f"{b.get('category')} {b.get('score')} buiten {b.get('range')}"
+                for b in blockers[:3]
+            )
+            why = f"Blockers: {blocker_text}."
+        elif not analysis.get("has_scores"):
+            why = "Er is onvoldoende scoredata; Finn geeft daarom geen fake actief/inactief conclusie."
+        else:
+            why = "Macro, technical en market passen bij je setup-ranges."
+
+        if setup:
+            why += f" Setup: {setup.get('name')} (#{setup.get('id')}), match {analysis.get('setup_match_percentage')}%."
+
+        bot_count = int(bot_today.get("decision_count") or 0)
+        bot_conclusion = f"{bot_count} bot-beslissing(en) voor vandaag."
+        bot_action = "Review open bot-beslissingen handmatig." if bot_count else "Geen bot-actie nodig zolang er geen decision klaarstaat."
+        bot_why = "Finn voert niets automatisch uit vanuit de briefing."
+
+        market_why_parts = [why]
+        if warnings:
+            market_why_parts.append("Data aandacht: " + "; ".join(str(w) for w in warnings[:2]) + ".")
+
+        return {
+            "greeting": f"Hoi, {symbol} briefing voor {page_type}: {posture}.",
+            "bot_insight": {
+                "conclusion": bot_conclusion,
+                "action": bot_action,
+                "why": bot_why,
+            },
+            "market_insight": {
+                "conclusion": conclusion,
+                "action": action,
+                "why": " ".join(market_why_parts),
+            },
+            "context_detected": {
+                "symbol": symbol,
+                "page": page_type,
+                "flow": "daily_coach",
+                "stance": stance,
+                "posture": posture,
+            },
+            "suggested_actions": suggestions[:4] or ["Vraag Finn om mijn plan uit te leggen", "Bekijk setup blockers"],
+            "daily_coach": analysis,
+            "briefing_text": daily_response.get("response"),
+        }
 
     def _build_flow_registry_prompt(self, conv_state: Optional[dict], stated_exp: str) -> str:
         from backend.ai_agents.flow_registry import FLOW_DEFINITIONS

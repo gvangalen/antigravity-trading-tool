@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.finn_plan_service import empty_indicator_config_draft
+from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.strategy_service import StrategyService
 
 
@@ -1310,3 +1311,40 @@ def test_daily_coach_message_is_advice_only_and_mentions_bot_decisions():
     assert "je plan mag vandaag actief zijn" in message
     assert "Bot vandaag: 1 beslissing" in message
     assert "Ik voer niets automatisch uit" in message
+
+
+def test_assistant_insight_from_daily_coach_is_structured_morning_brief():
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=None,
+        ai_gateway=None,
+    )
+
+    insight = assistant._assistant_insight_from_daily_coach(
+        symbol="BTC",
+        page_type="FINN",
+        daily_response={"response": "Daily coach text"},
+        analysis={
+            "asset": "BTC",
+            "stance": "wait_for_plan",
+            "has_scores": True,
+            "setup": {"id": 12, "name": "BTC Plan"},
+            "setup_match_percentage": 0.0,
+            "blockers": [{"category": "macro", "score": 10.0, "range": [30.0, 70.0]}],
+            "bot_today": {"decision_count": 0},
+            "indicator_summary": {"warnings": ["macro: geen actieve indicator-data gevonden"]},
+            "suggested_actions": ["Niet forceren"],
+        },
+    )
+
+    assert insight["context_detected"]["flow"] == "daily_coach"
+    assert insight["context_detected"]["posture"] == "Defensive Posture"
+    assert "geblokkeerd" in insight["market_insight"]["conclusion"]
+    assert "macro 10.0 buiten [30.0, 70.0]" in insight["market_insight"]["why"]
+    assert insight["suggested_actions"] == ["Niet forceren"]
