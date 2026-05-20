@@ -195,37 +195,10 @@ class DashboardService:
             logger.error(f"⚠️ [MobileOverview] Failed to initialize BotService: {e}", exc_info=True)
             bot_portfolios_task = asyncio.sleep(0, result=[])
 
-        try:
-            from backend.services.ai_assistant_service import AiAssistantService
-            from backend.infrastructure.repositories.score_repository import ScoreRepository
-            from backend.infrastructure.repositories.setup_repository import SetupRepository
-            from backend.infrastructure.repositories.report_repository import ReportRepository
-            from backend.infrastructure.repositories.bot_repository import BotRepository
-            from backend.infrastructure.repositories.user_repository import UserRepository
-            from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
-            from backend.infrastructure.repositories.strategy_repository import StrategyRepository
-            from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
-            from backend.services.ai_gateway import AiGateway
-            
-            user_repo = UserRepository(self.session)
-            score_repo = ScoreRepository(self.session)
-            ai_gateway = AiGateway(user_repo=user_repo, score_repo=score_repo)
-            
-            ai_service = AiAssistantService(
-                score_repo=score_repo,
-                setup_repo=SetupRepository(self.session),
-                report_repo=ReportRepository(self.session),
-                bot_repo=BotRepository(self.session),
-                user_repo=user_repo,
-                market_data_repo=MarketDataRepository(self.session),
-                strategy_repo=StrategyRepository(self.session),
-                state_repo=ConversationStateRepository(self.session),
-                ai_gateway=ai_gateway
-            )
-            ai_insight_task = ai_service.get_assistant_insight(user_id=user_id, context_data={"page": "dashboard", "symbol": "BTC"})
-        except Exception as e:
-            logger.error(f"⚠️ [MobileOverview] Failed to initialize AiAssistantService: {e}", exc_info=True)
-            ai_insight_task = asyncio.sleep(0, result={})
+        # Keep AI/Finn briefing out of the parallel gather: it uses the same
+        # AsyncSession and must run after the other DB tasks to avoid asyncpg
+        # "another operation is in progress" errors on mobile cold start.
+        ai_insight_task = asyncio.sleep(0, result={})
 
         try:
             from backend.services.intelligence_event_service import IntelligenceEventService
@@ -280,6 +253,24 @@ class DashboardService:
                 logger.error(f"❌ [MobileOverview] P4 Error: intel_task failed: {results[3]}", exc_info=True)
             else:
                 raw_intel_events = results[3] or []
+
+        try:
+            from backend.services.finn_plan_service import FinnPlanService
+
+            finn = FinnPlanService(self.session)
+            daily = await finn.build_daily_coach_response(
+                user_id,
+                "Wat moet ik vandaag doen met mijn BTC setup?",
+                {"symbol": "BTC", "page": "mobile_overview"},
+            )
+            analysis = (daily.get("state") or {}).get("analysis") or {}
+            ai_insight = {
+                "daily_coach": analysis,
+                "briefing_text": daily.get("response"),
+                "suggested_actions": daily.get("suggested_actions") or analysis.get("suggested_actions") or [],
+            }
+        except Exception as e:
+            logger.error(f"⚠️ [MobileOverview] Deterministic Finn briefing failed: {e}", exc_info=True)
 
         # 5. PRIORITEIT 1: Process watchlist scores dynamically via standard score engine
         from backend.services.intelligence_semantics import get_macro_semantics, get_technical_semantics, get_market_semantics
