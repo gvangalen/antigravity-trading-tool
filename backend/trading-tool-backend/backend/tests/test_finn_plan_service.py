@@ -373,6 +373,57 @@ def test_indicator_bucket_followup_is_not_treated_as_indicator_name():
     assert service._extract_indicator_name_hint("40-60=50 60-80=75 80-100=100", "macro") is None
 
 
+def test_indicator_config_changes_include_node_activation():
+    service = _service()
+    draft = empty_indicator_config_draft()
+    draft["score_mode"] = "standard"
+    draft["weight"] = 1.0
+    draft["activate_node"] = True
+    draft["existing_config_snapshot"] = {
+        "score_mode": "standard",
+        "weight": 1.0,
+        "node_active": False,
+        "rules": [],
+    }
+
+    changes = service._indicator_config_changes_from_snapshot(draft)
+
+    assert {"field": "node_active", "from": False, "to": True} in changes
+
+
+def test_indicator_reset_draft_does_not_require_score_mode_or_weight():
+    service = _service()
+    draft = empty_indicator_config_draft()
+    draft["operation"] = "reset"
+    draft["indicator"] = "btc_dominance"
+    draft["display_name"] = "Bitcoin Dominance"
+    draft["score_mode"] = None
+    draft["weight"] = None
+
+    validation = service._validate_indicator_config_draft(draft)
+
+    assert validation["can_confirm"] is True
+    assert validation["missing_fields"] == []
+
+
+def test_indicator_reset_changes_use_existing_snapshot():
+    service = _service()
+    draft = empty_indicator_config_draft()
+    draft["operation"] = "reset"
+    draft["existing_config_snapshot"] = {
+        "score_mode": "custom",
+        "weight": 2.0,
+        "has_user_override": True,
+        "rules": [],
+    }
+
+    changes = service._indicator_reset_changes_from_snapshot(draft)
+
+    assert {"field": "score_rules", "from": "user_override", "to": "template_default"} in changes
+    assert {"field": "score_mode", "from": "custom", "to": "template"} in changes
+    assert {"field": "weight", "from": 2.0, "to": "template"} in changes
+
+
 def test_technical_indicator_config_requires_symbol_when_activated():
     service = _service()
     assert service._extract_indicator_name_hint("Voeg RSI toe aan technical voor BTC met standaard scoring weight 1", "technical") == "rsi"

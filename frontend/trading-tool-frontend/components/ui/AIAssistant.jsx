@@ -582,7 +582,12 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       const verifiedOk = isBotOnly
         ? Boolean(res?.verified?.bot)
         : isIndicatorConfig
-        ? Boolean(res?.verified?.indicator_config && res?.verified?.macro_node !== false)
+        ? Boolean(
+            res?.verified?.indicator_config &&
+            (res.category === "technical"
+              ? res?.verified?.technical_node !== false
+              : res?.verified?.macro_node !== false)
+          )
         : Boolean(res?.verified?.setup && res?.verified?.strategy && (!res.bot_id || res?.verified?.bot));
       if (!res?.ok || !verifiedOk) {
         throw new Error("Read-after-write verificatie faalde.");
@@ -594,7 +599,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           res.category === "macro" ? fetchMacroData() : technicalDataAll(res.draft?.symbol || context.symbol || "BTC"),
         ]);
         const configFound = Boolean(config?.indicator === res.indicator && Array.isArray(config?.rules) && config.rules.length === 5);
-        const nodeFound = res.category === "macro"
+        const shouldVerifyNode = Boolean(res.draft?.activate_node || res.draft?.node_already_active);
+        const nodeFound = !shouldVerifyNode ? true : res.category === "macro"
           ? macroRows.some((row) => String(row.name).toLowerCase() === String(res.indicator).toLowerCase())
           : macroRows.some((row) => String(row.indicator).toLowerCase() === String(res.indicator).toLowerCase());
         if (!configFound || !nodeFound) {
@@ -602,7 +608,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         }
         setMessages(prev => [...prev, {
           role: "assistant",
-          text: `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Indicator-configuratie opgeslagen en geverifieerd: ${res.category}/${res.indicator}.`,
+          text: `${res.duplicate ? "Deze actie was al verwerkt. " : ""}${res.message || "Indicator-configuratie opgeslagen"} en geverifieerd: ${res.category}/${res.indicator}.`,
           intent: "indicator_configured",
         }]);
         setFinnDraft(null);
@@ -667,6 +673,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
     const rows = [
       ["Type", isFinnIndicator ? "indicator_config" : (isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type))],
+      isFinnIndicator ? ["Actie", draft.operation === "reset" ? "reset naar standaard" : (draft.operation === "update" ? "bijwerken" : "toevoegen")] : null,
       isFinnIndicator ? ["Categorie", draft.category] : null,
       isFinnIndicator ? ["Node", draft.indicator ? `${draft.display_name || draft.indicator} (${draft.indicator})` : null] : null,
       isFinnIndicator ? ["Score mode", draft.score_mode] : null,
@@ -756,7 +763,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         )}
         {isFinnIndicator && indicatorOptions.length > 0 && (
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/70 dark:bg-slate-950/30 p-3 space-y-2">
-            <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">Kies macro-node</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">Kies indicator-node</div>
             <div className="grid grid-cols-1 gap-2">
               {indicatorOptions.map((option) => (
                 <button

@@ -216,6 +216,7 @@ def empty_indicator_config_draft() -> Dict[str, Any]:
         "rules": [],
         "existing_config_snapshot": None,
         "node_already_active": False,
+        "has_user_override": False,
         "custom_rules_touched": False,
         "custom_rules_complete": False,
         "custom_rule_buckets": [],
@@ -480,8 +481,8 @@ class FinnPlanService:
             return True
         if self.looks_like_status_request(query):
             return False
-        has_category = any(word in q for word in ["macro", "indicator", "indicatoren", "node", "score", "scoring", "contrarian", "standard", "standaard"])
-        has_config_intent = any(word in q for word in ["voeg", "toevoegen", "zet", "maak", "configureer", "config", "gebruik", "weight", "weging", "gewicht"])
+        has_category = any(word in q for word in ["macro", "technical", "technisch", "technische", "indicator", "indicatoren", "node", "score", "scoring", "contrarian", "standard", "standaard"])
+        has_config_intent = any(word in q for word in ["voeg", "toevoegen", "zet", "maak", "configureer", "config", "gebruik", "weight", "weging", "gewicht", "reset", "herstel"])
         known_indicator_hint = any(word in q for word in ["btc dominance", "bitcoin dominance", "fear", "greed", "dxy", "vix", "dominance"])
         return has_config_intent and (has_category or known_indicator_hint)
 
@@ -760,6 +761,7 @@ class FinnPlanService:
 
         q = (query or "").strip()
         q_lower = q.lower()
+        explicit_indicator_input = bool(self._extract_indicator_name_hint(q, draft.get("category") or "macro"))
         if self.is_cancel_request(q):
             return {
                 "response": "Prima, ik heb deze bot-flow gestopt. Er is niets aangemaakt of bijgewerkt.",
@@ -981,6 +983,8 @@ class FinnPlanService:
 
         q = (query or "").strip()
         q_lower = q.lower()
+        mentioned_assets = _asset_mentions(q)
+        explicit_indicator_input = bool(self._extract_indicator_name_hint(q, draft.get("category") or "macro"))
         if self.is_cancel_request(q):
             return {
                 "response": "Prima, ik heb deze indicator-configuratie gestopt. Er is niets aangepast.",
@@ -994,21 +998,31 @@ class FinnPlanService:
                 "actions": [],
             }
 
+        if any(word in q_lower for word in ["reset", "herstel standaard", "terug naar standaard", "standaard terug", "default"]):
+            draft["operation"] = "reset"
+            draft["activate_node"] = False
+            draft["score_mode"] = None
+            draft["weight"] = None
+            draft["custom_rules_touched"] = False
+            draft["custom_rules_complete"] = False
+            draft["custom_rule_buckets"] = []
+        elif draft.get("operation") == "reset" and any(word in q_lower for word in ["standard", "standaard", "contrarian", "custom", "weight", "weging", "gewicht"]):
+            draft["operation"] = "configure"
+
         if any(word in q_lower for word in ["technical", "technisch", "technische"]):
             draft["category"] = "technical"
         elif "macro" in q_lower or not draft.get("category"):
             draft["category"] = "macro"
-        if draft.get("category") == "technical" and not draft.get("symbol"):
+        if draft.get("category") == "technical" and not draft.get("symbol") and not (draft.get("operation") == "reset" and not mentioned_assets and not context.get("symbol") and not context.get("setup_symbol")):
             draft["symbol"] = (context.get("symbol") or context.get("setup_symbol") or "BTC").upper()
-        mentioned_assets = _asset_mentions(q)
         if draft.get("category") == "technical" and mentioned_assets:
             draft["symbol"] = mentioned_assets[0]
 
         mode = self._extract_indicator_score_mode(q_lower)
-        if mode:
+        if mode and draft.get("operation") != "reset":
             draft["score_mode"] = mode
         weight = self._extract_indicator_weight(q_lower)
-        if weight is not None:
+        if weight is not None and draft.get("operation") != "reset":
             draft["weight"] = weight
         if any(word in q_lower for word in ["niet toevoegen", "niet activeren", "alleen config", "alleen instellingen"]):
             draft["activate_node"] = False
@@ -1019,9 +1033,9 @@ class FinnPlanService:
         if explicit_indicator:
             draft["indicator"] = explicit_indicator
 
-        await self._hydrate_indicator_config_draft(user_id, draft, q)
+        await self._hydrate_indicator_config_draft(user_id, draft, q, explicit_indicator_input=explicit_indicator_input)
         custom_rules = self._extract_indicator_custom_bucket_rules(q, draft.get("rules") or [])
-        if custom_rules is not None:
+        if custom_rules is not None and draft.get("operation") != "reset":
             previous_buckets = set(draft.get("custom_rule_buckets") or [])
             current_buckets = set(custom_rules["provided_buckets"])
             provided_buckets = sorted(previous_buckets | current_buckets)
@@ -1036,6 +1050,10 @@ class FinnPlanService:
                 if f"{int(lo)}-{int(hi)}" not in provided_buckets
             ]
             draft["changes"] = self._indicator_config_changes_from_snapshot(draft)
+        if draft.get("operation") == "reset":
+            draft["score_mode"] = None
+            draft["weight"] = None
+            draft["changes"] = self._indicator_reset_changes_from_snapshot(draft)
         validation = self._validate_indicator_config_draft(draft)
 
         actions = []
@@ -1044,7 +1062,7 @@ class FinnPlanService:
             actions.append({
                 "id": self._indicator_config_action_id(action_payload),
                 "type": "configure_indicator",
-                "label": "Indicator configureren",
+                "label": "Indicator resetten" if draft.get("operation") == "reset" else ("Indicator bijwerken" if draft.get("operation") == "update" else "Indicator toevoegen"),
                 "payload": action_payload,
                 "risk_level": "low",
                 "requires_confirmation": True,
@@ -2086,7 +2104,14 @@ class FinnPlanService:
             return normalize_indicator_name(cleaned)
         return None
 
-    async def _hydrate_indicator_config_draft(self, user_id: int, draft: Dict[str, Any], query: str = "") -> None:
+    async def _hydrate_indicator_config_draft(
+        self,
+        user_id: int,
+        draft: Dict[str, Any],
+        query: str = "",
+        *,
+        explicit_indicator_input: bool = False,
+    ) -> None:
         if not self.session:
             return
         category = (draft.get("category") or "macro").lower()
@@ -2097,27 +2122,43 @@ class FinnPlanService:
                 draft["indicator"] = exact["name"]
                 draft["display_name"] = exact.get("display_name") or exact["name"]
                 draft["indicator_options"] = []
-                config = await IndicatorConfigService(IndicatorConfigRepository(self.session)).get_indicator_config(category, exact["name"], user_id)
+                config_repository = IndicatorConfigRepository(self.session)
+                config_service = IndicatorConfigService(config_repository)
+                config = await config_service.get_indicator_config(category, exact["name"], user_id)
+                _, has_user_override = await config_repository.get_indicator_rules(category, exact["name"], user_id)
                 config_rules = [rule.dict() for rule in config.rules]
+                node_active = await self._indicator_node_is_active(user_id, category, exact["name"], draft.get("symbol"))
                 draft["existing_config_snapshot"] = {
                     "score_mode": config.score_mode or "standard",
                     "weight": float(config.weight or 1.0),
                     "rules": deepcopy(config_rules),
+                    "node_active": node_active,
+                    "has_user_override": bool(has_user_override),
                 }
+                draft["has_user_override"] = bool(has_user_override)
                 if not draft.get("custom_rules_touched"):
                     draft["rules"] = config_rules
-                if not draft.get("score_mode"):
+                if draft.get("operation") != "reset" and not draft.get("score_mode"):
                     draft["score_mode"] = config.score_mode or "standard"
-                if draft.get("weight") is None:
+                if draft.get("operation") != "reset" and draft.get("weight") is None:
                     draft["weight"] = float(config.weight or 1.0)
-                draft["node_already_active"] = await self._indicator_node_is_active(user_id, category, exact["name"], draft.get("symbol"))
-                draft["changes"] = self._indicator_config_changes_from_snapshot(draft)
+                draft["node_already_active"] = node_active
+                if draft.get("operation") == "reset":
+                    draft["changes"] = self._indicator_reset_changes_from_snapshot(draft)
+                else:
+                    draft["operation"] = "update" if (has_user_override or node_active) else "create"
+                    draft["changes"] = self._indicator_config_changes_from_snapshot(draft)
                 return
-            draft["_indicator_lookup_error"] = "indicator bestaat niet in de bestaande indicator registry"
 
         options = await self._indicator_options(category, query or indicator or "")
         draft["indicator_options"] = options
-        if not indicator and len(options) == 1:
+        if indicator:
+            if options:
+                draft["indicator"] = None
+                draft["display_name"] = None
+            else:
+                draft["_indicator_lookup_error"] = "indicator bestaat niet in de bestaande indicator registry"
+        if not indicator and len(options) == 1 and explicit_indicator_input:
             draft["indicator"] = options[0]["name"]
             draft["display_name"] = options[0].get("display_name") or options[0]["name"]
             await self._hydrate_indicator_config_draft(user_id, draft, "")
@@ -2143,6 +2184,8 @@ class FinnPlanService:
                 "voeg", "toe", "macro", "indicator", "indicatoren", "node",
                 "score", "scoring", "standard", "standaard", "contrarian",
                 "custom", "weight", "weging", "gewicht", "gebruik", "maak",
+                "technical", "technisch", "technische", "reset", "herstel",
+                "default", "terug", "naar", "config", "configureer",
             }
         ]
         if not tokens:
@@ -2256,6 +2299,10 @@ class FinnPlanService:
             changes.append({"field": "score_mode", "from": current_mode, "to": next_mode})
         if round(current_weight, 8) != round(next_weight, 8):
             changes.append({"field": "weight", "from": current_weight, "to": next_weight})
+        current_node_active = bool(snapshot.get("node_active"))
+        next_node_active = bool(draft.get("activate_node") or current_node_active)
+        if current_node_active != next_node_active:
+            changes.append({"field": "node_active", "from": current_node_active, "to": next_node_active})
 
         old_rules = snapshot.get("rules") if isinstance(snapshot.get("rules"), list) else []
         new_rules = draft.get("rules") if isinstance(draft.get("rules"), list) else []
@@ -2278,6 +2325,19 @@ class FinnPlanService:
                 })
         return changes
 
+    def _indicator_reset_changes_from_snapshot(self, draft: Dict[str, Any]) -> List[Dict[str, Any]]:
+        snapshot = draft.get("existing_config_snapshot") if isinstance(draft.get("existing_config_snapshot"), dict) else {}
+        changes = []
+        if snapshot.get("has_user_override"):
+            changes.append({"field": "score_rules", "from": "user_override", "to": "template_default"})
+        current_mode = snapshot.get("score_mode")
+        if current_mode and current_mode != "standard":
+            changes.append({"field": "score_mode", "from": current_mode, "to": "template"})
+        current_weight = float(snapshot.get("weight") or 1.0)
+        if round(current_weight, 8) != 1.0:
+            changes.append({"field": "weight", "from": current_weight, "to": "template"})
+        return changes
+
     def _validate_indicator_config_draft(self, draft: Dict[str, Any]) -> Dict[str, Any]:
         missing: List[str] = []
         invalid: List[Dict[str, str]] = []
@@ -2289,16 +2349,18 @@ class FinnPlanService:
         if draft.get("_indicator_lookup_error"):
             invalid.append({"field": "indicator", "reason": draft["_indicator_lookup_error"]})
         mode = draft.get("score_mode")
-        if not mode:
-            missing.append("score_mode")
-        elif mode not in {"standard", "contrarian", "custom"}:
-            invalid.append({"field": "score_mode", "reason": "score_mode moet standard, contrarian of custom zijn"})
+        if draft.get("operation") != "reset":
+            if not mode:
+                missing.append("score_mode")
+            elif mode not in {"standard", "contrarian", "custom"}:
+                invalid.append({"field": "score_mode", "reason": "score_mode moet standard, contrarian of custom zijn"})
         weight = draft.get("weight")
-        if weight is None:
-            missing.append("weight")
-        elif not isinstance(weight, (int, float)) or float(weight) < 0 or float(weight) > 3:
-            invalid.append({"field": "weight", "reason": "weight moet tussen 0.0 en 3.0 liggen"})
-        if mode == "custom":
+        if draft.get("operation") != "reset":
+            if weight is None:
+                missing.append("weight")
+            elif not isinstance(weight, (int, float)) or float(weight) < 0 or float(weight) > 3:
+                invalid.append({"field": "weight", "reason": "weight moet tussen 0.0 en 3.0 liggen"})
+        if draft.get("operation") != "reset" and mode == "custom":
             rules = draft.get("rules") if isinstance(draft.get("rules"), list) else []
             if not draft.get("custom_rules_touched"):
                 missing.append("rules")
@@ -2320,7 +2382,7 @@ class FinnPlanService:
                     if not isinstance(score, (int, float)) or int(float(score)) < 10 or int(float(score)) > 100:
                         invalid.append({"field": "rules", "reason": "bucket-scores moeten tussen 10 en 100 liggen"})
                         break
-        if draft.get("category") == "technical" and draft.get("activate_node") and not draft.get("symbol"):
+        if draft.get("operation") != "reset" and draft.get("category") == "technical" and draft.get("activate_node") and not draft.get("symbol"):
             missing.append("symbol")
 
         next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
@@ -2361,8 +2423,23 @@ class FinnPlanService:
 
         scores = [rule.get("score") for rule in (draft.get("rules") or [])]
         change_lines = [f"- {c['field']}: {c.get('from')} -> {c.get('to')}" for c in (draft.get("changes") or [])]
+        operation_label = {
+            "create": "Nieuwe indicator-config",
+            "update": "Indicator-config bijwerken",
+            "reset": "Reset naar standaard",
+        }.get(draft.get("operation"), "Indicator-config bijwerken")
+        if draft.get("operation") == "reset":
+            return (
+                "Ik heb deze reset klaarstaan. Ik verwijder alleen jouw user-overrides en val terug op de bestaande template-buckets:\n\n"
+                f"- Actie: {operation_label}\n"
+                f"- Node: {draft.get('display_name') or draft.get('indicator')} ({draft.get('indicator')})\n"
+                + (f"- Asset: {draft.get('symbol')}\n" if draft.get("category") == "technical" and draft.get("symbol") else "")
+                + f"- Categorie: {draft.get('category')}"
+                + (("\n\nWijzigingen:\n" + "\n".join(change_lines)) if change_lines else "")
+            )
         return (
             f"Ik heb deze {draft.get('category')}-config klaarstaan. Ik gebruik alleen de bestaande indicator-node en bestaande score-buckets:\n\n"
+            f"- Actie: {operation_label}\n"
             f"- Node: {draft.get('display_name') or draft.get('indicator')} ({draft.get('indicator')})\n"
             + (f"- Asset: {draft.get('symbol')}\n" if draft.get("category") == "technical" else "")
             + f"- Mode: {draft.get('score_mode')}\n"
@@ -2377,6 +2454,7 @@ class FinnPlanService:
         return {
             "status": "ready_for_confirmation" if validation["can_confirm"] else "collecting",
             "current_flow": "indicator_config",
+            "operation": draft.get("operation") or "configure",
             "category": draft.get("category"),
             "indicator": draft.get("indicator"),
             "display_name": draft.get("display_name"),
@@ -2384,6 +2462,8 @@ class FinnPlanService:
             "score_mode": draft.get("score_mode"),
             "weight": draft.get("weight"),
             "indicator_options": draft.get("indicator_options") or [],
+            "node_already_active": draft.get("node_already_active"),
+            "has_user_override": draft.get("has_user_override"),
             "changes": draft.get("changes") or [],
             "next_question": validation["next_question"],
             "autonomy_level": "confirm_required",
@@ -2931,7 +3011,9 @@ class FinnPlanService:
         category = draft["category"]
         try:
             config_service = IndicatorConfigService(IndicatorConfigRepository(self.session))
-            if draft.get("score_mode") == "custom":
+            if draft.get("operation") == "reset":
+                await config_service.reset_indicator_rules(category, indicator, user_id)
+            elif draft.get("score_mode") == "custom":
                 await config_service.save_custom_rules(
                     category=category,
                     indicator=indicator,
@@ -2961,7 +3043,13 @@ class FinnPlanService:
                 else:
                     await technical_service.add_technical_indicator(indicator, user_id, symbol)
                 node_active = True
-            verified = await self._verify_indicator_config(user_id, category, indicator, node_active=node_active)
+            verified = await self._verify_indicator_config(
+                user_id,
+                category,
+                indicator,
+                node_active=node_active,
+                require_override=draft.get("operation") != "reset",
+            )
         except Exception:
             await self.session.rollback()
             await self._upsert_action_audit(user_id, action_id, action, status="failed", result={
@@ -2973,10 +3061,12 @@ class FinnPlanService:
 
         result = {
             "ok": True,
-            "message": "Indicator-configuratie opgeslagen",
+            "message": "Indicator-configuratie gereset" if draft.get("operation") == "reset" else ("Indicator-configuratie bijgewerkt" if draft.get("operation") == "update" else "Indicator-configuratie toegevoegd"),
             "indicator": indicator,
             "category": category,
             "symbol": draft.get("symbol"),
+            "operation": draft.get("operation") or "configure",
+            "changes": draft.get("changes") or [],
             "draft": draft,
             "action_id": action_id,
             "verified": verified,
@@ -3342,7 +3432,15 @@ class FinnPlanService:
             raise HTTPException(500, f"Read-after-write verificatie faalde: {verified}")
         return verified
 
-    async def _verify_indicator_config(self, user_id: int, category: str, indicator: str, *, node_active: bool = False) -> Dict[str, bool]:
+    async def _verify_indicator_config(
+        self,
+        user_id: int,
+        category: str,
+        indicator: str,
+        *,
+        node_active: bool = False,
+        require_override: bool = True,
+    ) -> Dict[str, bool]:
         config = await IndicatorConfigService(IndicatorConfigRepository(self.session)).get_indicator_config(category, indicator, user_id)
         rules_ok = bool(config and len(config.rules) == 5)
         table = {
@@ -3356,7 +3454,8 @@ class FinnPlanService:
             FROM {table}
             WHERE user_id = :user_id AND indicator = :indicator
         """.format(table=table)), {"user_id": user_id, "indicator": indicator})
-        override_ok = int(override_rows.scalar() or 0) == 5
+        override_count = int(override_rows.scalar() or 0)
+        override_ok = override_count == 5 if require_override else override_count == 0
         node_ok = True
         if node_active and category == "macro":
             node_ok = await MacroDataService(self.session).repository.check_indicator_exists(user_id, indicator)
