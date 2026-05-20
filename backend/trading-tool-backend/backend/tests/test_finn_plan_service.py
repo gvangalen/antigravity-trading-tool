@@ -1,5 +1,6 @@
 import asyncio
 from decimal import Decimal
+from unittest.mock import AsyncMock
 
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.finn_plan_service import empty_indicator_config_draft
@@ -1305,6 +1306,31 @@ def test_portfolio_daily_coach_prioritizes_active_blocked_and_scoreless_assets()
     assert "ETH: nu doen" in message
     assert "BTC: niet forceren" in message
     assert "advies-only" in message
+
+
+def test_daily_score_fetch_uses_runtime_refresh_when_raw_scores_are_missing(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    fetch_scores = AsyncMock(side_effect=[None, {"macro_score": 10, "technical_score": 20, "market_score": 30}])
+    refresh_scores = AsyncMock()
+
+    class Repo:
+        def __init__(self, session):
+            self.session = session
+        fetch_daily_scores = fetch_scores
+
+    class RuntimeScoreService:
+        def __init__(self, repo):
+            self.repo = repo
+        get_daily_scores = refresh_scores
+
+    monkeypatch.setattr("backend.services.finn_plan_service.ScoreRepository", Repo)
+    monkeypatch.setattr("backend.services.finn_plan_service.ScoreService", RuntimeScoreService)
+
+    result = asyncio.run(service._fetch_daily_scores_with_runtime_refresh(7, "BTC"))
+
+    assert result["macro_score"] == 10
+    assert fetch_scores.await_count == 2
+    refresh_scores.assert_awaited_once_with(7, "BTC")
 
 
 def test_daily_coach_analysis_waits_when_setup_has_blockers():

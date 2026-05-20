@@ -22,6 +22,7 @@ from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSche
 from backend.services.bot_service import BotService
 from backend.services.indicator_config_service import IndicatorConfigService
 from backend.services.macro_data_service import MacroDataService
+from backend.services.score_service import ScoreService
 from backend.services.setup_service import SetupService
 from backend.services.strategy_service import StrategyService
 from backend.services.technical_data_service import TechnicalDataService
@@ -1147,7 +1148,7 @@ class FinnPlanService:
         active_setups = []
         if self.session:
             score_repo = ScoreRepository(self.session)
-            daily_scores = await score_repo.fetch_daily_scores(user_id, asset)
+            daily_scores = await self._fetch_daily_scores_with_runtime_refresh(user_id, asset)
             active_setups = await score_repo.fetch_active_setups(user_id)
 
         if draft and draft.get("asset") == asset:
@@ -1391,7 +1392,7 @@ class FinnPlanService:
 
             for asset in sorted(best_setups_by_asset.keys()):
                 setup = best_setups_by_asset[asset]
-                daily_scores = await score_repo.fetch_daily_scores(user_id, asset)
+                daily_scores = await self._fetch_daily_scores_with_runtime_refresh(user_id, asset)
                 setup_analysis = self._evaluate_setup_row(setup, daily_scores)
                 try:
                     bot_today = await BotService(self.session).get_bot_today(user_id, symbol=asset)
@@ -2964,6 +2965,19 @@ class FinnPlanService:
             "wat zijn mijn prioriteiten",
         ]
         return any(phrase in q for phrase in portfolio_phrases)
+
+    async def _fetch_daily_scores_with_runtime_refresh(self, user_id: int, asset: str) -> Optional[Dict[str, Any]]:
+        if not self.session:
+            return None
+        score_repo = ScoreRepository(self.session)
+        scores = await score_repo.fetch_daily_scores(user_id, asset)
+        if scores:
+            return scores
+        try:
+            await ScoreService(score_repo).get_daily_scores(user_id, asset)
+            return await score_repo.fetch_daily_scores(user_id, asset)
+        except Exception:
+            return scores
 
     def _indicator_insight_categories(self, q: str) -> List[str]:
         categories = []

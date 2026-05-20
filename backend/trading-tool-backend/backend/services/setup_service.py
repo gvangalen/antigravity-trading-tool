@@ -431,8 +431,13 @@ class SetupService:
         technical = float(row_scores[1]) if row_scores and row_scores[1] is not None else 50.0
         market = float(row_scores[2]) if row_scores and row_scores[2] is not None else 50.0
 
-        # 2. Haal ALLE setups op
-        setups = await self.repository.get_all_setups(user_id)
+        # 2. Haal alleen setups op voor dit asset. Zonder deze filter kan
+        # /setups/active?symbol=BTC een ETH-setup teruggeven met BTC-scores.
+        setups = [
+            dict(s)
+            for s in await self.repository.get_all_setups(user_id)
+            if str(s.get("symbol") or "").upper() == symbol
+        ]
         if not setups:
             return {"active": None}
 
