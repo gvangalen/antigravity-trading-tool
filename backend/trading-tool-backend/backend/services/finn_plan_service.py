@@ -512,11 +512,14 @@ class FinnPlanService:
         q = (query or "").lower()
         has_today = any(word in q for word in [
             "vandaag", "today", "nu", "daily", "dagelijkse", "dagcheck", "cockpit",
+            "brief", "briefing", "dagstart", "morning", "mijn dag",
         ])
         has_decision_intent = any(phrase in q for phrase in [
             "wat moet ik", "wat moet finn", "wat doe ik", "wat nu", "moet ik kopen",
             "mag ik kopen", "moet mijn bot", "waar moet ik op letten", "dagelijkse check",
-            "trading coach", "coach me", "plan check",
+            "trading coach", "coach me", "plan check", "geef mijn daily brief",
+            "daily brief", "dagelijkse briefing", "start mijn dag", "prioriteiten vandaag",
+            "mijn prioriteiten", "prioriteiten",
         ])
         has_trading_context = any(word in q for word in [
             "setup", "plan", "bot", "trade", "dca", "btc", "eth", "sol", "market", "markt",

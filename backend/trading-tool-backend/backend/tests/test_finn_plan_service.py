@@ -1244,7 +1244,11 @@ def test_daily_coach_request_detection_is_separate_from_status_and_plan_creation
 
     assert service.looks_like_daily_coach_request("Wat moet ik vandaag doen met mijn BTC setup?") is True
     assert service.looks_like_daily_coach_request("Moet ik vandaag kopen?") is True
+    assert service.looks_like_daily_coach_request("Geef mijn daily brief") is True
+    assert service.looks_like_daily_coach_request("Wat zijn mijn prioriteiten vandaag?") is True
+    assert service.looks_like_daily_coach_request("Start mijn dag") is True
     assert service.looks_like_plan_request("Wat moet ik vandaag doen met mijn BTC setup?") is False
+    assert service.looks_like_plan_request("Geef mijn daily brief") is False
     assert service.looks_like_status_request("Welke score blokkeert mijn BTC setup?") is True
     assert service.looks_like_daily_coach_request("Welke score blokkeert mijn BTC setup?") is False
 
