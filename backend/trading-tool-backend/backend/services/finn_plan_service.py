@@ -55,6 +55,13 @@ WEEKDAY_NUMBERS = {
     "sunday": 7,
 }
 NO_BOT_PHRASES = ("geen bot", "zonder bot", "niet automatisch", "manual only", "manual-only", "alleen handmatig")
+INDICATOR_FIXED_BUCKETS = [
+    (0.0, 20.0),
+    (20.0, 40.0),
+    (40.0, 60.0),
+    (60.0, 80.0),
+    (80.0, 100.0),
+]
 
 
 def empty_plan_draft() -> Dict[str, Any]:
@@ -207,6 +214,11 @@ def empty_indicator_config_draft() -> Dict[str, Any]:
         "weight": 1.0,
         "activate_node": True,
         "rules": [],
+        "existing_config_snapshot": None,
+        "node_already_active": False,
+        "custom_rules_touched": False,
+        "custom_rules_complete": False,
+        "custom_rule_buckets": [],
         "indicator_options": [],
         "changes": [],
     }
@@ -1008,6 +1020,22 @@ class FinnPlanService:
             draft["indicator"] = explicit_indicator
 
         await self._hydrate_indicator_config_draft(user_id, draft, q)
+        custom_rules = self._extract_indicator_custom_bucket_rules(q, draft.get("rules") or [])
+        if custom_rules is not None:
+            previous_buckets = set(draft.get("custom_rule_buckets") or [])
+            current_buckets = set(custom_rules["provided_buckets"])
+            provided_buckets = sorted(previous_buckets | current_buckets)
+            draft["score_mode"] = "custom"
+            draft["rules"] = custom_rules["rules"]
+            draft["custom_rules_touched"] = True
+            draft["custom_rule_buckets"] = provided_buckets
+            draft["custom_rules_complete"] = len(provided_buckets) == len(INDICATOR_FIXED_BUCKETS)
+            draft["missing_custom_buckets"] = [
+                f"{int(lo)}-{int(hi)}"
+                for lo, hi in INDICATOR_FIXED_BUCKETS
+                if f"{int(lo)}-{int(hi)}" not in provided_buckets
+            ]
+            draft["changes"] = self._indicator_config_changes_from_snapshot(draft)
         validation = self._validate_indicator_config_draft(draft)
 
         actions = []
@@ -2068,12 +2096,20 @@ class FinnPlanService:
                 draft["display_name"] = exact.get("display_name") or exact["name"]
                 draft["indicator_options"] = []
                 config = await IndicatorConfigService(IndicatorConfigRepository(self.session)).get_indicator_config(category, exact["name"], user_id)
-                draft["rules"] = [rule.dict() for rule in config.rules]
+                config_rules = [rule.dict() for rule in config.rules]
+                draft["existing_config_snapshot"] = {
+                    "score_mode": config.score_mode or "standard",
+                    "weight": float(config.weight or 1.0),
+                    "rules": deepcopy(config_rules),
+                }
+                if not draft.get("custom_rules_touched"):
+                    draft["rules"] = config_rules
                 if not draft.get("score_mode"):
                     draft["score_mode"] = config.score_mode or "standard"
                 if draft.get("weight") is None:
                     draft["weight"] = float(config.weight or 1.0)
-                draft["changes"] = self._indicator_config_changes(config, draft)
+                draft["node_already_active"] = await self._indicator_node_is_active(user_id, category, exact["name"], draft.get("symbol"))
+                draft["changes"] = self._indicator_config_changes_from_snapshot(draft)
                 return
             draft["_indicator_lookup_error"] = "indicator bestaat niet in de bestaande indicator registry"
 
@@ -2131,6 +2167,68 @@ class FinnPlanService:
             """), {"category": category, "like": like})
         return [dict(row) for row in result.mappings().all()]
 
+    async def _indicator_node_is_active(self, user_id: int, category: str, indicator: str, symbol: Optional[str] = None) -> bool:
+        if category == "macro":
+            return await MacroDataService(self.session).repository.check_indicator_exists(user_id, indicator)
+        if category == "technical":
+            result = await self.session.execute(text("""
+                SELECT COUNT(*) AS count
+                FROM user_indicator_configs
+                WHERE user_id = :user_id AND category = 'technical' AND indicator = :indicator
+            """), {"user_id": user_id, "indicator": indicator})
+            return int(result.scalar() or 0) > 0
+        return False
+
+    def _extract_indicator_custom_bucket_rules(self, query: str, current_rules: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        q = (query or "").lower()
+        has_bucket_range = any(
+            re.search(rf"\b0*{int(lo)}\s*(?:-|–|tot)\s*0*{int(hi)}\b", q)
+            for lo, hi in INDICATOR_FIXED_BUCKETS
+        )
+        if "custom" not in q and not has_bucket_range:
+            return None
+
+        found: Dict[tuple, int] = {}
+        for lo, hi in INDICATOR_FIXED_BUCKETS:
+            lo_pattern = str(int(lo))
+            hi_pattern = str(int(hi))
+            match = re.search(
+                rf"\b0*{lo_pattern}\s*(?:-|–|tot)\s*0*{hi_pattern}\b\s*(?:=|:|score|val|waarde|is|naar)?\s*([0-9]{{1,3}})",
+                q,
+            )
+            if match:
+                score = int(match.group(1))
+                found[(lo, hi)] = max(10, min(100, score))
+
+        if not found:
+            return None
+
+        by_bucket = {
+            (round(float(rule.get("range_min", 0)), 4), round(float(rule.get("range_max", 0)), 4)): deepcopy(rule)
+            for rule in (current_rules or [])
+            if isinstance(rule, dict)
+        }
+        next_rules = []
+        provided_buckets = []
+        for lo, hi in INDICATOR_FIXED_BUCKETS:
+            key = (round(lo, 4), round(hi, 4))
+            rule = by_bucket.get(key) or {
+                "range_min": lo,
+                "range_max": hi,
+                "score": 50,
+                "trend": None,
+                "interpretation": None,
+                "action": None,
+            }
+            if (lo, hi) in found:
+                rule["score"] = found[(lo, hi)]
+                provided_buckets.append(f"{int(lo)}-{int(hi)}")
+            next_rules.append(rule)
+        return {
+            "rules": next_rules,
+            "provided_buckets": provided_buckets,
+        }
+
     def _indicator_config_changes(self, current_config: Any, draft: Dict[str, Any]) -> List[Dict[str, Any]]:
         changes = []
         current_mode = getattr(current_config, "score_mode", None) or "standard"
@@ -2141,6 +2239,41 @@ class FinnPlanService:
             changes.append({"field": "score_mode", "from": current_mode, "to": next_mode})
         if round(current_weight, 8) != round(next_weight, 8):
             changes.append({"field": "weight", "from": current_weight, "to": next_weight})
+        return changes
+
+    def _indicator_config_changes_from_snapshot(self, draft: Dict[str, Any]) -> List[Dict[str, Any]]:
+        snapshot = draft.get("existing_config_snapshot") if isinstance(draft.get("existing_config_snapshot"), dict) else {}
+        if not snapshot:
+            return []
+        changes = []
+        current_mode = snapshot.get("score_mode") or "standard"
+        current_weight = float(snapshot.get("weight") or 1.0)
+        next_mode = draft.get("score_mode") or current_mode
+        next_weight = float(draft.get("weight") if draft.get("weight") is not None else current_weight)
+        if current_mode != next_mode:
+            changes.append({"field": "score_mode", "from": current_mode, "to": next_mode})
+        if round(current_weight, 8) != round(next_weight, 8):
+            changes.append({"field": "weight", "from": current_weight, "to": next_weight})
+
+        old_rules = snapshot.get("rules") if isinstance(snapshot.get("rules"), list) else []
+        new_rules = draft.get("rules") if isinstance(draft.get("rules"), list) else []
+        old_by_bucket = {
+            (round(float(rule.get("range_min", 0)), 4), round(float(rule.get("range_max", 0)), 4)): rule.get("score")
+            for rule in old_rules
+            if isinstance(rule, dict)
+        }
+        for rule in new_rules:
+            if not isinstance(rule, dict):
+                continue
+            key = (round(float(rule.get("range_min", 0)), 4), round(float(rule.get("range_max", 0)), 4))
+            before = old_by_bucket.get(key)
+            after = rule.get("score")
+            if before is not None and int(float(before)) != int(float(after)):
+                changes.append({
+                    "field": f"bucket_{int(key[0])}_{int(key[1])}",
+                    "from": int(float(before)),
+                    "to": int(float(after)),
+                })
         return changes
 
     def _validate_indicator_config_draft(self, draft: Dict[str, Any]) -> Dict[str, Any]:
@@ -2164,7 +2297,27 @@ class FinnPlanService:
         elif not isinstance(weight, (int, float)) or float(weight) < 0 or float(weight) > 3:
             invalid.append({"field": "weight", "reason": "weight moet tussen 0.0 en 3.0 liggen"})
         if mode == "custom":
-            invalid.append({"field": "rules", "reason": "custom rules moeten exact via bestaande 5 score-buckets worden aangeleverd; Finn mag geen buckets verzinnen"})
+            rules = draft.get("rules") if isinstance(draft.get("rules"), list) else []
+            if not draft.get("custom_rules_touched"):
+                missing.append("rules")
+            elif not draft.get("custom_rules_complete"):
+                missing.append("rules")
+            elif len(rules) != 5:
+                invalid.append({"field": "rules", "reason": "custom rules moeten exact 5 vaste buckets bevatten"})
+            else:
+                expected = [(round(lo, 4), round(hi, 4)) for lo, hi in INDICATOR_FIXED_BUCKETS]
+                actual = [
+                    (round(float(rule.get("range_min", -1)), 4), round(float(rule.get("range_max", -1)), 4))
+                    for rule in rules
+                    if isinstance(rule, dict)
+                ]
+                if actual != expected:
+                    invalid.append({"field": "rules", "reason": "custom buckets moeten exact 0-20, 20-40, 40-60, 60-80 en 80-100 zijn"})
+                for rule in rules:
+                    score = rule.get("score") if isinstance(rule, dict) else None
+                    if not isinstance(score, (int, float)) or int(float(score)) < 10 or int(float(score)) > 100:
+                        invalid.append({"field": "rules", "reason": "bucket-scores moeten tussen 10 en 100 liggen"})
+                        break
         if draft.get("category") == "technical" and draft.get("activate_node") and not draft.get("symbol"):
             missing.append("symbol")
 
@@ -2182,6 +2335,13 @@ class FinnPlanService:
             if issue["field"] == "rules":
                 return "Custom scoring kan alleen met exact de bestaande 5 buckets. Geef alle bucket-scores door of kies standard/contrarian."
             return f"Ik zie een probleem met {issue['field']}: {issue['reason']}."
+        if validation["next_question"] == "rules":
+            missing = draft.get("missing_custom_buckets") or [f"{int(lo)}-{int(hi)}" for lo, hi in INDICATOR_FIXED_BUCKETS]
+            return (
+                "Voor custom scoring heb ik exact alle 5 vaste buckets nodig. "
+                "Geef bijvoorbeeld: 0-20=10, 20-40=25, 40-60=50, 60-80=75, 80-100=100. "
+                f"Ontbreekt nog: {', '.join(missing)}."
+            )
         if validation["next_question"] == "indicator":
             options = draft.get("indicator_options") or []
             if options:
@@ -2207,6 +2367,7 @@ class FinnPlanService:
             f"- Weight: {draft.get('weight')}\n"
             f"- Buckets: {scores}\n"
             f"- Node activeren: {'ja' if draft.get('activate_node') else 'nee'}"
+            + ("\n- Status: node is al actief; ik werk alleen de configuratie bij" if draft.get("node_already_active") else "")
             + (("\n\nWijzigingen:\n" + "\n".join(change_lines)) if change_lines else "")
         )
 
@@ -2768,13 +2929,22 @@ class FinnPlanService:
         category = draft["category"]
         try:
             config_service = IndicatorConfigService(IndicatorConfigRepository(self.session))
-            await config_service.update_indicator_settings(
-                category=category,
-                indicator=indicator,
-                user_id=user_id,
-                score_mode=draft["score_mode"],
-                weight=float(draft["weight"]),
-            )
+            if draft.get("score_mode") == "custom":
+                await config_service.save_custom_rules(
+                    category=category,
+                    indicator=indicator,
+                    user_id=user_id,
+                    rules=draft.get("rules") or [],
+                    weight=float(draft["weight"]),
+                )
+            else:
+                await config_service.update_indicator_settings(
+                    category=category,
+                    indicator=indicator,
+                    user_id=user_id,
+                    score_mode=draft["score_mode"],
+                    weight=float(draft["weight"]),
+                )
             node_active = False
             if draft.get("activate_node") and category == "macro":
                 macro_service = MacroDataService(self.session)

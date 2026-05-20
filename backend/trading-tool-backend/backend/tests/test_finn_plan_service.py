@@ -281,7 +281,8 @@ def test_macro_indicator_config_blocks_custom_without_bucket_rules():
     validation = service._validate_indicator_config_draft(draft)
 
     assert validation["can_confirm"] is False
-    assert {"field": "rules", "reason": "custom rules moeten exact via bestaande 5 score-buckets worden aangeleverd; Finn mag geen buckets verzinnen"} in validation["invalid_fields"]
+    assert validation["next_question"] == "rules"
+    assert "rules" in validation["missing_fields"]
 
 
 def test_macro_indicator_config_accepts_existing_standard_or_contrarian_draft():
@@ -298,6 +299,72 @@ def test_macro_indicator_config_accepts_existing_standard_or_contrarian_draft():
     assert validation["can_confirm"] is True
     assert validation["missing_fields"] == []
     assert validation["invalid_fields"] == []
+
+
+def test_macro_indicator_custom_bucket_rules_are_parsed_and_confirmable():
+    service = _service()
+    draft = empty_indicator_config_draft()
+    draft["indicator"] = "btc_dominance"
+    draft["display_name"] = "Bitcoin Dominance"
+    draft["score_mode"] = "custom"
+    draft["weight"] = 1.0
+    draft["rules"] = [
+        {"range_min": 0, "range_max": 20, "score": 50},
+        {"range_min": 20, "range_max": 40, "score": 50},
+        {"range_min": 40, "range_max": 60, "score": 50},
+        {"range_min": 60, "range_max": 80, "score": 50},
+        {"range_min": 80, "range_max": 100, "score": 50},
+    ]
+
+    parsed = service._extract_indicator_custom_bucket_rules(
+        "custom 0-20=10 20-40=25 40-60=50 60-80=75 80-100=100",
+        draft["rules"],
+    )
+    draft["rules"] = parsed["rules"]
+    draft["custom_rules_touched"] = True
+    draft["custom_rule_buckets"] = parsed["provided_buckets"]
+    draft["custom_rules_complete"] = len(parsed["provided_buckets"]) == 5
+
+    validation = service._validate_indicator_config_draft(draft)
+
+    assert parsed["provided_buckets"] == ["0-20", "20-40", "40-60", "60-80", "80-100"]
+    assert [rule["score"] for rule in draft["rules"]] == [10, 25, 50, 75, 100]
+    assert validation["can_confirm"] is True
+
+
+def test_macro_indicator_custom_bucket_rules_can_be_collected_across_turns():
+    service = _service()
+    draft = empty_indicator_config_draft()
+    draft["indicator"] = "btc_dominance"
+    draft["display_name"] = "Bitcoin Dominance"
+    draft["score_mode"] = "custom"
+    draft["weight"] = 1.0
+    draft["rules"] = [
+        {"range_min": 0, "range_max": 20, "score": 50},
+        {"range_min": 20, "range_max": 40, "score": 50},
+        {"range_min": 40, "range_max": 60, "score": 50},
+        {"range_min": 60, "range_max": 80, "score": 50},
+        {"range_min": 80, "range_max": 100, "score": 50},
+    ]
+
+    first = service._extract_indicator_custom_bucket_rules("custom 0-20=10 20-40=25", draft["rules"])
+    draft["rules"] = first["rules"]
+    draft["custom_rules_touched"] = True
+    draft["custom_rule_buckets"] = first["provided_buckets"]
+    draft["custom_rules_complete"] = len(draft["custom_rule_buckets"]) == 5
+
+    first_validation = service._validate_indicator_config_draft(draft)
+    assert first_validation["can_confirm"] is False
+    assert first_validation["next_question"] == "rules"
+
+    second = service._extract_indicator_custom_bucket_rules("40-60=50 60-80=75 80-100=100", draft["rules"])
+    draft["rules"] = second["rules"]
+    draft["custom_rule_buckets"] = sorted(set(draft["custom_rule_buckets"]) | set(second["provided_buckets"]))
+    draft["custom_rules_complete"] = len(draft["custom_rule_buckets"]) == 5
+
+    final_validation = service._validate_indicator_config_draft(draft)
+    assert [rule["score"] for rule in draft["rules"]] == [10, 25, 50, 75, 100]
+    assert final_validation["can_confirm"] is True
 
 
 def test_technical_indicator_config_requires_symbol_when_activated():
