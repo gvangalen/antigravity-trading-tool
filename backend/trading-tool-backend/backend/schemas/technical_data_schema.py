@@ -11,7 +11,7 @@ class TechnicalDataResponse(BaseModel):
     timestamp: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 class TechnicalIndicatorConfig(BaseModel):
     name: str
@@ -28,11 +28,11 @@ class TechnicalIndicatorRuleResponse(BaseModel):
     action: Optional[str]
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 class TechnicalIndicatorHistoryResponse(BaseModel):
     value: float
     timestamp: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
