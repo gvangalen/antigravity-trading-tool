@@ -15,6 +15,13 @@ from backend.schemas.dashboard_schema import (
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_event_attr(event: Any, key: str, default: Any = None) -> Any:
+    if isinstance(event, dict):
+        return event.get(key, default)
+    data = getattr(event, "__dict__", {}) or {}
+    return data.get(key, default)
+
 # =========================================================
 # SYNCHRONOUS WRAPPER FOR SCORING ENGINE
 # =========================================================
@@ -413,14 +420,17 @@ class DashboardService:
         # 8. Format and assemble intelligence events
         formatted_events = []
         for ev in raw_intel_events:
+            event_id = _safe_event_attr(ev, "id")
+            if event_id is None:
+                continue
             formatted_events.append(MobileIntelligenceEventSchema(
-                id=ev.id,
-                type=ev.type,
-                symbol=ev.symbol,
-                title=ev.title,
-                description=ev.description,
-                severity=ev.severity,
-                created_at=ev.created_at
+                id=event_id,
+                type=_safe_event_attr(ev, "type", "info"),
+                symbol=_safe_event_attr(ev, "symbol"),
+                title=_safe_event_attr(ev, "title", "FINN melding"),
+                description=_safe_event_attr(ev, "description", ""),
+                severity=_safe_event_attr(ev, "severity", "info"),
+                created_at=_safe_event_attr(ev, "created_at", datetime.now(timezone.utc))
             ))
 
         response_payload = MobileOverviewResponse(
