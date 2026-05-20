@@ -1253,6 +1253,60 @@ def test_daily_coach_request_detection_is_separate_from_status_and_plan_creation
     assert service.looks_like_daily_coach_request("Welke score blokkeert mijn BTC setup?") is False
 
 
+def test_daily_coach_portfolio_scope_only_for_generic_briefing_prompts():
+    service = _service()
+
+    assert service._should_build_portfolio_daily_coach("Geef mijn daily brief", {"symbol": "BTC"}) is True
+    assert service._should_build_portfolio_daily_coach("Wat zijn mijn prioriteiten vandaag?", {"symbol": "BTC"}) is True
+    assert service._should_build_portfolio_daily_coach("Wat moet ik vandaag doen?", {"symbol": "BTC"}) is True
+    assert service._should_build_portfolio_daily_coach("Wat moet ik vandaag doen met mijn BTC setup?", {}) is False
+    assert service._should_build_portfolio_daily_coach("Geef mijn ETH daily brief", {"symbol": "BTC"}) is False
+
+
+def test_portfolio_daily_coach_prioritizes_active_blocked_and_scoreless_assets():
+    service = _service()
+    active = {
+        "asset": "ETH",
+        "stance": "plan_is_active",
+        "has_scores": True,
+        "setup": {"id": 1, "name": "ETH DCA"},
+        "blockers": [],
+        "bot_today": {"decision_count": 1},
+        "indicator_summary": {"warnings": []},
+    }
+    blocked = {
+        "asset": "BTC",
+        "stance": "wait_for_plan",
+        "has_scores": True,
+        "setup": {"id": 2, "name": "BTC Trade"},
+        "blockers": [{"category": "macro", "score": 10, "range": [30, 70]}],
+        "bot_today": {"decision_count": 0},
+        "indicator_summary": {"warnings": ["macro-laag is dun"]},
+    }
+    scoreless = {
+        "asset": "SOL",
+        "stance": "wait_for_scores",
+        "has_scores": False,
+        "setup": {"id": 3, "name": "SOL DCA"},
+        "blockers": [],
+        "bot_today": {"decision_count": 0},
+        "indicator_summary": {"warnings": []},
+    }
+
+    analysis = service._build_portfolio_daily_coach_analysis([blocked, scoreless, active])
+    message = service._portfolio_daily_coach_message(analysis)
+
+    assert analysis["scope"] == "portfolio"
+    assert analysis["asset_count"] == 3
+    assert analysis["top_priorities"][0]["asset"] == "ETH"
+    assert len(analysis["blocked_assets"]) == 1
+    assert len(analysis["scoreless_assets"]) == 1
+    assert "Portfolio daily brief" in message
+    assert "ETH: nu doen" in message
+    assert "BTC: niet forceren" in message
+    assert "advies-only" in message
+
+
 def test_daily_coach_analysis_waits_when_setup_has_blockers():
     service = _service()
     setup_analysis = service._evaluate_setup_row(

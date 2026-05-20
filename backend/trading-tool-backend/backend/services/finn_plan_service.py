@@ -1285,6 +1285,9 @@ class FinnPlanService:
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         context = context or {}
+        if self._should_build_portfolio_daily_coach(query, context):
+            return await self.build_portfolio_daily_coach_response(user_id, query, context)
+
         asset = self._asset_from_query_or_context(query, context)
         daily_scores = None
         setup_analysis: Dict[str, Any] = {
@@ -1361,6 +1364,89 @@ class FinnPlanService:
                 "risk_detected": analysis.get("stance") != "plan_is_active",
                 "reasons": analysis.get("reasons") or [],
                 "coaching_level": "daily_cockpit",
+            },
+            "suggested_actions": analysis.get("suggested_actions") or [],
+        }
+
+    async def build_portfolio_daily_coach_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        asset_analyses: List[Dict[str, Any]] = []
+
+        if self.session:
+            score_repo = ScoreRepository(self.session)
+            active_setups = await score_repo.fetch_active_setups(user_id)
+            best_setups_by_asset: Dict[str, Dict[str, Any]] = {}
+            for setup in active_setups:
+                symbol = str(setup.get("symbol") or "").upper()
+                if symbol not in SUPPORTED_ASSETS:
+                    continue
+                current = best_setups_by_asset.get(symbol)
+                if not current or (setup.get("is_active") and not current.get("is_active")):
+                    best_setups_by_asset[symbol] = setup
+
+            for asset in sorted(best_setups_by_asset.keys()):
+                setup = best_setups_by_asset[asset]
+                daily_scores = await score_repo.fetch_daily_scores(user_id, asset)
+                setup_analysis = self._evaluate_setup_row(setup, daily_scores)
+                try:
+                    bot_today = await BotService(self.session).get_bot_today(user_id, symbol=asset)
+                except Exception as exc:
+                    bot_today = {"decisions": [], "scores": {}, "orders": [], "executions": [], "error": str(exc)}
+                try:
+                    insight = await self.build_indicator_insight_response(
+                        user_id,
+                        f"Welke macro technical market data gebruikt Finn voor {asset} vandaag?",
+                        {**context, "symbol": asset},
+                    )
+                    indicator_analysis = (insight.get("state") or {}).get("analysis") or {}
+                except Exception as exc:
+                    indicator_analysis = {
+                        "asset": asset,
+                        "has_daily_scores": bool(daily_scores),
+                        "categories": {},
+                        "warnings": [f"Indicatoranalyse voor {asset} kon niet worden geladen: {exc}"],
+                        "suggestions": [],
+                    }
+
+                asset_analyses.append(self._build_daily_coach_analysis(
+                    asset=asset,
+                    daily_scores=daily_scores,
+                    setup_analysis=setup_analysis,
+                    active_strategy={"active": False, "portfolio_scope": True},
+                    bot_today=bot_today,
+                    indicator_analysis=indicator_analysis,
+                ))
+
+        analysis = self._build_portfolio_daily_coach_analysis(asset_analyses)
+        response = self._portfolio_daily_coach_message(analysis)
+
+        return {
+            "response": response,
+            "intent": "daily_coach",
+            "flow": "daily_coach",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "status": "answered",
+                "current_flow": "daily_coach",
+                "scope": "portfolio",
+                "analysis": analysis,
+                "autonomy_level": "advice_only",
+            },
+            "reasoning": {
+                "confidence_score": 0.76 if analysis.get("has_any_scores") else 0.45,
+                "risk_detected": bool(analysis.get("blocked_assets") or analysis.get("warning_assets")),
+                "reasons": analysis.get("reasons") or [],
+                "coaching_level": "portfolio_daily_cockpit",
             },
             "suggested_actions": analysis.get("suggested_actions") or [],
         }
@@ -2860,6 +2946,25 @@ class FinnPlanService:
             return draft["asset"]
         return "BTC"
 
+    def _should_build_portfolio_daily_coach(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
+        q = (query or "").lower()
+        if any(asset in SUPPORTED_ASSETS for asset in _asset_mentions(query)):
+            return False
+        if any(phrase in q for phrase in ["mijn btc setup", "mijn eth setup", "mijn sol setup"]):
+            return False
+        portfolio_phrases = [
+            "daily brief",
+            "briefing",
+            "prioriteiten",
+            "start mijn dag",
+            "dagstart",
+            "wat moet ik vandaag doen",
+            "wat moet ik doen vandaag",
+            "wat moet ik vandaag",
+            "wat zijn mijn prioriteiten",
+        ]
+        return any(phrase in q for phrase in portfolio_phrases)
+
     def _indicator_insight_categories(self, q: str) -> List[str]:
         categories = []
         if any(word in q for word in ["macro", "macro score"]):
@@ -3184,6 +3289,92 @@ class FinnPlanService:
             "suggested_actions": suggested_actions[:5],
         }
 
+    def _build_portfolio_daily_coach_analysis(self, asset_analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
+        ranked = sorted(asset_analyses, key=self._portfolio_priority_sort_key)
+        actionable_assets = [a for a in ranked if a.get("stance") == "plan_is_active"]
+        blocked_assets = [a for a in ranked if a.get("stance") == "wait_for_plan"]
+        scoreless_assets = [a for a in ranked if a.get("stance") == "wait_for_scores"]
+        warning_assets = [
+            a for a in ranked
+            if (a.get("indicator_summary") or {}).get("warnings")
+        ]
+
+        top_priorities = []
+        for item in ranked[:5]:
+            asset = item.get("asset")
+            if item.get("stance") == "plan_is_active":
+                label = "nu doen"
+                reason = "plan actief volgens je score-ranges"
+            elif item.get("stance") == "wait_for_plan":
+                label = "niet forceren"
+                blocker = (item.get("blockers") or [{}])[0]
+                reason = f"{blocker.get('category')} blokkeert" if blocker.get("category") else "setup niet actief"
+            else:
+                label = "eerst data"
+                reason = "daily scores ontbreken"
+            top_priorities.append({
+                "asset": asset,
+                "priority": label,
+                "reason": reason,
+                "setup": item.get("setup"),
+                "stance": item.get("stance"),
+                "bot_decision_count": (item.get("bot_today") or {}).get("decision_count", 0),
+                "warnings": ((item.get("indicator_summary") or {}).get("warnings") or [])[:2],
+            })
+
+        suggested_actions = []
+        if actionable_assets:
+            assets = ", ".join(a.get("asset") for a in actionable_assets[:3])
+            suggested_actions.append(f"Review eerst de actieve plan-assets: {assets}.")
+        if blocked_assets:
+            first = blocked_assets[0]
+            blocker = (first.get("blockers") or [{}])[0]
+            suggested_actions.append(
+                f"Forceer {first.get('asset')} niet: {blocker.get('category', 'score')} blokkeert nog."
+            )
+        if scoreless_assets:
+            assets = ", ".join(a.get("asset") for a in scoreless_assets[:3])
+            suggested_actions.append(f"Genereer of ververs daily scores voor: {assets}.")
+        if warning_assets:
+            first = warning_assets[0]
+            warning = ((first.get("indicator_summary") or {}).get("warnings") or ["indicator coverage is dun"])[0]
+            suggested_actions.append(f"Verbeter data-dekking voor {first.get('asset')}: {warning}")
+        if not asset_analyses:
+            suggested_actions.append("Maak eerst een setup aan; daarna kan Finn echte portfolio-prioriteiten bepalen.")
+
+        reasons = []
+        if not asset_analyses:
+            reasons.append("Geen opgeslagen setups gevonden voor portfolio-briefing.")
+        else:
+            reasons.append(f"{len(asset_analyses)} setup-assets gecontroleerd.")
+            reasons.append(f"{len(actionable_assets)} actief, {len(blocked_assets)} geblokkeerd, {len(scoreless_assets)} zonder daily scores.")
+
+        return {
+            "scope": "portfolio",
+            "date": datetime.utcnow().date().isoformat(),
+            "asset_count": len(asset_analyses),
+            "has_any_scores": any(a.get("has_scores") for a in asset_analyses),
+            "actionable_assets": actionable_assets,
+            "blocked_assets": blocked_assets,
+            "scoreless_assets": scoreless_assets,
+            "warning_assets": warning_assets,
+            "top_priorities": top_priorities,
+            "assets": ranked,
+            "reasons": reasons,
+            "suggested_actions": suggested_actions[:5],
+        }
+
+    def _portfolio_priority_sort_key(self, analysis: Dict[str, Any]) -> tuple:
+        stance_rank = {
+            "plan_is_active": 0,
+            "wait_for_plan": 1,
+            "wait_for_scores": 2,
+        }.get(analysis.get("stance"), 3)
+        warning_count = len((analysis.get("indicator_summary") or {}).get("warnings") or [])
+        blocker_count = len(analysis.get("blockers") or [])
+        bot_count = (analysis.get("bot_today") or {}).get("decision_count", 0)
+        return (stance_rank, -bot_count, -blocker_count, -warning_count, str(analysis.get("asset") or ""))
+
     def _daily_coach_message(self, analysis: Dict[str, Any]) -> str:
         asset = analysis.get("asset") or "BTC"
         stance = analysis.get("stance")
@@ -3239,6 +3430,44 @@ class FinnPlanService:
                 lines.append(f"- {action}")
 
         lines.append("Ik voer niets automatisch uit vanuit deze check; dit is advies-only.")
+        return "\n".join(lines)
+
+    def _portfolio_daily_coach_message(self, analysis: Dict[str, Any]) -> str:
+        asset_count = analysis.get("asset_count", 0)
+        if not asset_count:
+            return (
+                "Ik kan je portfolio-dagbrief nog niet betrouwbaar maken, omdat ik nog geen opgeslagen setups vind.\n"
+                "Topprioriteit: maak eerst een setup aan. Daarna kan ik per asset beoordelen wat actief, geblokkeerd of incompleet is.\n"
+                "Ik voer niets automatisch uit vanuit deze briefing; dit is advies-only."
+            )
+
+        active_count = len(analysis.get("actionable_assets") or [])
+        blocked_count = len(analysis.get("blocked_assets") or [])
+        scoreless_count = len(analysis.get("scoreless_assets") or [])
+        lines = [
+            f"Portfolio daily brief: ik heb {asset_count} setup-assets gecontroleerd.",
+            f"Status: {active_count} actief, {blocked_count} geblokkeerd, {scoreless_count} zonder daily scores.",
+        ]
+
+        priorities = analysis.get("top_priorities") or []
+        if priorities:
+            lines.append("Topprioriteiten vandaag:")
+            for index, item in enumerate(priorities[:3], start=1):
+                setup = item.get("setup") or {}
+                setup_name = setup.get("name") or f"{item.get('asset')} setup"
+                lines.append(
+                    f"{index}. {item.get('asset')}: {item.get('priority')} - {item.get('reason')} ({setup_name})."
+                )
+                for warning in item.get("warnings") or []:
+                    lines.append(f"   - Data-aandacht: {warning}")
+
+        actions = analysis.get("suggested_actions") or []
+        if actions:
+            lines.append("Veilige volgende stappen:")
+            for action in actions[:4]:
+                lines.append(f"- {action}")
+
+        lines.append("Ik voer niets automatisch uit vanuit deze portfolio-briefing; dit is advies-only.")
         return "\n".join(lines)
 
     def _score_value(self, daily_scores: Optional[Dict[str, Any]], key: str) -> Optional[float]:
