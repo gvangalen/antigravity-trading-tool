@@ -367,6 +367,12 @@ def test_macro_indicator_custom_bucket_rules_can_be_collected_across_turns():
     assert final_validation["can_confirm"] is True
 
 
+def test_indicator_bucket_followup_is_not_treated_as_indicator_name():
+    service = _service()
+
+    assert service._extract_indicator_name_hint("40-60=50 60-80=75 80-100=100", "macro") is None
+
+
 def test_technical_indicator_config_requires_symbol_when_activated():
     service = _service()
     assert service._extract_indicator_name_hint("Voeg RSI toe aan technical voor BTC met standaard scoring weight 1", "technical") == "rsi"

@@ -2080,6 +2080,8 @@ class FinnPlanService:
         )
         cleaned = re.sub(r"[^a-z0-9_&\s-]", " ", cleaned)
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if not re.search(r"[a-z]", cleaned):
+            return None
         if 2 <= len(cleaned) <= 60:
             return normalize_indicator_name(cleaned)
         return None
