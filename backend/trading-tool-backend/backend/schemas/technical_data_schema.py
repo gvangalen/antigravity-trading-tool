@@ -22,10 +22,10 @@ class TechnicalIndicatorRuleResponse(BaseModel):
     indicator: str
     range_min: Optional[float]
     range_max: Optional[float]
-    score: float
-    trend: str
-    interpretation: str
-    action: str
+    score: Optional[float]
+    trend: Optional[str]
+    interpretation: Optional[str]
+    action: Optional[str]
 
     class Config:
         from_attributes = True
