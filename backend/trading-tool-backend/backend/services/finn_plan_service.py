@@ -2065,7 +2065,10 @@ class FinnPlanService:
         match = re.search(r"(?:weight|weging|gewicht)\s*(?:van|naar|=|:)?\s*([0-9][0-9.,]*)", q_lower)
         if not match:
             return None
-        return _number(match.group(1))
+        try:
+            return float(match.group(1).replace(",", "."))
+        except ValueError:
+            return None
 
     def _extract_indicator_name_hint(self, query: str, category: str) -> Optional[str]:
         q = (query or "").lower()

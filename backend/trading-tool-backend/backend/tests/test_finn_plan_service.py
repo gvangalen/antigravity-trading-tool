@@ -268,6 +268,8 @@ def test_macro_indicator_config_request_is_transactional_intent():
     assert service._extract_indicator_name_hint("Voeg Bitcoin Dominance toe aan macro", "macro") == "btc_dominance"
     assert service._extract_indicator_score_mode("gebruik contrarian want ik wil tegen de markt in kopen") == "contrarian"
     assert service._extract_indicator_weight("weight naar 2") == 2
+    assert service._extract_indicator_weight("weight 1.5") == 1.5
+    assert service._extract_indicator_weight("weging 1,5") == 1.5
 
 
 def test_macro_indicator_config_blocks_custom_without_bucket_rules():
