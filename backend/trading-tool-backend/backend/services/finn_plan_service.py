@@ -3367,11 +3367,12 @@ class FinnPlanService:
                 WHERE user_id = :user_id AND category = 'technical' AND indicator = :indicator
             """), {"user_id": user_id, "indicator": indicator})
             node_ok = int(config_rows.scalar() or 0) > 0
+        node_key = "technical_node" if category == "technical" else "macro_node"
         verified = {
             "indicator_config": rules_ok and override_ok,
-            "macro_node": node_ok,
+            node_key: node_ok,
         }
-        if not verified["indicator_config"] or not verified["macro_node"]:
+        if not verified["indicator_config"] or not verified[node_key]:
             raise HTTPException(500, f"Indicator read-after-write verificatie faalde: {verified}")
         return verified
 
