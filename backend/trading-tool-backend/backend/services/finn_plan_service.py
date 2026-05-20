@@ -3362,7 +3362,10 @@ class FinnPlanService:
 
         if daily_scores:
             status = "ready_with_gaps" if config_gaps else "ready"
-            message = "Daily scores zijn beschikbaar."
+            if config_gaps:
+                message = f"Daily scores zijn beschikbaar, maar deze indicatorlagen zijn nog niet actief ingericht: {', '.join(config_gaps)}."
+            else:
+                message = "Daily scores zijn beschikbaar en de indicatorlagen zijn ingericht."
         elif onboarding_gaps:
             status = "onboarding_incomplete"
             message = f"De daily score ontbreekt omdat je onboarding nog niet volledig is voor: {', '.join(onboarding_gaps)}."
@@ -3403,6 +3406,7 @@ class FinnPlanService:
             a for a in ranked
             if (a.get("indicator_summary") or {}).get("warnings")
         ]
+        portfolio_readiness = self._build_portfolio_data_readiness(ranked)
 
         top_priorities = []
         for item in ranked[:5]:
@@ -3425,6 +3429,7 @@ class FinnPlanService:
                 "stance": item.get("stance"),
                 "bot_decision_count": (item.get("bot_today") or {}).get("decision_count", 0),
                 "warnings": ((item.get("indicator_summary") or {}).get("warnings") or [])[:2],
+                "data_readiness": item.get("data_readiness") or {},
             })
 
         suggested_actions = []
@@ -3444,6 +3449,9 @@ class FinnPlanService:
             first = warning_assets[0]
             warning = ((first.get("indicator_summary") or {}).get("warnings") or ["indicator coverage is dun"])[0]
             suggested_actions.append(f"Verbeter data-dekking voor {first.get('asset')}: {warning}")
+        for action in portfolio_readiness.get("suggested_actions") or []:
+            if action not in suggested_actions:
+                suggested_actions.append(action)
         if not asset_analyses:
             suggested_actions.append("Maak eerst een setup aan; daarna kan Finn echte portfolio-prioriteiten bepalen.")
 
@@ -3463,6 +3471,7 @@ class FinnPlanService:
             "blocked_assets": blocked_assets,
             "scoreless_assets": scoreless_assets,
             "warning_assets": warning_assets,
+            "data_readiness": portfolio_readiness,
             "top_priorities": top_priorities,
             "assets": ranked,
             "reasons": reasons,
@@ -3479,6 +3488,64 @@ class FinnPlanService:
         blocker_count = len(analysis.get("blockers") or [])
         bot_count = (analysis.get("bot_today") or {}).get("decision_count", 0)
         return (stance_rank, -bot_count, -blocker_count, -warning_count, str(analysis.get("asset") or ""))
+
+    def _build_portfolio_data_readiness(self, asset_analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
+        by_asset = []
+        onboarding_gap_assets = []
+        config_gap_assets = []
+        score_generation_gap_assets = []
+        ready_with_gaps_assets = []
+
+        for item in asset_analyses:
+            asset = item.get("asset")
+            readiness = item.get("data_readiness") or {}
+            status = readiness.get("status")
+            entry = {
+                "asset": asset,
+                "status": status,
+                "message": readiness.get("message"),
+                "onboarding_gaps": readiness.get("onboarding_gaps") or [],
+                "config_gaps": readiness.get("config_gaps") or [],
+            }
+            by_asset.append(entry)
+            if status == "onboarding_incomplete":
+                onboarding_gap_assets.append(asset)
+            if readiness.get("config_gaps"):
+                config_gap_assets.append(asset)
+            if status == "score_generation_missing":
+                score_generation_gap_assets.append(asset)
+            if status == "ready_with_gaps":
+                ready_with_gaps_assets.append(asset)
+
+        if onboarding_gap_assets:
+            status = "onboarding_incomplete"
+            message = f"Onboarding/config ontbreekt nog voor: {', '.join(onboarding_gap_assets)}."
+        elif score_generation_gap_assets:
+            status = "score_generation_missing"
+            message = f"Configuratie lijkt aanwezig, maar daily score-generatie ontbreekt voor: {', '.join(score_generation_gap_assets)}."
+        elif config_gap_assets:
+            status = "ready_with_gaps"
+            message = f"Scores bestaan, maar indicatorlagen zijn nog dun voor: {', '.join(config_gap_assets)}."
+        else:
+            status = "ready" if asset_analyses else "no_setups"
+            message = "Alle gecontroleerde assets hebben bruikbare data." if asset_analyses else "Geen setups gevonden om data readiness te bepalen."
+
+        suggested_actions = []
+        for entry in by_asset:
+            for action in (next((a.get("data_readiness") or {} for a in asset_analyses if a.get("asset") == entry.get("asset")), {}).get("suggested_actions") or []):
+                if action not in suggested_actions:
+                    suggested_actions.append(action)
+
+        return {
+            "status": status,
+            "message": message,
+            "assets": by_asset,
+            "onboarding_gap_assets": onboarding_gap_assets,
+            "config_gap_assets": config_gap_assets,
+            "score_generation_gap_assets": score_generation_gap_assets,
+            "ready_with_gaps_assets": ready_with_gaps_assets,
+            "suggested_actions": suggested_actions[:5],
+        }
 
     def _daily_coach_message(self, analysis: Dict[str, Any]) -> str:
         asset = analysis.get("asset") or "BTC"
@@ -3571,6 +3638,14 @@ class FinnPlanService:
                 )
                 for warning in item.get("warnings") or []:
                     lines.append(f"   - Data-aandacht: {warning}")
+
+        readiness = analysis.get("data_readiness") or {}
+        if readiness.get("status") and readiness.get("status") != "ready":
+            lines.append("Datakwaliteit:")
+            lines.append(f"- {readiness.get('message')}")
+            for item in (readiness.get("assets") or [])[:3]:
+                if item.get("status") and item.get("status") != "ready":
+                    lines.append(f"- {item.get('asset')}: {item.get('message')}")
 
         actions = analysis.get("suggested_actions") or []
         if actions:

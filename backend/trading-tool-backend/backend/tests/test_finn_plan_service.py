@@ -1292,6 +1292,13 @@ def test_portfolio_daily_coach_prioritizes_active_blocked_and_scoreless_assets()
         "blockers": [],
         "bot_today": {"decision_count": 0},
         "indicator_summary": {"warnings": []},
+        "data_readiness": {
+            "status": "onboarding_incomplete",
+            "message": "De daily score ontbreekt omdat je onboarding nog niet volledig is voor: macro.",
+            "onboarding_gaps": ["macro"],
+            "config_gaps": ["macro"],
+            "suggested_actions": ["Rond eerst deze onboarding-stap af: macro."],
+        },
     }
 
     analysis = service._build_portfolio_daily_coach_analysis([blocked, scoreless, active])
@@ -1302,9 +1309,12 @@ def test_portfolio_daily_coach_prioritizes_active_blocked_and_scoreless_assets()
     assert analysis["top_priorities"][0]["asset"] == "ETH"
     assert len(analysis["blocked_assets"]) == 1
     assert len(analysis["scoreless_assets"]) == 1
+    assert analysis["data_readiness"]["status"] == "onboarding_incomplete"
+    assert analysis["top_priorities"][2]["data_readiness"]["status"] == "onboarding_incomplete"
     assert "Portfolio daily brief" in message
     assert "ETH: nu doen" in message
     assert "BTC: niet forceren" in message
+    assert "Datakwaliteit" in message
     assert "advies-only" in message
 
 
@@ -1382,6 +1392,32 @@ def test_daily_data_readiness_marks_score_generation_gap_when_config_exists():
     assert readiness["status"] == "score_generation_missing"
     assert readiness["config_gaps"] == []
     assert "Genereer daily scores opnieuw" in readiness["suggested_actions"][0]
+
+
+def test_daily_data_readiness_explains_config_gaps_even_when_scores_exist():
+    service = _service()
+    indicator_analysis = {
+        "categories": {
+            "macro": {"active_count": 1},
+            "technical": {"active_count": 1},
+            "market": {"active_count": 0},
+        }
+    }
+
+    readiness = service._build_daily_data_readiness(
+        daily_scores={"macro_score": 50, "technical_score": 25, "market_score": 10},
+        indicator_analysis=indicator_analysis,
+        onboarding_status={
+            "has_macro": True,
+            "has_technical": True,
+            "has_market": False,
+        },
+    )
+
+    assert readiness["status"] == "ready_with_gaps"
+    assert readiness["config_gaps"] == ["market"]
+    assert "Daily scores zijn beschikbaar" in readiness["message"]
+    assert "market" in readiness["message"]
 
 
 def test_daily_coach_analysis_waits_when_setup_has_blockers():
