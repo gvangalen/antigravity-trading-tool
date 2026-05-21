@@ -207,6 +207,54 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     return suggestions.slice(0, 4);
   };
 
+  const normalizeFollowUpActions = (items = []) => {
+    if (!Array.isArray(items)) return [];
+    return items
+      .map((item) => {
+        if (typeof item === "string") {
+          return { label: item, prompt: item, handoff: "chat" };
+        }
+        const prompt = item?.prompt || item?.label || item?.title;
+        if (!prompt) return null;
+        return {
+          label: item.label || prompt,
+          prompt,
+          handoff: item.handoff || item.flow || "chat",
+          requiresConfirmation: Boolean(item.requires_confirmation),
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 5);
+  };
+
+  const getMessageFollowUpActions = (message) => {
+    if (Array.isArray(message?.actions) && message.actions.some((action) => action?.requires_confirmation)) {
+      return [];
+    }
+    const structured = message?.state?.analysis?.follow_up_actions;
+    if (Array.isArray(structured) && structured.length > 0) {
+      return normalizeFollowUpActions(structured);
+    }
+    if (Array.isArray(message?.suggestedActions) && message.suggestedActions.length > 0) {
+      return normalizeFollowUpActions(message.suggestedActions);
+    }
+    return normalizeFollowUpActions(parseSuggestedActions(message?.text));
+  };
+
+  const getBriefingFollowUpActions = () => {
+    return normalizeFollowUpActions(insight?.suggested_actions || []);
+  };
+
+  const followUpLabel = (handoff) => {
+    const labels = {
+      indicator_config: "Config",
+      daily_score_refresh: "Confirm",
+      bot_decision: "Proposal",
+      indicator_insight: "Insight",
+    };
+    return labels[handoff] || "Open";
+  };
+
   useEffect(() => {
     const handleTrigger = (e) => {
       const { query: queryText, openAssistant, metric, symbol, timeframe } = e.detail || {};
@@ -260,6 +308,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           invalidFields: envelope.invalid_fields || [],
           nextQuestion: envelope.next_question || null,
           canConfirm: envelope.can_confirm,
+          suggestedActions: envelope.suggested_actions || [],
           reasoning: envelope.reasoning,
           state: envelope.state || null,
           restoredFinnDraft: true,
@@ -382,6 +431,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
               lastMsg.invalidFields = envelope.invalid_fields || [];
               lastMsg.nextQuestion = envelope.next_question || null;
               lastMsg.canConfirm = envelope.can_confirm;
+              lastMsg.suggestedActions = envelope.suggested_actions || [];
               lastMsg.reasoning = envelope.reasoning;
               lastMsg.state = envelope.state || null;
               lastMsg.isComplete = true;
@@ -576,6 +626,32 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
     try {
       const res = await executeAssistantAction(action);
+      if (action.type === "refresh_daily_scores") {
+        if (!res?.ok || !res?.verified?.daily_scores) {
+          throw new Error("Daily scores zijn nog niet verifieerbaar.");
+        }
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          text: res.message || "Daily scores ververst en geverifieerd.",
+          intent: "daily_score_refresh_done",
+        }]);
+        await loadInsight();
+        return;
+      }
+
+      if (action.type === "generate_bot_decision") {
+        if (!res?.ok || !res?.verified?.bot_decision) {
+          throw new Error("Bot-decision is nog niet verifieerbaar.");
+        }
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          text: res.message || "Bot-decision gegenereerd. Review het voorstel voordat je iets uitvoert.",
+          intent: "bot_decision_generated",
+        }]);
+        await loadInsight();
+        return;
+      }
+
       const isBotOnly = res?.draft?.draft_kind === "bot";
       const isStrategyOnly = res?.draft?.draft_kind === "strategy";
       const isIndicatorConfig = res?.draft?.draft_kind === "indicator_config";
@@ -643,7 +719,11 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       console.error("Finn action failed", err);
       setMessages(prev => [...prev, {
         role: "assistant",
-        text: "Ik kon dit plan nog niet aanmaken. Controleer de velden en probeer opnieuw.",
+        text: action.type === "refresh_daily_scores"
+          ? "Ik kon de daily scores nog niet verversen. Probeer het zo opnieuw."
+          : action.type === "generate_bot_decision"
+          ? "Ik kon de bot-decision nog niet genereren. Controleer de bot en probeer opnieuw."
+          : "Ik kon dit plan nog niet aanmaken. Controleer de velden en probeer opnieuw.",
         isError: true,
       }]);
     } finally {
@@ -841,6 +921,40 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     );
   };
 
+  const renderInlineActionCard = (message) => {
+    const actions = Array.isArray(message.actions) ? message.actions : [];
+    const actionOnly = actions.filter((action) => (
+      action?.requires_confirmation &&
+      ["refresh_daily_scores", "generate_bot_decision"].includes(action.type)
+    ));
+    if (actionOnly.length === 0 || message.draft) return null;
+
+    return (
+      <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-3">
+        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-300">
+          <ListChecks size={13} />
+          Finn Actie Ter Bevestiging
+        </div>
+        <div className="space-y-2">
+          {actionOnly.map((action, index) => (
+            <button
+              key={`${action.type}-${action.id || index}`}
+              onClick={() => handleExecuteAction(action)}
+              disabled={executingAction}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/15"
+            >
+              {executingAction ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+              {action.label || "Bevestigen"}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] font-semibold text-blue-700/80 dark:text-blue-200/80 leading-snug">
+          Finn voert deze actie pas uit na bevestiging. Er worden geen trades geplaatst vanuit deze stap.
+        </p>
+      </div>
+    );
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -944,9 +1058,28 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                </div>
             </div>
           ) : (
-            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
-              "{insight?.greeting || `Hallo ${preferences?.first_name || 'Henk'}, alle ${context.symbol} feeds draaien stabiel.`} {getInsightField('bot_insight', 'conclusion') || getInsightField('market_insight', 'conclusion') || "BTC bevindt zich momenteel in een consolidatiefase met verhoogd correctierisico zolang volume achterblijft."}"
-            </p>
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
+                "{insight?.greeting || `Hallo ${preferences?.first_name || 'Henk'}, alle ${context.symbol} feeds draaien stabiel.`} {getInsightField('bot_insight', 'conclusion') || getInsightField('market_insight', 'conclusion') || "BTC bevindt zich momenteel in een consolidatiefase met verhoogd correctierisico zolang volume achterblijft."}"
+              </p>
+              {getBriefingFollowUpActions().length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {getBriefingFollowUpActions().map((action, index) => (
+                    <button
+                      key={`${action.prompt}-${index}`}
+                      onClick={() => handleChat(action.prompt)}
+                      className="group inline-flex items-center gap-2 rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/50 px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 shadow-sm hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-all active:scale-[0.98]"
+                    >
+                      <Zap size={11} className="text-amber-500 shrink-0" />
+                      <span className="normal-case tracking-normal text-[11px] leading-tight">{action.label}</span>
+                      <span className="rounded-md bg-blue-100 dark:bg-blue-900/50 px-1.5 py-0.5 text-[8px] tracking-widest text-blue-500 dark:text-blue-300">
+                        {followUpLabel(action.handoff)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -1029,23 +1162,28 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                   : m.isError 
                     ? "bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900 text-rose-700 dark:text-rose-300"
                     : "bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-foreground dark:text-slate-100"
-              }`}>
+                }`}>
                 <p className="text-sm leading-relaxed">{m.text}</p>
                 {m.role === "assistant" && m.isComplete !== false && (() => {
-                  const suggestions = parseSuggestedActions(m.text);
+                  const suggestions = getMessageFollowUpActions(m);
                   if (suggestions.length === 0) return null;
                   return (
                     <div className="mt-4 pt-3 border-t border-slate-100/50 dark:border-slate-800/50 flex flex-col gap-2">
                       <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Volgende stappen:</span>
                       <div className="flex flex-wrap gap-2">
-                        {suggestions.map((s, idx) => (
+                        {suggestions.map((action, idx) => (
                           <button
-                            key={idx}
-                            onClick={() => handleChat(s)}
+                            key={`${action.prompt}-${idx}`}
+                            onClick={() => handleChat(action.prompt)}
                             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold bg-white dark:bg-slate-950 hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:text-blue-700 border border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-900/40 transition-all hover:-translate-y-0.5 active:translate-y-0 hover:shadow-sm text-left"
                           >
                             <Zap size={10} className="text-amber-500" />
-                            {s}
+                            <span>{action.label}</span>
+                            {action.handoff && action.handoff !== "chat" && (
+                              <span className="ml-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-blue-400">
+                                {followUpLabel(action.handoff)}
+                              </span>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -1092,6 +1230,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                   </div>
                 )}
                 {renderDraftCard(m)}
+                {renderInlineActionCard(m)}
                 {m.isError && (
                   <button 
                     onClick={() => handleChat(messages[i-1]?.text)} 
