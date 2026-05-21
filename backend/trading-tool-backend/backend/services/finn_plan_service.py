@@ -37,6 +37,13 @@ FINN_STATE_VERSION = 2
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _utc_db_timestamp() -> datetime:
+    """Return UTC normalized for existing naive timestamp columns."""
+    return _utc_now().replace(tzinfo=None)
+
+
 WEEKDAYS = {
     "maandag": "monday",
     "dinsdag": "tuesday",
@@ -4850,7 +4857,7 @@ class FinnPlanService:
             "id": action_id,
             "user_id": user_id,
             "payload": json.dumps(payload),
-            "expires_at": _utc_now() + timedelta(days=7),
+            "expires_at": _utc_db_timestamp() + timedelta(days=7),
         })
         acquired = row.fetchone() is not None
         await self.session.commit()
@@ -4910,7 +4917,7 @@ class FinnPlanService:
             "user_id": user_id,
             "payload": json.dumps(payload),
             "status": status,
-            "expires_at": _utc_now() + timedelta(days=7),
+            "expires_at": _utc_db_timestamp() + timedelta(days=7),
         })
         await self.session.commit()
 
