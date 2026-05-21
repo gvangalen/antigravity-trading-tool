@@ -3894,43 +3894,13 @@ class FinnPlanService:
         bot_review_queue: List[Dict[str, Any]] = []
 
         for item in assets:
-            asset = item.get("asset") or "BTC"
-            setup = item.get("setup") or {}
-            stance = item.get("stance")
-            blockers = item.get("blockers") or []
-            data_readiness = item.get("data_readiness") or {}
+            plan = self._mission_plan_health_entry(item)
+            asset = plan["asset"]
+            setup = plan.get("setup") or {}
+            status = plan.get("status")
+            data_readiness = plan.get("data_readiness") or {}
             bot_today = item.get("bot_today") or {}
-            warnings = ((item.get("indicator_summary") or {}).get("warnings") or [])[:2]
-
-            if stance == "plan_is_active":
-                status = "active"
-                label = "nu doen"
-                reason = "Plan actief volgens je setup-ranges."
-            elif stance == "wait_for_scores":
-                status = "data_missing"
-                label = "eerst data"
-                reason = data_readiness.get("message") or "Daily scores ontbreken."
-            else:
-                status = "blocked"
-                label = "niet forceren"
-                first_blocker = blockers[0] if blockers else {}
-                reason = (
-                    f"{first_blocker.get('category')} score {first_blocker.get('score')} buiten {first_blocker.get('range')}."
-                    if first_blocker else "Setup is nog niet actief volgens je planregels."
-                )
-
-            plan_health.append({
-                "asset": asset,
-                "status": status,
-                "priority": label,
-                "reason": reason,
-                "setup": setup,
-                "match_percentage": item.get("setup_match_percentage"),
-                "blockers": blockers[:3],
-                "warnings": warnings,
-                "data_readiness": data_readiness,
-                "bot_decision_count": bot_today.get("decision_count", 0),
-            })
+            plan_health.append(plan)
 
             for action in item.get("follow_up_actions") or []:
                 open_actions.append(self._mission_action(action, asset, status, setup))
@@ -3969,6 +3939,170 @@ class FinnPlanService:
             "plan_health": plan_health,
             "bot_review_queue": bot_review_queue[:8],
         }
+
+    def _mission_plan_health_entry(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        asset = item.get("asset") or "BTC"
+        setup = item.get("setup") or {}
+        stance = item.get("stance")
+        blockers = item.get("blockers") or []
+        data_readiness = item.get("data_readiness") or {}
+        bot_today = item.get("bot_today") or {}
+        warnings = ((item.get("indicator_summary") or {}).get("warnings") or [])[:2]
+
+        if stance == "plan_is_active":
+            status = "active"
+            label = "nu doen"
+            reason = "Plan actief volgens je setup-ranges."
+        elif stance == "wait_for_scores":
+            status = "data_missing"
+            label = "eerst data"
+            reason = data_readiness.get("message") or "Daily scores ontbreken."
+        else:
+            status = "blocked"
+            label = "niet forceren"
+            first_blocker = blockers[0] if blockers else {}
+            reason = (
+                f"{first_blocker.get('category')} score {first_blocker.get('score')} buiten {first_blocker.get('range')}."
+                if first_blocker else "Setup is nog niet actief volgens je planregels."
+            )
+
+        category_checks = self._mission_category_checks(item)
+        health_score = self._mission_health_score(
+            status=status,
+            match_percentage=item.get("setup_match_percentage"),
+            warnings=warnings,
+            data_readiness=data_readiness,
+        )
+
+        return {
+            "asset": asset,
+            "status": status,
+            "priority": label,
+            "reason": reason,
+            "setup": setup,
+            "match_percentage": item.get("setup_match_percentage"),
+            "health_score": health_score,
+            "health_grade": self._mission_health_grade(status, health_score),
+            "category_checks": category_checks,
+            "lifecycle": self._mission_lifecycle(item),
+            "next_best_action": self._mission_next_best_action(item, status),
+            "blockers": blockers[:3],
+            "warnings": warnings,
+            "data_readiness": data_readiness,
+            "bot_decision_count": bot_today.get("decision_count", 0),
+        }
+
+    def _mission_category_checks(self, item: Dict[str, Any]) -> List[Dict[str, Any]]:
+        by_category: Dict[str, Dict[str, Any]] = {}
+        for status, source in [
+            ("blocked", item.get("blockers") or []),
+            ("passed", item.get("passed_checks") or []),
+            ("missing", item.get("missing_checks") or []),
+        ]:
+            for check in source:
+                category = check.get("category")
+                if not category:
+                    continue
+                by_category[category] = {
+                    "category": category,
+                    "status": status,
+                    "score": check.get("score"),
+                    "range": check.get("range"),
+                    "reason": check.get("blocker_reason") or check.get("interpretation"),
+                }
+
+        checks = []
+        for category in ["macro", "technical", "market"]:
+            checks.append(by_category.get(category) or {
+                "category": category,
+                "status": "unknown",
+                "score": None,
+                "range": None,
+                "reason": "Geen betrouwbare check beschikbaar.",
+            })
+        return checks
+
+    def _mission_health_score(
+        self,
+        *,
+        status: str,
+        match_percentage: Any,
+        warnings: List[str],
+        data_readiness: Dict[str, Any],
+    ) -> int:
+        match = self._to_float(match_percentage)
+        if match is None:
+            match = 25.0 if status == "data_missing" else 50.0
+        if status == "active":
+            score = max(match, 80.0)
+        elif status == "data_missing":
+            score = min(match, 35.0)
+        else:
+            score = match
+
+        score -= min(len(warnings), 3) * 5
+        score -= min(len(data_readiness.get("config_gaps") or []), 3) * 5
+        return int(max(0, min(100, round(score))))
+
+    def _mission_health_grade(self, status: str, health_score: int) -> str:
+        if status == "data_missing":
+            return "incomplete"
+        if status == "blocked":
+            return "blocked"
+        if health_score >= 80:
+            return "healthy"
+        if health_score >= 55:
+            return "watch"
+        return "weak"
+
+    def _mission_lifecycle(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        setup = item.get("setup") or {}
+        active_strategy = item.get("active_strategy") or {}
+        strategy = active_strategy.get("strategy") or {}
+        bot_today = item.get("bot_today") or {}
+        data_readiness = item.get("data_readiness") or {}
+        decision_count = int(bot_today.get("decision_count") or 0)
+
+        return {
+            "setup": {
+                "status": "configured" if setup else "missing",
+                "id": setup.get("id"),
+                "name": setup.get("name"),
+                "type": setup.get("type"),
+                "timeframe": setup.get("timeframe"),
+            },
+            "strategy": {
+                "status": "active_today" if active_strategy.get("active") else "not_active_today",
+                "id": strategy.get("id"),
+                "name": strategy.get("name"),
+            },
+            "bot": {
+                "status": "review_ready" if decision_count else "needs_decision",
+                "decision_count": decision_count,
+                "error": bot_today.get("error"),
+            },
+            "data": {
+                "status": data_readiness.get("status") or ("ready" if item.get("has_scores") else "missing"),
+                "has_scores": bool(item.get("has_scores")),
+                "config_gaps": data_readiness.get("config_gaps") or [],
+            },
+        }
+
+    def _mission_next_best_action(self, item: Dict[str, Any], status: str) -> Optional[Dict[str, Any]]:
+        actions = item.get("follow_up_actions") or []
+        preferred_handoffs = {
+            "data_missing": ["daily_score_refresh", "indicator_config", "indicator_insight", "bot_decision"],
+            "blocked": ["indicator_insight", "indicator_config", "daily_score_refresh", "bot_decision"],
+            "active": ["bot_decision", "indicator_insight", "daily_score_refresh", "indicator_config"],
+        }.get(status, ["indicator_insight", "daily_score_refresh", "indicator_config", "bot_decision"])
+
+        for handoff in preferred_handoffs:
+            action = next((candidate for candidate in actions if candidate.get("handoff") == handoff), None)
+            if action:
+                return self._mission_action(action, item.get("asset"), status, item.get("setup") or {})
+        if actions:
+            return self._mission_action(actions[0], item.get("asset"), status, item.get("setup") or {})
+        return None
 
     def _mission_action(
         self,

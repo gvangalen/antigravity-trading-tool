@@ -1496,7 +1496,15 @@ def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis
     assert mission["summary"]["blocked_count"] == 1
     assert mission["summary"]["open_action_count"] >= 1
     assert mission["plan_health"][0]["asset"] == "ETH"
-    assert any(item["asset"] == "BTC" and item["status"] == "blocked" for item in mission["plan_health"])
+    btc_health = next(item for item in mission["plan_health"] if item["asset"] == "BTC")
+    assert btc_health["status"] == "blocked"
+    assert btc_health["health_score"] == 23
+    assert btc_health["health_grade"] == "blocked"
+    assert btc_health["category_checks"][0]["category"] == "macro"
+    assert btc_health["category_checks"][0]["status"] == "blocked"
+    assert btc_health["lifecycle"]["setup"]["status"] == "configured"
+    assert btc_health["lifecycle"]["data"]["status"] == "ready_with_gaps"
+    assert btc_health["next_best_action"]["handoff"] == "indicator_insight"
     assert any(action["handoff"] == "indicator_config" for action in mission["open_actions"])
     assert any(action["handoff"] == "daily_score_refresh" for action in mission["open_actions"])
     assert mission["bot_review_queue"][0]["decision_id"] == 7

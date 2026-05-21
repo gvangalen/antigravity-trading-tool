@@ -1187,15 +1187,52 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                       <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">
                         {item.asset} · {item.priority}
                       </span>
-                      <span className={`text-[8px] font-black uppercase tracking-widest ${
-                        item.status === "active" ? "text-emerald-600" : item.status === "blocked" ? "text-rose-600" : "text-amber-600"
-                      }`}>
-                        {item.status}
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {typeof item.health_score === "number" && (
+                          <span className="text-[10px] font-black tabular-nums text-slate-700 dark:text-slate-200">
+                            {item.health_score}
+                          </span>
+                        )}
+                        <span className={`text-[8px] font-black uppercase tracking-widest ${
+                          item.status === "active" ? "text-emerald-600" : item.status === "blocked" ? "text-rose-600" : "text-amber-600"
+                        }`}>
+                          {item.health_grade || item.status}
+                        </span>
+                      </div>
                     </div>
                     <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
                       {item.reason}
                     </p>
+                    {Array.isArray(item.category_checks) && item.category_checks.length > 0 && (
+                      <div className="mt-2 grid grid-cols-3 gap-1">
+                        {item.category_checks.slice(0, 3).map((check) => (
+                          <div key={`${item.asset}-${check.category}`} className="rounded-lg bg-white/70 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800 px-1.5 py-1">
+                            <div className={`text-[7px] font-black uppercase tracking-widest ${
+                              check.status === "passed" ? "text-emerald-600" : check.status === "blocked" ? "text-rose-600" : "text-slate-400"
+                            }`}>
+                              {check.category}
+                            </div>
+                            <div className="text-[9px] font-black text-slate-700 dark:text-slate-200 tabular-nums">
+                              {check.score ?? "—"}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {item.lifecycle && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {["strategy", "bot", "data"].map((key) => item.lifecycle[key]?.status && (
+                          <span key={`${item.asset}-${key}`} className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                            {key}: {item.lifecycle[key].status}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {item.next_best_action?.prompt && (
+                      <div className="mt-2">
+                        {renderFollowUpButtons([item.next_best_action], true)}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
