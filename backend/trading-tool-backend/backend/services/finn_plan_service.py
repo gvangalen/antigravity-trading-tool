@@ -4417,6 +4417,7 @@ class FinnPlanService:
             asset = assets[0]
         result_status = result.get("status")
         verified = result.get("verified") if isinstance(result.get("verified"), dict) else {}
+        resolve_state = self._mission_activity_resolve_state(status, result_status, action_type)
 
         title_by_type = {
             "create_plan": "Setup-flow uitgevoerd",
@@ -4450,6 +4451,7 @@ class FinnPlanService:
             "type": action_type,
             "label": label,
             "status": status,
+            "resolve_state": resolve_state,
             "asset": asset,
             "created_at": created_at,
             "updated_at": payload.get("updated_at"),
@@ -4465,6 +4467,19 @@ class FinnPlanService:
             "requires_confirmation": bool(action.get("requires_confirmation")),
             "risk_level": action.get("risk_level"),
         }
+
+    def _mission_activity_resolve_state(self, status: Any, result_status: Any, action_type: str) -> str:
+        normalized_status = str(status or "").lower()
+        normalized_result = str(result_status or "").lower()
+        if normalized_result in {"skipped", "cancelled"} or action_type == "skip_bot_decision":
+            return "skipped"
+        if normalized_status == "pending":
+            return "needs_user_confirmation"
+        if normalized_status == "failed":
+            return "needs_user_confirmation"
+        if normalized_status == "executed":
+            return "resolved"
+        return "monitor_today"
 
     def _mission_plan_health_entry(self, item: Dict[str, Any]) -> Dict[str, Any]:
         asset = item.get("asset") or "BTC"
@@ -4685,6 +4700,12 @@ class FinnPlanService:
             aging_after_minutes=120,
         )
         priority_rank = 5 if freshness.get("status") == "stale" else 8
+        resolve_state = self._mission_resolve_state(
+            "bot_decision",
+            "stale" if freshness.get("status") == "stale" else "review_ready",
+            next_action,
+            freshness=freshness,
+        )
         return {
             "id": f"bot_decision:{item.get('decision_id')}",
             "type": "bot_decision",
@@ -4692,6 +4713,7 @@ class FinnPlanService:
             "priority_rank": priority_rank,
             "sort_rank": priority_rank,
             "status": "stale" if freshness.get("status") == "stale" else "review_ready",
+            "resolve_state": resolve_state,
             "asset": item.get("asset"),
             "title": f"Review bot-decision #{item.get('decision_id')}",
             "reason": item.get("summary") or "Bot-decision vraagt review.",
@@ -4713,13 +4735,15 @@ class FinnPlanService:
         priority = "high" if status == "blocked" else "medium"
         freshness = self._mission_freshness(None, fallback_status="stale" if status == "data_missing" else "unknown")
         priority_rank = 9 if priority == "high" else 25
+        item_status = "blocked" if status == "blocked" else "blocked_by_data"
         return {
             "id": f"{item_type}:{plan.get('asset')}:{(plan.get('setup') or {}).get('id') or 'none'}",
             "type": item_type,
             "priority": priority,
             "priority_rank": priority_rank,
             "sort_rank": priority_rank,
-            "status": "blocked" if status == "blocked" else "blocked_by_data",
+            "status": item_status,
+            "resolve_state": self._mission_resolve_state(item_type, item_status, plan.get("next_best_action"), freshness=freshness),
             "asset": plan.get("asset"),
             "title": f"{plan.get('asset')} plan aandacht",
             "reason": plan.get("reason"),
@@ -4738,13 +4762,15 @@ class FinnPlanService:
         priority = "medium" if action.get("requires_confirmation") else "low"
         freshness = self._mission_freshness(None, fallback_status="unknown")
         priority_rank = action.get("priority_rank", 60) + (0 if priority == "medium" else 10)
+        item_status = "needs_user_confirmation" if action.get("requires_confirmation") else "new"
         return {
             "id": f"{item_type}:{action.get('handoff')}:{action.get('asset') or 'portfolio'}:{hashlib.sha1(str(action.get('prompt') or '').encode('utf-8')).hexdigest()[:10]}",
             "type": item_type,
             "priority": priority,
             "priority_rank": priority_rank,
             "sort_rank": priority_rank,
-            "status": "needs_user_confirmation" if action.get("requires_confirmation") else "new",
+            "status": item_status,
+            "resolve_state": self._mission_resolve_state(item_type, item_status, action, freshness=freshness),
             "asset": action.get("asset"),
             "title": action.get("label") or "Finn actie",
             "reason": "Aanbevolen volgende stap vanuit Mission Control.",
@@ -4769,6 +4795,31 @@ class FinnPlanService:
         if "data" in label:
             return "data_gap"
         return "open_action"
+
+    def _mission_resolve_state(
+        self,
+        item_type: str,
+        status: Optional[str],
+        action: Optional[Dict[str, Any]] = None,
+        *,
+        freshness: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        normalized_status = str(status or "").lower()
+        if normalized_status in {"skipped", "cancelled"}:
+            return "skipped"
+        if normalized_status in {"executed", "filled", "resolved", "handled"}:
+            return "resolved"
+        if normalized_status in {"blocked_by_data", "data_missing"} or item_type == "data_gap":
+            return "waiting_for_data"
+        if bool((action or {}).get("requires_confirmation")):
+            return "needs_user_confirmation"
+        if item_type in {"bot_decision", "score_refresh", "indicator_gap", "bot_decision_request"}:
+            return "needs_user_confirmation"
+        if item_type in {"blocked_plan", "blocker_explanation"}:
+            return "monitor_today"
+        if (freshness or {}).get("status") == "stale":
+            return "needs_user_confirmation"
+        return "monitor_today"
 
     def _mission_freshness(
         self,

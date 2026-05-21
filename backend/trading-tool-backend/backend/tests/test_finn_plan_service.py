@@ -1506,9 +1506,12 @@ def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis
     assert mission["workqueue"][0]["type"] == "bot_decision"
     assert mission["workqueue"][0]["priority"] == "high"
     assert mission["workqueue"][0]["status"] == "review_ready"
+    assert mission["workqueue"][0]["resolve_state"] == "needs_user_confirmation"
     assert any(item["type"] == "blocked_plan" and item["asset"] == "BTC" for item in mission["workqueue"])
     assert any(item["type"] == "score_refresh" for item in mission["workqueue"])
     assert any(item["type"] == "indicator_gap" for item in mission["workqueue"])
+    blocked_item = next(item for item in mission["workqueue"] if item["type"] == "blocked_plan" and item["asset"] == "BTC")
+    assert blocked_item["resolve_state"] == "monitor_today"
     assert mission["plan_health"][0]["asset"] == "ETH"
     btc_health = next(item for item in mission["plan_health"] if item["asset"] == "BTC")
     assert btc_health["status"] == "blocked"
@@ -1677,9 +1680,11 @@ def test_mission_workqueue_dedupes_actions_and_preserves_priority_order():
     assert len(queue) == 2
     assert queue[0]["type"] == "score_refresh"
     assert queue[0]["status"] == "needs_user_confirmation"
+    assert queue[0]["resolve_state"] == "needs_user_confirmation"
     assert queue[0]["next_best_action"]["handoff"] == "daily_score_refresh"
     assert queue[0]["sort_rank"] == queue[0]["priority_rank"]
     assert queue[1]["priority"] == "low"
+    assert queue[1]["resolve_state"] == "monitor_today"
     assert queue[1]["freshness"]["status"] == "unknown"
 
 
@@ -1702,6 +1707,7 @@ def test_mission_workqueue_freshness_marks_fresh_bot_decision():
 
     assert item["priority"] == "high"
     assert item["status"] == "review_ready"
+    assert item["resolve_state"] == "needs_user_confirmation"
     assert item["priority_rank"] == 8
     assert item["sort_rank"] == 8
     assert item["freshness"]["status"] == "fresh"
@@ -1726,6 +1732,7 @@ def test_mission_workqueue_freshness_marks_aging_bot_decision():
     item = service._mission_workqueue_from_bot_review(review)
 
     assert item["status"] == "review_ready"
+    assert item["resolve_state"] == "needs_user_confirmation"
     assert item["priority_rank"] == 8
     assert item["sort_rank"] == 8
     assert item["freshness"]["status"] == "aging"
@@ -1751,6 +1758,7 @@ def test_mission_workqueue_freshness_marks_stale_bot_decision():
 
     assert item["priority"] == "high"
     assert item["status"] == "stale"
+    assert item["resolve_state"] == "needs_user_confirmation"
     assert item["priority_rank"] == 5
     assert item["sort_rank"] == 5
     assert item["freshness"]["status"] == "stale"
@@ -1786,10 +1794,55 @@ def test_mission_activity_item_summarizes_executed_action():
     assert item["label"] == "Bot-decision overslaan"
     assert item["status"] == "executed"
     assert item["result_status"] == "skipped"
+    assert item["resolve_state"] == "skipped"
     assert item["outcome"] == "Bot-decision #22 is overgeslagen."
     assert item["entity_ids"]["bot_id"] == 9
     assert item["entity_ids"]["decision_id"] == 22
     assert item["verified"]["bot_decision_skipped"] is True
+
+
+def test_mission_activity_item_marks_pending_and_executed_resolve_states():
+    service = _service()
+    pending = service._mission_activity_item({
+        "id": "finn-pending-1",
+        "status": "pending",
+        "created_at": datetime(2026, 5, 21, 12, 0, 0),
+        "payload": {
+            "action": {
+                "type": "refresh_daily_scores",
+                "label": "Daily scores verversen",
+                "requires_confirmation": True,
+            }
+        },
+    })
+    executed = service._mission_activity_item({
+        "id": "finn-executed-1",
+        "status": "executed",
+        "created_at": datetime(2026, 5, 21, 12, 0, 0),
+        "payload": {
+            "action": {"type": "configure_indicator"},
+            "result": {"ok": True, "message": "Indicator opgeslagen."},
+        },
+    })
+
+    assert pending["resolve_state"] == "needs_user_confirmation"
+    assert executed["resolve_state"] == "resolved"
+
+
+def test_mission_workqueue_data_gap_waits_for_data():
+    service = _service()
+    item = service._mission_workqueue_from_plan({
+        "asset": "BTC",
+        "status": "data_missing",
+        "reason": "Daily scores ontbreken.",
+        "setup": {"id": 12},
+        "lifecycle": {"strategy": {"id": 91}},
+    })
+
+    assert item["type"] == "data_gap"
+    assert item["status"] == "blocked_by_data"
+    assert item["resolve_state"] == "waiting_for_data"
+    assert item["freshness"]["status"] == "stale"
 
 
 def test_bot_decision_review_request_detection():
