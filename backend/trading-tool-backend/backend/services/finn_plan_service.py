@@ -1362,6 +1362,17 @@ class FinnPlanService:
 
             try:
                 active_strategy = await StrategyService(self.session).get_active_strategy_today(user_id)
+                if best_setup and not active_strategy.get("active"):
+                    setup_strategy = await StrategyService(self.session).repository.get_strategy_by_setup(
+                        int(best_setup.get("id")),
+                        user_id,
+                    )
+                    if setup_strategy:
+                        active_strategy = {
+                            "active": False,
+                            "strategy_exists": True,
+                            "strategy": StrategyService(self.session)._format_strategy_row(setup_strategy),
+                        }
             except Exception as exc:
                 active_strategy = {"active": False, "error": str(exc)}
 
@@ -1442,6 +1453,21 @@ class FinnPlanService:
                 setup = best_setups_by_asset[asset]
                 daily_scores = await self._fetch_daily_scores_with_runtime_refresh(user_id, asset)
                 setup_analysis = self._evaluate_setup_row(setup, daily_scores)
+                active_strategy = {"active": False, "portfolio_scope": True}
+                try:
+                    setup_strategy = await StrategyService(self.session).repository.get_strategy_by_setup(
+                        int(setup.get("id")),
+                        user_id,
+                    )
+                    if setup_strategy:
+                        active_strategy = {
+                            "active": False,
+                            "portfolio_scope": True,
+                            "strategy_exists": True,
+                            "strategy": StrategyService(self.session)._format_strategy_row(setup_strategy),
+                        }
+                except Exception as exc:
+                    active_strategy = {"active": False, "portfolio_scope": True, "error": str(exc)}
                 try:
                     bot_today = await BotService(self.session).get_bot_today(user_id, symbol=asset)
                 except Exception as exc:
@@ -1466,7 +1492,7 @@ class FinnPlanService:
                     asset=asset,
                     daily_scores=daily_scores,
                     setup_analysis=setup_analysis,
-                    active_strategy={"active": False, "portfolio_scope": True},
+                    active_strategy=active_strategy,
                     bot_today=bot_today,
                     indicator_analysis=indicator_analysis,
                     onboarding_status=onboarding_status,
@@ -1708,11 +1734,18 @@ class FinnPlanService:
             }
 
         review = self._mission_bot_review_item(selected, {"asset": selected.get("symbol") or asset, "setup": {"id": selected.get("setup_id")}})
+        confidence_label = (
+            f"{round(review['confidence'] * 100)}%"
+            if isinstance(review.get("confidence"), (int, float))
+            else "onbekend"
+        )
         lines = [
             f"Bot-decision #{review['decision_id']} voor {review.get('asset')}: {review.get('action')} ({review.get('review_status')}).",
-            f"Risico: {review.get('risk_level')}. Confidence: {review.get('confidence')}.",
+            f"Risico: {review.get('risk_level')}. Confidence: {confidence_label}.",
         ]
-        if review.get("amount_eur") is not None:
+        if review.get("action") == "hold":
+            lines.append("Uitvoering: hold-decision; geen orderbedrag, alleen monitoren.")
+        elif review.get("amount_eur") is not None:
             lines.append(f"Bedrag: EUR {review.get('amount_eur')}.")
         if review.get("guardrail_reason"):
             lines.append(f"Guardrail: {review.get('guardrail_reason')}.")
@@ -3984,6 +4017,7 @@ class FinnPlanService:
                 "reason": reason,
                 "setup": item.get("setup"),
                 "stance": item.get("stance"),
+                "active_strategy": item.get("active_strategy") or {},
                 "bot_decision_count": (item.get("bot_today") or {}).get("decision_count", 0),
                 "warnings": ((item.get("indicator_summary") or {}).get("warnings") or [])[:2],
                 "data_readiness": item.get("data_readiness") or {},
@@ -4256,7 +4290,9 @@ class FinnPlanService:
         review_status = "handled" if status in {"executed", "skipped", "cancelled", "filled"} else "needs_review"
         amount_label = amount if amount is not None else requested_amount
         summary = f"{asset}: {action}"
-        if amount_label is not None:
+        if action == "hold":
+            summary += " - geen orderbedrag"
+        elif amount_label is not None:
             summary += f" voor EUR {amount_label:g}"
         if guardrail_reason:
             summary += " - guardrail aandacht"
@@ -4540,6 +4576,13 @@ class FinnPlanService:
         bot_today = item.get("bot_today") or {}
         data_readiness = item.get("data_readiness") or {}
         decision_count = int(bot_today.get("decision_count") or 0)
+        strategy_status = (
+            "active_today"
+            if active_strategy.get("active")
+            else "configured_not_active_today"
+            if strategy or active_strategy.get("strategy_exists")
+            else "missing"
+        )
 
         return {
             "setup": {
@@ -4550,7 +4593,7 @@ class FinnPlanService:
                 "timeframe": setup.get("timeframe"),
             },
             "strategy": {
-                "status": "active_today" if active_strategy.get("active") else "not_active_today",
+                "status": strategy_status,
                 "id": strategy.get("id"),
                 "name": strategy.get("name"),
             },

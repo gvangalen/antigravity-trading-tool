@@ -1466,6 +1466,11 @@ def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis
             "setup": {"id": 12, "name": "BTC DCA"},
             "setup_match_percentage": 33,
             "blockers": [{"category": "macro", "score": 10, "range": [30, 70]}],
+            "active_strategy": {
+                "active": False,
+                "strategy_exists": True,
+                "strategy": {"id": 91, "name": "BTC DCA Strategy"},
+            },
             "bot_today": {"decision_count": 0, "decisions": []},
             "indicator_summary": {"warnings": ["macro-laag is dun"]},
             "data_readiness": {"status": "ready_with_gaps", "config_gaps": ["macro"]},
@@ -1504,6 +1509,8 @@ def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis
     assert btc_health["category_checks"][0]["category"] == "macro"
     assert btc_health["category_checks"][0]["status"] == "blocked"
     assert btc_health["lifecycle"]["setup"]["status"] == "configured"
+    assert btc_health["lifecycle"]["strategy"]["status"] == "configured_not_active_today"
+    assert btc_health["lifecycle"]["strategy"]["id"] == 91
     assert btc_health["lifecycle"]["data"]["status"] == "ready_with_gaps"
     assert btc_health["next_best_action"]["handoff"] == "indicator_insight"
     assert any(action["handoff"] == "indicator_config" for action in mission["open_actions"])
@@ -1543,6 +1550,59 @@ def test_bot_decision_review_items_escalate_guardrail_risk():
     assert review["review_actions"][0]["prompt"] == "Leg bot-decision 22 uit"
     assert any(action["handoff"] == "bot_execution_decision" and "paper" in action["label"].lower() for action in review["review_actions"])
     assert any(action["handoff"] == "bot_execution_decision" and "overslaan" in action["label"].lower() for action in review["review_actions"])
+
+
+def test_bot_decision_review_copy_handles_hold_without_raw_none_or_zero_amount():
+    service = _service()
+    review = service._mission_bot_review_item(
+        {
+            "id": 23,
+            "bot_id": 9,
+            "symbol": "BTC",
+            "action": "hold",
+            "confidence": None,
+            "status": "planned",
+            "amount_eur": 0,
+        },
+        {"asset": "BTC", "setup": {"id": 12}},
+    )
+    confidence_label = (
+        f"{round(review['confidence'] * 100)}%"
+        if isinstance(review.get("confidence"), (int, float))
+        else "onbekend"
+    )
+    lines = [
+        f"Bot-decision #{review['decision_id']} voor {review.get('asset')}: {review.get('action')} ({review.get('review_status')}).",
+        f"Risico: {review.get('risk_level')}. Confidence: {confidence_label}.",
+    ]
+    if review.get("action") == "hold":
+        lines.append("Uitvoering: hold-decision; geen orderbedrag, alleen monitoren.")
+    elif review.get("amount_eur") is not None:
+        lines.append(f"Bedrag: EUR {review.get('amount_eur')}.")
+    response = "\n".join(lines)
+
+    assert "Confidence: onbekend" in response
+    assert "geen orderbedrag" in response
+    assert "EUR 0" not in response
+    assert "None" not in response
+
+
+def test_bot_decision_review_summary_handles_hold_without_zero_amount():
+    service = _service()
+    review = service._mission_bot_review_item(
+        {
+            "id": 24,
+            "bot_id": 9,
+            "symbol": "BTC",
+            "action": "hold",
+            "status": "planned",
+            "amount_eur": 0,
+        },
+        {"asset": "BTC", "setup": {"id": 12}},
+    )
+
+    assert review["summary"] == "BTC: hold - geen orderbedrag"
+    assert "EUR 0" not in review["summary"]
 
 
 def test_mission_control_excludes_handled_bot_decisions():
