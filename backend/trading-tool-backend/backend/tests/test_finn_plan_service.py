@@ -1507,6 +1507,15 @@ def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis
     assert mission["workqueue"][0]["priority"] == "high"
     assert mission["workqueue"][0]["status"] == "review_ready"
     assert mission["workqueue"][0]["resolve_state"] == "needs_user_confirmation"
+    assert mission["workqueue_labels"]["first"] == "Eerst dit"
+    assert [group["key"] for group in mission["workqueue_groups"]] == ["first", "review"]
+    first_group = mission["workqueue_groups"][0]
+    assert first_group["label"] == "Eerst dit"
+    assert first_group["count"] >= 3
+    assert first_group["items"][0]["type"] == "bot_decision"
+    review_group = mission["workqueue_groups"][1]
+    assert review_group["label"] == "Daarna reviewen"
+    assert any(item["type"] == "blocked_plan" for item in review_group["items"])
     assert any(item["type"] == "blocked_plan" and item["asset"] == "BTC" for item in mission["workqueue"])
     assert any(item["type"] == "score_refresh" for item in mission["workqueue"])
     assert any(item["type"] == "indicator_gap" for item in mission["workqueue"])

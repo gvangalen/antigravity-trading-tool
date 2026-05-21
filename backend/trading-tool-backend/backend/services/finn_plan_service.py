@@ -4206,6 +4206,8 @@ class FinnPlanService:
             "autonomy_level": "advice_only",
             "summary": mission["summary"],
             "workqueue": mission["workqueue"],
+            "workqueue_groups": mission["workqueue_groups"],
+            "workqueue_labels": mission["workqueue_labels"],
             "open_actions": mission["open_actions"],
             "plan_health": mission["plan_health"],
             "bot_review_queue": mission["bot_review_queue"],
@@ -4255,6 +4257,7 @@ class FinnPlanService:
         for action in open_actions:
             workqueue.append(self._mission_workqueue_from_action(action))
         workqueue = self._dedupe_workqueue(workqueue)[:10]
+        workqueue_groups = self._mission_workqueue_groups(workqueue)
         active_count = len([item for item in plan_health if item["status"] == "active"])
         blocked_count = len([item for item in plan_health if item["status"] == "blocked"])
         data_missing_count = len([item for item in plan_health if item["status"] == "data_missing"])
@@ -4271,10 +4274,48 @@ class FinnPlanService:
                 "posture": "action_required" if open_actions or blocked_count or data_missing_count else "stable",
             },
             "workqueue": workqueue,
+            "workqueue_groups": workqueue_groups,
+            "workqueue_labels": self._mission_workqueue_labels(),
             "open_actions": open_actions,
             "plan_health": plan_health,
             "bot_review_queue": bot_review_queue[:8],
         }
+
+    def _mission_workqueue_labels(self) -> Dict[str, str]:
+        return {
+            "first": "Eerst dit",
+            "review": "Daarna reviewen",
+            "later": "Kan wachten",
+        }
+
+    def _mission_workqueue_group_key(self, item: Dict[str, Any]) -> str:
+        state = item.get("resolve_state") or item.get("status")
+        if state in {"needs_user_confirmation", "waiting_for_data"} or (item.get("freshness") or {}).get("status") == "stale":
+            return "first"
+        if state == "monitor_today" or item.get("type") in {"blocked_plan", "blocker_explanation"}:
+            return "review"
+        return "later"
+
+    def _mission_workqueue_groups(self, workqueue: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        labels = self._mission_workqueue_labels()
+        groups = {
+            "first": [],
+            "review": [],
+            "later": [],
+        }
+        for item in workqueue:
+            groups[self._mission_workqueue_group_key(item)].append(item)
+
+        return [
+            {
+                "key": key,
+                "label": labels[key],
+                "count": len(items),
+                "items": items,
+            }
+            for key, items in groups.items()
+            if items
+        ]
 
     def _mission_bot_review_item(self, decision: Dict[str, Any], item: Dict[str, Any]) -> Dict[str, Any]:
         asset = decision.get("symbol") or item.get("asset") or "BTC"

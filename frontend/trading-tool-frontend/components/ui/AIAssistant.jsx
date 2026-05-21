@@ -347,6 +347,15 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   }[state] || state || "open");
 
   const missionWorkqueueSections = () => {
+    if (Array.isArray(missionControl?.workqueue_groups) && missionControl.workqueue_groups.length > 0) {
+      return missionControl.workqueue_groups.map((group) => ({
+        key: group.key,
+        title: group.label || missionControl?.workqueue_labels?.[group.key] || group.key,
+        tone: group.key === "first" ? "rose" : group.key === "review" ? "amber" : "slate",
+        items: Array.isArray(group.items) ? group.items : [],
+      })).filter((section) => section.items.length > 0);
+    }
+
     const items = Array.isArray(missionControl?.workqueue) ? missionControl.workqueue : [];
     const first = [];
     const review = [];
