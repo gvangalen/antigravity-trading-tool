@@ -3858,6 +3858,153 @@ class FinnPlanService:
             })
         return actions[:5]
 
+    async def build_mission_control_response(
+        self,
+        user_id: int,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        daily = await self.build_portfolio_daily_coach_response(
+            user_id,
+            "Geef mijn daily brief",
+            context or {"page": "mission_control"},
+        )
+        analysis = (daily.get("state") or {}).get("analysis") or {}
+        mission = self._build_mission_control_from_daily_analysis(analysis)
+        return {
+            "ok": True,
+            "intent": "mission_control",
+            "flow": "mission_control",
+            "autonomy_level": "advice_only",
+            "summary": mission["summary"],
+            "open_actions": mission["open_actions"],
+            "plan_health": mission["plan_health"],
+            "bot_review_queue": mission["bot_review_queue"],
+            "data_readiness": analysis.get("data_readiness") or {},
+            "source": {
+                "flow": "daily_coach",
+                "date": analysis.get("date"),
+                "asset_count": analysis.get("asset_count", 0),
+            },
+        }
+
+    def _build_mission_control_from_daily_analysis(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
+        assets = analysis.get("assets") or []
+        open_actions: List[Dict[str, Any]] = []
+        plan_health: List[Dict[str, Any]] = []
+        bot_review_queue: List[Dict[str, Any]] = []
+
+        for item in assets:
+            asset = item.get("asset") or "BTC"
+            setup = item.get("setup") or {}
+            stance = item.get("stance")
+            blockers = item.get("blockers") or []
+            data_readiness = item.get("data_readiness") or {}
+            bot_today = item.get("bot_today") or {}
+            warnings = ((item.get("indicator_summary") or {}).get("warnings") or [])[:2]
+
+            if stance == "plan_is_active":
+                status = "active"
+                label = "nu doen"
+                reason = "Plan actief volgens je setup-ranges."
+            elif stance == "wait_for_scores":
+                status = "data_missing"
+                label = "eerst data"
+                reason = data_readiness.get("message") or "Daily scores ontbreken."
+            else:
+                status = "blocked"
+                label = "niet forceren"
+                first_blocker = blockers[0] if blockers else {}
+                reason = (
+                    f"{first_blocker.get('category')} score {first_blocker.get('score')} buiten {first_blocker.get('range')}."
+                    if first_blocker else "Setup is nog niet actief volgens je planregels."
+                )
+
+            plan_health.append({
+                "asset": asset,
+                "status": status,
+                "priority": label,
+                "reason": reason,
+                "setup": setup,
+                "match_percentage": item.get("setup_match_percentage"),
+                "blockers": blockers[:3],
+                "warnings": warnings,
+                "data_readiness": data_readiness,
+                "bot_decision_count": bot_today.get("decision_count", 0),
+            })
+
+            for action in item.get("follow_up_actions") or []:
+                open_actions.append(self._mission_action(action, asset, status, setup))
+
+            for decision in (bot_today.get("decisions") or [])[:3]:
+                bot_review_queue.append({
+                    "asset": asset,
+                    "setup_id": setup.get("id"),
+                    "bot_id": decision.get("bot_id"),
+                    "decision_id": decision.get("id"),
+                    "action": decision.get("action"),
+                    "status": decision.get("status"),
+                    "prompt": f"Leg bot-decision {decision.get('id')} uit",
+                })
+
+        for action in analysis.get("follow_up_actions") or []:
+            open_actions.append(self._mission_action(action, action.get("asset"), "portfolio", {}))
+
+        open_actions = self._dedupe_mission_actions(open_actions)
+        active_count = len([item for item in plan_health if item["status"] == "active"])
+        blocked_count = len([item for item in plan_health if item["status"] == "blocked"])
+        data_missing_count = len([item for item in plan_health if item["status"] == "data_missing"])
+
+        return {
+            "summary": {
+                "asset_count": len(plan_health),
+                "active_count": active_count,
+                "blocked_count": blocked_count,
+                "data_missing_count": data_missing_count,
+                "open_action_count": len(open_actions),
+                "bot_review_count": len(bot_review_queue),
+                "posture": "action_required" if open_actions or blocked_count or data_missing_count else "stable",
+            },
+            "open_actions": open_actions[:8],
+            "plan_health": plan_health,
+            "bot_review_queue": bot_review_queue[:8],
+        }
+
+    def _mission_action(
+        self,
+        action: Dict[str, Any],
+        asset: Optional[str],
+        plan_status: str,
+        setup: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        handoff = action.get("handoff") or "chat"
+        priority_rank = {
+            "daily_score_refresh": 10,
+            "indicator_config": 20,
+            "indicator_insight": 30,
+            "bot_decision": 40,
+        }.get(handoff, 50)
+        return {
+            "label": action.get("label") or action.get("prompt") or "Finn actie",
+            "prompt": action.get("prompt") or action.get("label") or "",
+            "handoff": handoff,
+            "requires_confirmation": bool(action.get("requires_confirmation")),
+            "asset": asset,
+            "setup_id": setup.get("id") if isinstance(setup, dict) else None,
+            "plan_status": plan_status,
+            "priority_rank": priority_rank,
+        }
+
+    def _dedupe_mission_actions(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        seen = set()
+        unique = []
+        for action in sorted(actions, key=lambda item: (item.get("priority_rank", 99), str(item.get("asset") or ""), str(item.get("prompt") or ""))):
+            key = (action.get("prompt"), action.get("handoff"), action.get("asset"))
+            if not action.get("prompt") or key in seen:
+                continue
+            seen.add(key)
+            unique.append(action)
+        return unique
+
     def _daily_coach_message(self, analysis: Dict[str, Any]) -> str:
         asset = analysis.get("asset") or "BTC"
         stance = analysis.get("stance")

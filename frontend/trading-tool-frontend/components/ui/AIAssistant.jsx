@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState } from "@/lib/api/ai";
+import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2 } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -41,6 +41,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   const [activeState, setActiveState] = useState(null);
   const [contextMetric, setContextMetric] = useState(null);
   const [finnDraft, setFinnDraft] = useState(null);
+  const [missionControl, setMissionControl] = useState(null);
   const [executingAction, setExecutingAction] = useState(false);
   
   const messagesEndRef = useRef(null);
@@ -212,7 +213,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     return items
       .map((item) => {
         if (typeof item === "string") {
-          return { label: item, prompt: item, handoff: "chat" };
+          return { label: item, prompt: item, handoff: "chat", type: "chat_prompt" };
         }
         const prompt = item?.prompt || item?.label || item?.title;
         if (!prompt) return null;
@@ -220,6 +221,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           label: item.label || prompt,
           prompt,
           handoff: item.handoff || item.flow || "chat",
+          type: item.type || "chat_prompt",
           requiresConfirmation: Boolean(item.requires_confirmation),
         };
       })
@@ -242,18 +244,77 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   };
 
   const getBriefingFollowUpActions = () => {
-    return normalizeFollowUpActions(insight?.suggested_actions || []);
+    return normalizeFollowUpActions(
+      insight?.follow_up_actions ||
+      insight?.state?.analysis?.follow_up_actions ||
+      insight?.suggested_actions ||
+      []
+    );
+  };
+
+  const getMissionOpenActions = () => {
+    return normalizeFollowUpActions(missionControl?.open_actions || []);
   };
 
   const followUpLabel = (handoff) => {
     const labels = {
       indicator_config: "Config",
       daily_score_refresh: "Confirm",
+      maintenance_action: "Confirm",
       bot_decision: "Proposal",
       indicator_insight: "Insight",
     };
     return labels[handoff] || "Open";
   };
+
+  const followUpIcon = (handoff) => {
+    if (handoff === "indicator_config") return <ListChecks size={11} className="text-blue-500 shrink-0" />;
+    if (handoff === "daily_score_refresh" || handoff === "maintenance_action") return <Activity size={11} className="text-emerald-500 shrink-0" />;
+    if (handoff === "bot_decision") return <Bot size={11} className="text-violet-500 shrink-0" />;
+    if (handoff === "indicator_insight") return <Brain size={11} className="text-amber-500 shrink-0" />;
+    return <Zap size={11} className="text-amber-500 shrink-0" />;
+  };
+
+  function emitFinnRefreshSignals() {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("finn-refresh-requested"));
+    }
+    router.refresh();
+  }
+
+  const handleFollowUpAction = async (action) => {
+    if (!action?.prompt) return;
+    await handleChat(action.prompt);
+  };
+
+  const renderFollowUpButtons = (actions, compact = false) => (
+    <div className={`flex flex-wrap gap-2 ${compact ? "" : "mt-4 pt-3 border-t border-slate-100/50 dark:border-slate-800/50"}`}>
+      {!compact && (
+        <span className="w-full text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          Volgende stappen:
+        </span>
+      )}
+      {actions.map((action, idx) => (
+        <button
+          key={`${action.prompt}-${idx}`}
+          onClick={() => handleFollowUpAction(action)}
+          className={`group inline-flex items-center gap-2 rounded-xl border transition-all active:scale-[0.98] text-left ${
+            compact
+              ? "border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 shadow-sm hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+              : "px-3 py-2 text-[11px] font-bold bg-white dark:bg-slate-950 hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:text-blue-700 border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-900/40 hover:-translate-y-0.5 hover:shadow-sm"
+          }`}
+        >
+          {followUpIcon(action.handoff)}
+          <span className={compact ? "normal-case tracking-normal text-[11px] leading-tight" : ""}>{action.label}</span>
+          {action.handoff && action.handoff !== "chat" && (
+            <span className="rounded-md bg-blue-100 dark:bg-blue-900/50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">
+              {followUpLabel(action.handoff)}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
 
   useEffect(() => {
     const handleTrigger = (e) => {
@@ -277,6 +338,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   useEffect(() => {
     if (isOpen) {
       loadInsight();
+      loadMissionControl();
       loadFinnState();
       if (Object.keys(preferences).length === 0) {
         getAssistantPreferences().then(res => setPreferences(res.preferences || {}));
@@ -330,6 +392,16 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       console.error("Failed to fetch AI insight", err);
     } finally {
       setInsightLoading(false);
+    }
+  }
+
+  async function loadMissionControl() {
+    try {
+      const res = await fetchFinnMissionControl();
+      setMissionControl(res || null);
+    } catch (err) {
+      console.error("Finn Mission Control laden mislukt", err);
+      setMissionControl(null);
     }
   }
 
@@ -636,6 +708,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           intent: "daily_score_refresh_done",
         }]);
         await loadInsight();
+        await loadMissionControl();
+        emitFinnRefreshSignals();
         return;
       }
 
@@ -649,6 +723,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           intent: "bot_decision_generated",
         }]);
         await loadInsight();
+        await loadMissionControl();
+        emitFinnRefreshSignals();
         return;
       }
 
@@ -689,6 +765,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         }]);
         setFinnDraft(null);
         await loadInsight();
+        await loadMissionControl();
+        emitFinnRefreshSignals();
         return;
       }
 
@@ -715,6 +793,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       }]);
       setFinnDraft(null);
       await loadInsight();
+      await loadMissionControl();
+      emitFinnRefreshSignals();
     } catch (err) {
       console.error("Finn action failed", err);
       setMessages(prev => [...prev, {
@@ -1063,25 +1143,67 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 "{insight?.greeting || `Hallo ${preferences?.first_name || 'Henk'}, alle ${context.symbol} feeds draaien stabiel.`} {getInsightField('bot_insight', 'conclusion') || getInsightField('market_insight', 'conclusion') || "BTC bevindt zich momenteel in een consolidatiefase met verhoogd correctierisico zolang volume achterblijft."}"
               </p>
               {getBriefingFollowUpActions().length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {getBriefingFollowUpActions().map((action, index) => (
-                    <button
-                      key={`${action.prompt}-${index}`}
-                      onClick={() => handleChat(action.prompt)}
-                      className="group inline-flex items-center gap-2 rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/50 px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 shadow-sm hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-all active:scale-[0.98]"
-                    >
-                      <Zap size={11} className="text-amber-500 shrink-0" />
-                      <span className="normal-case tracking-normal text-[11px] leading-tight">{action.label}</span>
-                      <span className="rounded-md bg-blue-100 dark:bg-blue-900/50 px-1.5 py-0.5 text-[8px] tracking-widest text-blue-500 dark:text-blue-300">
-                        {followUpLabel(action.handoff)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                renderFollowUpButtons(getBriefingFollowUpActions(), true)
               )}
             </div>
           )}
         </div>
+
+        {/* SECTION 1B — FINN Mission Control */}
+        {missionControl?.summary && (
+          <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f172a] space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Activity size={12} className="text-blue-600" />
+                <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Mission Control</span>
+              </div>
+              <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                missionControl.summary.posture === "stable"
+                  ? "bg-emerald-50 text-emerald-600 border-emerald-200/70 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800/50"
+                  : "bg-amber-50 text-amber-700 border-amber-200/70 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800/50"
+              }`}>
+                {missionControl.summary.open_action_count || 0} open
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                ["Actief", missionControl.summary.active_count || 0, "text-emerald-600"],
+                ["Geblokkeerd", missionControl.summary.blocked_count || 0, "text-rose-600"],
+                ["Data", missionControl.summary.data_missing_count || 0, "text-amber-600"],
+              ].map(([label, value, tone]) => (
+                <div key={label} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-2.5">
+                  <div className={`text-sm font-black tabular-nums ${tone}`}>{value}</div>
+                  <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {Array.isArray(missionControl.plan_health) && missionControl.plan_health.length > 0 && (
+              <div className="space-y-1.5">
+                {missionControl.plan_health.slice(0, 3).map((item) => (
+                  <div key={`${item.asset}-${item.setup?.id || item.reason}`} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                        {item.asset} · {item.priority}
+                      </span>
+                      <span className={`text-[8px] font-black uppercase tracking-widest ${
+                        item.status === "active" ? "text-emerald-600" : item.status === "blocked" ? "text-rose-600" : "text-amber-600"
+                      }`}>
+                        {item.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
+                      {item.reason}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {getMissionOpenActions().length > 0 && renderFollowUpButtons(getMissionOpenActions(), true)}
+          </div>
+        )}
 
         {/* SECTION 2 — FINN Live Intelligence Terminal */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f172a] space-y-4">
@@ -1167,28 +1289,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 {m.role === "assistant" && m.isComplete !== false && (() => {
                   const suggestions = getMessageFollowUpActions(m);
                   if (suggestions.length === 0) return null;
-                  return (
-                    <div className="mt-4 pt-3 border-t border-slate-100/50 dark:border-slate-800/50 flex flex-col gap-2">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Volgende stappen:</span>
-                      <div className="flex flex-wrap gap-2">
-                        {suggestions.map((action, idx) => (
-                          <button
-                            key={`${action.prompt}-${idx}`}
-                            onClick={() => handleChat(action.prompt)}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold bg-white dark:bg-slate-950 hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:text-blue-700 border border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-900/40 transition-all hover:-translate-y-0.5 active:translate-y-0 hover:shadow-sm text-left"
-                          >
-                            <Zap size={10} className="text-amber-500" />
-                            <span>{action.label}</span>
-                            {action.handoff && action.handoff !== "chat" && (
-                              <span className="ml-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-blue-400">
-                                {followUpLabel(action.handoff)}
-                              </span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
+                  return renderFollowUpButtons(suggestions);
                 })()}
                 {m.reasoning && m.isComplete !== false && (
                   <ReasoningWidget reasoning={m.reasoning} />

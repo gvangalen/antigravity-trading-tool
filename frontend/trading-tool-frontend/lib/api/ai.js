@@ -62,6 +62,12 @@ export const fetchFinnState = () => {
   });
 };
 
+export const fetchFinnMissionControl = () => {
+  return fetchAuth(`/api/assistant/mission-control`, {
+    method: 'GET',
+  });
+};
+
 // ========================================
 // ⚙️ 5. AI Assistant Preferences
 // ========================================

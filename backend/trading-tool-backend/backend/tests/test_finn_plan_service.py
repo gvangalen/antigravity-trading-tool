@@ -1455,6 +1455,53 @@ def test_portfolio_follow_up_actions_include_guided_briefing_handoffs():
     assert "Maak bot-decision voor BTC" in prompts
 
 
+def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis():
+    service = _service()
+    daily_analysis = service._build_portfolio_daily_coach_analysis([
+        {
+            "asset": "BTC",
+            "stance": "wait_for_plan",
+            "has_scores": True,
+            "setup": {"id": 12, "name": "BTC DCA"},
+            "setup_match_percentage": 33,
+            "blockers": [{"category": "macro", "score": 10, "range": [30, 70]}],
+            "bot_today": {"decision_count": 0, "decisions": []},
+            "indicator_summary": {"warnings": ["macro-laag is dun"]},
+            "data_readiness": {"status": "ready_with_gaps", "config_gaps": ["macro"]},
+            "follow_up_actions": service._daily_follow_up_actions(
+                "BTC",
+                {"status": "ready_with_gaps", "config_gaps": ["macro"]},
+                [{"category": "macro"}],
+                [],
+            ),
+        },
+        {
+            "asset": "ETH",
+            "stance": "plan_is_active",
+            "has_scores": True,
+            "setup": {"id": 13, "name": "ETH DCA"},
+            "setup_match_percentage": 100,
+            "blockers": [],
+            "bot_today": {"decision_count": 1, "decisions": [{"id": 7, "bot_id": 3, "action": "buy", "status": "proposed"}]},
+            "indicator_summary": {"warnings": []},
+            "data_readiness": {"status": "ready", "config_gaps": []},
+            "follow_up_actions": [],
+        },
+    ])
+
+    mission = service._build_mission_control_from_daily_analysis(daily_analysis)
+
+    assert mission["summary"]["asset_count"] == 2
+    assert mission["summary"]["active_count"] == 1
+    assert mission["summary"]["blocked_count"] == 1
+    assert mission["summary"]["open_action_count"] >= 1
+    assert mission["plan_health"][0]["asset"] == "ETH"
+    assert any(item["asset"] == "BTC" and item["status"] == "blocked" for item in mission["plan_health"])
+    assert any(action["handoff"] == "indicator_config" for action in mission["open_actions"])
+    assert any(action["handoff"] == "daily_score_refresh" for action in mission["open_actions"])
+    assert mission["bot_review_queue"][0]["decision_id"] == 7
+
+
 def test_daily_coach_analysis_waits_when_setup_has_blockers():
     service = _service()
     setup_analysis = service._evaluate_setup_row(

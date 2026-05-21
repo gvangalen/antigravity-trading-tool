@@ -507,3 +507,15 @@ async def get_finn_state(
 ):
     finn = FinnPlanService(db)
     return await finn.get_open_plan_state(current_user["id"])
+
+
+@router.get("/assistant/mission-control")
+async def get_finn_mission_control(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    finn = FinnPlanService(db)
+    return await finn.build_mission_control_response(
+        current_user["id"],
+        {"page": "assistant", "scope": "mission_control"},
+    )
