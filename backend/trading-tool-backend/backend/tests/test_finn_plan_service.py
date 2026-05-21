@@ -1507,7 +1507,47 @@ def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis
     assert btc_health["next_best_action"]["handoff"] == "indicator_insight"
     assert any(action["handoff"] == "indicator_config" for action in mission["open_actions"])
     assert any(action["handoff"] == "daily_score_refresh" for action in mission["open_actions"])
-    assert mission["bot_review_queue"][0]["decision_id"] == 7
+    review = mission["bot_review_queue"][0]
+    assert review["decision_id"] == 7
+    assert review["review_status"] == "needs_review"
+    assert review["risk_level"] == "medium"
+    assert review["review_actions"][0]["handoff"] == "bot_decision_review"
+
+
+def test_bot_decision_review_items_escalate_guardrail_risk():
+    service = _service()
+
+    review = service._mission_bot_review_item(
+        {
+            "id": 22,
+            "bot_id": 9,
+            "symbol": "BTC",
+            "action": "buy",
+            "confidence": 0.48,
+            "status": "planned",
+            "amount_eur": 100,
+            "guardrails_result": False,
+            "guardrail_reason": "Daglimiet overschreden",
+            "reasons": ["macro is actief"],
+            "setup_match": {"status": "partial", "score": 67},
+            "trade_plan": {"targets": [{"price": 120}]},
+        },
+        {"asset": "BTC", "setup": {"id": 12}},
+    )
+
+    assert review["risk_level"] == "high"
+    assert review["review_status"] == "needs_review"
+    assert review["summary"] == "BTC: buy voor EUR 100 - guardrail aandacht"
+    assert review["trade_plan_present"] is True
+    assert review["review_actions"][0]["prompt"] == "Leg bot-decision 22 uit"
+
+
+def test_bot_decision_review_request_detection():
+    service = _service()
+
+    assert service.looks_like_bot_decision_review_request("Leg bot-decision 22 uit") is True
+    assert service.looks_like_bot_decision_review_request("Waarom dit bot voorstel?") is True
+    assert service.looks_like_bot_decision_review_request("Maak bot-decision voor BTC") is False
 
 
 def test_daily_coach_analysis_waits_when_setup_has_blockers():

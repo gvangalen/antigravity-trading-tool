@@ -554,6 +554,12 @@ class FinnPlanService:
         has_generate = any(word in q for word in ["maak", "genereer", "bereid", "draai", "run", "laat"])
         return has_bot and has_decision and has_generate
 
+    def looks_like_bot_decision_review_request(self, query: str) -> bool:
+        q = (query or "").lower()
+        has_decision = any(word in q for word in ["bot-decision", "bot decision", "decision", "beslissing", "proposal", "voorstel"])
+        has_review = any(word in q for word in ["leg", "uitleg", "waarom", "review", "beoordeel", "controleer"])
+        return has_decision and has_review
+
     def looks_like_status_request(self, query: str) -> bool:
         q = (query or "").lower()
         has_status = any(word in q for word in [
@@ -1639,6 +1645,100 @@ class FinnPlanService:
                 "coaching_level": "bot_decision_handoff",
             },
             "suggested_actions": [f"Bevestig bot-decision voor bot #{selected.get('id')}"],
+        }
+
+    async def build_bot_decision_review_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        decision_id = self._extract_id_after_words(query, ["bot-decision", "decision", "beslissing", "proposal", "voorstel"])
+        asset = self._asset_from_query_or_context(query, context)
+        bot_today = await BotService(self.session).get_bot_today(user_id, symbol=asset) if self.session else {"decisions": []}
+        decisions = bot_today.get("decisions") or []
+
+        selected = None
+        if decision_id:
+            selected = next((decision for decision in decisions if int(decision.get("id") or 0) == decision_id), None)
+        elif len(decisions) == 1:
+            selected = decisions[0]
+
+        if not selected:
+            queue = [self._mission_bot_review_item(decision, {"asset": decision.get("symbol") or asset, "setup": {"id": decision.get("setup_id")}}) for decision in decisions[:5]]
+            options = ", ".join(f"#{item.get('decision_id')} {item.get('action')} ({item.get('review_status')})" for item in queue)
+            return {
+                "response": (
+                    f"Welke bot-decision wil je reviewen? Open voor {asset}: {options}."
+                    if queue else f"Ik vind geen open bot-decisions voor {asset} om te reviewen."
+                ),
+                "intent": "bot_decision_review",
+                "flow": "bot_decision_review",
+                "draft": None,
+                "missing_fields": ["decision_id"] if queue else [],
+                "invalid_fields": [],
+                "next_question": "decision_id" if queue else None,
+                "can_confirm": False,
+                "actions": [],
+                "state": {
+                    "status": "needs_input" if queue else "empty",
+                    "current_flow": "bot_decision_review",
+                    "asset": asset,
+                    "bot_review_queue": queue,
+                    "autonomy_level": "advice_only",
+                },
+                "reasoning": {
+                    "confidence_score": 0.72,
+                    "risk_detected": False,
+                    "reasons": ["Finn reviewt bot-decisions read-only; order execution blijft buiten deze flow."],
+                    "coaching_level": "bot_decision_review",
+                },
+                "suggested_actions": ["Noem het decision_id dat je wilt reviewen."] if queue else ["Maak eerst een bot-decision voor dit asset."],
+            }
+
+        review = self._mission_bot_review_item(selected, {"asset": selected.get("symbol") or asset, "setup": {"id": selected.get("setup_id")}})
+        lines = [
+            f"Bot-decision #{review['decision_id']} voor {review.get('asset')}: {review.get('action')} ({review.get('review_status')}).",
+            f"Risico: {review.get('risk_level')}. Confidence: {review.get('confidence')}.",
+        ]
+        if review.get("amount_eur") is not None:
+            lines.append(f"Bedrag: EUR {review.get('amount_eur')}.")
+        if review.get("guardrail_reason"):
+            lines.append(f"Guardrail: {review.get('guardrail_reason')}.")
+        if review.get("setup_match"):
+            match = review["setup_match"]
+            lines.append(f"Setup-match: {match.get('status') or 'unknown'} {match.get('score') or ''}.")
+        reasons = review.get("reasons") or []
+        if reasons:
+            lines.append("Belangrijkste redenen:")
+            lines.extend(f"- {reason}" for reason in reasons[:3])
+        lines.append("Ik voer niets uit. Gebruik dit als review voordat je handmatig of via bot-acties verdergaat.")
+
+        return {
+            "response": "\n".join(lines),
+            "intent": "bot_decision_review",
+            "flow": "bot_decision_review",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "status": "review_ready",
+                "current_flow": "bot_decision_review",
+                "asset": review.get("asset"),
+                "review": review,
+                "autonomy_level": "advice_only",
+            },
+            "reasoning": {
+                "confidence_score": 0.84,
+                "risk_detected": review.get("risk_level") in {"medium", "high"},
+                "reasons": ["Bot-decision review is read-only; no_order_execution."],
+                "coaching_level": "bot_decision_review",
+            },
+            "suggested_actions": ["Controleer guardrails en trade plan voordat je uitvoert."],
         }
 
     def _extract_from_query(self, query: str) -> Dict[str, Any]:
@@ -3906,15 +4006,7 @@ class FinnPlanService:
                 open_actions.append(self._mission_action(action, asset, status, setup))
 
             for decision in (bot_today.get("decisions") or [])[:3]:
-                bot_review_queue.append({
-                    "asset": asset,
-                    "setup_id": setup.get("id"),
-                    "bot_id": decision.get("bot_id"),
-                    "decision_id": decision.get("id"),
-                    "action": decision.get("action"),
-                    "status": decision.get("status"),
-                    "prompt": f"Leg bot-decision {decision.get('id')} uit",
-                })
+                bot_review_queue.append(self._mission_bot_review_item(decision, item))
 
         if len(assets) > 1 or not assets:
             for action in analysis.get("follow_up_actions") or []:
@@ -3938,6 +4030,84 @@ class FinnPlanService:
             "open_actions": open_actions,
             "plan_health": plan_health,
             "bot_review_queue": bot_review_queue[:8],
+        }
+
+    def _mission_bot_review_item(self, decision: Dict[str, Any], item: Dict[str, Any]) -> Dict[str, Any]:
+        asset = decision.get("symbol") or item.get("asset") or "BTC"
+        setup = item.get("setup") or {}
+        decision_id = decision.get("id")
+        status = str(decision.get("status") or "planned").lower()
+        action = str(decision.get("action") or "hold").lower()
+        confidence = self._to_float(decision.get("confidence"))
+        amount = self._to_float(decision.get("amount_eur"))
+        requested_amount = self._to_float(decision.get("requested_amount_eur"))
+        guardrails_result = decision.get("guardrails_result")
+        guardrail_reason = decision.get("guardrail_reason")
+        reasons = decision.get("reasons") or []
+        setup_match = decision.get("setup_match") or {}
+        trade_plan = decision.get("trade_plan") or {}
+
+        risk_level = "low"
+        if action in {"buy", "sell"}:
+            risk_level = "medium"
+        if guardrails_result is False or guardrail_reason:
+            risk_level = "high"
+        if confidence is not None and confidence < 0.55 and action in {"buy", "sell"}:
+            risk_level = "high"
+
+        review_status = "handled" if status in {"executed", "skipped", "cancelled", "filled"} else "needs_review"
+        amount_label = amount if amount is not None else requested_amount
+        summary = f"{asset}: {action}"
+        if amount_label is not None:
+            summary += f" voor EUR {amount_label:g}"
+        if guardrail_reason:
+            summary += " - guardrail aandacht"
+
+        review_actions = [
+            {
+                "type": "chat_prompt",
+                "label": "Decision uitleg",
+                "prompt": f"Leg bot-decision {decision_id} uit",
+                "handoff": "bot_decision_review",
+                "requires_confirmation": False,
+            },
+            {
+                "type": "chat_prompt",
+                "label": "Bot-decision opnieuw maken",
+                "prompt": f"Maak bot-decision voor bot #{decision.get('bot_id')}",
+                "handoff": "bot_decision",
+                "requires_confirmation": True,
+            },
+        ]
+
+        return {
+            "asset": asset,
+            "setup_id": setup.get("id") or decision.get("setup_id"),
+            "strategy_id": decision.get("strategy_id"),
+            "bot_id": decision.get("bot_id"),
+            "bot_name": decision.get("bot_name"),
+            "decision_id": decision_id,
+            "action": action,
+            "status": status,
+            "review_status": review_status,
+            "risk_level": risk_level,
+            "confidence": confidence,
+            "amount_eur": amount,
+            "requested_amount_eur": requested_amount,
+            "summary": summary,
+            "guardrails_result": guardrails_result,
+            "guardrail_reason": guardrail_reason,
+            "setup_match": setup_match,
+            "reasons": reasons[:3] if isinstance(reasons, list) else [str(reasons)],
+            "trade_plan_present": bool(
+                (trade_plan.get("entry_plan") if isinstance(trade_plan, dict) else None)
+                or (trade_plan.get("targets") if isinstance(trade_plan, dict) else None)
+                or (trade_plan.get("stop_loss") if isinstance(trade_plan, dict) else None)
+            ),
+            "created_at": decision.get("created_at"),
+            "updated_at": decision.get("updated_at"),
+            "prompt": f"Leg bot-decision {decision_id} uit",
+            "review_actions": review_actions,
         }
 
     def _mission_plan_health_entry(self, item: Dict[str, Any]) -> Dict[str, Any]:

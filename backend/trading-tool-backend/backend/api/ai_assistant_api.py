@@ -158,6 +158,10 @@ async def assistant_chat(
             finn_response = await finn.build_bot_decision_response(user_id, request.query, context_payload)
             finn_response["trace_id"] = trace_id
             return AssistantChatResponse(**finn_response)
+        if finn.looks_like_bot_decision_review_request(request.query):
+            finn_response = await finn.build_bot_decision_review_response(user_id, request.query, context_payload)
+            finn_response["trace_id"] = trace_id
+            return AssistantChatResponse(**finn_response)
         if finn.looks_like_daily_coach_request(request.query):
             finn_response = await finn.build_daily_coach_response(user_id, request.query, context_payload)
             finn_response["trace_id"] = trace_id

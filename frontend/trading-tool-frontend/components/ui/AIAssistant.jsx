@@ -262,6 +262,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       daily_score_refresh: "Confirm",
       maintenance_action: "Confirm",
       bot_decision: "Proposal",
+      bot_decision_review: "Review",
       indicator_insight: "Insight",
     };
     return labels[handoff] || "Open";
@@ -271,6 +272,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     if (handoff === "indicator_config") return <ListChecks size={11} className="text-blue-500 shrink-0" />;
     if (handoff === "daily_score_refresh" || handoff === "maintenance_action") return <Activity size={11} className="text-emerald-500 shrink-0" />;
     if (handoff === "bot_decision") return <Bot size={11} className="text-violet-500 shrink-0" />;
+    if (handoff === "bot_decision_review") return <ListChecks size={11} className="text-violet-500 shrink-0" />;
     if (handoff === "indicator_insight") return <Brain size={11} className="text-amber-500 shrink-0" />;
     return <Zap size={11} className="text-amber-500 shrink-0" />;
   };
@@ -1231,6 +1233,54 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                     {item.next_best_action?.prompt && (
                       <div className="mt-2">
                         {renderFollowUpButtons([item.next_best_action], true)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {Array.isArray(missionControl.bot_review_queue) && missionControl.bot_review_queue.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-400">
+                  <Bot size={11} className="text-violet-500" />
+                  Bot Review Queue
+                </div>
+                {missionControl.bot_review_queue.slice(0, 3).map((item) => (
+                  <div key={`${item.bot_id}-${item.decision_id}`} className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/20 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                        {item.asset} · #{item.decision_id}
+                      </span>
+                      <span className={`text-[8px] font-black uppercase tracking-widest ${
+                        item.risk_level === "high" ? "text-rose-600" : item.risk_level === "medium" ? "text-amber-600" : "text-emerald-600"
+                      }`}>
+                        {item.risk_level || "review"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
+                      {item.summary || `${item.action || "decision"} · ${item.review_status || item.status || "needs_review"}`}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {item.review_status && (
+                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                          {item.review_status}
+                        </span>
+                      )}
+                      {typeof item.confidence === "number" && (
+                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                          conf {Math.round(item.confidence * 100)}%
+                        </span>
+                      )}
+                      {item.trade_plan_present && (
+                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                          trade plan
+                        </span>
+                      )}
+                    </div>
+                    {Array.isArray(item.review_actions) && item.review_actions.length > 0 && (
+                      <div className="mt-2">
+                        {renderFollowUpButtons(item.review_actions.slice(0, 1), true)}
                       </div>
                     )}
                   </div>
