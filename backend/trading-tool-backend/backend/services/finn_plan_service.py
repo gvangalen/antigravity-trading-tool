@@ -3946,10 +3946,11 @@ class FinnPlanService:
                     "prompt": f"Leg bot-decision {decision.get('id')} uit",
                 })
 
-        for action in analysis.get("follow_up_actions") or []:
-            open_actions.append(self._mission_action(action, action.get("asset"), "portfolio", {}))
+        if len(assets) > 1 or not assets:
+            for action in analysis.get("follow_up_actions") or []:
+                open_actions.append(self._mission_action(action, action.get("asset"), "portfolio", {}))
 
-        open_actions = self._dedupe_mission_actions(open_actions)
+        open_actions = self._dedupe_mission_actions(open_actions)[:8]
         active_count = len([item for item in plan_health if item["status"] == "active"])
         blocked_count = len([item for item in plan_health if item["status"] == "blocked"])
         data_missing_count = len([item for item in plan_health if item["status"] == "data_missing"])
@@ -3964,7 +3965,7 @@ class FinnPlanService:
                 "bot_review_count": len(bot_review_queue),
                 "posture": "action_required" if open_actions or blocked_count or data_missing_count else "stable",
             },
-            "open_actions": open_actions[:8],
+            "open_actions": open_actions,
             "plan_health": plan_health,
             "bot_review_queue": bot_review_queue[:8],
         }
