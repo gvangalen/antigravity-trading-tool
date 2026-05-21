@@ -1501,6 +1501,10 @@ def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis
     assert mission["summary"]["active_count"] == 1
     assert mission["summary"]["blocked_count"] == 1
     assert mission["summary"]["open_action_count"] >= 1
+    assert mission["summary"]["workqueue_count"] >= 2
+    assert mission["workqueue"][0]["type"] == "bot_decision"
+    assert mission["workqueue"][0]["status"] == "review_ready"
+    assert any(item["type"] == "blocked_plan" and item["asset"] == "BTC" for item in mission["workqueue"])
     assert mission["plan_health"][0]["asset"] == "ETH"
     btc_health = next(item for item in mission["plan_health"] if item["asset"] == "BTC")
     assert btc_health["status"] == "blocked"
@@ -1638,6 +1642,38 @@ def test_mission_control_excludes_handled_bot_decisions():
     )
     assert handled["review_status"] == "handled"
     assert not any(action["handoff"] == "bot_execution_decision" for action in handled["review_actions"])
+
+
+def test_mission_workqueue_dedupes_actions_and_preserves_priority_order():
+    service = _service()
+    action = {
+        "label": "Daily scores verversen",
+        "prompt": "Ververs daily scores",
+        "handoff": "daily_score_refresh",
+        "requires_confirmation": True,
+        "asset": "BTC",
+        "setup_id": 12,
+        "priority_rank": 10,
+    }
+    low_action = {
+        "label": "Macro uitleg",
+        "prompt": "Waarom blokkeert macro mijn BTC setup?",
+        "handoff": "indicator_insight",
+        "requires_confirmation": False,
+        "asset": "BTC",
+        "priority_rank": 30,
+    }
+
+    queue = service._dedupe_workqueue([
+        service._mission_workqueue_from_action(low_action),
+        service._mission_workqueue_from_action(action),
+        service._mission_workqueue_from_action(action),
+    ])
+
+    assert len(queue) == 2
+    assert queue[0]["status"] == "needs_user_confirmation"
+    assert queue[0]["next_best_action"]["handoff"] == "daily_score_refresh"
+    assert queue[1]["priority"] == "low"
 
 
 def test_mission_activity_item_summarizes_executed_action():

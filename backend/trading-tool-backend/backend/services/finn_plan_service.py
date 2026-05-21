@@ -4205,6 +4205,7 @@ class FinnPlanService:
             "flow": "mission_control",
             "autonomy_level": "advice_only",
             "summary": mission["summary"],
+            "workqueue": mission["workqueue"],
             "open_actions": mission["open_actions"],
             "plan_health": mission["plan_health"],
             "bot_review_queue": mission["bot_review_queue"],
@@ -4222,6 +4223,7 @@ class FinnPlanService:
         open_actions: List[Dict[str, Any]] = []
         plan_health: List[Dict[str, Any]] = []
         bot_review_queue: List[Dict[str, Any]] = []
+        workqueue: List[Dict[str, Any]] = []
 
         for item in assets:
             plan = self._mission_plan_health_entry(item)
@@ -4239,12 +4241,20 @@ class FinnPlanService:
                 review_item = self._mission_bot_review_item(decision, item)
                 if review_item.get("review_status") == "needs_review":
                     bot_review_queue.append(review_item)
+                    workqueue.append(self._mission_workqueue_from_bot_review(review_item))
+
+            plan_item = self._mission_workqueue_from_plan(plan)
+            if plan_item:
+                workqueue.append(plan_item)
 
         if len(assets) > 1 or not assets:
             for action in analysis.get("follow_up_actions") or []:
                 open_actions.append(self._mission_action(action, action.get("asset"), "portfolio", {}))
 
         open_actions = self._dedupe_mission_actions(open_actions)[:8]
+        for action in open_actions:
+            workqueue.append(self._mission_workqueue_from_action(action))
+        workqueue = self._dedupe_workqueue(workqueue)[:10]
         active_count = len([item for item in plan_health if item["status"] == "active"])
         blocked_count = len([item for item in plan_health if item["status"] == "blocked"])
         data_missing_count = len([item for item in plan_health if item["status"] == "data_missing"])
@@ -4257,8 +4267,10 @@ class FinnPlanService:
                 "data_missing_count": data_missing_count,
                 "open_action_count": len(open_actions),
                 "bot_review_count": len(bot_review_queue),
+                "workqueue_count": len(workqueue),
                 "posture": "action_required" if open_actions or blocked_count or data_missing_count else "stable",
             },
+            "workqueue": workqueue,
             "open_actions": open_actions,
             "plan_health": plan_health,
             "bot_review_queue": bot_review_queue[:8],
@@ -4659,6 +4671,82 @@ class FinnPlanService:
                 continue
             seen.add(key)
             unique.append(action)
+        return unique
+
+    def _mission_workqueue_from_bot_review(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        next_action = next(
+            (action for action in item.get("review_actions") or [] if action.get("handoff") == "bot_decision_review"),
+            (item.get("review_actions") or [None])[0],
+        )
+        priority = "high" if item.get("risk_level") == "high" else "medium"
+        return {
+            "id": f"bot_decision:{item.get('decision_id')}",
+            "type": "bot_decision",
+            "priority": priority,
+            "priority_rank": 5 if priority == "high" else 8,
+            "status": "review_ready",
+            "asset": item.get("asset"),
+            "title": f"Review bot-decision #{item.get('decision_id')}",
+            "reason": item.get("summary") or "Bot-decision vraagt review.",
+            "next_best_action": next_action,
+            "source_ids": {
+                "setup_id": item.get("setup_id"),
+                "strategy_id": item.get("strategy_id"),
+                "bot_id": item.get("bot_id"),
+                "decision_id": item.get("decision_id"),
+            },
+        }
+
+    def _mission_workqueue_from_plan(self, plan: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        status = plan.get("status")
+        if status == "active":
+            return None
+        item_type = "data_gap" if status == "data_missing" else "blocked_plan"
+        priority = "high" if status == "blocked" else "medium"
+        return {
+            "id": f"{item_type}:{plan.get('asset')}:{(plan.get('setup') or {}).get('id') or 'none'}",
+            "type": item_type,
+            "priority": priority,
+            "priority_rank": 9 if priority == "high" else 25,
+            "status": "blocked" if status == "blocked" else "blocked_by_data",
+            "asset": plan.get("asset"),
+            "title": f"{plan.get('asset')} plan aandacht",
+            "reason": plan.get("reason"),
+            "next_best_action": plan.get("next_best_action"),
+            "source_ids": {
+                "setup_id": (plan.get("setup") or {}).get("id"),
+                "strategy_id": ((plan.get("lifecycle") or {}).get("strategy") or {}).get("id"),
+            },
+            "health_score": plan.get("health_score"),
+            "health_grade": plan.get("health_grade"),
+        }
+
+    def _mission_workqueue_from_action(self, action: Dict[str, Any]) -> Dict[str, Any]:
+        priority = "medium" if action.get("requires_confirmation") else "low"
+        return {
+            "id": f"action:{action.get('handoff')}:{action.get('asset') or 'portfolio'}:{hashlib.sha1(str(action.get('prompt') or '').encode('utf-8')).hexdigest()[:10]}",
+            "type": "open_action",
+            "priority": priority,
+            "priority_rank": action.get("priority_rank", 60) + (0 if priority == "medium" else 10),
+            "status": "needs_user_confirmation" if action.get("requires_confirmation") else "new",
+            "asset": action.get("asset"),
+            "title": action.get("label") or "Finn actie",
+            "reason": "Aanbevolen volgende stap vanuit Mission Control.",
+            "next_best_action": action,
+            "source_ids": {
+                "setup_id": action.get("setup_id"),
+            },
+        }
+
+    def _dedupe_workqueue(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        seen = set()
+        unique = []
+        for item in sorted(items, key=lambda entry: (entry.get("priority_rank", 99), str(entry.get("asset") or ""), str(entry.get("id") or ""))):
+            key = item.get("id")
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
         return unique
 
     def _daily_coach_message(self, analysis: Dict[str, Any]) -> str:

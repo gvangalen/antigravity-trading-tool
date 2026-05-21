@@ -1277,6 +1277,57 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
               ))}
             </div>
 
+            {Array.isArray(missionControl.workqueue) && missionControl.workqueue.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-400">
+                    <ListChecks size={11} className="text-blue-500" />
+                    Werkqueue
+                  </div>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+                    {missionControl.summary.workqueue_count || missionControl.workqueue.length} items
+                  </span>
+                </div>
+                {missionControl.workqueue.slice(0, 4).map((item) => (
+                  <div key={item.id} className="rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 leading-tight">
+                        {item.title}
+                      </span>
+                      <span className={`text-[8px] font-black uppercase tracking-widest ${
+                        item.priority === "high" ? "text-rose-600" : item.priority === "medium" ? "text-amber-600" : "text-emerald-600"
+                      }`}>
+                        {item.priority}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
+                      {item.reason}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                        {item.status}
+                      </span>
+                      {item.asset && (
+                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                          {item.asset}
+                        </span>
+                      )}
+                      {typeof item.health_score === "number" && (
+                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                          health {item.health_score}
+                        </span>
+                      )}
+                    </div>
+                    {item.next_best_action?.prompt && (
+                      <div className="mt-2">
+                        {renderFollowUpButtons([item.next_best_action], true)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {Array.isArray(missionControl.plan_health) && missionControl.plan_health.length > 0 && (
               <div className="space-y-1.5">
                 {missionControl.plan_health.slice(0, 3).map((item) => (
