@@ -560,6 +560,16 @@ class FinnPlanService:
         has_review = any(word in q for word in ["leg", "uitleg", "waarom", "review", "beoordeel", "controleer"])
         return has_decision and has_review
 
+    def looks_like_bot_execution_decision_request(self, query: str) -> bool:
+        q = (query or "").lower()
+        has_decision = any(word in q for word in ["bot-decision", "bot decision", "decision", "beslissing", "proposal", "voorstel"])
+        has_execution_choice = any(phrase in q for phrase in [
+            "sla over", "sla bot-decision", "sla decision", "overslaan", "skip", "monitor", "alleen monitoren",
+            "paper uitvoeren", "paper execute", "voer paper", "paper uit", "uitvoeren",
+            "markeer uitgevoerd", "live preflight", "live check", "live uitvoeren",
+        ])
+        return has_decision and has_execution_choice
+
     def looks_like_status_request(self, query: str) -> bool:
         q = (query or "").lower()
         has_status = any(word in q for word in [
@@ -1739,6 +1749,190 @@ class FinnPlanService:
                 "coaching_level": "bot_decision_review",
             },
             "suggested_actions": ["Controleer guardrails en trade plan voordat je uitvoert."],
+        }
+
+    async def build_bot_execution_decision_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        execution_choice = self._bot_execution_choice(query)
+        decision = await self._find_bot_decision_for_query(user_id, query, context)
+        asset = self._asset_from_query_or_context(query, context)
+
+        if not decision:
+            return {
+                "response": f"Welke bot-decision bedoel je? Noem het decision_id, bijvoorbeeld: sla bot-decision 123 over.",
+                "intent": "bot_execution_decision",
+                "flow": "bot_execution_decision",
+                "draft": None,
+                "missing_fields": ["decision_id"],
+                "invalid_fields": [],
+                "next_question": "decision_id",
+                "can_confirm": False,
+                "actions": [],
+                "state": {
+                    "status": "needs_input",
+                    "current_flow": "bot_execution_decision",
+                    "asset": asset,
+                    "autonomy_level": "confirm_required",
+                },
+                "reasoning": {
+                    "confidence_score": 0.7,
+                    "risk_detected": False,
+                    "reasons": ["Finn heeft een specifieke bot-decision nodig voordat hij een execution-keuze kan voorbereiden."],
+                    "coaching_level": "bot_execution_handoff",
+                },
+                "suggested_actions": ["Noem het decision_id dat je wilt overslaan, monitoren of uitvoeren."],
+            }
+
+        review = self._mission_bot_review_item(decision, {"asset": decision.get("symbol") or asset, "setup": {"id": decision.get("setup_id")}})
+        bot = await BotService(self.session).repository.get_bot_config(user_id, int(review["bot_id"])) if self.session else None
+        is_live = bool((bot or {}).get("is_live"))
+        action = None
+        can_confirm = False
+        invalid_fields: List[Dict[str, Any]] = []
+        response = ""
+        next_question = None
+
+        if execution_choice == "monitor":
+            response = (
+                f"Ik zet bot-decision #{review['decision_id']} in monitor-modus voor je dagbeeld: "
+                f"{review.get('summary')}. Ik voer niets uit en wijzig geen status."
+            )
+        elif execution_choice == "skip":
+            action = self._bot_execution_action("skip_bot_decision", review, is_live=is_live)
+            can_confirm = True
+            response = f"Ik kan bot-decision #{review['decision_id']} overslaan. Dit annuleert bijbehorende open orders, maar voert geen trade uit."
+        elif execution_choice == "live_preflight":
+            action = self._bot_execution_action("live_preflight_bot_decision", review, is_live=is_live)
+            can_confirm = True
+            response = (
+                f"Ik kan een live preflight doen voor bot-decision #{review['decision_id']}. "
+                "Dit controleert live-bot en exchange-key readiness, maar voert geen order uit."
+            )
+        else:
+            if is_live:
+                invalid_fields.append({
+                    "field": "bot.execution_mode",
+                    "reason": "Deze bot is live. Gebruik eerst live preflight; Finn voert live orders niet vanuit deze stap uit.",
+                })
+                next_question = "bot.execution_mode"
+                response = (
+                    f"Bot-decision #{review['decision_id']} hoort bij een live bot. "
+                    "Ik kan eerst een live preflight doen, maar niet direct uitvoeren vanuit Finn."
+                )
+            elif review.get("action") not in {"buy", "sell"}:
+                invalid_fields.append({
+                    "field": "bot_decision.action",
+                    "reason": "Alleen buy/sell decisions kunnen als paper execution worden gemarkeerd.",
+                })
+                next_question = "bot_decision.action"
+                response = f"Bot-decision #{review['decision_id']} is {review.get('action')}; er is niets om paper uit te voeren."
+            else:
+                action = self._bot_execution_action("paper_execute_bot_decision", review, is_live=is_live)
+                can_confirm = True
+                response = (
+                    f"Ik kan bot-decision #{review['decision_id']} als paper/manual execution verwerken. "
+                    "Dit blijft paper/manual en plaatst geen live order."
+                )
+
+        actions = [action] if action else []
+        return {
+            "response": response,
+            "intent": "bot_execution_decision",
+            "flow": "bot_execution_decision",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": invalid_fields,
+            "next_question": next_question,
+            "can_confirm": can_confirm,
+            "actions": actions,
+            "state": {
+                "status": "ready_for_confirmation" if can_confirm else ("blocked" if invalid_fields else "advice_only"),
+                "current_flow": "bot_execution_decision",
+                "asset": review.get("asset"),
+                "execution_choice": execution_choice,
+                "review": review,
+                "bot": {
+                    "id": (bot or {}).get("id"),
+                    "name": (bot or {}).get("name"),
+                    "is_live": is_live,
+                },
+                "autonomy_level": "confirm_required" if can_confirm else "advice_only",
+            },
+            "reasoning": {
+                "confidence_score": 0.82,
+                "risk_detected": execution_choice in {"paper_execute", "live_preflight"} or bool(invalid_fields),
+                "reasons": ["Execution decisions require explicit confirmation and preserve live-trading guardrails."],
+                "coaching_level": "bot_execution_handoff",
+            },
+            "suggested_actions": ["Bevestig alleen als dit overeenkomt met je eigen plan."],
+        }
+
+    def _bot_execution_choice(self, query: str) -> str:
+        q = (query or "").lower()
+        if any(phrase in q for phrase in ["sla over", "sla bot-decision", "sla decision", "overslaan", "skip"]):
+            return "skip"
+        if "monitor" in q:
+            return "monitor"
+        if any(phrase in q for phrase in ["live preflight", "live check", "live uitvoeren"]):
+            return "live_preflight"
+        return "paper_execute"
+
+    async def _find_bot_decision_for_query(
+        self,
+        user_id: int,
+        query: str,
+        context: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        decision_id = self._extract_id_after_words(query, ["bot-decision", "decision", "beslissing", "proposal", "voorstel"])
+        asset = self._asset_from_query_or_context(query, context)
+        assets = [asset] + [candidate for candidate in sorted(SUPPORTED_ASSETS) if candidate != asset]
+        seen = set()
+        decisions: List[Dict[str, Any]] = []
+        for symbol in assets:
+            bot_today = await BotService(self.session).get_bot_today(user_id, symbol=symbol) if self.session else {"decisions": []}
+            for decision in bot_today.get("decisions") or []:
+                key = decision.get("id")
+                if key in seen:
+                    continue
+                seen.add(key)
+                decisions.append(decision)
+        if decision_id:
+            return next((decision for decision in decisions if int(decision.get("id") or 0) == decision_id), None)
+        return decisions[0] if len(decisions) == 1 else None
+
+    def _bot_execution_action(self, action_type: str, review: Dict[str, Any], *, is_live: bool) -> Dict[str, Any]:
+        decision_id = int(review["decision_id"])
+        bot_id = int(review["bot_id"])
+        labels = {
+            "skip_bot_decision": "Bot-decision overslaan",
+            "paper_execute_bot_decision": "Paper execution bevestigen",
+            "live_preflight_bot_decision": "Live preflight controleren",
+        }
+        risk = "high" if action_type in {"paper_execute_bot_decision", "live_preflight_bot_decision"} or is_live else "medium"
+        return {
+            "id": self._maintenance_action_id(action_type, [str(bot_id), str(decision_id)]),
+            "type": action_type,
+            "label": labels.get(action_type, "Bot-decision bevestigen"),
+            "payload": {
+                "bot_id": bot_id,
+                "decision_id": decision_id,
+                "asset": review.get("asset"),
+                "is_live": is_live,
+            },
+            "risk_level": risk,
+            "requires_confirmation": True,
+            "autonomy_level": "confirm_required",
+            "guardrails": {
+                "requires_confirmation": True,
+                "can_execute_without_user": False,
+                "no_live_order_execution": action_type != "paper_execute_bot_decision",
+                "live_preflight_only": action_type == "live_preflight_bot_decision",
+            },
         }
 
     def _extract_from_query(self, query: str) -> Dict[str, Any]:
@@ -4006,7 +4200,9 @@ class FinnPlanService:
                 open_actions.append(self._mission_action(action, asset, status, setup))
 
             for decision in (bot_today.get("decisions") or [])[:3]:
-                bot_review_queue.append(self._mission_bot_review_item(decision, item))
+                review_item = self._mission_bot_review_item(decision, item)
+                if review_item.get("review_status") == "needs_review":
+                    bot_review_queue.append(review_item)
 
         if len(assets) > 1 or not assets:
             for action in analysis.get("follow_up_actions") or []:
@@ -4079,6 +4275,31 @@ class FinnPlanService:
                 "requires_confirmation": True,
             },
         ]
+        if review_status == "needs_review" and action in {"buy", "sell"}:
+            review_actions.extend([
+                {
+                    "type": "chat_prompt",
+                    "label": "Paper uitvoeren",
+                    "prompt": f"Voer bot-decision {decision_id} paper uit",
+                    "handoff": "bot_execution_decision",
+                    "requires_confirmation": True,
+                },
+                {
+                    "type": "chat_prompt",
+                    "label": "Live preflight",
+                    "prompt": f"Doe live preflight voor bot-decision {decision_id}",
+                    "handoff": "bot_execution_decision",
+                    "requires_confirmation": True,
+                },
+            ])
+        if review_status == "needs_review":
+            review_actions.append({
+                "type": "chat_prompt",
+                "label": "Overslaan",
+                "prompt": f"Sla bot-decision {decision_id} over",
+                "handoff": "bot_execution_decision",
+                "requires_confirmation": True,
+            })
 
         return {
             "asset": asset,
@@ -4677,6 +4898,12 @@ class FinnPlanService:
             return await self._execute_refresh_daily_scores_action(user_id, action)
         if action and action.get("type") == "generate_bot_decision":
             return await self._execute_generate_bot_decision_action(user_id, action)
+        if action and action.get("type") == "skip_bot_decision":
+            return await self._execute_skip_bot_decision_action(user_id, action)
+        if action and action.get("type") == "paper_execute_bot_decision":
+            return await self._execute_paper_bot_decision_action(user_id, action)
+        if action and action.get("type") == "live_preflight_bot_decision":
+            return await self._execute_live_preflight_bot_decision_action(user_id, action)
         if action and action.get("type") == "configure_indicator":
             return await self._execute_indicator_config_action(user_id, action)
         if action and action.get("type") == "create_bot":
@@ -5038,6 +5265,124 @@ class FinnPlanService:
         }
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         return result
+
+    async def _execute_skip_bot_decision_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        payload = action.get("payload") or {}
+        bot_id = int(payload.get("bot_id") or 0)
+        decision_id = int(payload.get("decision_id") or 0)
+        if bot_id <= 0 or decision_id <= 0:
+            raise HTTPException(422, "bot_id en decision_id zijn verplicht.")
+        action_id = f"{action.get('id') or self._maintenance_action_id('skip_bot_decision', [str(bot_id), str(decision_id)])}-u{user_id}"
+        acquired = await self._try_create_pending_action(user_id, action_id, action)
+        if not acquired:
+            existing_result = await self._wait_for_action_result(user_id, action_id)
+            if existing_result:
+                return existing_result
+            raise HTTPException(409, "Deze Finn actie wordt al verwerkt. Probeer zo opnieuw.")
+
+        try:
+            skipped = await BotService(self.session).skip_bot_today(bot_id, None, user_id)
+            status = await self._read_bot_decision_status(user_id, decision_id)
+        except Exception:
+            await self.session.rollback()
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={"ok": False, "bot_id": bot_id, "decision_id": decision_id})
+            raise
+
+        result = {
+            "ok": bool(skipped.get("ok")),
+            "message": f"Bot-decision #{decision_id} is overgeslagen.",
+            "action_id": action_id,
+            "bot_id": bot_id,
+            "decision_id": decision_id,
+            "status": status,
+            "verified": {"bot_decision_skipped": status == "skipped"},
+        }
+        await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
+        return result
+
+    async def _execute_paper_bot_decision_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        payload = action.get("payload") or {}
+        bot_id = int(payload.get("bot_id") or 0)
+        decision_id = int(payload.get("decision_id") or 0)
+        if bot_id <= 0 or decision_id <= 0:
+            raise HTTPException(422, "bot_id en decision_id zijn verplicht.")
+        action_id = f"{action.get('id') or self._maintenance_action_id('paper_execute_bot_decision', [str(bot_id), str(decision_id)])}-u{user_id}"
+        acquired = await self._try_create_pending_action(user_id, action_id, action)
+        if not acquired:
+            existing_result = await self._wait_for_action_result(user_id, action_id)
+            if existing_result:
+                return existing_result
+            raise HTTPException(409, "Deze Finn actie wordt al verwerkt. Probeer zo opnieuw.")
+
+        bot_service = BotService(self.session)
+        bot = await bot_service.repository.get_bot_config(user_id, bot_id)
+        if not bot:
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={"ok": False, "bot_id": bot_id, "decision_id": decision_id})
+            raise HTTPException(404, "Bot niet gevonden.")
+        if bot.get("is_live"):
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={"ok": False, "bot_id": bot_id, "decision_id": decision_id, "reason": "live_bot"})
+            raise HTTPException(422, "Live bots moeten eerst door live preflight; Finn voert live orders niet vanuit deze stap uit.")
+
+        try:
+            executed = await bot_service.mark_bot_executed(bot_id, decision_id, user_id)
+            status = await self._read_bot_decision_status(user_id, decision_id)
+        except Exception:
+            await self.session.rollback()
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={"ok": False, "bot_id": bot_id, "decision_id": decision_id})
+            raise
+
+        result = {
+            "ok": bool(executed.get("ok")),
+            "message": f"Bot-decision #{decision_id} is als paper/manual execution verwerkt.",
+            "action_id": action_id,
+            "bot_id": bot_id,
+            "decision_id": decision_id,
+            "status": status,
+            "verified": {"paper_execution": bool(executed.get("ok"))},
+        }
+        await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
+        return result
+
+    async def _execute_live_preflight_bot_decision_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        payload = action.get("payload") or {}
+        bot_id = int(payload.get("bot_id") or 0)
+        decision_id = int(payload.get("decision_id") or 0)
+        if bot_id <= 0 or decision_id <= 0:
+            raise HTTPException(422, "bot_id en decision_id zijn verplicht.")
+        action_id = f"{action.get('id') or self._maintenance_action_id('live_preflight_bot_decision', [str(bot_id), str(decision_id)])}-u{user_id}"
+        acquired = await self._try_create_pending_action(user_id, action_id, action)
+        if not acquired:
+            existing_result = await self._wait_for_action_result(user_id, action_id)
+            if existing_result:
+                return existing_result
+            raise HTTPException(409, "Deze Finn actie wordt al verwerkt. Probeer zo opnieuw.")
+
+        bot_service = BotService(self.session)
+        bot = await bot_service.repository.get_bot_config(user_id, bot_id)
+        keys = await ExchangeRepository(self.session).get_active_keys(user_id)
+        ready = bool(bot and bot.get("is_live") and keys)
+        result = {
+            "ok": True,
+            "message": (
+                "Live preflight geslaagd. Review alsnog handmatig voordat je buiten Finn live uitvoert."
+                if ready else "Live preflight blokkeert: live bot of actieve exchange keys ontbreken."
+            ),
+            "action_id": action_id,
+            "bot_id": bot_id,
+            "decision_id": decision_id,
+            "verified": {
+                "live_preflight": ready,
+                "live_bot": bool(bot and bot.get("is_live")),
+                "exchange_keys": bool(keys),
+            },
+        }
+        await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
+        return result
+
+    async def _read_bot_decision_status(self, user_id: int, decision_id: int) -> Optional[str]:
+        rows = await BotService(self.session).repository.get_bot_decisions_by_date(user_id, _utc_now().date())
+        row = next((item for item in rows if int(item.get("id") or 0) == int(decision_id)), None)
+        return str(row.get("status")) if row else None
 
     async def _execute_strategy_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
         draft = _deep_merge(empty_strategy_draft(), action.get("payload") or {})

@@ -281,6 +281,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       maintenance_action: "Confirm",
       bot_decision: "Proposal",
       bot_decision_review: "Review",
+      bot_execution_decision: "Confirm",
       indicator_insight: "Insight",
     };
     return labels[handoff] || "Open";
@@ -291,6 +292,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     if (handoff === "daily_score_refresh" || handoff === "maintenance_action") return <Activity size={11} className="text-emerald-500 shrink-0" />;
     if (handoff === "bot_decision") return <Bot size={11} className="text-violet-500 shrink-0" />;
     if (handoff === "bot_decision_review") return <ListChecks size={11} className="text-violet-500 shrink-0" />;
+    if (handoff === "bot_execution_decision") return <Shield size={11} className="text-rose-500 shrink-0" />;
     if (handoff === "indicator_insight") return <Brain size={11} className="text-amber-500 shrink-0" />;
     return <Zap size={11} className="text-amber-500 shrink-0" />;
   };
@@ -773,6 +775,49 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         return;
       }
 
+      if (action.type === "skip_bot_decision") {
+        if (!res?.ok || !res?.verified?.bot_decision_skipped) {
+          throw new Error("Bot-decision skip is nog niet verifieerbaar.");
+        }
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          text: res.message || "Bot-decision overgeslagen en geverifieerd.",
+          intent: "bot_decision_skipped",
+        }]);
+        await loadInsight();
+        await loadMissionControl();
+        emitFinnRefreshSignals();
+        return;
+      }
+
+      if (action.type === "paper_execute_bot_decision") {
+        if (!res?.ok || !res?.verified?.paper_execution) {
+          throw new Error("Paper execution is nog niet verifieerbaar.");
+        }
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          text: res.message || "Bot-decision als paper/manual execution verwerkt.",
+          intent: "bot_decision_executed",
+        }]);
+        await loadInsight();
+        await loadMissionControl();
+        emitFinnRefreshSignals();
+        return;
+      }
+
+      if (action.type === "live_preflight_bot_decision") {
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          text: res.message || "Live preflight gecontroleerd.",
+          intent: "bot_live_preflight",
+          isError: !res?.verified?.live_preflight,
+        }]);
+        await loadInsight();
+        await loadMissionControl();
+        emitFinnRefreshSignals();
+        return;
+      }
+
       const isBotOnly = res?.draft?.draft_kind === "bot";
       const isStrategyOnly = res?.draft?.draft_kind === "strategy";
       const isIndicatorConfig = res?.draft?.draft_kind === "indicator_config";
@@ -848,6 +893,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           ? "Ik kon de daily scores nog niet verversen. Probeer het zo opnieuw."
           : action.type === "generate_bot_decision"
           ? "Ik kon de bot-decision nog niet genereren. Controleer de bot en probeer opnieuw."
+          : ["skip_bot_decision", "paper_execute_bot_decision", "live_preflight_bot_decision"].includes(action.type)
+          ? "Ik kon deze bot-decision actie nog niet veilig afronden. Controleer de status en probeer opnieuw."
           : "Ik kon dit plan nog niet aanmaken. Controleer de velden en probeer opnieuw.",
         isError: true,
       }]);
@@ -1050,7 +1097,13 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     const actions = Array.isArray(message.actions) ? message.actions : [];
     const actionOnly = actions.filter((action) => (
       action?.requires_confirmation &&
-      ["refresh_daily_scores", "generate_bot_decision"].includes(action.type)
+      [
+        "refresh_daily_scores",
+        "generate_bot_decision",
+        "skip_bot_decision",
+        "paper_execute_bot_decision",
+        "live_preflight_bot_decision",
+      ].includes(action.type)
     ));
     if (actionOnly.length === 0 || message.draft) return null;
 

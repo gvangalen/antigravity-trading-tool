@@ -1540,6 +1540,43 @@ def test_bot_decision_review_items_escalate_guardrail_risk():
     assert review["summary"] == "BTC: buy voor EUR 100 - guardrail aandacht"
     assert review["trade_plan_present"] is True
     assert review["review_actions"][0]["prompt"] == "Leg bot-decision 22 uit"
+    assert any(action["handoff"] == "bot_execution_decision" and "paper" in action["label"].lower() for action in review["review_actions"])
+    assert any(action["handoff"] == "bot_execution_decision" and "overslaan" in action["label"].lower() for action in review["review_actions"])
+
+
+def test_mission_control_excludes_handled_bot_decisions():
+    service = _service()
+    daily_analysis = {
+        "assets": [
+            {
+                "asset": "BTC",
+                "stance": "plan_is_active",
+                "has_scores": True,
+                "setup": {"id": 12, "name": "BTC DCA"},
+                "blockers": [],
+                "bot_today": {
+                    "decisions": [
+                        {"id": 21, "bot_id": 9, "symbol": "BTC", "action": "hold", "status": "skipped"},
+                        {"id": 22, "bot_id": 9, "symbol": "BTC", "action": "buy", "status": "planned"},
+                    ]
+                },
+                "indicator_summary": {"warnings": []},
+                "data_readiness": {"status": "ready", "config_gaps": []},
+                "follow_up_actions": [],
+            }
+        ],
+        "follow_up_actions": [],
+    }
+
+    mission = service._build_mission_control_from_daily_analysis(daily_analysis)
+
+    assert [item["decision_id"] for item in mission["bot_review_queue"]] == [22]
+    handled = service._mission_bot_review_item(
+        {"id": 21, "bot_id": 9, "symbol": "BTC", "action": "buy", "status": "skipped"},
+        {"asset": "BTC", "setup": {"id": 12}},
+    )
+    assert handled["review_status"] == "handled"
+    assert not any(action["handoff"] == "bot_execution_decision" for action in handled["review_actions"])
 
 
 def test_bot_decision_review_request_detection():
@@ -1548,6 +1585,32 @@ def test_bot_decision_review_request_detection():
     assert service.looks_like_bot_decision_review_request("Leg bot-decision 22 uit") is True
     assert service.looks_like_bot_decision_review_request("Waarom dit bot voorstel?") is True
     assert service.looks_like_bot_decision_review_request("Maak bot-decision voor BTC") is False
+    assert service.looks_like_bot_execution_decision_request("Sla bot-decision 22 over") is True
+    assert service.looks_like_bot_execution_decision_request("Voer bot-decision 22 paper uit") is True
+    assert service.looks_like_bot_execution_decision_request("Doe live preflight voor bot-decision 22") is True
+    assert service.looks_like_bot_execution_decision_request("Leg bot-decision 22 uit") is False
+    assert service._bot_execution_choice("Sla bot-decision 22 over") == "skip"
+    assert service._bot_execution_choice("Voer bot-decision 22 paper uit") == "paper_execute"
+    assert service._bot_execution_choice("Doe live preflight voor bot-decision 22") == "live_preflight"
+
+
+def test_bot_execution_actions_are_confirmable_and_guarded():
+    service = _service()
+    review = {
+        "decision_id": 22,
+        "bot_id": 9,
+        "asset": "BTC",
+    }
+
+    skip_action = service._bot_execution_action("skip_bot_decision", review, is_live=False)
+    paper_action = service._bot_execution_action("paper_execute_bot_decision", review, is_live=False)
+    live_action = service._bot_execution_action("live_preflight_bot_decision", review, is_live=True)
+
+    assert skip_action["requires_confirmation"] is True
+    assert paper_action["payload"]["decision_id"] == 22
+    assert paper_action["guardrails"]["can_execute_without_user"] is False
+    assert live_action["guardrails"]["live_preflight_only"] is True
+    assert live_action["risk_level"] == "high"
 
 
 def test_daily_coach_analysis_waits_when_setup_has_blockers():
