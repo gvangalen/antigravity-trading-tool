@@ -338,6 +338,100 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     </div>
   );
 
+  const missionResolveLabel = (state) => ({
+    needs_user_confirmation: "actie nodig",
+    waiting_for_data: "wacht op data",
+    monitor_today: "monitor",
+    resolved: "klaar",
+    skipped: "overgeslagen",
+  }[state] || state || "open");
+
+  const missionWorkqueueSections = () => {
+    const items = Array.isArray(missionControl?.workqueue) ? missionControl.workqueue : [];
+    const first = [];
+    const review = [];
+    const later = [];
+
+    items.forEach((item) => {
+      const state = item.resolve_state || item.status;
+      if (state === "needs_user_confirmation" || state === "waiting_for_data" || item.freshness?.status === "stale") {
+        first.push(item);
+      } else if (state === "monitor_today" || item.type === "blocked_plan" || item.type === "blocker_explanation") {
+        review.push(item);
+      } else {
+        later.push(item);
+      }
+    });
+
+    return [
+      { key: "first", title: "Eerst dit", tone: "rose", items: first },
+      { key: "review", title: "Daarna reviewen", tone: "amber", items: review },
+      { key: "later", title: "Kan wachten", tone: "slate", items: later },
+    ].filter((section) => section.items.length > 0);
+  };
+
+  const missionSectionTone = (tone) => {
+    if (tone === "rose") return "border-rose-100 dark:border-rose-900/50 bg-rose-50/45 dark:bg-rose-950/15";
+    if (tone === "amber") return "border-amber-100 dark:border-amber-900/50 bg-amber-50/45 dark:bg-amber-950/15";
+    return "border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40";
+  };
+
+  const missionItemTone = (item) => {
+    if ((item.resolve_state || item.status) === "needs_user_confirmation") return "border-blue-100 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20";
+    if ((item.resolve_state || item.status) === "waiting_for_data") return "border-amber-100 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20";
+    return "border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/30";
+  };
+
+  const renderMissionWorkqueueItem = (item) => (
+    <div key={item.id} className={`rounded-xl border px-3 py-2 ${missionItemTone(item)}`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 leading-tight">
+          {item.title}
+        </span>
+        <span className={`text-[8px] font-black uppercase tracking-widest ${
+          item.priority === "high" ? "text-rose-600" : item.priority === "medium" ? "text-amber-600" : "text-emerald-600"
+        }`}>
+          {item.priority}
+        </span>
+      </div>
+      <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
+        {item.reason}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1">
+        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+          {missionResolveLabel(item.resolve_state || item.status)}
+        </span>
+        {item.resolve_state && item.status && item.resolve_state !== item.status && (
+          <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-400">
+            {item.status}
+          </span>
+        )}
+        {item.freshness?.status && (
+          <span className={`rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest ${
+            item.freshness.status === "stale" ? "text-rose-600" : item.freshness.status === "aging" ? "text-amber-600" : "text-slate-500 dark:text-slate-400"
+          }`}>
+            {item.freshness.label || item.freshness.status}
+          </span>
+        )}
+        {item.asset && (
+          <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            {item.asset}
+          </span>
+        )}
+        {typeof item.health_score === "number" && (
+          <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            health {item.health_score}
+          </span>
+        )}
+      </div>
+      {item.next_best_action?.prompt && (
+        <div className="mt-2">
+          {renderFollowUpButtons([item.next_best_action], true)}
+        </div>
+      )}
+    </div>
+  );
+
   useEffect(() => {
     const handleTrigger = (e) => {
       const { query: queryText, openAssistant, metric, symbol, timeframe } = e.detail || {};
@@ -1278,63 +1372,27 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             </div>
 
             {Array.isArray(missionControl.workqueue) && missionControl.workqueue.length > 0 && (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-400">
                     <ListChecks size={11} className="text-blue-500" />
-                    Werkqueue
+                    Werkvolgorde
                   </div>
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
                     {missionControl.summary.workqueue_count || missionControl.workqueue.length} items
                   </span>
                 </div>
-                {missionControl.workqueue.slice(0, 4).map((item) => (
-                  <div key={item.id} className="rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20 px-3 py-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 leading-tight">
-                        {item.title}
+                {missionWorkqueueSections().map((section) => (
+                  <div key={section.key} className={`rounded-2xl border p-2 space-y-1.5 ${missionSectionTone(section.tone)}`}>
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[8px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                        {section.title}
                       </span>
-                      <span className={`text-[8px] font-black uppercase tracking-widest ${
-                        item.priority === "high" ? "text-rose-600" : item.priority === "medium" ? "text-amber-600" : "text-emerald-600"
-                      }`}>
-                        {item.priority}
+                      <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+                        {section.items.length}
                       </span>
                     </div>
-                    <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
-                      {item.reason}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                        {item.resolve_state || item.status}
-                      </span>
-                      {item.resolve_state && item.status && item.resolve_state !== item.status && (
-                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-400">
-                          {item.status}
-                        </span>
-                      )}
-                      {item.freshness?.status && (
-                        <span className={`rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest ${
-                          item.freshness.status === "stale" ? "text-rose-600" : item.freshness.status === "aging" ? "text-amber-600" : "text-slate-500 dark:text-slate-400"
-                        }`}>
-                          {item.freshness.status}
-                        </span>
-                      )}
-                      {item.asset && (
-                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                          {item.asset}
-                        </span>
-                      )}
-                      {typeof item.health_score === "number" && (
-                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                          health {item.health_score}
-                        </span>
-                      )}
-                    </div>
-                    {item.next_best_action?.prompt && (
-                      <div className="mt-2">
-                        {renderFollowUpButtons([item.next_best_action], true)}
-                      </div>
-                    )}
+                    {section.items.slice(0, 3).map(renderMissionWorkqueueItem)}
                   </div>
                 ))}
               </div>
