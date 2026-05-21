@@ -3,7 +3,7 @@ import json
 import re
 import asyncio
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
@@ -33,6 +33,10 @@ SUPPORTED_ASSETS = {"BTC", "ETH", "SOL"}
 KNOWN_ASSET_CANDIDATES = ("BTC", "ETH", "SOL", "DOGE", "XRP", "ADA", "BNB", "AVAX", "LINK", "MATIC", "PEPE")
 NUMBER_WITH_DELIMITER = r"([0-9][0-9.,]*)(?=\s|,|/|$)"
 FINN_STATE_VERSION = 2
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 WEEKDAYS = {
     "maandag": "monday",
     "dinsdag": "tuesday",
@@ -337,7 +341,7 @@ class FinnPlanService:
                 "missing_fields": response.get("missing_fields", []),
                 "invalid_fields": response.get("invalid_fields", []),
                 "can_confirm": response.get("can_confirm", False),
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": _utc_now().isoformat(),
             },
         )
 
@@ -526,6 +530,22 @@ class FinnPlanService:
             "setup", "plan", "bot", "trade", "dca", "btc", "eth", "sol", "market", "markt",
         ])
         return has_today and (has_decision_intent or has_trading_context or "kopen" in q)
+
+    def looks_like_daily_score_refresh_request(self, query: str) -> bool:
+        q = (query or "").lower()
+        return any(phrase in q for phrase in [
+            "ververs daily score", "ververs daily scores", "refresh daily score",
+            "refresh daily scores", "genereer daily score", "genereer daily scores",
+            "daily score opnieuw", "daily scores opnieuw", "scores opnieuw genereren",
+            "scores verversen",
+        ])
+
+    def looks_like_bot_decision_request(self, query: str) -> bool:
+        q = (query or "").lower()
+        has_bot = "bot" in q
+        has_decision = any(word in q for word in ["decision", "beslissing", "proposal", "voorstel"])
+        has_generate = any(word in q for word in ["maak", "genereer", "bereid", "draai", "run", "laat"])
+        return has_bot and has_decision and has_generate
 
     def looks_like_status_request(self, query: str) -> bool:
         q = (query or "").lower()
@@ -1458,6 +1478,162 @@ class FinnPlanService:
             "suggested_actions": analysis.get("suggested_actions") or [],
         }
 
+    async def build_daily_score_refresh_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        explicit_assets = [asset for asset in _asset_mentions(query) if asset in SUPPORTED_ASSETS]
+        if explicit_assets:
+            assets = explicit_assets
+            scope = "asset"
+        else:
+            assets = await self._portfolio_setup_assets(user_id)
+            scope = "portfolio" if len(assets) > 1 else "asset"
+        assets = sorted(set(assets or ["BTC"]))
+        action = {
+            "id": self._maintenance_action_id("refresh_daily_scores", assets),
+            "type": "refresh_daily_scores",
+            "label": "Daily scores verversen",
+            "payload": {"assets": assets, "scope": scope},
+            "risk_level": "low",
+            "requires_confirmation": True,
+            "autonomy_level": "confirm_required",
+            "guardrails": {
+                "requires_confirmation": True,
+                "can_execute_without_user": False,
+                "execution_allowed": "score_refresh_only",
+            },
+        }
+        asset_text = ", ".join(assets)
+        return {
+            "response": (
+                f"Ik kan de daily scores verversen voor {asset_text}. "
+                "Dit haalt/geneert scoredata opnieuw op, maar voert geen trade uit en wijzigt geen setup, strategie of bot."
+            ),
+            "intent": "daily_score_refresh",
+            "flow": "maintenance_action",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": True,
+            "actions": [action],
+            "state": {
+                "status": "ready_for_confirmation",
+                "current_flow": "maintenance_action",
+                "maintenance_type": "refresh_daily_scores",
+                "assets": assets,
+                "autonomy_level": "confirm_required",
+            },
+            "reasoning": {
+                "confidence_score": 0.86,
+                "risk_detected": False,
+                "reasons": ["Daily score refresh is een read/compute maintenance action; geen trading execution."],
+                "coaching_level": "maintenance_handoff",
+            },
+            "suggested_actions": [f"Bevestig daily score refresh voor {asset_text}"],
+        }
+
+    async def build_bot_decision_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        asset = self._asset_from_query_or_context(query, context)
+        bots = []
+        if self.session:
+            bots = [
+                bot for bot in await BotService(self.session).get_bot_configs(user_id)
+                if str(bot.get("symbol") or "").upper() == asset
+            ]
+        bot_id = self._extract_id_after_words(query, ["bot"])
+        selected = next((bot for bot in bots if int(bot.get("id")) == bot_id), None) if bot_id else None
+        if not selected and len(bots) == 1:
+            selected = bots[0]
+
+        if not selected:
+            if not bots:
+                response = f"Ik vind nog geen bot voor {asset}. Maak eerst een bot of kies een bestaande strategie om een bot aan te maken."
+                next_question = "bot_id"
+            else:
+                options = ", ".join(f"#{bot.get('id')} {bot.get('name')}" for bot in bots[:5])
+                response = f"Welke bot moet ik gebruiken voor de decision? Beschikbaar voor {asset}: {options}."
+                next_question = "bot_id"
+            return {
+                "response": response,
+                "intent": "bot_decision",
+                "flow": "bot_decision",
+                "draft": None,
+                "missing_fields": ["bot_id"],
+                "invalid_fields": [],
+                "next_question": next_question,
+                "can_confirm": False,
+                "actions": [],
+                "state": {
+                    "status": "needs_input",
+                    "current_flow": "bot_decision",
+                    "asset": asset,
+                    "bot_options": bots[:5],
+                    "autonomy_level": "confirm_required",
+                },
+                "reasoning": {
+                    "confidence_score": 0.68,
+                    "risk_detected": False,
+                    "reasons": ["Finn heeft een specifieke bot nodig voordat hij een decision kan genereren."],
+                    "coaching_level": "bot_decision_handoff",
+                },
+                "suggested_actions": ["Noem het bot_id, bijvoorbeeld: Maak bot-decision voor bot #12"],
+            }
+
+        action = {
+            "id": self._maintenance_action_id("generate_bot_decision", [str(selected.get("id"))]),
+            "type": "generate_bot_decision",
+            "label": "Bot-decision genereren",
+            "payload": {"bot_id": int(selected["id"]), "asset": asset},
+            "risk_level": "medium",
+            "requires_confirmation": True,
+            "autonomy_level": "confirm_required",
+            "guardrails": {
+                "requires_confirmation": True,
+                "can_execute_without_user": False,
+                "execution_allowed": "generate_decision_only",
+                "no_order_execution": True,
+            },
+        }
+        return {
+            "response": (
+                f"Ik kan een bot-decision genereren voor {selected.get('name')} (bot #{selected.get('id')}). "
+                "Dit maakt alleen een voorstel/decision; orders uitvoeren blijft apart bevestigd."
+            ),
+            "intent": "bot_decision",
+            "flow": "bot_decision",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": True,
+            "actions": [action],
+            "state": {
+                "status": "ready_for_confirmation",
+                "current_flow": "bot_decision",
+                "asset": asset,
+                "bot_id": int(selected["id"]),
+                "autonomy_level": "confirm_required",
+            },
+            "reasoning": {
+                "confidence_score": 0.82,
+                "risk_detected": False,
+                "reasons": ["Bot decision generation creates a proposal only; no order execution."],
+                "coaching_level": "bot_decision_handoff",
+            },
+            "suggested_actions": [f"Bevestig bot-decision voor bot #{selected.get('id')}"],
+        }
+
     def _extract_from_query(self, query: str) -> Dict[str, Any]:
         q = query.lower()
         patch = empty_plan_patch()
@@ -2367,6 +2543,18 @@ class FinnPlanService:
         normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return f"finn-indicator-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:24]}"
 
+    def _maintenance_action_id(self, action_type: str, parts: List[str]) -> str:
+        normalized = json.dumps({"type": action_type, "parts": parts}, sort_keys=True, separators=(",", ":"), default=str)
+        return f"finn-maint-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:24]}"
+
+    def _extract_id_after_words(self, query: str, words: List[str]) -> Optional[int]:
+        q = query or ""
+        for word in words:
+            match = re.search(rf"\b{re.escape(word)}\s*#?\s*(\d+)\b", q, re.IGNORECASE)
+            if match:
+                return int(match.group(1))
+        return None
+
     def _extract_indicator_score_mode(self, q_lower: str) -> Optional[str]:
         if any(word in q_lower for word in ["contrarian", "tegen de markt", "omgekeerd", "andersom", "inverse"]):
             return "contrarian"
@@ -3009,6 +3197,20 @@ class FinnPlanService:
         except Exception:
             return {}
 
+    async def _portfolio_setup_assets(self, user_id: int) -> List[str]:
+        if not self.session:
+            return ["BTC"]
+        try:
+            setups = await ScoreRepository(self.session).fetch_active_setups(user_id)
+            assets = sorted({
+                str(setup.get("symbol") or "").upper()
+                for setup in setups
+                if str(setup.get("symbol") or "").upper() in SUPPORTED_ASSETS
+            })
+            return assets or ["BTC"]
+        except Exception:
+            return ["BTC"]
+
     def _indicator_insight_categories(self, q: str) -> List[str]:
         categories = []
         if any(word in q for word in ["macro", "macro score"]):
@@ -3315,10 +3517,11 @@ class FinnPlanService:
             suggested_actions.extend(indicator_suggestions[:2])
         if not decisions:
             suggested_actions.append("Vraag Finn om een bot-decision te genereren als er een bot actief hoort te zijn.")
+        follow_up_actions = self._daily_follow_up_actions(asset, data_readiness, blockers, decisions)
 
         return {
             "asset": asset,
-            "date": datetime.utcnow().date().isoformat(),
+            "date": _utc_now().date().isoformat(),
             "has_scores": bool(daily_scores),
             "stance": stance,
             "setup": setup_analysis.get("setup"),
@@ -3338,9 +3541,62 @@ class FinnPlanService:
                 "categories": indicator_analysis.get("categories") or {},
             },
             "data_readiness": data_readiness,
+            "follow_up_actions": follow_up_actions,
             "reasons": reasons,
             "suggested_actions": suggested_actions[:5],
         }
+
+    def _daily_follow_up_actions(
+        self,
+        asset: str,
+        data_readiness: Dict[str, Any],
+        blockers: List[Dict[str, Any]],
+        decisions: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        actions = []
+        config_gaps = data_readiness.get("config_gaps") or []
+        if "macro" in config_gaps:
+            actions.append({
+                "type": "chat_prompt",
+                "label": "Macro toevoegen",
+                "prompt": "Voeg Bitcoin Dominance toe aan macro",
+                "handoff": "indicator_config",
+                "requires_confirmation": True,
+            })
+        if "technical" in config_gaps:
+            actions.append({
+                "type": "chat_prompt",
+                "label": "Technical toevoegen",
+                "prompt": f"Voeg RSI toe aan technical voor {asset} met standaard scoring weight 1",
+                "handoff": "indicator_config",
+                "requires_confirmation": True,
+            })
+        if data_readiness.get("status") in {"score_generation_missing", "indicator_config_missing", "onboarding_incomplete", "ready_with_gaps"}:
+            actions.append({
+                "type": "confirmable_action_prompt",
+                "label": "Daily scores verversen",
+                "prompt": f"Ververs daily scores voor {asset}",
+                "handoff": "daily_score_refresh",
+                "requires_confirmation": True,
+            })
+        if blockers:
+            category = blockers[0].get("category") or "macro"
+            actions.append({
+                "type": "chat_prompt",
+                "label": f"Waarom blokkeert {category}?",
+                "prompt": f"Waarom blokkeert {category} mijn {asset} setup?",
+                "handoff": "indicator_insight",
+                "requires_confirmation": False,
+            })
+        if not decisions:
+            actions.append({
+                "type": "confirmable_action_prompt",
+                "label": "Bot-decision maken",
+                "prompt": f"Maak bot-decision voor {asset}",
+                "handoff": "bot_decision",
+                "requires_confirmation": True,
+            })
+        return actions[:5]
 
     def _build_daily_data_readiness(
         self,
@@ -3461,10 +3717,11 @@ class FinnPlanService:
         else:
             reasons.append(f"{len(asset_analyses)} setup-assets gecontroleerd.")
             reasons.append(f"{len(actionable_assets)} actief, {len(blocked_assets)} geblokkeerd, {len(scoreless_assets)} zonder daily scores.")
+        follow_up_actions = self._portfolio_follow_up_actions(ranked, portfolio_readiness)
 
         return {
             "scope": "portfolio",
-            "date": datetime.utcnow().date().isoformat(),
+            "date": _utc_now().date().isoformat(),
             "asset_count": len(asset_analyses),
             "has_any_scores": any(a.get("has_scores") for a in asset_analyses),
             "actionable_assets": actionable_assets,
@@ -3474,6 +3731,7 @@ class FinnPlanService:
             "data_readiness": portfolio_readiness,
             "top_priorities": top_priorities,
             "assets": ranked,
+            "follow_up_actions": follow_up_actions,
             "reasons": reasons,
             "suggested_actions": suggested_actions[:5],
         }
@@ -3546,6 +3804,52 @@ class FinnPlanService:
             "ready_with_gaps_assets": ready_with_gaps_assets,
             "suggested_actions": suggested_actions[:5],
         }
+
+    def _portfolio_follow_up_actions(
+        self,
+        asset_analyses: List[Dict[str, Any]],
+        readiness: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        actions = []
+        first_asset = (asset_analyses[0].get("asset") if asset_analyses else "BTC") or "BTC"
+        if readiness.get("config_gap_assets"):
+            actions.append({
+                "type": "chat_prompt",
+                "label": "Macro-laag aanvullen",
+                "prompt": "Voeg Bitcoin Dominance toe aan macro",
+                "handoff": "indicator_config",
+                "requires_confirmation": True,
+            })
+            actions.append({
+                "type": "chat_prompt",
+                "label": f"{first_asset} technical aanvullen",
+                "prompt": f"Voeg RSI toe aan technical voor {first_asset} met standaard scoring weight 1",
+                "handoff": "indicator_config",
+                "requires_confirmation": True,
+            })
+        if asset_analyses:
+            actions.append({
+                "type": "confirmable_action_prompt",
+                "label": "Daily scores verversen",
+                "prompt": "Ververs daily scores",
+                "handoff": "daily_score_refresh",
+                "requires_confirmation": True,
+            })
+            actions.append({
+                "type": "chat_prompt",
+                "label": "Macro blocker uitleg",
+                "prompt": f"Waarom blokkeert macro mijn {first_asset} setup?",
+                "handoff": "indicator_insight",
+                "requires_confirmation": False,
+            })
+            actions.append({
+                "type": "confirmable_action_prompt",
+                "label": "Bot-decision maken",
+                "prompt": f"Maak bot-decision voor {first_asset}",
+                "handoff": "bot_decision",
+                "requires_confirmation": True,
+            })
+        return actions[:5]
 
     def _daily_coach_message(self, analysis: Dict[str, Any]) -> str:
         asset = analysis.get("asset") or "BTC"
@@ -3910,6 +4214,10 @@ class FinnPlanService:
         return "\n".join(lines)
 
     async def execute_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        if action and action.get("type") == "refresh_daily_scores":
+            return await self._execute_refresh_daily_scores_action(user_id, action)
+        if action and action.get("type") == "generate_bot_decision":
+            return await self._execute_generate_bot_decision_action(user_id, action)
         if action and action.get("type") == "configure_indicator":
             return await self._execute_indicator_config_action(user_id, action)
         if action and action.get("type") == "create_bot":
@@ -4205,6 +4513,73 @@ class FinnPlanService:
         await self.clear_state(user_id)
         return result
 
+    async def _execute_refresh_daily_scores_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        payload = action.get("payload") or {}
+        assets = [
+            str(asset).upper()
+            for asset in (payload.get("assets") or [])
+            if str(asset).upper() in SUPPORTED_ASSETS
+        ] or ["BTC"]
+        action_id = f"{action.get('id') or self._maintenance_action_id('refresh_daily_scores', assets)}-u{user_id}"
+        acquired = await self._try_create_pending_action(user_id, action_id, action)
+        if not acquired:
+            existing_result = await self._wait_for_action_result(user_id, action_id)
+            if existing_result:
+                return existing_result
+            raise HTTPException(409, "Deze Finn actie wordt al verwerkt. Probeer zo opnieuw.")
+
+        refreshed = {}
+        score_service = ScoreService(ScoreRepository(self.session))
+        try:
+            for asset in assets:
+                await score_service.get_daily_scores(user_id, asset)
+                row = await ScoreRepository(self.session).fetch_daily_scores(user_id, asset)
+                refreshed[asset] = bool(row)
+        except Exception:
+            await self.session.rollback()
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={"ok": False, "assets": assets})
+            raise
+
+        result = {
+            "ok": all(refreshed.values()),
+            "message": f"Daily scores ververst voor: {', '.join(assets)}.",
+            "action_id": action_id,
+            "assets": assets,
+            "verified": {"daily_scores": refreshed},
+        }
+        await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
+        return result
+
+    async def _execute_generate_bot_decision_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        payload = action.get("payload") or {}
+        bot_id = int(payload.get("bot_id") or 0)
+        if bot_id <= 0:
+            raise HTTPException(422, "bot_id is verplicht voor een bot-decision.")
+        action_id = f"{action.get('id') or self._maintenance_action_id('generate_bot_decision', [str(bot_id)])}-u{user_id}"
+        acquired = await self._try_create_pending_action(user_id, action_id, action)
+        if not acquired:
+            existing_result = await self._wait_for_action_result(user_id, action_id)
+            if existing_result:
+                return existing_result
+            raise HTTPException(409, "Deze Finn actie wordt al verwerkt. Probeer zo opnieuw.")
+
+        try:
+            generated = await BotService(self.session).run_bot_agent_generate(bot_id, None, user_id)
+        except Exception:
+            await self.session.rollback()
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={"ok": False, "bot_id": bot_id})
+            raise
+        result = {
+            "ok": bool(generated.get("ok")),
+            "message": "Bot-decision gegenereerd. Review het voorstel voordat je iets uitvoert.",
+            "action_id": action_id,
+            "bot_id": bot_id,
+            "result": generated,
+            "verified": {"bot_decision": bool(generated.get("ok"))},
+        }
+        await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
+        return result
+
     async def _execute_strategy_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
         draft = _deep_merge(empty_strategy_draft(), action.get("payload") or {})
         self._apply_strategy_defaults(draft)
@@ -4464,7 +4839,7 @@ class FinnPlanService:
         payload = {
             "action": action,
             "result": None,
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": _utc_now().isoformat(),
         }
         row = await self.session.execute(text("""
             INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at)
@@ -4475,7 +4850,7 @@ class FinnPlanService:
             "id": action_id,
             "user_id": user_id,
             "payload": json.dumps(payload),
-            "expires_at": datetime.utcnow() + timedelta(days=7),
+            "expires_at": _utc_now() + timedelta(days=7),
         })
         acquired = row.fetchone() is not None
         await self.session.commit()
@@ -4521,7 +4896,7 @@ class FinnPlanService:
         payload = {
             "action": action,
             "result": result,
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": _utc_now().isoformat(),
         }
         await self.session.execute(text("""
             INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at)
@@ -4535,7 +4910,7 @@ class FinnPlanService:
             "user_id": user_id,
             "payload": json.dumps(payload),
             "status": status,
-            "expires_at": datetime.utcnow() + timedelta(days=7),
+            "expires_at": _utc_now() + timedelta(days=7),
         })
         await self.session.commit()
 

@@ -1252,6 +1252,8 @@ def test_daily_coach_request_detection_is_separate_from_status_and_plan_creation
     assert service.looks_like_plan_request("Geef mijn daily brief") is False
     assert service.looks_like_status_request("Welke score blokkeert mijn BTC setup?") is True
     assert service.looks_like_daily_coach_request("Welke score blokkeert mijn BTC setup?") is False
+    assert service.looks_like_daily_score_refresh_request("Ververs daily scores voor BTC") is True
+    assert service.looks_like_bot_decision_request("Maak bot-decision voor BTC") is True
 
 
 def test_daily_coach_portfolio_scope_only_for_generic_briefing_prompts():
@@ -1418,6 +1420,39 @@ def test_daily_data_readiness_explains_config_gaps_even_when_scores_exist():
     assert readiness["config_gaps"] == ["market"]
     assert "Daily scores zijn beschikbaar" in readiness["message"]
     assert "market" in readiness["message"]
+
+
+def test_daily_follow_up_actions_handoff_to_existing_flows():
+    service = _service()
+
+    actions = service._daily_follow_up_actions(
+        "BTC",
+        {"status": "ready_with_gaps", "config_gaps": ["macro", "technical"]},
+        [{"category": "macro"}],
+        [],
+    )
+
+    handoffs = [action["handoff"] for action in actions]
+    assert "indicator_config" in handoffs
+    assert "daily_score_refresh" in handoffs
+    assert "indicator_insight" in handoffs
+    assert "bot_decision" in handoffs
+    assert any(action["prompt"] == "Voeg Bitcoin Dominance toe aan macro" for action in actions)
+
+
+def test_portfolio_follow_up_actions_include_guided_briefing_handoffs():
+    service = _service()
+
+    actions = service._portfolio_follow_up_actions(
+        [{"asset": "BTC"}],
+        {"config_gap_assets": ["BTC"]},
+    )
+
+    prompts = [action["prompt"] for action in actions]
+    assert "Voeg Bitcoin Dominance toe aan macro" in prompts
+    assert "Ververs daily scores" in prompts
+    assert "Waarom blokkeert macro mijn BTC setup?" in prompts
+    assert "Maak bot-decision voor BTC" in prompts
 
 
 def test_daily_coach_analysis_waits_when_setup_has_blockers():
