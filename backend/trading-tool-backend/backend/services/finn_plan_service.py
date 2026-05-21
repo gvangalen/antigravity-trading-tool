@@ -4199,6 +4199,9 @@ class FinnPlanService:
         analysis = (daily.get("state") or {}).get("analysis") or {}
         mission = self._build_mission_control_from_daily_analysis(analysis)
         activity_feed = await self._get_recent_finn_activity(user_id)
+        resolved_item_ids = await self._get_today_resolved_mission_item_ids(user_id)
+        if resolved_item_ids:
+            mission = self._filter_resolved_mission_items(mission, resolved_item_ids)
         return {
             "ok": True,
             "intent": "mission_control",
@@ -4316,6 +4319,45 @@ class FinnPlanService:
             for key, items in groups.items()
             if items
         ]
+
+    def _filter_resolved_mission_items(self, mission: Dict[str, Any], resolved_item_ids: set) -> Dict[str, Any]:
+        workqueue = [
+            item for item in mission.get("workqueue", [])
+            if item.get("id") not in resolved_item_ids
+        ]
+        mission = {**mission, "workqueue": workqueue}
+        mission["workqueue_groups"] = self._mission_workqueue_groups(workqueue)
+        mission["summary"] = {
+            **(mission.get("summary") or {}),
+            "workqueue_count": len(workqueue),
+        }
+        return mission
+
+    async def _get_today_resolved_mission_item_ids(self, user_id: int) -> set:
+        if not self.session:
+            return set()
+        day_key = _utc_now().date().isoformat()
+        rows = await self.session.execute(text("""
+            SELECT payload
+            FROM ai_pending_actions
+            WHERE user_id = :user_id
+              AND status = 'executed'
+              AND payload->'action'->>'type' = 'resolve_mission_item'
+              AND payload->'result'->>'day_key' = :day_key
+        """), {"user_id": user_id, "day_key": day_key})
+        item_ids = set()
+        for row in rows.fetchall():
+            payload = row._mapping.get("payload") or {}
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except json.JSONDecodeError:
+                    payload = {}
+            result = payload.get("result") if isinstance(payload, dict) else {}
+            source_item_id = (result or {}).get("source_item_id")
+            if source_item_id:
+                item_ids.add(source_item_id)
+        return item_ids
 
     def _mission_bot_review_item(self, decision: Dict[str, Any], item: Dict[str, Any]) -> Dict[str, Any]:
         asset = decision.get("symbol") or item.get("asset") or "BTC"
@@ -4470,6 +4512,7 @@ class FinnPlanService:
             "skip_bot_decision": "Bot-decision overgeslagen",
             "paper_execute_bot_decision": "Paper execution verwerkt",
             "live_preflight_bot_decision": "Live preflight gecontroleerd",
+            "resolve_mission_item": "Mission Control item bijgewerkt",
         }
         label = action.get("label") or title_by_type.get(action_type) or action_type.replace("_", " ")
         outcome = result.get("message") or result.get("response")
@@ -4512,6 +4555,10 @@ class FinnPlanService:
     def _mission_activity_resolve_state(self, status: Any, result_status: Any, action_type: str) -> str:
         normalized_status = str(status or "").lower()
         normalized_result = str(result_status or "").lower()
+        if action_type == "resolve_mission_item":
+            if normalized_result in {"skipped", "monitor_today", "waiting_for_data"}:
+                return normalized_result
+            return "resolved"
         if normalized_result in {"skipped", "cancelled"} or action_type == "skip_bot_decision":
             return "skipped"
         if normalized_status == "pending":
@@ -4759,6 +4806,7 @@ class FinnPlanService:
             "title": f"Review bot-decision #{item.get('decision_id')}",
             "reason": item.get("summary") or "Bot-decision vraagt review.",
             "next_best_action": next_action,
+            "resolve_action": None,
             "freshness": freshness,
             "source_ids": {
                 "setup_id": item.get("setup_id"),
@@ -4789,6 +4837,17 @@ class FinnPlanService:
             "title": f"{plan.get('asset')} plan aandacht",
             "reason": plan.get("reason"),
             "next_best_action": plan.get("next_best_action"),
+            "resolve_action": self._mission_resolve_action(
+                f"{item_type}:{plan.get('asset')}:{(plan.get('setup') or {}).get('id') or 'none'}",
+                "monitor_today" if item_status == "blocked" else "waiting_for_data",
+                asset=plan.get("asset"),
+                label="Vandaag monitoren" if item_status == "blocked" else "Wachten op data",
+                reason=plan.get("reason"),
+                source_ids={
+                    "setup_id": (plan.get("setup") or {}).get("id"),
+                    "strategy_id": ((plan.get("lifecycle") or {}).get("strategy") or {}).get("id"),
+                },
+            ),
             "freshness": freshness,
             "source_ids": {
                 "setup_id": (plan.get("setup") or {}).get("id"),
@@ -4816,6 +4875,7 @@ class FinnPlanService:
             "title": action.get("label") or "Finn actie",
             "reason": "Aanbevolen volgende stap vanuit Mission Control.",
             "next_best_action": action,
+            "resolve_action": None,
             "freshness": freshness,
             "source_ids": {
                 "setup_id": action.get("setup_id"),
@@ -4836,6 +4896,39 @@ class FinnPlanService:
         if "data" in label:
             return "data_gap"
         return "open_action"
+
+    def _mission_resolve_action(
+        self,
+        item_id: str,
+        resolution: str,
+        *,
+        asset: Optional[str] = None,
+        label: str = "Markeer afgehandeld",
+        reason: Optional[str] = None,
+        source_ids: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "id": self._maintenance_action_id("resolve_mission_item", [item_id, resolution, _utc_now().date().isoformat()]),
+            "type": "resolve_mission_item",
+            "label": label,
+            "payload": {
+                "source_item_id": item_id,
+                "resolution": resolution,
+                "asset": asset,
+                "reason": reason,
+                "source_ids": source_ids or {},
+                "day_key": _utc_now().date().isoformat(),
+            },
+            "risk_level": "low",
+            "requires_confirmation": False,
+            "autonomy_level": "user_initiated",
+            "guardrails": {
+                "requires_confirmation": False,
+                "can_execute_without_user": False,
+                "writes_trading_config": False,
+                "executes_order": False,
+            },
+        }
 
     def _mission_resolve_state(
         self,
@@ -5299,6 +5392,8 @@ class FinnPlanService:
             return await self._execute_paper_bot_decision_action(user_id, action)
         if action and action.get("type") == "live_preflight_bot_decision":
             return await self._execute_live_preflight_bot_decision_action(user_id, action)
+        if action and action.get("type") == "resolve_mission_item":
+            return await self._execute_resolve_mission_item_action(user_id, action)
         if action and action.get("type") == "configure_indicator":
             return await self._execute_indicator_config_action(user_id, action)
         if action and action.get("type") == "create_bot":
@@ -5694,6 +5789,47 @@ class FinnPlanService:
         }
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         return result
+
+    async def _execute_resolve_mission_item_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        payload = action.get("payload") or {}
+        source_item_id = str(payload.get("source_item_id") or "").strip()
+        resolution = str(payload.get("resolution") or "resolved").strip()
+        day_key = str(payload.get("day_key") or _utc_now().date().isoformat())
+        if not source_item_id:
+            raise HTTPException(422, "source_item_id is verplicht.")
+        allowed = {"resolved", "skipped", "monitor_today", "waiting_for_data"}
+        if resolution not in allowed:
+            raise HTTPException(422, "Ongeldige resolve status.")
+        action_id = f"{action.get('id') or self._maintenance_action_id('resolve_mission_item', [source_item_id, resolution, day_key])}-u{user_id}"
+        acquired = await self._try_create_pending_action(user_id, action_id, action)
+        if not acquired:
+            existing_result = await self._wait_for_action_result(user_id, action_id)
+            if existing_result:
+                return existing_result
+            raise HTTPException(409, "Deze Mission Control actie wordt al verwerkt. Probeer zo opnieuw.")
+
+        result = {
+            "ok": True,
+            "message": self._mission_resolve_message(resolution),
+            "action_id": action_id,
+            "source_item_id": source_item_id,
+            "resolution": resolution,
+            "status": resolution,
+            "asset": payload.get("asset"),
+            "day_key": day_key,
+            "source_ids": payload.get("source_ids") or {},
+            "verified": {"mission_item_resolved": True},
+        }
+        await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
+        return result
+
+    def _mission_resolve_message(self, resolution: str) -> str:
+        return {
+            "resolved": "Mission Control item is afgehandeld voor vandaag.",
+            "skipped": "Mission Control item is overgeslagen en vastgelegd.",
+            "monitor_today": "Mission Control item staat op monitoren voor vandaag.",
+            "waiting_for_data": "Mission Control item wacht op data en is voor nu uit je werkqueue gehaald.",
+        }.get(resolution, "Mission Control item is bijgewerkt.")
 
     async def _execute_paper_bot_decision_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
         payload = action.get("payload") or {}

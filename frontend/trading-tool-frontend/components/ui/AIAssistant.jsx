@@ -294,6 +294,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     if (handoff === "bot_decision_review") return <ListChecks size={11} className="text-violet-500 shrink-0" />;
     if (handoff === "bot_execution_decision") return <Shield size={11} className="text-rose-500 shrink-0" />;
     if (handoff === "indicator_insight") return <Brain size={11} className="text-amber-500 shrink-0" />;
+    if (handoff === "resolve_mission_item") return <CheckCircle2 size={11} className="text-emerald-500 shrink-0" />;
     return <Zap size={11} className="text-amber-500 shrink-0" />;
   };
 
@@ -391,55 +392,77 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     return "border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/30";
   };
 
-  const renderMissionWorkqueueItem = (item) => (
-    <div key={item.id} className={`rounded-xl border px-3 py-2 ${missionItemTone(item)}`}>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 leading-tight">
-          {item.title}
-        </span>
-        <span className={`text-[8px] font-black uppercase tracking-widest ${
-          item.priority === "high" ? "text-rose-600" : item.priority === "medium" ? "text-amber-600" : "text-emerald-600"
-        }`}>
-          {item.priority}
-        </span>
-      </div>
-      <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
-        {item.reason}
-      </p>
-      <div className="mt-2 flex flex-wrap gap-1">
-        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-          {missionResolveLabel(item.resolve_state || item.status)}
-        </span>
-        {item.resolve_state && item.status && item.resolve_state !== item.status && (
-          <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-400">
-            {item.status}
+  const missionPrimaryAction = (item) => item.next_best_action?.prompt ? item.next_best_action : item.resolve_action;
+
+  const handleMissionPrimaryAction = async (action) => {
+    if (!action) return;
+    if (action.prompt) {
+      await handleFollowUpAction(action);
+      return;
+    }
+    if (action.type) {
+      await handleExecuteAction(action);
+    }
+  };
+
+  const renderMissionWorkqueueItem = (item) => {
+    const action = missionPrimaryAction(item);
+    return (
+      <div key={item.id} className={`rounded-xl border px-3 py-2 ${missionItemTone(item)}`}>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 leading-tight">
+            {item.title}
           </span>
-        )}
-        {item.freshness?.status && (
-          <span className={`rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest ${
-            item.freshness.status === "stale" ? "text-rose-600" : item.freshness.status === "aging" ? "text-amber-600" : "text-slate-500 dark:text-slate-400"
+          <span className={`text-[8px] font-black uppercase tracking-widest ${
+            item.priority === "high" ? "text-rose-600" : item.priority === "medium" ? "text-amber-600" : "text-emerald-600"
           }`}>
-            {item.freshness.label || item.freshness.status}
+            {item.priority}
           </span>
-        )}
-        {item.asset && (
+        </div>
+        <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
+          {item.reason}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-1">
           <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            {item.asset}
+            {missionResolveLabel(item.resolve_state || item.status)}
           </span>
-        )}
-        {typeof item.health_score === "number" && (
-          <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            health {item.health_score}
-          </span>
+          {item.resolve_state && item.status && item.resolve_state !== item.status && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-400">
+              {item.status}
+            </span>
+          )}
+          {item.freshness?.status && (
+            <span className={`rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest ${
+              item.freshness.status === "stale" ? "text-rose-600" : item.freshness.status === "aging" ? "text-amber-600" : "text-slate-500 dark:text-slate-400"
+            }`}>
+              {item.freshness.label || item.freshness.status}
+            </span>
+          )}
+          {item.asset && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+              {item.asset}
+            </span>
+          )}
+          {typeof item.health_score === "number" && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+              health {item.health_score}
+            </span>
+          )}
+        </div>
+        {action && (
+          <button
+            type="button"
+            onClick={() => handleMissionPrimaryAction(action)}
+            disabled={executingAction}
+            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 shadow-sm transition-all hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 active:scale-[0.98] disabled:opacity-60"
+          >
+            {followUpIcon(action.handoff || action.type)}
+            <span className="normal-case tracking-normal text-[11px] leading-tight">{action.label}</span>
+          </button>
         )}
       </div>
-      {item.next_best_action?.prompt && (
-        <div className="mt-2">
-          {renderFollowUpButtons([item.next_best_action], true)}
-        </div>
-      )}
-    </div>
-  );
+    );
+  };
 
   useEffect(() => {
     const handleTrigger = (e) => {
@@ -916,6 +939,20 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           isError: !res?.verified?.live_preflight,
         }]);
         await loadInsight();
+        await loadMissionControl();
+        emitFinnRefreshSignals();
+        return;
+      }
+
+      if (action.type === "resolve_mission_item") {
+        if (!res?.ok || !res?.verified?.mission_item_resolved) {
+          throw new Error("Mission Control item is nog niet verifieerbaar afgehandeld.");
+        }
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          text: res.message || "Mission Control item bijgewerkt.",
+          intent: "mission_item_resolved",
+        }]);
         await loadMissionControl();
         emitFinnRefreshSignals();
         return;

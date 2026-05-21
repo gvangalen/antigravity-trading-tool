@@ -1521,6 +1521,8 @@ def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis
     assert any(item["type"] == "indicator_gap" for item in mission["workqueue"])
     blocked_item = next(item for item in mission["workqueue"] if item["type"] == "blocked_plan" and item["asset"] == "BTC")
     assert blocked_item["resolve_state"] == "monitor_today"
+    assert blocked_item["resolve_action"]["type"] == "resolve_mission_item"
+    assert blocked_item["resolve_action"]["payload"]["resolution"] == "monitor_today"
     assert mission["plan_health"][0]["asset"] == "ETH"
     btc_health = next(item for item in mission["plan_health"] if item["asset"] == "BTC")
     assert btc_health["status"] == "blocked"
@@ -1851,7 +1853,52 @@ def test_mission_workqueue_data_gap_waits_for_data():
     assert item["type"] == "data_gap"
     assert item["status"] == "blocked_by_data"
     assert item["resolve_state"] == "waiting_for_data"
+    assert item["resolve_action"]["payload"]["resolution"] == "waiting_for_data"
     assert item["freshness"]["status"] == "stale"
+
+
+def test_mission_control_filters_resolved_workqueue_items():
+    service = _service()
+    mission = {
+        "summary": {"workqueue_count": 2},
+        "workqueue": [
+            {"id": "blocked_plan:BTC:12", "type": "blocked_plan", "resolve_state": "monitor_today"},
+            {"id": "score_refresh:daily_score_refresh:BTC:abc", "type": "score_refresh", "resolve_state": "needs_user_confirmation"},
+        ],
+    }
+
+    filtered = service._filter_resolved_mission_items(mission, {"blocked_plan:BTC:12"})
+
+    assert filtered["summary"]["workqueue_count"] == 1
+    assert filtered["workqueue"][0]["type"] == "score_refresh"
+    assert filtered["workqueue_groups"][0]["key"] == "first"
+
+
+def test_mission_activity_item_marks_resolve_action_states():
+    service = _service()
+    item = service._mission_activity_item({
+        "id": "finn-resolve-1",
+        "status": "executed",
+        "created_at": datetime(2026, 5, 21, 12, 0, 0),
+        "payload": {
+            "action": {
+                "type": "resolve_mission_item",
+                "label": "Vandaag monitoren",
+                "payload": {"source_item_id": "blocked_plan:BTC:12"},
+            },
+            "result": {
+                "ok": True,
+                "message": "Mission Control item staat op monitoren voor vandaag.",
+                "status": "monitor_today",
+                "source_item_id": "blocked_plan:BTC:12",
+                "verified": {"mission_item_resolved": True},
+            },
+        },
+    })
+
+    assert item["type"] == "resolve_mission_item"
+    assert item["resolve_state"] == "monitor_today"
+    assert item["verified"]["mission_item_resolved"] is True
 
 
 def test_bot_decision_review_request_detection():
