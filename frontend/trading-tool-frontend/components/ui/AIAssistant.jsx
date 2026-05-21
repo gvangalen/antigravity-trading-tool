@@ -47,7 +47,25 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   const messagesEndRef = useRef(null);
   const scrollRef = useRef(null);
   const loadedFinnStateRef = useRef(false);
+  const activeStreamIdRef = useRef(null);
   const [showReasoning, setShowReasoning] = useState(false);
+
+  const normalizeStreamingText = (text) => {
+    if (!text || text.length < 8) return text;
+    const evenLength = text.length - (text.length % 2);
+    if (evenLength < 8) return text;
+    let paired = 0;
+    for (let i = 0; i < evenLength; i += 2) {
+      if (text[i] === text[i + 1]) paired += 1;
+    }
+    const pairCount = evenLength / 2;
+    if (paired / pairCount < 0.8) return text;
+    let normalized = "";
+    for (let i = 0; i < evenLength; i += 2) {
+      normalized += text[i];
+    }
+    return normalized + (text.length % 2 ? text[text.length - 1] : "");
+  };
   
   // 🧭 Onboarding Context
   const { stepStatus, onboardingComplete } = useOnboarding();
@@ -458,11 +476,15 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       setMessages(prev => [...prev, { role: "user", text: activeQuery }]);
     }
 
+    const streamId = `stream-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    activeStreamIdRef.current = streamId;
+
     // Append initial empty assistant bubble
     setMessages(prev => [...prev, { 
       role: "assistant", 
       text: "", 
-      isComplete: false 
+      isComplete: false,
+      streamId,
     }]);
 
     try {
@@ -477,41 +499,50 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         cleanHistory,
         (token) => {
           // onChunk
+          if (activeStreamIdRef.current !== streamId) return;
           setMessages(prev => {
             const copy = [...prev];
-            const lastMsg = copy[copy.length - 1];
-            if (lastMsg && lastMsg.role === "assistant") {
-              lastMsg.text += token;
+            const msgIndex = copy.findIndex(message => message.streamId === streamId);
+            if (msgIndex >= 0 && copy[msgIndex].role === "assistant" && copy[msgIndex].isComplete === false) {
+              copy[msgIndex] = {
+                ...copy[msgIndex],
+                text: normalizeStreamingText(`${copy[msgIndex].text || ""}${token || ""}`),
+              };
             }
             return copy;
           });
         },
         (envelope) => {
           // onEnvelope
+          if (activeStreamIdRef.current !== streamId) return;
           setMessages(prev => {
             const copy = [...prev];
-            const lastMsg = copy[copy.length - 1];
-            if (lastMsg && lastMsg.role === "assistant") {
-              lastMsg.text = envelope.response;
-              lastMsg.intent = envelope.intent;
-              lastMsg.action = envelope.action;
-              lastMsg.draft = envelope.draft;
-              lastMsg.actions = Array.isArray(envelope.actions)
+            const msgIndex = copy.findIndex(message => message.streamId === streamId);
+            if (msgIndex >= 0 && copy[msgIndex].role === "assistant") {
+              copy[msgIndex] = {
+                ...copy[msgIndex],
+                text: envelope.response,
+                intent: envelope.intent,
+                action: envelope.action,
+                draft: envelope.draft,
+                actions: Array.isArray(envelope.actions)
                 ? envelope.actions
                 : envelope.action
                   ? [envelope.action]
-                  : [];
-              lastMsg.missingFields = envelope.missing_fields || [];
-              lastMsg.invalidFields = envelope.invalid_fields || [];
-              lastMsg.nextQuestion = envelope.next_question || null;
-              lastMsg.canConfirm = envelope.can_confirm;
-              lastMsg.suggestedActions = envelope.suggested_actions || [];
-              lastMsg.reasoning = envelope.reasoning;
-              lastMsg.state = envelope.state || null;
-              lastMsg.isComplete = true;
+                  : [],
+                missingFields: envelope.missing_fields || [],
+                invalidFields: envelope.invalid_fields || [],
+                nextQuestion: envelope.next_question || null,
+                canConfirm: envelope.can_confirm,
+                suggestedActions: envelope.suggested_actions || [],
+                reasoning: envelope.reasoning,
+                state: envelope.state || null,
+                isComplete: true,
+              };
             }
             return copy;
           });
+          activeStreamIdRef.current = null;
 
           if (["plan_creation_cancelled", "strategy_creation_cancelled", "bot_creation_cancelled", "indicator_config_cancelled"].includes(envelope.intent)) {
             setFinnDraft(null);
@@ -528,31 +559,43 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         },
         (errorMessage) => {
           // onError
+          if (activeStreamIdRef.current !== streamId) return;
           setMessages(prev => {
             const copy = [...prev];
-            const lastMsg = copy[copy.length - 1];
-            if (lastMsg && lastMsg.role === "assistant") {
-              lastMsg.text = "⚠️ " + errorMessage;
-              lastMsg.isError = true;
-              lastMsg.isComplete = true;
+            const msgIndex = copy.findIndex(message => message.streamId === streamId);
+            if (msgIndex >= 0 && copy[msgIndex].role === "assistant") {
+              copy[msgIndex] = {
+                ...copy[msgIndex],
+                text: "⚠️ " + errorMessage,
+                isError: true,
+                isComplete: true,
+              };
             }
             return copy;
           });
+          activeStreamIdRef.current = null;
         }
       );
     } catch (err) {
+      if (activeStreamIdRef.current !== streamId) return;
       setMessages(prev => {
         const copy = [...prev];
-        const lastMsg = copy[copy.length - 1];
-        if (lastMsg && lastMsg.role === "assistant") {
-          lastMsg.text = "⚠️ Failed to retrieve analysis. Please try again.";
-          lastMsg.isError = true;
-          lastMsg.isComplete = true;
+        const msgIndex = copy.findIndex(message => message.streamId === streamId);
+        if (msgIndex >= 0 && copy[msgIndex].role === "assistant") {
+          copy[msgIndex] = {
+            ...copy[msgIndex],
+            text: "⚠️ Failed to retrieve analysis. Please try again.",
+            isError: true,
+            isComplete: true,
+          };
         }
         return copy;
       });
+      activeStreamIdRef.current = null;
     } finally {
-      setLoading(false);
+      if (activeStreamIdRef.current === streamId || activeStreamIdRef.current === null) {
+        setLoading(false);
+      }
     }
   };
 
