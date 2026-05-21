@@ -1678,7 +1678,58 @@ def test_mission_workqueue_dedupes_actions_and_preserves_priority_order():
     assert queue[0]["type"] == "score_refresh"
     assert queue[0]["status"] == "needs_user_confirmation"
     assert queue[0]["next_best_action"]["handoff"] == "daily_score_refresh"
+    assert queue[0]["sort_rank"] == queue[0]["priority_rank"]
     assert queue[1]["priority"] == "low"
+    assert queue[1]["freshness"]["status"] == "unknown"
+
+
+def test_mission_workqueue_freshness_marks_fresh_bot_decision():
+    service = _service()
+    fresh_timestamp = (_utc_now() - timedelta(minutes=30)).isoformat()
+    review = service._mission_bot_review_item(
+        {
+            "id": 30,
+            "bot_id": 9,
+            "symbol": "BTC",
+            "action": "buy",
+            "status": "planned",
+            "created_at": fresh_timestamp,
+        },
+        {"asset": "BTC", "setup": {"id": 12}},
+    )
+
+    item = service._mission_workqueue_from_bot_review(review)
+
+    assert item["priority"] == "high"
+    assert item["status"] == "review_ready"
+    assert item["priority_rank"] == 8
+    assert item["sort_rank"] == 8
+    assert item["freshness"]["status"] == "fresh"
+    assert 25 <= item["freshness"]["age_minutes"] <= 35
+
+
+def test_mission_workqueue_freshness_marks_aging_bot_decision():
+    service = _service()
+    aging_timestamp = (_utc_now() - timedelta(hours=3)).isoformat().replace("+00:00", "Z")
+    review = service._mission_bot_review_item(
+        {
+            "id": 31,
+            "bot_id": 9,
+            "symbol": "BTC",
+            "action": "buy",
+            "status": "planned",
+            "updated_at": aging_timestamp,
+        },
+        {"asset": "BTC", "setup": {"id": 12}},
+    )
+
+    item = service._mission_workqueue_from_bot_review(review)
+
+    assert item["status"] == "review_ready"
+    assert item["priority_rank"] == 8
+    assert item["sort_rank"] == 8
+    assert item["freshness"]["status"] == "aging"
+    assert item["freshness"]["age_minutes"] >= 180
 
 
 def test_mission_workqueue_freshness_marks_stale_bot_decision():
@@ -1700,6 +1751,8 @@ def test_mission_workqueue_freshness_marks_stale_bot_decision():
 
     assert item["priority"] == "high"
     assert item["status"] == "stale"
+    assert item["priority_rank"] == 5
+    assert item["sort_rank"] == 5
     assert item["freshness"]["status"] == "stale"
     assert item["freshness"]["age_minutes"] >= 420
 

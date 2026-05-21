@@ -4690,6 +4690,7 @@ class FinnPlanService:
             "type": "bot_decision",
             "priority": priority,
             "priority_rank": priority_rank,
+            "sort_rank": priority_rank,
             "status": "stale" if freshness.get("status") == "stale" else "review_ready",
             "asset": item.get("asset"),
             "title": f"Review bot-decision #{item.get('decision_id')}",
@@ -4711,11 +4712,13 @@ class FinnPlanService:
         item_type = "data_gap" if status == "data_missing" else "blocked_plan"
         priority = "high" if status == "blocked" else "medium"
         freshness = self._mission_freshness(None, fallback_status="stale" if status == "data_missing" else "unknown")
+        priority_rank = 9 if priority == "high" else 25
         return {
             "id": f"{item_type}:{plan.get('asset')}:{(plan.get('setup') or {}).get('id') or 'none'}",
             "type": item_type,
             "priority": priority,
-            "priority_rank": 9 if priority == "high" else 25,
+            "priority_rank": priority_rank,
+            "sort_rank": priority_rank,
             "status": "blocked" if status == "blocked" else "blocked_by_data",
             "asset": plan.get("asset"),
             "title": f"{plan.get('asset')} plan aandacht",
@@ -4734,11 +4737,13 @@ class FinnPlanService:
         item_type = self._mission_workqueue_action_type(action)
         priority = "medium" if action.get("requires_confirmation") else "low"
         freshness = self._mission_freshness(None, fallback_status="unknown")
+        priority_rank = action.get("priority_rank", 60) + (0 if priority == "medium" else 10)
         return {
             "id": f"{item_type}:{action.get('handoff')}:{action.get('asset') or 'portfolio'}:{hashlib.sha1(str(action.get('prompt') or '').encode('utf-8')).hexdigest()[:10]}",
             "type": item_type,
             "priority": priority,
-            "priority_rank": action.get("priority_rank", 60) + (0 if priority == "medium" else 10),
+            "priority_rank": priority_rank,
+            "sort_rank": priority_rank,
             "status": "needs_user_confirmation" if action.get("requires_confirmation") else "new",
             "asset": action.get("asset"),
             "title": action.get("label") or "Finn actie",
