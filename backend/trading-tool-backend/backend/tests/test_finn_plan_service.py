@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -1577,6 +1578,41 @@ def test_mission_control_excludes_handled_bot_decisions():
     )
     assert handled["review_status"] == "handled"
     assert not any(action["handoff"] == "bot_execution_decision" for action in handled["review_actions"])
+
+
+def test_mission_activity_item_summarizes_executed_action():
+    service = _service()
+    item = service._mission_activity_item({
+        "id": "finn-maint-123-u7",
+        "status": "executed",
+        "created_at": datetime(2026, 5, 21, 12, 0, 0),
+        "payload": {
+            "updated_at": "2026-05-21T12:01:00+00:00",
+            "action": {
+                "type": "skip_bot_decision",
+                "label": "Bot-decision overslaan",
+                "requires_confirmation": True,
+                "payload": {"bot_id": 9, "decision_id": 22},
+            },
+            "result": {
+                "ok": True,
+                "message": "Bot-decision #22 is overgeslagen.",
+                "status": "skipped",
+                "bot_id": 9,
+                "decision_id": 22,
+                "verified": {"bot_decision_skipped": True},
+            },
+        },
+    })
+
+    assert item["type"] == "skip_bot_decision"
+    assert item["label"] == "Bot-decision overslaan"
+    assert item["status"] == "executed"
+    assert item["result_status"] == "skipped"
+    assert item["outcome"] == "Bot-decision #22 is overgeslagen."
+    assert item["entity_ids"]["bot_id"] == 9
+    assert item["entity_ids"]["decision_id"] == 22
+    assert item["verified"]["bot_decision_skipped"] is True
 
 
 def test_bot_decision_review_request_detection():

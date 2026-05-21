@@ -1384,6 +1384,49 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
               </div>
             )}
 
+            {Array.isArray(missionControl.activity_feed) && missionControl.activity_feed.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-400">
+                  <CheckCircle2 size={11} className="text-emerald-500" />
+                  Recente Finn Acties
+                </div>
+                {missionControl.activity_feed.slice(0, 4).map((item) => (
+                  <div key={item.id} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 leading-tight">
+                        {item.label || item.type}
+                      </span>
+                      <span className={`text-[8px] font-black uppercase tracking-widest ${
+                        item.status === "executed" ? "text-emerald-600" : item.status === "failed" ? "text-rose-600" : "text-amber-600"
+                      }`}>
+                        {item.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
+                      {item.outcome}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {item.asset && (
+                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                          {item.asset}
+                        </span>
+                      )}
+                      {item.entity_ids?.bot_id && (
+                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                          bot #{item.entity_ids.bot_id}
+                        </span>
+                      )}
+                      {item.entity_ids?.decision_id && (
+                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                          decision #{item.entity_ids.decision_id}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {getMissionOpenActions().length > 0 && renderFollowUpButtons(getMissionOpenActions(), true)}
           </div>
         )}

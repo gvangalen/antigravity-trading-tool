@@ -4164,6 +4164,7 @@ class FinnPlanService:
         )
         analysis = (daily.get("state") or {}).get("analysis") or {}
         mission = self._build_mission_control_from_daily_analysis(analysis)
+        activity_feed = await self._get_recent_finn_activity(user_id)
         return {
             "ok": True,
             "intent": "mission_control",
@@ -4173,6 +4174,7 @@ class FinnPlanService:
             "open_actions": mission["open_actions"],
             "plan_health": mission["plan_health"],
             "bot_review_queue": mission["bot_review_queue"],
+            "activity_feed": activity_feed,
             "data_readiness": analysis.get("data_readiness") or {},
             "source": {
                 "flow": "daily_coach",
@@ -4329,6 +4331,91 @@ class FinnPlanService:
             "updated_at": decision.get("updated_at"),
             "prompt": f"Leg bot-decision {decision_id} uit",
             "review_actions": review_actions,
+        }
+
+    async def _get_recent_finn_activity(self, user_id: int, limit: int = 8) -> List[Dict[str, Any]]:
+        if not self.session:
+            return []
+        rows = await self.session.execute(text("""
+            SELECT id, status, payload, created_at
+            FROM ai_pending_actions
+            WHERE user_id = :user_id
+              AND id LIKE 'finn%'
+              AND status IN ('pending', 'executed', 'failed')
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """), {"user_id": user_id, "limit": max(1, min(limit, 20))})
+        return [self._mission_activity_item(dict(row._mapping)) for row in rows.fetchall()]
+
+    def _mission_activity_item(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        payload = row.get("payload") or {}
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError:
+                payload = {}
+        action = payload.get("action") or {}
+        result = payload.get("result") or {}
+        action_type = action.get("type") or result.get("type") or "unknown"
+        status = row.get("status") or "pending"
+        asset = (
+            action.get("asset")
+            or (action.get("payload") or {}).get("asset")
+            or result.get("asset")
+            or result.get("symbol")
+        )
+        assets = (action.get("payload") or {}).get("assets") or result.get("assets")
+        if not asset and isinstance(assets, list) and assets:
+            asset = assets[0]
+        result_status = result.get("status")
+        verified = result.get("verified") if isinstance(result.get("verified"), dict) else {}
+
+        title_by_type = {
+            "create_plan": "Setup-flow uitgevoerd",
+            "create_strategy": "Strategie opgeslagen",
+            "create_bot": "Bot opgeslagen",
+            "configure_indicator": "Indicator-config opgeslagen",
+            "refresh_daily_scores": "Daily scores ververst",
+            "generate_bot_decision": "Bot-decision gemaakt",
+            "skip_bot_decision": "Bot-decision overgeslagen",
+            "paper_execute_bot_decision": "Paper execution verwerkt",
+            "live_preflight_bot_decision": "Live preflight gecontroleerd",
+        }
+        label = action.get("label") or title_by_type.get(action_type) or action_type.replace("_", " ")
+        outcome = result.get("message") or result.get("response")
+        if not outcome:
+            if status == "pending":
+                outcome = "Wacht nog op bevestiging of uitvoering."
+            elif status == "failed":
+                outcome = "Actie is niet afgerond."
+            elif result_status:
+                outcome = f"Status: {result_status}."
+            else:
+                outcome = "Actie afgerond en vastgelegd."
+
+        created_at = row.get("created_at")
+        if hasattr(created_at, "isoformat"):
+            created_at = created_at.isoformat()
+
+        return {
+            "id": row.get("id"),
+            "type": action_type,
+            "label": label,
+            "status": status,
+            "asset": asset,
+            "created_at": created_at,
+            "updated_at": payload.get("updated_at"),
+            "result_status": result_status,
+            "outcome": outcome,
+            "verified": verified,
+            "entity_ids": {
+                "setup_id": result.get("setup_id") or (action.get("payload") or {}).get("setup_id"),
+                "strategy_id": result.get("strategy_id") or (action.get("payload") or {}).get("strategy_id"),
+                "bot_id": result.get("bot_id") or (action.get("payload") or {}).get("bot_id"),
+                "decision_id": result.get("decision_id") or (action.get("payload") or {}).get("decision_id"),
+            },
+            "requires_confirmation": bool(action.get("requires_confirmation")),
+            "risk_level": action.get("risk_level"),
         }
 
     def _mission_plan_health_entry(self, item: Dict[str, Any]) -> Dict[str, Any]:
