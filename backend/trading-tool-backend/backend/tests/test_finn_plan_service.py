@@ -1,9 +1,10 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
 from backend.services.finn_plan_service import FinnPlanService
+from backend.services.finn_plan_service import _utc_now
 from backend.services.finn_plan_service import empty_indicator_config_draft
 from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.strategy_service import StrategyService
@@ -1503,8 +1504,11 @@ def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis
     assert mission["summary"]["open_action_count"] >= 1
     assert mission["summary"]["workqueue_count"] >= 2
     assert mission["workqueue"][0]["type"] == "bot_decision"
+    assert mission["workqueue"][0]["priority"] == "high"
     assert mission["workqueue"][0]["status"] == "review_ready"
     assert any(item["type"] == "blocked_plan" and item["asset"] == "BTC" for item in mission["workqueue"])
+    assert any(item["type"] == "score_refresh" for item in mission["workqueue"])
+    assert any(item["type"] == "indicator_gap" for item in mission["workqueue"])
     assert mission["plan_health"][0]["asset"] == "ETH"
     btc_health = next(item for item in mission["plan_health"] if item["asset"] == "BTC")
     assert btc_health["status"] == "blocked"
@@ -1671,9 +1675,33 @@ def test_mission_workqueue_dedupes_actions_and_preserves_priority_order():
     ])
 
     assert len(queue) == 2
+    assert queue[0]["type"] == "score_refresh"
     assert queue[0]["status"] == "needs_user_confirmation"
     assert queue[0]["next_best_action"]["handoff"] == "daily_score_refresh"
     assert queue[1]["priority"] == "low"
+
+
+def test_mission_workqueue_freshness_marks_stale_bot_decision():
+    service = _service()
+    old_timestamp = (_utc_now() - timedelta(hours=7)).isoformat()
+    review = service._mission_bot_review_item(
+        {
+            "id": 30,
+            "bot_id": 9,
+            "symbol": "BTC",
+            "action": "buy",
+            "status": "planned",
+            "created_at": old_timestamp,
+        },
+        {"asset": "BTC", "setup": {"id": 12}},
+    )
+
+    item = service._mission_workqueue_from_bot_review(review)
+
+    assert item["priority"] == "high"
+    assert item["status"] == "stale"
+    assert item["freshness"]["status"] == "stale"
+    assert item["freshness"]["age_minutes"] >= 420
 
 
 def test_mission_activity_item_summarizes_executed_action():

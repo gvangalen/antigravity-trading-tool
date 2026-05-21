@@ -4678,17 +4678,24 @@ class FinnPlanService:
             (action for action in item.get("review_actions") or [] if action.get("handoff") == "bot_decision_review"),
             (item.get("review_actions") or [None])[0],
         )
-        priority = "high" if item.get("risk_level") == "high" else "medium"
+        priority = "high"
+        freshness = self._mission_freshness(
+            item.get("updated_at") or item.get("created_at"),
+            stale_after_minutes=360,
+            aging_after_minutes=120,
+        )
+        priority_rank = 5 if freshness.get("status") == "stale" else 8
         return {
             "id": f"bot_decision:{item.get('decision_id')}",
             "type": "bot_decision",
             "priority": priority,
-            "priority_rank": 5 if priority == "high" else 8,
-            "status": "review_ready",
+            "priority_rank": priority_rank,
+            "status": "stale" if freshness.get("status") == "stale" else "review_ready",
             "asset": item.get("asset"),
             "title": f"Review bot-decision #{item.get('decision_id')}",
             "reason": item.get("summary") or "Bot-decision vraagt review.",
             "next_best_action": next_action,
+            "freshness": freshness,
             "source_ids": {
                 "setup_id": item.get("setup_id"),
                 "strategy_id": item.get("strategy_id"),
@@ -4703,6 +4710,7 @@ class FinnPlanService:
             return None
         item_type = "data_gap" if status == "data_missing" else "blocked_plan"
         priority = "high" if status == "blocked" else "medium"
+        freshness = self._mission_freshness(None, fallback_status="stale" if status == "data_missing" else "unknown")
         return {
             "id": f"{item_type}:{plan.get('asset')}:{(plan.get('setup') or {}).get('id') or 'none'}",
             "type": item_type,
@@ -4713,6 +4721,7 @@ class FinnPlanService:
             "title": f"{plan.get('asset')} plan aandacht",
             "reason": plan.get("reason"),
             "next_best_action": plan.get("next_best_action"),
+            "freshness": freshness,
             "source_ids": {
                 "setup_id": (plan.get("setup") or {}).get("id"),
                 "strategy_id": ((plan.get("lifecycle") or {}).get("strategy") or {}).get("id"),
@@ -4722,10 +4731,12 @@ class FinnPlanService:
         }
 
     def _mission_workqueue_from_action(self, action: Dict[str, Any]) -> Dict[str, Any]:
+        item_type = self._mission_workqueue_action_type(action)
         priority = "medium" if action.get("requires_confirmation") else "low"
+        freshness = self._mission_freshness(None, fallback_status="unknown")
         return {
-            "id": f"action:{action.get('handoff')}:{action.get('asset') or 'portfolio'}:{hashlib.sha1(str(action.get('prompt') or '').encode('utf-8')).hexdigest()[:10]}",
-            "type": "open_action",
+            "id": f"{item_type}:{action.get('handoff')}:{action.get('asset') or 'portfolio'}:{hashlib.sha1(str(action.get('prompt') or '').encode('utf-8')).hexdigest()[:10]}",
+            "type": item_type,
             "priority": priority,
             "priority_rank": action.get("priority_rank", 60) + (0 if priority == "medium" else 10),
             "status": "needs_user_confirmation" if action.get("requires_confirmation") else "new",
@@ -4733,10 +4744,79 @@ class FinnPlanService:
             "title": action.get("label") or "Finn actie",
             "reason": "Aanbevolen volgende stap vanuit Mission Control.",
             "next_best_action": action,
+            "freshness": freshness,
             "source_ids": {
                 "setup_id": action.get("setup_id"),
             },
         }
+
+    def _mission_workqueue_action_type(self, action: Dict[str, Any]) -> str:
+        handoff = action.get("handoff")
+        label = str(action.get("label") or action.get("prompt") or "").lower()
+        if handoff == "daily_score_refresh":
+            return "score_refresh"
+        if handoff == "indicator_config":
+            return "indicator_gap"
+        if handoff == "indicator_insight":
+            return "blocker_explanation"
+        if handoff == "bot_decision":
+            return "bot_decision_request"
+        if "data" in label:
+            return "data_gap"
+        return "open_action"
+
+    def _mission_freshness(
+        self,
+        timestamp: Any,
+        *,
+        stale_after_minutes: int = 360,
+        aging_after_minutes: int = 120,
+        fallback_status: str = "unknown",
+    ) -> Dict[str, Any]:
+        moment = self._parse_mission_timestamp(timestamp)
+        if not moment:
+            labels = {
+                "fresh": "actueel",
+                "aging": "wordt ouder",
+                "stale": "verouderd",
+                "unknown": "onbekend",
+            }
+            return {
+                "status": fallback_status,
+                "age_minutes": None,
+                "label": labels.get(fallback_status, fallback_status),
+                "source_timestamp": None,
+            }
+        now = _utc_now()
+        age_minutes = max(0, int((now - moment).total_seconds() // 60))
+        if age_minutes >= stale_after_minutes:
+            status = "stale"
+            label = f"{age_minutes} min oud"
+        elif age_minutes >= aging_after_minutes:
+            status = "aging"
+            label = f"{age_minutes} min oud"
+        else:
+            status = "fresh"
+            label = f"{age_minutes} min oud"
+        return {
+            "status": status,
+            "age_minutes": age_minutes,
+            "label": label,
+            "source_timestamp": moment.isoformat(),
+        }
+
+    def _parse_mission_timestamp(self, value: Any) -> Optional[datetime]:
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        if isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            except ValueError:
+                return None
+        return None
 
     def _dedupe_workqueue(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         seen = set()

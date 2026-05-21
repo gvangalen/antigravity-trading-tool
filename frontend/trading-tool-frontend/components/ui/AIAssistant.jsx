@@ -1307,6 +1307,13 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                       <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
                         {item.status}
                       </span>
+                      {item.freshness?.status && (
+                        <span className={`rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest ${
+                          item.freshness.status === "stale" ? "text-rose-600" : item.freshness.status === "aging" ? "text-amber-600" : "text-slate-500 dark:text-slate-400"
+                        }`}>
+                          {item.freshness.status}
+                        </span>
+                      )}
                       {item.asset && (
                         <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
                           {item.asset}
