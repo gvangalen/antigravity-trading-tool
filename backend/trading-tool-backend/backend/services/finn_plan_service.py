@@ -4660,7 +4660,7 @@ class FinnPlanService:
 
         plan_creates_7d = count_type(seven_day_items, "create_plan")
         strategy_changes_7d = count_type(seven_day_items, "create_strategy")
-        bot_changes_7d = count_type(seven_day_items, "create_bot")
+        bot_changes_7d = count_type(seven_day_items, "create_bot") + count_type(seven_day_items, "bot_config_update")
         indicator_changes_7d = count_type(seven_day_items, "configure_indicator")
         previous_configuration_changes_7d = (
             count_type(previous_seven_day_items, "create_plan")
@@ -5177,6 +5177,8 @@ class FinnPlanService:
             "skip_bot_decision": "Bot-decision overgeslagen",
             "paper_execute_bot_decision": "Paper execution verwerkt",
             "live_preflight_bot_decision": "Live preflight gecontroleerd",
+            "bot_config_update": "Bot risk-wijziging bevestigd",
+            "manual_order": "Manual order bevestigd",
             "resolve_mission_item": "Mission Control item bijgewerkt",
             "snooze_mission_item": "Mission Control item uitgesteld",
         }

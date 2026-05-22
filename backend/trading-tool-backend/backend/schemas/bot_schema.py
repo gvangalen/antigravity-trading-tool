@@ -36,6 +36,7 @@ class BotConfigUpdateSchema(BaseModel):
     daily_limit_eur: Optional[float] = None
     min_order_eur: Optional[float] = None
     max_order_eur: Optional[float] = None
+    risk_acknowledged: Optional[bool] = None
     
 class BotManualOrderSchema(BaseModel):
     bot_id: int
@@ -45,6 +46,7 @@ class BotManualOrderSchema(BaseModel):
     price: float
     value_eur: Optional[float] = None
     idempotency_key: Optional[str] = None
+    risk_acknowledged: bool = False
 
 class TradePlanUpsertSchema(BaseModel):
     entry_plan: List[Dict[str, Any]] = []

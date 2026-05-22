@@ -1,6 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
+from backend.schemas.bot_schema import BotManualOrderSchema
 from backend.services.bot_service import BotService
 
 
@@ -27,6 +28,23 @@ class _FakeSession:
             row = (self.duplicate_strategy_bot_id,) if self.duplicate_strategy_bot_id else None
             return _FakeResult(row)
         return _FakeResult(None)
+
+
+class _ManualOrderRepo:
+    async def get_bot_config(self, user_id, bot_id):
+        return {
+            "id": bot_id,
+            "name": "BTC Live Bot",
+            "is_live": True,
+            "is_active": True,
+            "mode": "auto",
+            "symbol": "BTC",
+            "budget_total_eur": 1000,
+            "budget_daily_limit_eur": 100,
+            "budget_min_order_eur": 10,
+            "budget_max_order_eur": 50,
+            "max_asset_exposure_pct": 100,
+        }
 
 
 def test_bot_payload_validation_normalizes_transactional_fields():
@@ -129,3 +147,62 @@ def test_bot_contract_exposes_consistent_top_level_ids_and_nested_strategy():
     assert contract["bot"]["strategy_id"] == 42
     assert contract["bot"]["strategy"]["id"] == 42
     assert contract["budget"]["total_eur"] == 1000
+
+
+def test_bot_update_pressure_event_detects_budget_live_and_mode_risk():
+    service = BotService(_FakeSession())
+    existing = {
+        "id": 9,
+        "strategy_id": 42,
+        "symbol": "BTC",
+        "mode": "manual",
+        "is_live": False,
+        "risk_profile": "balanced",
+        "budget_total_eur": 500,
+        "budget_daily_limit_eur": 50,
+        "budget_max_order_eur": 25,
+    }
+    merged = {
+        **existing,
+        "mode": "auto",
+        "is_live": True,
+        "risk_profile": "aggressive",
+        "budget_total_eur": 1000,
+        "budget_daily_limit_eur": 100,
+    }
+    updates = {
+        "mode": "auto",
+        "is_live": True,
+        "risk_profile": "aggressive",
+        "budget_total_eur": 1000,
+        "budget_daily_limit_eur": 100,
+    }
+
+    event = service._bot_update_pressure_event(existing, merged, updates)
+
+    assert event["type"] == "plan_deviation_attempt"
+    assert event["severity"] == "high"
+    assert any("budget_total_eur verhoogd" in reason for reason in event["reasons"])
+    assert any("bot naar live" in reason for reason in event["reasons"])
+    assert any("mode verhoogd" in reason for reason in event["reasons"])
+
+
+def test_live_manual_order_requires_idempotency_and_risk_acknowledgement():
+    service = BotService(_FakeSession())
+    service.repository = _ManualOrderRepo()
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.01, price=50000)
+
+    import asyncio
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=1))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_ORDER_IDEMPOTENCY_REQUIRED"
+
+    payload.idempotency_key = "manual-live-test-1"
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=1))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_ORDER_RISK_ACK_REQUIRED"
+    assert exc.value.detail["behavioral_event"]["type"] == "execution_pressure"

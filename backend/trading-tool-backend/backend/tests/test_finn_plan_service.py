@@ -2503,6 +2503,33 @@ def test_behavioral_insight_counts_override_events():
     assert any(signal["type"] == "execution_friction" for signal in insight["signals"])
 
 
+def test_behavioral_insight_counts_direct_bot_risk_update_events():
+    service = _service()
+    item = service._mission_activity_item({
+        "id": "finn-risk-abc123",
+        "status": "executed",
+        "created_at": _utc_now(),
+        "payload": {
+            "action": {"type": "bot_config_update"},
+            "result": {
+                "ok": True,
+                "behavioral_event": {
+                    "type": "plan_deviation_attempt",
+                    "severity": "medium",
+                    "reasons": ["budget_total_eur verhoogd van 0 naar 1000"],
+                },
+            },
+        },
+    })
+
+    insight = service._build_behavioral_insight_from_activity([item])
+
+    assert item["label"] == "Bot risk-wijziging bevestigd"
+    assert insight["metrics"]["bot_changes_7d"] == 1
+    assert insight["metrics"]["possible_overrides_7d"] == 1
+    assert insight["metrics"]["plan_deviation_events_7d"] == 1
+
+
 def test_bot_decision_review_request_detection():
     service = _service()
 

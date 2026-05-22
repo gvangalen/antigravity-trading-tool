@@ -1,7 +1,8 @@
 import logging
 import asyncio
 import json
-from datetime import date, timedelta, datetime
+import uuid
+from datetime import date, timedelta, datetime, timezone
 from typing import List, Dict, Any, Optional
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -19,6 +20,10 @@ from backend.engine.guardrails_engine import apply_guardrails
 from backend.services.exchange_service import ExchangeService
 
 logger = logging.getLogger(__name__)
+
+
+def _utc_db_timestamp() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 # =========================================================
 # SYNCHRONOUS WRAPPERS FOR LEGACY COMPONENTS/AGENTS
@@ -359,6 +364,7 @@ class BotService:
             raise HTTPException(404, "Bot niet gevonden")
 
         updates = payload.dict(exclude_unset=True)
+        risk_acknowledged = bool(updates.pop("risk_acknowledged", False))
         # Handle aliases
         if "total_eur" in updates: updates["budget_total_eur"] = updates.pop("total_eur")
         if "daily_limit_eur" in updates: updates["budget_daily_limit_eur"] = updates.pop("daily_limit_eur")
@@ -371,6 +377,16 @@ class BotService:
             merged[k] = v
 
         await self.validate_bot_payload(merged, user_id, is_update=True, bot_id=bot_id)
+        pressure_event = self._bot_update_pressure_event(existing, merged, updates)
+        if pressure_event and not risk_acknowledged:
+            raise HTTPException(
+                409,
+                {
+                    "code": "BOT_RISK_ACK_REQUIRED",
+                    "message": "Deze bot-wijziging verhoogt risico of automatisering. Bevestig bewust met risk_acknowledged=true.",
+                    "behavioral_event": pressure_event,
+                },
+            )
 
         updated_id = await self.repository.update_bot_config(user_id, bot_id, updates)
         if not updated_id:
@@ -378,7 +394,12 @@ class BotService:
             
         await self.session.commit()
         bot = await self.repository.get_bot_config(user_id, bot_id)
-        return {"ok": True, **self._bot_contract(bot)}
+        result = {"ok": True, **self._bot_contract(bot)}
+        if pressure_event:
+            result["risk_acknowledged"] = True
+            result["behavioral_event"] = pressure_event
+            await self._record_behavioral_risk_event(user_id, "bot_config_update", pressure_event)
+        return result
 
     async def delete_bot_config(self, bot_id: int, user_id: int) -> dict:
         deleted = await self.repository.delete_bot_config(user_id, bot_id)
@@ -386,6 +407,93 @@ class BotService:
             raise HTTPException(404, "Bot niet gevonden")
         await self.session.commit()
         return {"ok": True, "bot_id": bot_id, "deleted": True}
+
+    def _bot_update_pressure_event(self, existing: Dict[str, Any], merged: Dict[str, Any], updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        reasons: List[str] = []
+        for field in ["budget_total_eur", "budget_daily_limit_eur", "budget_max_order_eur", "max_asset_exposure_pct"]:
+            if field not in updates:
+                continue
+            before = self._as_float(existing.get(field))
+            after = self._as_float(merged.get(field))
+            if before is not None and after is not None and after > before:
+                reasons.append(f"{field} verhoogd van {before:g} naar {after:g}")
+
+        if "is_live" in updates and not bool(existing.get("is_live")) and bool(merged.get("is_live")):
+            reasons.append("bot naar live trading gezet")
+
+        mode_order = {"manual": 0, "semi-auto": 1, "auto": 2}
+        if "mode" in updates:
+            before_mode = str(existing.get("mode") or "manual").lower()
+            after_mode = str(merged.get("mode") or "manual").lower()
+            if mode_order.get(after_mode, 0) > mode_order.get(before_mode, 0):
+                reasons.append(f"bot mode verhoogd van {before_mode} naar {after_mode}")
+
+        risk_order = {"conservative": 0, "balanced": 1, "aggressive": 2}
+        if "risk_profile" in updates:
+            before_risk = str(existing.get("risk_profile") or "balanced").lower()
+            after_risk = str(merged.get("risk_profile") or "balanced").lower()
+            if risk_order.get(after_risk, 1) > risk_order.get(before_risk, 1):
+                reasons.append(f"risk_profile verhoogd van {before_risk} naar {after_risk}")
+
+        if not reasons:
+            return None
+        return {
+            "type": "plan_deviation_attempt",
+            "severity": "high" if bool(merged.get("is_live")) else "medium",
+            "asset": merged.get("symbol") or existing.get("symbol"),
+            "bot_id": existing.get("id"),
+            "strategy_id": merged.get("strategy_id") or existing.get("strategy_id"),
+            "reasons": reasons,
+            "source": "bot_config_update",
+        }
+
+    def _manual_order_pressure_event(self, bot: Dict[str, Any], payload: BotManualOrderSchema, notional: float) -> Dict[str, Any]:
+        return {
+            "type": "execution_pressure",
+            "severity": "high" if bot.get("is_live") else "medium",
+            "asset": payload.symbol,
+            "bot_id": payload.bot_id,
+            "decision_action": payload.side,
+            "reasons": [
+                "live manual order" if bot.get("is_live") else "manual order",
+                f"orderwaarde {notional:g} EUR",
+                f"side {payload.side}",
+            ],
+            "source": "manual_order",
+        }
+
+    def _as_float(self, value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    async def _record_behavioral_risk_event(self, user_id: int, action_type: str, event: Dict[str, Any]) -> None:
+        try:
+            now = _utc_db_timestamp()
+            payload = {
+                "action": {"type": action_type},
+                "result": {
+                    "ok": True,
+                    "behavioral_event": event,
+                },
+                "updated_at": now.isoformat(),
+            }
+            await self.session.execute(text("""
+                INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at)
+                VALUES (:id, :user_id, :type, CAST(:payload AS JSONB), 'executed', :expires_at)
+            """), {
+                "id": f"finn-risk-{uuid.uuid4().hex[:16]}",
+                "user_id": user_id,
+                "type": action_type,
+                "payload": json.dumps(payload),
+                "expires_at": now + timedelta(days=30),
+            })
+            await self.session.commit()
+        except Exception as exc:
+            logger.warning("Kon behavioral risk event niet loggen: %s", exc)
 
     # ==========================
     # BOT DECISIONS (TODAY/HISTORY)
@@ -650,6 +758,22 @@ class BotService:
         bot = await self.repository.get_bot_config(user_id, payload.bot_id)
         if not bot:
             raise HTTPException(404, "Bot niet gevonden")
+        if bot.get("is_live"):
+            if not payload.idempotency_key:
+                raise HTTPException(409, {
+                    "code": "LIVE_ORDER_IDEMPOTENCY_REQUIRED",
+                    "message": "Live manual orders vereisen een idempotency_key zodat retries geen dubbele order kunnen plaatsen.",
+                })
+            if not payload.risk_acknowledged:
+                raise HTTPException(409, {
+                    "code": "LIVE_ORDER_RISK_ACK_REQUIRED",
+                    "message": "Live manual orders vereisen bewuste risk acknowledgement.",
+                    "behavioral_event": self._manual_order_pressure_event(
+                        bot,
+                        payload,
+                        round(payload.quantity * payload.price, 2),
+                    ),
+                })
             
         # 2. Fetch current stats
         stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
@@ -803,9 +927,13 @@ class BotService:
         await self.repository.insert_bot_ledger(user_id, payload.bot_id, order_id, payload.symbol, cash_delta, qty_delta, payload.price)
         
         await self.session.commit()
+        behavioral_event = None
+        if bot.get("is_live"):
+            behavioral_event = self._manual_order_pressure_event(bot, payload, notional)
+            await self._record_behavioral_risk_event(user_id, "manual_order", behavioral_event)
         await asyncio.to_thread(sync_snapshot_all_for_user, user_id)
         
-        return {
+        result = {
             "ok": True, "order_id": order_id, "symbol": payload.symbol, "side": payload.side,
             "quantity": payload.quantity,
             "price": payload.price,
@@ -813,6 +941,10 @@ class BotService:
             "mode": "manual",
             "duplicate": False,
         }
+        if behavioral_event:
+            result["risk_acknowledged"] = True
+            result["behavioral_event"] = behavioral_event
+        return result
 
     def _validate_manual_order_payload(self, payload: BotManualOrderSchema) -> None:
         side = str(payload.side or "").lower().strip()
