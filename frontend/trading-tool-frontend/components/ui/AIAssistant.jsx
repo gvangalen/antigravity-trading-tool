@@ -1091,6 +1091,10 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     const strategyOptions = message.state?.strategy_options || [];
     const indicatorOptions = message.state?.indicator_options || draft.indicator_options || [];
     const changes = draft.changes || message.state?.changes || [];
+    const planDeviation = message.state?.plan_deviation || draft.plan_deviation || null;
+    const planDeviationRequiresAck = Boolean(planDeviation?.requires_ack && !planDeviation?.acknowledged);
+    const visibleMissingFields = (message.missingFields || []).filter((field) => field !== "plan_deviation_ack");
+    const visibleNextQuestion = message.nextQuestion === "plan_deviation_ack" ? null : message.nextQuestion;
 
     const rows = [
       ["Type", isFinnIndicator ? "indicator_config" : (isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type))],
@@ -1214,13 +1218,75 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             </div>
           </div>
         )}
-        {(message.missingFields?.length > 0 || message.invalidFields?.length > 0 || message.nextQuestion) && (
+        {planDeviation && (
+          <div className="rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/90 dark:bg-rose-950/25 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-300">
+                <Shield size={13} />
+                Plan Afwijking
+              </div>
+              <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest border ${
+                planDeviation.acknowledged
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+                  : "border-rose-200 bg-white/80 text-rose-700 dark:border-rose-900/60 dark:bg-slate-950/40 dark:text-rose-300"
+              }`}>
+                {planDeviation.acknowledged ? "Override bevestigd" : "Override vereist"}
+              </span>
+            </div>
+            <div className="space-y-1">
+              <div className="text-sm font-black text-slate-950 dark:text-slate-50">
+                Je houdt je nu niet aan je eigen plan.
+              </div>
+              <p className="text-xs font-semibold leading-relaxed text-rose-800 dark:text-rose-100">
+                {planDeviation.message || "Deze wijziging wijkt af van je huidige setup-context."}
+              </p>
+            </div>
+            {Array.isArray(planDeviation.reasons) && planDeviation.reasons.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-[9px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-300">Waarom Finn remt</div>
+                <div className="grid grid-cols-1 gap-1">
+                  {planDeviation.reasons.slice(0, 4).map((reason, index) => (
+                    <div key={`${reason}-${index}`} className="rounded-lg border border-rose-100 dark:border-rose-900/40 bg-white/75 dark:bg-slate-950/35 px-2.5 py-2 text-[11px] font-bold leading-snug text-slate-800 dark:text-slate-100">
+                      {reason}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {planDeviation.safe_alternative && (
+              <p className="text-[11px] font-bold leading-snug text-slate-700 dark:text-slate-200">
+                Veilige route: {planDeviation.safe_alternative}
+              </p>
+            )}
+            {planDeviationRequiresAck && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={() => handleChat(planDeviation.ack_phrase || "bewuste override")}
+                  disabled={loading || executingAction}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-rose-600/15 transition-colors hover:bg-rose-700 disabled:opacity-60"
+                >
+                  <Shield size={14} />
+                  Bewuste override
+                </button>
+                <button
+                  onClick={() => handleChat("annuleer")}
+                  disabled={loading || executingAction}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/40 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200 transition-colors hover:border-slate-300 dark:hover:border-slate-700 disabled:opacity-60"
+                >
+                  <X size={14} />
+                  Annuleer
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {(visibleMissingFields.length > 0 || message.invalidFields?.length > 0 || visibleNextQuestion) && (
           <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-950/20 p-3 space-y-2">
-            {message.missingFields?.length > 0 && (
+            {visibleMissingFields.length > 0 && (
               <div>
                 <div className="text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Ontbreekt nog</div>
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {message.missingFields.map((field) => (
+                  {visibleMissingFields.map((field) => (
                     <span key={field} className="px-2 py-1 rounded-lg bg-white/80 dark:bg-slate-950/50 text-[10px] font-bold text-amber-800 dark:text-amber-200 border border-amber-100 dark:border-amber-900/40">
                       {field}
                     </span>
@@ -1240,9 +1306,9 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 </div>
               </div>
             )}
-            {message.nextQuestion && (
+            {visibleNextQuestion && (
               <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                {message.nextQuestion}
+                {visibleNextQuestion}
               </div>
             )}
           </div>
