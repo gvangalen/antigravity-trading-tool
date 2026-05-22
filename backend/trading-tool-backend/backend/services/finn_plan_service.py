@@ -4416,6 +4416,12 @@ class FinnPlanService:
                 "snoozed_7d": metrics.get("snoozed_7d", 0),
                 "monitor_7d": metrics.get("monitor_7d", 0),
                 "possible_overrides_7d": metrics.get("possible_overrides_7d", 0),
+                "previous_actions_7d": metrics.get("previous_actions_7d", 0),
+                "previous_bot_decisions_generated_7d": metrics.get("previous_bot_decisions_generated_7d", 0),
+                "previous_configuration_changes_7d": metrics.get("previous_configuration_changes_7d", 0),
+                "previous_skipped_7d": metrics.get("previous_skipped_7d", 0),
+                "previous_snoozed_7d": metrics.get("previous_snoozed_7d", 0),
+                "previous_monitor_7d": metrics.get("previous_monitor_7d", 0),
             },
             "evidence": self._weekly_reflection_evidence(activity_feed),
             "safe_next_step": (

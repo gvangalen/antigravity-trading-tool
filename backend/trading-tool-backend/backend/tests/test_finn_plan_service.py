@@ -2174,6 +2174,7 @@ def test_weekly_reflection_includes_week_over_week_and_profile():
     assert reflection["week_over_week"]["period"] == "last_7_days_vs_previous_7_days"
     assert reflection["week_over_week"]["comparisons"][1]["current"] == 5
     assert reflection["week_over_week"]["comparisons"][1]["previous"] == 1
+    assert reflection["metrics"]["previous_bot_decisions_generated_7d"] == 1
     assert "Profiel deze week" in message
     assert "Vergeleken met vorige week" in message
 
