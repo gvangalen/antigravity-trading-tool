@@ -31,6 +31,9 @@ class _FakeSession:
 
 
 class _ManualOrderRepo:
+    def __init__(self):
+        self.created_orders = 0
+
     async def get_bot_config(self, user_id, bot_id):
         return {
             "id": bot_id,
@@ -45,6 +48,23 @@ class _ManualOrderRepo:
             "budget_max_order_eur": 50,
             "max_asset_exposure_pct": 100,
         }
+
+    async def get_bot_ledger_stats(self, user_id, bot_id, day):
+        return {
+            "executed_cash": 0,
+            "today_spent": 0,
+            "today_reserved": 0,
+            "net_qty": 0,
+        }
+
+    async def create_manual_order(self, *args, **kwargs):
+        self.created_orders += 1
+        return 1, True
+
+
+class _NoExchangeKeys:
+    async def get_active_keys(self, user_id):
+        return []
 
 
 def test_bot_payload_validation_normalizes_transactional_fields():
@@ -206,3 +226,27 @@ def test_live_manual_order_requires_idempotency_and_risk_acknowledgement():
     assert exc.value.status_code == 409
     assert exc.value.detail["code"] == "LIVE_ORDER_RISK_ACK_REQUIRED"
     assert exc.value.detail["behavioral_event"]["type"] == "execution_pressure"
+
+
+def test_live_manual_order_checks_exchange_keys_before_order_insert():
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo()
+    service.repository = repo
+    service.exchange_repo = _NoExchangeKeys()
+    payload = BotManualOrderSchema(
+        bot_id=9,
+        symbol="BTC",
+        side="buy",
+        quantity=0.001,
+        price=50000,
+        idempotency_key="manual-live-test-2",
+        risk_acknowledged=True,
+    )
+
+    import asyncio
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=1))
+
+    assert exc.value.status_code == 400
+    assert "exchange keys" in exc.value.detail
+    assert repo.created_orders == 0

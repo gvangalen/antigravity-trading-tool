@@ -829,6 +829,12 @@ class BotService:
                     f"Niet genoeg positie om te verkopen. Beschikbaar: {round(current_qty, 8)} {payload.symbol}."
                 )
 
+        live_keys = None
+        if bot.get("is_live"):
+            live_keys = await self.exchange_repo.get_active_keys(user_id)
+            if not live_keys:
+                raise HTTPException(400, "Geen actieve exchange keys gevonden voor live trading.")
+
         order_id, is_new_order = await self.repository.create_manual_order(
             user_id,
             payload.bot_id,
@@ -838,7 +844,7 @@ class BotService:
             payload.price,
             idempotency_key=payload.idempotency_key,
             quote_amount_eur=notional,
-            status="pending" if bot.get("is_live") else "filled",
+            status="sent" if bot.get("is_live") else "filled",
         )
         if not is_new_order:
             existing = await self.repository.get_manual_order_by_idempotency_key(user_id, payload.idempotency_key)
@@ -864,12 +870,8 @@ class BotService:
         # 4. Handle Live Exchange Execution
         if bot.get("is_live"):
             try:
-                keys = await self.exchange_repo.get_active_keys(user_id)
-                if not keys:
-                    raise HTTPException(400, "Geen actieve exchange keys gevonden voor live trading.")
-                
                 # Use the first active key (assuming Bitvavo for now based on user context)
-                key = keys[0]
+                key = live_keys[0]
                 client = await ExchangeService.get_client(
                     key.exchange_name, key.api_key, key.api_secret, key.api_passphrase
                 )
@@ -904,11 +906,11 @@ class BotService:
                 payload.quantity = final_qty
                 payload.price = final_price
             except HTTPException:
-                await self.repository.update_manual_order_status(user_id, order_id, "failed")
+                await self.repository.update_manual_order_status(user_id, order_id, "error")
                 await self.session.commit()
                 raise
             except Exception as e:
-                await self.repository.update_manual_order_status(user_id, order_id, "failed")
+                await self.repository.update_manual_order_status(user_id, order_id, "error")
                 await self.session.commit()
                 logger.error(f"❌ Exchange Order Failed: {str(e)}")
                 raise HTTPException(500, f"Order bij exchange mislukt: {str(e)}")
