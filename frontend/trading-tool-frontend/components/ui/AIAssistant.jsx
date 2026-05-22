@@ -295,6 +295,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     if (handoff === "bot_execution_decision") return <Shield size={11} className="text-rose-500 shrink-0" />;
     if (handoff === "indicator_insight") return <Brain size={11} className="text-amber-500 shrink-0" />;
     if (handoff === "resolve_mission_item") return <CheckCircle2 size={11} className="text-emerald-500 shrink-0" />;
+    if (handoff === "snooze_mission_item") return <Activity size={11} className="text-slate-500 shrink-0" />;
     return <Zap size={11} className="text-amber-500 shrink-0" />;
   };
 
@@ -345,6 +346,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     monitor_today: "monitor",
     resolved: "klaar",
     skipped: "overgeslagen",
+    snoozed: "later",
   }[state] || state || "open");
 
   const missionWorkqueueSections = () => {
@@ -459,6 +461,21 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             {followUpIcon(action.handoff || action.type)}
             <span className="normal-case tracking-normal text-[11px] leading-tight">{action.label}</span>
           </button>
+        )}
+        {Array.isArray(item.resolve_actions) && item.resolve_actions.length > 0 && (
+          <div className="mt-2 grid grid-cols-3 gap-1">
+            {item.resolve_actions.slice(0, 4).map((resolveAction) => (
+              <button
+                key={resolveAction.id}
+                type="button"
+                onClick={() => handleMissionPrimaryAction(resolveAction)}
+                disabled={executingAction}
+                className="rounded-lg border border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/40 px-2 py-1.5 text-[8px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 transition hover:border-emerald-200 hover:text-emerald-600 disabled:opacity-60"
+              >
+                {resolveAction.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
     );
@@ -944,7 +961,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         return;
       }
 
-      if (action.type === "resolve_mission_item") {
+      if (action.type === "resolve_mission_item" || action.type === "snooze_mission_item") {
         if (!res?.ok || !res?.verified?.mission_item_resolved) {
           throw new Error("Mission Control item is nog niet verifieerbaar afgehandeld.");
         }
@@ -1416,6 +1433,32 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 </div>
               ))}
             </div>
+
+            {missionControl.day_log?.handled_count > 0 && (
+              <div className="rounded-xl border border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
+                    Vandaag afgehandeld
+                  </span>
+                  <span className="text-sm font-black tabular-nums text-emerald-700 dark:text-emerald-300">
+                    {missionControl.day_log.handled_count}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {[
+                    ["klaar", missionControl.day_log.resolved_count],
+                    ["monitor", missionControl.day_log.monitor_count],
+                    ["data", missionControl.day_log.waiting_for_data_count],
+                    ["later", missionControl.day_log.snoozed_count],
+                    ["skip", missionControl.day_log.skipped_count],
+                  ].filter(([, value]) => value > 0).map(([label, value]) => (
+                    <span key={label} className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
+                      {label} {value}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {Array.isArray(missionControl.workqueue) && missionControl.workqueue.length > 0 && (
               <div className="space-y-2">

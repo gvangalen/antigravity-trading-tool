@@ -4199,9 +4199,16 @@ class FinnPlanService:
         analysis = (daily.get("state") or {}).get("analysis") or {}
         mission = self._build_mission_control_from_daily_analysis(analysis)
         activity_feed = await self._get_recent_finn_activity(user_id)
+        day_log = self._mission_day_log(activity_feed)
         resolved_item_ids = await self._get_today_resolved_mission_item_ids(user_id)
         if resolved_item_ids:
             mission = self._filter_resolved_mission_items(mission, resolved_item_ids)
+        mission["summary"] = {
+            **mission["summary"],
+            "handled_today_count": day_log["handled_count"],
+            "skipped_today_count": day_log["skipped_count"],
+            "snoozed_today_count": day_log["snoozed_count"],
+        }
         return {
             "ok": True,
             "intent": "mission_control",
@@ -4215,6 +4222,7 @@ class FinnPlanService:
             "plan_health": mission["plan_health"],
             "bot_review_queue": mission["bot_review_queue"],
             "activity_feed": activity_feed,
+            "day_log": day_log,
             "data_readiness": analysis.get("data_readiness") or {},
             "source": {
                 "flow": "daily_coach",
@@ -4342,6 +4350,22 @@ class FinnPlanService:
         }
         return mission
 
+    def _mission_day_log(self, activity_feed: List[Dict[str, Any]]) -> Dict[str, Any]:
+        handled = [
+            item for item in activity_feed
+            if item.get("resolve_state") in {"resolved", "skipped", "monitor_today", "waiting_for_data", "snoozed"}
+        ]
+        return {
+            "date": _utc_now().date().isoformat(),
+            "handled_count": len(handled),
+            "resolved_count": len([item for item in handled if item.get("resolve_state") == "resolved"]),
+            "skipped_count": len([item for item in handled if item.get("resolve_state") == "skipped"]),
+            "monitor_count": len([item for item in handled if item.get("resolve_state") == "monitor_today"]),
+            "waiting_for_data_count": len([item for item in handled if item.get("resolve_state") == "waiting_for_data"]),
+            "snoozed_count": len([item for item in handled if item.get("resolve_state") == "snoozed"]),
+            "items": handled[:6],
+        }
+
     async def _get_today_resolved_mission_item_ids(self, user_id: int) -> set:
         if not self.session:
             return set()
@@ -4351,7 +4375,7 @@ class FinnPlanService:
             FROM ai_pending_actions
             WHERE user_id = :user_id
               AND status = 'executed'
-              AND payload->'action'->>'type' = 'resolve_mission_item'
+              AND payload->'action'->>'type' IN ('resolve_mission_item', 'snooze_mission_item')
               AND payload->'result'->>'day_key' = :day_key
         """), {"user_id": user_id, "day_key": day_key})
         item_ids = set()
@@ -4364,6 +4388,10 @@ class FinnPlanService:
                     payload = {}
             result = payload.get("result") if isinstance(payload, dict) else {}
             source_item_id = (result or {}).get("source_item_id")
+            if (result or {}).get("resolution") == "snoozed":
+                snooze_until = self._parse_mission_timestamp((result or {}).get("snooze_until"))
+                if snooze_until and snooze_until <= _utc_now():
+                    continue
             if source_item_id:
                 item_ids.add(source_item_id)
         return item_ids
@@ -4522,6 +4550,7 @@ class FinnPlanService:
             "paper_execute_bot_decision": "Paper execution verwerkt",
             "live_preflight_bot_decision": "Live preflight gecontroleerd",
             "resolve_mission_item": "Mission Control item bijgewerkt",
+            "snooze_mission_item": "Mission Control item uitgesteld",
         }
         label = action.get("label") or title_by_type.get(action_type) or action_type.replace("_", " ")
         outcome = result.get("message") or result.get("response")
@@ -4564,6 +4593,8 @@ class FinnPlanService:
     def _mission_activity_resolve_state(self, status: Any, result_status: Any, action_type: str) -> str:
         normalized_status = str(status or "").lower()
         normalized_result = str(result_status or "").lower()
+        if action_type == "snooze_mission_item":
+            return "snoozed"
         if action_type == "resolve_mission_item":
             if normalized_result in {"skipped", "monitor_today", "waiting_for_data"}:
                 return normalized_result
@@ -4857,6 +4888,16 @@ class FinnPlanService:
                     "strategy_id": ((plan.get("lifecycle") or {}).get("strategy") or {}).get("id"),
                 },
             ),
+            "resolve_actions": self._mission_resolve_actions(
+                f"{item_type}:{plan.get('asset')}:{(plan.get('setup') or {}).get('id') or 'none'}",
+                asset=plan.get("asset"),
+                reason=plan.get("reason"),
+                source_ids={
+                    "setup_id": (plan.get("setup") or {}).get("id"),
+                    "strategy_id": ((plan.get("lifecycle") or {}).get("strategy") or {}).get("id"),
+                },
+                include_waiting_for_data=item_status != "blocked",
+            ),
             "freshness": freshness,
             "source_ids": {
                 "setup_id": (plan.get("setup") or {}).get("id"),
@@ -4927,6 +4968,87 @@ class FinnPlanService:
                 "reason": reason,
                 "source_ids": source_ids or {},
                 "day_key": _utc_now().date().isoformat(),
+            },
+            "risk_level": "low",
+            "requires_confirmation": False,
+            "autonomy_level": "user_initiated",
+            "guardrails": {
+                "requires_confirmation": False,
+                "can_execute_without_user": False,
+                "writes_trading_config": False,
+                "executes_order": False,
+            },
+        }
+
+    def _mission_resolve_actions(
+        self,
+        item_id: str,
+        *,
+        asset: Optional[str] = None,
+        reason: Optional[str] = None,
+        source_ids: Optional[Dict[str, Any]] = None,
+        include_waiting_for_data: bool = False,
+    ) -> List[Dict[str, Any]]:
+        actions = [
+            self._mission_resolve_action(
+                item_id,
+                "resolved",
+                asset=asset,
+                label="Markeer klaar",
+                reason=reason,
+                source_ids=source_ids,
+            ),
+            self._mission_resolve_action(
+                item_id,
+                "monitor_today",
+                asset=asset,
+                label="Vandaag monitoren",
+                reason=reason,
+                source_ids=source_ids,
+            ),
+            self._mission_snooze_action(
+                item_id,
+                asset=asset,
+                label="Later opnieuw bekijken",
+                reason=reason,
+                source_ids=source_ids,
+            ),
+        ]
+        if include_waiting_for_data:
+            actions.insert(0, self._mission_resolve_action(
+                item_id,
+                "waiting_for_data",
+                asset=asset,
+                label="Wachten op data",
+                reason=reason,
+                source_ids=source_ids,
+            ))
+        return actions
+
+    def _mission_snooze_action(
+        self,
+        item_id: str,
+        *,
+        asset: Optional[str] = None,
+        label: str = "Later opnieuw bekijken",
+        reason: Optional[str] = None,
+        source_ids: Optional[Dict[str, Any]] = None,
+        minutes: int = 240,
+    ) -> Dict[str, Any]:
+        snooze_until = _utc_now() + timedelta(minutes=minutes)
+        return {
+            "id": self._maintenance_action_id("snooze_mission_item", [item_id, str(minutes), _utc_now().date().isoformat()]),
+            "type": "snooze_mission_item",
+            "label": label,
+            "payload": {
+                "source_item_id": item_id,
+                "resolution": "snoozed",
+                "asset": asset,
+                "reason": reason,
+                "source_ids": source_ids or {},
+                "day_key": _utc_now().date().isoformat(),
+                "snooze_until": snooze_until.isoformat(),
+                "snooze_minutes": minutes,
             },
             "risk_level": "low",
             "requires_confirmation": False,
@@ -5403,6 +5525,8 @@ class FinnPlanService:
             return await self._execute_live_preflight_bot_decision_action(user_id, action)
         if action and action.get("type") == "resolve_mission_item":
             return await self._execute_resolve_mission_item_action(user_id, action)
+        if action and action.get("type") == "snooze_mission_item":
+            return await self._execute_resolve_mission_item_action(user_id, action)
         if action and action.get("type") == "configure_indicator":
             return await self._execute_indicator_config_action(user_id, action)
         if action and action.get("type") == "create_bot":
@@ -5806,10 +5930,11 @@ class FinnPlanService:
         day_key = str(payload.get("day_key") or _utc_now().date().isoformat())
         if not source_item_id:
             raise HTTPException(422, "source_item_id is verplicht.")
-        allowed = {"resolved", "skipped", "monitor_today", "waiting_for_data"}
+        allowed = {"resolved", "skipped", "monitor_today", "waiting_for_data", "snoozed"}
         if resolution not in allowed:
             raise HTTPException(422, "Ongeldige resolve status.")
-        action_id = f"{action.get('id') or self._maintenance_action_id('resolve_mission_item', [source_item_id, resolution, day_key])}-u{user_id}"
+        action_type = action.get("type") or "resolve_mission_item"
+        action_id = f"{action.get('id') or self._maintenance_action_id(action_type, [source_item_id, resolution, day_key])}-u{user_id}"
         acquired = await self._try_create_pending_action(user_id, action_id, action)
         if not acquired:
             existing_result = await self._wait_for_action_result(user_id, action_id)
@@ -5826,6 +5951,7 @@ class FinnPlanService:
             "status": resolution,
             "asset": payload.get("asset"),
             "day_key": day_key,
+            "snooze_until": payload.get("snooze_until"),
             "source_ids": payload.get("source_ids") or {},
             "verified": {"mission_item_resolved": True},
         }
@@ -5838,6 +5964,7 @@ class FinnPlanService:
             "skipped": "Mission Control item is overgeslagen en vastgelegd.",
             "monitor_today": "Mission Control item staat op monitoren voor vandaag.",
             "waiting_for_data": "Mission Control item wacht op data en is voor nu uit je werkqueue gehaald.",
+            "snoozed": "Mission Control item is uitgesteld en voor nu uit je werkqueue gehaald.",
         }.get(resolution, "Mission Control item is bijgewerkt.")
 
     async def _execute_paper_bot_decision_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:

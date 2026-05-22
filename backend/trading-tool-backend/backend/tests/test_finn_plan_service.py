@@ -1859,6 +1859,12 @@ def test_mission_workqueue_data_gap_waits_for_data():
     assert item["status"] == "blocked_by_data"
     assert item["resolve_state"] == "waiting_for_data"
     assert item["resolve_action"]["payload"]["resolution"] == "waiting_for_data"
+    assert [action["payload"]["resolution"] for action in item["resolve_actions"]] == [
+        "waiting_for_data",
+        "resolved",
+        "monitor_today",
+        "snoozed",
+    ]
     assert item["freshness"]["status"] == "stale"
 
 
@@ -1904,6 +1910,46 @@ def test_mission_activity_item_marks_resolve_action_states():
     assert item["type"] == "resolve_mission_item"
     assert item["resolve_state"] == "monitor_today"
     assert item["verified"]["mission_item_resolved"] is True
+
+
+def test_mission_activity_item_marks_snooze_and_day_log_counts():
+    service = _service()
+    snoozed = service._mission_activity_item({
+        "id": "finn-snooze-1",
+        "status": "executed",
+        "created_at": datetime(2026, 5, 21, 12, 0, 0),
+        "payload": {
+            "action": {
+                "type": "snooze_mission_item",
+                "label": "Later opnieuw bekijken",
+                "payload": {"source_item_id": "blocked_plan:BTC:12"},
+            },
+            "result": {
+                "ok": True,
+                "message": "Mission Control item is uitgesteld.",
+                "status": "snoozed",
+                "source_item_id": "blocked_plan:BTC:12",
+                "verified": {"mission_item_resolved": True},
+            },
+        },
+    })
+    resolved = service._mission_activity_item({
+        "id": "finn-resolve-2",
+        "status": "executed",
+        "created_at": datetime(2026, 5, 21, 12, 0, 0),
+        "payload": {
+            "action": {"type": "resolve_mission_item", "label": "Markeer klaar"},
+            "result": {"ok": True, "status": "resolved", "verified": {"mission_item_resolved": True}},
+        },
+    })
+
+    day_log = service._mission_day_log([snoozed, resolved])
+
+    assert snoozed["resolve_state"] == "snoozed"
+    assert resolved["resolve_state"] == "resolved"
+    assert day_log["handled_count"] == 2
+    assert day_log["snoozed_count"] == 1
+    assert day_log["resolved_count"] == 1
 
 
 def test_bot_decision_review_request_detection():
