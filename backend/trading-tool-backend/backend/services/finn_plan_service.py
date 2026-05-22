@@ -1955,6 +1955,7 @@ class FinnPlanService:
     def _bot_execution_action(self, action_type: str, review: Dict[str, Any], *, is_live: bool) -> Dict[str, Any]:
         decision_id = int(review["decision_id"])
         bot_id = int(review["bot_id"])
+        setup_match = review.get("setup_match") if isinstance(review.get("setup_match"), dict) else {}
         labels = {
             "skip_bot_decision": "Bot-decision overslaan",
             "paper_execute_bot_decision": "Paper execution bevestigen",
@@ -1970,6 +1971,15 @@ class FinnPlanService:
                 "decision_id": decision_id,
                 "asset": review.get("asset"),
                 "is_live": is_live,
+                "behavioral_context": {
+                    "decision_action": review.get("action"),
+                    "risk_level": review.get("risk_level"),
+                    "confidence": review.get("confidence"),
+                    "guardrail_reason": review.get("guardrail_reason"),
+                    "guardrails_result": review.get("guardrails_result"),
+                    "setup_match_status": setup_match.get("status"),
+                    "setup_match_score": setup_match.get("score"),
+                },
             },
             "risk_level": risk,
             "requires_confirmation": True,
@@ -4212,7 +4222,7 @@ class FinnPlanService:
         )
         analysis = (daily.get("state") or {}).get("analysis") or {}
         mission = self._build_mission_control_from_daily_analysis(analysis)
-        activity_feed = await self._get_recent_finn_activity(user_id)
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=40)
         day_log = self._mission_day_log(activity_feed)
         resolved_item_ids = await self._get_today_resolved_mission_item_ids(user_id)
         if resolved_item_ids:
@@ -4253,7 +4263,7 @@ class FinnPlanService:
         query: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        activity_feed = await self._get_recent_finn_activity(user_id, limit=20)
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=50)
         day_log = self._mission_day_log(activity_feed)
         insight = self._build_behavioral_insight_from_activity(activity_feed, day_log)
         response = self._behavioral_intelligence_message(insight)
@@ -4286,13 +4296,28 @@ class FinnPlanService:
         today = _utc_now().date()
 
         today_items = []
+        seven_day_items = []
         for item in activity_feed:
             created_at = self._parse_mission_timestamp(item.get("created_at"))
             if created_at and created_at.date() == today:
                 today_items.append(item)
+            if created_at and created_at >= _utc_now() - timedelta(days=7):
+                seven_day_items.append(item)
 
         def count_type(items: List[Dict[str, Any]], action_type: str) -> int:
             return len([item for item in items if item.get("type") == action_type])
+
+        def count_resolution(items: List[Dict[str, Any]], resolution: str) -> int:
+            return len([item for item in items if item.get("resolve_state") == resolution])
+
+        behavioral_events = [
+            item.get("behavioral_event") for item in seven_day_items
+            if isinstance(item.get("behavioral_event"), dict)
+        ]
+        possible_overrides = [
+            event for event in behavioral_events
+            if event.get("type") in {"plan_deviation_attempt", "execution_pressure"}
+        ]
 
         metrics = {
             "actions_today": len(today_items),
@@ -4310,6 +4335,22 @@ class FinnPlanService:
             "strategy_changes": count_type(today_items, "create_strategy"),
             "bot_changes": count_type(today_items, "create_bot"),
             "indicator_changes": count_type(today_items, "configure_indicator"),
+            "actions_7d": len(seven_day_items),
+            "executed_7d": len([item for item in seven_day_items if item.get("status") == "executed"]),
+            "skipped_7d": count_resolution(seven_day_items, "skipped"),
+            "snoozed_7d": count_resolution(seven_day_items, "snoozed"),
+            "monitor_7d": count_resolution(seven_day_items, "monitor_today"),
+            "bot_decisions_generated_7d": count_type(seven_day_items, "generate_bot_decision"),
+            "paper_executions_7d": count_type(seven_day_items, "paper_execute_bot_decision"),
+            "live_preflights_7d": count_type(seven_day_items, "live_preflight_bot_decision"),
+            "configuration_changes_7d": (
+                count_type(seven_day_items, "create_plan")
+                + count_type(seven_day_items, "create_strategy")
+                + count_type(seven_day_items, "create_bot")
+                + count_type(seven_day_items, "configure_indicator")
+            ),
+            "behavioral_events_7d": len(behavioral_events),
+            "possible_overrides_7d": len(possible_overrides),
         }
 
         signals: List[Dict[str, Any]] = []
@@ -4318,43 +4359,56 @@ class FinnPlanService:
             primary = "Ik heb nog te weinig Finn-activiteit om je handelsgedrag betrouwbaar te spiegelen."
             safe_next_step = "Gebruik Mission Control vandaag bewust: review, skip of stel acties uit in plaats van impulsief te handelen."
         else:
-            if metrics["bot_decisions_generated"] >= 3 or metrics["paper_executions"] >= 2:
+            if metrics["bot_decisions_generated"] >= 3 or metrics["paper_executions"] >= 2 or metrics["bot_decisions_generated_7d"] >= 5:
                 signals.append({
-                    "type": "overtrading_risk",
+                    "type": "decision_churn",
                     "severity": "medium",
-                    "message": "Er is vandaag relatief veel decision/execution-activiteit. Neem extra frictie voordat je een nieuwe actie start.",
+                    "message": "Er is relatief veel decision/execution-activiteit. Dat kan op onrust of overtrading-druk wijzen.",
                     "evidence": [
-                        f"{metrics['bot_decisions_generated']} bot-decisions gegenereerd",
-                        f"{metrics['paper_executions']} paper executions",
+                        f"{metrics['bot_decisions_generated']} bot-decisions vandaag",
+                        f"{metrics['bot_decisions_generated_7d']} bot-decisions in 7 dagen",
+                        f"{metrics['paper_executions_7d']} paper executions in 7 dagen",
                     ],
                 })
-            if metrics["live_preflights"] > 0:
+            if metrics["live_preflights"] > 0 or metrics["live_preflights_7d"] >= 2 or possible_overrides:
                 signals.append({
                     "type": "execution_friction",
                     "severity": "medium",
-                    "message": "Je hebt live-preflight gedrag geraakt. Finn moet hier streng blijven: alleen doorgaan als guardrails en keys kloppen.",
-                    "evidence": [f"{metrics['live_preflights']} live preflight checks vandaag"],
-                })
-            if metrics["skipped_today"] > 0 or metrics["snoozed_today"] > 0 or metrics["monitor_today"] > 0:
-                signals.append({
-                    "type": "discipline_positive",
-                    "severity": "low",
-                    "message": "Je hebt vandaag bewust afgeremd of items afgehandeld. Dat is goed disciplinegedrag.",
+                    "message": "Ik zie execution-druk of guardrail-frictie. Finn moet hier extra remmend blijven.",
                     "evidence": [
-                        f"{metrics['skipped_today']} overgeslagen",
-                        f"{metrics['snoozed_today']} later gezet",
-                        f"{metrics['monitor_today']} gemonitord",
+                        f"{metrics['live_preflights_7d']} live preflight checks in 7 dagen",
+                        f"{metrics['possible_overrides_7d']} mogelijke plan-afwijking events",
                     ],
                 })
-            if metrics["plan_creates"] + metrics["strategy_changes"] + metrics["bot_changes"] >= 4:
+            if metrics["skipped_today"] > 0 or metrics["snoozed_today"] > 0 or metrics["monitor_today"] > 0 or metrics["skipped_7d"] + metrics["snoozed_7d"] + metrics["monitor_7d"] >= 2:
+                signals.append({
+                    "type": "disciplined_waiting",
+                    "severity": "low",
+                    "message": "Je hebt bewust afgeremd of items afgehandeld. Dat is positief disciplinegedrag.",
+                    "evidence": [
+                        f"{metrics['skipped_7d']} overgeslagen in 7 dagen",
+                        f"{metrics['snoozed_7d']} later gezet in 7 dagen",
+                        f"{metrics['monitor_7d']} gemonitord in 7 dagen",
+                    ],
+                })
+            if metrics["plan_creates"] + metrics["strategy_changes"] + metrics["bot_changes"] >= 4 or metrics["configuration_changes_7d"] >= 6:
                 signals.append({
                     "type": "configuration_churn",
                     "severity": "medium",
-                    "message": "Er zijn vandaag veel configuratiewijzigingen. Check of je je plan verbetert of steeds van richting verandert.",
+                    "message": "Er zijn relatief veel configuratiewijzigingen. Check of je je plan verbetert of steeds van richting verandert.",
                     "evidence": [
-                        f"{metrics['plan_creates']} plan-flows",
-                        f"{metrics['strategy_changes']} strategy changes",
-                        f"{metrics['bot_changes']} bot changes",
+                        f"{metrics['configuration_changes_7d']} configuratiewijzigingen in 7 dagen",
+                    ],
+                })
+            if metrics["bot_decisions_generated"] >= 3 and (metrics["paper_executions"] > 0 or metrics["live_preflights"] > 0):
+                signals.append({
+                    "type": "possible_fomo",
+                    "severity": "medium",
+                    "message": "Mogelijke FOMO-druk: meerdere decisions en execution-intentie op dezelfde dag.",
+                    "evidence": [
+                        f"{metrics['bot_decisions_generated']} bot-decisions vandaag",
+                        f"{metrics['paper_executions']} paper executions vandaag",
+                        f"{metrics['live_preflights']} live preflights vandaag",
                     ],
                 })
             if pending:
@@ -4383,16 +4437,18 @@ class FinnPlanService:
 
         do_not_do = "Gebruik dit niet als koop- of verkoopadvies; dit is alleen gedragscoaching op basis van je eigen Finn-activiteit."
         return {
-            "status": status,
-            "period": "today",
-            "advice_only": True,
-            "signals": signals,
-            "metrics": metrics,
-            "coaching": {
-                "primary_reflection": primary,
-                "safe_next_step": safe_next_step,
-                "do_not_do": do_not_do,
-            },
+                "status": status,
+                "period": "today_and_7d",
+                "advice_only": True,
+                "signals": signals,
+                "patterns": [signal["type"] for signal in signals],
+                "behavioral_events": behavioral_events[:5],
+                "metrics": metrics,
+                "coaching": {
+                    "primary_reflection": primary,
+                    "safe_next_step": safe_next_step,
+                    "do_not_do": do_not_do,
+                },
             "evidence_source": "ai_pending_actions",
         }
 
@@ -4414,6 +4470,13 @@ class FinnPlanService:
             f"{metrics.get('skipped_today', 0)} skips, "
             f"{metrics.get('snoozed_today', 0)} later gezet, "
             f"{metrics.get('bot_decisions_generated', 0)} bot-decisions."
+        )
+        lines.append(
+            "Laatste 7 dagen: "
+            f"{metrics.get('actions_7d', 0)} acties, "
+            f"{metrics.get('bot_decisions_generated_7d', 0)} bot-decisions, "
+            f"{metrics.get('configuration_changes_7d', 0)} configuratiewijzigingen, "
+            f"{metrics.get('possible_overrides_7d', 0)} mogelijke plan-afwijkingen."
         )
         lines.append(f"Veilige volgende stap: {coaching.get('safe_next_step')}")
         return "\n".join([line for line in lines if line])
@@ -4767,6 +4830,7 @@ class FinnPlanService:
             "result_status": result_status,
             "outcome": outcome,
             "verified": verified,
+            "behavioral_event": result.get("behavioral_event") if isinstance(result.get("behavioral_event"), dict) else None,
             "entity_ids": {
                 "setup_id": result.get("setup_id") or (action.get("payload") or {}).get("setup_id"),
                 "strategy_id": result.get("strategy_id") or (action.get("payload") or {}).get("strategy_id"),
@@ -6154,6 +6218,35 @@ class FinnPlanService:
             "snoozed": "Mission Control item is uitgesteld en voor nu uit je werkqueue gehaald.",
         }.get(resolution, "Mission Control item is bijgewerkt.")
 
+    def _behavioral_event_from_execution_action(self, action: Dict[str, Any], *, result_status: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        payload = action.get("payload") or {}
+        context = payload.get("behavioral_context") if isinstance(payload.get("behavioral_context"), dict) else {}
+        reasons = []
+        confidence = self._to_float(context.get("confidence"))
+        setup_match_score = self._to_float(context.get("setup_match_score"))
+        guardrail_reason = context.get("guardrail_reason")
+        if confidence is not None and confidence < 0.55:
+            reasons.append(f"confidence {confidence:g} onder 0.55")
+        if setup_match_score is not None and setup_match_score < 70:
+            reasons.append(f"setup match {setup_match_score:g} onder 70")
+        if guardrail_reason:
+            reasons.append(f"guardrail: {guardrail_reason}")
+        if action.get("type") == "live_preflight_bot_decision":
+            reasons.append("live preflight aangevraagd")
+        if not reasons:
+            return None
+        event_type = "execution_pressure" if action.get("type") == "live_preflight_bot_decision" else "plan_deviation_attempt"
+        return {
+            "type": event_type,
+            "severity": "medium",
+            "asset": payload.get("asset"),
+            "bot_id": payload.get("bot_id"),
+            "decision_id": payload.get("decision_id"),
+            "decision_action": context.get("decision_action"),
+            "result_status": result_status,
+            "reasons": reasons,
+        }
+
     async def _execute_paper_bot_decision_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
         payload = action.get("payload") or {}
         bot_id = int(payload.get("bot_id") or 0)
@@ -6194,6 +6287,9 @@ class FinnPlanService:
             "status": status,
             "verified": {"paper_execution": bool(executed.get("ok"))},
         }
+        behavioral_event = self._behavioral_event_from_execution_action(action, result_status=status)
+        if behavioral_event:
+            result["behavioral_event"] = behavioral_event
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         return result
 
@@ -6230,6 +6326,9 @@ class FinnPlanService:
                 "exchange_keys": bool(keys),
             },
         }
+        behavioral_event = self._behavioral_event_from_execution_action(action, result_status="ready" if ready else "blocked")
+        if behavioral_event:
+            result["behavioral_event"] = behavioral_event
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         return result
 

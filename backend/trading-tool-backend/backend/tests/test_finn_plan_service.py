@@ -1999,7 +1999,7 @@ def test_behavioral_insight_rewards_review_discipline():
     insight = service._build_behavioral_insight_from_activity([skipped, snoozed])
 
     assert insight["status"] == "early_signal"
-    assert any(signal["type"] == "discipline_positive" for signal in insight["signals"])
+    assert any(signal["type"] == "disciplined_waiting" for signal in insight["signals"])
     assert insight["metrics"]["skipped_today"] == 1
     assert insight["metrics"]["snoozed_today"] == 1
 
@@ -2022,8 +2022,84 @@ def test_behavioral_insight_flags_decision_churn():
     insight = service._build_behavioral_insight_from_activity(activity)
 
     assert insight["status"] == "attention"
-    assert any(signal["type"] == "overtrading_risk" for signal in insight["signals"])
+    assert any(signal["type"] == "decision_churn" for signal in insight["signals"])
     assert insight["metrics"]["bot_decisions_generated"] == 3
+    assert insight["metrics"]["bot_decisions_generated_7d"] == 3
+
+
+def test_behavioral_insight_uses_seven_day_patterns():
+    service = _service()
+    activity = [
+        service._mission_activity_item({
+            "id": f"finn-old-decision-{idx}",
+            "status": "executed",
+            "created_at": _utc_now() - timedelta(days=idx + 1),
+            "payload": {
+                "action": {"type": "generate_bot_decision"},
+                "result": {"ok": True, "status": "generated", "message": "Bot-decision gemaakt."},
+            },
+        })
+        for idx in range(5)
+    ]
+
+    insight = service._build_behavioral_insight_from_activity(activity)
+
+    assert insight["status"] == "attention"
+    assert insight["metrics"]["bot_decisions_generated"] == 0
+    assert insight["metrics"]["bot_decisions_generated_7d"] == 5
+    assert "decision_churn" in insight["patterns"]
+
+
+def test_behavioral_event_from_risky_execution_is_auditable():
+    service = _service()
+    action = service._bot_execution_action(
+        "paper_execute_bot_decision",
+        {
+            "decision_id": 22,
+            "bot_id": 9,
+            "asset": "BTC",
+            "action": "buy",
+            "risk_level": "high",
+            "confidence": 0.48,
+            "guardrail_reason": "Daglimiet overschreden",
+            "setup_match": {"status": "partial", "score": 62},
+        },
+        is_live=False,
+    )
+    event = service._behavioral_event_from_execution_action(action, result_status="executed")
+
+    assert event["type"] == "plan_deviation_attempt"
+    assert event["decision_id"] == 22
+    assert any("confidence" in reason for reason in event["reasons"])
+    assert any("setup match" in reason for reason in event["reasons"])
+    assert any("guardrail" in reason for reason in event["reasons"])
+
+
+def test_behavioral_insight_counts_override_events():
+    service = _service()
+    risky = service._mission_activity_item({
+        "id": "finn-risky-paper-1",
+        "status": "executed",
+        "created_at": _utc_now(),
+        "payload": {
+            "action": {"type": "paper_execute_bot_decision"},
+            "result": {
+                "ok": True,
+                "status": "executed",
+                "behavioral_event": {
+                    "type": "plan_deviation_attempt",
+                    "severity": "medium",
+                    "reasons": ["confidence 0.48 onder 0.55"],
+                },
+            },
+        },
+    })
+
+    insight = service._build_behavioral_insight_from_activity([risky])
+
+    assert insight["metrics"]["possible_overrides_7d"] == 1
+    assert insight["behavioral_events"][0]["type"] == "plan_deviation_attempt"
+    assert any(signal["type"] == "execution_friction" for signal in insight["signals"])
 
 
 def test_bot_decision_review_request_detection():
