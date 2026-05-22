@@ -1962,6 +1962,16 @@ def test_behavioral_intelligence_request_detection_is_read_only():
     assert service.looks_like_behavioral_intelligence_request("Maak een wekelijkse BTC DCA") is False
 
 
+def test_weekly_reflection_request_detection_is_separate_from_daily_behavior():
+    service = _service()
+
+    assert service.looks_like_weekly_reflection_request("Geef mijn weekreflectie") is True
+    assert service.looks_like_weekly_reflection_request("Maak een week review van mijn discipline") is True
+    assert service.looks_like_weekly_reflection_request("Hoe was mijn gedrag de laatste 7 dagen?") is True
+    assert service.looks_like_weekly_reflection_request("Hoe is mijn trading discipline vandaag?") is False
+    assert service.looks_like_weekly_reflection_request("Geef mijn daily brief") is False
+
+
 def test_behavioral_insight_waits_for_evidence_when_empty():
     service = _service()
 
@@ -1973,6 +1983,20 @@ def test_behavioral_insight_waits_for_evidence_when_empty():
     assert insight["signals"] == []
     assert "te weinig" in insight["coaching"]["primary_reflection"].lower()
     assert "alleen" in message.lower()
+
+
+def test_weekly_reflection_waits_for_enough_evidence():
+    service = _service()
+    behavioral = service._build_behavioral_insight_from_activity([])
+
+    reflection = service._build_weekly_reflection_from_behavioral(behavioral, [])
+    message = service._weekly_reflection_message(reflection)
+
+    assert reflection["status"] == "not_enough_data"
+    assert reflection["period"] == "last_7_days"
+    assert reflection["advice_only"] is True
+    assert reflection["discipline_score"] is None
+    assert "nog niet betrouwbaar" in message.lower()
 
 
 def test_behavioral_insight_rewards_review_discipline():
@@ -2025,6 +2049,44 @@ def test_behavioral_insight_flags_decision_churn():
     assert any(signal["type"] == "decision_churn" for signal in insight["signals"])
     assert insight["metrics"]["bot_decisions_generated"] == 3
     assert insight["metrics"]["bot_decisions_generated_7d"] == 3
+
+
+def test_weekly_reflection_summarizes_behavioral_patterns():
+    service = _service()
+    activity = [
+        service._mission_activity_item({
+            "id": f"finn-decision-{idx}",
+            "status": "executed",
+            "created_at": _utc_now() - timedelta(days=idx),
+            "payload": {
+                "action": {"type": "generate_bot_decision"},
+                "result": {"ok": True, "status": "generated", "message": "Bot-decision gemaakt."},
+            },
+        })
+        for idx in range(5)
+    ]
+    activity.append(service._mission_activity_item({
+        "id": "finn-skip-1",
+        "status": "executed",
+        "created_at": _utc_now(),
+        "payload": {
+            "action": {"type": "skip_bot_decision"},
+            "result": {"ok": True, "status": "skipped", "message": "Bot-decision overgeslagen."},
+        },
+    }))
+    behavioral = service._build_behavioral_insight_from_activity(activity)
+
+    reflection = service._build_weekly_reflection_from_behavioral(behavioral, activity)
+    message = service._weekly_reflection_message(reflection)
+
+    assert reflection["status"] == "attention"
+    assert reflection["period"] == "last_7_days"
+    assert reflection["discipline_score"] == 55
+    assert "decision_churn" in reflection["patterns"]
+    assert reflection["metrics"]["bot_decisions_generated_7d"] == 5
+    assert reflection["strengths"]
+    assert reflection["watchouts"]
+    assert "Weekreflectie" in message
 
 
 def test_behavioral_insight_uses_seven_day_patterns():

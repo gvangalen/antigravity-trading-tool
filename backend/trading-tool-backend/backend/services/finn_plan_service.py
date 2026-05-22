@@ -552,6 +552,19 @@ class FinnPlanService:
         ]
         return any(term in q for term in behavioral_terms) and any(term in q for term in coaching_terms)
 
+    def looks_like_weekly_reflection_request(self, query: str) -> bool:
+        q = (query or "").lower()
+        weekly_terms = [
+            "weekreflectie", "week reflectie", "weekly reflection", "weekrapport",
+            "week rapport", "week review", "weekoverzicht", "afgelopen week",
+            "laatste 7 dagen", "7 dagen", "deze week",
+        ]
+        reflection_terms = [
+            "geef", "maak", "toon", "hoe", "reflectie", "review", "rapport",
+            "samenvatting", "gedrag", "discipline", "patroon", "patronen",
+        ]
+        return any(term in q for term in weekly_terms) and any(term in q for term in reflection_terms)
+
     def looks_like_daily_score_refresh_request(self, query: str) -> bool:
         q = (query or "").lower()
         return any(phrase in q for phrase in [
@@ -4283,6 +4296,153 @@ class FinnPlanService:
                 "advice_only": True,
             },
         }
+
+    async def build_weekly_reflection_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=100)
+        day_log = self._mission_day_log(activity_feed)
+        behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        reflection = self._build_weekly_reflection_from_behavioral(behavioral, activity_feed)
+        response = self._weekly_reflection_message(reflection)
+        return {
+            "response": response,
+            "intent": "weekly_reflection",
+            "flow": "weekly_reflection",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "current_flow": "weekly_reflection",
+                "analysis": reflection,
+                "behavioral_insight": behavioral,
+                "advice_only": True,
+            },
+            "suggested_actions": [
+                "Open Mission Control",
+                "Vraag: hoe is mijn trading discipline vandaag?",
+                "Vraag: wat zijn mijn prioriteiten vandaag?",
+            ],
+        }
+
+    def _build_weekly_reflection_from_behavioral(
+        self,
+        behavioral: Dict[str, Any],
+        activity_feed: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        metrics = behavioral.get("metrics") or {}
+        signals = behavioral.get("signals") or []
+        patterns = behavioral.get("patterns") or []
+        enough_data = metrics.get("actions_7d", 0) >= 3 or bool(patterns and patterns != ["discipline_neutral"])
+
+        strengths = []
+        watchouts = []
+        if "disciplined_waiting" in patterns:
+            strengths.append("Je hebt deze week bewust afgeremd via skip, monitor of later-opnieuw-bekijken.")
+        if metrics.get("executed_7d", 0) > 0 and metrics.get("possible_overrides_7d", 0) == 0:
+            strengths.append("Ik zie geen geregistreerde plan-afwijking events in je recente Finn-activiteit.")
+        if "decision_churn" in patterns:
+            watchouts.append("Veel bot-decisions of execution-intentie kan wijzen op decision churn.")
+        if "configuration_churn" in patterns:
+            watchouts.append("Veel configuratiewijzigingen kunnen betekenen dat je plan nog niet stabiel genoeg is.")
+        if "execution_friction" in patterns or metrics.get("possible_overrides_7d", 0) > 0:
+            watchouts.append("Er zijn signalen van execution pressure of mogelijke plan-afwijking.")
+        if "possible_fomo" in patterns:
+            watchouts.append("Mogelijke FOMO-druk: meerdere decisions plus execution-intentie op dezelfde dag.")
+
+        if not strengths and enough_data:
+            strengths.append("Je gebruikt Finn aantoonbaar als beslislaag in plaats van direct te handelen.")
+        if not watchouts and enough_data:
+            watchouts.append("Geen duidelijke gedragswaarschuwing gevonden; blijf wel via Mission Control werken.")
+
+        if not enough_data:
+            status = "not_enough_data"
+            headline = "Ik heb nog te weinig weekdata om een stevige gedragsreflectie te geven."
+            score = None
+        elif any(signal.get("severity") == "medium" for signal in signals):
+            status = "attention"
+            headline = "Deze week vraagt om extra discipline: er zijn patronen die op onrust of execution-druk kunnen wijzen."
+            score = 55
+        else:
+            status = "steady"
+            headline = "Je weekgedrag oogt beheerst op basis van de recente Finn-activiteit."
+            score = 78
+
+        return {
+            "status": status,
+            "period": "last_7_days",
+            "advice_only": True,
+            "headline": headline,
+            "discipline_score": score,
+            "patterns": patterns,
+            "strengths": strengths,
+            "watchouts": watchouts,
+            "metrics": {
+                "actions_7d": metrics.get("actions_7d", 0),
+                "executed_7d": metrics.get("executed_7d", 0),
+                "bot_decisions_generated_7d": metrics.get("bot_decisions_generated_7d", 0),
+                "paper_executions_7d": metrics.get("paper_executions_7d", 0),
+                "live_preflights_7d": metrics.get("live_preflights_7d", 0),
+                "configuration_changes_7d": metrics.get("configuration_changes_7d", 0),
+                "skipped_7d": metrics.get("skipped_7d", 0),
+                "snoozed_7d": metrics.get("snoozed_7d", 0),
+                "monitor_7d": metrics.get("monitor_7d", 0),
+                "possible_overrides_7d": metrics.get("possible_overrides_7d", 0),
+            },
+            "evidence": self._weekly_reflection_evidence(activity_feed),
+            "safe_next_step": (
+                "Gebruik volgende week Mission Control als werkqueue: eerst reviewen, dan pas nieuwe decisions maken."
+                if status != "not_enough_data"
+                else "Laat Finn deze week je actions, skips en reviews vastleggen; daarna wordt de reflectie rijker."
+            ),
+        }
+
+    def _weekly_reflection_evidence(self, activity_feed: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        evidence = []
+        for item in activity_feed[:8]:
+            evidence.append({
+                "type": item.get("type"),
+                "resolve_state": item.get("resolve_state"),
+                "asset": item.get("asset"),
+                "created_at": item.get("created_at"),
+                "outcome": item.get("outcome"),
+            })
+        return evidence
+
+    def _weekly_reflection_message(self, reflection: Dict[str, Any]) -> str:
+        metrics = reflection.get("metrics") or {}
+        lines = [
+            "Weekreflectie op basis van je echte Finn-activiteit van de laatste 7 dagen.",
+            reflection.get("headline") or "Ik heb nog geen harde weekconclusie.",
+            (
+                f"Discipline-score: {reflection.get('discipline_score')}/100."
+                if reflection.get("discipline_score") is not None else
+                "Discipline-score: nog niet betrouwbaar genoeg."
+            ),
+            (
+                "Kernmetrics: "
+                f"{metrics.get('actions_7d', 0)} acties, "
+                f"{metrics.get('bot_decisions_generated_7d', 0)} bot-decisions, "
+                f"{metrics.get('configuration_changes_7d', 0)} configuratiewijzigingen, "
+                f"{metrics.get('possible_overrides_7d', 0)} mogelijke plan-afwijkingen."
+            ),
+        ]
+        strengths = reflection.get("strengths") or []
+        if strengths:
+            lines.append("Sterk deze week:")
+            lines.extend([f"- {item}" for item in strengths[:3]])
+        watchouts = reflection.get("watchouts") or []
+        if watchouts:
+            lines.append("Let volgende week op:")
+            lines.extend([f"- {item}" for item in watchouts[:3]])
+        lines.append(f"Veilige volgende stap: {reflection.get('safe_next_step')}")
+        return "\n".join([line for line in lines if line])
 
     def _build_behavioral_insight_from_activity(
         self,
