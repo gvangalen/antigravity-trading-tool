@@ -9,3 +9,7 @@ __pycache__/
 .DS_Store
 *.sql
 dump.sql
+
+# Celery Beat runtime state
+celerybeat-schedule
+celerybeat-schedule.*
