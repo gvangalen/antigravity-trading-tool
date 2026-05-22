@@ -2089,6 +2089,91 @@ def test_weekly_reflection_summarizes_behavioral_patterns():
     assert "Weekreflectie" in message
 
 
+def test_weekly_reflection_splits_configuration_metrics():
+    service = _service()
+    activity = [
+        service._mission_activity_item({
+            "id": "finn-plan-1",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "create_plan"},
+                "result": {"ok": True, "status": "created", "message": "Plan aangemaakt."},
+            },
+        }),
+        service._mission_activity_item({
+            "id": "finn-strategy-1",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "create_strategy"},
+                "result": {"ok": True, "status": "created", "message": "Strategie opgeslagen."},
+            },
+        }),
+        service._mission_activity_item({
+            "id": "finn-bot-1",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "create_bot"},
+                "result": {"ok": True, "status": "created", "message": "Bot opgeslagen."},
+            },
+        }),
+        service._mission_activity_item({
+            "id": "finn-indicator-1",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "configure_indicator"},
+                "result": {"ok": True, "status": "saved", "message": "Indicator opgeslagen."},
+            },
+        }),
+    ]
+    behavioral = service._build_behavioral_insight_from_activity(activity)
+
+    reflection = service._build_weekly_reflection_from_behavioral(behavioral, activity)
+    message = service._weekly_reflection_message(reflection)
+
+    assert reflection["metrics"]["plan_creates_7d"] == 1
+    assert reflection["metrics"]["strategy_changes_7d"] == 1
+    assert reflection["metrics"]["bot_changes_7d"] == 1
+    assert reflection["metrics"]["indicator_changes_7d"] == 1
+    assert reflection["metrics"]["configuration_changes_7d"] == 4
+    assert "1 nieuwe plannen" in message
+
+
+def test_weekly_reflection_names_waiting_behavior():
+    service = _service()
+    activity = [
+        service._mission_activity_item({
+            "id": "finn-skip-1",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "skip_bot_decision"},
+                "result": {"ok": True, "status": "skipped", "message": "Bot-decision overgeslagen."},
+            },
+        }),
+        service._mission_activity_item({
+            "id": "finn-snooze-1",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "snooze_mission_item"},
+                "result": {"ok": True, "status": "snoozed", "message": "Later opnieuw bekijken."},
+            },
+        }),
+    ]
+    behavioral = service._build_behavioral_insight_from_activity(activity)
+
+    reflection = service._build_weekly_reflection_from_behavioral(behavioral, activity)
+
+    assert reflection["metrics"]["skipped_7d"] == 1
+    assert reflection["metrics"]["snoozed_7d"] == 1
+    assert any("bewust niet doorgezet" in item for item in reflection["strengths"])
+    assert any("uitgesteld" in item for item in reflection["strengths"])
+
+
 def test_behavioral_insight_uses_seven_day_patterns():
     service = _service()
     activity = [

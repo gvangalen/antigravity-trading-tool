@@ -4345,12 +4345,26 @@ class FinnPlanService:
         watchouts = []
         if "disciplined_waiting" in patterns:
             strengths.append("Je hebt deze week bewust afgeremd via skip, monitor of later-opnieuw-bekijken.")
+        if metrics.get("skipped_7d", 0) > 0:
+            strengths.append(f"Je hebt {metrics.get('skipped_7d')} keer bewust niet doorgezet. Dat is discipline, geen passiviteit.")
+        if metrics.get("snoozed_7d", 0) > 0:
+            strengths.append(f"Je hebt {metrics.get('snoozed_7d')} item(s) uitgesteld in plaats van direct te reageren.")
         if metrics.get("executed_7d", 0) > 0 and metrics.get("possible_overrides_7d", 0) == 0:
             strengths.append("Ik zie geen geregistreerde plan-afwijking events in je recente Finn-activiteit.")
         if "decision_churn" in patterns:
             watchouts.append("Veel bot-decisions of execution-intentie kan wijzen op decision churn.")
         if "configuration_churn" in patterns:
-            watchouts.append("Veel configuratiewijzigingen kunnen betekenen dat je plan nog niet stabiel genoeg is.")
+            parts = []
+            if metrics.get("plan_creates_7d", 0):
+                parts.append(f"{metrics.get('plan_creates_7d')} nieuwe plannen")
+            if metrics.get("strategy_changes_7d", 0):
+                parts.append(f"{metrics.get('strategy_changes_7d')} strategy-wijzigingen")
+            if metrics.get("bot_changes_7d", 0):
+                parts.append(f"{metrics.get('bot_changes_7d')} bot-wijzigingen")
+            if metrics.get("indicator_changes_7d", 0):
+                parts.append(f"{metrics.get('indicator_changes_7d')} indicator-wijzigingen")
+            detail = ", ".join(parts) if parts else f"{metrics.get('configuration_changes_7d', 0)} configuratiewijzigingen"
+            watchouts.append(f"Veel configuratiebeweging ({detail}) kan betekenen dat je plan nog niet stabiel genoeg is.")
         if "execution_friction" in patterns or metrics.get("possible_overrides_7d", 0) > 0:
             watchouts.append("Er zijn signalen van execution pressure of mogelijke plan-afwijking.")
         if "possible_fomo" in patterns:
@@ -4389,6 +4403,10 @@ class FinnPlanService:
                 "bot_decisions_generated_7d": metrics.get("bot_decisions_generated_7d", 0),
                 "paper_executions_7d": metrics.get("paper_executions_7d", 0),
                 "live_preflights_7d": metrics.get("live_preflights_7d", 0),
+                "plan_creates_7d": metrics.get("plan_creates_7d", 0),
+                "strategy_changes_7d": metrics.get("strategy_changes_7d", 0),
+                "bot_changes_7d": metrics.get("bot_changes_7d", 0),
+                "indicator_changes_7d": metrics.get("indicator_changes_7d", 0),
                 "configuration_changes_7d": metrics.get("configuration_changes_7d", 0),
                 "skipped_7d": metrics.get("skipped_7d", 0),
                 "snoozed_7d": metrics.get("snoozed_7d", 0),
@@ -4432,6 +4450,13 @@ class FinnPlanService:
                 f"{metrics.get('configuration_changes_7d', 0)} configuratiewijzigingen, "
                 f"{metrics.get('possible_overrides_7d', 0)} mogelijke plan-afwijkingen."
             ),
+            (
+                "Configuratie: "
+                f"{metrics.get('plan_creates_7d', 0)} nieuwe plannen, "
+                f"{metrics.get('strategy_changes_7d', 0)} strategy-wijzigingen, "
+                f"{metrics.get('bot_changes_7d', 0)} bot-wijzigingen, "
+                f"{metrics.get('indicator_changes_7d', 0)} indicator-wijzigingen."
+            ),
         ]
         strengths = reflection.get("strengths") or []
         if strengths:
@@ -4470,6 +4495,11 @@ class FinnPlanService:
         def count_resolution(items: List[Dict[str, Any]], resolution: str) -> int:
             return len([item for item in items if item.get("resolve_state") == resolution])
 
+        plan_creates_7d = count_type(seven_day_items, "create_plan")
+        strategy_changes_7d = count_type(seven_day_items, "create_strategy")
+        bot_changes_7d = count_type(seven_day_items, "create_bot")
+        indicator_changes_7d = count_type(seven_day_items, "configure_indicator")
+
         behavioral_events = [
             item.get("behavioral_event") for item in seven_day_items
             if isinstance(item.get("behavioral_event"), dict)
@@ -4503,12 +4533,11 @@ class FinnPlanService:
             "bot_decisions_generated_7d": count_type(seven_day_items, "generate_bot_decision"),
             "paper_executions_7d": count_type(seven_day_items, "paper_execute_bot_decision"),
             "live_preflights_7d": count_type(seven_day_items, "live_preflight_bot_decision"),
-            "configuration_changes_7d": (
-                count_type(seven_day_items, "create_plan")
-                + count_type(seven_day_items, "create_strategy")
-                + count_type(seven_day_items, "create_bot")
-                + count_type(seven_day_items, "configure_indicator")
-            ),
+            "plan_creates_7d": plan_creates_7d,
+            "strategy_changes_7d": strategy_changes_7d,
+            "bot_changes_7d": bot_changes_7d,
+            "indicator_changes_7d": indicator_changes_7d,
+            "configuration_changes_7d": plan_creates_7d + strategy_changes_7d + bot_changes_7d + indicator_changes_7d,
             "behavioral_events_7d": len(behavioral_events),
             "possible_overrides_7d": len(possible_overrides),
         }
@@ -4558,6 +4587,7 @@ class FinnPlanService:
                     "message": "Er zijn relatief veel configuratiewijzigingen. Check of je je plan verbetert of steeds van richting verandert.",
                     "evidence": [
                         f"{metrics['configuration_changes_7d']} configuratiewijzigingen in 7 dagen",
+                        f"{metrics['plan_creates_7d']} plannen, {metrics['strategy_changes_7d']} strategies, {metrics['bot_changes_7d']} bots, {metrics['indicator_changes_7d']} indicators",
                     ],
                 })
             if metrics["bot_decisions_generated"] >= 3 and (metrics["paper_executions"] > 0 or metrics["live_preflights"] > 0):
