@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.finn_plan_service import _utc_now
 from backend.services.finn_plan_service import empty_indicator_config_draft
+from backend.services.ai_action_engine import _utc_db_timestamp
 from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.strategy_service import StrategyService
 
@@ -588,6 +589,19 @@ def test_strategy_update_context_is_confirmable():
     assert result["draft"]["strategy_id"] == 91
     assert result["draft"]["strategy"]["base_amount_eur"] == 150
     assert result["actions"][0]["label"] == "Strategie bijwerken"
+
+
+def test_strategy_update_intent_detector_accepts_wijzig_with_strategy_id():
+    service = _service()
+
+    assert service.looks_like_strategy_request("Wijzig strategie 228 naar 150 euro", {}) is True
+    assert service.looks_like_strategy_request("Pas strategie 228 aan naar 150 euro", {}) is True
+
+
+def test_legacy_action_engine_uses_naive_utc_timestamps_for_existing_db_schema():
+    ts = _utc_db_timestamp()
+
+    assert ts.tzinfo is None
 
 
 def test_strategy_create_intent_after_duplicate_warning_does_not_become_update():

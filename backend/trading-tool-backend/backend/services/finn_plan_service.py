@@ -470,8 +470,10 @@ class FinnPlanService:
             return False
         has_strategy_word = any(word in q for word in ["strategie", "strategy"])
         has_setup_ref = bool(context.get("setup_id")) or bool(re.search(r"\bsetup\s*#?\s*\d+\b", q))
+        has_strategy_ref = bool(context.get("strategy_id")) or bool(re.search(r"\bstrateg(?:ie|y)\s*#?\s*\d+\b", q))
         has_create_intent = any(word in q for word in ["maak", "aanmaken", "creeer", "creeër", "bouw", "instellen", "wil"])
-        return has_strategy_word and (has_setup_ref or has_create_intent)
+        has_update_intent = any(word in q for word in ["pas", "wijzig", "update", "bijwerk", "bijwerken", "verander", "aanpassen"])
+        return has_strategy_word and (has_setup_ref or has_strategy_ref or has_create_intent or has_update_intent)
 
     def looks_like_bot_request(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
         q = (query or "").lower()

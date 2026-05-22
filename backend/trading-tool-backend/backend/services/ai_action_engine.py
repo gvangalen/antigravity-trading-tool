@@ -18,6 +18,12 @@ from backend.schemas.bot_schema import BotConfigCreateSchema
 
 logger = logging.getLogger(__name__)
 
+
+def _utc_db_timestamp() -> datetime:
+    """Return UTC normalized for existing naive timestamp columns."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class AiActionEngine:
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
@@ -38,7 +44,7 @@ class AiActionEngine:
         Registers a proposed action in the database with status 'pending' and returns a unique action_id.
         """
         action_id = f"act_{uuid.uuid4().hex[:12]}"
-        created_at = datetime.now(timezone.utc)
+        created_at = _utc_db_timestamp()
         expires_at = created_at + timedelta(seconds=ttl_seconds)
 
         new_action = AiPendingAction(
@@ -78,7 +84,11 @@ class AiActionEngine:
             raise HTTPException(status_code=400, detail=f"Deze actie is al verwerkt (status: {action_record.status}).")
 
         # Check expiration
-        if datetime.now(timezone.utc) > action_record.expires_at:
+        now = _utc_db_timestamp()
+        expires_at = action_record.expires_at
+        if expires_at and expires_at.tzinfo:
+            expires_at = expires_at.astimezone(timezone.utc).replace(tzinfo=None)
+        if now > expires_at:
             action_record.status = "expired"
             await self.session.commit()
             logger.warning(f"🚨 Action {action_id} has expired.")
