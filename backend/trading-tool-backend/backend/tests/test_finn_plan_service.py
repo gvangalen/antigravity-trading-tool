@@ -2066,6 +2066,62 @@ def test_behavioral_insight_flags_decision_churn():
     assert insight["metrics"]["bot_decisions_generated_7d"] == 3
 
 
+def test_generate_bot_decision_event_marks_open_review_churn():
+    service = _service()
+    action = {
+        "type": "generate_bot_decision",
+        "payload": {
+            "bot_id": 12,
+            "asset": "BTC",
+            "behavioral_context": {
+                "decision_churn": {
+                    "existing_decision_ids": [101, 102],
+                    "existing_open_count": 2,
+                }
+            },
+        },
+    }
+
+    event = service._behavioral_event_from_generate_bot_decision_action(action)
+
+    assert event["type"] == "decision_churn"
+    assert event["bot_id"] == 12
+    assert event["existing_decision_ids"] == [101, 102]
+    assert any("open review" in reason for reason in event["reasons"])
+
+
+def test_weekly_reflection_names_explicit_decision_churn_event():
+    service = _service()
+    churn = service._mission_activity_item({
+        "id": "finn-decision-churn-1",
+        "status": "executed",
+        "created_at": _utc_now(),
+        "payload": {
+            "action": {"type": "generate_bot_decision"},
+            "result": {
+                "ok": True,
+                "status": "generated",
+                "message": "Bot-decision gemaakt.",
+                "behavioral_event": {
+                    "type": "decision_churn",
+                    "severity": "medium",
+                    "existing_decision_ids": [101],
+                    "reasons": ["nieuwe bot-decision gevraagd terwijl 1 open review nog niet afgehandeld was"],
+                },
+            },
+        },
+    })
+
+    behavioral = service._build_behavioral_insight_from_activity([churn])
+    reflection = service._build_weekly_reflection_from_behavioral(behavioral, [churn])
+    message = service._weekly_reflection_message(reflection)
+
+    assert behavioral["metrics"]["decision_churn_events_7d"] == 1
+    assert "decision_churn" in behavioral["patterns"]
+    assert reflection["metrics"]["decision_churn_events_7d"] == 1
+    assert "Je vroeg meerdere keren nieuwe decisions aan terwijl er nog open review stond." in message
+
+
 def test_weekly_reflection_summarizes_behavioral_patterns():
     service = _service()
     activity = [

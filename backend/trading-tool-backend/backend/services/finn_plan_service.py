@@ -1686,7 +1686,10 @@ class FinnPlanService:
             }
 
         action = {
-            "id": self._maintenance_action_id("generate_bot_decision", [str(selected.get("id"))]),
+            "id": self._maintenance_action_id(
+                "generate_bot_decision",
+                self._generate_bot_decision_action_parts(selected, []),
+            ),
             "type": "generate_bot_decision",
             "label": "Bot-decision genereren",
             "payload": {"bot_id": int(selected["id"]), "asset": asset},
@@ -1700,9 +1703,30 @@ class FinnPlanService:
                 "no_order_execution": True,
             },
         }
+        open_reviews = await self._open_bot_reviews_for_bot(user_id, asset, int(selected["id"]))
+        if open_reviews:
+            open_decision_ids = [int(item["decision_id"]) for item in open_reviews if item.get("decision_id")]
+            action["id"] = self._maintenance_action_id(
+                "generate_bot_decision",
+                self._generate_bot_decision_action_parts(selected, open_decision_ids),
+            )
+            action["risk_level"] = "high"
+            action["payload"]["behavioral_context"] = {
+                "decision_churn": {
+                    "existing_decision_ids": open_decision_ids,
+                    "existing_open_count": len(open_decision_ids),
+                }
+            }
+            action["guardrails"]["open_decision_review_exists"] = True
         return {
             "response": (
+                (
+                    f"Er staat al {len(open_reviews)} open bot-decision(s) voor {selected.get('name')}. "
+                    "Als je nu opnieuw een decision maakt, leg ik dat vast als decision churn. "
+                )
+                if open_reviews else
                 f"Ik kan een bot-decision genereren voor {selected.get('name')} (bot #{selected.get('id')}). "
+            ) + (
                 "Dit maakt alleen een voorstel/decision; orders uitvoeren blijft apart bevestigd."
             ),
             "intent": "bot_decision",
@@ -1718,12 +1742,18 @@ class FinnPlanService:
                 "current_flow": "bot_decision",
                 "asset": asset,
                 "bot_id": int(selected["id"]),
+                "open_decision_count": len(open_reviews),
+                "open_decision_ids": [item.get("decision_id") for item in open_reviews],
                 "autonomy_level": "confirm_required",
             },
             "reasoning": {
                 "confidence_score": 0.82,
-                "risk_detected": False,
-                "reasons": ["Bot decision generation creates a proposal only; no order execution."],
+                "risk_detected": bool(open_reviews),
+                "reasons": (
+                    ["Er staat al een open bot-decision; opnieuw genereren wordt als decision churn gelogd."]
+                    if open_reviews else
+                    ["Bot decision generation creates a proposal only; no order execution."]
+                ),
                 "coaching_level": "bot_decision_handoff",
             },
             "suggested_actions": [f"Bevestig bot-decision voor bot #{selected.get('id')}"],
@@ -2987,6 +3017,28 @@ class FinnPlanService:
     def _maintenance_action_id(self, action_type: str, parts: List[str]) -> str:
         normalized = json.dumps({"type": action_type, "parts": parts}, sort_keys=True, separators=(",", ":"), default=str)
         return f"finn-maint-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:24]}"
+
+    def _generate_bot_decision_action_parts(self, bot: Dict[str, Any], open_decision_ids: List[int]) -> List[str]:
+        parts = [str(bot.get("id"))]
+        if open_decision_ids:
+            parts.extend(["open_review", *[str(decision_id) for decision_id in sorted(open_decision_ids)]])
+        return parts
+
+    async def _open_bot_reviews_for_bot(self, user_id: int, asset: str, bot_id: int) -> List[Dict[str, Any]]:
+        if not self.session or bot_id <= 0:
+            return []
+        try:
+            bot_today = await BotService(self.session).get_bot_today(user_id, symbol=asset)
+        except Exception:
+            return []
+        reviews = []
+        for decision in bot_today.get("decisions") or []:
+            if int(decision.get("bot_id") or 0) != int(bot_id):
+                continue
+            review = self._mission_bot_review_item(decision, {"asset": decision.get("symbol") or asset, "setup": {"id": decision.get("setup_id")}})
+            if review.get("review_status") == "needs_review":
+                reviews.append(review)
+        return reviews
 
     def _extract_id_after_words(self, query: str, words: List[str]) -> Optional[int]:
         q = query or ""
@@ -4424,7 +4476,10 @@ class FinnPlanService:
         if metrics.get("executed_7d", 0) > 0 and metrics.get("possible_overrides_7d", 0) == 0:
             strengths.append("Ik zie geen geregistreerde plan-afwijking events in je recente Finn-activiteit.")
         if "decision_churn" in patterns:
-            watchouts.append("Veel bot-decisions of execution-intentie kan wijzen op decision churn.")
+            if metrics.get("decision_churn_events_7d", 0) > 0:
+                watchouts.append("Je vroeg meerdere keren nieuwe decisions aan terwijl er nog open review stond.")
+            else:
+                watchouts.append("Veel bot-decisions of execution-intentie kan wijzen op decision churn.")
         if "configuration_churn" in patterns:
             parts = []
             if metrics.get("plan_creates_7d", 0):
@@ -4487,6 +4542,8 @@ class FinnPlanService:
                 "monitor_7d": metrics.get("monitor_7d", 0),
                 "possible_overrides_7d": metrics.get("possible_overrides_7d", 0),
                 "plan_deviation_events_7d": metrics.get("plan_deviation_events_7d", 0),
+                "decision_churn_events_7d": metrics.get("decision_churn_events_7d", 0),
+                "execution_pressure_events_7d": metrics.get("execution_pressure_events_7d", 0),
                 "previous_actions_7d": metrics.get("previous_actions_7d", 0),
                 "previous_bot_decisions_generated_7d": metrics.get("previous_bot_decisions_generated_7d", 0),
                 "previous_configuration_changes_7d": metrics.get("previous_configuration_changes_7d", 0),
@@ -4601,7 +4658,8 @@ class FinnPlanService:
                 f"{metrics.get('actions_7d', 0)} acties, "
                 f"{metrics.get('bot_decisions_generated_7d', 0)} bot-decisions, "
                 f"{metrics.get('configuration_changes_7d', 0)} configuratiewijzigingen, "
-                f"{metrics.get('possible_overrides_7d', 0)} mogelijke plan-afwijkingen."
+                f"{metrics.get('possible_overrides_7d', 0)} mogelijke plan-afwijkingen, "
+                f"{metrics.get('decision_churn_events_7d', 0)} decision-churn events."
             ),
             (
                 "Configuratie: "
@@ -4681,6 +4739,14 @@ class FinnPlanService:
             event for event in behavioral_events
             if event.get("type") in {"plan_deviation_attempt", "strategy_change_pressure"}
         ]
+        decision_churn_events = [
+            event for event in behavioral_events
+            if event.get("type") == "decision_churn"
+        ]
+        execution_pressure_events = [
+            event for event in behavioral_events
+            if event.get("type") == "execution_pressure"
+        ]
 
         metrics = {
             "actions_today": len(today_items),
@@ -4720,6 +4786,8 @@ class FinnPlanService:
             "behavioral_events_7d": len(behavioral_events),
             "possible_overrides_7d": len(possible_overrides),
             "plan_deviation_events_7d": len(plan_deviation_events),
+            "decision_churn_events_7d": len(decision_churn_events),
+            "execution_pressure_events_7d": len(execution_pressure_events),
         }
 
         signals: List[Dict[str, Any]] = []
@@ -4728,15 +4796,20 @@ class FinnPlanService:
             primary = "Ik heb nog te weinig Finn-activiteit om je handelsgedrag betrouwbaar te spiegelen."
             safe_next_step = "Gebruik Mission Control vandaag bewust: review, skip of stel acties uit in plaats van impulsief te handelen."
         else:
-            if metrics["bot_decisions_generated"] >= 3 or metrics["paper_executions"] >= 2 or metrics["bot_decisions_generated_7d"] >= 5:
+            if decision_churn_events or metrics["bot_decisions_generated"] >= 3 or metrics["paper_executions"] >= 2 or metrics["bot_decisions_generated_7d"] >= 5:
                 signals.append({
                     "type": "decision_churn",
                     "severity": "medium",
-                    "message": "Er is relatief veel decision/execution-activiteit. Dat kan op onrust of overtrading-druk wijzen.",
+                    "message": (
+                        "Je vroeg opnieuw bot-decisions aan terwijl er nog open review stond."
+                        if decision_churn_events else
+                        "Er is relatief veel decision/execution-activiteit. Dat kan op onrust of overtrading-druk wijzen."
+                    ),
                     "evidence": [
                         f"{metrics['bot_decisions_generated']} bot-decisions vandaag",
                         f"{metrics['bot_decisions_generated_7d']} bot-decisions in 7 dagen",
                         f"{metrics['paper_executions_7d']} paper executions in 7 dagen",
+                        f"{metrics['decision_churn_events_7d']} explicit decision-churn events",
                     ],
                 })
             if metrics["live_preflights"] > 0 or metrics["live_preflights_7d"] >= 2 or possible_overrides:
@@ -4854,7 +4927,8 @@ class FinnPlanService:
             f"{metrics.get('bot_decisions_generated_7d', 0)} bot-decisions, "
             f"{metrics.get('configuration_changes_7d', 0)} configuratiewijzigingen, "
             f"{metrics.get('possible_overrides_7d', 0)} mogelijke override-/druksignalen, "
-            f"{metrics.get('plan_deviation_events_7d', 0)} plan-afwijking events."
+            f"{metrics.get('plan_deviation_events_7d', 0)} plan-afwijking events, "
+            f"{metrics.get('decision_churn_events_7d', 0)} decision-churn events."
         )
         lines.append(f"Veilige volgende stap: {coaching.get('safe_next_step')}")
         return "\n".join([line for line in lines if line])
@@ -6524,6 +6598,9 @@ class FinnPlanService:
             "result": generated,
             "verified": {"bot_decision": bool(generated.get("ok"))},
         }
+        behavioral_event = self._behavioral_event_from_generate_bot_decision_action(action)
+        if behavioral_event:
+            result["behavioral_event"] = behavioral_event
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         return result
 
@@ -6604,6 +6681,24 @@ class FinnPlanService:
             "waiting_for_data": "Mission Control item wacht op data en is voor nu uit je werkqueue gehaald.",
             "snoozed": "Mission Control item is uitgesteld en voor nu uit je werkqueue gehaald.",
         }.get(resolution, "Mission Control item is bijgewerkt.")
+
+    def _behavioral_event_from_generate_bot_decision_action(self, action: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        payload = action.get("payload") or {}
+        context = payload.get("behavioral_context") if isinstance(payload.get("behavioral_context"), dict) else {}
+        churn = context.get("decision_churn") if isinstance(context.get("decision_churn"), dict) else {}
+        open_ids = churn.get("existing_decision_ids") or []
+        if not open_ids:
+            return None
+        return {
+            "type": "decision_churn",
+            "severity": "medium",
+            "asset": payload.get("asset"),
+            "bot_id": payload.get("bot_id"),
+            "existing_decision_ids": open_ids,
+            "reasons": [
+                f"nieuwe bot-decision gevraagd terwijl {len(open_ids)} open review(s) nog niet afgehandeld waren"
+            ],
+        }
 
     def _behavioral_event_from_execution_action(self, action: Dict[str, Any], *, result_status: Optional[str] = None) -> Optional[Dict[str, Any]]:
         payload = action.get("payload") or {}
