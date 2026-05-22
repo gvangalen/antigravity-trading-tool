@@ -166,6 +166,10 @@ async def assistant_chat(
             finn_response = await finn.build_bot_execution_decision_response(user_id, request.query, context_payload)
             finn_response["trace_id"] = trace_id
             return AssistantChatResponse(**finn_response)
+        if finn.looks_like_behavioral_intelligence_request(request.query):
+            finn_response = await finn.build_behavioral_intelligence_response(user_id, request.query, context_payload)
+            finn_response["trace_id"] = trace_id
+            return AssistantChatResponse(**finn_response)
         if finn.looks_like_daily_coach_request(request.query):
             finn_response = await finn.build_daily_coach_response(user_id, request.query, context_payload)
             finn_response["trace_id"] = trace_id
@@ -376,6 +380,12 @@ async def assistant_chat_stream(
 
             if finn.looks_like_bot_execution_decision_request(request.query):
                 envelope = await finn.build_bot_execution_decision_response(user_id, request.query, context_payload)
+                envelope["trace_id"] = trace_id
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_behavioral_intelligence_request(request.query):
+                envelope = await finn.build_behavioral_intelligence_response(user_id, request.query, context_payload)
                 envelope["trace_id"] = trace_id
                 yield _sse_event("envelope", envelope)
                 return

@@ -349,6 +349,18 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     snoozed: "later",
   }[state] || state || "open");
 
+  const behavioralStatusLabel = (status) => ({
+    not_enough_data: "te weinig data",
+    early_signal: "stabiel",
+    attention: "aandacht",
+  }[status] || status || "onbekend");
+
+  const behavioralTone = (status) => {
+    if (status === "attention") return "border-amber-100 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300";
+    if (status === "not_enough_data") return "border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 text-slate-500 dark:text-slate-400";
+    return "border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300";
+  };
+
   const missionWorkqueueSections = () => {
     if (Array.isArray(missionControl?.workqueue_groups) && missionControl.workqueue_groups.length > 0) {
       return missionControl.workqueue_groups.map((group) => ({
@@ -1457,6 +1469,28 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                     </span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {missionControl.behavioral_insight?.coaching && (
+              <div className={`rounded-xl border px-3 py-2 ${behavioralTone(missionControl.behavioral_insight.status)}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+                    <Brain size={11} />
+                    Gedrag & discipline
+                  </span>
+                  <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
+                    {behavioralStatusLabel(missionControl.behavioral_insight.status)}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[10px] font-semibold leading-snug">
+                  {missionControl.behavioral_insight.coaching.primary_reflection}
+                </p>
+                {missionControl.behavioral_insight.coaching.safe_next_step && (
+                  <p className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-80">
+                    {missionControl.behavioral_insight.coaching.safe_next_step}
+                  </p>
+                )}
               </div>
             )}
 

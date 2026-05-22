@@ -538,6 +538,20 @@ class FinnPlanService:
         ])
         return has_today and (has_decision_intent or has_trading_context or "kopen" in q)
 
+    def looks_like_behavioral_intelligence_request(self, query: str) -> bool:
+        q = (query or "").lower()
+        behavioral_terms = [
+            "discipline", "gedrag", "behavior", "behaviour", "fomo", "revenge",
+            "impulsief", "impulsieve", "emotie", "emotioneel", "overtrade",
+            "overtrading", "afwijk", "wijk ik af", "plan gevolgd", "trading gedrag",
+            "heb ik mijn plan", "weekreflectie", "reflectie", "patroon", "patronen",
+        ]
+        coaching_terms = [
+            "hoe", "zie", "check", "controleer", "analyseer", "waar", "wat zegt",
+            "spiegel", "coach", "ben ik", "heb ik", "wijk",
+        ]
+        return any(term in q for term in behavioral_terms) and any(term in q for term in coaching_terms)
+
     def looks_like_daily_score_refresh_request(self, query: str) -> bool:
         q = (query or "").lower()
         return any(phrase in q for phrase in [
@@ -4209,6 +4223,7 @@ class FinnPlanService:
             "skipped_today_count": day_log["skipped_count"],
             "snoozed_today_count": day_log["snoozed_count"],
         }
+        behavioral_insight = self._build_behavioral_insight_from_activity(activity_feed, day_log)
         return {
             "ok": True,
             "intent": "mission_control",
@@ -4223,6 +4238,7 @@ class FinnPlanService:
             "bot_review_queue": mission["bot_review_queue"],
             "activity_feed": activity_feed,
             "day_log": day_log,
+            "behavioral_insight": behavioral_insight,
             "data_readiness": analysis.get("data_readiness") or {},
             "source": {
                 "flow": "daily_coach",
@@ -4230,6 +4246,177 @@ class FinnPlanService:
                 "asset_count": analysis.get("asset_count", 0),
             },
         }
+
+    async def build_behavioral_intelligence_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=20)
+        day_log = self._mission_day_log(activity_feed)
+        insight = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        response = self._behavioral_intelligence_message(insight)
+        return {
+            "response": response,
+            "intent": "behavioral_intelligence",
+            "flow": "behavioral_intelligence",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "current_flow": "behavioral_intelligence",
+                "analysis": insight,
+                "advice_only": True,
+            },
+        }
+
+    def _build_behavioral_insight_from_activity(
+        self,
+        activity_feed: List[Dict[str, Any]],
+        day_log: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        activity_feed = activity_feed or []
+        day_log = day_log or self._mission_day_log(activity_feed)
+        executed = [item for item in activity_feed if item.get("status") == "executed"]
+        pending = [item for item in activity_feed if item.get("status") == "pending"]
+        today = _utc_now().date()
+
+        today_items = []
+        for item in activity_feed:
+            created_at = self._parse_mission_timestamp(item.get("created_at"))
+            if created_at and created_at.date() == today:
+                today_items.append(item)
+
+        def count_type(items: List[Dict[str, Any]], action_type: str) -> int:
+            return len([item for item in items if item.get("type") == action_type])
+
+        metrics = {
+            "actions_today": len(today_items),
+            "executed_today": len([item for item in today_items if item.get("status") == "executed"]),
+            "pending_today": len([item for item in today_items if item.get("status") == "pending"]),
+            "resolved_today": day_log.get("resolved_count", 0),
+            "skipped_today": day_log.get("skipped_count", 0),
+            "snoozed_today": day_log.get("snoozed_count", 0),
+            "monitor_today": day_log.get("monitor_count", 0),
+            "bot_decisions_generated": count_type(today_items, "generate_bot_decision"),
+            "bot_decisions_skipped": count_type(today_items, "skip_bot_decision"),
+            "paper_executions": count_type(today_items, "paper_execute_bot_decision"),
+            "live_preflights": count_type(today_items, "live_preflight_bot_decision"),
+            "plan_creates": count_type(today_items, "create_plan"),
+            "strategy_changes": count_type(today_items, "create_strategy"),
+            "bot_changes": count_type(today_items, "create_bot"),
+            "indicator_changes": count_type(today_items, "configure_indicator"),
+        }
+
+        signals: List[Dict[str, Any]] = []
+        if not activity_feed:
+            status = "not_enough_data"
+            primary = "Ik heb nog te weinig Finn-activiteit om je handelsgedrag betrouwbaar te spiegelen."
+            safe_next_step = "Gebruik Mission Control vandaag bewust: review, skip of stel acties uit in plaats van impulsief te handelen."
+        else:
+            if metrics["bot_decisions_generated"] >= 3 or metrics["paper_executions"] >= 2:
+                signals.append({
+                    "type": "overtrading_risk",
+                    "severity": "medium",
+                    "message": "Er is vandaag relatief veel decision/execution-activiteit. Neem extra frictie voordat je een nieuwe actie start.",
+                    "evidence": [
+                        f"{metrics['bot_decisions_generated']} bot-decisions gegenereerd",
+                        f"{metrics['paper_executions']} paper executions",
+                    ],
+                })
+            if metrics["live_preflights"] > 0:
+                signals.append({
+                    "type": "execution_friction",
+                    "severity": "medium",
+                    "message": "Je hebt live-preflight gedrag geraakt. Finn moet hier streng blijven: alleen doorgaan als guardrails en keys kloppen.",
+                    "evidence": [f"{metrics['live_preflights']} live preflight checks vandaag"],
+                })
+            if metrics["skipped_today"] > 0 or metrics["snoozed_today"] > 0 or metrics["monitor_today"] > 0:
+                signals.append({
+                    "type": "discipline_positive",
+                    "severity": "low",
+                    "message": "Je hebt vandaag bewust afgeremd of items afgehandeld. Dat is goed disciplinegedrag.",
+                    "evidence": [
+                        f"{metrics['skipped_today']} overgeslagen",
+                        f"{metrics['snoozed_today']} later gezet",
+                        f"{metrics['monitor_today']} gemonitord",
+                    ],
+                })
+            if metrics["plan_creates"] + metrics["strategy_changes"] + metrics["bot_changes"] >= 4:
+                signals.append({
+                    "type": "configuration_churn",
+                    "severity": "medium",
+                    "message": "Er zijn vandaag veel configuratiewijzigingen. Check of je je plan verbetert of steeds van richting verandert.",
+                    "evidence": [
+                        f"{metrics['plan_creates']} plan-flows",
+                        f"{metrics['strategy_changes']} strategy changes",
+                        f"{metrics['bot_changes']} bot changes",
+                    ],
+                })
+            if pending:
+                signals.append({
+                    "type": "review_hygiene",
+                    "severity": "low",
+                    "message": "Er staan nog bevestigbare acties open. Rond die bewust af of annuleer ze, zodat je cockpit schoon blijft.",
+                    "evidence": [f"{len(pending)} pending Finn-acties"],
+                })
+
+            if not signals:
+                signals.append({
+                    "type": "discipline_neutral",
+                    "severity": "low",
+                    "message": "Ik zie geen hard bewijs voor impulsief gedrag in je recente Finn-activiteit.",
+                    "evidence": [f"{len(executed)} uitgevoerde Finn-acties in recente historie"],
+                })
+
+            status = "attention" if any(signal["severity"] in {"medium", "high"} for signal in signals) else "early_signal"
+            primary = signals[0]["message"]
+            safe_next_step = (
+                "Werk eerst de bovenste Mission Control-actie af en maak pas daarna een nieuwe trade- of botbeslissing."
+                if status == "attention"
+                else "Blijf deze acties bewust via review, confirm of skip afhandelen."
+            )
+
+        do_not_do = "Gebruik dit niet als koop- of verkoopadvies; dit is alleen gedragscoaching op basis van je eigen Finn-activiteit."
+        return {
+            "status": status,
+            "period": "today",
+            "advice_only": True,
+            "signals": signals,
+            "metrics": metrics,
+            "coaching": {
+                "primary_reflection": primary,
+                "safe_next_step": safe_next_step,
+                "do_not_do": do_not_do,
+            },
+            "evidence_source": "ai_pending_actions",
+        }
+
+    def _behavioral_intelligence_message(self, insight: Dict[str, Any]) -> str:
+        coaching = insight.get("coaching") or {}
+        metrics = insight.get("metrics") or {}
+        signals = insight.get("signals") or []
+        lines = [
+            "Ik kijk hier alleen naar je recente Finn-gedrag, niet naar marktvoorspellingen.",
+            coaching.get("primary_reflection") or "Ik heb nog geen harde gedragsconclusie.",
+        ]
+        if signals:
+            lines.append("Signalen:")
+            for signal in signals[:3]:
+                lines.append(f"- {signal.get('message')}")
+        lines.append(
+            "Vandaag: "
+            f"{metrics.get('actions_today', 0)} acties, "
+            f"{metrics.get('skipped_today', 0)} skips, "
+            f"{metrics.get('snoozed_today', 0)} later gezet, "
+            f"{metrics.get('bot_decisions_generated', 0)} bot-decisions."
+        )
+        lines.append(f"Veilige volgende stap: {coaching.get('safe_next_step')}")
+        return "\n".join([line for line in lines if line])
 
     def _build_mission_control_from_daily_analysis(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
         assets = analysis.get("assets") or []

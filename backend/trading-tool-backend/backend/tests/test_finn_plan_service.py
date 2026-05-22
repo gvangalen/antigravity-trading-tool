@@ -1952,6 +1952,80 @@ def test_mission_activity_item_marks_snooze_and_day_log_counts():
     assert day_log["resolved_count"] == 1
 
 
+def test_behavioral_intelligence_request_detection_is_read_only():
+    service = _service()
+
+    assert service.looks_like_behavioral_intelligence_request("Hoe is mijn trading discipline vandaag?") is True
+    assert service.looks_like_behavioral_intelligence_request("Zie je FOMO of impulsief gedrag?") is True
+    assert service.looks_like_behavioral_intelligence_request("Wijk ik af van mijn plan?") is True
+    assert service.looks_like_behavioral_intelligence_request("Geef mijn daily brief") is False
+    assert service.looks_like_behavioral_intelligence_request("Maak een wekelijkse BTC DCA") is False
+
+
+def test_behavioral_insight_waits_for_evidence_when_empty():
+    service = _service()
+
+    insight = service._build_behavioral_insight_from_activity([])
+    message = service._behavioral_intelligence_message(insight)
+
+    assert insight["status"] == "not_enough_data"
+    assert insight["advice_only"] is True
+    assert insight["signals"] == []
+    assert "te weinig" in insight["coaching"]["primary_reflection"].lower()
+    assert "alleen" in message.lower()
+
+
+def test_behavioral_insight_rewards_review_discipline():
+    service = _service()
+    skipped = service._mission_activity_item({
+        "id": "finn-skip-1",
+        "status": "executed",
+        "created_at": _utc_now(),
+        "payload": {
+            "action": {"type": "skip_bot_decision"},
+            "result": {"ok": True, "status": "skipped", "message": "Bot-decision overgeslagen."},
+        },
+    })
+    snoozed = service._mission_activity_item({
+        "id": "finn-snooze-1",
+        "status": "executed",
+        "created_at": _utc_now(),
+        "payload": {
+            "action": {"type": "snooze_mission_item"},
+            "result": {"ok": True, "status": "snoozed", "message": "Later opnieuw bekijken."},
+        },
+    })
+
+    insight = service._build_behavioral_insight_from_activity([skipped, snoozed])
+
+    assert insight["status"] == "early_signal"
+    assert any(signal["type"] == "discipline_positive" for signal in insight["signals"])
+    assert insight["metrics"]["skipped_today"] == 1
+    assert insight["metrics"]["snoozed_today"] == 1
+
+
+def test_behavioral_insight_flags_decision_churn():
+    service = _service()
+    activity = [
+        service._mission_activity_item({
+            "id": f"finn-decision-{idx}",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "generate_bot_decision"},
+                "result": {"ok": True, "status": "generated", "message": "Bot-decision gemaakt."},
+            },
+        })
+        for idx in range(3)
+    ]
+
+    insight = service._build_behavioral_insight_from_activity(activity)
+
+    assert insight["status"] == "attention"
+    assert any(signal["type"] == "overtrading_risk" for signal in insight["signals"])
+    assert insight["metrics"]["bot_decisions_generated"] == 3
+
+
 def test_bot_decision_review_request_detection():
     service = _service()
 
