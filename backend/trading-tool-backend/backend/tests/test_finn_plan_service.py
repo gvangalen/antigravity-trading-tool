@@ -2142,6 +2142,42 @@ def test_weekly_reflection_splits_configuration_metrics():
     assert "1 nieuwe plannen" in message
 
 
+def test_weekly_reflection_includes_week_over_week_and_profile():
+    service = _service()
+    activity = [
+        service._mission_activity_item({
+            "id": f"finn-decision-now-{idx}",
+            "status": "executed",
+            "created_at": _utc_now() - timedelta(days=idx),
+            "payload": {
+                "action": {"type": "generate_bot_decision"},
+                "result": {"ok": True, "status": "generated", "message": "Bot-decision gemaakt."},
+            },
+        })
+        for idx in range(5)
+    ]
+    activity.append(service._mission_activity_item({
+        "id": "finn-decision-prev",
+        "status": "executed",
+        "created_at": _utc_now() - timedelta(days=9),
+        "payload": {
+            "action": {"type": "generate_bot_decision"},
+            "result": {"ok": True, "status": "generated", "message": "Bot-decision gemaakt."},
+        },
+    }))
+    behavioral = service._build_behavioral_insight_from_activity(activity)
+
+    reflection = service._build_weekly_reflection_from_behavioral(behavioral, activity)
+    message = service._weekly_reflection_message(reflection)
+
+    assert reflection["behavioral_profile"]["type"] == "decision_heavy"
+    assert reflection["week_over_week"]["period"] == "last_7_days_vs_previous_7_days"
+    assert reflection["week_over_week"]["comparisons"][1]["current"] == 5
+    assert reflection["week_over_week"]["comparisons"][1]["previous"] == 1
+    assert "Profiel deze week" in message
+    assert "Vergeleken met vorige week" in message
+
+
 def test_weekly_reflection_names_waiting_behavior():
     service = _service()
     activity = [
@@ -2172,6 +2208,47 @@ def test_weekly_reflection_names_waiting_behavior():
     assert reflection["metrics"]["snoozed_7d"] == 1
     assert any("bewust niet doorgezet" in item for item in reflection["strengths"])
     assert any("uitgesteld" in item for item in reflection["strengths"])
+
+
+def test_behavioral_event_from_bot_update_detects_budget_and_live_pressure():
+    service = _service()
+    draft = {
+        "operation": "update",
+        "asset": "BTC",
+        "bot_id": 42,
+        "strategy_id": 11,
+        "changes": [
+            {"field": "budget_total_eur", "from": 100, "to": 500},
+            {"field": "is_live", "from": False, "to": True},
+        ],
+    }
+
+    event = service._behavioral_event_from_bot_draft(draft)
+
+    assert event["type"] == "plan_deviation_attempt"
+    assert event["bot_id"] == 42
+    assert any("budget_total_eur verhoogd" in reason for reason in event["reasons"])
+    assert any("live" in reason for reason in event["reasons"])
+
+
+def test_behavioral_event_from_strategy_update_detects_sensitive_changes():
+    service = _service()
+    draft = {
+        "operation": "update",
+        "asset": "ETH",
+        "setup_id": 7,
+        "strategy_id": 12,
+        "changes": [
+            {"field": "base_amount_eur", "from": 100, "to": 250},
+            {"field": "targets", "from": [3200], "to": [3600]},
+        ],
+    }
+
+    event = service._behavioral_event_from_strategy_draft(draft)
+
+    assert event["type"] == "strategy_change_pressure"
+    assert event["strategy_id"] == 12
+    assert "base_amount_eur gewijzigd" in event["reasons"]
 
 
 def test_behavioral_insight_uses_seven_day_patterns():

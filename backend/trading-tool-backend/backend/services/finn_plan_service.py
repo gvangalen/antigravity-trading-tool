@@ -4339,6 +4339,8 @@ class FinnPlanService:
         metrics = behavioral.get("metrics") or {}
         signals = behavioral.get("signals") or []
         patterns = behavioral.get("patterns") or []
+        week_over_week = self._behavioral_week_over_week(metrics)
+        behavioral_profile = self._behavioral_profile_from_metrics(metrics, patterns)
         enough_data = metrics.get("actions_7d", 0) >= 3 or bool(patterns and patterns != ["discipline_neutral"])
 
         strengths = []
@@ -4395,6 +4397,8 @@ class FinnPlanService:
             "headline": headline,
             "discipline_score": score,
             "patterns": patterns,
+            "behavioral_profile": behavioral_profile,
+            "week_over_week": week_over_week,
             "strengths": strengths,
             "watchouts": watchouts,
             "metrics": {
@@ -4433,6 +4437,77 @@ class FinnPlanService:
             })
         return evidence
 
+    def _behavioral_profile_from_metrics(self, metrics: Dict[str, Any], patterns: List[str]) -> Dict[str, Any]:
+        if metrics.get("actions_7d", 0) < 3 and patterns == ["discipline_neutral"]:
+            return {
+                "type": "insufficient_history",
+                "label": "Nog te weinig historie",
+                "summary": "Finn heeft meer review-, skip- en decision-data nodig voordat dit profiel stevig is.",
+            }
+        if metrics.get("possible_overrides_7d", 0) > 0 or "execution_friction" in patterns:
+            return {
+                "type": "execution_pressure",
+                "label": "Execution pressure",
+                "summary": "Je week bevat signalen waarbij extra frictie rond execution verstandig blijft.",
+            }
+        if "decision_churn" in patterns:
+            return {
+                "type": "decision_heavy",
+                "label": "Decision-heavy",
+                "summary": "Je gebruikt Finn intensief voor decisions; bewaak dat dit geen herhaald zoeken naar bevestiging wordt.",
+            }
+        if "configuration_churn" in patterns:
+            return {
+                "type": "configuration_heavy",
+                "label": "Veel configuratiebeweging",
+                "summary": "Je bent je systeem veel aan het aanpassen; rond wijzigingen bewust af voordat je execution zoekt.",
+            }
+        if "disciplined_waiting" in patterns:
+            return {
+                "type": "disciplined_waiting",
+                "label": "Gedisciplineerd wachten",
+                "summary": "Je laat Finn je helpen om niet elke open actie direct door te drukken.",
+            }
+        return {
+            "type": "steady_operator",
+            "label": "Stabiele operator",
+            "summary": "Geen duidelijke onrustsignalen in de recente Finn-activiteit.",
+        }
+
+    def _behavioral_week_over_week(self, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        comparisons = []
+        for key, label in [
+            ("actions_7d", "acties"),
+            ("bot_decisions_generated_7d", "bot-decisions"),
+            ("configuration_changes_7d", "configuratiewijzigingen"),
+            ("skipped_7d", "skips"),
+            ("snoozed_7d", "later gezet"),
+        ]:
+            previous_key = f"previous_{key}"
+            current = int(metrics.get(key) or 0)
+            previous = int(metrics.get(previous_key) or 0)
+            delta = current - previous
+            comparisons.append({
+                "metric": key,
+                "label": label,
+                "current": current,
+                "previous": previous,
+                "delta": delta,
+                "direction": "up" if delta > 0 else ("down" if delta < 0 else "flat"),
+            })
+        meaningful = [item for item in comparisons if item["delta"] != 0]
+        if not meaningful:
+            summary = "nog geen duidelijke verandering of te weinig vorige-weekdata."
+        else:
+            lead = max(meaningful, key=lambda item: abs(item["delta"]))
+            direction = "meer" if lead["delta"] > 0 else "minder"
+            summary = f"{abs(lead['delta'])} {lead['label']} {direction} dan vorige week."
+        return {
+            "period": "last_7_days_vs_previous_7_days",
+            "summary": summary,
+            "comparisons": comparisons,
+        }
+
     def _weekly_reflection_message(self, reflection: Dict[str, Any]) -> str:
         metrics = reflection.get("metrics") or {}
         lines = [
@@ -4458,6 +4533,12 @@ class FinnPlanService:
                 f"{metrics.get('indicator_changes_7d', 0)} indicator-wijzigingen."
             ),
         ]
+        profile = reflection.get("behavioral_profile") or {}
+        if profile:
+            lines.append(f"Profiel deze week: {profile.get('label')} - {profile.get('summary')}")
+        wow = reflection.get("week_over_week") or {}
+        if wow.get("summary"):
+            lines.append(f"Vergeleken met vorige week: {wow.get('summary')}")
         strengths = reflection.get("strengths") or []
         if strengths:
             lines.append("Sterk deze week:")
@@ -4482,12 +4563,16 @@ class FinnPlanService:
 
         today_items = []
         seven_day_items = []
+        previous_seven_day_items = []
+        now = _utc_now()
         for item in activity_feed:
             created_at = self._parse_mission_timestamp(item.get("created_at"))
             if created_at and created_at.date() == today:
                 today_items.append(item)
-            if created_at and created_at >= _utc_now() - timedelta(days=7):
+            if created_at and created_at >= now - timedelta(days=7):
                 seven_day_items.append(item)
+            elif created_at and created_at >= now - timedelta(days=14):
+                previous_seven_day_items.append(item)
 
         def count_type(items: List[Dict[str, Any]], action_type: str) -> int:
             return len([item for item in items if item.get("type") == action_type])
@@ -4499,6 +4584,12 @@ class FinnPlanService:
         strategy_changes_7d = count_type(seven_day_items, "create_strategy")
         bot_changes_7d = count_type(seven_day_items, "create_bot")
         indicator_changes_7d = count_type(seven_day_items, "configure_indicator")
+        previous_configuration_changes_7d = (
+            count_type(previous_seven_day_items, "create_plan")
+            + count_type(previous_seven_day_items, "create_strategy")
+            + count_type(previous_seven_day_items, "create_bot")
+            + count_type(previous_seven_day_items, "configure_indicator")
+        )
 
         behavioral_events = [
             item.get("behavioral_event") for item in seven_day_items
@@ -4538,6 +4629,12 @@ class FinnPlanService:
             "bot_changes_7d": bot_changes_7d,
             "indicator_changes_7d": indicator_changes_7d,
             "configuration_changes_7d": plan_creates_7d + strategy_changes_7d + bot_changes_7d + indicator_changes_7d,
+            "previous_actions_7d": len(previous_seven_day_items),
+            "previous_bot_decisions_generated_7d": count_type(previous_seven_day_items, "generate_bot_decision"),
+            "previous_configuration_changes_7d": previous_configuration_changes_7d,
+            "previous_skipped_7d": count_resolution(previous_seven_day_items, "skipped"),
+            "previous_snoozed_7d": count_resolution(previous_seven_day_items, "snoozed"),
+            "previous_monitor_7d": count_resolution(previous_seven_day_items, "monitor_today"),
             "behavioral_events_7d": len(behavioral_events),
             "possible_overrides_7d": len(possible_overrides),
         }
@@ -6166,6 +6263,9 @@ class FinnPlanService:
             "action_id": action_id,
             "verified": verified,
         }
+        behavioral_event = self._behavioral_event_from_bot_draft(draft)
+        if behavioral_event:
+            result["behavioral_event"] = behavioral_event
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         await self.clear_state(user_id)
         return result
@@ -6259,6 +6359,9 @@ class FinnPlanService:
             "action_id": action_id,
             "verified": verified,
         }
+        behavioral_event = self._behavioral_event_from_strategy_draft(draft)
+        if behavioral_event:
+            result["behavioral_event"] = behavioral_event
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         await self.clear_state(user_id)
         return result
@@ -6435,6 +6538,50 @@ class FinnPlanService:
             "decision_action": context.get("decision_action"),
             "result_status": result_status,
             "reasons": reasons,
+        }
+
+    def _behavioral_event_from_bot_draft(self, draft: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if draft.get("operation") != "update":
+            return None
+        reasons = []
+        for change in draft.get("changes") or []:
+            field = change.get("field")
+            before = self._to_float(change.get("from"))
+            after = self._to_float(change.get("to"))
+            if field in {"budget_total_eur", "budget_daily_limit_eur", "budget_max_order_eur"} and before is not None and after is not None and after > before:
+                reasons.append(f"{field} verhoogd van {before:g} naar {after:g}")
+            if field == "is_live" and change.get("from") is False and change.get("to") is True:
+                reasons.append("bot naar live gezet")
+            if field == "mode" and str(change.get("to") or "").lower() in {"auto", "semi-auto"} and str(change.get("from") or "").lower() == "manual":
+                reasons.append(f"bot mode verhoogd naar {change.get('to')}")
+        if not reasons:
+            return None
+        return {
+            "type": "plan_deviation_attempt",
+            "severity": "medium",
+            "asset": draft.get("asset"),
+            "bot_id": draft.get("bot_id"),
+            "strategy_id": draft.get("strategy_id"),
+            "reasons": reasons,
+        }
+
+    def _behavioral_event_from_strategy_draft(self, draft: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if draft.get("operation") != "update":
+            return None
+        sensitive_fields = {"base_amount_eur", "entry", "stop_loss", "targets", "entry_type"}
+        changed = [change for change in draft.get("changes") or [] if change.get("field") in sensitive_fields]
+        if not changed:
+            return None
+        return {
+            "type": "strategy_change_pressure",
+            "severity": "low",
+            "asset": draft.get("asset"),
+            "setup_id": draft.get("setup_id"),
+            "strategy_id": draft.get("strategy_id"),
+            "reasons": [
+                f"{change.get('field')} gewijzigd"
+                for change in changed[:4]
+            ],
         }
 
     async def _execute_paper_bot_decision_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
