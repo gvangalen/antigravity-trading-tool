@@ -1523,6 +1523,11 @@ def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis
     assert blocked_item["resolve_state"] == "monitor_today"
     assert blocked_item["resolve_action"]["type"] == "resolve_mission_item"
     assert blocked_item["resolve_action"]["payload"]["resolution"] == "monitor_today"
+    assert mission["workqueue"] == [
+        item
+        for group in mission["workqueue_groups"]
+        for item in group["items"]
+    ]
     assert mission["plan_health"][0]["asset"] == "ETH"
     btc_health = next(item for item in mission["plan_health"] if item["asset"] == "BTC")
     assert btc_health["status"] == "blocked"

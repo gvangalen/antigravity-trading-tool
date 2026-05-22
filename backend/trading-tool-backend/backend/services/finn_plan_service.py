@@ -4261,6 +4261,7 @@ class FinnPlanService:
             workqueue.append(self._mission_workqueue_from_action(action))
         workqueue = self._dedupe_workqueue(workqueue)[:10]
         workqueue_groups = self._mission_workqueue_groups(workqueue)
+        workqueue = self._flatten_mission_workqueue_groups(workqueue_groups)
         active_count = len([item for item in plan_health if item["status"] == "active"])
         blocked_count = len([item for item in plan_health if item["status"] == "blocked"])
         data_missing_count = len([item for item in plan_health if item["status"] == "data_missing"])
@@ -4320,13 +4321,21 @@ class FinnPlanService:
             if items
         ]
 
+    def _flatten_mission_workqueue_groups(self, groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            item
+            for group in groups
+            for item in (group.get("items") or [])
+        ]
+
     def _filter_resolved_mission_items(self, mission: Dict[str, Any], resolved_item_ids: set) -> Dict[str, Any]:
         workqueue = [
             item for item in mission.get("workqueue", [])
             if item.get("id") not in resolved_item_ids
         ]
-        mission = {**mission, "workqueue": workqueue}
-        mission["workqueue_groups"] = self._mission_workqueue_groups(workqueue)
+        workqueue_groups = self._mission_workqueue_groups(workqueue)
+        mission = {**mission, "workqueue": self._flatten_mission_workqueue_groups(workqueue_groups)}
+        mission["workqueue_groups"] = workqueue_groups
         mission["summary"] = {
             **(mission.get("summary") or {}),
             "workqueue_count": len(workqueue),
