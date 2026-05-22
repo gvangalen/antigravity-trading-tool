@@ -2,6 +2,7 @@ import os
 import logging
 from typing import AsyncGenerator
 
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
@@ -69,6 +70,13 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         try:
             yield session
             await session.commit()
+        except HTTPException as e:
+            await session.rollback()
+            if e.status_code >= 500:
+                logging.error(f"❌ Async DB Error in session: {e}", exc_info=True)
+            else:
+                logging.info("↩️ API request stopped with expected HTTP %s: %s", e.status_code, e.detail)
+            raise
         except Exception as e:
             logging.error(f"❌ Async DB Error in session: {e}", exc_info=True)
             await session.rollback()
