@@ -4416,6 +4416,7 @@ class FinnPlanService:
                 "snoozed_7d": metrics.get("snoozed_7d", 0),
                 "monitor_7d": metrics.get("monitor_7d", 0),
                 "possible_overrides_7d": metrics.get("possible_overrides_7d", 0),
+                "plan_deviation_events_7d": metrics.get("plan_deviation_events_7d", 0),
                 "previous_actions_7d": metrics.get("previous_actions_7d", 0),
                 "previous_bot_decisions_generated_7d": metrics.get("previous_bot_decisions_generated_7d", 0),
                 "previous_configuration_changes_7d": metrics.get("previous_configuration_changes_7d", 0),
@@ -4440,6 +4441,7 @@ class FinnPlanService:
                 "asset": item.get("asset"),
                 "created_at": item.get("created_at"),
                 "outcome": item.get("outcome"),
+                "behavioral_event": item.get("behavioral_event"),
             })
         return evidence
 
@@ -4603,7 +4605,11 @@ class FinnPlanService:
         ]
         possible_overrides = [
             event for event in behavioral_events
-            if event.get("type") in {"plan_deviation_attempt", "execution_pressure"}
+            if event.get("type") in {"plan_deviation_attempt", "execution_pressure", "strategy_change_pressure"}
+        ]
+        plan_deviation_events = [
+            event for event in behavioral_events
+            if event.get("type") in {"plan_deviation_attempt", "strategy_change_pressure"}
         ]
 
         metrics = {
@@ -4643,6 +4649,7 @@ class FinnPlanService:
             "previous_monitor_7d": count_resolution(previous_seven_day_items, "monitor_today"),
             "behavioral_events_7d": len(behavioral_events),
             "possible_overrides_7d": len(possible_overrides),
+            "plan_deviation_events_7d": len(plan_deviation_events),
         }
 
         signals: List[Dict[str, Any]] = []
@@ -4663,14 +4670,21 @@ class FinnPlanService:
                     ],
                 })
             if metrics["live_preflights"] > 0 or metrics["live_preflights_7d"] >= 2 or possible_overrides:
+                evidence = [
+                    f"{metrics['live_preflights_7d']} live preflight checks in 7 dagen",
+                    f"{metrics['possible_overrides_7d']} mogelijke plan-afwijking events",
+                ]
+                blocked_contexts = [
+                    event for event in possible_overrides
+                    if (event.get("context") or {}).get("status") in {"blocked", "data_missing"}
+                ]
+                if blocked_contexts:
+                    evidence.append(f"{len(blocked_contexts)} event(s) terwijl setup/data blokkeerde")
                 signals.append({
                     "type": "execution_friction",
                     "severity": "medium",
                     "message": "Ik zie execution-druk of guardrail-frictie. Finn moet hier extra remmend blijven.",
-                    "evidence": [
-                        f"{metrics['live_preflights_7d']} live preflight checks in 7 dagen",
-                        f"{metrics['possible_overrides_7d']} mogelijke plan-afwijking events",
-                    ],
+                    "evidence": evidence,
                 })
             if metrics["skipped_today"] > 0 or metrics["snoozed_today"] > 0 or metrics["monitor_today"] > 0 or metrics["skipped_7d"] + metrics["snoozed_7d"] + metrics["monitor_7d"] >= 2:
                 signals.append({
@@ -4769,7 +4783,8 @@ class FinnPlanService:
             f"{metrics.get('actions_7d', 0)} acties, "
             f"{metrics.get('bot_decisions_generated_7d', 0)} bot-decisions, "
             f"{metrics.get('configuration_changes_7d', 0)} configuratiewijzigingen, "
-            f"{metrics.get('possible_overrides_7d', 0)} mogelijke plan-afwijkingen."
+            f"{metrics.get('possible_overrides_7d', 0)} mogelijke override-/druksignalen, "
+            f"{metrics.get('plan_deviation_events_7d', 0)} plan-afwijking events."
         )
         lines.append(f"Veilige volgende stap: {coaching.get('safe_next_step')}")
         return "\n".join([line for line in lines if line])
@@ -6269,7 +6284,8 @@ class FinnPlanService:
             "action_id": action_id,
             "verified": verified,
         }
-        behavioral_event = self._behavioral_event_from_bot_draft(draft)
+        pressure_context = await self._plan_deviation_context_for_draft(user_id, draft)
+        behavioral_event = self._behavioral_event_from_bot_draft(draft, pressure_context)
         if behavioral_event:
             result["behavioral_event"] = behavioral_event
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
@@ -6546,7 +6562,81 @@ class FinnPlanService:
             "reasons": reasons,
         }
 
-    def _behavioral_event_from_bot_draft(self, draft: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def _plan_deviation_context_for_draft(self, user_id: int, draft: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if not self.session:
+            return None
+        asset = str(draft.get("asset") or "").upper()
+        setup_id = draft.get("setup_id")
+        if not asset and not setup_id:
+            return None
+        try:
+            score_repo = ScoreRepository(self.session)
+            active_setups = await score_repo.fetch_active_setups(user_id)
+            setup = None
+            if setup_id:
+                setup = next((item for item in active_setups if int(item.get("id") or 0) == int(setup_id)), None)
+            if not setup and asset:
+                setup = next((item for item in active_setups if str(item.get("symbol") or "").upper() == asset), None)
+            if not setup:
+                return None
+            asset = str(setup.get("symbol") or asset or "").upper()
+            daily_scores = await self._fetch_daily_scores_with_runtime_refresh(user_id, asset)
+            analysis = self._evaluate_setup_row(setup, daily_scores)
+            if analysis.get("is_active"):
+                return {
+                    "status": "active",
+                    "asset": asset,
+                    "setup_id": setup.get("id"),
+                    "has_scores": bool(daily_scores),
+                    "match_percentage": analysis.get("match_percentage"),
+                    "reasons": [],
+                }
+            blockers = analysis.get("blockers") or []
+            missing = analysis.get("missing_checks") or []
+            reasons = [
+                f"{item.get('category')} score {item.get('score')} buiten {item.get('range')}"
+                for item in blockers[:3]
+            ]
+            if missing:
+                reasons.extend([
+                    f"{item.get('category')} score of range ontbreekt"
+                    for item in missing[:3]
+                ])
+            return {
+                "status": "blocked" if blockers else "data_missing",
+                "asset": asset,
+                "setup_id": setup.get("id"),
+                "has_scores": bool(daily_scores),
+                "match_percentage": analysis.get("match_percentage"),
+                "reasons": reasons or ["setup is niet actief volgens de huidige score-context"],
+            }
+        except Exception:
+            return None
+
+    def _append_plan_deviation_context(self, event: Dict[str, Any], context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        if not context or context.get("status") == "active":
+            return event
+        context_reasons = context.get("reasons") or []
+        reasons = list(event.get("reasons") or [])
+        if context.get("status") == "blocked":
+            reasons.append("actie terwijl setup-score blokkeert")
+        elif context.get("status") == "data_missing":
+            reasons.append("actie terwijl scoredata of setup-check incompleet is")
+        reasons.extend(str(reason) for reason in context_reasons[:3])
+        event["reasons"] = list(dict.fromkeys(reasons))
+        event["context"] = {
+            "status": context.get("status"),
+            "asset": context.get("asset"),
+            "setup_id": context.get("setup_id"),
+            "has_scores": bool(context.get("has_scores")),
+            "match_percentage": context.get("match_percentage"),
+            "reasons": context_reasons[:3],
+        }
+        if context.get("status") == "blocked":
+            event["severity"] = "high"
+        return event
+
+    def _behavioral_event_from_bot_draft(self, draft: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         if draft.get("operation") != "update":
             return None
         reasons = []
@@ -6560,9 +6650,9 @@ class FinnPlanService:
                 reasons.append("bot naar live gezet")
             if field == "mode" and str(change.get("to") or "").lower() in {"auto", "semi-auto"} and str(change.get("from") or "").lower() == "manual":
                 reasons.append(f"bot mode verhoogd naar {change.get('to')}")
-        if not reasons:
+        if not reasons and not (context and context.get("status") in {"blocked", "data_missing"}):
             return None
-        return {
+        event = {
             "type": "plan_deviation_attempt",
             "severity": "medium",
             "asset": draft.get("asset"),
@@ -6570,15 +6660,16 @@ class FinnPlanService:
             "strategy_id": draft.get("strategy_id"),
             "reasons": reasons,
         }
+        return self._append_plan_deviation_context(event, context)
 
-    def _behavioral_event_from_strategy_draft(self, draft: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _behavioral_event_from_strategy_draft(self, draft: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         if draft.get("operation") != "update":
             return None
         sensitive_fields = {"base_amount_eur", "entry", "stop_loss", "targets", "entry_type"}
         changed = [change for change in draft.get("changes") or [] if change.get("field") in sensitive_fields]
-        if not changed:
+        if not changed and not (context and context.get("status") in {"blocked", "data_missing"}):
             return None
-        return {
+        event = {
             "type": "strategy_change_pressure",
             "severity": "low",
             "asset": draft.get("asset"),
@@ -6589,6 +6680,7 @@ class FinnPlanService:
                 for change in changed[:4]
             ],
         }
+        return self._append_plan_deviation_context(event, context)
 
     async def _execute_paper_bot_decision_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
         payload = action.get("payload") or {}
@@ -6742,6 +6834,10 @@ class FinnPlanService:
             "action_id": action_id,
             "verified": verified,
         }
+        pressure_context = await self._plan_deviation_context_for_draft(user_id, draft)
+        behavioral_event = self._behavioral_event_from_strategy_draft(draft, pressure_context)
+        if behavioral_event:
+            result["behavioral_event"] = behavioral_event
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         await self.clear_state(user_id)
         return result

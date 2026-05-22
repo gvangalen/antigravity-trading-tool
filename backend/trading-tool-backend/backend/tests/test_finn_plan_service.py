@@ -2233,6 +2233,36 @@ def test_behavioral_event_from_bot_update_detects_budget_and_live_pressure():
     assert any("live" in reason for reason in event["reasons"])
 
 
+def test_behavioral_event_from_bot_update_includes_blocked_setup_context():
+    service = _service()
+    draft = {
+        "operation": "update",
+        "asset": "BTC",
+        "bot_id": 42,
+        "strategy_id": 11,
+        "changes": [
+            {"field": "budget_daily_limit_eur", "from": 100, "to": 200},
+        ],
+    }
+    context = {
+        "status": "blocked",
+        "asset": "BTC",
+        "setup_id": 7,
+        "has_scores": True,
+        "match_percentage": 33.3,
+        "reasons": ["macro score 10 buiten [30, 70]"],
+    }
+
+    event = service._behavioral_event_from_bot_draft(draft, context)
+
+    assert event["type"] == "plan_deviation_attempt"
+    assert event["severity"] == "high"
+    assert event["context"]["status"] == "blocked"
+    assert event["context"]["setup_id"] == 7
+    assert "actie terwijl setup-score blokkeert" in event["reasons"]
+    assert "macro score 10 buiten [30, 70]" in event["reasons"]
+
+
 def test_behavioral_event_from_strategy_update_detects_sensitive_changes():
     service = _service()
     draft = {
@@ -2251,6 +2281,33 @@ def test_behavioral_event_from_strategy_update_detects_sensitive_changes():
     assert event["type"] == "strategy_change_pressure"
     assert event["strategy_id"] == 12
     assert "base_amount_eur gewijzigd" in event["reasons"]
+
+
+def test_behavioral_event_from_strategy_update_tracks_data_missing_context():
+    service = _service()
+    draft = {
+        "operation": "update",
+        "asset": "ETH",
+        "setup_id": 7,
+        "strategy_id": 12,
+        "changes": [
+            {"field": "base_amount_eur", "from": 100, "to": 250},
+        ],
+    }
+    context = {
+        "status": "data_missing",
+        "asset": "ETH",
+        "setup_id": 7,
+        "has_scores": False,
+        "match_percentage": 0,
+        "reasons": ["macro score of range ontbreekt"],
+    }
+
+    event = service._behavioral_event_from_strategy_draft(draft, context)
+
+    assert event["type"] == "strategy_change_pressure"
+    assert event["context"]["status"] == "data_missing"
+    assert "actie terwijl scoredata of setup-check incompleet is" in event["reasons"]
 
 
 def test_behavioral_insight_uses_seven_day_patterns():
@@ -2324,6 +2381,7 @@ def test_behavioral_insight_counts_override_events():
     insight = service._build_behavioral_insight_from_activity([risky])
 
     assert insight["metrics"]["possible_overrides_7d"] == 1
+    assert insight["metrics"]["plan_deviation_events_7d"] == 1
     assert insight["behavioral_events"][0]["type"] == "plan_deviation_attempt"
     assert any(signal["type"] == "execution_friction" for signal in insight["signals"])
 
