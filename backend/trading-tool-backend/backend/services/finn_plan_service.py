@@ -707,10 +707,15 @@ class FinnPlanService:
                 "actions": [],
             }
 
+        if self._is_plan_deviation_ack(q_lower):
+            draft["plan_deviation_ack"] = True
+
         if explicit_create_intent and not explicit_update_intent:
             draft["operation"] = "create"
             draft["strategy_id"] = None
             draft.pop("changes", None)
+            draft.pop("plan_deviation", None)
+            draft.pop("plan_deviation_ack", None)
 
         setup_id_match = re.search(r"\bsetup\s*#?\s*(\d+)\b", q, re.IGNORECASE)
         if setup_id_match:
@@ -826,6 +831,9 @@ class FinnPlanService:
             existing_for_diff = await self._load_strategy_snapshot_for_diff(user_id, draft, strategy_service)
             self._merge_existing_strategy_into_draft(draft, existing_for_diff or existing_strategy)
             draft["changes"] = self._strategy_changes(existing_for_diff or existing_strategy, draft)
+            pressure_context = await self._plan_deviation_context_for_draft(user_id, draft)
+            behavioral_event = self._behavioral_event_from_strategy_draft(draft, pressure_context)
+            draft["plan_deviation"] = self._plan_deviation_warning_from_event(behavioral_event, acknowledged=bool(draft.get("plan_deviation_ack")))
             validation = self._validate_strategy_draft(draft)
 
         setup_options = []
@@ -847,6 +855,7 @@ class FinnPlanService:
                     "requires_confirmation": True,
                     "can_execute_without_user": False,
                     "execution_allowed": "strategy_update" if draft.get("operation") == "update" else "strategy_creation_only",
+                    "plan_deviation": draft.get("plan_deviation"),
                 },
             })
 
@@ -968,6 +977,8 @@ class FinnPlanService:
         if any(phrase in q_lower for phrase in ["live akkoord", "ik bevestig live", "live bevestig", "live risico akkoord"]):
             bot["live_trading_ack"] = True
             touched_bot_fields.add("live_trading_ack")
+        if self._is_plan_deviation_ack(q_lower):
+            draft["plan_deviation_ack"] = True
 
         self._apply_bot_name_default(draft)
         draft["_touched_bot_fields"] = sorted(touched_bot_fields)
@@ -1048,6 +1059,11 @@ class FinnPlanService:
             })
             return response
 
+        pressure_context = await self._plan_deviation_context_for_draft(user_id, draft)
+        behavioral_event = self._behavioral_event_from_bot_draft(draft, pressure_context)
+        draft["plan_deviation"] = self._plan_deviation_warning_from_event(behavioral_event, acknowledged=bool(draft.get("plan_deviation_ack")))
+        validation = self._validate_bot_draft(draft)
+
         strategy_options = []
         if "strategy_id" in validation["missing_fields"]:
             strategy_options = await self._bot_strategy_options(user_id, draft)
@@ -1068,6 +1084,7 @@ class FinnPlanService:
                     "can_execute_without_user": False,
                     "execution_allowed": "bot_update" if draft.get("operation") == "update" else "bot_creation_only",
                     "live_trading": bool(draft["bot"].get("is_live")),
+                    "plan_deviation": draft.get("plan_deviation"),
                 },
             })
 
@@ -2655,6 +2672,9 @@ class FinnPlanService:
                     if risk > 0 and reward / risk < 1:
                         invalid.append({"field": "strategy.risk_reward", "reason": "risk/reward moet minimaal 1:1 zijn"})
 
+        if self._draft_requires_plan_deviation_ack(draft) and not draft.get("plan_deviation_ack"):
+            missing.append("plan_deviation_ack")
+
         next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
         return {
             "missing_fields": missing,
@@ -2691,6 +2711,18 @@ class FinnPlanService:
             return "Welke stop-loss hoort bij deze strategie?"
         if next_question == "strategy.targets":
             return "Welke target(s) wil je gebruiken? Je mag meerdere targets met komma's geven."
+        if next_question == "plan_deviation_ack":
+            warning = draft.get("plan_deviation") or {}
+            reasons = warning.get("reasons") or []
+            lines = [
+                "Let op: je houdt je nu niet aan je eigen plan.",
+                warning.get("message") or "Deze strategie-wijziging wijkt af van je huidige setup-context.",
+            ]
+            if reasons:
+                lines.append("Waarom Finn remt:")
+                lines.extend([f"- {reason}" for reason in reasons[:4]])
+            lines.append("Zeg 'bewuste override' als je dit alsnog wilt bevestigen, of 'annuleer' om te stoppen.")
+            return "\n".join(lines)
         summary = self._strategy_summary(draft)
         return f"Ik heb je strategie klaarstaan. Controleer dit even en bevestig als het klopt:\n\n{summary}"
 
@@ -2706,6 +2738,13 @@ class FinnPlanService:
             f"- Bedrag: €{strategy.get('base_amount_eur')}",
         ]
         lines = [line for line in lines if line]
+        if draft.get("plan_deviation"):
+            warning = draft.get("plan_deviation") or {}
+            lines.extend([
+                "- Plan-afwijking: ja",
+                f"- Override bevestigd: {'ja' if draft.get('plan_deviation_ack') else 'nee'}",
+                f"- Reden: {warning.get('message')}",
+            ])
         if draft.get("setup_type") == "trade":
             lines.extend([
                 f"- Uitvoering: {strategy.get('entry_type')}",
@@ -2729,6 +2768,8 @@ class FinnPlanService:
             "setup_type": draft.get("setup_type"),
             "setup_options": setup_options or [],
             "changes": draft.get("changes") or [],
+            "plan_deviation": draft.get("plan_deviation"),
+            "plan_deviation_ack": bool(draft.get("plan_deviation_ack")),
             "next_question": validation["next_question"],
             "autonomy_level": "confirm_required",
             "version": FINN_STATE_VERSION,
@@ -2742,9 +2783,11 @@ class FinnPlanService:
             reasons.append(f"Ongeldige velden: {', '.join(item['field'] for item in validation['invalid_fields'])}")
         if not reasons:
             reasons.append("Alle verplichte strategievelden zijn aanwezig en validatie is geslaagd.")
+        if self._draft_requires_plan_deviation_ack(draft):
+            reasons.append("Plan-afwijking gedetecteerd: bewuste override is vereist voordat Finn dit bevestigbaar maakt.")
         return {
             "confidence_score": 0.9 if validation["can_confirm"] else 0.55,
-            "risk_detected": bool(validation["invalid_fields"]),
+            "risk_detected": bool(validation["invalid_fields"]) or self._draft_requires_plan_deviation_ack(draft),
             "reasons": reasons,
             "coaching_level": "strategy_creation",
         }
@@ -2826,6 +2869,9 @@ class FinnPlanService:
             if not draft.get("changes") and not missing and not invalid:
                 invalid.append({"field": "bot.changes", "reason": "geen wijzigingen gevonden om bij te werken"})
 
+        if self._draft_requires_plan_deviation_ack(draft) and not draft.get("plan_deviation_ack"):
+            missing.append("plan_deviation_ack")
+
         next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
         return {
             "missing_fields": missing,
@@ -2852,6 +2898,18 @@ class FinnPlanService:
             return "Voor live of automatische bots heb ik expliciete budgetlimieten nodig: totaal budget, daglimiet, min order en max order."
         if next_question == "bot.live_trading_ack":
             return "Live trading kan echte orders plaatsen. Bevestig expliciet met: live akkoord."
+        if next_question == "plan_deviation_ack":
+            warning = draft.get("plan_deviation") or {}
+            reasons = warning.get("reasons") or []
+            lines = [
+                "Let op: je houdt je nu niet aan je eigen plan.",
+                warning.get("message") or "Deze bot-wijziging wijkt af van je huidige setup-context.",
+            ]
+            if reasons:
+                lines.append("Waarom Finn remt:")
+                lines.extend([f"- {reason}" for reason in reasons[:4]])
+            lines.append("Zeg 'bewuste override' als je dit alsnog wilt bevestigen, of 'annuleer' om te stoppen.")
+            return "\n".join(lines)
 
         bot = draft.get("bot") or {}
         env = "live" if bot.get("is_live") else "paper"
@@ -2872,6 +2930,12 @@ class FinnPlanService:
             f"- Risk: {bot.get('risk_profile')}\n"
             f"- Cadence: {bot.get('cadence')}\n"
             f"- Budget: €{bot.get('budget_total_eur')} totaal, €{bot.get('budget_daily_limit_eur')} per dag"
+            + (
+                "\n- Plan-afwijking: ja"
+                f"\n- Override bevestigd: {'ja' if draft.get('plan_deviation_ack') else 'nee'}"
+                f"\n- Reden: {(draft.get('plan_deviation') or {}).get('message')}"
+                if draft.get("plan_deviation") else ""
+            )
             + (("\n\nWijzigingen:\n" + "\n".join(change_lines)) if draft.get("operation") == "update" else "")
         )
 
@@ -2885,6 +2949,8 @@ class FinnPlanService:
             "existing_bot_id": draft.get("existing_bot_id"),
             "asset": draft.get("asset"),
             "changes": draft.get("changes") or [],
+            "plan_deviation": draft.get("plan_deviation"),
+            "plan_deviation_ack": bool(draft.get("plan_deviation_ack")),
             "strategy_options": strategy_options or [],
             "next_question": validation["next_question"],
             "autonomy_level": "confirm_required",
@@ -2899,9 +2965,11 @@ class FinnPlanService:
             reasons.append(f"Ongeldige velden: {', '.join(item['field'] for item in validation['invalid_fields'])}")
         if not reasons:
             reasons.append("Alle verplichte botvelden zijn aanwezig en validatie is geslaagd.")
+        if self._draft_requires_plan_deviation_ack(draft):
+            reasons.append("Plan-afwijking gedetecteerd: bewuste override is vereist voordat Finn dit bevestigbaar maakt.")
         return {
             "confidence_score": 0.9 if validation["can_confirm"] else 0.55,
-            "risk_detected": bool(validation["invalid_fields"]) or bool((draft.get("bot") or {}).get("is_live")),
+            "risk_detected": bool(validation["invalid_fields"]) or bool((draft.get("bot") or {}).get("is_live")) or self._draft_requires_plan_deviation_ack(draft),
             "reasons": reasons,
             "coaching_level": "bot_creation",
         }
@@ -6562,6 +6630,53 @@ class FinnPlanService:
             "reasons": reasons,
         }
 
+    def _is_plan_deviation_ack(self, q_lower: str) -> bool:
+        return any(phrase in q_lower for phrase in [
+            "bewuste override",
+            "ik wijk bewust af",
+            "override akkoord",
+            "override bevestig",
+            "bewust afwijken",
+            "toch doorgaan",
+            "ik bevestig de afwijking",
+        ])
+
+    def _draft_requires_plan_deviation_ack(self, draft: Dict[str, Any]) -> bool:
+        warning = draft.get("plan_deviation")
+        return bool(isinstance(warning, dict) and warning.get("requires_ack") and not warning.get("acknowledged"))
+
+    def _plan_deviation_warning_from_event(self, event: Optional[Dict[str, Any]], *, acknowledged: bool = False) -> Optional[Dict[str, Any]]:
+        if not event:
+            return None
+        context = event.get("context") if isinstance(event.get("context"), dict) else {}
+        if context.get("status") not in {"blocked", "data_missing"}:
+            return None
+        status = context.get("status")
+        asset = event.get("asset") or context.get("asset")
+        if status == "blocked":
+            message = (
+                f"Je wijzigt nu {asset or 'dit plan'} terwijl je setup volgens je eigen macro/technical/market ranges blokkeert."
+            )
+            safe_alternative = "Wacht tot de setup actief is, of markeer dit bewust als override."
+        else:
+            message = (
+                f"Je wijzigt nu {asset or 'dit plan'} terwijl Finn nog geen complete score-/setup-check heeft."
+            )
+            safe_alternative = "Ververs daily scores of rond data-config af voordat je dit doorzet."
+        return {
+            "type": event.get("type"),
+            "severity": event.get("severity") or ("high" if status == "blocked" else "medium"),
+            "status": status,
+            "asset": asset,
+            "setup_id": context.get("setup_id"),
+            "requires_ack": True,
+            "acknowledged": acknowledged,
+            "message": message,
+            "reasons": event.get("reasons") or [],
+            "safe_alternative": safe_alternative,
+            "ack_phrase": "bewuste override",
+        }
+
     async def _plan_deviation_context_for_draft(self, user_id: int, draft: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if not self.session:
             return None
@@ -6880,6 +6995,10 @@ class FinnPlanService:
             await self._hydrate_bot_draft_from_db(user_id, draft)
             await self._apply_live_bot_preflight(user_id, draft)
             validation = self._validate_bot_draft(draft)
+            pressure_context = await self._plan_deviation_context_for_draft(user_id, draft)
+            behavioral_event = self._behavioral_event_from_bot_draft(draft, pressure_context)
+            draft["plan_deviation"] = self._plan_deviation_warning_from_event(behavioral_event, acknowledged=bool(draft.get("plan_deviation_ack")))
+            validation = self._validate_bot_draft(draft)
             existing_bot = await self._existing_bot_for_strategy(user_id, draft.get("strategy_id"))
             if existing_bot and draft.get("operation") != "update":
                 draft["existing_bot_id"] = existing_bot.get("id")
@@ -6956,6 +7075,9 @@ class FinnPlanService:
                 existing_for_diff = await self._load_strategy_snapshot_for_diff(user_id, draft, strategy_service)
                 self._merge_existing_strategy_into_draft(draft, existing_for_diff or existing_strategy)
                 draft["changes"] = self._strategy_changes(existing_for_diff or existing_strategy, draft)
+                pressure_context = await self._plan_deviation_context_for_draft(user_id, draft)
+                behavioral_event = self._behavioral_event_from_strategy_draft(draft, pressure_context)
+                draft["plan_deviation"] = self._plan_deviation_warning_from_event(behavioral_event, acknowledged=bool(draft.get("plan_deviation_ack")))
                 validation = self._validate_strategy_draft(draft)
                 message = self._build_strategy_message(draft, validation)
             actions = []

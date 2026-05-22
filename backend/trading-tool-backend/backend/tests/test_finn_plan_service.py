@@ -2310,6 +2310,109 @@ def test_behavioral_event_from_strategy_update_tracks_data_missing_context():
     assert "actie terwijl scoredata of setup-check incompleet is" in event["reasons"]
 
 
+def test_strategy_plan_deviation_requires_conscious_override_before_confirm():
+    service = _service()
+    draft = {
+        "draft_kind": "strategy",
+        "operation": "update",
+        "setup_id": 7,
+        "strategy_id": 12,
+        "setup_type": "dca",
+        "asset": "BTC",
+        "timeframe": "1W",
+        "strategy": {"base_amount_eur": 150},
+        "plan_deviation": {
+            "requires_ack": True,
+            "acknowledged": False,
+            "message": "Je wijzigt nu BTC terwijl je setup blokkeert.",
+            "reasons": ["macro score 10 buiten [30, 70]"],
+        },
+    }
+
+    validation = service._validate_strategy_draft(draft)
+    message = service._build_strategy_message(draft, validation)
+
+    assert validation["can_confirm"] is False
+    assert validation["next_question"] == "plan_deviation_ack"
+    assert "niet aan je eigen plan" in message
+    assert "bewuste override" in message
+
+
+def test_strategy_plan_deviation_ack_restores_confirmability():
+    service = _service()
+    draft = {
+        "draft_kind": "strategy",
+        "operation": "update",
+        "setup_id": 7,
+        "strategy_id": 12,
+        "setup_type": "dca",
+        "asset": "BTC",
+        "timeframe": "1W",
+        "strategy": {"base_amount_eur": 150},
+        "plan_deviation_ack": True,
+        "plan_deviation": {
+            "requires_ack": True,
+            "acknowledged": True,
+            "message": "Je wijzigt nu BTC terwijl je setup blokkeert.",
+            "reasons": ["macro score 10 buiten [30, 70]"],
+        },
+    }
+
+    validation = service._validate_strategy_draft(draft)
+    message = service._build_strategy_message(draft, validation)
+
+    assert validation["can_confirm"] is True
+    assert "Plan-afwijking: ja" in message
+    assert "Override bevestigd: ja" in message
+
+
+def test_bot_plan_deviation_requires_override_before_confirm():
+    service = _service()
+    draft = {
+        "draft_kind": "bot",
+        "operation": "update",
+        "bot_id": 42,
+        "strategy_id": 11,
+        "asset": "BTC",
+        "bot": {
+            "name": "Finn BTC Auto Bot",
+            "mode": "auto",
+            "risk_profile": "balanced",
+            "cadence": "daily",
+            "is_live": False,
+            "budget_total_eur": 1000,
+            "budget_daily_limit_eur": 100,
+            "budget_min_order_eur": 10,
+            "budget_max_order_eur": 50,
+        },
+        "existing_bot_snapshot": {
+            "name": "Finn BTC Auto Bot",
+            "mode": "auto",
+            "risk_profile": "balanced",
+            "cadence": "daily",
+            "is_live": False,
+            "budget_total_eur": 500,
+            "budget_daily_limit_eur": 100,
+            "budget_min_order_eur": 10,
+            "budget_max_order_eur": 50,
+        },
+        "changes": [{"field": "budget_total_eur", "from": 500, "to": 1000}],
+        "plan_deviation": {
+            "requires_ack": True,
+            "acknowledged": False,
+            "message": "Je wijzigt nu BTC terwijl je setup blokkeert.",
+            "reasons": ["technical score 10 buiten [40, 80]"],
+        },
+    }
+
+    validation = service._validate_bot_draft(draft)
+    message = service._build_bot_message(draft, validation)
+
+    assert validation["can_confirm"] is False
+    assert validation["next_question"] == "plan_deviation_ack"
+    assert "niet aan je eigen plan" in message
+
+
 def test_behavioral_insight_uses_seven_day_patterns():
     service = _service()
     activity = [
