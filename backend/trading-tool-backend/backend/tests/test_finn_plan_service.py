@@ -1996,6 +1996,7 @@ def test_weekly_reflection_waits_for_enough_evidence():
     assert reflection["period"] == "last_7_days"
     assert reflection["advice_only"] is True
     assert reflection["discipline_score"] is None
+    assert reflection["behavioral_profile"]["type"] == "insufficient_history"
     assert "nog niet betrouwbaar" in message.lower()
 
 

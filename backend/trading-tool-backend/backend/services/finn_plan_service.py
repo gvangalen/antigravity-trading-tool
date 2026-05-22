@@ -4444,7 +4444,7 @@ class FinnPlanService:
         return evidence
 
     def _behavioral_profile_from_metrics(self, metrics: Dict[str, Any], patterns: List[str]) -> Dict[str, Any]:
-        if metrics.get("actions_7d", 0) < 3 and patterns == ["discipline_neutral"]:
+        if metrics.get("actions_7d", 0) < 3:
             return {
                 "type": "insufficient_history",
                 "label": "Nog te weinig historie",
