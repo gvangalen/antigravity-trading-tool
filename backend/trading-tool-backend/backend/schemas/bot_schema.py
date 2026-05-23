@@ -49,6 +49,7 @@ class BotManualOrderSchema(BaseModel):
     risk_acknowledged: bool = False
     live_preflight_token: Optional[str] = None
     live_preflight_action_id: Optional[str] = None
+    setup_block_acknowledged: bool = False
 
 class TradePlanUpsertSchema(BaseModel):
     entry_plan: List[Dict[str, Any]] = []

@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from fastapi import HTTPException
 from datetime import datetime, timedelta, timezone
@@ -43,7 +44,7 @@ class _FakeSession:
 
 
 class _ManualOrderRepo:
-    def __init__(self, decisions=None):
+    def __init__(self, decisions=None, *, live_daily_spend=0, portfolio_context=None, bot_setup_id=None):
         self.created_orders = 0
         self.decisions = decisions if decisions is not None else [
             {
@@ -54,6 +55,15 @@ class _ManualOrderRepo:
                 "created_at": datetime.now(timezone.utc),
             }
         ]
+        self.live_daily_spend = live_daily_spend
+        self.portfolio_context = portfolio_context if portfolio_context is not None else {
+            "global": {
+                "total_equity": 1000,
+                "current_position_value": 0,
+            },
+            "bots": [],
+        }
+        self.bot_setup_id = bot_setup_id
 
     async def get_bot_config(self, user_id, bot_id):
         return {
@@ -68,6 +78,7 @@ class _ManualOrderRepo:
             "budget_min_order_eur": 10,
             "budget_max_order_eur": 50,
             "max_asset_exposure_pct": 100,
+            "setup_id": self.bot_setup_id,
         }
 
     async def get_bot_ledger_stats(self, user_id, bot_id, day):
@@ -84,6 +95,12 @@ class _ManualOrderRepo:
 
     async def get_bot_decisions_by_date(self, user_id, decision_date):
         return self.decisions
+
+    async def get_live_daily_spend(self, user_id, today):
+        return self.live_daily_spend
+
+    async def get_portfolio_intelligence_context(self, user_id):
+        return self.portfolio_context
 
 
 class _NoExchangeKeys:
@@ -414,6 +431,82 @@ def test_recent_live_preflight_token_rejects_stale_token():
     assert exc.value.status_code == 409
     assert exc.value.detail["code"] == "LIVE_PREFLIGHT_STALE"
     assert exc.value.detail["age_minutes"] >= 20
+
+
+def test_live_order_risk_context_blocks_notional_limit(monkeypatch):
+    monkeypatch.setattr("backend.services.bot_service.LIVE_MAX_MANUAL_ORDER_EUR", 25)
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo()
+    service.repository = repo
+    bot = asyncio.run(repo.get_bot_config(1, 9))
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_live_order_risk_context(1, bot, payload, 50))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_ORDER_NOTIONAL_LIMIT"
+    assert exc.value.detail["behavioral_event"]["type"] == "execution_pressure"
+
+
+def test_live_order_risk_context_blocks_portfolio_daily_limit(monkeypatch):
+    monkeypatch.setattr("backend.services.bot_service.LIVE_PORTFOLIO_DAILY_LIMIT_EUR", 100)
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo(live_daily_spend=80)
+    service.repository = repo
+    bot = asyncio.run(repo.get_bot_config(1, 9))
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_live_order_risk_context(1, bot, payload, 50))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_PORTFOLIO_DAILY_LIMIT"
+
+
+def test_live_order_risk_context_blocks_asset_exposure(monkeypatch):
+    monkeypatch.setattr("backend.services.bot_service.LIVE_MAX_ASSET_EXPOSURE_PCT", 70)
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo(portfolio_context={
+        "global": {"total_equity": 1000, "current_position_value": 650},
+        "bots": [{"symbol": "BTC", "position_value": 650}],
+    })
+    service.repository = repo
+    bot = asyncio.run(repo.get_bot_config(1, 9))
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.002, price=50000)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_live_order_risk_context(1, bot, payload, 100))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_ASSET_EXPOSURE_LIMIT"
+    assert exc.value.detail["projected_exposure_pct"] == 75.0
+
+
+def test_live_order_risk_context_requires_ack_for_blocked_setup(monkeypatch):
+    class FakeScoreRepository:
+        def __init__(self, session):
+            pass
+
+        async def fetch_active_setups(self, user_id):
+            return [{"id": 42, "is_active": False, "score": 0}]
+
+    monkeypatch.setattr("backend.infrastructure.repositories.score_repository.ScoreRepository", FakeScoreRepository)
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo(bot_setup_id=42)
+    service.repository = repo
+    bot = asyncio.run(repo.get_bot_config(1, 9))
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_live_order_risk_context(1, bot, payload, 50))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_SETUP_BLOCK_ACK_REQUIRED"
+
+    payload.setup_block_acknowledged = True
+    result = asyncio.run(service.require_live_order_risk_context(1, bot, payload, 50))
+    assert any(check["code"] == "blocked_setup_ack" for check in result["checks"])
 
 
 def test_live_manual_order_blocks_when_decision_context_is_missing():

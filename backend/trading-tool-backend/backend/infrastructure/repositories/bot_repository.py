@@ -409,6 +409,21 @@ class BotRepository:
             "today_reserved": float(row4[0] or 0)
         }
 
+    async def get_live_daily_spend(self, user_id: int, today: date) -> float:
+        query = text("""
+            SELECT COALESCE(SUM(ABS(l.cash_delta_eur)), 0)
+            FROM bot_ledger l
+            JOIN bot_configs b ON b.id = l.bot_id AND b.user_id = l.user_id
+            WHERE l.user_id = :user_id
+              AND b.is_live = TRUE
+              AND DATE(l.ts) = :today
+              AND l.entry_type = 'execute'
+              AND l.cash_delta_eur < 0
+        """)
+        result = await self.session.execute(query, {"user_id": user_id, "today": today})
+        row = result.fetchone()
+        return float(row[0] or 0)
+
     async def get_market_price(self, symbol: str) -> Optional[float]:
         query = text("""
             SELECT price FROM market_data WHERE symbol=:symbol ORDER BY timestamp DESC LIMIT 1

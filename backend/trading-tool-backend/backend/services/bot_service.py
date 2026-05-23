@@ -1,6 +1,7 @@
 import logging
 import asyncio
 import json
+import os
 import uuid
 from datetime import date, timedelta, datetime, timezone
 from typing import List, Dict, Any, Optional
@@ -22,6 +23,10 @@ from backend.services.exchange_service import ExchangeService
 logger = logging.getLogger(__name__)
 LIVE_EXECUTION_STALE_AFTER_MINUTES = 60
 LIVE_PREFLIGHT_TOKEN_TTL_MINUTES = 15
+LIVE_MAX_MANUAL_ORDER_EUR = float(os.getenv("LIVE_MAX_MANUAL_ORDER_EUR", "5000"))
+LIVE_PORTFOLIO_DAILY_LIMIT_EUR = float(os.getenv("LIVE_PORTFOLIO_DAILY_LIMIT_EUR", "1000"))
+LIVE_MAX_PORTFOLIO_EXPOSURE_PCT = float(os.getenv("LIVE_MAX_PORTFOLIO_EXPOSURE_PCT", "95"))
+LIVE_MAX_ASSET_EXPOSURE_PCT = float(os.getenv("LIVE_MAX_ASSET_EXPOSURE_PCT", "70"))
 
 
 def _utc_db_timestamp() -> datetime:
@@ -464,6 +469,12 @@ class BotService:
             "source": "manual_order",
         }
 
+    def _manual_order_guardrail_event(self, bot: Dict[str, Any], payload: BotManualOrderSchema, notional: float, reason: str) -> Dict[str, Any]:
+        event = self._manual_order_pressure_event(bot, payload, notional)
+        event["reasons"].append(reason)
+        event["source"] = "manual_order_guardrail"
+        return event
+
     def _parse_execution_timestamp(self, value: Any) -> Optional[datetime]:
         if not value:
             return None
@@ -610,6 +621,93 @@ class BotService:
             "freshness": result.get("freshness"),
             "verified": verified,
         }
+
+    async def require_live_order_risk_context(
+        self,
+        user_id: int,
+        bot: Dict[str, Any],
+        payload: BotManualOrderSchema,
+        notional: float,
+    ) -> Dict[str, Any]:
+        if not bot.get("is_live"):
+            return {"ok": True, "checks": []}
+
+        checks = []
+        if notional > LIVE_MAX_MANUAL_ORDER_EUR:
+            raise HTTPException(409, {
+                "code": "LIVE_ORDER_NOTIONAL_LIMIT",
+                "message": f"Live orderwaarde {notional:g} EUR overschrijdt de maximale live orderlimiet van {LIVE_MAX_MANUAL_ORDER_EUR:g} EUR.",
+                "behavioral_event": self._manual_order_guardrail_event(bot, payload, notional, "live orderwaarde boven maximale orderlimiet"),
+            })
+        checks.append({"code": "live_order_notional", "ok": True, "limit_eur": LIVE_MAX_MANUAL_ORDER_EUR, "notional_eur": notional})
+
+        live_daily_spend = await self.repository.get_live_daily_spend(user_id, date.today())
+        if payload.side == "buy" and LIVE_PORTFOLIO_DAILY_LIMIT_EUR > 0 and (live_daily_spend + notional) > (LIVE_PORTFOLIO_DAILY_LIMIT_EUR + 0.01):
+            raise HTTPException(409, {
+                "code": "LIVE_PORTFOLIO_DAILY_LIMIT",
+                "message": f"Live daglimiet portfolio overschreden: {live_daily_spend + notional:g} EUR > {LIVE_PORTFOLIO_DAILY_LIMIT_EUR:g} EUR.",
+                "today_spent_eur": live_daily_spend,
+                "notional_eur": notional,
+                "limit_eur": LIVE_PORTFOLIO_DAILY_LIMIT_EUR,
+                "behavioral_event": self._manual_order_guardrail_event(bot, payload, notional, "portfolio live daglimiet overschreden"),
+            })
+        checks.append({"code": "portfolio_daily_spend", "ok": True, "today_spent_eur": live_daily_spend, "limit_eur": LIVE_PORTFOLIO_DAILY_LIMIT_EUR})
+
+        if payload.side == "buy":
+            portfolio = await self.repository.get_portfolio_intelligence_context(user_id)
+            global_ctx = portfolio.get("global") or {}
+            bots = portfolio.get("bots") or []
+            total_equity = float(global_ctx.get("total_equity") or 0)
+            current_position_value = float(global_ctx.get("current_position_value") or 0)
+            symbol = str(payload.symbol or bot.get("symbol") or "").upper()
+            asset_position_value = sum(
+                float(item.get("position_value") or 0)
+                for item in bots
+                if str(item.get("symbol") or "").upper() == symbol
+            )
+            if total_equity > 0:
+                projected_portfolio_exposure_pct = round(((current_position_value + notional) / total_equity) * 100, 2)
+                if projected_portfolio_exposure_pct > LIVE_MAX_PORTFOLIO_EXPOSURE_PCT:
+                    raise HTTPException(409, {
+                        "code": "LIVE_PORTFOLIO_EXPOSURE_LIMIT",
+                        "message": f"Live order zou portfolio-exposure naar {projected_portfolio_exposure_pct}% brengen.",
+                        "projected_exposure_pct": projected_portfolio_exposure_pct,
+                        "limit_pct": LIVE_MAX_PORTFOLIO_EXPOSURE_PCT,
+                        "behavioral_event": self._manual_order_guardrail_event(bot, payload, notional, "portfolio exposure limiet overschreden"),
+                    })
+                checks.append({"code": "portfolio_exposure", "ok": True, "projected_pct": projected_portfolio_exposure_pct, "limit_pct": LIVE_MAX_PORTFOLIO_EXPOSURE_PCT})
+
+                bot_limit = float(bot.get("max_asset_exposure_pct") or 100)
+                asset_limit = min(bot_limit, LIVE_MAX_ASSET_EXPOSURE_PCT)
+                projected_asset_exposure_pct = round(((asset_position_value + notional) / total_equity) * 100, 2)
+                if projected_asset_exposure_pct > asset_limit:
+                    raise HTTPException(409, {
+                        "code": "LIVE_ASSET_EXPOSURE_LIMIT",
+                        "message": f"Live order zou {symbol} exposure naar {projected_asset_exposure_pct}% brengen.",
+                        "symbol": symbol,
+                        "projected_exposure_pct": projected_asset_exposure_pct,
+                        "limit_pct": asset_limit,
+                        "behavioral_event": self._manual_order_guardrail_event(bot, payload, notional, "asset exposure limiet overschreden"),
+                    })
+                checks.append({"code": "asset_exposure", "ok": True, "symbol": symbol, "projected_pct": projected_asset_exposure_pct, "limit_pct": asset_limit})
+
+        setup_id = bot.get("setup_id")
+        if setup_id:
+            from backend.infrastructure.repositories.score_repository import ScoreRepository
+            setups = await ScoreRepository(self.session).fetch_active_setups(user_id)
+            setup = next((item for item in setups if int(item.get("id") or 0) == int(setup_id)), None)
+            if setup and not bool(setup.get("is_active")):
+                if not payload.setup_block_acknowledged:
+                    raise HTTPException(409, {
+                        "code": "LIVE_SETUP_BLOCK_ACK_REQUIRED",
+                        "message": "Deze live order hoort bij een setup die vandaag niet actief is. Bevestig bewust met setup_block_acknowledged=true.",
+                        "setup_id": setup_id,
+                        "setup_score": float(setup.get("score") or 0),
+                        "behavioral_event": self._manual_order_guardrail_event(bot, payload, notional, "live order terwijl setup vandaag blokkeert"),
+                    })
+                checks.append({"code": "blocked_setup_ack", "ok": True, "setup_id": setup_id, "setup_score": float(setup.get("score") or 0)})
+
+        return {"ok": True, "checks": checks}
 
     def _as_float(self, value: Any) -> Optional[float]:
         if value is None:
@@ -935,6 +1033,10 @@ class BotService:
         if notional <= 0:
             raise HTTPException(400, "Orderwaarde moet groter zijn dan 0.")
 
+        live_risk_context = None
+        if bot.get("is_live"):
+            live_risk_context = await self.require_live_order_risk_context(user_id, bot, payload, notional)
+
         min_order = float(bot.get("budget_min_order_eur", 0) or 0)
         if min_order > 0 and notional < (min_order - 0.01):
             raise HTTPException(400, f"Minimale ordergrootte niet gehaald (Min {min_order} EUR)")
@@ -1098,6 +1200,8 @@ class BotService:
         if behavioral_event:
             result["risk_acknowledged"] = True
             result["behavioral_event"] = behavioral_event
+        if live_risk_context:
+            result["live_order_guardrails"] = live_risk_context
         return result
 
     def _validate_manual_order_payload(self, payload: BotManualOrderSchema) -> None:
