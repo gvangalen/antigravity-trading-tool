@@ -598,6 +598,22 @@ class FinnPlanService:
         ]
         return any(term in q for term in weekly_terms) and any(term in q for term in reflection_terms)
 
+    def looks_like_finn_report_request(self, query: str) -> bool:
+        q = (query or "").lower()
+        finn_terms = [
+            "finn rapport", "finn-report", "finn report", "rapport van finn",
+            "finn verslag", "operator rapport", "operator report", "discipline rapport",
+            "risk officer rapport", "guardrail rapport", "wat heeft finn geblokkeerd",
+            "wat heeft finn vandaag gedaan", "wat heb ik vandaag met finn gedaan",
+            "dagafsluiting", "dag afsluiting", "einde dag", "sluit mijn dag af",
+        ]
+        report_terms = [
+            "rapport", "verslag", "samenvatting", "overzicht", "afsluiting",
+            "geblokkeerd", "afgeremd", "overrides", "afwijkingen", "skips",
+            "snoozes", "guardrails", "finn acties",
+        ]
+        return any(term in q for term in finn_terms) or ("finn" in q and any(term in q for term in report_terms))
+
     def looks_like_behavioral_memory_request(self, query: str) -> bool:
         q = (query or "").lower()
         memory_terms = [
@@ -4659,6 +4675,42 @@ class FinnPlanService:
             ],
         }
 
+    async def build_finn_report_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=200)
+        day_log = self._mission_day_log(activity_feed)
+        behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        report = self._build_finn_reflection_report(activity_feed, behavioral, query)
+        response = self._finn_reflection_report_message(report)
+        return {
+            "response": response,
+            "intent": "finn_report",
+            "flow": "finn_report",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "current_flow": "finn_report",
+                "analysis": report,
+                "behavioral_insight": behavioral,
+                "advice_only": True,
+                "report_family": "finn_reflection",
+                "separate_from": "daily_trading_report",
+            },
+            "suggested_actions": [
+                "Vraag: geef mijn weekreflectie",
+                "Vraag: geef mijn gedragsrapport van de laatste 30 dagen",
+                "Vraag: open Mission Control",
+            ],
+        }
+
     def _build_weekly_reflection_from_behavioral(
         self,
         behavioral: Dict[str, Any],
@@ -4981,6 +5033,226 @@ class FinnPlanService:
             lines.append("Wat Finn nog niet mag concluderen:")
             lines.extend([f"- {item}" for item in not_enough[:3]])
         lines.append(f"Veilige volgende stap: {memory.get('safe_next_step')}")
+        return "\n".join([line for line in lines if line])
+
+    def _finn_report_period_from_query(self, query: str) -> Dict[str, Any]:
+        q = (query or "").lower()
+        if any(term in q for term in ["30 dagen", "maand", "monthly", "maandrapport"]):
+            return {"key": "last_30_days", "days": 30, "label": "laatste 30 dagen"}
+        if any(term in q for term in ["week", "weekly", "7 dagen"]):
+            return {"key": "last_7_days", "days": 7, "label": "laatste 7 dagen"}
+        return {"key": "today", "days": 1, "label": "vandaag"}
+
+    def _build_finn_reflection_report(
+        self,
+        activity_feed: List[Dict[str, Any]],
+        behavioral: Dict[str, Any],
+        query: str,
+    ) -> Dict[str, Any]:
+        period = self._finn_report_period_from_query(query)
+        now = _utc_now()
+        cutoff = now - timedelta(days=period["days"])
+        items = []
+        for item in activity_feed or []:
+            created_at = self._parse_mission_timestamp(item.get("created_at"))
+            if not created_at:
+                continue
+            if period["key"] == "today":
+                if created_at.date() == now.date():
+                    items.append(item)
+            elif created_at >= cutoff:
+                items.append(item)
+
+        def count_type(action_type: str) -> int:
+            return len([item for item in items if item.get("type") == action_type])
+
+        def count_resolution(resolve_state: str) -> int:
+            return len([item for item in items if item.get("resolve_state") == resolve_state])
+
+        behavioral_events = [
+            item.get("behavioral_event") for item in items
+            if isinstance(item.get("behavioral_event"), dict)
+        ]
+        event_counts: Dict[str, int] = {}
+        for event in behavioral_events:
+            event_type = str(event.get("type") or "unknown")
+            event_counts[event_type] = event_counts.get(event_type, 0) + 1
+
+        metrics = {
+            "actions": len(items),
+            "executed": len([item for item in items if item.get("status") == "executed"]),
+            "pending": len([item for item in items if item.get("status") == "pending"]),
+            "failed": len([item for item in items if item.get("status") == "failed"]),
+            "resolved": count_resolution("resolved"),
+            "skipped": count_resolution("skipped"),
+            "snoozed": count_resolution("snoozed"),
+            "monitor_today": count_resolution("monitor_today"),
+            "waiting_for_data": count_resolution("waiting_for_data"),
+            "plans_created": count_type("create_plan"),
+            "strategies_changed": count_type("create_strategy"),
+            "bots_changed": count_type("create_bot") + count_type("bot_config_update"),
+            "indicators_changed": count_type("configure_indicator"),
+            "bot_decisions_generated": count_type("generate_bot_decision"),
+            "bot_decisions_skipped": count_type("skip_bot_decision"),
+            "paper_executions": count_type("paper_execute_bot_decision"),
+            "live_preflights": count_type("live_preflight_bot_decision"),
+            "mission_items_resolved": count_type("resolve_mission_item"),
+            "mission_items_snoozed": count_type("snooze_mission_item"),
+            "behavioral_events": len(behavioral_events),
+            "plan_deviation_events": event_counts.get("plan_deviation_attempt", 0) + event_counts.get("strategy_change_pressure", 0),
+            "decision_churn_events": event_counts.get("decision_churn", 0),
+            "execution_pressure_events": event_counts.get("execution_pressure", 0),
+        }
+
+        interventions = []
+        if metrics["plan_deviation_events"] > 0:
+            interventions.append({
+                "type": "plan_deviation",
+                "label": "Plan-afwijking afgeremd",
+                "count": metrics["plan_deviation_events"],
+                "meaning": "Finn heeft je laten bevestigen dat je bewust van je plan wilde afwijken.",
+            })
+        if metrics["decision_churn_events"] > 0:
+            interventions.append({
+                "type": "decision_churn",
+                "label": "Decision-churn afgeremd",
+                "count": metrics["decision_churn_events"],
+                "meaning": "Finn zag herhaald nieuwe bot-decisions aanvragen terwijl review nog open stond.",
+            })
+        if metrics["execution_pressure_events"] > 0:
+            interventions.append({
+                "type": "execution_pressure",
+                "label": "Execution pressure afgeremd",
+                "count": metrics["execution_pressure_events"],
+                "meaning": "Finn zag execution-druk of live/manual risico en voegde frictie toe.",
+            })
+        if metrics["skipped"] + metrics["snoozed"] + metrics["monitor_today"] > 0:
+            interventions.append({
+                "type": "disciplined_waiting",
+                "label": "Bewust wachten vastgelegd",
+                "count": metrics["skipped"] + metrics["snoozed"] + metrics["monitor_today"],
+                "meaning": "Je hebt items bewust overgeslagen, gemonitord of later gezet.",
+            })
+
+        configuration_total = (
+            metrics["plans_created"]
+            + metrics["strategies_changed"]
+            + metrics["bots_changed"]
+            + metrics["indicators_changed"]
+        )
+        sections = {
+            "operator_summary": {
+                "title": "Operator samenvatting",
+                "items": [
+                    f"{metrics['actions']} Finn-acties in {period['label']}",
+                    f"{metrics['executed']} uitgevoerd, {metrics['pending']} nog pending, {metrics['failed']} mislukt",
+                    f"{metrics['resolved']} resolved, {metrics['skipped']} skipped, {metrics['snoozed']} later gezet",
+                ],
+            },
+            "configuration": {
+                "title": "Systeemwijzigingen",
+                "items": [
+                    f"{metrics['plans_created']} plannen",
+                    f"{metrics['strategies_changed']} strategy-wijzigingen",
+                    f"{metrics['bots_changed']} bot-wijzigingen",
+                    f"{metrics['indicators_changed']} indicator-wijzigingen",
+                ],
+                "total": configuration_total,
+            },
+            "decision_review": {
+                "title": "Decision & review",
+                "items": [
+                    f"{metrics['bot_decisions_generated']} bot-decisions gegenereerd",
+                    f"{metrics['bot_decisions_skipped']} bot-decisions overgeslagen",
+                    f"{metrics['paper_executions']} paper executions",
+                    f"{metrics['live_preflights']} live preflights",
+                ],
+            },
+            "guardrails": {
+                "title": "Finn guardrails",
+                "items": interventions,
+            },
+        }
+
+        if not items:
+            status = "empty"
+            headline = "Ik heb voor deze periode nog geen Finn-activiteit om te rapporteren."
+            safe_next_step = "Gebruik Mission Control vandaag; daarna kan Finn een echt operatorrapport maken."
+        elif interventions:
+            status = "attention"
+            headline = "Finn heeft deze periode echte frictie- en disciplinepunten vastgelegd."
+            safe_next_step = "Review eerst de open queue en rond pending bot-decisions af voordat je nieuwe decisions maakt."
+        elif configuration_total >= 4:
+            status = "configuration_heavy"
+            headline = "Je hebt vooral aan je systeem gebouwd of aangepast."
+            safe_next_step = "Laat Finn controleren of deze wijzigingen nog bij je oorspronkelijke plan passen."
+        else:
+            status = "steady"
+            headline = "Je Finn-activiteit oogt beheerst; ik zie geen zware guardrail-events in deze periode."
+            safe_next_step = "Blijf Mission Control gebruiken als vaste review-queue."
+
+        return {
+            "report_type": "finn_reflection_report",
+            "report_family": "finn_reports",
+            "separate_from": "daily_trading_report",
+            "period": period,
+            "status": status,
+            "headline": headline,
+            "advice_only": True,
+            "metrics": metrics,
+            "sections": sections,
+            "behavioral_profile": behavioral.get("metrics") and self._behavioral_profile_from_metrics(
+                behavioral.get("metrics") or {},
+                behavioral.get("patterns") or [],
+            ),
+            "risk_officer_interventions": interventions,
+            "evidence": self._weekly_reflection_evidence(items[:12]),
+            "source": {
+                "primary": "ai_pending_actions",
+                "derived_from": ["Mission Control activity", "behavioral events", "resolve states"],
+                "stores_new_report": False,
+                "does_not_use": "daily_reports market/trading narrative",
+            },
+            "safe_next_step": safe_next_step,
+        }
+
+    def _finn_reflection_report_message(self, report: Dict[str, Any]) -> str:
+        metrics = report.get("metrics") or {}
+        period = report.get("period") or {}
+        lines = [
+            f"Finn rapport ({period.get('label', 'periode')}).",
+            "Dit is een Finn operator-/disciplinerapport, los van je dagelijkse trading report.",
+            report.get("headline") or "Ik heb nog geen stevige conclusie.",
+            (
+                "Operator-log: "
+                f"{metrics.get('actions', 0)} acties, "
+                f"{metrics.get('executed', 0)} uitgevoerd, "
+                f"{metrics.get('pending', 0)} pending, "
+                f"{metrics.get('skipped', 0)} skips, "
+                f"{metrics.get('snoozed', 0)} later gezet."
+            ),
+            (
+                "Systeemwijzigingen: "
+                f"{metrics.get('plans_created', 0)} plannen, "
+                f"{metrics.get('strategies_changed', 0)} strategies, "
+                f"{metrics.get('bots_changed', 0)} bots, "
+                f"{metrics.get('indicators_changed', 0)} indicators."
+            ),
+            (
+                "Risk-officer events: "
+                f"{metrics.get('plan_deviation_events', 0)} plan-afwijkingen, "
+                f"{metrics.get('decision_churn_events', 0)} decision-churn, "
+                f"{metrics.get('execution_pressure_events', 0)} execution-pressure."
+            ),
+        ]
+        interventions = report.get("risk_officer_interventions") or []
+        if interventions:
+            lines.append("Wat Finn heeft afgeremd of vastgelegd:")
+            for item in interventions[:4]:
+                lines.append(f"- {item.get('label')}: {item.get('meaning')} ({item.get('count')}x)")
+        else:
+            lines.append("Finn heeft in deze periode geen zware guardrail-interventie gevonden.")
+        lines.append(f"Veilige volgende stap: {report.get('safe_next_step')}")
         return "\n".join([line for line in lines if line])
 
     def _behavioral_profile_from_metrics(self, metrics: Dict[str, Any], patterns: List[str]) -> Dict[str, Any]:

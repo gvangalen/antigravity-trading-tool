@@ -78,6 +78,57 @@ def test_bot_decision_ack_state_persists_and_hydrates_without_client_context(mon
     assert saved == {}
 
 
+def test_finn_report_request_is_separate_from_trading_report():
+    service = _service()
+
+    assert service.looks_like_finn_report_request("Geef mijn Finn rapport van vandaag")
+    assert service.looks_like_finn_report_request("Wat heeft Finn vandaag geblokkeerd?")
+    assert not service.looks_like_finn_report_request("Geef mijn daily trading report")
+
+
+def test_finn_reflection_report_summarizes_operator_activity():
+    service = _service()
+    now = _utc_now().isoformat()
+    activity = [
+        {
+            "type": "create_plan",
+            "status": "executed",
+            "resolve_state": "resolved",
+            "asset": "BTC",
+            "created_at": now,
+        },
+        {
+            "type": "generate_bot_decision",
+            "status": "executed",
+            "resolve_state": "resolved",
+            "asset": "BTC",
+            "created_at": now,
+            "behavioral_event": {"type": "decision_churn", "severity": "medium"},
+        },
+        {
+            "type": "snooze_mission_item",
+            "status": "executed",
+            "resolve_state": "snoozed",
+            "asset": "BTC",
+            "created_at": now,
+        },
+    ]
+    behavioral = service._build_behavioral_insight_from_activity(activity)
+
+    report = service._build_finn_reflection_report(activity, behavioral, "Geef mijn Finn rapport van vandaag")
+    message = service._finn_reflection_report_message(report)
+
+    assert report["report_type"] == "finn_reflection_report"
+    assert report["separate_from"] == "daily_trading_report"
+    assert report["source"]["primary"] == "ai_pending_actions"
+    assert report["source"]["stores_new_report"] is False
+    assert report["metrics"]["actions"] == 3
+    assert report["metrics"]["decision_churn_events"] == 1
+    assert report["metrics"]["snoozed"] == 1
+    assert report["risk_officer_interventions"][0]["type"] == "decision_churn"
+    assert "los van je dagelijkse trading report" in message
+
+
 def test_one_shot_weekly_dca_is_confirmable_and_creates_bot_by_default():
     result = _service().build_response("Maak een wekelijkse BTC DCA van 100 euro")
 
