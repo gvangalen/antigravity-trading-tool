@@ -80,6 +80,61 @@ def test_bot_decision_ack_state_persists_and_hydrates_without_client_context(mon
     assert saved == {}
 
 
+def test_live_preflight_rechecks_freshness_when_action_was_already_executed(monkeypatch):
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            return {"id": bot_id, "is_live": True}
+
+    class FakeBotService:
+        def __init__(self, session):
+            self.repository = Repo()
+
+        async def require_fresh_live_decision_context(self, user_id, bot_id):
+            raise HTTPException(409, {
+                "code": "LIVE_EXECUTION_STALE_DATA",
+                "freshness": {
+                    "fresh": False,
+                    "status": "stale",
+                    "age_minutes": 92,
+                    "decision_id": 38677,
+                },
+            })
+
+    class FakeExchangeRepository:
+        def __init__(self, session):
+            pass
+
+        async def get_active_keys(self, user_id):
+            return {"id": 1}
+
+    monkeypatch.setattr("backend.services.finn_plan_service.BotService", FakeBotService)
+    monkeypatch.setattr("backend.services.finn_plan_service.ExchangeRepository", FakeExchangeRepository)
+
+    service = FinnPlanService(db_session=object())
+    service._try_create_pending_action = AsyncMock(return_value=False)
+    service._wait_for_action_result = AsyncMock(return_value={
+        "ok": True,
+        "verified": {"fresh_decision_context": True},
+        "freshness": {"status": "fresh", "age_minutes": 39},
+    })
+    service._upsert_action_audit = AsyncMock()
+
+    result = asyncio.run(service._execute_live_preflight_bot_decision_action(
+        30,
+        {
+            "id": "live-preflight-38677",
+            "type": "live_preflight_bot_decision",
+            "payload": {"bot_id": 17, "decision_id": 38677},
+        },
+    ))
+
+    assert result["verified"]["live_preflight"] is False
+    assert result["verified"]["fresh_decision_context"] is False
+    assert result["freshness"]["status"] == "stale"
+    assert result["stale_data_block"]["code"] == "LIVE_EXECUTION_STALE_DATA"
+    service._wait_for_action_result.assert_not_awaited()
+
+
 def test_finn_report_request_is_separate_from_trading_report():
     service = _service()
 

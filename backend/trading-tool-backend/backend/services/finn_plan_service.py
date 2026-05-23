@@ -8114,11 +8114,11 @@ class FinnPlanService:
             raise HTTPException(422, "bot_id en decision_id zijn verplicht.")
         action_id = f"{action.get('id') or self._maintenance_action_id('live_preflight_bot_decision', [str(bot_id), str(decision_id)])}-u{user_id}"
         acquired = await self._try_create_pending_action(user_id, action_id, action)
+        # Live preflight is a read-only safety check. Re-run it against live DB
+        # state even when the same action id was executed before, because
+        # decision freshness can change minute by minute.
         if not acquired:
-            existing_result = await self._wait_for_action_result(user_id, action_id)
-            if existing_result:
-                return existing_result
-            raise HTTPException(409, "Deze Finn actie wordt al verwerkt. Probeer zo opnieuw.")
+            await asyncio.sleep(0)
 
         bot_service = BotService(self.session)
         bot = await bot_service.repository.get_bot_config(user_id, bot_id)
