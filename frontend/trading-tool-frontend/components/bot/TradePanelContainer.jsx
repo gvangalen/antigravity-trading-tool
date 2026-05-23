@@ -5,7 +5,7 @@ import { useModal } from "@/components/modal/ModalProvider";
 import TradePanel from "./TradePanel";
 import OrderPreviewModal from "./OrderPreviewModal";
 import { fetchTradePlan, createManualOrder, preflightManualOrder, previewManualOrder } from "@/lib/api/botApi";
-import { fetchLatestBTC } from "@/lib/api/market";
+import { fetchLatestPrice } from "@/lib/api/market";
 
 export default function TradePanelContainer({
   bot,
@@ -17,6 +17,13 @@ export default function TradePanelContainer({
   const { showSnackbar } = useModal();
   const botId = bot?.id;
   const decisionId = decision?.id;
+  const tradeSymbol = (
+    bot?.strategy?.setup?.symbol ||
+    bot?.strategy?.symbol ||
+    bot?.symbol ||
+    decision?.symbol ||
+    "BTC"
+  ).toUpperCase();
 
   const [price, setPrice] = useState(null);
 
@@ -162,16 +169,16 @@ export default function TradePanelContainer({
 
     return () => clearInterval(interval);
 
-  }, [botId]);
+  }, [botId, tradeSymbol]);
 
   async function loadPrice() {
 
     try {
 
-      const btc = await fetchLatestBTC();
+      const latest = await fetchLatestPrice(tradeSymbol);
 
-      if (btc?.price) {
-        setPrice(Number(btc.price));
+      if (latest?.price) {
+        setPrice(Number(latest.price));
       }
 
     } catch (err) {
@@ -204,7 +211,7 @@ export default function TradePanelContainer({
       ...order,
       idempotency_key: idempotencyKey,
       risk_acknowledged: Boolean(bot?.is_live),
-      setup_block_acknowledged: Boolean(bot?.is_live),
+      setup_block_acknowledged: Boolean(order.setup_block_acknowledged),
       live_preflight_token: preflightToken,
     };
     setDraftOrder(safeOrder);
@@ -218,7 +225,7 @@ export default function TradePanelContainer({
       setLoading(true);
       const payload = {
         bot_id: botId,
-        symbol: "BTC",
+        symbol: tradeSymbol,
         side: order.side,
         quantity: order.quantity,
         price: order.orderType === "market" ? price : order.price,
@@ -264,11 +271,11 @@ export default function TradePanelContainer({
 
       await createManualOrder({
         bot_id: botId,
-        symbol: "BTC",
+        symbol: tradeSymbol,
         side: draftOrder.side,
         quantity: previewData.quantity,
         price: previewData.price,
-        value_eur: previewData.gross_eur,
+        value_eur: previewData.gross_eur ?? previewData.notional_eur,
         idempotency_key: draftOrder.idempotency_key,
         risk_acknowledged: draftOrder.risk_acknowledged,
         live_preflight_token: draftOrder.live_preflight_token,
@@ -304,6 +311,16 @@ export default function TradePanelContainer({
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleAcknowledgeSetupBlock() {
+    if (!draftOrder) return;
+    const acknowledged = {
+      ...draftOrder,
+      setup_block_acknowledged: true,
+    };
+    setDraftOrder(acknowledged);
+    await refreshPreview(acknowledged);
   }
 
   /* =====================================================
@@ -347,7 +364,8 @@ export default function TradePanelContainer({
         availableQuote={availableQuote}
         balanceBase={balanceBase}
         quoteSymbol={bot?.base_currency || "EUR"}
-        baseSymbol="BTC"
+        baseSymbol={tradeSymbol}
+        symbol={tradeSymbol}
         watchLevels={watchLevels}
         strategy={strategy}
         loading={loading}
@@ -361,6 +379,7 @@ export default function TradePanelContainer({
           loading={loading}
           currencySymbol={bot?.base_currency === "USD" ? "$" : "€"}
           onConfirm={handleConfirmOrder}
+          onAcknowledgeSetupBlock={handleAcknowledgeSetupBlock}
           onCancel={() => setShowPreview(false)}
           onRefresh={refreshPreview}
         />

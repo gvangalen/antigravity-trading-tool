@@ -25,6 +25,7 @@ const fmt = (v, digits = 2) => {
 export default function OrderPreviewModal({
   preview,
   onConfirm,
+  onAcknowledgeSetupBlock,
   onCancel,
   onRefresh,
   loading = false,
@@ -56,6 +57,7 @@ export default function OrderPreviewModal({
   const isBuy = preview.side === "buy";
   const isLivePreflight = preview.mode === "manual_order_preflight" || preview.live_market_price || preview.live_order_guardrails || preview.blocked;
   const isBlocked = preview.blocked || preview.ok === false;
+  const requiresSetupBlockAck = preview.code === "LIVE_SETUP_BLOCK_ACK_REQUIRED";
   const orderAmount = preview.gross_eur ?? preview.notional_eur ?? (Number(preview.quantity) * Number(preview.price));
   const feeRate = Number(preview.fee_rate);
   const liveChecks = [
@@ -207,6 +209,16 @@ export default function OrderPreviewModal({
               <div className="px-4 py-4 space-y-2">
                 {preview.safe_next_step && (
                   <p className="text-xs font-bold leading-relaxed text-slate-700">{preview.safe_next_step}</p>
+                )}
+                {requiresSetupBlockAck && (
+                  <button
+                    type="button"
+                    onClick={onAcknowledgeSetupBlock}
+                    disabled={loading}
+                    className="w-full mt-3 py-3 rounded-xl bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 disabled:bg-slate-300 transition-colors"
+                  >
+                    Bewust doorgaan met geblokkeerde setup
+                  </button>
                 )}
                 {preview.live_market_price || preview.market_timestamp ? (
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
