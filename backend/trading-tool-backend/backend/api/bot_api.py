@@ -129,6 +129,14 @@ async def create_manual_order(
 ):
     return await service.create_manual_order(payload, current_user["id"])
 
+@router.post("/orders/manual/preflight")
+async def preflight_manual_order(
+    payload: BotManualOrderSchema,
+    current_user: dict = Depends(get_current_user),
+    service: BotService = Depends(get_bot_service)
+):
+    return await service.preflight_manual_order(payload, current_user["id"])
+
 # ==========================================================
 # 📦 BOT PORTFOLIOS
 # ==========================================================

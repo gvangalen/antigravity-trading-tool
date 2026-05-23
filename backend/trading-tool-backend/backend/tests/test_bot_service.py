@@ -651,6 +651,72 @@ def test_live_manual_order_blocks_when_market_price_is_stale(monkeypatch):
     assert repo.created_orders == 0
 
 
+def test_live_manual_order_preflight_is_not_persisted_and_returns_guardrail_context():
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo()
+    service.repository = repo
+
+    async def _preflight_ok(user_id, bot_id, token):
+        return {
+            "token": token,
+            "verified": {"live_preflight": True, "fresh_decision_context": True},
+            "freshness": {"status": "fresh"},
+        }
+
+    service.require_recent_live_preflight = _preflight_ok
+    payload = BotManualOrderSchema(
+        bot_id=9,
+        symbol="BTC",
+        side="buy",
+        quantity=0.001,
+        price=50000,
+        idempotency_key="manual-live-dry-run",
+        risk_acknowledged=True,
+        live_preflight_token="preflight-ok",
+    )
+
+    result = asyncio.run(service.preflight_manual_order(payload, user_id=1))
+
+    assert result["ok"] is True
+    assert result["not_persisted"] is True
+    assert result["exchange_order_created"] is False
+    assert result["order_id"] is None
+    assert result["live_market_price"]["symbol"] == "BTC"
+    assert result["live_order_guardrails"]["ok"] is True
+    assert result["verified"]["no_exchange_order"] is True
+    assert repo.created_orders == 0
+
+
+def test_live_manual_order_preflight_reuses_stale_market_price_guardrail(monkeypatch):
+    monkeypatch.setattr("backend.services.bot_service.LIVE_MARKET_PRICE_STALE_AFTER_SECONDS", 300)
+    service = BotService(_FakeSession())
+    stale_ts = datetime.now(timezone.utc) - timedelta(minutes=10)
+    repo = _ManualOrderRepo(market_snapshot={"price": 50000, "timestamp": stale_ts})
+    service.repository = repo
+
+    async def _preflight_ok(user_id, bot_id, token):
+        return {"token": token}
+
+    service.require_recent_live_preflight = _preflight_ok
+    payload = BotManualOrderSchema(
+        bot_id=9,
+        symbol="BTC",
+        side="buy",
+        quantity=0.001,
+        price=50000,
+        idempotency_key="manual-live-dry-run-stale",
+        risk_acknowledged=True,
+        live_preflight_token="preflight-ok",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.preflight_manual_order(payload, user_id=1))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_MARKET_PRICE_STALE"
+    assert repo.created_orders == 0
+
+
 def test_live_manual_order_blocks_when_decision_context_is_missing():
     service = BotService(_FakeSession())
     repo = _ManualOrderRepo(decisions=[])

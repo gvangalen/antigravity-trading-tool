@@ -767,6 +767,99 @@ class BotService:
             "stale_after_seconds": LIVE_MARKET_PRICE_STALE_AFTER_SECONDS,
         }
 
+    async def require_live_manual_order_preflight_context(
+        self,
+        user_id: int,
+        bot: Dict[str, Any],
+        payload: BotManualOrderSchema,
+        notional: float,
+    ) -> Dict[str, Any]:
+        if not bot.get("is_live"):
+            return {
+                "is_live": False,
+                "not_persisted": True,
+            }
+        if not payload.idempotency_key:
+            raise HTTPException(409, {
+                "code": "LIVE_ORDER_IDEMPOTENCY_REQUIRED",
+                "message": "Live manual orders vereisen een idempotency_key zodat retries geen dubbele order kunnen plaatsen.",
+            })
+        if not payload.risk_acknowledged:
+            raise HTTPException(409, {
+                "code": "LIVE_ORDER_RISK_ACK_REQUIRED",
+                "message": "Live manual orders vereisen bewuste risk acknowledgement.",
+                "behavioral_event": self._manual_order_pressure_event(bot, payload, notional),
+            })
+
+        decision_freshness = await self.require_fresh_live_decision_context(user_id, payload.bot_id)
+        preflight_token = payload.live_preflight_token or payload.live_preflight_action_id
+        preflight = await self.require_recent_live_preflight(user_id, payload.bot_id, preflight_token)
+        market_price = await self.require_fresh_live_market_price(payload.symbol)
+        live_order_guardrails = await self.require_live_order_risk_context(user_id, bot, payload, notional)
+
+        return {
+            "is_live": True,
+            "not_persisted": True,
+            "idempotency_key": payload.idempotency_key,
+            "risk_acknowledged": True,
+            "decision_freshness": decision_freshness,
+            "live_preflight": preflight,
+            "live_market_price": market_price,
+            "live_order_guardrails": live_order_guardrails,
+        }
+
+    def _validate_manual_order_budget_context(
+        self,
+        bot: Dict[str, Any],
+        stats: Dict[str, Any],
+        payload: BotManualOrderSchema,
+        notional: float,
+    ) -> Optional[Dict[str, Any]]:
+        min_order = float(bot.get("budget_min_order_eur", 0) or 0)
+        if min_order > 0 and notional < (min_order - 0.01):
+            raise HTTPException(400, f"Minimale ordergrootte niet gehaald (Min {min_order} EUR)")
+
+        if payload.side == "buy":
+            invested = abs(float(stats.get("executed_cash", 0)))
+            total_budget = float(bot.get("budget_total_eur", 0))
+            if total_budget > 0 and (invested + notional) > (total_budget + 0.01):
+                raise HTTPException(400, f"Totaal budget overschreden (Max {total_budget} EUR)")
+
+            daily_limit = float(bot.get("budget_daily_limit_eur", 0))
+            today_spent = float(stats.get("today_spent", 0))
+            if daily_limit > 0 and (today_spent + notional) > (daily_limit + 0.01):
+                raise HTTPException(400, f"Daglimiet overschreden (Max {daily_limit} EUR, vandaag al {today_spent} EUR besteed)")
+
+            max_order = float(bot.get("budget_max_order_eur", 0))
+            if max_order > 0 and notional > (max_order + 0.01):
+                raise HTTPException(400, f"Maximale ordergrootte overschreden (Max {max_order} EUR)")
+
+            guardrails = apply_guardrails(
+                proposed_amount_eur=notional,
+                portfolio_value_eur=max(total_budget, invested, notional),
+                current_asset_value_eur=max(float(stats.get("net_qty", 0) or 0), 0.0) * payload.price,
+                invested_eur=invested,
+                today_allocated_eur=today_spent,
+                cash_balance_eur=max(total_budget - invested, 0.0) if total_budget > 0 else notional,
+                kill_switch=bool(bot.get("is_active", True)),
+                max_trade_risk_eur=bot.get("budget_max_order_eur"),
+                daily_allocation_eur=bot.get("budget_daily_limit_eur"),
+                max_asset_exposure_pct=bot.get("max_asset_exposure_pct"),
+                total_budget_eur=bot.get("budget_total_eur"),
+                min_order_eur=bot.get("budget_min_order_eur"),
+            )
+            if not guardrails.get("allowed", False):
+                raise HTTPException(400, guardrails.get("reason") or "Order geblokkeerd door bot guardrails.")
+            return guardrails
+
+        current_qty = max(float(stats.get("net_qty", 0) or 0), 0.0)
+        if payload.quantity > (current_qty + 1e-12):
+            raise HTTPException(
+                400,
+                f"Niet genoeg positie om te verkopen. Beschikbaar: {round(current_qty, 8)} {payload.symbol}."
+            )
+        return None
+
     def _as_float(self, value: Any) -> Optional[float]:
         if value is None:
             return None
@@ -1063,85 +1156,18 @@ class BotService:
         bot = await self.repository.get_bot_config(user_id, payload.bot_id)
         if not bot:
             raise HTTPException(404, "Bot niet gevonden")
-        if bot.get("is_live"):
-            if not payload.idempotency_key:
-                raise HTTPException(409, {
-                    "code": "LIVE_ORDER_IDEMPOTENCY_REQUIRED",
-                    "message": "Live manual orders vereisen een idempotency_key zodat retries geen dubbele order kunnen plaatsen.",
-                })
-            if not payload.risk_acknowledged:
-                raise HTTPException(409, {
-                    "code": "LIVE_ORDER_RISK_ACK_REQUIRED",
-                    "message": "Live manual orders vereisen bewuste risk acknowledgement.",
-                    "behavioral_event": self._manual_order_pressure_event(
-                        bot,
-                        payload,
-                        round(payload.quantity * payload.price, 2),
-                    ),
-                })
-            await self.require_fresh_live_decision_context(user_id, payload.bot_id)
-            preflight_token = payload.live_preflight_token or payload.live_preflight_action_id
-            await self.require_recent_live_preflight(user_id, payload.bot_id, preflight_token)
-            
-        # 2. Fetch current stats
-        stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
-        
-        # 3. Guardrail check for BUY and SELL orders
+
         notional = round(payload.quantity * payload.price, 2)
         if notional <= 0:
             raise HTTPException(400, "Orderwaarde moet groter zijn dan 0.")
 
-        live_risk_context = None
-        live_market_price_context = None
-        if bot.get("is_live"):
-            live_market_price_context = await self.require_fresh_live_market_price(payload.symbol)
-            live_risk_context = await self.require_live_order_risk_context(user_id, bot, payload, notional)
+        live_context = await self.require_live_manual_order_preflight_context(user_id, bot, payload, notional)
 
-        min_order = float(bot.get("budget_min_order_eur", 0) or 0)
-        if min_order > 0 and notional < (min_order - 0.01):
-            raise HTTPException(400, f"Minimale ordergrootte niet gehaald (Min {min_order} EUR)")
+        # 2. Fetch current stats
+        stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
         
-        if payload.side == "buy":
-            # Total Budget Check
-            invested = abs(float(stats.get("executed_cash", 0)))
-            total_budget = float(bot.get("budget_total_eur", 0))
-            if total_budget > 0 and (invested + notional) > (total_budget + 0.01):
-                raise HTTPException(400, f"Totaal budget overschreden (Max {total_budget} EUR)")
-                
-            # Daily Limit Check
-            daily_limit = float(bot.get("budget_daily_limit_eur", 0))
-            today_spent = float(stats.get("today_spent", 0))
-            if daily_limit > 0 and (today_spent + notional) > (daily_limit + 0.01):
-                raise HTTPException(400, f"Daglimiet overschreden (Max {daily_limit} EUR, vandaag al {today_spent} EUR besteed)")
-                
-            # Max Order Check
-            max_order = float(bot.get("budget_max_order_eur", 0))
-            if max_order > 0 and notional > (max_order + 0.01):
-                raise HTTPException(400, f"Maximale ordergrootte overschreden (Max {max_order} EUR)")
-
-            guardrails = apply_guardrails(
-                proposed_amount_eur=notional,
-                portfolio_value_eur=max(total_budget, invested, notional),
-                current_asset_value_eur=max(float(stats.get("net_qty", 0) or 0), 0.0) * payload.price,
-                invested_eur=invested,
-                today_allocated_eur=today_spent,
-                cash_balance_eur=max(total_budget - invested, 0.0) if total_budget > 0 else notional,
-                kill_switch=bool(bot.get("is_active", True)),
-                max_trade_risk_eur=bot.get("budget_max_order_eur"),
-                daily_allocation_eur=bot.get("budget_daily_limit_eur"),
-                max_asset_exposure_pct=bot.get("max_asset_exposure_pct"),
-                total_budget_eur=bot.get("budget_total_eur"),
-                min_order_eur=bot.get("budget_min_order_eur"),
-            )
-            if not guardrails.get("allowed", False):
-                raise HTTPException(400, guardrails.get("reason") or "Order geblokkeerd door bot guardrails.")
-        else:
-            current_qty = max(float(stats.get("net_qty", 0) or 0), 0.0)
-            if payload.quantity > (current_qty + 1e-12):
-                raise HTTPException(
-                    400,
-                    f"Niet genoeg positie om te verkopen. Beschikbaar: {round(current_qty, 8)} {payload.symbol}."
-                )
+        # 3. Guardrail check for BUY and SELL orders
+        self._validate_manual_order_budget_context(bot, stats, payload, notional)
 
         live_keys = None
         if bot.get("is_live"):
@@ -1260,11 +1286,54 @@ class BotService:
         if behavioral_event:
             result["risk_acknowledged"] = True
             result["behavioral_event"] = behavioral_event
-        if live_risk_context:
-            result["live_order_guardrails"] = live_risk_context
-        if live_market_price_context:
-            result["live_market_price"] = live_market_price_context
+        if live_context.get("live_order_guardrails"):
+            result["live_order_guardrails"] = live_context["live_order_guardrails"]
+        if live_context.get("live_market_price"):
+            result["live_market_price"] = live_context["live_market_price"]
         return result
+
+    async def preflight_manual_order(self, payload: BotManualOrderSchema, user_id: int) -> dict:
+        self._validate_manual_order_payload(payload)
+        bot = await self.repository.get_bot_config(user_id, payload.bot_id)
+        if not bot:
+            raise HTTPException(404, "Bot niet gevonden")
+
+        notional = round(payload.quantity * payload.price, 2)
+        if notional <= 0:
+            raise HTTPException(400, "Orderwaarde moet groter zijn dan 0.")
+
+        live_context = await self.require_live_manual_order_preflight_context(user_id, bot, payload, notional)
+        stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
+        bot_guardrails = self._validate_manual_order_budget_context(bot, stats, payload, notional)
+
+        return {
+            "ok": True,
+            "mode": "manual_order_preflight",
+            "not_persisted": True,
+            "exchange_order_created": False,
+            "order_id": None,
+            "bot_id": payload.bot_id,
+            "symbol": payload.symbol,
+            "side": payload.side,
+            "quantity": payload.quantity,
+            "price": payload.price,
+            "notional_eur": notional,
+            "is_live": bool(bot.get("is_live")),
+            "live_preflight": live_context.get("live_preflight"),
+            "decision_freshness": live_context.get("decision_freshness"),
+            "live_market_price": live_context.get("live_market_price"),
+            "live_order_guardrails": live_context.get("live_order_guardrails"),
+            "bot_guardrails": bot_guardrails,
+            "verified": {
+                "manual_order_preflight": True,
+                "not_persisted": True,
+                "no_exchange_order": True,
+                "live_preflight": bool(live_context.get("live_preflight")) if bot.get("is_live") else None,
+                "fresh_decision_context": bool((live_context.get("decision_freshness") or {}).get("fresh")) if bot.get("is_live") else None,
+                "fresh_market_price": bool(live_context.get("live_market_price")) if bot.get("is_live") else None,
+                "live_order_guardrails": bool((live_context.get("live_order_guardrails") or {}).get("ok")) if bot.get("is_live") else None,
+            },
+        }
 
     def _validate_manual_order_payload(self, payload: BotManualOrderSchema) -> None:
         side = str(payload.side or "").lower().strip()
