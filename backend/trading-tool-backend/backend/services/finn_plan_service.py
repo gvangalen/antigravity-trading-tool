@@ -1317,11 +1317,15 @@ class FinnPlanService:
 
         if draft and draft.get("asset") == asset:
             analysis = self._evaluate_draft_against_scores(draft, daily_scores)
+            agent_verdicts = self._build_plan_status_agent_verdicts(asset, analysis, source="draft")
+            analysis["agent_verdicts"] = agent_verdicts
             response = self._status_message(asset, analysis, source="draft")
         else:
             matching_setups = [s for s in active_setups if str(s.get("symbol", "")).upper() == asset]
             best_setup = next((s for s in matching_setups if s.get("is_active")), None) or (matching_setups[0] if matching_setups else None)
             analysis = self._evaluate_setup_row(best_setup, daily_scores)
+            agent_verdicts = self._build_plan_status_agent_verdicts(asset, analysis, source="saved_setup")
+            analysis["agent_verdicts"] = agent_verdicts
             response = self._status_message(asset, analysis, source="saved_setup")
 
         return {
@@ -1339,6 +1343,7 @@ class FinnPlanService:
                 "current_flow": "plan_status",
                 "asset": asset,
                 "analysis": analysis,
+                "agent_verdicts": agent_verdicts,
                 "autonomy_level": "advice_only",
             },
             "reasoning": {
@@ -7740,12 +7745,85 @@ class FinnPlanService:
             return [f"Setup-score: {setup.get('score')}"]
         return ["Onvoldoende scoredata voor betrouwbare uitleg."]
 
+    def _build_plan_status_agent_verdicts(
+        self,
+        asset: str,
+        analysis: Dict[str, Any],
+        *,
+        source: str,
+    ) -> List[Dict[str, Any]]:
+        blockers = analysis.get("blockers") or []
+        checks = analysis.get("checks") or {}
+        has_scores = bool(analysis.get("has_scores"))
+
+        def blocker_for(category: str) -> Optional[Dict[str, Any]]:
+            return next((item for item in blockers if item.get("category") == category), None)
+
+        def score_verdict(category: str, label: str) -> Dict[str, Any]:
+            blocker = blocker_for(category)
+            check = checks.get(category) if isinstance(checks, dict) else None
+            if blocker:
+                status = "blocks_plan"
+                priority = "high"
+                reason = f"{label} blokkeert: score {blocker.get('score')} buiten range {blocker.get('range')}."
+                next_action = f"Vraag waarom {category} mijn {asset} setup blokkeert."
+            elif not has_scores or not check:
+                status = "missing_data"
+                priority = "medium"
+                reason = f"{label} heeft onvoldoende scoredata voor deze status-check."
+                next_action = "Ververs daily scores."
+            else:
+                status = "clear"
+                priority = "low"
+                reason = f"{label} valt binnen je planrange."
+                next_action = "Geen actie nodig."
+            return {
+                "agent": f"{category}_agent",
+                "label": f"{label} Agent",
+                "status": status,
+                "priority": priority,
+                "reason": reason,
+                "evidence": {
+                    "asset": asset,
+                    "source": source,
+                    "check": check,
+                    "blocker": blocker,
+                },
+                "next_action": next_action,
+            }
+
+        risk_status = "blocked" if blockers else ("clear" if analysis.get("is_active") else "unknown")
+        return [
+            score_verdict("macro", "Macro"),
+            score_verdict("technical", "Technical"),
+            score_verdict("market", "Market"),
+            {
+                "agent": "risk_agent",
+                "label": "Risk Agent",
+                "status": risk_status,
+                "priority": "high" if blockers else "low",
+                "reason": "Je setup is niet actief volgens je eigen ranges." if blockers else "Geen score-blocker gevonden." if analysis.get("is_active") else analysis.get("reason") or "Status nog onzeker.",
+                "evidence": {
+                    "asset": asset,
+                    "source": source,
+                    "match_percentage": analysis.get("match_percentage"),
+                    "blocker_count": len(blockers),
+                },
+                "next_action": "Niet forceren; los eerst de blocker of data-gap op." if blockers else "Gebruik dit als plan-check, niet als emotionele trigger.",
+            },
+        ]
+
     def _status_message(self, asset: str, analysis: Dict[str, Any], source: str) -> str:
         if not analysis.get("has_scores"):
-            return (
+            lines = [
                 f"Ik kan nog niet betrouwbaar zeggen of {asset} actief is, omdat ik geen scores van vandaag vind. "
                 "Zodra macro, technical en market scores beschikbaar zijn kan ik dit onderbouwen."
-            )
+            ]
+            verdicts = analysis.get("agent_verdicts") or []
+            if verdicts:
+                lines.append("Agent-verdicts:")
+                lines.extend([f"- {item.get('label')}: {item.get('status')} - {item.get('reason')}" for item in verdicts[:4]])
+            return "\n".join(lines)
 
         active_text = "actief" if analysis.get("is_active") else "niet actief"
         checks = analysis.get("checks") or {}
@@ -7776,6 +7854,10 @@ class FinnPlanService:
                 if contributors:
                     preview = ", ".join(str(item) for item in contributors[:2])
                     lines.append(f"- Belangrijkste {label}-signalen: {preview}")
+            verdicts = analysis.get("agent_verdicts") or []
+            if verdicts:
+                lines.append("Agent-verdicts:")
+                lines.extend([f"- {item.get('label')}: {item.get('status')} - {item.get('reason')}" for item in verdicts[:4]])
             return "\n".join(lines)
 
         setup = analysis.get("setup")
@@ -7798,6 +7880,10 @@ class FinnPlanService:
             lines.append("Binnen plan:")
             for check in passed_checks:
                 lines.append(f"- {check.get('category')}: {check.get('score')} binnen {check.get('range')}")
+        verdicts = analysis.get("agent_verdicts") or []
+        if verdicts:
+            lines.append("Agent-verdicts:")
+            lines.extend([f"- {item.get('label')}: {item.get('status')} - {item.get('reason')}" for item in verdicts[:4]])
         lines.append("Gebruik dit als plan-check, niet als losse emotionele trigger.")
         return "\n".join(lines)
 

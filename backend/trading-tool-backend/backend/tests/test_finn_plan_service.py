@@ -1423,6 +1423,35 @@ def test_status_message_lists_blocking_scores_for_saved_setup():
     assert "Gebruik dit als plan-check" in message
 
 
+def test_plan_status_agent_verdicts_explain_blocking_layer():
+    service = _service()
+    analysis = service._evaluate_setup_row(
+        {
+            "id": 12,
+            "name": "BTC Plan",
+            "setup_type": "dca",
+            "timeframe": "1W",
+            "score": 55,
+            "is_active": False,
+            "min_macro_score": 30,
+            "max_macro_score": 70,
+            "min_technical_score": 40,
+            "max_technical_score": 60,
+            "min_market_score": 20,
+            "max_market_score": 80,
+        },
+        {"macro_score": 50, "technical_score": 90, "market_score": 40},
+    )
+    analysis["agent_verdicts"] = service._build_plan_status_agent_verdicts("BTC", analysis, source="saved_setup")
+
+    message = service._status_message("BTC", analysis, source="saved_setup")
+
+    assert any(verdict["agent"] == "technical_agent" and verdict["status"] == "blocks_plan" for verdict in analysis["agent_verdicts"])
+    assert any(verdict["agent"] == "risk_agent" and verdict["status"] == "blocked" for verdict in analysis["agent_verdicts"])
+    assert "Agent-verdicts:" in message
+    assert "Technical Agent: blocks_plan" in message
+
+
 def test_indicator_insight_request_is_detected_but_config_stays_separate():
     service = _service()
 
