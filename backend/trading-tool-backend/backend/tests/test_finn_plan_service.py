@@ -1413,6 +1413,8 @@ def test_daily_coach_portfolio_scope_only_for_generic_briefing_prompts():
     assert service._should_build_portfolio_daily_coach("Waar zit mijn grootste portfolio risico?", {"symbol": "BTC"}) is True
     assert service.looks_like_daily_coach_request("Welke asset vraagt vandaag aandacht?") is True
     assert service.looks_like_daily_coach_request("Heb ik te veel exposure?") is True
+    assert service.looks_like_daily_coach_request("Welke bots en plannen stapelen risico?") is True
+    assert service._should_build_portfolio_daily_coach("Welke bots en plannen stapelen risico?", {}) is True
     assert service._portfolio_question_focus("Heb ik te veel exposure?") == "exposure"
     assert service._should_build_portfolio_daily_coach("Wat moet ik vandaag doen met mijn BTC setup?", {}) is False
     assert service._should_build_portfolio_daily_coach("Geef mijn ETH daily brief", {"symbol": "BTC"}) is False

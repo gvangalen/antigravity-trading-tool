@@ -559,7 +559,7 @@ class FinnPlanService:
             "grootste portfolio risico", "grootste risico", "portfolio risico",
             "portefeuille risico", "portfolio exposure", "te veel exposure",
             "risico per asset", "welke asset vraagt", "welke assets vragen",
-            "welke bots stapelen", "welke plannen stapelen",
+            "welke bots stapelen", "welke plannen stapelen", "stapelen risico",
         ]
         if any(term in q for term in portfolio_risk_terms):
             return True
@@ -3866,6 +3866,7 @@ class FinnPlanService:
             "portefeuille risico",
             "welke bots stapelen",
             "welke plannen stapelen",
+            "stapelen risico",
         ]
         return any(phrase in q for phrase in portfolio_phrases)
 
