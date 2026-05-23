@@ -1417,6 +1417,9 @@ def test_daily_coach_portfolio_scope_only_for_generic_briefing_prompts():
     assert service._should_build_portfolio_daily_coach("Welke bots en plannen stapelen risico?", {}) is True
     assert service.looks_like_daily_coach_request("Welke setups conflicteren?") is True
     assert service._should_build_portfolio_daily_coach("Bots met overlappende budgetten", {}) is True
+    assert service._portfolio_question_focus("Welke setups conflicteren?") == "setup_conflicts"
+    assert service._portfolio_question_focus("Bots met overlappende budgetten") == "budget_overlap"
+    assert service._portfolio_question_focus("DCA en trade") == "setup_conflicts"
     assert service._portfolio_question_focus("Heb ik te veel exposure?") == "exposure"
     assert service._should_build_portfolio_daily_coach("Wat moet ik vandaag doen met mijn BTC setup?", {}) is False
     assert service._should_build_portfolio_daily_coach("Geef mijn ETH daily brief", {"symbol": "BTC"}) is False
@@ -1638,6 +1641,44 @@ def test_portfolio_risk_detects_setup_conflicts_and_budget_overlap():
     assert "active_plan_high_exposure" in conflict_types
     assert "DCA en trade tegelijk" in risk["risk_stacks"][0]["factors"]
     assert "botbudget boven equity" in risk["risk_stacks"][0]["factors"]
+
+
+def test_portfolio_budget_overlap_is_flagged_when_equity_is_zero():
+    service = _service()
+    blocked_btc = {
+        "asset": "BTC",
+        "stance": "wait_for_plan",
+        "has_scores": True,
+        "setup": {"id": 12, "name": "BTC DCA"},
+        "blockers": [{"category": "macro", "score": 10, "range": [30, 70]}],
+        "bot_today": {"decision_count": 0},
+        "indicator_summary": {"warnings": []},
+        "data_readiness": {"status": "ready", "config_gaps": []},
+    }
+
+    analysis = service._build_portfolio_daily_coach_analysis(
+        [blocked_btc],
+        {
+            "global": {
+                "total_equity": 0,
+                "current_position_value": 0,
+                "cash_balance": 0,
+                "allocations_pct": {"Cash": 100.0},
+            },
+            "bots": [
+                {"bot_id": 1, "symbol": "BTC", "position_value": 0, "budget_total": 1200, "is_active": True, "is_live": False},
+                {"bot_id": 2, "symbol": "BTC", "position_value": 0, "budget_total": 1500, "is_active": True, "is_live": False},
+            ],
+        },
+    )
+    risk = analysis["portfolio_risk"]
+    btc = risk["asset_risk"][0]
+    budget_conflict = next(conflict for conflict in risk["conflicts"] if conflict["type"] == "bot_budget_overlap")
+
+    assert btc["budget_eur"] == 2700
+    assert "budget_overlap" in btc["risk_flags"]
+    assert budget_conflict["severity"] == "high"
+    assert "onbekende of nul portfolio equity" in budget_conflict["reason"]
 
 
 def test_portfolio_exposure_question_answers_cash_before_blocked_plan_risk():

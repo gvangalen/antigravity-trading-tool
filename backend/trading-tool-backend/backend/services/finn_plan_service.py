@@ -3885,6 +3885,12 @@ class FinnPlanService:
         q = (query or "").lower()
         if any(phrase in q for phrase in ["te veel exposure", "portfolio exposure", "exposure", "allocatie", "allocation"]):
             return "exposure"
+        if any(phrase in q for phrase in ["overlappende budgetten", "bots met overlappende budgetten", "budget overlap", "budgetten"]):
+            return "budget_overlap"
+        if any(phrase in q for phrase in ["welke setups conflicteren", "conflicterende setups", "dca en trade"]):
+            return "setup_conflicts"
+        if any(phrase in q for phrase in ["welke bots stapelen", "welke plannen stapelen", "stapelen risico"]):
+            return "risk_stacking"
         if any(phrase in q for phrase in ["welke asset vraagt", "welke assets vragen", "asset vraagt", "assets vragen"]):
             return "asset_priority"
         if any(phrase in q for phrase in ["grootste portfolio risico", "grootste risico", "portfolio risico", "portefeuille risico", "risico per asset"]):
@@ -4543,7 +4549,11 @@ class FinnPlanService:
                 risk_flags.append("multiple_setups")
             if setup_context.get("mixed_setup_types"):
                 risk_flags.append("mixed_setup_types")
-            if total_equity > 0 and budget_eur > total_equity:
+            budget_overlap = budget_eur > 0 and (
+                (total_equity > 0 and budget_eur > total_equity)
+                or (total_equity <= 0 and bot_count > 1)
+            )
+            if budget_overlap:
                 risk_flags.append("budget_overlap")
 
             score = 0
@@ -4569,7 +4579,7 @@ class FinnPlanService:
                 score += 8
             if setup_context.get("mixed_setup_types"):
                 score += 12
-            if total_equity > 0 and budget_eur > total_equity:
+            if budget_overlap:
                 score += 15
             score = min(score, 100)
             risk_level = "high" if score >= 75 else "medium" if score >= 50 else "low"
@@ -4606,12 +4616,13 @@ class FinnPlanService:
                     "setup_ids": setup_context.get("setup_ids") or [],
                     "setup_types": setup_context.get("setup_types") or [],
                 })
-            if total_equity > 0 and budget_eur > total_equity:
+            if budget_overlap:
+                equity_label = f"portfolio equity EUR {round(total_equity, 2)}" if total_equity > 0 else "onbekende of nul portfolio equity"
                 conflicts.append({
                     "type": "bot_budget_overlap",
                     "asset": asset,
-                    "severity": "high" if budget_eur >= total_equity * 1.5 else "medium",
-                    "reason": f"{asset} botbudgetten tellen op tot EUR {round(budget_eur, 2)}, boven portfolio equity EUR {round(total_equity, 2)}.",
+                    "severity": "high" if total_equity <= 0 or budget_eur >= total_equity * 1.5 else "medium",
+                    "reason": f"{asset} botbudgetten tellen op tot EUR {round(budget_eur, 2)}, tegenover {equity_label}.",
                 })
             if item.get("stance") == "plan_is_active" and allocation_pct is not None and allocation_pct >= 60:
                 conflicts.append({
