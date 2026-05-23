@@ -4486,6 +4486,7 @@ class FinnPlanService:
         asset_risk = []
         conflicts = []
         concentration_warnings = []
+        risk_stacks = []
 
         for item in asset_analyses:
             asset = str(item.get("asset") or "").upper()
@@ -4604,8 +4605,31 @@ class FinnPlanService:
                 "next_best_action": next_best_action,
                 "top_reason": top_reason,
             })
+            stack_factors = []
+            if "blocked_setup" in risk_flags:
+                stack_factors.append("setup geblokkeerd")
+            if "high_exposure" in risk_flags:
+                stack_factors.append("hoge exposure")
+            elif "elevated_exposure" in risk_flags:
+                stack_factors.append("verhoogde exposure")
+            if "multiple_bots" in risk_flags:
+                stack_factors.append("meerdere bots")
+            if "live_bot" in risk_flags:
+                stack_factors.append("live bot actief")
+            if "data_gap" in risk_flags:
+                stack_factors.append("dunne datalaag")
+            if len(stack_factors) >= 2:
+                risk_stacks.append({
+                    "asset": asset,
+                    "severity": "high" if score >= 75 else "medium",
+                    "risk_score": score,
+                    "factors": stack_factors,
+                    "reason": f"{asset} stapelt risico: {', '.join(stack_factors[:4])}.",
+                    "next_best_action": next_best_action,
+                })
 
         asset_risk = sorted(asset_risk, key=lambda item: (-item["risk_score"], item["asset"]))
+        risk_stacks = sorted(risk_stacks, key=lambda item: (-item["risk_score"], item["asset"]))
         high_assets = [item for item in asset_risk if item["risk_level"] == "high"]
         medium_assets = [item for item in asset_risk if item["risk_level"] == "medium"]
         if not asset_analyses:
@@ -4628,6 +4652,18 @@ class FinnPlanService:
             message = "Geen duidelijke portfolio-risk vlaggen gevonden."
 
         top = asset_risk[0] if asset_risk else {}
+        asset_priority = [
+            {
+                "rank": index,
+                "asset": item.get("asset"),
+                "priority": "eerst oplossen" if item.get("risk_level") == "high" else "reviewen" if item.get("risk_level") == "medium" else "monitoren",
+                "risk_score": item.get("risk_score"),
+                "risk_level": item.get("risk_level"),
+                "reason": item.get("top_reason"),
+                "next_best_action": item.get("next_best_action"),
+            }
+            for index, item in enumerate(asset_risk[:5], start=1)
+        ]
         return {
             "status": status,
             "message": message,
@@ -4637,7 +4673,9 @@ class FinnPlanService:
             "allocations_pct": allocations,
             "top_asset": top.get("asset"),
             "top_reason": top.get("top_reason"),
+            "asset_priority": asset_priority,
             "asset_risk": asset_risk,
+            "risk_stacks": risk_stacks,
             "concentration_warnings": concentration_warnings,
             "conflicts": conflicts,
         }
@@ -5883,6 +5921,10 @@ class FinnPlanService:
             for action in analysis.get("follow_up_actions") or []:
                 open_actions.append(self._mission_action(action, action.get("asset"), "portfolio", {}))
 
+        portfolio_risk = analysis.get("portfolio_risk") or {}
+        for stack in (portfolio_risk.get("risk_stacks") or [])[:3]:
+            workqueue.append(self._mission_workqueue_from_portfolio_risk_stack(stack))
+
         open_actions = self._dedupe_mission_actions(open_actions)[:8]
         for action in open_actions:
             workqueue.append(self._mission_workqueue_from_action(action))
@@ -5892,7 +5934,6 @@ class FinnPlanService:
         active_count = len([item for item in plan_health if item["status"] == "active"])
         blocked_count = len([item for item in plan_health if item["status"] == "blocked"])
         data_missing_count = len([item for item in plan_health if item["status"] == "data_missing"])
-        portfolio_risk = analysis.get("portfolio_risk") or {}
 
         return {
             "summary": {
@@ -5916,6 +5957,51 @@ class FinnPlanService:
             "portfolio_risk": portfolio_risk,
         }
 
+    def _mission_workqueue_from_portfolio_risk_stack(self, stack: Dict[str, Any]) -> Dict[str, Any]:
+        asset = stack.get("asset") or "portfolio"
+        item_id = f"portfolio_risk_stack:{asset}"
+        priority = "high" if stack.get("severity") == "high" else "medium"
+        priority_rank = 7 if priority == "high" else 18
+        next_action = {
+            "type": "chat_prompt",
+            "label": f"{asset} risk stack uitleg",
+            "prompt": f"Welke bots en plannen stapelen risico voor {asset}?",
+            "handoff": "daily_coach",
+            "requires_confirmation": False,
+        }
+        freshness = self._mission_freshness(None, fallback_status="unknown")
+        return {
+            "id": item_id,
+            "type": "portfolio_risk_stack",
+            "priority": priority,
+            "priority_rank": priority_rank,
+            "sort_rank": priority_rank,
+            "status": "stacked_risk",
+            "resolve_state": self._mission_resolve_state("portfolio_risk_stack", "stacked_risk", next_action, freshness=freshness),
+            "asset": asset,
+            "title": f"{asset} risico stapelt",
+            "reason": stack.get("reason"),
+            "next_best_action": next_action,
+            "resolve_action": self._mission_resolve_action(
+                item_id,
+                "monitor_today",
+                asset=asset,
+                label="Vandaag monitoren",
+                reason=stack.get("reason"),
+                source_ids={"asset": asset},
+            ),
+            "resolve_actions": self._mission_resolve_actions(
+                item_id,
+                asset=asset,
+                reason=stack.get("reason"),
+                source_ids={"asset": asset},
+            ),
+            "freshness": freshness,
+            "source_ids": {"asset": asset},
+            "risk_score": stack.get("risk_score"),
+            "risk_factors": stack.get("factors") or [],
+        }
+
     def _mission_workqueue_labels(self) -> Dict[str, str]:
         return {
             "first": "Eerst dit",
@@ -5927,7 +6013,7 @@ class FinnPlanService:
         state = item.get("resolve_state") or item.get("status")
         if state in {"needs_user_confirmation", "waiting_for_data"} or (item.get("freshness") or {}).get("status") == "stale":
             return "first"
-        if state == "monitor_today" or item.get("type") in {"blocked_plan", "blocker_explanation"}:
+        if state == "monitor_today" or item.get("type") in {"blocked_plan", "blocker_explanation", "portfolio_risk_stack"}:
             return "review"
         return "later"
 
@@ -6706,7 +6792,7 @@ class FinnPlanService:
             return "needs_user_confirmation"
         if item_type in {"bot_decision", "score_refresh", "indicator_gap", "bot_decision_request"}:
             return "needs_user_confirmation"
-        if item_type in {"blocked_plan", "blocker_explanation"}:
+        if item_type in {"blocked_plan", "blocker_explanation", "portfolio_risk_stack"}:
             return "monitor_today"
         if (freshness or {}).get("status") == "stale":
             return "needs_user_confirmation"
@@ -6889,6 +6975,8 @@ class FinnPlanService:
                 lines.append(
                     f"- {item.get('asset')}: {item.get('risk_level')} risk, score {item.get('risk_score')}{flag_text}."
                 )
+            for stack in (portfolio_risk.get("risk_stacks") or [])[:2]:
+                lines.append(f"- Risk stack: {stack.get('reason')}")
             for conflict in (portfolio_risk.get("conflicts") or [])[:2]:
                 lines.append(f"- Conflict: {conflict.get('reason')}")
 

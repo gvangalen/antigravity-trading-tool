@@ -1527,6 +1527,58 @@ def test_portfolio_risk_detects_concentration_and_bot_conflicts():
     assert "multiple_bots" in btc["risk_flags"]
     assert any(conflict["type"] == "blocked_setup_with_bot" for conflict in risk["conflicts"])
     assert any(warning["asset"] == "BTC" for warning in risk["concentration_warnings"])
+    assert risk["asset_priority"][0]["asset"] == "BTC"
+    assert risk["asset_priority"][0]["priority"] == "eerst oplossen"
+    assert risk["risk_stacks"][0]["asset"] == "BTC"
+    assert "setup geblokkeerd" in risk["risk_stacks"][0]["factors"]
+    assert "hoge exposure" in risk["risk_stacks"][0]["factors"]
+    assert "meerdere bots" in risk["risk_stacks"][0]["factors"]
+    message = service._portfolio_daily_coach_message(analysis)
+    assert "Risk stack: BTC stapelt risico" in message
+
+
+def test_mission_control_adds_portfolio_risk_stack_to_workqueue():
+    service = _service()
+    daily_analysis = service._build_portfolio_daily_coach_analysis(
+        [
+            {
+                "asset": "BTC",
+                "stance": "wait_for_plan",
+                "has_scores": True,
+                "setup": {"id": 12, "name": "BTC DCA"},
+                "setup_match_percentage": 33,
+                "blockers": [{"category": "macro", "score": 10, "range": [30, 70]}],
+                "active_strategy": {"active": False},
+                "bot_today": {"decision_count": 0, "decisions": []},
+                "indicator_summary": {"warnings": []},
+                "data_readiness": {"status": "ready", "config_gaps": []},
+                "follow_up_actions": [],
+            }
+        ],
+        {
+            "global": {
+                "total_equity": 1000,
+                "current_position_value": 800,
+                "cash_balance": 200,
+                "allocations_pct": {"Cash": 20.0, "BTC": 80.0},
+            },
+            "bots": [
+                {"bot_id": 1, "symbol": "BTC", "position_value": 500, "budget_total": 1000, "is_active": True, "is_live": False},
+                {"bot_id": 2, "symbol": "BTC", "position_value": 300, "budget_total": 500, "is_active": True, "is_live": False},
+            ],
+        },
+    )
+
+    mission = service._build_mission_control_from_daily_analysis(daily_analysis)
+    stack_item = next(item for item in mission["workqueue"] if item["type"] == "portfolio_risk_stack")
+
+    assert stack_item["asset"] == "BTC"
+    assert stack_item["priority"] == "high"
+    assert stack_item["resolve_state"] == "monitor_today"
+    assert stack_item["risk_score"] >= 75
+    assert "hoge exposure" in stack_item["risk_factors"]
+    assert stack_item["next_best_action"]["prompt"] == "Welke bots en plannen stapelen risico voor BTC?"
+    assert mission["workqueue_groups"][0]["key"] == "review"
 
 
 def test_portfolio_exposure_question_answers_cash_before_blocked_plan_risk():
