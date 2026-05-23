@@ -741,6 +741,43 @@ def test_live_manual_order_block_records_execution_audit():
     assert audit_payload["result"]["execution_audit"]["notional_eur"] == 50
 
 
+def test_live_manual_order_block_records_setup_block_ack_when_acknowledged():
+    session = _FakeSession()
+    service = BotService(session)
+    service.repository = _ManualOrderRepo()
+    payload = BotManualOrderSchema(
+        bot_id=9,
+        symbol="BTC",
+        side="sell",
+        quantity=0.001,
+        price=50000,
+        idempotency_key="manual-live-blocked-ack",
+        risk_acknowledged=True,
+        setup_block_acknowledged=True,
+        live_preflight_token="preflight-ok",
+    )
+    exc = HTTPException(409, {
+        "code": "LIVE_MARKET_PRICE_STALE",
+        "message": "Marktprijs voor BTC is te oud.",
+    })
+
+    asyncio.run(service.record_live_order_block_from_exception(
+        payload,
+        user_id=1,
+        exc=exc,
+        source="manual_order_preflight",
+    ))
+
+    ack_events = [
+        item for item in session.executed
+        if item["params"].get("type") == "live_setup_block_acknowledged"
+    ]
+    assert len(ack_events) == 1
+    ack_payload = json.loads(ack_events[0]["params"]["payload"])
+    assert ack_payload["result"]["execution_audit"]["setup_block_acknowledged"] is True
+    assert ack_payload["result"]["execution_audit"]["code"] == "LIVE_MARKET_PRICE_STALE"
+
+
 def test_live_manual_order_preflight_reuses_stale_market_price_guardrail(monkeypatch):
     monkeypatch.setattr("backend.services.bot_service.LIVE_MARKET_PRICE_STALE_AFTER_SECONDS", 300)
     service = BotService(_FakeSession())

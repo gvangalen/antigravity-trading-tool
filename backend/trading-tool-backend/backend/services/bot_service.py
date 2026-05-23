@@ -1009,6 +1009,19 @@ class BotService:
                 source=source,
             )
             await self._record_execution_audit_event(user_id, "live_manual_order_blocked", audit_payload)
+            if payload.setup_block_acknowledged:
+                await self._record_execution_audit_event(
+                    user_id,
+                    "live_setup_block_acknowledged",
+                    self._manual_order_audit_payload(
+                        "live_setup_block_acknowledged",
+                        bot=bot,
+                        payload=payload,
+                        notional=notional,
+                        block_detail=detail,
+                        source=source,
+                    ),
+                )
         except Exception as audit_exc:
             logger.warning("Kon live order block audit niet loggen: %s", audit_exc)
 
