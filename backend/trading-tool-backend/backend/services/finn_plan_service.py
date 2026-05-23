@@ -3075,7 +3075,7 @@ class FinnPlanService:
                 return {
                     "type": "decision_churn",
                     "severity": "medium",
-                    "message": "je recente memory laat decision-churn zien",
+                    "message": "je recente memory laat decision-churn zien.",
                     "source": "behavioral_memory",
                     "evidence": card.get("evidence") or [],
                     "safe_alternative": "review of skip eerst de open bot-decisions voordat je nieuwe voorstellen maakt.",
