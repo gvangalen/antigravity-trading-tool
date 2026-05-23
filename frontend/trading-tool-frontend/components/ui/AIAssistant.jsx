@@ -402,6 +402,43 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     );
   };
 
+  const getMessageAgentController = (message) => {
+    const state = message?.state || {};
+    const analysis = state.analysis || message?.analysis || {};
+    return state.agent_controller || analysis.agent_controller || message?.agent_controller || null;
+  };
+
+  const renderAgentController = (controller, compact = false) => {
+    if (!controller?.dominant_agent) return null;
+    const score = Number(controller.dominant_score || 0);
+    const tone = score >= 90
+      ? "border-rose-100 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300"
+      : score >= 65
+        ? "border-amber-100 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300"
+        : "border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/45 text-slate-600 dark:text-slate-300";
+    return (
+      <div className={`${compact ? "mt-2" : "mt-3"} rounded-xl border px-3 py-2 ${tone}`}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+            <Brain size={11} />
+            Finn Controller
+          </span>
+          <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">
+            {controller.dominant_label || controller.dominant_agent}
+          </span>
+        </div>
+        <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">
+          {controller.reason || controller.next_action || "Finn heeft de agent-rangorde gewogen."}
+        </p>
+        {!compact && controller.next_action && (
+          <p className="mt-1 text-[8px] font-black uppercase tracking-widest opacity-75">
+            {controller.next_action}
+          </p>
+        )}
+      </div>
+    );
+  };
+
   const renderAgentVerdicts = (verdicts, compact = false) => {
     const items = Array.isArray(verdicts) ? verdicts.filter(Boolean).slice(0, compact ? 4 : 6) : [];
     if (items.length === 0) return null;
@@ -1749,6 +1786,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                     {missionControl.agent_verdicts.length}
                   </span>
                 </div>
+                {renderAgentController(missionControl.agent_controller, true)}
                 {renderAgentVerdicts(missionControl.agent_verdicts, true)}
               </div>
             )}
@@ -2015,6 +2053,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                     : "bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-foreground dark:text-slate-100"
                 }`}>
                 <p className="text-sm leading-relaxed">{m.text}</p>
+                {m.role === "assistant" && m.isComplete !== false && renderAgentController(getMessageAgentController(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderAgentVerdicts(getMessageAgentVerdicts(m))}
                 {m.role === "assistant" && m.isComplete !== false && (() => {
                   const suggestions = getMessageFollowUpActions(m);

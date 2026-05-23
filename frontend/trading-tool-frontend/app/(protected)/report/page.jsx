@@ -199,6 +199,38 @@ function FinnAgentVerdicts({ verdicts = [] }) {
   );
 }
 
+function FinnAgentController({ controller }) {
+  if (!controller?.dominant_agent) return null;
+  const score = Number(controller.dominant_score || 0);
+  const tone = score >= 90
+    ? 'border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300'
+    : score >= 65
+      ? 'border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300'
+      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 text-slate-600 dark:text-slate-300';
+
+  return (
+    <div className={`mt-5 rounded-2xl border p-4 ${tone}`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
+          <Brain size={13} />
+          Finn Controller
+        </span>
+        <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
+          {controller.dominant_label || controller.dominant_agent}
+        </span>
+      </div>
+      <p className="mt-3 text-sm font-semibold leading-relaxed">
+        {controller.reason || controller.next_action || 'Finn heeft de agent-verdicts gewogen.'}
+      </p>
+      {controller.next_action && (
+        <p className="mt-2 text-[10px] font-black uppercase tracking-[0.14em] opacity-75">
+          {controller.next_action}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function FinnReportsPanel() {
   const [activeFinnReport, setActiveFinnReport] = useState(FINN_REPORT_OPTIONS[0].key);
   const [finnReportCache, setFinnReportCache] = useState({});
@@ -374,6 +406,7 @@ function FinnReportsPanel() {
                     ))}
                   </div>
 
+                  <FinnAgentController controller={analysis?.agent_controller} />
                   <FinnAgentVerdicts verdicts={analysis?.agent_verdicts || []} />
                 </div>
 

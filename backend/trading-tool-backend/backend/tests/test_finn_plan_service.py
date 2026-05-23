@@ -1628,6 +1628,8 @@ def test_portfolio_daily_coach_prioritizes_active_blocked_and_scoreless_assets()
     assert "Datakwaliteit" in message
     assert "Portfolio-risico" in message
     assert "Agent-verdicts:" in message
+    assert analysis["agent_controller"]["dominant_agent"] in {"macro_agent", "risk_agent"}
+    assert "Finn Controller:" in message
     assert "advies-only" in message
 
 
@@ -2145,6 +2147,67 @@ def test_mission_agent_verdicts_add_memory_agent():
     assert memory["agent"] == "memory_agent"
     assert memory["status"] == "attention"
     assert memory["priority"] == "medium"
+
+
+def test_agent_controller_ranks_verdicts_and_biases_mission_queue():
+    service = _service()
+    mission = {
+        "summary": {"workqueue_count": 2},
+        "workqueue": [
+            {
+                "id": "blocked_plan:BTC:1",
+                "type": "blocked_plan",
+                "priority_rank": 9,
+                "sort_rank": 9,
+                "status": "blocked",
+                "resolve_state": "monitor_today",
+                "asset": "BTC",
+                "title": "BTC plan aandacht",
+                "reason": "macro score blokkeert.",
+            },
+            {
+                "id": "bot_decision_request:BTC",
+                "type": "bot_decision_request",
+                "priority_rank": 40,
+                "sort_rank": 40,
+                "status": "needs_user_confirmation",
+                "resolve_state": "needs_user_confirmation",
+                "asset": "BTC",
+                "title": "Bot-decision maken",
+                "reason": "Aanbevolen volgende stap.",
+            },
+        ],
+        "workqueue_groups": [],
+    }
+    controller = service._build_agent_controller([
+        {
+            "agent": "risk_agent",
+            "label": "Risk Agent",
+            "status": "blocked",
+            "priority": "high",
+            "reason": "Risk Agent blokkeert eerst.",
+            "next_action": "Los de blocker op.",
+            "evidence": {"blocker_count": 3},
+        },
+        {
+            "agent": "execution_agent",
+            "label": "Execution Agent",
+            "status": "review_ready",
+            "priority": "medium",
+            "reason": "Execution kan wachten.",
+            "evidence": {"decision_count": 1},
+        },
+    ], context="mission_control")
+
+    updated = service._apply_agent_controller_to_mission(mission, controller)
+
+    assert controller["dominant_agent"] == "risk_agent"
+    assert controller["ranked_verdicts"][0]["controller_rank"] == 1
+    assert updated["summary"]["dominant_agent"] == "risk_agent"
+    assert updated["workqueue_groups"][0]["key"] == "first"
+    assert updated["workqueue"][0]["type"] == "blocked_plan"
+    assert updated["workqueue"][0]["controller_rank_boost"] > 0
+    assert updated["workqueue"][0]["dominant_agent"] == "risk_agent"
 
 
 def test_bot_decision_review_items_escalate_guardrail_risk():

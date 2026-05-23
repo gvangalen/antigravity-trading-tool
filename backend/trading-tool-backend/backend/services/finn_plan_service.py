@@ -1327,6 +1327,8 @@ class FinnPlanService:
             agent_verdicts = self._build_plan_status_agent_verdicts(asset, analysis, source="saved_setup")
             analysis["agent_verdicts"] = agent_verdicts
             response = self._status_message(asset, analysis, source="saved_setup")
+        agent_controller = self._build_agent_controller(agent_verdicts, context="plan_status")
+        analysis["agent_controller"] = agent_controller
 
         return {
             "response": response,
@@ -1344,6 +1346,7 @@ class FinnPlanService:
                 "asset": asset,
                 "analysis": analysis,
                 "agent_verdicts": agent_verdicts,
+                "agent_controller": agent_controller,
                 "autonomy_level": "advice_only",
             },
             "reasoning": {
@@ -4269,6 +4272,7 @@ class FinnPlanService:
             decisions=decisions,
             indicator_analysis=indicator_analysis,
         )
+        agent_controller = self._build_agent_controller(agent_verdicts, context="daily_coach")
 
         return {
             "asset": asset,
@@ -4293,6 +4297,7 @@ class FinnPlanService:
             },
             "data_readiness": data_readiness,
             "agent_verdicts": agent_verdicts,
+            "agent_controller": agent_controller,
             "follow_up_actions": follow_up_actions,
             "reasons": reasons,
             "suggested_actions": suggested_actions[:5],
@@ -4569,6 +4574,7 @@ class FinnPlanService:
             portfolio_risk,
             portfolio_readiness,
         )
+        agent_controller = self._build_agent_controller(agent_verdicts, context="portfolio_daily_coach")
 
         return {
             "scope": "portfolio",
@@ -4582,6 +4588,7 @@ class FinnPlanService:
             "data_readiness": portfolio_readiness,
             "portfolio_risk": portfolio_risk,
             "agent_verdicts": agent_verdicts,
+            "agent_controller": agent_controller,
             "top_priorities": top_priorities,
             "assets": ranked,
             "follow_up_actions": follow_up_actions,
@@ -5106,6 +5113,8 @@ class FinnPlanService:
             analysis.get("agent_verdicts") or mission.get("agent_verdicts") or [],
             behavioral_insight,
         )
+        agent_controller = self._build_agent_controller(agent_verdicts, context="mission_control")
+        mission = self._apply_agent_controller_to_mission(mission, agent_controller)
         return {
             "ok": True,
             "intent": "mission_control",
@@ -5122,6 +5131,7 @@ class FinnPlanService:
             "day_log": day_log,
             "behavioral_insight": behavioral_insight,
             "agent_verdicts": agent_verdicts,
+            "agent_controller": agent_controller,
             "data_readiness": analysis.get("data_readiness") or {},
             "portfolio_risk": mission.get("portfolio_risk") or analysis.get("portfolio_risk") or {},
             "source": {
@@ -5157,6 +5167,143 @@ class FinnPlanService:
             "next_action": "Gebruik extra frictie bij nieuwe decisions." if behavioral_insight.get("status") == "attention" else "Blijf Mission Control gebruiken als auditbron.",
         })
         return verdicts
+
+    def _agent_verdict_score(self, verdict: Dict[str, Any]) -> int:
+        priority = str(verdict.get("priority") or "").lower()
+        status = str(verdict.get("status") or "").lower()
+        score = {
+            "critical": 100,
+            "high": 80,
+            "medium": 50,
+            "low": 20,
+        }.get(priority, 35)
+        if any(token in status for token in ["block", "intervened", "high_attention", "attention", "stale"]):
+            score += 25
+        elif any(token in status for token in ["need", "missing", "review", "waiting"]):
+            score += 12
+        elif status in {"clear", "quiet", "ready", "no_open_decision", "no_decision"}:
+            score -= 8
+        evidence = verdict.get("evidence") or {}
+        if isinstance(evidence, dict):
+            for key in ["conflict_count", "risk_stack_count", "decision_count", "blocked_assets", "blocker_count"]:
+                try:
+                    score += min(int(evidence.get(key) or 0), 5) * 3
+                except (TypeError, ValueError):
+                    continue
+        return int(max(0, min(120, score)))
+
+    def _build_agent_controller(
+        self,
+        agent_verdicts: List[Dict[str, Any]],
+        *,
+        context: str,
+    ) -> Dict[str, Any]:
+        ranked = []
+        for index, verdict in enumerate(agent_verdicts or []):
+            if not isinstance(verdict, dict):
+                continue
+            item = {**verdict}
+            item["controller_score"] = self._agent_verdict_score(item)
+            item["_input_order"] = index
+            ranked.append(item)
+        ranked.sort(key=lambda item: (-item.get("controller_score", 0), item.get("_input_order", 99)))
+        for rank, item in enumerate(ranked, start=1):
+            item["controller_rank"] = rank
+            item.pop("_input_order", None)
+
+        dominant = ranked[0] if ranked else None
+        score = int((dominant or {}).get("controller_score") or 0)
+        if score >= 90:
+            status = "intervene_first"
+        elif score >= 65:
+            status = "review_first"
+        elif score >= 40:
+            status = "monitor"
+        else:
+            status = "stable"
+
+        dominant_agent = (dominant or {}).get("agent")
+        return {
+            "context": context,
+            "status": status,
+            "dominant_agent": dominant_agent,
+            "dominant_label": (dominant or {}).get("label"),
+            "dominant_status": (dominant or {}).get("status"),
+            "dominant_priority": (dominant or {}).get("priority"),
+            "dominant_score": score,
+            "reason": (dominant or {}).get("reason") or "Geen dominante agent gevonden.",
+            "next_action": (dominant or {}).get("next_action"),
+            "ranked_verdicts": ranked[:6],
+            "policy": {
+                "source": "deterministic_agent_verdict_scoring",
+                "advice_only": True,
+                "uses_llm": False,
+            },
+        }
+
+    def _mission_item_matches_agent(self, item: Dict[str, Any], agent: Optional[str]) -> bool:
+        if not agent:
+            return False
+        item_type = str(item.get("type") or "")
+        haystack = " ".join([
+            str(item.get("title") or ""),
+            str(item.get("reason") or ""),
+            str(((item.get("next_best_action") or {}).get("label")) or ""),
+            str(((item.get("next_best_action") or {}).get("prompt")) or ""),
+        ]).lower()
+        if agent == "execution_agent":
+            return item_type in {"bot_decision", "bot_decision_request", "score_refresh"}
+        if agent == "risk_agent":
+            return item_type in {"portfolio_risk_stack", "blocked_plan", "data_gap"} or "risk" in haystack or "blokkeert" in haystack
+        if agent == "macro_agent":
+            return item_type in {"indicator_gap", "blocker_explanation", "blocked_plan"} and "macro" in haystack
+        if agent == "technical_agent":
+            return item_type in {"indicator_gap", "blocker_explanation", "blocked_plan"} and ("technical" in haystack or "technisch" in haystack)
+        if agent == "market_agent":
+            return item_type in {"indicator_gap", "blocker_explanation", "blocked_plan", "data_gap"} and "market" in haystack
+        if agent == "strategy_agent":
+            return item_type in {"blocked_plan", "portfolio_risk_stack"} or "strategie" in haystack or "strategy" in haystack
+        if agent == "memory_agent":
+            return item_type in {"bot_decision", "bot_decision_request"} or "decision" in haystack
+        return False
+
+    def _apply_agent_controller_to_mission(
+        self,
+        mission: Dict[str, Any],
+        controller: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        dominant_agent = controller.get("dominant_agent")
+        if not dominant_agent:
+            return mission
+        dominant_score = int(controller.get("dominant_score") or 0)
+        boost = 30 if dominant_score >= 90 else 18 if dominant_score >= 65 else 8
+        workqueue = []
+        for item in mission.get("workqueue") or []:
+            updated = {**item}
+            if self._mission_item_matches_agent(updated, dominant_agent):
+                original_rank = int(updated.get("priority_rank") or updated.get("sort_rank") or 99)
+                updated["controller_rank_boost"] = boost
+                updated["controller_reason"] = controller.get("reason")
+                updated["dominant_agent"] = dominant_agent
+                updated["priority_rank"] = max(1, original_rank - boost)
+                updated["sort_rank"] = updated["priority_rank"]
+            workqueue.append(updated)
+        workqueue = self._dedupe_workqueue(workqueue)[:10]
+        workqueue_groups = self._mission_workqueue_groups(workqueue)
+        mission = {
+            **mission,
+            "workqueue": self._flatten_mission_workqueue_groups(workqueue_groups),
+            "workqueue_groups": workqueue_groups,
+            "agent_controller": controller,
+        }
+        mission["summary"] = {
+            **(mission.get("summary") or {}),
+            "controller_status": controller.get("status"),
+            "dominant_agent": dominant_agent,
+            "dominant_agent_score": dominant_score,
+            "workqueue_count": len(mission["workqueue"]),
+        }
+        return mission
 
     async def build_behavioral_intelligence_response(
         self,
@@ -5280,6 +5427,7 @@ class FinnPlanService:
                 "report_type": report.get("report_type"),
                 "report_family": report.get("report_family"),
                 "source": report.get("source"),
+                "agent_controller": report.get("agent_controller"),
                 "behavioral_insight": behavioral,
                 "advice_only": True,
                 "separate_from": report.get("separate_from"),
@@ -5921,6 +6069,9 @@ class FinnPlanService:
                 headline = "Dagafsluiting: je Finn-operatorlog is netjes afgerond voor vandaag."
                 safe_next_step = day_close["tomorrow_focus"][0]
 
+        agent_verdicts = self._build_report_agent_verdicts(metrics, interventions, behavioral)
+        agent_controller = self._build_agent_controller(agent_verdicts, context="finn_report")
+
         return {
             "report_type": "finn_reflection_report",
             "report_family": "finn_reports",
@@ -5933,7 +6084,8 @@ class FinnPlanService:
             "metrics": metrics,
             "sections": sections,
             "day_close": day_close,
-            "agent_verdicts": self._build_report_agent_verdicts(metrics, interventions, behavioral),
+            "agent_verdicts": agent_verdicts,
+            "agent_controller": agent_controller,
             "behavioral_profile": behavioral.get("metrics") and self._behavioral_profile_from_metrics(
                 behavioral.get("metrics") or {},
                 behavioral.get("patterns") or [],
@@ -6034,6 +6186,11 @@ class FinnPlanService:
             lines.append("Agent-verdicts:")
             for verdict in verdicts[:4]:
                 lines.append(f"- {verdict.get('label')}: {verdict.get('status')} - {verdict.get('reason')}")
+        controller = report.get("agent_controller") or {}
+        if controller.get("dominant_label"):
+            lines.append(
+                f"Finn Controller: eerst {controller.get('dominant_label')} volgen - {controller.get('reason')}"
+            )
         day_close = report.get("day_close") or {}
         if day_close:
             lines.append("Dagafsluiting:")
@@ -6543,6 +6700,8 @@ class FinnPlanService:
 
     def _mission_workqueue_group_key(self, item: Dict[str, Any]) -> str:
         state = item.get("resolve_state") or item.get("status")
+        if item.get("controller_rank_boost"):
+            return "first"
         if state in {"needs_user_confirmation", "waiting_for_data"} or (item.get("freshness") or {}).get("status") == "stale":
             return "first"
         if state == "monitor_today" or item.get("type") in {"blocked_plan", "blocker_explanation", "portfolio_risk_stack"}:
@@ -7459,6 +7618,11 @@ class FinnPlanService:
             lines.append("Agent-verdicts:")
             for verdict in verdicts[:5]:
                 lines.append(f"- {verdict.get('label')}: {verdict.get('status')} - {verdict.get('reason')}")
+        controller = analysis.get("agent_controller") or {}
+        if controller.get("dominant_label"):
+            lines.append(
+                f"Finn Controller: eerst {controller.get('dominant_label')} volgen - {controller.get('reason')}"
+            )
 
         actions = analysis.get("suggested_actions") or []
         if actions:
@@ -7529,6 +7693,11 @@ class FinnPlanService:
             lines.append("Agent-verdicts:")
             for verdict in verdicts[:5]:
                 lines.append(f"- {verdict.get('label')}: {verdict.get('status')} - {verdict.get('reason')}")
+        controller = analysis.get("agent_controller") or {}
+        if controller.get("dominant_label"):
+            lines.append(
+                f"Finn Controller: eerst {controller.get('dominant_label')} volgen - {controller.get('reason')}"
+            )
 
         actions = analysis.get("suggested_actions") or []
         if actions:
@@ -7823,6 +7992,9 @@ class FinnPlanService:
             if verdicts:
                 lines.append("Agent-verdicts:")
                 lines.extend([f"- {item.get('label')}: {item.get('status')} - {item.get('reason')}" for item in verdicts[:4]])
+            controller = analysis.get("agent_controller") or {}
+            if controller.get("dominant_label"):
+                lines.append(f"Finn Controller: eerst {controller.get('dominant_label')} volgen - {controller.get('reason')}")
             return "\n".join(lines)
 
         active_text = "actief" if analysis.get("is_active") else "niet actief"
@@ -7858,6 +8030,9 @@ class FinnPlanService:
             if verdicts:
                 lines.append("Agent-verdicts:")
                 lines.extend([f"- {item.get('label')}: {item.get('status')} - {item.get('reason')}" for item in verdicts[:4]])
+            controller = analysis.get("agent_controller") or {}
+            if controller.get("dominant_label"):
+                lines.append(f"Finn Controller: eerst {controller.get('dominant_label')} volgen - {controller.get('reason')}")
             return "\n".join(lines)
 
         setup = analysis.get("setup")
@@ -7884,6 +8059,9 @@ class FinnPlanService:
         if verdicts:
             lines.append("Agent-verdicts:")
             lines.extend([f"- {item.get('label')}: {item.get('status')} - {item.get('reason')}" for item in verdicts[:4]])
+        controller = analysis.get("agent_controller") or {}
+        if controller.get("dominant_label"):
+            lines.append(f"Finn Controller: eerst {controller.get('dominant_label')} volgen - {controller.get('reason')}")
         lines.append("Gebruik dit als plan-check, niet als losse emotionele trigger.")
         return "\n".join(lines)
 
