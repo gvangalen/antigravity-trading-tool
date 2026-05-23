@@ -183,7 +183,9 @@ def test_finn_reflection_report_summarizes_operator_activity():
     assert report["metrics"]["decision_churn_events"] == 1
     assert report["metrics"]["snoozed"] == 1
     assert report["risk_officer_interventions"][0]["type"] == "decision_churn"
+    assert any(verdict["agent"] == "risk_agent" for verdict in report["agent_verdicts"])
     assert "los van je dagelijkse trading report" in message
+    assert "Agent-verdicts:" in message
 
 
 def test_finn_day_close_report_summarizes_closeout_and_tomorrow_focus():
@@ -237,6 +239,7 @@ def test_finn_day_close_report_summarizes_closeout_and_tomorrow_focus():
     assert report["metrics"]["live_order_blocks_today"] == 1
     assert report["day_close"]["status"] == "review_before_tomorrow"
     assert report["day_close"]["carryover_count"] == 1
+    assert any(verdict["agent"] == "execution_agent" for verdict in report["agent_verdicts"])
     assert any("live orders geblokkeerd" in item.lower() for item in report["day_close"]["tomorrow_focus"])
     assert "Dagafsluiting:" in message
     assert "Meenemen naar morgen:" in message
@@ -1587,12 +1590,15 @@ def test_portfolio_daily_coach_prioritizes_active_blocked_and_scoreless_assets()
     assert analysis["data_readiness"]["status"] == "onboarding_incomplete"
     assert analysis["portfolio_risk"]["status"] == "needs_data"
     assert analysis["portfolio_risk"]["top_asset"] == "BTC"
+    assert any(verdict["agent"] == "macro_agent" for verdict in analysis["agent_verdicts"])
+    assert any(verdict["agent"] == "risk_agent" and verdict["status"] == "needs_data" for verdict in analysis["agent_verdicts"])
     assert analysis["top_priorities"][2]["data_readiness"]["status"] == "onboarding_incomplete"
     assert "Portfolio daily brief" in message
     assert "ETH: nu doen" in message
     assert "BTC: niet forceren" in message
     assert "Datakwaliteit" in message
     assert "Portfolio-risico" in message
+    assert "Agent-verdicts:" in message
     assert "advies-only" in message
 
 
@@ -1647,6 +1653,8 @@ def test_portfolio_risk_detects_concentration_and_bot_conflicts():
     assert "high_exposure" in btc["risk_flags"]
     assert "multiple_bots" in btc["risk_flags"]
     assert any(conflict["type"] == "blocked_setup_with_bot" for conflict in risk["conflicts"])
+    assert any(verdict["agent"] == "execution_agent" for verdict in analysis["agent_verdicts"])
+    assert any(verdict["agent"] == "risk_agent" and verdict["status"] == "high_attention" for verdict in analysis["agent_verdicts"])
     assert any(warning["asset"] == "BTC" for warning in risk["concentration_warnings"])
     assert risk["asset_priority"][0]["asset"] == "BTC"
     assert risk["asset_priority"][0]["priority"] == "eerst oplossen"
@@ -1656,6 +1664,7 @@ def test_portfolio_risk_detects_concentration_and_bot_conflicts():
     assert "meerdere bots" in risk["risk_stacks"][0]["factors"]
     message = service._portfolio_daily_coach_message(analysis)
     assert "Risk stack: BTC stapelt risico" in message
+    assert "Risk Agent: high_attention" in message
 
 
 def test_mission_control_adds_portfolio_risk_stack_to_workqueue():
@@ -2089,6 +2098,24 @@ def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis
     assert review["review_status"] == "needs_review"
     assert review["risk_level"] == "medium"
     assert review["review_actions"][0]["handoff"] == "bot_decision_review"
+
+
+def test_mission_agent_verdicts_add_memory_agent():
+    service = _service()
+    verdicts = service._merge_mission_agent_verdicts(
+        [{"agent": "risk_agent", "status": "high_attention"}],
+        {
+            "status": "attention",
+            "patterns": ["decision_churn"],
+            "metrics": {"decision_churn_events_today": 1},
+        },
+    )
+
+    assert verdicts[0]["agent"] == "risk_agent"
+    memory = verdicts[-1]
+    assert memory["agent"] == "memory_agent"
+    assert memory["status"] == "attention"
+    assert memory["priority"] == "medium"
 
 
 def test_bot_decision_review_items_escalate_guardrail_risk():
@@ -3381,6 +3408,9 @@ def test_daily_coach_analysis_waits_when_setup_has_blockers():
     assert analysis["stance"] == "wait_for_plan"
     assert analysis["setup_active"] is False
     assert analysis["blockers"][0]["category"] == "technical"
+    assert any(verdict["agent"] == "technical_agent" and verdict["status"] == "blocks_plan" for verdict in analysis["agent_verdicts"])
+    assert any(verdict["agent"] == "risk_agent" and verdict["status"] == "blocked" for verdict in analysis["agent_verdicts"])
+    assert any(verdict["agent"] == "execution_agent" and verdict["status"] == "no_decision" for verdict in analysis["agent_verdicts"])
     assert "Niet forceren" in analysis["suggested_actions"][0]
 
 
@@ -3399,6 +3429,9 @@ def test_daily_coach_message_is_advice_only_and_mentions_bot_decisions():
             "decisions": [{"bot_id": 8, "action": "buy", "status": "pending"}],
         },
         "indicator_summary": {"warnings": []},
+        "agent_verdicts": [
+            {"label": "Risk Agent", "status": "ready", "reason": "Geen setup-blocker gevonden."}
+        ],
         "suggested_actions": ["Volg je plan."],
     }
 
@@ -3406,6 +3439,7 @@ def test_daily_coach_message_is_advice_only_and_mentions_bot_decisions():
 
     assert "je plan mag vandaag actief zijn" in message
     assert "Bot vandaag: 1 beslissing" in message
+    assert "Agent-verdicts:" in message
     assert "Ik voer niets automatisch uit" in message
 
 
