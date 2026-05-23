@@ -1721,6 +1721,7 @@ class FinnPlanService:
             },
         }
         open_reviews = await self._open_bot_reviews_for_bot(user_id, asset, int(selected["id"]))
+        memory_friction = await self._behavioral_memory_friction_for_action(user_id, "generate_bot_decision")
         if open_reviews:
             open_decision_ids = [int(item["decision_id"]) for item in open_reviews if item.get("decision_id")]
             action["id"] = self._maintenance_action_id(
@@ -1735,14 +1736,26 @@ class FinnPlanService:
                 }
             }
             action["guardrails"]["open_decision_review_exists"] = True
+        if memory_friction:
+            action["guardrails"]["behavioral_memory_friction"] = True
+            action["payload"]["memory_friction"] = memory_friction
+            if action.get("risk_level") != "high":
+                action["risk_level"] = "medium"
+
+        response_prefix = ""
+        if open_reviews:
+            response_prefix = (
+                f"Er staat al {len(open_reviews)} open bot-decision(s) voor {selected.get('name')}. "
+                "Als je nu opnieuw een decision maakt, leg ik dat vast als decision churn. "
+            )
+        elif memory_friction:
+            response_prefix = (
+                f"Memory check: {memory_friction.get('message')} "
+                "Ik maak alleen een nieuw voorstel als je dit bewust bevestigt. "
+            )
         return {
-            "response": (
-                (
-                    f"Er staat al {len(open_reviews)} open bot-decision(s) voor {selected.get('name')}. "
-                    "Als je nu opnieuw een decision maakt, leg ik dat vast als decision churn. "
-                )
-                if open_reviews else
-                f"Ik kan een bot-decision genereren voor {selected.get('name')} (bot #{selected.get('id')}). "
+            "response": response_prefix + (
+                "" if response_prefix else f"Ik kan een bot-decision genereren voor {selected.get('name')} (bot #{selected.get('id')}). "
             ) + (
                 "Dit maakt alleen een voorstel/decision; orders uitvoeren blijft apart bevestigd."
             ),
@@ -1761,14 +1774,17 @@ class FinnPlanService:
                 "bot_id": int(selected["id"]),
                 "open_decision_count": len(open_reviews),
                 "open_decision_ids": [item.get("decision_id") for item in open_reviews],
+                "memory_friction": memory_friction,
                 "autonomy_level": "confirm_required",
             },
             "reasoning": {
                 "confidence_score": 0.82,
-                "risk_detected": bool(open_reviews),
+                "risk_detected": bool(open_reviews or memory_friction),
                 "reasons": (
                     ["Er staat al een open bot-decision; opnieuw genereren wordt als decision churn gelogd."]
                     if open_reviews else
+                    [memory_friction.get("message")]
+                    if memory_friction else
                     ["Bot decision generation creates a proposal only; no order execution."]
                 ),
                 "coaching_level": "bot_decision_handoff",
@@ -3040,6 +3056,31 @@ class FinnPlanService:
         if open_decision_ids:
             parts.extend(["open_review", *[str(decision_id) for decision_id in sorted(open_decision_ids)]])
         return parts
+
+    async def _behavioral_memory_friction_for_action(self, user_id: int, action_type: str) -> Optional[Dict[str, Any]]:
+        if not self.session or action_type != "generate_bot_decision":
+            return None
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
+        if not activity_feed:
+            return None
+        behavioral = self._build_behavioral_insight_from_activity(activity_feed)
+        memory = self._build_behavioral_memory_report(activity_feed, behavioral)
+        return self._behavioral_memory_friction_from_report(memory, action_type)
+
+    def _behavioral_memory_friction_from_report(self, memory: Dict[str, Any], action_type: str) -> Optional[Dict[str, Any]]:
+        if action_type != "generate_bot_decision":
+            return None
+        for card in memory.get("memory_cards") or []:
+            if card.get("type") == "decision_churn":
+                return {
+                    "type": "decision_churn",
+                    "severity": "medium",
+                    "message": "je recente memory laat decision-churn zien",
+                    "source": "behavioral_memory",
+                    "evidence": card.get("evidence") or [],
+                    "safe_alternative": "review of skip eerst de open bot-decisions voordat je nieuwe voorstellen maakt.",
+                }
+        return None
 
     async def _open_bot_reviews_for_bot(self, user_id: int, asset: str, bot_id: int) -> List[Dict[str, Any]]:
         if not self.session or bot_id <= 0:

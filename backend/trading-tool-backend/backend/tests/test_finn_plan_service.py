@@ -2202,6 +2202,24 @@ def test_behavioral_memory_report_uses_30_day_evidence_without_new_writes():
     assert "Wat Finn nog niet mag concluderen" in message
 
 
+def test_behavioral_memory_friction_slows_repeated_bot_decisions():
+    service = _service()
+    memory = {
+        "memory_cards": [
+            {
+                "type": "decision_churn",
+                "evidence": ["2 bot-decisions in 30 dagen", "1 expliciete decision-churn events"],
+            }
+        ]
+    }
+
+    friction = service._behavioral_memory_friction_from_report(memory, "generate_bot_decision")
+
+    assert friction["type"] == "decision_churn"
+    assert friction["source"] == "behavioral_memory"
+    assert "review" in friction["safe_alternative"]
+
+
 def test_weekly_reflection_summarizes_behavioral_patterns():
     service = _service()
     activity = [
