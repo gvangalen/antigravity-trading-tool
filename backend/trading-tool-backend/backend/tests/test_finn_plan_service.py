@@ -1412,6 +1412,8 @@ def test_daily_coach_portfolio_scope_only_for_generic_briefing_prompts():
     assert service.looks_like_daily_coach_request("Waar zit mijn grootste portfolio risico?") is True
     assert service._should_build_portfolio_daily_coach("Waar zit mijn grootste portfolio risico?", {"symbol": "BTC"}) is True
     assert service.looks_like_daily_coach_request("Welke asset vraagt vandaag aandacht?") is True
+    assert service.looks_like_daily_coach_request("Heb ik te veel exposure?") is True
+    assert service._portfolio_question_focus("Heb ik te veel exposure?") == "exposure"
     assert service._should_build_portfolio_daily_coach("Wat moet ik vandaag doen met mijn BTC setup?", {}) is False
     assert service._should_build_portfolio_daily_coach("Geef mijn ETH daily brief", {"symbol": "BTC"}) is False
 
@@ -1525,6 +1527,39 @@ def test_portfolio_risk_detects_concentration_and_bot_conflicts():
     assert "multiple_bots" in btc["risk_flags"]
     assert any(conflict["type"] == "blocked_setup_with_bot" for conflict in risk["conflicts"])
     assert any(warning["asset"] == "BTC" for warning in risk["concentration_warnings"])
+
+
+def test_portfolio_exposure_question_answers_cash_before_blocked_plan_risk():
+    service = _service()
+    blocked_btc = {
+        "asset": "BTC",
+        "stance": "wait_for_plan",
+        "has_scores": True,
+        "setup": {"id": 2, "name": "BTC DCA"},
+        "blockers": [{"category": "macro", "score": 10, "range": [30, 70]}],
+        "bot_today": {"decision_count": 0},
+        "indicator_summary": {"warnings": []},
+        "data_readiness": {"status": "ready", "config_gaps": []},
+    }
+    analysis = service._build_portfolio_daily_coach_analysis(
+        [blocked_btc],
+        {
+            "global": {
+                "total_equity": 1000,
+                "current_position_value": 0,
+                "cash_balance": 1000,
+                "allocations_pct": {"Cash": 100.0},
+            },
+            "bots": [],
+        },
+    )
+    analysis["question_focus"] = "exposure"
+
+    message = service._portfolio_daily_coach_message(analysis)
+
+    assert "Exposure-check: nee" in message
+    assert "praktisch in cash" in message
+    assert "grootste aandachtspunt is BTC: macro blokkeert" in message
 
 
 def test_daily_score_fetch_uses_runtime_refresh_when_raw_scores_are_missing(monkeypatch):

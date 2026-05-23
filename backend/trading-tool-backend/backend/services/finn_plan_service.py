@@ -1626,6 +1626,7 @@ class FinnPlanService:
                 portfolio_context = {}
 
         analysis = self._build_portfolio_daily_coach_analysis(asset_analyses, portfolio_context)
+        analysis["question_focus"] = self._portfolio_question_focus(query)
         response = self._portfolio_daily_coach_message(analysis)
 
         return {
@@ -3867,6 +3868,16 @@ class FinnPlanService:
             "welke plannen stapelen",
         ]
         return any(phrase in q for phrase in portfolio_phrases)
+
+    def _portfolio_question_focus(self, query: str) -> str:
+        q = (query or "").lower()
+        if any(phrase in q for phrase in ["te veel exposure", "portfolio exposure", "exposure", "allocatie", "allocation"]):
+            return "exposure"
+        if any(phrase in q for phrase in ["welke asset vraagt", "welke assets vragen", "asset vraagt", "assets vragen"]):
+            return "asset_priority"
+        if any(phrase in q for phrase in ["grootste portfolio risico", "grootste risico", "portfolio risico", "portefeuille risico", "risico per asset"]):
+            return "risk"
+        return "brief"
 
     async def _fetch_daily_scores_with_runtime_refresh(self, user_id: int, asset: str) -> Optional[Dict[str, Any]]:
         if not self.session:
@@ -6868,6 +6879,9 @@ class FinnPlanService:
         portfolio_risk = analysis.get("portfolio_risk") or {}
         if portfolio_risk.get("status") and portfolio_risk.get("status") != "balanced":
             lines.append("Portfolio-risico:")
+            exposure_note = self._portfolio_exposure_note(portfolio_risk, analysis.get("question_focus"))
+            if exposure_note:
+                lines.append(f"- {exposure_note}")
             lines.append(f"- {portfolio_risk.get('message')}")
             for item in (portfolio_risk.get("asset_risk") or [])[:3]:
                 flags = item.get("risk_flags") or []
@@ -6886,6 +6900,35 @@ class FinnPlanService:
 
         lines.append("Ik voer niets automatisch uit vanuit deze portfolio-briefing; dit is advies-only.")
         return "\n".join(lines)
+
+    def _portfolio_exposure_note(self, portfolio_risk: Dict[str, Any], focus: Optional[str]) -> Optional[str]:
+        if focus != "exposure":
+            return None
+        total_equity = self._to_float(portfolio_risk.get("total_equity")) or 0.0
+        position_value = self._to_float(portfolio_risk.get("current_position_value")) or 0.0
+        allocations = portfolio_risk.get("allocations_pct") or {}
+        cash_pct = self._to_float(allocations.get("Cash"))
+        concentration = portfolio_risk.get("concentration_warnings") or []
+        if total_equity <= 0:
+            return "Exposure-check: ik zie nog geen portfolio equity om exposure betrouwbaar te wegen."
+        if position_value <= 0 or (cash_pct is not None and cash_pct >= 99):
+            top_asset = portfolio_risk.get("top_asset")
+            top_reason = portfolio_risk.get("top_reason") or "geen exposure-signaal"
+            if top_asset:
+                return (
+                    f"Exposure-check: nee, ik zie nu geen open positie-exposure; je staat praktisch in cash. "
+                    f"Het grootste aandachtspunt is {top_asset}: {top_reason}."
+                )
+            return "Exposure-check: nee, ik zie nu geen open positie-exposure; je staat praktisch in cash."
+        if concentration:
+            first = concentration[0]
+            asset = first.get("asset")
+            pct = first.get("allocation_pct") or first.get("position_share_pct")
+            return f"Exposure-check: ja, {asset} is geconcentreerd rond {pct}% en vraagt eerst review."
+        return (
+            f"Exposure-check: ik zie {round(position_value, 2)} euro open positie-waarde op {round(total_equity, 2)} euro equity; "
+            "geen harde concentratievlag gevonden."
+        )
 
     def _score_value(self, daily_scores: Optional[Dict[str, Any]], key: str) -> Optional[float]:
         if not daily_scores:
