@@ -1409,6 +1409,9 @@ def test_daily_coach_portfolio_scope_only_for_generic_briefing_prompts():
     assert service._should_build_portfolio_daily_coach("Geef mijn daily brief", {"symbol": "BTC"}) is True
     assert service._should_build_portfolio_daily_coach("Wat zijn mijn prioriteiten vandaag?", {"symbol": "BTC"}) is True
     assert service._should_build_portfolio_daily_coach("Wat moet ik vandaag doen?", {"symbol": "BTC"}) is True
+    assert service.looks_like_daily_coach_request("Waar zit mijn grootste portfolio risico?") is True
+    assert service._should_build_portfolio_daily_coach("Waar zit mijn grootste portfolio risico?", {"symbol": "BTC"}) is True
+    assert service.looks_like_daily_coach_request("Welke asset vraagt vandaag aandacht?") is True
     assert service._should_build_portfolio_daily_coach("Wat moet ik vandaag doen met mijn BTC setup?", {}) is False
     assert service._should_build_portfolio_daily_coach("Geef mijn ETH daily brief", {"symbol": "BTC"}) is False
 
@@ -1459,12 +1462,69 @@ def test_portfolio_daily_coach_prioritizes_active_blocked_and_scoreless_assets()
     assert len(analysis["blocked_assets"]) == 1
     assert len(analysis["scoreless_assets"]) == 1
     assert analysis["data_readiness"]["status"] == "onboarding_incomplete"
+    assert analysis["portfolio_risk"]["status"] == "needs_data"
+    assert analysis["portfolio_risk"]["top_asset"] == "BTC"
     assert analysis["top_priorities"][2]["data_readiness"]["status"] == "onboarding_incomplete"
     assert "Portfolio daily brief" in message
     assert "ETH: nu doen" in message
     assert "BTC: niet forceren" in message
     assert "Datakwaliteit" in message
+    assert "Portfolio-risico" in message
     assert "advies-only" in message
+
+
+def test_portfolio_risk_detects_concentration_and_bot_conflicts():
+    service = _service()
+    blocked_btc = {
+        "asset": "BTC",
+        "stance": "wait_for_plan",
+        "has_scores": True,
+        "setup": {"id": 2, "name": "BTC DCA"},
+        "blockers": [{"category": "macro", "score": 10, "range": [30, 70]}],
+        "bot_today": {"decision_count": 0},
+        "indicator_summary": {"warnings": ["macro-laag is dun"]},
+        "data_readiness": {"status": "ready", "config_gaps": []},
+    }
+    active_eth = {
+        "asset": "ETH",
+        "stance": "plan_is_active",
+        "has_scores": True,
+        "setup": {"id": 3, "name": "ETH DCA"},
+        "blockers": [],
+        "bot_today": {"decision_count": 0},
+        "indicator_summary": {"warnings": []},
+        "data_readiness": {"status": "ready", "config_gaps": []},
+    }
+    portfolio_context = {
+        "global": {
+            "total_equity": 1000,
+            "current_position_value": 1000,
+            "cash_balance": 0,
+            "allocations_pct": {"BTC": 80.0, "ETH": 20.0},
+        },
+        "bots": [
+            {"bot_id": 1, "symbol": "BTC", "position_value": 500, "budget_total": 1000, "is_active": True, "is_live": True},
+            {"bot_id": 2, "symbol": "BTC", "position_value": 300, "budget_total": 500, "is_active": True, "is_live": False},
+            {"bot_id": 3, "symbol": "ETH", "position_value": 200, "budget_total": 500, "is_active": True, "is_live": False},
+        ],
+    }
+
+    analysis = service._build_portfolio_daily_coach_analysis([active_eth, blocked_btc], portfolio_context)
+    risk = analysis["portfolio_risk"]
+
+    assert risk["status"] == "high_attention"
+    assert risk["top_asset"] == "BTC"
+    btc = risk["asset_risk"][0]
+    assert btc["asset"] == "BTC"
+    assert btc["risk_level"] == "high"
+    assert btc["allocation_pct"] == 80.0
+    assert btc["bot_count"] == 2
+    assert btc["live_bot_count"] == 1
+    assert "blocked_setup" in btc["risk_flags"]
+    assert "high_exposure" in btc["risk_flags"]
+    assert "multiple_bots" in btc["risk_flags"]
+    assert any(conflict["type"] == "blocked_setup_with_bot" for conflict in risk["conflicts"])
+    assert any(warning["asset"] == "BTC" for warning in risk["concentration_warnings"])
 
 
 def test_daily_score_fetch_uses_runtime_refresh_when_raw_scores_are_missing(monkeypatch):

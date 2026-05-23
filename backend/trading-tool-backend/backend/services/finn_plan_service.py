@@ -555,6 +555,14 @@ class FinnPlanService:
 
     def looks_like_daily_coach_request(self, query: str) -> bool:
         q = (query or "").lower()
+        portfolio_risk_terms = [
+            "grootste portfolio risico", "grootste risico", "portfolio risico",
+            "portefeuille risico", "portfolio exposure", "te veel exposure",
+            "risico per asset", "welke asset vraagt", "welke assets vragen",
+            "welke bots stapelen", "welke plannen stapelen",
+        ]
+        if any(term in q for term in portfolio_risk_terms):
+            return True
         has_today = any(word in q for word in [
             "vandaag", "today", "nu", "daily", "dagelijkse", "dagcheck", "cockpit",
             "brief", "briefing", "dagstart", "morning", "mijn dag",
@@ -568,6 +576,7 @@ class FinnPlanService:
         ])
         has_trading_context = any(word in q for word in [
             "setup", "plan", "bot", "trade", "dca", "btc", "eth", "sol", "market", "markt",
+            "portfolio", "portefeuille", "asset", "assets", "exposure", "risico",
         ])
         return has_today and (has_decision_intent or has_trading_context or "kopen" in q)
 
@@ -1608,7 +1617,15 @@ class FinnPlanService:
                     onboarding_status=onboarding_status,
                 ))
 
-        analysis = self._build_portfolio_daily_coach_analysis(asset_analyses)
+        portfolio_context: Dict[str, Any] = {}
+        if self.session:
+            try:
+                from backend.infrastructure.repositories.bot_repository import BotRepository
+                portfolio_context = await BotRepository(self.session).get_portfolio_intelligence_context(user_id)
+            except Exception:
+                portfolio_context = {}
+
+        analysis = self._build_portfolio_daily_coach_analysis(asset_analyses, portfolio_context)
         response = self._portfolio_daily_coach_message(analysis)
 
         return {
@@ -3838,6 +3855,16 @@ class FinnPlanService:
             "wat moet ik doen vandaag",
             "wat moet ik vandaag",
             "wat zijn mijn prioriteiten",
+            "grootste portfolio risico",
+            "grootste risico",
+            "welke asset vraagt",
+            "welke assets vragen",
+            "te veel exposure",
+            "risico per asset",
+            "portfolio exposure",
+            "portefeuille risico",
+            "welke bots stapelen",
+            "welke plannen stapelen",
         ]
         return any(phrase in q for phrase in portfolio_phrases)
 
@@ -4334,7 +4361,11 @@ class FinnPlanService:
             "suggested_actions": suggested_actions[:4],
         }
 
-    def _build_portfolio_daily_coach_analysis(self, asset_analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _build_portfolio_daily_coach_analysis(
+        self,
+        asset_analyses: List[Dict[str, Any]],
+        portfolio_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         ranked = sorted(asset_analyses, key=self._portfolio_priority_sort_key)
         actionable_assets = [a for a in ranked if a.get("stance") == "plan_is_active"]
         blocked_assets = [a for a in ranked if a.get("stance") == "wait_for_plan"]
@@ -4387,6 +4418,11 @@ class FinnPlanService:
             first = warning_assets[0]
             warning = ((first.get("indicator_summary") or {}).get("warnings") or ["indicator coverage is dun"])[0]
             suggested_actions.append(f"Verbeter data-dekking voor {first.get('asset')}: {warning}")
+        portfolio_risk = self._build_portfolio_risk_analysis(ranked, portfolio_context or {})
+        if portfolio_risk.get("top_asset"):
+            suggested_actions.append(
+                f"Bekijk portfolio-risico voor {portfolio_risk.get('top_asset')}: {portfolio_risk.get('top_reason')}"
+            )
         for action in portfolio_readiness.get("suggested_actions") or []:
             if action not in suggested_actions:
                 suggested_actions.append(action)
@@ -4411,11 +4447,188 @@ class FinnPlanService:
             "scoreless_assets": scoreless_assets,
             "warning_assets": warning_assets,
             "data_readiness": portfolio_readiness,
+            "portfolio_risk": portfolio_risk,
             "top_priorities": top_priorities,
             "assets": ranked,
             "follow_up_actions": follow_up_actions,
             "reasons": reasons,
             "suggested_actions": suggested_actions[:5],
+        }
+
+    def _build_portfolio_risk_analysis(
+        self,
+        asset_analyses: List[Dict[str, Any]],
+        portfolio_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        bots = portfolio_context.get("bots") or []
+        global_ctx = portfolio_context.get("global") or {}
+        allocations = global_ctx.get("allocations_pct") or {}
+        total_equity = self._to_float(global_ctx.get("total_equity")) or 0.0
+        total_position_value = self._to_float(global_ctx.get("current_position_value")) or 0.0
+        bots_by_asset: Dict[str, List[Dict[str, Any]]] = {}
+        for bot in bots:
+            symbol = str(bot.get("symbol") or "").upper()
+            if not symbol:
+                continue
+            bots_by_asset.setdefault(symbol, []).append(bot)
+
+        asset_risk = []
+        conflicts = []
+        concentration_warnings = []
+
+        for item in asset_analyses:
+            asset = str(item.get("asset") or "").upper()
+            asset_bots = bots_by_asset.get(asset, [])
+            exposure_eur = sum(
+                self._to_float(bot.get("position_value")) or self._to_float(bot.get("current_position_value")) or 0.0
+                for bot in asset_bots
+            )
+            budget_eur = sum(self._to_float(bot.get("budget_total")) or self._to_float(bot.get("budget_total_eur")) or 0.0 for bot in asset_bots)
+            allocation_pct = self._to_float(allocations.get(asset))
+            if allocation_pct is None and total_equity > 0:
+                allocation_pct = round((exposure_eur / total_equity) * 100, 2)
+            position_share_pct = round((exposure_eur / total_position_value) * 100, 2) if total_position_value > 0 else None
+
+            blockers = item.get("blockers") or []
+            warnings = (item.get("indicator_summary") or {}).get("warnings") or []
+            readiness = item.get("data_readiness") or {}
+            bot_count = len(asset_bots)
+            live_bot_count = len([bot for bot in asset_bots if bot.get("is_live")])
+            active_bot_count = len([bot for bot in asset_bots if bot.get("is_active")])
+
+            risk_flags = []
+            if item.get("stance") == "wait_for_plan":
+                risk_flags.append("blocked_setup")
+            if item.get("stance") == "wait_for_scores":
+                risk_flags.append("score_missing")
+            if readiness.get("config_gaps"):
+                risk_flags.append("data_gap")
+            if allocation_pct is not None and allocation_pct >= 60:
+                risk_flags.append("high_exposure")
+            elif allocation_pct is not None and allocation_pct >= 40:
+                risk_flags.append("elevated_exposure")
+            if bot_count > 1:
+                risk_flags.append("multiple_bots")
+            if live_bot_count:
+                risk_flags.append("live_bot")
+
+            score = 0
+            if item.get("stance") == "wait_for_plan":
+                score += 55
+            elif item.get("stance") == "wait_for_scores":
+                score += 45
+            elif item.get("stance") == "plan_is_active":
+                score += 30
+            score += min(len(blockers) * 8, 24)
+            score += min(len(warnings) * 5, 15)
+            if allocation_pct is not None:
+                if allocation_pct >= 60:
+                    score += 25
+                elif allocation_pct >= 40:
+                    score += 12
+            score += min(max(bot_count - 1, 0) * 8, 16)
+            if live_bot_count:
+                score += 10
+            if readiness.get("config_gaps"):
+                score += 8
+            score = min(score, 100)
+            risk_level = "high" if score >= 75 else "medium" if score >= 50 else "low"
+
+            if item.get("stance") == "wait_for_plan" and bot_count:
+                conflicts.append({
+                    "type": "blocked_setup_with_bot",
+                    "asset": asset,
+                    "severity": "high" if live_bot_count else "medium",
+                    "reason": f"{asset} heeft een geblokkeerde setup maar ook {bot_count} bot(s) gekoppeld.",
+                })
+            if bot_count > 1:
+                conflicts.append({
+                    "type": "multiple_bots_same_asset",
+                    "asset": asset,
+                    "severity": "medium",
+                    "reason": f"{asset} heeft {bot_count} bot-configuraties; controleer overlap en budgetstapeling.",
+                })
+            if allocation_pct is not None and allocation_pct >= 60:
+                concentration_warnings.append({
+                    "asset": asset,
+                    "allocation_pct": allocation_pct,
+                    "reason": f"{asset} draagt {allocation_pct}% van de portfolio equity.",
+                })
+            elif position_share_pct is not None and position_share_pct >= 70:
+                concentration_warnings.append({
+                    "asset": asset,
+                    "position_share_pct": position_share_pct,
+                    "reason": f"{asset} draagt {position_share_pct}% van de open positie-waarde.",
+                })
+
+            first_blocker = (blockers or [{}])[0]
+            if first_blocker.get("category"):
+                next_best_action = f"Vraag waarom {first_blocker.get('category')} {asset} blokkeert."
+                top_reason = f"{first_blocker.get('category')} blokkeert"
+            elif readiness.get("config_gaps"):
+                next_best_action = f"Vul datakwaliteit voor {asset} aan."
+                top_reason = "datakwaliteit is dun"
+            elif risk_flags:
+                next_best_action = f"Review {asset} exposure en bot-configuratie."
+                top_reason = ", ".join(risk_flags[:2])
+            else:
+                next_best_action = f"Monitor {asset}; geen harde portfolio-risk vlag."
+                top_reason = "geen harde vlag"
+
+            asset_risk.append({
+                "asset": asset,
+                "risk_score": score,
+                "risk_level": risk_level,
+                "risk_flags": risk_flags,
+                "stance": item.get("stance"),
+                "blocker_count": len(blockers),
+                "has_scores": bool(item.get("has_scores")),
+                "exposure_eur": round(exposure_eur, 2),
+                "budget_eur": round(budget_eur, 2),
+                "allocation_pct": allocation_pct,
+                "position_share_pct": position_share_pct,
+                "bot_count": bot_count,
+                "active_bot_count": active_bot_count,
+                "live_bot_count": live_bot_count,
+                "next_best_action": next_best_action,
+                "top_reason": top_reason,
+            })
+
+        asset_risk = sorted(asset_risk, key=lambda item: (-item["risk_score"], item["asset"]))
+        high_assets = [item for item in asset_risk if item["risk_level"] == "high"]
+        medium_assets = [item for item in asset_risk if item["risk_level"] == "medium"]
+        if not asset_analyses:
+            status = "no_assets"
+            message = "Geen setups gevonden om portfolio-risk te bepalen."
+        elif high_assets or conflicts:
+            status = "high_attention"
+            message = "Er zijn portfolio-risico's die vandaag aandacht vragen."
+        elif concentration_warnings:
+            status = "concentrated"
+            message = "De portfolio lijkt geconcentreerd in een of meer assets."
+        elif any("score_missing" in item["risk_flags"] or "data_gap" in item["risk_flags"] for item in asset_risk):
+            status = "needs_data"
+            message = "Portfolio-risk is deels onzeker door ontbrekende of dunne datalagen."
+        elif medium_assets:
+            status = "watch"
+            message = "Geen harde portfolio-conflicten, maar enkele assets vragen monitoring."
+        else:
+            status = "balanced"
+            message = "Geen duidelijke portfolio-risk vlaggen gevonden."
+
+        top = asset_risk[0] if asset_risk else {}
+        return {
+            "status": status,
+            "message": message,
+            "total_equity": total_equity,
+            "current_position_value": total_position_value,
+            "cash_balance": self._to_float(global_ctx.get("cash_balance")) or 0.0,
+            "allocations_pct": allocations,
+            "top_asset": top.get("asset"),
+            "top_reason": top.get("top_reason"),
+            "asset_risk": asset_risk,
+            "concentration_warnings": concentration_warnings,
+            "conflicts": conflicts,
         }
 
     def _portfolio_priority_sort_key(self, analysis: Dict[str, Any]) -> tuple:
@@ -4525,13 +4738,20 @@ class FinnPlanService:
                 "requires_confirmation": False,
             })
             actions.append({
+                "type": "chat_prompt",
+                "label": "Portfolio-risico bekijken",
+                "prompt": "Waar zit mijn grootste portfolio risico?",
+                "handoff": "daily_coach",
+                "requires_confirmation": False,
+            })
+            actions.append({
                 "type": "confirmable_action_prompt",
                 "label": "Bot-decision maken",
                 "prompt": f"Maak bot-decision voor {first_asset}",
                 "handoff": "bot_decision",
                 "requires_confirmation": True,
             })
-        return actions[:5]
+        return actions[:6]
 
     async def build_mission_control_response(
         self,
@@ -4573,6 +4793,7 @@ class FinnPlanService:
             "day_log": day_log,
             "behavioral_insight": behavioral_insight,
             "data_readiness": analysis.get("data_readiness") or {},
+            "portfolio_risk": mission.get("portfolio_risk") or analysis.get("portfolio_risk") or {},
             "source": {
                 "flow": "daily_coach",
                 "date": analysis.get("date"),
@@ -5660,6 +5881,7 @@ class FinnPlanService:
         active_count = len([item for item in plan_health if item["status"] == "active"])
         blocked_count = len([item for item in plan_health if item["status"] == "blocked"])
         data_missing_count = len([item for item in plan_health if item["status"] == "data_missing"])
+        portfolio_risk = analysis.get("portfolio_risk") or {}
 
         return {
             "summary": {
@@ -5670,6 +5892,8 @@ class FinnPlanService:
                 "open_action_count": len(open_actions),
                 "bot_review_count": len(bot_review_queue),
                 "workqueue_count": len(workqueue),
+                "portfolio_risk_status": portfolio_risk.get("status"),
+                "portfolio_risk_top_asset": portfolio_risk.get("top_asset"),
                 "posture": "action_required" if open_actions or blocked_count or data_missing_count else "stable",
             },
             "workqueue": workqueue,
@@ -5678,6 +5902,7 @@ class FinnPlanService:
             "open_actions": open_actions,
             "plan_health": plan_health,
             "bot_review_queue": bot_review_queue[:8],
+            "portfolio_risk": portfolio_risk,
         }
 
     def _mission_workqueue_labels(self) -> Dict[str, str]:
@@ -6639,6 +6864,19 @@ class FinnPlanService:
             for item in (readiness.get("assets") or [])[:3]:
                 if item.get("status") and item.get("status") != "ready":
                     lines.append(f"- {item.get('asset')}: {item.get('message')}")
+
+        portfolio_risk = analysis.get("portfolio_risk") or {}
+        if portfolio_risk.get("status") and portfolio_risk.get("status") != "balanced":
+            lines.append("Portfolio-risico:")
+            lines.append(f"- {portfolio_risk.get('message')}")
+            for item in (portfolio_risk.get("asset_risk") or [])[:3]:
+                flags = item.get("risk_flags") or []
+                flag_text = f" ({', '.join(flags[:3])})" if flags else ""
+                lines.append(
+                    f"- {item.get('asset')}: {item.get('risk_level')} risk, score {item.get('risk_score')}{flag_text}."
+                )
+            for conflict in (portfolio_risk.get("conflicts") or [])[:2]:
+                lines.append(f"- Conflict: {conflict.get('reason')}")
 
         actions = analysis.get("suggested_actions") or []
         if actions:
