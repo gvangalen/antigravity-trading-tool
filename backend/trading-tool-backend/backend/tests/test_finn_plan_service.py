@@ -2754,6 +2754,39 @@ def test_bot_execution_actions_are_confirmable_and_guarded():
     assert live_action["risk_level"] == "high"
 
 
+def test_bot_decision_memory_friction_blocks_even_with_open_reviews(monkeypatch):
+    service = FinnPlanService(db_session=object())
+
+    class BotSvc:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_bot_configs(self, user_id):
+            return [{"id": 9, "name": "BTC Paper Bot", "symbol": "BTC"}]
+
+    async def open_reviews(user_id, asset, bot_id):
+        return [{"decision_id": 22, "bot_id": bot_id, "review_status": "needs_review"}]
+
+    async def memory_friction(user_id, action_type):
+        return {
+            "type": "decision_churn",
+            "message": "je recente memory laat decision-churn zien.",
+            "evidence": ["2 bot-decisions in 30 dagen"],
+        }
+
+    monkeypatch.setattr("backend.services.finn_plan_service.BotService", BotSvc)
+    monkeypatch.setattr(service, "_open_bot_reviews_for_bot", open_reviews)
+    monkeypatch.setattr(service, "_behavioral_memory_friction_for_action", memory_friction)
+
+    result = asyncio.run(service.build_bot_decision_response(1, "Maak bot-decision voor BTC"))
+
+    assert result["can_confirm"] is False
+    assert result["actions"] == []
+    assert result["missing_fields"] == ["behavioral_memory_ack"]
+    assert result["next_question"] == "behavioral_memory_ack"
+    assert result["state"]["pending_behavioral_memory_friction"]["requires_ack"] is True
+
+
 def test_daily_coach_analysis_waits_when_setup_has_blockers():
     service = _service()
     setup_analysis = service._evaluate_setup_row(

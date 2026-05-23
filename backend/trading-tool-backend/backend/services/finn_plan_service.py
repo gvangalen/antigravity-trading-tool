@@ -1663,7 +1663,7 @@ class FinnPlanService:
                 bot for bot in await BotService(self.session).get_bot_configs(user_id)
                 if str(bot.get("symbol") or "").upper() == asset
             ]
-        bot_id = self._extract_id_after_words(query, ["bot"])
+        bot_id = self._extract_id_after_words(query, ["bot"]) or self._safe_int(context.get("bot_id"))
         selected = next((bot for bot in bots if int(bot.get("id")) == bot_id), None) if bot_id else None
         if not selected and len(bots) == 1:
             selected = bots[0]
@@ -1730,7 +1730,7 @@ class FinnPlanService:
         open_reviews = await self._open_bot_reviews_for_bot(user_id, asset, int(selected["id"]))
         memory_friction = await self._behavioral_memory_friction_for_action(user_id, "generate_bot_decision")
         memory_acknowledged = bool(context.get("behavioral_memory_ack")) or self._is_behavioral_memory_ack((query or "").lower())
-        if memory_friction and not open_reviews and not memory_acknowledged:
+        if memory_friction and not memory_acknowledged:
             return self._blocked_behavioral_memory_ack_response(asset, int(selected["id"]), memory_friction)
         if open_reviews:
             open_decision_ids = [int(item["decision_id"]) for item in open_reviews if item.get("decision_id")]
@@ -3152,6 +3152,8 @@ class FinnPlanService:
                     "source": "behavioral_memory",
                     "evidence": card.get("evidence") or [],
                     "safe_alternative": "review of skip eerst de open bot-decisions voordat je nieuwe voorstellen maakt.",
+                    "requires_ack": True,
+                    "ack_phrase": "bewust doorgaan",
                 }
         return None
 
@@ -3178,6 +3180,14 @@ class FinnPlanService:
             if match:
                 return int(match.group(1))
         return None
+
+    def _safe_int(self, value: Any) -> Optional[int]:
+        try:
+            if value is None or value == "":
+                return None
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
     def _extract_indicator_score_mode(self, q_lower: str) -> Optional[str]:
         if any(word in q_lower for word in ["contrarian", "tegen de markt", "omgekeerd", "andersom", "inverse"]):
