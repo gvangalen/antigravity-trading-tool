@@ -363,6 +363,59 @@ def test_recent_live_preflight_token_rejects_failed_preflight():
     assert exc.value.detail["code"] == "LIVE_PREFLIGHT_NOT_APPROVED"
 
 
+def test_recent_live_preflight_token_rejects_bot_mismatch():
+    now = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "updated_at": now,
+        "action": {
+            "type": "live_preflight_bot_decision",
+            "payload": {"bot_id": 8, "decision_id": 123},
+        },
+        "result": {
+            "bot_id": 8,
+            "verified": {
+                "live_preflight": True,
+                "fresh_decision_context": True,
+            },
+        },
+    }
+    service = BotService(_PreflightSession(payload))
+
+    import asyncio
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_recent_live_preflight(1, 9, "token-123"))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_PREFLIGHT_BOT_MISMATCH"
+
+
+def test_recent_live_preflight_token_rejects_stale_token():
+    old = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+    payload = {
+        "updated_at": old,
+        "action": {
+            "type": "live_preflight_bot_decision",
+            "payload": {"bot_id": 9, "decision_id": 123},
+        },
+        "result": {
+            "bot_id": 9,
+            "verified": {
+                "live_preflight": True,
+                "fresh_decision_context": True,
+            },
+        },
+    }
+    service = BotService(_PreflightSession(payload))
+
+    import asyncio
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_recent_live_preflight(1, 9, "token-123"))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_PREFLIGHT_STALE"
+    assert exc.value.detail["age_minutes"] >= 20
+
+
 def test_live_manual_order_blocks_when_decision_context_is_missing():
     service = BotService(_FakeSession())
     repo = _ManualOrderRepo(decisions=[])
