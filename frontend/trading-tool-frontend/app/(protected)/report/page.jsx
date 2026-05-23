@@ -23,6 +23,7 @@ import {
   generateQuarterlyReport,
   fetchQuarterlyReportPDF,
 } from '@/lib/api/report';
+import { assistantChat } from '@/lib/api/ai';
 
 // Components
 import ReportTabs from '@/components/report/ReportTabs';
@@ -42,6 +43,10 @@ import {
   Loader2,
   Calendar,
   FileText,
+  Brain,
+  ShieldCheck,
+  ClipboardList,
+  ChevronDown,
 } from 'lucide-react';
 
 /* =====================================================
@@ -77,6 +82,223 @@ function getReportSignature(report) {
     report.updated_at ||
     report.created_at ||
     JSON.stringify(report)
+  );
+}
+
+function getNested(obj, path, fallback = null) {
+  return path.split('.').reduce((acc, key) => acc?.[key], obj) ?? fallback;
+}
+
+function getFinnReportSummary(report) {
+  const text = report?.response || '';
+  if (!text) {
+    return 'Finn analyseerde je recente interacties, risicochecks en beslisflows.';
+  }
+
+  const cleaned = text
+    .replace(/^dit is een finn operator-\/disciplinerapport, los van je dagelijkse trading report\.\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned) {
+    return 'Finn analyseerde je recente interacties, risicochecks en beslisflows.';
+  }
+
+  return cleaned.length > 220 ? `${cleaned.slice(0, 220).trim()}...` : cleaned;
+}
+
+function formatFinnReportSource(report) {
+  const source = getNested(report, 'state.source.primary') || getNested(report, 'state.analysis.source.primary');
+  return source || 'Finn auditdata';
+}
+
+function FinnReportsPanel() {
+  const [finnReport, setFinnReport] = useState(null);
+  const [finnLoading, setFinnLoading] = useState(true);
+  const [finnError, setFinnError] = useState('');
+  const [expanded, setExpanded] = useState(false);
+
+  const loadFinnReport = async () => {
+    setFinnLoading(true);
+    setFinnError('');
+
+    try {
+      const data = await assistantChat(
+        'Geef mijn Finn rapport van vandaag',
+        {
+          page: '/report',
+          page_type: 'Reports',
+          report_family: 'finn_reports',
+        },
+        []
+      );
+      setFinnReport(data || null);
+    } catch (err) {
+      console.error('Finn report load failed:', err);
+      setFinnError('Finn rapport kon niet geladen worden.');
+    } finally {
+      setFinnLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFinnReport();
+  }, []);
+
+  const analysis = finnReport?.state?.analysis || finnReport?.analysis || {};
+  const metrics = analysis?.metrics || {};
+  const source = formatFinnReportSource(finnReport);
+  const summary = getFinnReportSummary(finnReport);
+  const reportType = finnReport?.state?.report_type || analysis?.report_type || 'finn_reflection_report';
+  const separateFrom = finnReport?.state?.separate_from || analysis?.separate_from || 'daily_trading_report';
+  const isContractValid = finnReport?.intent === 'finn_report' && finnReport?.flow === 'finn_report';
+
+  const metricItems = [
+    ['Acties', metrics.actions_today ?? metrics.actions_7d ?? metrics.actions_30d],
+    ['Afgeremd', metrics.plan_deviation_events_today ?? metrics.plan_deviation_events_7d ?? metrics.plan_deviation_events_30d],
+    ['Skips', metrics.skipped_today ?? metrics.skipped_7d ?? metrics.skipped_30d],
+  ].filter(([, value]) => value !== undefined && value !== null);
+
+  return (
+    <section className="my-10 md:my-12">
+      <div className="flex items-center gap-2 mb-4">
+        <Brain size={14} className="text-blue-600 dark:text-blue-400" />
+        <span className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
+          Finn Reports
+        </span>
+      </div>
+
+      <div className="rounded-[2rem] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-xl shadow-blue-900/5 overflow-hidden">
+        <div className="p-6 md:p-8 border-b border-slate-100 dark:border-slate-800/80">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+            <div className="max-w-3xl">
+              <h2 className="text-2xl md:text-3xl font-black tracking-tight text-slate-950 dark:text-slate-100">
+                Persoonlijke Finn rapportage
+              </h2>
+              <p className="mt-3 text-sm md:text-[15px] leading-relaxed text-slate-500 dark:text-slate-400 max-w-2xl">
+                Read-only rapporten over je Finn-activiteit, risicochecks en beslisflows.
+                Los van trading reports. Dit rapport analyseert je gebruik van Finn, niet de markt.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {['READ-ONLY', 'AUDITDATA', 'LOS VAN TRADING REPORTS'].map((label) => (
+                <span
+                  key={label}
+                  className="px-3 py-1.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 md:p-8">
+          {finnLoading ? (
+            <div className="flex items-center gap-3 text-sm font-bold text-slate-500 dark:text-slate-400">
+              <Loader2 size={16} className="animate-spin text-blue-600" />
+              Finn rapport ophalen...
+            </div>
+          ) : finnError ? (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 p-4">
+              <div className="flex items-center gap-3 text-sm font-bold text-red-700 dark:text-red-300">
+                <AlertTriangle size={16} />
+                {finnError}
+              </div>
+              <button
+                onClick={loadFinnReport}
+                className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white dark:bg-slate-950 border border-red-200 dark:border-red-900/40 text-[10px] font-black uppercase tracking-widest text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors"
+              >
+                Opnieuw
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-5 md:p-6">
+              <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
+                      <ClipboardList size={13} />
+                      Laatste Finn report
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                      Gebruikersactiviteit
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">
+                      Auditdata
+                    </span>
+                  </div>
+
+                  <p className="text-sm md:text-[15px] leading-relaxed text-slate-700 dark:text-slate-300 max-w-3xl">
+                    {summary}
+                  </p>
+
+                  <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
+                    {(metricItems.length ? metricItems : [['Bron', source], ['Type', reportType], ['Scheiding', separateFrom]]).map(([label, value]) => (
+                      <div
+                        key={label}
+                        className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3"
+                      >
+                        <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                          {label}
+                        </div>
+                        <div className="mt-1 text-sm font-black text-slate-900 dark:text-slate-100 truncate">
+                          {String(value)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row xl:flex-col xl:min-w-[180px]">
+                  <button
+                    onClick={() => setExpanded((value) => !value)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 dark:bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-widest text-white hover:bg-blue-700 dark:hover:bg-blue-500 transition-all active:scale-[0.98]"
+                  >
+                    Lees Finn rapport
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                  <button
+                    onClick={loadFinnReport}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-5 py-3 text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all active:scale-[0.98]"
+                  >
+                    <RefreshCw size={13} />
+                    Vernieuw
+                  </button>
+                </div>
+              </div>
+
+              {expanded && (
+                <div className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-5">
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.14em] border ${
+                      isContractValid
+                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300'
+                    }`}>
+                      <ShieldCheck size={12} />
+                      {isContractValid ? 'Contract OK' : 'Contract controleren'}
+                    </span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                      Bron: {source}
+                    </span>
+                  </div>
+                  <div className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-4">
+                    <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
+                      {finnReport?.response || 'Geen rapporttekst beschikbaar.'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -346,6 +568,10 @@ RENDER
            </div>
         </div>
       )}
+
+      <DashboardErrorBoundary>
+        <FinnReportsPanel />
+      </DashboardErrorBoundary>
 
       {/* 📄 REPORT CONTENT */}
       {loading ? (
