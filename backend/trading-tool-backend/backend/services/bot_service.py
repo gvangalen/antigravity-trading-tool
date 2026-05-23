@@ -684,6 +684,13 @@ class BotService:
                         "message": f"Live order zou portfolio-exposure naar {projected_portfolio_exposure_pct}% brengen.",
                         "projected_exposure_pct": projected_portfolio_exposure_pct,
                         "limit_pct": LIVE_MAX_PORTFOLIO_EXPOSURE_PCT,
+                        "asset_exposure_projection": {
+                            "code": "LIVE_ASSET_EXPOSURE_LIMIT",
+                            "symbol": symbol,
+                            "projected_exposure_pct": projected_asset_exposure_pct,
+                            "limit_pct": asset_limit,
+                            "would_block": bool(asset_exposure_block),
+                        },
                         "behavioral_event": self._manual_order_guardrail_event(bot, payload, notional, "portfolio exposure limiet overschreden"),
                     }
                     if asset_exposure_block:

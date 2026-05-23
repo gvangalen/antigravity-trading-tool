@@ -503,6 +503,34 @@ def test_live_order_portfolio_exposure_reports_asset_exposure_when_both_block(mo
     assert exc.value.detail["projected_exposure_pct"] == 99.0
     assert exc.value.detail["also_blocked_by"][0]["code"] == "LIVE_ASSET_EXPOSURE_LIMIT"
     assert exc.value.detail["also_blocked_by"][0]["projected_exposure_pct"] == 74.0
+    assert exc.value.detail["asset_exposure_projection"]["would_block"] is True
+
+
+def test_live_order_portfolio_exposure_reports_asset_projection_when_asset_does_not_block(monkeypatch):
+    monkeypatch.setattr("backend.services.bot_service.LIVE_MAX_PORTFOLIO_EXPOSURE_PCT", 95)
+    monkeypatch.setattr("backend.services.bot_service.LIVE_MAX_ASSET_EXPOSURE_PCT", 70)
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo(portfolio_context={
+        "global": {"total_equity": 1000, "current_position_value": 980},
+        "bots": [{"symbol": "BTC", "position_value": 980}],
+    })
+    service.repository = repo
+    bot = asyncio.run(repo.get_bot_config(1, 9))
+    bot["symbol"] = "ETH"
+    bot["max_asset_exposure_pct"] = 50
+    payload = BotManualOrderSchema(bot_id=9, symbol="ETH", side="buy", quantity=0.001, price=50000)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_live_order_risk_context(1, bot, payload, 50))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_PORTFOLIO_EXPOSURE_LIMIT"
+    assert "also_blocked_by" not in exc.value.detail
+    projection = exc.value.detail["asset_exposure_projection"]
+    assert projection["symbol"] == "ETH"
+    assert projection["projected_exposure_pct"] == 5.0
+    assert projection["limit_pct"] == 50
+    assert projection["would_block"] is False
 
 
 def test_live_order_risk_context_requires_ack_for_blocked_setup(monkeypatch):
