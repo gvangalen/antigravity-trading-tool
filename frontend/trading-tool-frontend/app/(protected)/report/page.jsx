@@ -143,6 +143,62 @@ function formatFinnReportSource(report) {
   return source || 'Finn auditdata';
 }
 
+function finnAgentVerdictTone(verdict = {}) {
+  const status = String(verdict.status || '').toLowerCase();
+  const priority = String(verdict.priority || '').toLowerCase();
+  if (priority === 'high' || status.includes('block') || status.includes('attention') || status.includes('intervened')) {
+    return 'border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300';
+  }
+  if (priority === 'medium' || status.includes('need') || status.includes('missing') || status.includes('review') || status.includes('waiting')) {
+    return 'border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300';
+  }
+  return 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300';
+}
+
+function FinnAgentVerdicts({ verdicts = [] }) {
+  const items = Array.isArray(verdicts) ? verdicts.filter(Boolean).slice(0, 6) : [];
+  if (items.length === 0) return null;
+
+  return (
+    <div className="mt-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/50 p-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+          <Brain size={13} className="text-blue-600 dark:text-blue-400" />
+          Agent Verdicts
+        </span>
+        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+          {items.length}
+        </span>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {items.map((verdict, index) => (
+          <div
+            key={`${verdict.agent || verdict.label || 'agent'}-${index}`}
+            className={`rounded-xl border p-3 ${finnAgentVerdictTone(verdict)}`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[10px] font-black uppercase tracking-[0.14em] truncate">
+                {verdict.label || verdict.agent || 'Agent'}
+              </span>
+              <span className="shrink-0 rounded-full bg-white/75 dark:bg-slate-950/40 px-2 py-1 text-[8px] font-black uppercase tracking-widest">
+                {verdict.status || 'unknown'}
+              </span>
+            </div>
+            <p className="mt-2 text-xs font-semibold leading-relaxed opacity-90">
+              {verdict.reason || verdict.next_action || 'Geen toelichting beschikbaar.'}
+            </p>
+            {verdict.next_action && (
+              <p className="mt-2 text-[9px] font-black uppercase tracking-[0.14em] opacity-75">
+                {verdict.next_action}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FinnReportsPanel() {
   const [activeFinnReport, setActiveFinnReport] = useState(FINN_REPORT_OPTIONS[0].key);
   const [finnReportCache, setFinnReportCache] = useState({});
@@ -317,6 +373,8 @@ function FinnReportsPanel() {
                       </div>
                     ))}
                   </div>
+
+                  <FinnAgentVerdicts verdicts={analysis?.agent_verdicts || []} />
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row xl:flex-col xl:min-w-[180px]">

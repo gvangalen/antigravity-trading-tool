@@ -371,6 +371,78 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     return "border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300";
   };
 
+  const agentVerdictTone = (verdict = {}) => {
+    const status = String(verdict.status || "").toLowerCase();
+    const priority = String(verdict.priority || "").toLowerCase();
+    if (priority === "high" || status.includes("block") || status.includes("attention") || status.includes("intervened")) {
+      return "border-rose-100 dark:border-rose-900/50 bg-rose-50/55 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300";
+    }
+    if (priority === "medium" || status.includes("need") || status.includes("missing") || status.includes("waiting") || status.includes("review")) {
+      return "border-amber-100 dark:border-amber-900/50 bg-amber-50/55 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300";
+    }
+    return "border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/55 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300";
+  };
+
+  const agentVerdictIcon = (agent = "") => {
+    if (agent.includes("macro") || agent.includes("technical")) return <BarChart3 size={11} />;
+    if (agent.includes("risk") || agent.includes("execution")) return <Shield size={11} />;
+    if (agent.includes("strategy")) return <Target size={11} />;
+    if (agent.includes("memory")) return <Brain size={11} />;
+    return <Activity size={11} />;
+  };
+
+  const getMessageAgentVerdicts = (message) => {
+    const state = message?.state || {};
+    const analysis = state.analysis || message?.analysis || {};
+    return (
+      state.agent_verdicts ||
+      analysis.agent_verdicts ||
+      message?.agent_verdicts ||
+      []
+    );
+  };
+
+  const renderAgentVerdicts = (verdicts, compact = false) => {
+    const items = Array.isArray(verdicts) ? verdicts.filter(Boolean).slice(0, compact ? 4 : 6) : [];
+    if (items.length === 0) return null;
+    return (
+      <div className={`${compact ? "mt-2" : "mt-4 pt-3 border-t border-slate-100/60 dark:border-slate-800/60"} space-y-2`}>
+        {!compact && (
+          <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+            <Brain size={11} className="text-blue-500" />
+            Agent Verdicts
+          </div>
+        )}
+        <div className={`grid gap-1.5 ${compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}>
+          {items.map((verdict, index) => (
+            <div
+              key={`${verdict.agent || verdict.label || "agent"}-${index}`}
+              className={`rounded-xl border px-2.5 py-2 ${agentVerdictTone(verdict)}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 min-w-0 text-[9px] font-black uppercase tracking-widest">
+                  {agentVerdictIcon(verdict.agent || verdict.label || "")}
+                  <span className="truncate">{verdict.label || verdict.agent || "Agent"}</span>
+                </span>
+                <span className="shrink-0 rounded-full bg-white/75 dark:bg-slate-950/40 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest">
+                  {verdict.status || "unknown"}
+                </span>
+              </div>
+              <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">
+                {verdict.reason || verdict.next_action || "Geen toelichting beschikbaar."}
+              </p>
+              {!compact && verdict.next_action && (
+                <p className="mt-1 text-[8px] font-black uppercase tracking-widest opacity-75">
+                  {verdict.next_action}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   const missionWorkqueueSections = () => {
     if (Array.isArray(missionControl?.workqueue_groups) && missionControl.workqueue_groups.length > 0) {
       return missionControl.workqueue_groups.map((group) => ({
@@ -1666,6 +1738,21 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
               </div>
             )}
 
+            {Array.isArray(missionControl.agent_verdicts) && missionControl.agent_verdicts.length > 0 && (
+              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/65 dark:bg-slate-900/40 p-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-400">
+                    <Brain size={11} className="text-blue-500" />
+                    Agent Verdicts
+                  </span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+                    {missionControl.agent_verdicts.length}
+                  </span>
+                </div>
+                {renderAgentVerdicts(missionControl.agent_verdicts, true)}
+              </div>
+            )}
+
             {Array.isArray(missionControl.workqueue) && missionControl.workqueue.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
@@ -1928,6 +2015,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                     : "bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-foreground dark:text-slate-100"
                 }`}>
                 <p className="text-sm leading-relaxed">{m.text}</p>
+                {m.role === "assistant" && m.isComplete !== false && renderAgentVerdicts(getMessageAgentVerdicts(m))}
                 {m.role === "assistant" && m.isComplete !== false && (() => {
                   const suggestions = getMessageFollowUpActions(m);
                   if (suggestions.length === 0) return null;
