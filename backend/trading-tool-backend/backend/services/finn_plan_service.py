@@ -5408,11 +5408,111 @@ class FinnPlanService:
 
     def _finn_report_period_from_query(self, query: str) -> Dict[str, Any]:
         q = (query or "").lower()
+        if any(term in q for term in [
+            "dagafsluiting", "dag afsluiting", "einde dag", "sluit mijn dag af",
+            "close mijn dag", "day close", "dag sluiten", "wat staat morgen",
+        ]):
+            return {"key": "day_close", "days": 1, "label": "dagafsluiting vandaag", "mode": "day_close"}
         if any(term in q for term in ["30 dagen", "maand", "monthly", "maandrapport"]):
-            return {"key": "last_30_days", "days": 30, "label": "laatste 30 dagen"}
+            return {"key": "last_30_days", "days": 30, "label": "laatste 30 dagen", "mode": "reflection"}
         if any(term in q for term in ["week", "weekly", "7 dagen"]):
-            return {"key": "last_7_days", "days": 7, "label": "laatste 7 dagen"}
-        return {"key": "today", "days": 1, "label": "vandaag"}
+            return {"key": "last_7_days", "days": 7, "label": "laatste 7 dagen", "mode": "reflection"}
+        return {"key": "today", "days": 1, "label": "vandaag", "mode": "reflection"}
+
+    def _build_finn_day_close(
+        self,
+        items: List[Dict[str, Any]],
+        metrics: Dict[str, Any],
+        interventions: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        handled_count = (
+            metrics.get("resolved", 0)
+            + metrics.get("skipped", 0)
+            + metrics.get("snoozed", 0)
+            + metrics.get("monitor_today", 0)
+        )
+        carryover_count = metrics.get("pending", 0) + metrics.get("waiting_for_data", 0)
+        if metrics.get("failed", 0) > 0 or metrics.get("live_order_blocks", 0) > 0:
+            closeout_status = "review_before_tomorrow"
+        elif carryover_count > 0:
+            closeout_status = "carryover"
+        elif metrics.get("actions", 0) == 0:
+            closeout_status = "quiet_day"
+        else:
+            closeout_status = "closed"
+
+        completed = []
+        if metrics.get("plans_created", 0):
+            completed.append(f"{metrics.get('plans_created')} plan/setup flow(s) uitgevoerd")
+        if metrics.get("strategies_changed", 0):
+            completed.append(f"{metrics.get('strategies_changed')} strategy-wijziging(en)")
+        if metrics.get("bots_changed", 0):
+            completed.append(f"{metrics.get('bots_changed')} bot-wijziging(en)")
+        if metrics.get("indicators_changed", 0):
+            completed.append(f"{metrics.get('indicators_changed')} indicator-wijziging(en)")
+        if metrics.get("bot_decisions_generated", 0):
+            completed.append(f"{metrics.get('bot_decisions_generated')} bot-decision(s) gegenereerd")
+        if metrics.get("live_order_preflights", 0):
+            completed.append(f"{metrics.get('live_order_preflights')} live order preflight(s)")
+        if not completed and metrics.get("actions", 0):
+            completed.append(f"{metrics.get('actions')} Finn-actie(s) vastgelegd")
+
+        consciously_handled = []
+        if metrics.get("resolved", 0):
+            consciously_handled.append(f"{metrics.get('resolved')} item(s) gemarkeerd als klaar")
+        if metrics.get("skipped", 0):
+            consciously_handled.append(f"{metrics.get('skipped')} item(s) bewust overgeslagen")
+        if metrics.get("snoozed", 0):
+            consciously_handled.append(f"{metrics.get('snoozed')} item(s) later opnieuw bekijken")
+        if metrics.get("monitor_today", 0):
+            consciously_handled.append(f"{metrics.get('monitor_today')} item(s) vandaag gemonitord")
+
+        blocked = [
+            {
+                "type": item.get("type"),
+                "label": item.get("label"),
+                "asset": item.get("asset"),
+                "outcome": item.get("outcome"),
+                "created_at": item.get("created_at"),
+            }
+            for item in items
+            if item.get("type") in {
+                "live_manual_order_blocked",
+                "live_setup_block_acknowledged",
+            } or isinstance(item.get("behavioral_event"), dict)
+        ][:8]
+
+        tomorrow_focus = []
+        if metrics.get("pending", 0):
+            tomorrow_focus.append("Rond pending Finn-acties of bot-reviews eerst af.")
+        if metrics.get("waiting_for_data", 0):
+            tomorrow_focus.append("Ververs ontbrekende data voordat je nieuwe execution beoordeelt.")
+        if metrics.get("live_order_blocks", 0):
+            tomorrow_focus.append("Review waarom live orders geblokkeerd werden voordat je opnieuw preflight doet.")
+        if metrics.get("plan_deviation_events", 0):
+            tomorrow_focus.append("Controleer of de bewuste plan-afwijking nog steeds bij je setup past.")
+        if metrics.get("decision_churn_events", 0):
+            tomorrow_focus.append("Voorkom morgen nieuwe decisions voordat open reviews zijn afgehandeld.")
+        if not tomorrow_focus:
+            tomorrow_focus.append("Start morgen met Mission Control en werk de queue van boven naar beneden af.")
+
+        return {
+            "status": closeout_status,
+            "handled_count": handled_count,
+            "carryover_count": carryover_count,
+            "completed": completed,
+            "consciously_handled": consciously_handled,
+            "blocked_or_slowed": blocked,
+            "risk_officer_interventions": interventions,
+            "tomorrow_focus": tomorrow_focus,
+            "closing_line": (
+                "Niet meer forceren vandaag; begin morgen met review van de open punten."
+                if closeout_status in {"review_before_tomorrow", "carryover"} else
+                "Dag netjes afgesloten; morgen opnieuw starten vanuit Mission Control."
+                if closeout_status == "closed" else
+                "Rustige dag: er is nog weinig Finn-activiteit om af te sluiten."
+            ),
+        }
 
     def _build_finn_reflection_report(
         self,
@@ -5428,7 +5528,7 @@ class FinnPlanService:
             created_at = self._parse_mission_timestamp(item.get("created_at"))
             if not created_at:
                 continue
-            if period["key"] == "today":
+            if period["key"] in {"today", "day_close"}:
                 if created_at.date() == now.date():
                     items.append(item)
             elif created_at >= cutoff:
@@ -5478,6 +5578,19 @@ class FinnPlanService:
             "decision_churn_events": event_counts.get("decision_churn", 0),
             "execution_pressure_events": event_counts.get("execution_pressure", 0),
         }
+        if period["key"] in {"today", "day_close"}:
+            metrics.update({
+                "actions_today": metrics["actions"],
+                "executed_today": metrics["executed"],
+                "pending_today": metrics["pending"],
+                "skipped_today": metrics["skipped"],
+                "snoozed_today": metrics["snoozed"],
+                "monitor_today_count": metrics["monitor_today"],
+                "plan_deviation_events_today": metrics["plan_deviation_events"],
+                "decision_churn_events_today": metrics["decision_churn_events"],
+                "execution_pressure_events_today": metrics["execution_pressure_events"],
+                "live_order_blocks_today": metrics["live_order_blocks"],
+            })
 
         interventions = []
         if metrics["plan_deviation_events"] > 0:
@@ -5583,16 +5696,34 @@ class FinnPlanService:
             headline = "Je Finn-activiteit oogt beheerst; ik zie geen zware guardrail-events in deze periode."
             safe_next_step = "Blijf Mission Control gebruiken als vaste review-queue."
 
+        day_close = None
+        if period.get("mode") == "day_close":
+            day_close = self._build_finn_day_close(items, metrics, interventions)
+            if day_close["status"] == "review_before_tomorrow":
+                status = "day_close_attention"
+                headline = "Dagafsluiting: er zijn risk-officer punten die je morgen eerst moet reviewen."
+                safe_next_step = day_close["tomorrow_focus"][0]
+            elif day_close["status"] == "carryover":
+                status = "day_close_carryover"
+                headline = "Dagafsluiting: er staan nog punten open voor morgen."
+                safe_next_step = day_close["tomorrow_focus"][0]
+            elif day_close["status"] == "closed":
+                status = "day_close_closed"
+                headline = "Dagafsluiting: je Finn-operatorlog is netjes afgerond voor vandaag."
+                safe_next_step = day_close["tomorrow_focus"][0]
+
         return {
             "report_type": "finn_reflection_report",
             "report_family": "finn_reports",
             "separate_from": "daily_trading_report",
             "period": period,
+            "report_mode": period.get("mode") or "reflection",
             "status": status,
             "headline": headline,
             "advice_only": True,
             "metrics": metrics,
             "sections": sections,
+            "day_close": day_close,
             "behavioral_profile": behavioral.get("metrics") and self._behavioral_profile_from_metrics(
                 behavioral.get("metrics") or {},
                 behavioral.get("patterns") or [],
@@ -5644,6 +5775,28 @@ class FinnPlanService:
                 lines.append(f"- {item.get('label')}: {item.get('meaning')} ({item.get('count')}x)")
         else:
             lines.append("Finn heeft in deze periode geen zware guardrail-interventie gevonden.")
+        day_close = report.get("day_close") or {}
+        if day_close:
+            lines.append("Dagafsluiting:")
+            completed = day_close.get("completed") or []
+            if completed:
+                lines.append("Vandaag afgerond:")
+                lines.extend([f"- {item}" for item in completed[:5]])
+            handled = day_close.get("consciously_handled") or []
+            if handled:
+                lines.append("Bewust afgehandeld:")
+                lines.extend([f"- {item}" for item in handled[:4]])
+            blocked = day_close.get("blocked_or_slowed") or []
+            if blocked:
+                lines.append("Afgeremd of geblokkeerd:")
+                for item in blocked[:4]:
+                    asset = f" {item.get('asset')}" if item.get("asset") else ""
+                    lines.append(f"- {item.get('label') or item.get('type')}{asset}: {item.get('outcome')}")
+            tomorrow = day_close.get("tomorrow_focus") or []
+            if tomorrow:
+                lines.append("Meenemen naar morgen:")
+                lines.extend([f"- {item}" for item in tomorrow[:4]])
+            lines.append(day_close.get("closing_line"))
         lines.append(f"Veilige volgende stap: {report.get('safe_next_step')}")
         return "\n".join([line for line in lines if line])
 

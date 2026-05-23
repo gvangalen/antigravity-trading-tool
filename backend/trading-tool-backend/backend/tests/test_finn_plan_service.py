@@ -186,6 +186,63 @@ def test_finn_reflection_report_summarizes_operator_activity():
     assert "los van je dagelijkse trading report" in message
 
 
+def test_finn_day_close_report_summarizes_closeout_and_tomorrow_focus():
+    service = _service()
+    now = _utc_now().isoformat()
+    activity = [
+        {
+            "type": "create_plan",
+            "label": "Setup-flow uitgevoerd",
+            "status": "executed",
+            "resolve_state": "resolved",
+            "asset": "BTC",
+            "created_at": now,
+        },
+        {
+            "type": "live_manual_order_blocked",
+            "label": "Live order geblokkeerd",
+            "status": "executed",
+            "resolve_state": "resolved",
+            "asset": "ETH",
+            "created_at": now,
+            "outcome": "Marktprijs voor ETH is te oud; live order wordt geblokkeerd.",
+            "behavioral_event": {"type": "execution_pressure", "severity": "high"},
+        },
+        {
+            "type": "generate_bot_decision",
+            "label": "Bot-decision gemaakt",
+            "status": "pending",
+            "resolve_state": "needs_user_confirmation",
+            "asset": "ETH",
+            "created_at": now,
+        },
+        {
+            "type": "resolve_mission_item",
+            "label": "Mission Control item bijgewerkt",
+            "status": "executed",
+            "resolve_state": "monitor_today",
+            "asset": "BTC",
+            "created_at": now,
+        },
+    ]
+    behavioral = service._build_behavioral_insight_from_activity(activity)
+
+    report = service._build_finn_reflection_report(activity, behavioral, "Sluit mijn dag af")
+    message = service._finn_reflection_report_message(report)
+
+    assert report["report_mode"] == "day_close"
+    assert report["period"]["key"] == "day_close"
+    assert report["status"] == "day_close_attention"
+    assert report["metrics"]["actions_today"] == 4
+    assert report["metrics"]["live_order_blocks_today"] == 1
+    assert report["day_close"]["status"] == "review_before_tomorrow"
+    assert report["day_close"]["carryover_count"] == 1
+    assert any("live orders geblokkeerd" in item.lower() for item in report["day_close"]["tomorrow_focus"])
+    assert "Dagafsluiting:" in message
+    assert "Meenemen naar morgen:" in message
+    assert "los van je dagelijkse trading report" in message
+
+
 def test_finn_report_response_exposes_top_level_state_contract(monkeypatch):
     async def activity(user_id, limit=200):
         return []
