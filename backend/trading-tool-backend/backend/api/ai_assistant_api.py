@@ -160,6 +160,7 @@ async def assistant_chat(
         ):
             finn_response = await finn.build_bot_decision_response(user_id, request.query, context_payload)
             finn_response["trace_id"] = trace_id
+            await finn.persist_response_state(user_id, finn_response)
             return AssistantChatResponse(**finn_response)
         if finn.looks_like_bot_decision_review_request(request.query):
             finn_response = await finn.build_bot_decision_review_response(user_id, request.query, context_payload)
@@ -383,6 +384,7 @@ async def assistant_chat_stream(
             ):
                 envelope = await finn.build_bot_decision_response(user_id, request.query, context_payload)
                 envelope["trace_id"] = trace_id
+                await finn.persist_response_state(user_id, envelope)
                 yield _sse_event("envelope", envelope)
                 return
 

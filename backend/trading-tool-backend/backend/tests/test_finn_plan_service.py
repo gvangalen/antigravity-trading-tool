@@ -31,6 +31,53 @@ def test_assistant_context_preserves_transactional_follow_up_state():
     assert payload["pending_behavioral_memory_friction"]["type"] == "decision_churn"
 
 
+def test_bot_decision_ack_state_persists_and_hydrates_without_client_context(monkeypatch):
+    saved = {}
+
+    class Repo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_state(self, user_id):
+            return saved.get(user_id)
+
+        async def save_state(self, user_id, current_flow, asset, slots):
+            saved[user_id] = {
+                "current_flow": current_flow,
+                "asset": asset,
+                "slots": slots,
+            }
+
+        async def clear_state(self, user_id):
+            saved.pop(user_id, None)
+
+    monkeypatch.setattr("backend.services.finn_plan_service.ConversationStateRepository", Repo)
+    service = FinnPlanService(db_session=object())
+    blocked = service._blocked_behavioral_memory_ack_response(
+        "BTC",
+        9,
+        {"type": "decision_churn", "message": "memory friction"},
+    )
+
+    asyncio.run(service.persist_response_state(1, blocked))
+    hydrated = asyncio.run(service.hydrate_context(1, {}))
+
+    assert hydrated["current_flow"] == "bot_decision"
+    assert hydrated["asset"] == "BTC"
+    assert hydrated["bot_id"] == 9
+    assert hydrated["pending_behavioral_memory_friction"]["type"] == "decision_churn"
+
+    ready = {
+        "intent": "bot_decision",
+        "flow": "bot_decision",
+        "can_confirm": True,
+        "state": {"status": "ready_for_confirmation", "current_flow": "bot_decision"},
+    }
+    asyncio.run(service.persist_response_state(1, ready))
+
+    assert saved == {}
+
+
 def test_one_shot_weekly_dca_is_confirmable_and_creates_bot_by_default():
     result = _service().build_response("Maak een wekelijkse BTC DCA van 100 euro")
 

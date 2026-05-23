@@ -325,6 +325,16 @@ class FinnPlanService:
                 "updated_at": slots.get("updated_at"),
                 "current_flow": state.get("current_flow"),
             }
+        elif state and state.get("current_flow") == "bot_decision":
+            bot_decision_state = slots.get("state") if isinstance(slots.get("state"), dict) else {}
+            if bot_decision_state.get("pending_behavioral_memory_friction"):
+                hydrated.update({
+                    "current_flow": "bot_decision",
+                    "asset": state.get("asset") or bot_decision_state.get("asset"),
+                    "bot_id": bot_decision_state.get("bot_id"),
+                    "memory_friction": bot_decision_state.get("memory_friction"),
+                    "pending_behavioral_memory_friction": bot_decision_state.get("pending_behavioral_memory_friction"),
+                })
         return hydrated
 
     async def persist_response_state(self, user_id: int, response: Dict[str, Any]) -> None:
@@ -333,6 +343,27 @@ class FinnPlanService:
         repo = ConversationStateRepository(self.session)
         if response.get("intent") in {"plan_creation_cancelled", "strategy_creation_cancelled", "bot_creation_cancelled", "indicator_config_cancelled"}:
             await repo.clear_state(user_id)
+            return
+        if response.get("flow") == "bot_decision":
+            state = response.get("state") if isinstance(response.get("state"), dict) else {}
+            if state.get("pending_behavioral_memory_friction") and response.get("next_question") == "behavioral_memory_ack":
+                await repo.save_state(
+                    user_id,
+                    current_flow="bot_decision",
+                    asset=state.get("asset"),
+                    slots={
+                        "version": FINN_STATE_VERSION,
+                        "state": state,
+                        "missing_fields": response.get("missing_fields", []),
+                        "invalid_fields": response.get("invalid_fields", []),
+                        "can_confirm": response.get("can_confirm", False),
+                        "updated_at": _utc_now().isoformat(),
+                    },
+                )
+                return
+            stored = await repo.get_state(user_id)
+            if stored and stored.get("current_flow") == "bot_decision":
+                await repo.clear_state(user_id)
             return
         if response.get("flow") not in {"plan_creation", "strategy_creation", "bot_creation", "indicator_config"} or not isinstance(response.get("draft"), dict):
             return
