@@ -1562,6 +1562,42 @@ def test_portfolio_exposure_question_answers_cash_before_blocked_plan_risk():
     assert "grootste aandachtspunt is BTC: macro blokkeert" in message
 
 
+def test_portfolio_exposure_question_explains_overallocated_negative_cash():
+    service = _service()
+    blocked_btc = {
+        "asset": "BTC",
+        "stance": "wait_for_plan",
+        "has_scores": True,
+        "setup": {"id": 2, "name": "BTC DCA"},
+        "blockers": [{"category": "market", "score": 10, "range": [20, 60]}],
+        "bot_today": {"decision_count": 0},
+        "indicator_summary": {"warnings": []},
+        "data_readiness": {"status": "ready", "config_gaps": []},
+    }
+    analysis = service._build_portfolio_daily_coach_analysis(
+        [blocked_btc],
+        {
+            "global": {
+                "total_equity": 1000,
+                "current_position_value": 1667.5,
+                "cash_balance": -667.5,
+                "allocations_pct": {"Cash": -66.75, "BTC": 166.75},
+            },
+            "bots": [
+                {"bot_id": 1, "symbol": "BTC", "position_value": 1667.5, "budget_total": 1000, "is_active": True, "is_live": False},
+            ],
+        },
+    )
+    analysis["question_focus"] = "exposure"
+
+    message = service._portfolio_daily_coach_message(analysis)
+
+    assert "boven portfolio-equity" in message
+    assert "negatief" in message
+    assert "overallocatie" in message
+    assert "overlappende botbudgetten" in message
+
+
 def test_daily_score_fetch_uses_runtime_refresh_when_raw_scores_are_missing(monkeypatch):
     service = FinnPlanService(db_session=object())
     fetch_scores = AsyncMock(side_effect=[None, {"macro_score": 10, "technical_score": 20, "market_score": 30}])

@@ -6924,6 +6924,17 @@ class FinnPlanService:
             first = concentration[0]
             asset = first.get("asset")
             pct = first.get("allocation_pct") or first.get("position_share_pct")
+            if cash_pct is not None and cash_pct < 0:
+                return (
+                    f"Exposure-check: ja, {asset} staat boven portfolio-equity ({pct}%). "
+                    f"De cash-allocatie is negatief ({cash_pct}%), wat wijst op overallocatie, leverage of overlappende botbudgetten. "
+                    "Review eerst budgetten en open bot-exposure voordat je nieuwe acties toevoegt."
+                )
+            if pct is not None and float(pct) > 100:
+                return (
+                    f"Exposure-check: ja, {asset} staat boven 100% portfolio-equity ({pct}%). "
+                    "Dat voelt als overallocatie of budget overlap; review dit eerst voordat je verder opschaalt."
+                )
             return f"Exposure-check: ja, {asset} is geconcentreerd rond {pct}% en vraagt eerst review."
         return (
             f"Exposure-check: ik zie {round(position_value, 2)} euro open positie-waarde op {round(total_equity, 2)} euro equity; "
