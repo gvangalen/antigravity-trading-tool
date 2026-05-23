@@ -1,4 +1,5 @@
 import asyncio
+import json
 import pytest
 from fastapi import HTTPException
 from datetime import datetime, timedelta, timezone
@@ -29,10 +30,13 @@ class _FakeMappingResult:
 class _FakeSession:
     def __init__(self, *, duplicate_strategy_bot_id=None):
         self.duplicate_strategy_bot_id = duplicate_strategy_bot_id
+        self.executed = []
+        self.commits = 0
 
     async def execute(self, query, params=None):
         sql = str(query).lower()
         params = params or {}
+        self.executed.append({"sql": sql, "params": params})
         if "lower(name)" in sql:
             return _FakeResult(None)
         if "from strategies s" in sql:
@@ -41,6 +45,9 @@ class _FakeSession:
             row = (self.duplicate_strategy_bot_id,) if self.duplicate_strategy_bot_id else None
             return _FakeResult(row)
         return _FakeResult(None)
+
+    async def commit(self):
+        self.commits += 1
 
 
 _DEFAULT_MARKET_SNAPSHOT = object()
@@ -652,7 +659,8 @@ def test_live_manual_order_blocks_when_market_price_is_stale(monkeypatch):
 
 
 def test_live_manual_order_preflight_is_not_persisted_and_returns_guardrail_context():
-    service = BotService(_FakeSession())
+    session = _FakeSession()
+    service = BotService(session)
     repo = _ManualOrderRepo()
     service.repository = repo
 
@@ -685,6 +693,52 @@ def test_live_manual_order_preflight_is_not_persisted_and_returns_guardrail_cont
     assert result["live_order_guardrails"]["ok"] is True
     assert result["verified"]["no_exchange_order"] is True
     assert repo.created_orders == 0
+    audit_events = [
+        item for item in session.executed
+        if item["params"].get("type") == "live_manual_order_preflight"
+    ]
+    assert len(audit_events) == 1
+    audit_payload = json.loads(audit_events[0]["params"]["payload"])
+    assert audit_payload["result"]["execution_audit"]["not_persisted"] is True
+    assert audit_payload["result"]["execution_audit"]["exchange_order_created"] is False
+
+
+def test_live_manual_order_block_records_execution_audit():
+    session = _FakeSession()
+    service = BotService(session)
+    service.repository = _ManualOrderRepo()
+    payload = BotManualOrderSchema(
+        bot_id=9,
+        symbol="BTC",
+        side="buy",
+        quantity=0.001,
+        price=50000,
+        idempotency_key="manual-live-blocked",
+        risk_acknowledged=True,
+        live_preflight_token="preflight-ok",
+    )
+    exc = HTTPException(409, {
+        "code": "LIVE_MARKET_PRICE_STALE",
+        "message": "Marktprijs voor BTC is te oud.",
+        "age_seconds": 900,
+    })
+
+    asyncio.run(service.record_live_order_block_from_exception(
+        payload,
+        user_id=1,
+        exc=exc,
+        source="manual_order_preflight",
+    ))
+
+    audit_events = [
+        item for item in session.executed
+        if item["params"].get("type") == "live_manual_order_blocked"
+    ]
+    assert len(audit_events) == 1
+    audit_payload = json.loads(audit_events[0]["params"]["payload"])
+    assert audit_payload["result"]["status"] == "blocked"
+    assert audit_payload["result"]["execution_audit"]["code"] == "LIVE_MARKET_PRICE_STALE"
+    assert audit_payload["result"]["execution_audit"]["notional_eur"] == 50
 
 
 def test_live_manual_order_preflight_reuses_stale_market_price_guardrail(monkeypatch):

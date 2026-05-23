@@ -127,7 +127,16 @@ async def create_manual_order(
     current_user: dict = Depends(get_current_user),
     service: BotService = Depends(get_bot_service)
 ):
-    return await service.create_manual_order(payload, current_user["id"])
+    try:
+        return await service.create_manual_order(payload, current_user["id"])
+    except HTTPException as exc:
+        await service.record_live_order_block_from_exception(
+            payload,
+            current_user["id"],
+            exc,
+            source="manual_order_execute",
+        )
+        raise
 
 @router.post("/orders/manual/preflight")
 async def preflight_manual_order(
@@ -135,7 +144,16 @@ async def preflight_manual_order(
     current_user: dict = Depends(get_current_user),
     service: BotService = Depends(get_bot_service)
 ):
-    return await service.preflight_manual_order(payload, current_user["id"])
+    try:
+        return await service.preflight_manual_order(payload, current_user["id"])
+    except HTTPException as exc:
+        await service.record_live_order_block_from_exception(
+            payload,
+            current_user["id"],
+            exc,
+            source="manual_order_preflight",
+        )
+        raise
 
 # ==========================================================
 # 📦 BOT PORTFOLIOS

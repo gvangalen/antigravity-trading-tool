@@ -5467,6 +5467,10 @@ class FinnPlanService:
             "bot_decisions_skipped": count_type("skip_bot_decision"),
             "paper_executions": count_type("paper_execute_bot_decision"),
             "live_preflights": count_type("live_preflight_bot_decision"),
+            "live_order_preflights": count_type("live_manual_order_preflight"),
+            "live_order_blocks": count_type("live_manual_order_blocked"),
+            "live_orders_confirmed": count_type("live_manual_order_confirmed"),
+            "live_setup_block_acks": count_type("live_setup_block_acknowledged"),
             "mission_items_resolved": count_type("resolve_mission_item"),
             "mission_items_snoozed": count_type("snooze_mission_item"),
             "behavioral_events": len(behavioral_events),
@@ -5496,6 +5500,20 @@ class FinnPlanService:
                 "label": "Execution pressure afgeremd",
                 "count": metrics["execution_pressure_events"],
                 "meaning": "Finn zag execution-druk of live/manual risico en voegde frictie toe.",
+            })
+        if metrics["live_order_blocks"] > 0:
+            interventions.append({
+                "type": "live_order_blocked",
+                "label": "Live order geblokkeerd",
+                "count": metrics["live_order_blocks"],
+                "meaning": "De live execution guardrails hebben een manual order tegengehouden.",
+            })
+        if metrics["live_setup_block_acks"] > 0:
+            interventions.append({
+                "type": "setup_block_ack",
+                "label": "Geblokkeerde setup bewust bevestigd",
+                "count": metrics["live_setup_block_acks"],
+                "meaning": "Je hebt expliciet bevestigd dat je een live order bij een geblokkeerde setup wilde blijven beoordelen.",
             })
         if metrics["skipped"] + metrics["snoozed"] + metrics["monitor_today"] > 0:
             interventions.append({
@@ -5536,7 +5554,10 @@ class FinnPlanService:
                     f"{metrics['bot_decisions_generated']} bot-decisions gegenereerd",
                     f"{metrics['bot_decisions_skipped']} bot-decisions overgeslagen",
                     f"{metrics['paper_executions']} paper executions",
-                    f"{metrics['live_preflights']} live preflights",
+                    f"{metrics['live_preflights']} live decision preflights",
+                    f"{metrics['live_order_preflights']} live order preflights",
+                    f"{metrics['live_order_blocks']} live order blokkades",
+                    f"{metrics['live_orders_confirmed']} live manual orders",
                 ],
             },
             "guardrails": {
@@ -6337,8 +6358,10 @@ class FinnPlanService:
         asset = (
             action.get("asset")
             or (action.get("payload") or {}).get("asset")
+            or (action.get("payload") or {}).get("symbol")
             or result.get("asset")
             or result.get("symbol")
+            or ((result.get("execution_audit") or {}).get("asset") if isinstance(result.get("execution_audit"), dict) else None)
         )
         assets = (action.get("payload") or {}).get("assets") or result.get("assets")
         if not asset and isinstance(assets, list) and assets:
@@ -6359,6 +6382,10 @@ class FinnPlanService:
             "live_preflight_bot_decision": "Live preflight gecontroleerd",
             "bot_config_update": "Bot risk-wijziging bevestigd",
             "manual_order": "Manual order bevestigd",
+            "live_manual_order_preflight": "Live order preflight gecontroleerd",
+            "live_manual_order_blocked": "Live order geblokkeerd",
+            "live_setup_block_acknowledged": "Geblokkeerde setup bewust bevestigd",
+            "live_manual_order_confirmed": "Live manual order geplaatst",
             "resolve_mission_item": "Mission Control item bijgewerkt",
             "snooze_mission_item": "Mission Control item uitgesteld",
         }

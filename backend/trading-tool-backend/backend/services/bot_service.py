@@ -893,6 +893,125 @@ class BotService:
         except Exception as exc:
             logger.warning("Kon behavioral risk event niet loggen: %s", exc)
 
+    def _manual_order_audit_payload(
+        self,
+        event_type: str,
+        *,
+        bot: Optional[Dict[str, Any]],
+        payload: BotManualOrderSchema,
+        notional: float,
+        result: Optional[Dict[str, Any]] = None,
+        block_detail: Optional[Dict[str, Any]] = None,
+        source: str,
+    ) -> Dict[str, Any]:
+        result = result or {}
+        block_detail = block_detail or {}
+        code = block_detail.get("code")
+        message = (
+            block_detail.get("message")
+            or result.get("message")
+            or ("Live order geblokkeerd." if code else "Live order safety check vastgelegd.")
+        )
+        execution_audit = {
+            "type": event_type,
+            "source": source,
+            "bot_id": payload.bot_id,
+            "strategy_id": (bot or {}).get("strategy_id"),
+            "setup_id": (bot or {}).get("setup_id"),
+            "asset": str(payload.symbol or (bot or {}).get("symbol") or "").upper(),
+            "side": payload.side,
+            "quantity": payload.quantity,
+            "price": payload.price,
+            "notional_eur": notional,
+            "is_live": bool((bot or {}).get("is_live")),
+            "idempotency_key": payload.idempotency_key,
+            "risk_acknowledged": bool(payload.risk_acknowledged),
+            "setup_block_acknowledged": bool(payload.setup_block_acknowledged),
+            "live_preflight_token": payload.live_preflight_token or payload.live_preflight_action_id,
+            "code": code,
+            "message": message,
+            "not_persisted": result.get("not_persisted"),
+            "exchange_order_created": result.get("exchange_order_created"),
+            "order_id": result.get("order_id"),
+            "live_market_price": result.get("live_market_price") or block_detail.get("live_market_price"),
+            "decision_freshness": result.get("decision_freshness") or block_detail.get("freshness"),
+            "live_order_guardrails": result.get("live_order_guardrails"),
+            "bot_guardrails": result.get("bot_guardrails"),
+            "blocked_detail": block_detail if block_detail else None,
+        }
+        return {
+            "action": {
+                "type": event_type,
+                "payload": {
+                    "bot_id": payload.bot_id,
+                    "symbol": execution_audit["asset"],
+                    "side": payload.side,
+                    "notional_eur": notional,
+                    "source": source,
+                },
+            },
+            "result": {
+                "ok": not bool(code),
+                "status": "blocked" if code else "executed",
+                "message": message,
+                "verified": {
+                    "execution_audit": True,
+                    "not_persisted": bool(result.get("not_persisted")) if result else None,
+                    "no_exchange_order": result.get("exchange_order_created") is False if result else None,
+                },
+                "execution_audit": execution_audit,
+                "behavioral_event": block_detail.get("behavioral_event") if isinstance(block_detail.get("behavioral_event"), dict) else None,
+            },
+        }
+
+    async def _record_execution_audit_event(self, user_id: int, event_type: str, audit_payload: Dict[str, Any]) -> None:
+        try:
+            now = _utc_db_timestamp()
+            payload = {
+                **audit_payload,
+                "updated_at": now.isoformat(),
+            }
+            await self.session.execute(text("""
+                INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at)
+                VALUES (:id, :user_id, :type, CAST(:payload AS JSONB), 'executed', :expires_at)
+            """), {
+                "id": f"finn-exec-{uuid.uuid4().hex[:16]}",
+                "user_id": user_id,
+                "type": event_type,
+                "payload": json.dumps(payload),
+                "expires_at": now + timedelta(days=30),
+            })
+            await self.session.commit()
+        except Exception as exc:
+            logger.warning("Kon execution audit event niet loggen: %s", exc)
+
+    async def record_live_order_block_from_exception(
+        self,
+        payload: BotManualOrderSchema,
+        user_id: int,
+        exc: HTTPException,
+        *,
+        source: str,
+    ) -> None:
+        detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+        code = str(detail.get("code") or "")
+        if not code.startswith("LIVE_"):
+            return
+        try:
+            bot = await self.repository.get_bot_config(user_id, payload.bot_id)
+            notional = round(float(payload.quantity or 0) * float(payload.price or 0), 2)
+            audit_payload = self._manual_order_audit_payload(
+                "live_manual_order_blocked",
+                bot=bot,
+                payload=payload,
+                notional=notional,
+                block_detail=detail,
+                source=source,
+            )
+            await self._record_execution_audit_event(user_id, "live_manual_order_blocked", audit_payload)
+        except Exception as audit_exc:
+            logger.warning("Kon live order block audit niet loggen: %s", audit_exc)
+
     # ==========================
     # BOT DECISIONS (TODAY/HISTORY)
     # ==========================
@@ -1290,6 +1409,23 @@ class BotService:
             result["live_order_guardrails"] = live_context["live_order_guardrails"]
         if live_context.get("live_market_price"):
             result["live_market_price"] = live_context["live_market_price"]
+        if bot.get("is_live"):
+            await self._record_execution_audit_event(
+                user_id,
+                "live_manual_order_confirmed",
+                self._manual_order_audit_payload(
+                    "live_manual_order_confirmed",
+                    bot=bot,
+                    payload=payload,
+                    notional=notional,
+                    result={
+                        **result,
+                        "not_persisted": False,
+                        "exchange_order_created": True,
+                    },
+                    source="manual_order_execute",
+                ),
+            )
         return result
 
     async def preflight_manual_order(self, payload: BotManualOrderSchema, user_id: int) -> dict:
@@ -1306,7 +1442,7 @@ class BotService:
         stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
         bot_guardrails = self._validate_manual_order_budget_context(bot, stats, payload, notional)
 
-        return {
+        result = {
             "ok": True,
             "mode": "manual_order_preflight",
             "not_persisted": True,
@@ -1334,6 +1470,33 @@ class BotService:
                 "live_order_guardrails": bool((live_context.get("live_order_guardrails") or {}).get("ok")) if bot.get("is_live") else None,
             },
         }
+        if bot.get("is_live"):
+            await self._record_execution_audit_event(
+                user_id,
+                "live_manual_order_preflight",
+                self._manual_order_audit_payload(
+                    "live_manual_order_preflight",
+                    bot=bot,
+                    payload=payload,
+                    notional=notional,
+                    result=result,
+                    source="manual_order_preflight",
+                ),
+            )
+            if payload.setup_block_acknowledged:
+                await self._record_execution_audit_event(
+                    user_id,
+                    "live_setup_block_acknowledged",
+                    self._manual_order_audit_payload(
+                        "live_setup_block_acknowledged",
+                        bot=bot,
+                        payload=payload,
+                        notional=notional,
+                        result=result,
+                        source="manual_order_preflight",
+                    ),
+                )
+        return result
 
     def _validate_manual_order_payload(self, payload: BotManualOrderSchema) -> None:
         side = str(payload.side or "").lower().strip()
