@@ -304,6 +304,10 @@ export const createManualOrder = async ({
   price,
   value_eur,
   idempotency_key,
+  risk_acknowledged = false,
+  live_preflight_token,
+  live_preflight_action_id,
+  setup_block_acknowledged = false,
 }) => {
   if (!bot_id) throw new Error("bot_id is verplicht");
   if (!side) throw new Error("side is verplicht");
@@ -325,9 +329,73 @@ export const createManualOrder = async ({
         price: pr,
         value_eur: toNumber(value_eur, undefined),
         idempotency_key,
+        risk_acknowledged,
+        live_preflight_token,
+        live_preflight_action_id,
+        setup_block_acknowledged,
       }),
     })
   );
+};
+
+export const preflightManualOrder = async ({
+  bot_id,
+  symbol = "BTC",
+  side,
+  quantity,
+  price,
+  value_eur,
+  idempotency_key,
+  risk_acknowledged = true,
+  live_preflight_token,
+  live_preflight_action_id,
+  setup_block_acknowledged = false,
+}) => {
+  if (!bot_id) throw new Error("bot_id is verplicht");
+  if (!side) throw new Error("side is verplicht");
+
+  const qty = toNumber(quantity, null);
+  const pr = toNumber(price, null);
+
+  if (qty === null || qty <= 0) throw new Error("quantity ongeldig");
+  if (pr === null || pr <= 0) throw new Error("price ongeldig");
+
+  try {
+    return await handleApi(
+      fetchAuth(`/api/orders/manual/preflight`, {
+        method: "POST",
+        body: JSON.stringify({
+          bot_id,
+          symbol,
+          side,
+          quantity: qty,
+          price: pr,
+          value_eur: toNumber(value_eur, undefined),
+          idempotency_key,
+          risk_acknowledged,
+          live_preflight_token,
+          live_preflight_action_id,
+          setup_block_acknowledged,
+        }),
+      })
+    );
+  } catch (err) {
+    let parsed = null;
+    try {
+      parsed = JSON.parse(err?.body || "{}");
+    } catch {
+      parsed = null;
+    }
+    const detail = parsed?.detail && typeof parsed.detail === "object"
+      ? parsed.detail
+      : { message: parsed?.detail || err?.message || "Live preflight mislukt" };
+    return {
+      ok: false,
+      blocked: true,
+      status: err?.status,
+      ...detail,
+    };
+  }
 };
 
 /* =====================================================

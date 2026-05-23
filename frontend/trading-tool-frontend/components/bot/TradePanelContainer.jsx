@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useModal } from "@/components/modal/ModalProvider";
 import TradePanel from "./TradePanel";
 import OrderPreviewModal from "./OrderPreviewModal";
-import { fetchTradePlan, createManualOrder, previewManualOrder } from "@/lib/api/botApi";
+import { fetchTradePlan, createManualOrder, preflightManualOrder, previewManualOrder } from "@/lib/api/botApi";
 import { fetchLatestBTC } from "@/lib/api/market";
 
 export default function TradePanelContainer({
@@ -187,12 +187,26 @@ export default function TradePanelContainer({
   ===================================================== */
 
   async function handleOrderRequest(order) {
+    const preflightToken =
+      order.live_preflight_token ||
+      order.live_preflight_action_id ||
+      decision?.live_preflight_token ||
+      decision?.live_preflight_action_id ||
+      decision?.live_preflight?.token ||
+      decision?.preflight?.token ||
+      null;
     const idempotencyKey =
       order.idempotency_key ||
       (typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    const safeOrder = { ...order, idempotency_key: idempotencyKey };
+    const safeOrder = {
+      ...order,
+      idempotency_key: idempotencyKey,
+      risk_acknowledged: Boolean(bot?.is_live),
+      setup_block_acknowledged: Boolean(bot?.is_live),
+      live_preflight_token: preflightToken,
+    };
     setDraftOrder(safeOrder);
     await refreshPreview(safeOrder);
     setShowPreview(true);
@@ -202,17 +216,38 @@ export default function TradePanelContainer({
     if (!order) return;
     try {
       setLoading(true);
-      const data = await previewManualOrder({
+      const payload = {
         bot_id: botId,
         symbol: "BTC",
         side: order.side,
         quantity: order.quantity,
         price: order.orderType === "market" ? price : order.price,
         value_eur: order.value_eur,
+        idempotency_key: order.idempotency_key,
+        risk_acknowledged: order.risk_acknowledged,
+        live_preflight_token: order.live_preflight_token,
+        live_preflight_action_id: order.live_preflight_action_id,
+        setup_block_acknowledged: order.setup_block_acknowledged,
+      };
+      const data = bot?.is_live
+        ? await preflightManualOrder(payload)
+        : await previewManualOrder(payload);
+      setPreviewData({
+        symbol: payload.symbol,
+        side: payload.side,
+        quantity: payload.quantity,
+        price: payload.price,
+        notional_eur: Number(payload.quantity || 0) * Number(payload.price || 0),
+        is_live: Boolean(bot?.is_live),
+        ...data,
       });
-      setPreviewData(data);
     } catch (err) {
       console.error("Preview error:", err);
+      setPreviewData({
+        ok: false,
+        blocked: true,
+        message: err.message || "Order preview mislukt",
+      });
     } finally {
       setLoading(false);
     }
@@ -235,6 +270,10 @@ export default function TradePanelContainer({
         price: previewData.price,
         value_eur: previewData.gross_eur,
         idempotency_key: draftOrder.idempotency_key,
+        risk_acknowledged: draftOrder.risk_acknowledged,
+        live_preflight_token: draftOrder.live_preflight_token,
+        live_preflight_action_id: draftOrder.live_preflight_action_id,
+        setup_block_acknowledged: draftOrder.setup_block_acknowledged,
       });
 
       /* ---------- REFRESH LOCAL BALANCE ---------- */
