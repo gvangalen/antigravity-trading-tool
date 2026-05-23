@@ -1986,6 +1986,16 @@ def test_weekly_reflection_request_detection_is_separate_from_daily_behavior():
     assert service.looks_like_weekly_reflection_request("Geef mijn daily brief") is False
 
 
+def test_behavioral_memory_request_detection_is_separate_from_weekly_reflection():
+    service = _service()
+
+    assert service.looks_like_behavioral_memory_request("Geef mijn gedragsrapport van de laatste 30 dagen") is True
+    assert service.looks_like_behavioral_memory_request("Wat onthoudt Finn van mijn trading discipline?") is True
+    assert service.looks_like_behavioral_memory_request("Maak mijn lange termijn gedragsprofiel") is True
+    assert service.looks_like_behavioral_memory_request("Geef mijn weekreflectie") is False
+    assert service.looks_like_behavioral_memory_request("Geef mijn daily brief") is False
+
+
 def test_behavioral_insight_waits_for_evidence_when_empty():
     service = _service()
 
@@ -2120,6 +2130,76 @@ def test_weekly_reflection_names_explicit_decision_churn_event():
     assert "decision_churn" in behavioral["patterns"]
     assert reflection["metrics"]["decision_churn_events_7d"] == 1
     assert "Je vroeg meerdere keren nieuwe decisions aan terwijl er nog open review stond." in message
+
+
+def test_behavioral_memory_report_uses_30_day_evidence_without_new_writes():
+    service = _service()
+    now = _utc_now()
+    activity = [
+        service._mission_activity_item({
+            "id": "finn-memory-plan",
+            "status": "executed",
+            "created_at": now - timedelta(days=2),
+            "payload": {
+                "action": {"type": "create_plan"},
+                "result": {"ok": True, "message": "Plan gemaakt."},
+            },
+        }),
+        service._mission_activity_item({
+            "id": "finn-memory-bot-update",
+            "status": "executed",
+            "created_at": now - timedelta(days=3),
+            "payload": {
+                "action": {"type": "bot_config_update"},
+                "result": {
+                    "ok": True,
+                    "behavioral_event": {
+                        "type": "plan_deviation_attempt",
+                        "severity": "medium",
+                        "reasons": ["budget verhoogd"],
+                    },
+                },
+            },
+        }),
+        service._mission_activity_item({
+            "id": "finn-memory-churn",
+            "status": "executed",
+            "created_at": now - timedelta(days=4),
+            "payload": {
+                "action": {"type": "generate_bot_decision"},
+                "result": {
+                    "ok": True,
+                    "behavioral_event": {
+                        "type": "decision_churn",
+                        "severity": "medium",
+                        "existing_decision_ids": [12],
+                    },
+                },
+            },
+        }),
+        service._mission_activity_item({
+            "id": "finn-memory-skip",
+            "status": "executed",
+            "created_at": now - timedelta(days=5),
+            "payload": {
+                "action": {"type": "skip_bot_decision"},
+                "result": {"ok": True, "status": "skipped"},
+            },
+        }),
+    ]
+    behavioral = service._build_behavioral_insight_from_activity(activity)
+
+    memory = service._build_behavioral_memory_report(activity, behavioral)
+    message = service._behavioral_memory_message(memory)
+
+    assert memory["status"] == "early_memory"
+    assert memory["metrics"]["actions_30d"] == 4
+    assert memory["metrics"]["decision_churn_events_30d"] == 1
+    assert memory["metrics"]["plan_deviation_events_30d"] == 1
+    assert memory["memory_policy"]["stores_new_memory"] is False
+    assert any(card["type"] == "decision_churn" for card in memory["memory_cards"])
+    assert "Wat Finn voorzichtig mag onthouden" in message
+    assert "Wat Finn nog niet mag concluderen" in message
 
 
 def test_weekly_reflection_summarizes_behavioral_patterns():

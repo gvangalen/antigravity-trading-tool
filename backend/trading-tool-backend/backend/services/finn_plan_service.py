@@ -567,6 +567,23 @@ class FinnPlanService:
         ]
         return any(term in q for term in weekly_terms) and any(term in q for term in reflection_terms)
 
+    def looks_like_behavioral_memory_request(self, query: str) -> bool:
+        q = (query or "").lower()
+        memory_terms = [
+            "lange termijn", "lange-termijn", "long term", "long-term", "memory",
+            "geheugen", "onthoud", "onthouden", "gedragsrapport", "behavioral report",
+            "maandreflectie", "maand reflectie", "30 dagen", "laatste 30 dagen",
+            "persoonlijk profiel", "gedragsprofiel", "trading profiel",
+        ]
+        behavior_terms = [
+            "gedrag", "discipline", "fomo", "overtrading", "override", "afwijk",
+            "patroon", "patronen", "bot-decision", "decision", "plan",
+        ]
+        report_terms = ["geef", "maak", "toon", "wat", "hoe", "analyseer", "rapport", "reflectie", "profiel"]
+        return any(term in q for term in memory_terms) and (
+            any(term in q for term in behavior_terms) or any(term in q for term in report_terms)
+        )
+
     def looks_like_daily_score_refresh_request(self, query: str) -> bool:
         q = (query or "").lower()
         return any(phrase in q for phrase in [
@@ -4453,6 +4470,40 @@ class FinnPlanService:
             ],
         }
 
+    async def build_behavioral_memory_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
+        day_log = self._mission_day_log(activity_feed)
+        behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        memory = self._build_behavioral_memory_report(activity_feed, behavioral)
+        response = self._behavioral_memory_message(memory)
+        return {
+            "response": response,
+            "intent": "behavioral_memory",
+            "flow": "behavioral_memory",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "current_flow": "behavioral_memory",
+                "analysis": memory,
+                "behavioral_insight": behavioral,
+                "advice_only": True,
+            },
+            "suggested_actions": [
+                "Vraag: geef mijn weekreflectie",
+                "Vraag: open Mission Control",
+                "Vraag: waar wijk ik vaak af van mijn plan?",
+            ],
+        }
+
     def _build_weekly_reflection_from_behavioral(
         self,
         behavioral: Dict[str, Any],
@@ -4571,6 +4622,211 @@ class FinnPlanService:
                 "behavioral_event": item.get("behavioral_event"),
             })
         return evidence
+
+    def _build_behavioral_memory_report(
+        self,
+        activity_feed: List[Dict[str, Any]],
+        behavioral: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        now = _utc_now()
+        items_30d = []
+        previous_30d = []
+        for item in activity_feed or []:
+            created_at = self._parse_mission_timestamp(item.get("created_at"))
+            if not created_at:
+                continue
+            if created_at >= now - timedelta(days=30):
+                items_30d.append(item)
+            elif created_at >= now - timedelta(days=60):
+                previous_30d.append(item)
+
+        def count_type(items: List[Dict[str, Any]], action_type: str) -> int:
+            return len([item for item in items if item.get("type") == action_type])
+
+        def count_resolution(items: List[Dict[str, Any]], resolution: str) -> int:
+            return len([item for item in items if item.get("resolve_state") == resolution])
+
+        behavioral_events = [
+            item.get("behavioral_event") for item in items_30d
+            if isinstance(item.get("behavioral_event"), dict)
+        ]
+        event_counts: Dict[str, int] = {}
+        for event in behavioral_events:
+            event_type = str(event.get("type") or "unknown")
+            event_counts[event_type] = event_counts.get(event_type, 0) + 1
+
+        plan_creates = count_type(items_30d, "create_plan")
+        strategy_changes = count_type(items_30d, "create_strategy")
+        bot_changes = count_type(items_30d, "create_bot") + count_type(items_30d, "bot_config_update")
+        indicator_changes = count_type(items_30d, "configure_indicator")
+        configuration_changes = plan_creates + strategy_changes + bot_changes + indicator_changes
+        review_actions = (
+            count_type(items_30d, "skip_bot_decision")
+            + count_type(items_30d, "resolve_mission_item")
+            + count_type(items_30d, "snooze_mission_item")
+        )
+        first_seen = min(
+            [self._parse_mission_timestamp(item.get("created_at")) for item in items_30d if self._parse_mission_timestamp(item.get("created_at"))],
+            default=None,
+        )
+        days_observed = max(1, (now.date() - first_seen.date()).days + 1) if first_seen else 0
+
+        metrics = {
+            "actions_30d": len(items_30d),
+            "previous_actions_30d": len(previous_30d),
+            "executed_30d": len([item for item in items_30d if item.get("status") == "executed"]),
+            "bot_decisions_generated_30d": count_type(items_30d, "generate_bot_decision"),
+            "paper_executions_30d": count_type(items_30d, "paper_execute_bot_decision"),
+            "live_preflights_30d": count_type(items_30d, "live_preflight_bot_decision"),
+            "skipped_30d": count_resolution(items_30d, "skipped"),
+            "snoozed_30d": count_resolution(items_30d, "snoozed"),
+            "monitor_30d": count_resolution(items_30d, "monitor_today"),
+            "plan_creates_30d": plan_creates,
+            "strategy_changes_30d": strategy_changes,
+            "bot_changes_30d": bot_changes,
+            "indicator_changes_30d": indicator_changes,
+            "configuration_changes_30d": configuration_changes,
+            "review_actions_30d": review_actions,
+            "behavioral_events_30d": len(behavioral_events),
+            "decision_churn_events_30d": event_counts.get("decision_churn", 0),
+            "execution_pressure_events_30d": event_counts.get("execution_pressure", 0),
+            "plan_deviation_events_30d": event_counts.get("plan_deviation_attempt", 0) + event_counts.get("strategy_change_pressure", 0),
+            "days_observed": days_observed,
+        }
+
+        memory_cards = []
+        if metrics["decision_churn_events_30d"] > 0 or metrics["bot_decisions_generated_30d"] >= 5:
+            memory_cards.append({
+                "type": "decision_churn",
+                "label": "Decision-churn aandachtspunt",
+                "confidence": "medium" if metrics["decision_churn_events_30d"] else "low",
+                "summary": "Finn moet extra remmen als je opnieuw bot-decisions aanvraagt terwijl review nog openstaat.",
+                "evidence": [
+                    f"{metrics['bot_decisions_generated_30d']} bot-decisions in 30 dagen",
+                    f"{metrics['decision_churn_events_30d']} expliciete decision-churn events",
+                ],
+            })
+        if metrics["plan_deviation_events_30d"] > 0 or metrics["execution_pressure_events_30d"] > 0:
+            memory_cards.append({
+                "type": "execution_pressure",
+                "label": "Risk-officer frictie blijft nodig",
+                "confidence": "medium",
+                "summary": "Er zijn plan-afwijking of live/manual execution pressure events gevonden.",
+                "evidence": [
+                    f"{metrics['plan_deviation_events_30d']} plan-afwijking events",
+                    f"{metrics['execution_pressure_events_30d']} execution-pressure events",
+                ],
+            })
+        if metrics["configuration_changes_30d"] >= 6:
+            memory_cards.append({
+                "type": "configuration_churn",
+                "label": "Veel configuratiebeweging",
+                "confidence": "medium",
+                "summary": "Je past relatief vaak setups, strategies, bots of indicatoren aan. Finn moet vaker vragen of dit verbetering of richtingwissel is.",
+                "evidence": [
+                    f"{metrics['configuration_changes_30d']} configuratiewijzigingen in 30 dagen",
+                    f"{metrics['plan_creates_30d']} plannen, {metrics['strategy_changes_30d']} strategies, {metrics['bot_changes_30d']} bots, {metrics['indicator_changes_30d']} indicators",
+                ],
+            })
+        if metrics["skipped_30d"] + metrics["snoozed_30d"] + metrics["monitor_30d"] >= 2:
+            memory_cards.append({
+                "type": "disciplined_waiting",
+                "label": "Bewust wachten",
+                "confidence": "medium",
+                "summary": "Je gebruikt skip, monitor of later-opnieuw-bekijken als frictie in plaats van direct door te drukken.",
+                "evidence": [
+                    f"{metrics['skipped_30d']} skips",
+                    f"{metrics['snoozed_30d']} snoozes",
+                    f"{metrics['monitor_30d']} monitor-acties",
+                ],
+            })
+
+        status = "not_enough_data"
+        if metrics["actions_30d"] >= 8 and days_observed >= 3:
+            status = "memory_ready"
+        elif metrics["actions_30d"] >= 3:
+            status = "early_memory"
+
+        if not memory_cards and status != "not_enough_data":
+            memory_cards.append({
+                "type": "steady_operator",
+                "label": "Voorzichtig stabiel gedrag",
+                "confidence": "low",
+                "summary": "Ik zie nog geen zwaar gedragsrisico in je recente Finn-activiteit, maar de historie is nog beperkt.",
+                "evidence": [f"{metrics['actions_30d']} acties in {days_observed} dag(en)"],
+            })
+
+        previous_delta = metrics["actions_30d"] - metrics["previous_actions_30d"]
+        return {
+            "status": status,
+            "period": "last_30_days",
+            "advice_only": True,
+            "metrics": metrics,
+            "memory_cards": memory_cards,
+            "behavioral_profile": behavioral.get("metrics") and self._behavioral_profile_from_metrics(behavioral.get("metrics") or {}, behavioral.get("patterns") or []),
+            "month_over_month": {
+                "current_actions": metrics["actions_30d"],
+                "previous_actions": metrics["previous_actions_30d"],
+                "delta": previous_delta,
+                "summary": (
+                    "nog geen vorige 30-dagen baseline."
+                    if metrics["previous_actions_30d"] == 0 else
+                    f"{abs(previous_delta)} acties {'meer' if previous_delta > 0 else 'minder' if previous_delta < 0 else 'evenveel'} dan de vorige 30 dagen."
+                ),
+            },
+            "memory_policy": {
+                "source": "ai_pending_actions",
+                "stores_new_memory": False,
+                "rule": "Finn mag alleen patronen noemen die door audit-events worden ondersteund.",
+                "not_enough_for": [
+                    "performance-koppeling zonder PnL/result-data",
+                    "revenge-trading zonder verliescontext",
+                    "persoonlijkheidslabels zonder langere historie",
+                ],
+            },
+            "evidence": self._weekly_reflection_evidence(items_30d[:10]),
+            "safe_next_step": (
+                "Blijf Mission Control gebruiken en laat Finn overrides, skips en reviews vastleggen; daarna kan dit profiel sterker worden."
+                if status != "memory_ready" else
+                "Gebruik dit memory-profiel als frictielaag: bij vergelijkbare signalen moet Finn vertragen, niet versnellen."
+            ),
+        }
+
+    def _behavioral_memory_message(self, memory: Dict[str, Any]) -> str:
+        metrics = memory.get("metrics") or {}
+        lines = [
+            "Gedragsrapport op basis van je echte Finn-activiteit van de laatste 30 dagen.",
+            (
+                "Status: nog te weinig bewijs voor lange-termijn conclusies."
+                if memory.get("status") == "not_enough_data" else
+                "Status: eerste behavioral memory-profiel beschikbaar."
+                if memory.get("status") == "early_memory" else
+                "Status: behavioral memory is bruikbaar als risk-officer context."
+            ),
+            (
+                "30-dagen metrics: "
+                f"{metrics.get('actions_30d', 0)} acties, "
+                f"{metrics.get('bot_decisions_generated_30d', 0)} bot-decisions, "
+                f"{metrics.get('configuration_changes_30d', 0)} configuratiewijzigingen, "
+                f"{metrics.get('plan_deviation_events_30d', 0)} plan-afwijking events, "
+                f"{metrics.get('decision_churn_events_30d', 0)} decision-churn events."
+            ),
+        ]
+        mom = memory.get("month_over_month") or {}
+        if mom.get("summary"):
+            lines.append(f"Vergeleken met vorige periode: {mom.get('summary')}")
+        cards = memory.get("memory_cards") or []
+        if cards:
+            lines.append("Wat Finn voorzichtig mag onthouden:")
+            for card in cards[:4]:
+                lines.append(f"- {card.get('label')}: {card.get('summary')} ({card.get('confidence')} confidence)")
+        policy = memory.get("memory_policy") or {}
+        not_enough = policy.get("not_enough_for") or []
+        if not_enough:
+            lines.append("Wat Finn nog niet mag concluderen:")
+            lines.extend([f"- {item}" for item in not_enough[:3]])
+        lines.append(f"Veilige volgende stap: {memory.get('safe_next_step')}")
+        return "\n".join([line for line in lines if line])
 
     def _behavioral_profile_from_metrics(self, metrics: Dict[str, Any], patterns: List[str]) -> Dict[str, Any]:
         if metrics.get("actions_7d", 0) < 3:
@@ -5214,7 +5470,7 @@ class FinnPlanService:
               AND status IN ('pending', 'executed', 'failed')
             ORDER BY created_at DESC
             LIMIT :limit
-        """), {"user_id": user_id, "limit": max(1, min(limit, 20))})
+        """), {"user_id": user_id, "limit": max(1, min(limit, 200))})
         return [self._mission_activity_item(dict(row._mapping)) for row in rows.fetchall()]
 
     def _mission_activity_item(self, row: Dict[str, Any]) -> Dict[str, Any]:
