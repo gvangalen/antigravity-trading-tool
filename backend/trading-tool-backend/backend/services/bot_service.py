@@ -21,6 +21,7 @@ from backend.services.exchange_service import ExchangeService
 
 logger = logging.getLogger(__name__)
 LIVE_EXECUTION_STALE_AFTER_MINUTES = 60
+LIVE_PREFLIGHT_TOKEN_TTL_MINUTES = 15
 
 
 def _utc_db_timestamp() -> datetime:
@@ -540,6 +541,76 @@ class BotService:
             })
         return freshness
 
+    async def require_recent_live_preflight(self, user_id: int, bot_id: int, token: Optional[str]) -> Dict[str, Any]:
+        token = str(token or "").strip()
+        if not token:
+            raise HTTPException(409, {
+                "code": "LIVE_PREFLIGHT_REQUIRED",
+                "message": "Live manual orders vereisen eerst een recente Finn live preflight.",
+                "safe_next_step": "Vraag Finn: Doe live preflight voor deze bot-decision.",
+            })
+        row = await self.session.execute(text("""
+            SELECT payload
+            FROM ai_pending_actions
+            WHERE id = :token
+              AND user_id = :user_id
+              AND status = 'executed'
+            LIMIT 1
+        """), {"token": token, "user_id": user_id})
+        existing = row.mappings().first()
+        if not existing:
+            raise HTTPException(409, {
+                "code": "LIVE_PREFLIGHT_INVALID",
+                "message": "Live preflight token is niet gevonden of nog niet succesvol uitgevoerd.",
+                "safe_next_step": "Voer de live preflight opnieuw uit via Finn.",
+            })
+        payload = existing["payload"] or {}
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        action = payload.get("action") if isinstance(payload.get("action"), dict) else {}
+        result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+        verified = result.get("verified") if isinstance(result.get("verified"), dict) else {}
+        if action.get("type") != "live_preflight_bot_decision":
+            raise HTTPException(409, {
+                "code": "LIVE_PREFLIGHT_INVALID",
+                "message": "Het meegegeven token is geen live preflight token.",
+            })
+        if int((result.get("bot_id") or (action.get("payload") or {}).get("bot_id") or 0)) != int(bot_id):
+            raise HTTPException(409, {
+                "code": "LIVE_PREFLIGHT_BOT_MISMATCH",
+                "message": "Live preflight token hoort bij een andere bot.",
+            })
+        timestamp = self._parse_execution_timestamp(payload.get("updated_at"))
+        if not timestamp:
+            raise HTTPException(409, {
+                "code": "LIVE_PREFLIGHT_TIMESTAMP_UNKNOWN",
+                "message": "Live preflight timestamp ontbreekt; voer de preflight opnieuw uit.",
+            })
+        age_minutes = max(0, int((datetime.now(timezone.utc) - timestamp).total_seconds() // 60))
+        if age_minutes > LIVE_PREFLIGHT_TOKEN_TTL_MINUTES:
+            raise HTTPException(409, {
+                "code": "LIVE_PREFLIGHT_STALE",
+                "message": f"Live preflight is {age_minutes} minuten oud; voer eerst opnieuw preflight uit.",
+                "age_minutes": age_minutes,
+                "stale_after_minutes": LIVE_PREFLIGHT_TOKEN_TTL_MINUTES,
+            })
+        if not (verified.get("live_preflight") and verified.get("fresh_decision_context")):
+            raise HTTPException(409, {
+                "code": "LIVE_PREFLIGHT_NOT_APPROVED",
+                "message": "Laatste live preflight was niet volledig groen.",
+                "verified": verified,
+                "freshness": result.get("freshness"),
+                "safe_next_step": "Los de preflight-blocker op en voer daarna opnieuw preflight uit.",
+            })
+        return {
+            "token": token,
+            "age_minutes": age_minutes,
+            "stale_after_minutes": LIVE_PREFLIGHT_TOKEN_TTL_MINUTES,
+            "decision_id": result.get("decision_id") or (action.get("payload") or {}).get("decision_id"),
+            "freshness": result.get("freshness"),
+            "verified": verified,
+        }
+
     def _as_float(self, value: Any) -> Optional[float]:
         if value is None:
             return None
@@ -853,6 +924,8 @@ class BotService:
                     ),
                 })
             await self.require_fresh_live_decision_context(user_id, payload.bot_id)
+            preflight_token = payload.live_preflight_token or payload.live_preflight_action_id
+            await self.require_recent_live_preflight(user_id, payload.bot_id, preflight_token)
             
         # 2. Fetch current stats
         stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())

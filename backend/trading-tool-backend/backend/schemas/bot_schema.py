@@ -47,6 +47,8 @@ class BotManualOrderSchema(BaseModel):
     value_eur: Optional[float] = None
     idempotency_key: Optional[str] = None
     risk_acknowledged: bool = False
+    live_preflight_token: Optional[str] = None
+    live_preflight_action_id: Optional[str] = None
 
 class TradePlanUpsertSchema(BaseModel):
     entry_plan: List[Dict[str, Any]] = []

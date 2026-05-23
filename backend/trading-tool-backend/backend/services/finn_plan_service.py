@@ -8143,6 +8143,7 @@ class FinnPlanService:
             "action_id": action_id,
             "bot_id": bot_id,
             "decision_id": decision_id,
+            "live_preflight_token": action_id,
             "verified": {
                 "live_preflight": ready,
                 "live_bot": bool(bot and bot.get("is_live")),

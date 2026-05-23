@@ -14,6 +14,17 @@ class _FakeResult:
         return self._row
 
 
+class _FakeMappingResult:
+    def __init__(self, row=None):
+        self._row = row
+
+    def mappings(self):
+        return self
+
+    def first(self):
+        return self._row
+
+
 class _FakeSession:
     def __init__(self, *, duplicate_strategy_bot_id=None):
         self.duplicate_strategy_bot_id = duplicate_strategy_bot_id
@@ -78,6 +89,14 @@ class _ManualOrderRepo:
 class _NoExchangeKeys:
     async def get_active_keys(self, user_id):
         return []
+
+
+class _PreflightSession:
+    def __init__(self, payload):
+        self.payload = payload
+
+    async def execute(self, query, params=None):
+        return _FakeMappingResult({"payload": self.payload} if self.payload else None)
 
 
 def test_bot_payload_validation_normalizes_transactional_fields():
@@ -246,6 +265,9 @@ def test_live_manual_order_checks_exchange_keys_before_order_insert():
     repo = _ManualOrderRepo()
     service.repository = repo
     service.exchange_repo = _NoExchangeKeys()
+    async def _preflight_ok(user_id, bot_id, token):
+        return {"token": token}
+    service.require_recent_live_preflight = _preflight_ok
     payload = BotManualOrderSchema(
         bot_id=9,
         symbol="BTC",
@@ -254,6 +276,7 @@ def test_live_manual_order_checks_exchange_keys_before_order_insert():
         price=50000,
         idempotency_key="manual-live-test-2",
         risk_acknowledged=True,
+        live_preflight_token="preflight-ok",
     )
 
     import asyncio
@@ -263,6 +286,81 @@ def test_live_manual_order_checks_exchange_keys_before_order_insert():
     assert exc.value.status_code == 400
     assert "exchange keys" in exc.value.detail
     assert repo.created_orders == 0
+
+
+def test_live_manual_order_requires_recent_live_preflight_token():
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo()
+    service.repository = repo
+    payload = BotManualOrderSchema(
+        bot_id=9,
+        symbol="BTC",
+        side="buy",
+        quantity=0.001,
+        price=50000,
+        idempotency_key="manual-live-test-preflight",
+        risk_acknowledged=True,
+    )
+
+    import asyncio
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=1))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_PREFLIGHT_REQUIRED"
+    assert repo.created_orders == 0
+
+
+def test_recent_live_preflight_token_must_be_successful_and_recent():
+    now = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "updated_at": now,
+        "action": {
+            "type": "live_preflight_bot_decision",
+            "payload": {"bot_id": 9, "decision_id": 123},
+        },
+        "result": {
+            "bot_id": 9,
+            "decision_id": 123,
+            "verified": {
+                "live_preflight": True,
+                "fresh_decision_context": True,
+            },
+            "freshness": {"status": "fresh"},
+        },
+    }
+    service = BotService(_PreflightSession(payload))
+
+    import asyncio
+    result = asyncio.run(service.require_recent_live_preflight(1, 9, "token-123"))
+
+    assert result["token"] == "token-123"
+    assert result["decision_id"] == 123
+    assert result["verified"]["live_preflight"] is True
+
+
+def test_recent_live_preflight_token_rejects_failed_preflight():
+    now = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "updated_at": now,
+        "action": {"type": "live_preflight_bot_decision", "payload": {"bot_id": 9}},
+        "result": {
+            "bot_id": 9,
+            "verified": {
+                "live_preflight": False,
+                "fresh_decision_context": False,
+            },
+            "freshness": {"status": "stale"},
+        },
+    }
+    service = BotService(_PreflightSession(payload))
+
+    import asyncio
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_recent_live_preflight(1, 9, "token-123"))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_PREFLIGHT_NOT_APPROVED"
 
 
 def test_live_manual_order_blocks_when_decision_context_is_missing():
