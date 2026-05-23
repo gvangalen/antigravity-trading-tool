@@ -1629,6 +1629,8 @@ def test_portfolio_daily_coach_prioritizes_active_blocked_and_scoreless_assets()
     assert "Portfolio-risico" in message
     assert "Agent-verdicts:" in message
     assert analysis["agent_controller"]["dominant_agent"] in {"macro_agent", "risk_agent"}
+    assert analysis["agent_controller"]["primary_action"]["prompt"]
+    assert analysis["agent_controller"]["primary_action"]["source"] == "agent_controller"
     assert "Finn Controller:" in message
     assert "advies-only" in message
 
@@ -2202,8 +2204,11 @@ def test_agent_controller_ranks_verdicts_and_biases_mission_queue():
     updated = service._apply_agent_controller_to_mission(mission, controller)
 
     assert controller["dominant_agent"] == "risk_agent"
+    assert controller.get("primary_action") is None
     assert controller["ranked_verdicts"][0]["controller_rank"] == 1
     assert updated["summary"]["dominant_agent"] == "risk_agent"
+    assert updated["agent_controller"]["primary_action"]["prompt"]
+    assert updated["agent_controller"]["primary_item_id"] == updated["workqueue"][0]["id"]
     assert updated["workqueue_groups"][0]["key"] == "first"
     assert updated["workqueue"][0]["type"] == "blocked_plan"
     assert updated["workqueue"][0]["controller_rank_boost"] > 0

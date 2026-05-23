@@ -227,6 +227,11 @@ function FinnAgentController({ controller }) {
           {controller.next_action}
         </p>
       )}
+      {controller.primary_action?.prompt && (
+        <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white/75 dark:bg-slate-950/40 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em]">
+          Primaire handoff: {controller.primary_action.label || controller.primary_action.prompt}
+        </div>
+      )}
     </div>
   );
 }

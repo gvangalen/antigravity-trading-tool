@@ -1328,6 +1328,11 @@ class FinnPlanService:
             analysis["agent_verdicts"] = agent_verdicts
             response = self._status_message(asset, analysis, source="saved_setup")
         agent_controller = self._build_agent_controller(agent_verdicts, context="plan_status")
+        agent_controller["primary_action"] = self._agent_controller_primary_action(
+            agent_controller,
+            [],
+            asset=asset,
+        )
         analysis["agent_controller"] = agent_controller
 
         return {
@@ -4273,6 +4278,11 @@ class FinnPlanService:
             indicator_analysis=indicator_analysis,
         )
         agent_controller = self._build_agent_controller(agent_verdicts, context="daily_coach")
+        agent_controller["primary_action"] = self._agent_controller_primary_action(
+            agent_controller,
+            follow_up_actions,
+            asset=asset,
+        )
 
         return {
             "asset": asset,
@@ -4575,6 +4585,11 @@ class FinnPlanService:
             portfolio_readiness,
         )
         agent_controller = self._build_agent_controller(agent_verdicts, context="portfolio_daily_coach")
+        agent_controller["primary_action"] = self._agent_controller_primary_action(
+            agent_controller,
+            follow_up_actions,
+            asset=(ranked[0].get("asset") if ranked else None),
+        )
 
         return {
             "scope": "portfolio",
@@ -5131,7 +5146,7 @@ class FinnPlanService:
             "day_log": day_log,
             "behavioral_insight": behavioral_insight,
             "agent_verdicts": agent_verdicts,
-            "agent_controller": agent_controller,
+            "agent_controller": mission.get("agent_controller") or agent_controller,
             "data_readiness": analysis.get("data_readiness") or {},
             "portfolio_risk": mission.get("portfolio_risk") or analysis.get("portfolio_risk") or {},
             "source": {
@@ -5241,6 +5256,79 @@ class FinnPlanService:
             },
         }
 
+    def _agent_handoff_preferences(self, agent: Optional[str]) -> List[str]:
+        return {
+            "risk_agent": ["daily_coach", "indicator_insight", "daily_score_refresh", "bot_decision_review"],
+            "macro_agent": ["indicator_insight", "indicator_config", "daily_score_refresh"],
+            "technical_agent": ["indicator_insight", "indicator_config", "daily_score_refresh"],
+            "market_agent": ["indicator_insight", "daily_score_refresh", "indicator_config"],
+            "strategy_agent": ["bot_decision", "indicator_insight"],
+            "execution_agent": ["bot_decision_review", "bot_decision", "daily_score_refresh"],
+            "memory_agent": ["behavioral_memory", "weekly_reflection", "bot_decision_review"],
+        }.get(agent or "", ["daily_coach", "indicator_insight", "daily_score_refresh", "bot_decision"])
+
+    def _agent_controller_primary_action(
+        self,
+        controller: Dict[str, Any],
+        actions: List[Dict[str, Any]],
+        *,
+        asset: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        preferences = self._agent_handoff_preferences(controller.get("dominant_agent"))
+        candidates = [action for action in actions or [] if isinstance(action, dict)]
+        for handoff in preferences:
+            match = next((action for action in candidates if action.get("handoff") == handoff), None)
+            if match:
+                return {
+                    **match,
+                    "source": "agent_controller",
+                    "dominant_agent": controller.get("dominant_agent"),
+                    "controller_status": controller.get("status"),
+                }
+        if candidates:
+            return {
+                **candidates[0],
+                "source": "agent_controller",
+                "dominant_agent": controller.get("dominant_agent"),
+                "controller_status": controller.get("status"),
+            }
+
+        symbol = asset or "BTC"
+        agent = controller.get("dominant_agent")
+        if agent == "execution_agent":
+            label = "Maak bot-decision"
+            prompt = f"Maak bot-decision voor {symbol}"
+            handoff = "bot_decision"
+            requires_confirmation = True
+        elif agent == "memory_agent":
+            label = "Gedragsrapport bekijken"
+            prompt = "Geef mijn gedragsrapport van de laatste 30 dagen"
+            handoff = "behavioral_memory"
+            requires_confirmation = False
+        elif agent in {"macro_agent", "technical_agent", "market_agent"}:
+            category = (agent or "macro_agent").replace("_agent", "")
+            label = f"{category.capitalize()} uitleg"
+            prompt = f"Waarom blokkeert {category} mijn {symbol} setup?"
+            handoff = "indicator_insight"
+            requires_confirmation = False
+        else:
+            label = "Portfolio-risico bekijken" if not asset else "Planstatus bekijken"
+            prompt = "Waar zit mijn grootste portfolio risico?" if not asset else f"Waarom is mijn {symbol} setup inactief?"
+            handoff = "daily_coach" if not asset else "plan_status"
+            requires_confirmation = False
+
+        return {
+            "type": "chat_prompt",
+            "label": label,
+            "prompt": prompt,
+            "handoff": handoff,
+            "requires_confirmation": requires_confirmation,
+            "source": "agent_controller",
+            "dominant_agent": agent,
+            "controller_status": controller.get("status"),
+            "asset": asset,
+        }
+
     def _mission_item_matches_agent(self, item: Dict[str, Any], agent: Optional[str]) -> bool:
         if not agent:
             return False
@@ -5290,6 +5378,17 @@ class FinnPlanService:
             workqueue.append(updated)
         workqueue = self._dedupe_workqueue(workqueue)[:10]
         workqueue_groups = self._mission_workqueue_groups(workqueue)
+        primary_item = next((item for item in workqueue if item.get("controller_rank_boost")), None) or (workqueue[0] if workqueue else None)
+        primary_action = (primary_item or {}).get("next_best_action") if primary_item else None
+        controller = {
+            **controller,
+            "primary_action": self._agent_controller_primary_action(
+                controller,
+                [primary_action] if isinstance(primary_action, dict) else [],
+                asset=(primary_item or {}).get("asset") if primary_item else None,
+            ),
+            "primary_item_id": (primary_item or {}).get("id"),
+        }
         mission = {
             **mission,
             "workqueue": self._flatten_mission_workqueue_groups(workqueue_groups),
@@ -6071,6 +6170,16 @@ class FinnPlanService:
 
         agent_verdicts = self._build_report_agent_verdicts(metrics, interventions, behavioral)
         agent_controller = self._build_agent_controller(agent_verdicts, context="finn_report")
+        agent_controller["primary_action"] = self._agent_controller_primary_action(
+            agent_controller,
+            [{
+                "type": "chat_prompt",
+                "label": "Open Mission Control",
+                "prompt": "Open Mission Control",
+                "handoff": "mission_control",
+                "requires_confirmation": False,
+            }],
+        )
 
         return {
             "report_type": "finn_reflection_report",

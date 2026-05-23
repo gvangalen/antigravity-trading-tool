@@ -251,6 +251,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           handoff: item.handoff || item.flow || "chat",
           type: item.type || "chat_prompt",
           requiresConfirmation: Boolean(item.requires_confirmation),
+          source: item.source,
         };
       })
       .filter(Boolean)
@@ -261,14 +262,15 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     if (Array.isArray(message?.actions) && message.actions.some((action) => action?.requires_confirmation)) {
       return [];
     }
+    const controllerAction = message?.state?.analysis?.agent_controller?.primary_action || message?.state?.agent_controller?.primary_action;
     const structured = message?.state?.analysis?.follow_up_actions;
     if (Array.isArray(structured) && structured.length > 0) {
-      return normalizeFollowUpActions(structured);
+      return normalizeFollowUpActions([controllerAction, ...structured].filter(Boolean));
     }
     if (Array.isArray(message?.suggestedActions) && message.suggestedActions.length > 0) {
-      return normalizeFollowUpActions(message.suggestedActions);
+      return normalizeFollowUpActions([controllerAction, ...message.suggestedActions].filter(Boolean));
     }
-    return normalizeFollowUpActions(parseSuggestedActions(message?.text));
+    return normalizeFollowUpActions([controllerAction, ...parseSuggestedActions(message?.text)].filter(Boolean));
   };
 
   const getBriefingFollowUpActions = () => {
@@ -281,7 +283,10 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   };
 
   const getMissionOpenActions = () => {
-    return normalizeFollowUpActions(missionControl?.open_actions || []);
+    return normalizeFollowUpActions([
+      missionControl?.agent_controller?.primary_action,
+      ...(missionControl?.open_actions || []),
+    ].filter(Boolean));
   };
 
   const followUpLabel = (handoff) => {
@@ -293,6 +298,11 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       bot_decision_review: "Review",
       bot_execution_decision: "Confirm",
       indicator_insight: "Insight",
+      plan_status: "Status",
+      daily_coach: "Coach",
+      behavioral_memory: "Memory",
+      weekly_reflection: "Reflect",
+      mission_control: "Control",
     };
     return labels[handoff] || "Open";
   };
@@ -434,6 +444,16 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           <p className="mt-1 text-[8px] font-black uppercase tracking-widest opacity-75">
             {controller.next_action}
           </p>
+        )}
+        {controller.primary_action?.prompt && (
+          <button
+            type="button"
+            onClick={() => handleFollowUpAction(controller.primary_action)}
+            className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white/80 dark:bg-slate-950/45 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest shadow-sm transition hover:bg-white dark:hover:bg-slate-950"
+          >
+            {followUpIcon(controller.primary_action.handoff)}
+            {controller.primary_action.label || controller.primary_action.prompt}
+          </button>
         )}
       </div>
     );
