@@ -159,6 +159,16 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
   const context = getContext();
 
+  const getLatestAssistantState = () => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const state = messages[i]?.state;
+      if (messages[i]?.role === "assistant" && state?.current_flow) {
+        return state;
+      }
+    }
+    return null;
+  };
+
   const getFlowProgress = (state) => {
     if (!state || !state.current_flow || state.current_flow === "none") return null;
     
@@ -622,7 +632,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     }
   }
 
-  async function handleChat(directQuery, isSilent = false) {
+  async function handleChat(directQuery, isSilent = false, overrideContext = null) {
     const activeQuery = directQuery !== undefined ? directQuery : query;
     if (!activeQuery.trim()) return;
 
@@ -650,9 +660,14 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         { role: "user", text: activeQuery }
       ];
 
+      const latestAssistantState = overrideContext || activeState || getLatestAssistantState();
+      const requestContext = latestAssistantState?.current_flow
+        ? { ...context, ...latestAssistantState }
+        : context;
+
       await assistantChatStream(
         activeQuery,
-        context,
+        requestContext,
         cleanHistory,
         (token) => {
           // onChunk
@@ -708,7 +723,15 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             setFinnDraft(envelope.draft || null);
           }
 
-          if (envelope.state && envelope.state.status === "collecting" && envelope.state.current_flow !== "none") {
+          if (
+            envelope.state &&
+            envelope.state.current_flow !== "none" &&
+            (
+              envelope.state.status === "collecting" ||
+              envelope.state.pending_behavioral_memory_friction ||
+              envelope.next_question === "behavioral_memory_ack"
+            )
+          ) {
             setActiveState(envelope.state);
           } else {
             setActiveState(null);
@@ -1328,6 +1351,89 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     );
   };
 
+  const renderBehavioralMemoryAckCard = (message) => {
+    const friction = message.state?.pending_behavioral_memory_friction || message.state?.memory_friction || null;
+    const requiresAck = Boolean(
+      friction?.requires_ack &&
+      !friction?.acknowledged &&
+      (
+        message.nextQuestion === "behavioral_memory_ack" ||
+        (message.missingFields || []).includes("behavioral_memory_ack") ||
+        message.state?.status === "blocked_by_behavioral_memory"
+      )
+    );
+    if (!requiresAck) return null;
+
+    const evidence = Array.isArray(friction.evidence) ? friction.evidence : [];
+    const ackPhrase = friction.ack_phrase || "bewust doorgaan";
+
+    return (
+      <div className="mt-4 rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/90 dark:bg-amber-950/25 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
+            <Shield size={14} />
+            Behavioral Memory Check
+          </div>
+          <span className="shrink-0 rounded-full border border-amber-200 dark:border-amber-900/60 bg-white/80 dark:bg-slate-950/40 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
+            Bewuste bevestiging nodig
+          </span>
+        </div>
+
+        <div className="space-y-1">
+          <div className="text-sm font-black text-slate-950 dark:text-slate-50">
+            Finn remt deze actie eerst af.
+          </div>
+          <p className="text-xs font-semibold leading-relaxed text-amber-900 dark:text-amber-100">
+            {friction.message || "Je recente gedrag laat een patroon zien waar Finn extra voorzichtig mee wil zijn."}
+          </p>
+        </div>
+
+        {evidence.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
+              Bewijs uit je recente Finn-activiteit
+            </div>
+            <div className="grid grid-cols-1 gap-1">
+              {evidence.slice(0, 4).map((item, index) => (
+                <div
+                  key={`${item}-${index}`}
+                  className="rounded-lg border border-amber-100 dark:border-amber-900/40 bg-white/75 dark:bg-slate-950/35 px-2.5 py-2 text-[11px] font-bold leading-snug text-slate-800 dark:text-slate-100"
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {friction.safe_alternative && (
+          <p className="text-[11px] font-bold leading-snug text-slate-700 dark:text-slate-200">
+            Veilige route: {friction.safe_alternative}
+          </p>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+          <button
+            onClick={() => handleChat(ackPhrase, false, message.state)}
+            disabled={loading || executingAction}
+            className="flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-amber-600/15 transition-colors hover:bg-amber-700 disabled:opacity-60"
+          >
+            <Shield size={14} />
+            Bewust doorgaan
+          </button>
+          <button
+            onClick={() => handleChat("Welke bot-decisions moet ik eerst reviewen?", false, {})}
+            disabled={loading || executingAction}
+            className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/40 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200 transition-colors hover:border-slate-300 dark:hover:border-slate-700 disabled:opacity-60"
+          >
+            <ListChecks size={14} />
+            Eerst reviewen
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const renderInlineActionCard = (message) => {
     const actions = Array.isArray(message.actions) ? message.actions : [];
     const actionOnly = actions.filter((action) => (
@@ -1866,6 +1972,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                     ✓ Concept Succesvol Opgeslagen!
                   </div>
                 )}
+                {renderBehavioralMemoryAckCard(m)}
                 {renderDraftCard(m)}
                 {renderInlineActionCard(m)}
                 {m.isError && (
