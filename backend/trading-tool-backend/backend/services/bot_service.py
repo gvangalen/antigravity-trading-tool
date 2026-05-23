@@ -667,20 +667,31 @@ class BotService:
             )
             if total_equity > 0:
                 projected_portfolio_exposure_pct = round(((current_position_value + notional) / total_equity) * 100, 2)
+                bot_limit = float(bot.get("max_asset_exposure_pct") or 100)
+                asset_limit = min(bot_limit, LIVE_MAX_ASSET_EXPOSURE_PCT)
+                projected_asset_exposure_pct = round(((asset_position_value + notional) / total_equity) * 100, 2)
+                asset_exposure_block = None
+                if projected_asset_exposure_pct > asset_limit:
+                    asset_exposure_block = {
+                        "code": "LIVE_ASSET_EXPOSURE_LIMIT",
+                        "symbol": symbol,
+                        "projected_exposure_pct": projected_asset_exposure_pct,
+                        "limit_pct": asset_limit,
+                    }
                 if projected_portfolio_exposure_pct > LIVE_MAX_PORTFOLIO_EXPOSURE_PCT:
-                    raise HTTPException(409, {
+                    detail = {
                         "code": "LIVE_PORTFOLIO_EXPOSURE_LIMIT",
                         "message": f"Live order zou portfolio-exposure naar {projected_portfolio_exposure_pct}% brengen.",
                         "projected_exposure_pct": projected_portfolio_exposure_pct,
                         "limit_pct": LIVE_MAX_PORTFOLIO_EXPOSURE_PCT,
                         "behavioral_event": self._manual_order_guardrail_event(bot, payload, notional, "portfolio exposure limiet overschreden"),
-                    })
+                    }
+                    if asset_exposure_block:
+                        detail["also_blocked_by"] = [asset_exposure_block]
+                    raise HTTPException(409, detail)
                 checks.append({"code": "portfolio_exposure", "ok": True, "projected_pct": projected_portfolio_exposure_pct, "limit_pct": LIVE_MAX_PORTFOLIO_EXPOSURE_PCT})
 
-                bot_limit = float(bot.get("max_asset_exposure_pct") or 100)
-                asset_limit = min(bot_limit, LIVE_MAX_ASSET_EXPOSURE_PCT)
-                projected_asset_exposure_pct = round(((asset_position_value + notional) / total_equity) * 100, 2)
-                if projected_asset_exposure_pct > asset_limit:
+                if asset_exposure_block:
                     raise HTTPException(409, {
                         "code": "LIVE_ASSET_EXPOSURE_LIMIT",
                         "message": f"Live order zou {symbol} exposure naar {projected_asset_exposure_pct}% brengen.",
