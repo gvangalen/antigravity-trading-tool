@@ -129,6 +129,23 @@ def test_finn_reflection_report_summarizes_operator_activity():
     assert "los van je dagelijkse trading report" in message
 
 
+def test_finn_report_response_exposes_top_level_state_contract(monkeypatch):
+    async def activity(user_id, limit=200):
+        return []
+
+    service = _service()
+    monkeypatch.setattr(service, "_get_recent_finn_activity", activity)
+
+    result = asyncio.run(service.build_finn_report_response(1, "Geef mijn Finn rapport van vandaag"))
+
+    assert result["intent"] == "finn_report"
+    assert result["state"]["report_type"] == "finn_reflection_report"
+    assert result["state"]["report_family"] == "finn_reports"
+    assert result["state"]["separate_from"] == "daily_trading_report"
+    assert result["state"]["source"]["primary"] == "ai_pending_actions"
+    assert result["state"]["source"] == result["state"]["analysis"]["source"]
+
+
 def test_one_shot_weekly_dca_is_confirmable_and_creates_bot_by_default():
     result = _service().build_response("Maak een wekelijkse BTC DCA van 100 euro")
 

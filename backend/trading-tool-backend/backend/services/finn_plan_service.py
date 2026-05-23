@@ -4699,10 +4699,12 @@ class FinnPlanService:
             "state": {
                 "current_flow": "finn_report",
                 "analysis": report,
+                "report_type": report.get("report_type"),
+                "report_family": report.get("report_family"),
+                "source": report.get("source"),
                 "behavioral_insight": behavioral,
                 "advice_only": True,
-                "report_family": "finn_reflection",
-                "separate_from": "daily_trading_report",
+                "separate_from": report.get("separate_from"),
             },
             "suggested_actions": [
                 "Vraag: geef mijn weekreflectie",
