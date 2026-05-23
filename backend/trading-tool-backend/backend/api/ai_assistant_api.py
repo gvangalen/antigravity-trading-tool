@@ -154,7 +154,10 @@ async def assistant_chat(
             finn_response = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
             finn_response["trace_id"] = trace_id
             return AssistantChatResponse(**finn_response)
-        if finn.looks_like_bot_decision_request(request.query):
+        if finn.looks_like_bot_decision_request(request.query) or (
+            context_payload.get("current_flow") == "bot_decision"
+            and context_payload.get("pending_behavioral_memory_friction")
+        ):
             finn_response = await finn.build_bot_decision_response(user_id, request.query, context_payload)
             finn_response["trace_id"] = trace_id
             return AssistantChatResponse(**finn_response)
@@ -374,7 +377,10 @@ async def assistant_chat_stream(
                 yield _sse_event("envelope", envelope)
                 return
 
-            if finn.looks_like_bot_decision_request(request.query):
+            if finn.looks_like_bot_decision_request(request.query) or (
+                context_payload.get("current_flow") == "bot_decision"
+                and context_payload.get("pending_behavioral_memory_friction")
+            ):
                 envelope = await finn.build_bot_decision_response(user_id, request.query, context_payload)
                 envelope["trace_id"] = trace_id
                 yield _sse_event("envelope", envelope)
