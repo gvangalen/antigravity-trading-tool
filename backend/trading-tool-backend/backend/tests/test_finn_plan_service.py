@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
+from fastapi import HTTPException
+
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.finn_plan_service import _utc_now
 from backend.services.finn_plan_service import empty_indicator_config_draft
@@ -3150,6 +3152,52 @@ def test_bot_execution_actions_are_confirmable_and_guarded():
     assert paper_action["guardrails"]["can_execute_without_user"] is False
     assert live_action["guardrails"]["live_preflight_only"] is True
     assert live_action["risk_level"] == "high"
+
+
+def test_live_preflight_blocks_on_stale_decision_context(monkeypatch):
+    service = _service()
+
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            return {"id": bot_id, "is_live": True}
+
+    class BotSvc:
+        def __init__(self, session):
+            self.session = session
+            self.repository = Repo()
+
+        async def require_fresh_live_decision_context(self, user_id, bot_id):
+            raise HTTPException(409, {
+                "code": "LIVE_EXECUTION_STALE_DATA",
+                "message": "Live execution vereist een recente bot-decision context.",
+                "freshness": {"status": "stale", "age_minutes": 90},
+            })
+
+    class ExchangeRepo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_active_keys(self, user_id):
+            return [{"id": 1}]
+
+    monkeypatch.setattr("backend.services.finn_plan_service.BotService", BotSvc)
+    monkeypatch.setattr("backend.services.finn_plan_service.ExchangeRepository", ExchangeRepo)
+
+    action = service._bot_execution_action(
+        "live_preflight_bot_decision",
+        {"decision_id": 22, "bot_id": 9, "asset": "BTC"},
+        is_live=True,
+    )
+
+    result = asyncio.run(service._execute_live_preflight_bot_decision_action(1, action))
+
+    assert result["ok"] is True
+    assert result["verified"]["live_preflight"] is False
+    assert result["verified"]["live_bot"] is True
+    assert result["verified"]["exchange_keys"] is True
+    assert result["verified"]["fresh_decision_context"] is False
+    assert result["stale_data_block"]["code"] == "LIVE_EXECUTION_STALE_DATA"
+    assert result["freshness"]["status"] == "stale"
 
 
 def test_bot_decision_memory_friction_blocks_even_with_open_reviews(monkeypatch):

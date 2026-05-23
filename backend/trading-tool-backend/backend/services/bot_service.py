@@ -20,6 +20,7 @@ from backend.engine.guardrails_engine import apply_guardrails
 from backend.services.exchange_service import ExchangeService
 
 logger = logging.getLogger(__name__)
+LIVE_EXECUTION_STALE_AFTER_MINUTES = 60
 
 
 def _utc_db_timestamp() -> datetime:
@@ -462,6 +463,83 @@ class BotService:
             "source": "manual_order",
         }
 
+    def _parse_execution_timestamp(self, value: Any) -> Optional[datetime]:
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        if isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            except ValueError:
+                return None
+        return None
+
+    def _decision_freshness(self, decision: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        if not decision:
+            return {
+                "fresh": False,
+                "status": "missing",
+                "age_minutes": None,
+                "stale_after_minutes": LIVE_EXECUTION_STALE_AFTER_MINUTES,
+                "reason": "Geen bot-decision van vandaag gevonden voor deze bot.",
+            }
+        timestamp = (
+            self._parse_execution_timestamp(decision.get("decision_ts"))
+            or self._parse_execution_timestamp(decision.get("updated_at"))
+            or self._parse_execution_timestamp(decision.get("created_at"))
+        )
+        if not timestamp:
+            return {
+                "fresh": False,
+                "status": "unknown",
+                "age_minutes": None,
+                "stale_after_minutes": LIVE_EXECUTION_STALE_AFTER_MINUTES,
+                "reason": "Bot-decision timestamp ontbreekt; live execution wordt geblokkeerd tot de data ververst is.",
+                "decision_id": decision.get("id"),
+            }
+        age_minutes = max(0, int((datetime.now(timezone.utc) - timestamp).total_seconds() // 60))
+        fresh = age_minutes <= LIVE_EXECUTION_STALE_AFTER_MINUTES
+        return {
+            "fresh": fresh,
+            "status": "fresh" if fresh else "stale",
+            "age_minutes": age_minutes,
+            "stale_after_minutes": LIVE_EXECUTION_STALE_AFTER_MINUTES,
+            "reason": None if fresh else f"Bot-decision is {age_minutes} minuten oud; ververs eerst de bot-decision of daily scores.",
+            "decision_id": decision.get("id"),
+            "source_timestamp": timestamp.isoformat(),
+        }
+
+    async def _latest_decision_freshness_for_bot(self, user_id: int, bot_id: int) -> Dict[str, Any]:
+        decisions = await self.repository.get_bot_decisions_by_date(user_id, date.today())
+        bot_decisions = [
+            item for item in decisions
+            if int(item.get("bot_id") or 0) == int(bot_id)
+        ]
+        latest = max(
+            bot_decisions,
+            key=lambda item: (
+                self._parse_execution_timestamp(item.get("decision_ts"))
+                or self._parse_execution_timestamp(item.get("updated_at"))
+                or self._parse_execution_timestamp(item.get("created_at"))
+                or datetime.min.replace(tzinfo=timezone.utc)
+            ),
+            default=None,
+        )
+        return self._decision_freshness(latest)
+
+    async def require_fresh_live_decision_context(self, user_id: int, bot_id: int) -> Dict[str, Any]:
+        freshness = await self._latest_decision_freshness_for_bot(user_id, bot_id)
+        if not freshness.get("fresh"):
+            raise HTTPException(409, {
+                "code": "LIVE_EXECUTION_STALE_DATA",
+                "message": "Live execution vereist een recente bot-decision context.",
+                "freshness": freshness,
+                "safe_next_step": "Ververs daily scores of maak eerst opnieuw een bot-decision.",
+            })
+        return freshness
+
     def _as_float(self, value: Any) -> Optional[float]:
         if value is None:
             return None
@@ -774,6 +852,7 @@ class BotService:
                         round(payload.quantity * payload.price, 2),
                     ),
                 })
+            await self.require_fresh_live_decision_context(user_id, payload.bot_id)
             
         # 2. Fetch current stats
         stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())

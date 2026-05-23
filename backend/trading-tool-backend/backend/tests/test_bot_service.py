@@ -1,5 +1,6 @@
 import pytest
 from fastapi import HTTPException
+from datetime import datetime, timedelta, timezone
 
 from backend.schemas.bot_schema import BotManualOrderSchema
 from backend.services.bot_service import BotService
@@ -31,8 +32,17 @@ class _FakeSession:
 
 
 class _ManualOrderRepo:
-    def __init__(self):
+    def __init__(self, decisions=None):
         self.created_orders = 0
+        self.decisions = decisions if decisions is not None else [
+            {
+                "id": 1,
+                "bot_id": 9,
+                "decision_ts": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+                "created_at": datetime.now(timezone.utc),
+            }
+        ]
 
     async def get_bot_config(self, user_id, bot_id):
         return {
@@ -60,6 +70,9 @@ class _ManualOrderRepo:
     async def create_manual_order(self, *args, **kwargs):
         self.created_orders += 1
         return 1, True
+
+    async def get_bot_decisions_by_date(self, user_id, decision_date):
+        return self.decisions
 
 
 class _NoExchangeKeys:
@@ -249,4 +262,59 @@ def test_live_manual_order_checks_exchange_keys_before_order_insert():
 
     assert exc.value.status_code == 400
     assert "exchange keys" in exc.value.detail
+    assert repo.created_orders == 0
+
+
+def test_live_manual_order_blocks_when_decision_context_is_missing():
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo(decisions=[])
+    service.repository = repo
+    payload = BotManualOrderSchema(
+        bot_id=9,
+        symbol="BTC",
+        side="buy",
+        quantity=0.001,
+        price=50000,
+        idempotency_key="manual-live-test-3",
+        risk_acknowledged=True,
+    )
+
+    import asyncio
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=1))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_EXECUTION_STALE_DATA"
+    assert exc.value.detail["freshness"]["status"] == "missing"
+    assert repo.created_orders == 0
+
+
+def test_live_manual_order_blocks_when_decision_context_is_stale():
+    service = BotService(_FakeSession())
+    stale_ts = datetime.now(timezone.utc) - timedelta(minutes=90)
+    repo = _ManualOrderRepo(decisions=[{
+        "id": 1,
+        "bot_id": 9,
+        "decision_ts": stale_ts,
+        "updated_at": stale_ts,
+        "created_at": stale_ts,
+    }])
+    service.repository = repo
+    payload = BotManualOrderSchema(
+        bot_id=9,
+        symbol="BTC",
+        side="buy",
+        quantity=0.001,
+        price=50000,
+        idempotency_key="manual-live-test-4",
+        risk_acknowledged=True,
+    )
+
+    import asyncio
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=1))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_EXECUTION_STALE_DATA"
+    assert exc.value.detail["freshness"]["status"] == "stale"
     assert repo.created_orders == 0

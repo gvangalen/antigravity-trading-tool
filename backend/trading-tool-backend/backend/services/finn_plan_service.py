@@ -8123,12 +8123,22 @@ class FinnPlanService:
         bot_service = BotService(self.session)
         bot = await bot_service.repository.get_bot_config(user_id, bot_id)
         keys = await ExchangeRepository(self.session).get_active_keys(user_id)
-        ready = bool(bot and bot.get("is_live") and keys)
+        freshness = None
+        stale_block = None
+        if bot and bot.get("is_live") and keys:
+            try:
+                freshness = await bot_service.require_fresh_live_decision_context(user_id, bot_id)
+            except HTTPException as exc:
+                stale_block = exc.detail
+        ready = bool(bot and bot.get("is_live") and keys and not stale_block)
         result = {
             "ok": True,
             "message": (
                 "Live preflight geslaagd. Review alsnog handmatig voordat je buiten Finn live uitvoert."
-                if ready else "Live preflight blokkeert: live bot of actieve exchange keys ontbreken."
+                if ready else (
+                    "Live preflight blokkeert: decision/score context is niet vers genoeg."
+                    if stale_block else "Live preflight blokkeert: live bot of actieve exchange keys ontbreken."
+                )
             ),
             "action_id": action_id,
             "bot_id": bot_id,
@@ -8137,8 +8147,13 @@ class FinnPlanService:
                 "live_preflight": ready,
                 "live_bot": bool(bot and bot.get("is_live")),
                 "exchange_keys": bool(keys),
+                "fresh_decision_context": bool(freshness and freshness.get("fresh")),
             },
         }
+        if freshness or stale_block:
+            result["freshness"] = freshness or (stale_block or {}).get("freshness")
+        if stale_block:
+            result["stale_data_block"] = stale_block
         behavioral_event = self._behavioral_event_from_execution_action(action, result_status="ready" if ready else "blocked")
         if behavioral_event:
             result["behavioral_event"] = behavioral_event
