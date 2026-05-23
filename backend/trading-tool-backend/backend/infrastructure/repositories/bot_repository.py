@@ -424,13 +424,26 @@ class BotRepository:
         row = result.fetchone()
         return float(row[0] or 0)
 
-    async def get_market_price(self, symbol: str) -> Optional[float]:
+    async def get_market_price_snapshot(self, symbol: str) -> Optional[dict]:
         query = text("""
-            SELECT price FROM market_data WHERE symbol=:symbol ORDER BY timestamp DESC LIMIT 1
+            SELECT price, timestamp
+            FROM market_data
+            WHERE symbol=:symbol
+            ORDER BY timestamp DESC
+            LIMIT 1
         """)
         result = await self.session.execute(query, {"symbol": symbol})
         row = result.fetchone()
-        return float(row[0]) if row and row[0] else None
+        if not row:
+            return None
+        return {
+            "price": float(row[0]) if row[0] is not None else None,
+            "timestamp": row[1],
+        }
+
+    async def get_market_price(self, symbol: str) -> Optional[float]:
+        snapshot = await self.get_market_price_snapshot(symbol)
+        return snapshot.get("price") if snapshot else None
 
     # ==========================
     # BOT TRADES

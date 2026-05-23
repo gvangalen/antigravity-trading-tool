@@ -27,6 +27,7 @@ LIVE_MAX_MANUAL_ORDER_EUR = float(os.getenv("LIVE_MAX_MANUAL_ORDER_EUR", "5000")
 LIVE_PORTFOLIO_DAILY_LIMIT_EUR = float(os.getenv("LIVE_PORTFOLIO_DAILY_LIMIT_EUR", "1000"))
 LIVE_MAX_PORTFOLIO_EXPOSURE_PCT = float(os.getenv("LIVE_MAX_PORTFOLIO_EXPOSURE_PCT", "95"))
 LIVE_MAX_ASSET_EXPOSURE_PCT = float(os.getenv("LIVE_MAX_ASSET_EXPOSURE_PCT", "70"))
+LIVE_MARKET_PRICE_STALE_AFTER_SECONDS = int(os.getenv("LIVE_MARKET_PRICE_STALE_AFTER_SECONDS", "300"))
 
 
 def _utc_db_timestamp() -> datetime:
@@ -727,6 +728,45 @@ class BotService:
 
         return {"ok": True, "checks": checks}
 
+    async def require_fresh_live_market_price(self, symbol: str) -> Dict[str, Any]:
+        symbol = str(symbol or "").upper()
+        snapshot = await self.repository.get_market_price_snapshot(symbol)
+        if not snapshot or snapshot.get("price") is None:
+            raise HTTPException(409, {
+                "code": "LIVE_MARKET_PRICE_MISSING",
+                "message": f"Geen recente marktprijs gevonden voor {symbol}; live order wordt geblokkeerd.",
+                "symbol": symbol,
+                "safe_next_step": "Ververs market data en doe de live preflight opnieuw.",
+            })
+        timestamp = self._parse_execution_timestamp(snapshot.get("timestamp"))
+        if not timestamp:
+            raise HTTPException(409, {
+                "code": "LIVE_MARKET_PRICE_TIMESTAMP_UNKNOWN",
+                "message": f"Marktprijs timestamp voor {symbol} ontbreekt; live order wordt geblokkeerd.",
+                "symbol": symbol,
+                "market_price": snapshot.get("price"),
+                "safe_next_step": "Ververs market data en doe de live preflight opnieuw.",
+            })
+        age_seconds = max(0, int((datetime.now(timezone.utc) - timestamp).total_seconds()))
+        if age_seconds > LIVE_MARKET_PRICE_STALE_AFTER_SECONDS:
+            raise HTTPException(409, {
+                "code": "LIVE_MARKET_PRICE_STALE",
+                "message": f"Marktprijs voor {symbol} is {age_seconds} seconden oud; live order wordt geblokkeerd.",
+                "symbol": symbol,
+                "market_price": snapshot.get("price"),
+                "market_timestamp": timestamp.isoformat(),
+                "age_seconds": age_seconds,
+                "stale_after_seconds": LIVE_MARKET_PRICE_STALE_AFTER_SECONDS,
+                "safe_next_step": "Ververs market data en doe de live preflight opnieuw.",
+            })
+        return {
+            "symbol": symbol,
+            "market_price": snapshot.get("price"),
+            "market_timestamp": timestamp.isoformat(),
+            "age_seconds": age_seconds,
+            "stale_after_seconds": LIVE_MARKET_PRICE_STALE_AFTER_SECONDS,
+        }
+
     def _as_float(self, value: Any) -> Optional[float]:
         if value is None:
             return None
@@ -1052,7 +1092,9 @@ class BotService:
             raise HTTPException(400, "Orderwaarde moet groter zijn dan 0.")
 
         live_risk_context = None
+        live_market_price_context = None
         if bot.get("is_live"):
+            live_market_price_context = await self.require_fresh_live_market_price(payload.symbol)
             live_risk_context = await self.require_live_order_risk_context(user_id, bot, payload, notional)
 
         min_order = float(bot.get("budget_min_order_eur", 0) or 0)
@@ -1220,6 +1262,8 @@ class BotService:
             result["behavioral_event"] = behavioral_event
         if live_risk_context:
             result["live_order_guardrails"] = live_risk_context
+        if live_market_price_context:
+            result["live_market_price"] = live_market_price_context
         return result
 
     def _validate_manual_order_payload(self, payload: BotManualOrderSchema) -> None:

@@ -43,8 +43,19 @@ class _FakeSession:
         return _FakeResult(None)
 
 
+_DEFAULT_MARKET_SNAPSHOT = object()
+
+
 class _ManualOrderRepo:
-    def __init__(self, decisions=None, *, live_daily_spend=0, portfolio_context=None, bot_setup_id=None):
+    def __init__(
+        self,
+        decisions=None,
+        *,
+        live_daily_spend=0,
+        portfolio_context=None,
+        bot_setup_id=None,
+        market_snapshot=_DEFAULT_MARKET_SNAPSHOT,
+    ):
         self.created_orders = 0
         self.decisions = decisions if decisions is not None else [
             {
@@ -64,6 +75,11 @@ class _ManualOrderRepo:
             "bots": [],
         }
         self.bot_setup_id = bot_setup_id
+        self.market_snapshot = (
+            {"price": 50000, "timestamp": datetime.now(timezone.utc)}
+            if market_snapshot is _DEFAULT_MARKET_SNAPSHOT
+            else market_snapshot
+        )
 
     async def get_bot_config(self, user_id, bot_id):
         return {
@@ -101,6 +117,13 @@ class _ManualOrderRepo:
 
     async def get_portfolio_intelligence_context(self, user_id):
         return self.portfolio_context
+
+    async def get_market_price_snapshot(self, symbol):
+        return self.market_snapshot
+
+    async def get_market_price(self, symbol):
+        snapshot = await self.get_market_price_snapshot(symbol)
+        return snapshot.get("price") if snapshot else None
 
 
 class _NoExchangeKeys:
@@ -557,6 +580,75 @@ def test_live_order_risk_context_requires_ack_for_blocked_setup(monkeypatch):
     payload.setup_block_acknowledged = True
     result = asyncio.run(service.require_live_order_risk_context(1, bot, payload, 50))
     assert any(check["code"] == "blocked_setup_ack" for check in result["checks"])
+
+
+def test_fresh_live_market_price_context_returns_snapshot():
+    service = BotService(_FakeSession())
+    market_ts = datetime.now(timezone.utc)
+    service.repository = _ManualOrderRepo(market_snapshot={"price": 50123.45, "timestamp": market_ts})
+
+    result = asyncio.run(service.require_fresh_live_market_price("btc"))
+
+    assert result["symbol"] == "BTC"
+    assert result["market_price"] == 50123.45
+    assert result["age_seconds"] < 5
+    assert result["stale_after_seconds"] == 300
+
+
+def test_live_market_price_context_blocks_missing_snapshot():
+    service = BotService(_FakeSession())
+    service.repository = _ManualOrderRepo(market_snapshot=None)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_fresh_live_market_price("BTC"))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_MARKET_PRICE_MISSING"
+
+
+def test_live_market_price_context_blocks_stale_snapshot(monkeypatch):
+    monkeypatch.setattr("backend.services.bot_service.LIVE_MARKET_PRICE_STALE_AFTER_SECONDS", 300)
+    service = BotService(_FakeSession())
+    stale_ts = datetime.now(timezone.utc) - timedelta(minutes=10)
+    service.repository = _ManualOrderRepo(market_snapshot={"price": 50000, "timestamp": stale_ts})
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_fresh_live_market_price("BTC"))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_MARKET_PRICE_STALE"
+    assert exc.value.detail["age_seconds"] >= 600
+    assert exc.value.detail["stale_after_seconds"] == 300
+
+
+def test_live_manual_order_blocks_when_market_price_is_stale(monkeypatch):
+    monkeypatch.setattr("backend.services.bot_service.LIVE_MARKET_PRICE_STALE_AFTER_SECONDS", 300)
+    service = BotService(_FakeSession())
+    stale_ts = datetime.now(timezone.utc) - timedelta(minutes=10)
+    repo = _ManualOrderRepo(market_snapshot={"price": 50000, "timestamp": stale_ts})
+    service.repository = repo
+
+    async def _preflight_ok(user_id, bot_id, token):
+        return {"token": token}
+
+    service.require_recent_live_preflight = _preflight_ok
+    payload = BotManualOrderSchema(
+        bot_id=9,
+        symbol="BTC",
+        side="buy",
+        quantity=0.001,
+        price=50000,
+        idempotency_key="manual-live-market-stale",
+        risk_acknowledged=True,
+        live_preflight_token="preflight-ok",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=1))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_MARKET_PRICE_STALE"
+    assert repo.created_orders == 0
 
 
 def test_live_manual_order_blocks_when_decision_context_is_missing():
