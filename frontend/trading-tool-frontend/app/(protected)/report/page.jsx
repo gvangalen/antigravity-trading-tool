@@ -64,6 +64,37 @@ const AUTO_GENERATE_IF_EMPTY = true;
 const POLL_INTERVAL_MS = 4000;
 const POLL_MAX_ATTEMPTS = 60;
 
+const FINN_REPORT_OPTIONS = [
+  {
+    key: 'today',
+    label: 'Vandaag',
+    eyebrow: 'Operator dagrapport',
+    prompt: 'Geef mijn Finn rapport van vandaag',
+    empty: 'Nog geen Finn-activiteit vandaag. Zodra Finn iets begeleidt, blokkeert of vastlegt, verschijnt het hier.',
+  },
+  {
+    key: 'week',
+    label: 'Weekreflectie',
+    eyebrow: 'Discipline weekbeeld',
+    prompt: 'Maak een Finn weekrapport',
+    empty: 'Nog te weinig weekhistorie. Finn toont hier pas patronen wanneer er auditdata is.',
+  },
+  {
+    key: 'blocked',
+    label: 'Geblokkeerd',
+    eyebrow: 'Risk-officer log',
+    prompt: 'Wat heeft Finn vandaag geblokkeerd?',
+    empty: 'Geen blokkades vandaag. Finn heeft nog geen risicovolle actie hoeven afremmen.',
+  },
+  {
+    key: 'behavior',
+    label: '30 dagen gedrag',
+    eyebrow: 'Behavioral memory',
+    prompt: 'Geef mijn gedragsrapport van de laatste 30 dagen',
+    empty: 'Nog te weinig gedragsdata over 30 dagen. Finn verzint hier geen profiel zonder bewijs.',
+  },
+];
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* =====================================================
@@ -113,26 +144,40 @@ function formatFinnReportSource(report) {
 }
 
 function FinnReportsPanel() {
+  const [activeFinnReport, setActiveFinnReport] = useState(FINN_REPORT_OPTIONS[0].key);
+  const [finnReportCache, setFinnReportCache] = useState({});
   const [finnReport, setFinnReport] = useState(null);
   const [finnLoading, setFinnLoading] = useState(true);
   const [finnError, setFinnError] = useState('');
   const [expanded, setExpanded] = useState(false);
 
-  const loadFinnReport = async () => {
+  const activeOption = FINN_REPORT_OPTIONS.find((option) => option.key === activeFinnReport) || FINN_REPORT_OPTIONS[0];
+
+  const loadFinnReport = async (option = activeOption, force = false) => {
+    if (!force && finnReportCache[option.key]) {
+      setFinnReport(finnReportCache[option.key]);
+      setFinnError('');
+      setFinnLoading(false);
+      return;
+    }
+
     setFinnLoading(true);
     setFinnError('');
 
     try {
       const data = await assistantChat(
-        'Geef mijn Finn rapport van vandaag',
+        option.prompt,
         {
           page: '/report',
           page_type: 'Reports',
           report_family: 'finn_reports',
+          finn_report_type: option.key,
         },
         []
       );
+      setFinnReportCache((cache) => ({ ...cache, [option.key]: data || null }));
       setFinnReport(data || null);
+      setExpanded(false);
     } catch (err) {
       console.error('Finn report load failed:', err);
       setFinnError('Finn rapport kon niet geladen worden.');
@@ -142,8 +187,8 @@ function FinnReportsPanel() {
   };
 
   useEffect(() => {
-    loadFinnReport();
-  }, []);
+    loadFinnReport(activeOption);
+  }, [activeFinnReport]);
 
   const analysis = finnReport?.state?.analysis || finnReport?.analysis || {};
   const metrics = analysis?.metrics || {};
@@ -151,7 +196,9 @@ function FinnReportsPanel() {
   const summary = getFinnReportSummary(finnReport);
   const reportType = finnReport?.state?.report_type || analysis?.report_type || 'finn_reflection_report';
   const separateFrom = finnReport?.state?.separate_from || analysis?.separate_from || 'daily_trading_report';
-  const isContractValid = finnReport?.intent === 'finn_report' && finnReport?.flow === 'finn_report';
+  const isFinnReport = finnReport?.intent === 'finn_report' && finnReport?.flow === 'finn_report';
+  const isBehavioralMemory = finnReport?.intent === 'behavioral_memory' && finnReport?.flow === 'behavioral_memory';
+  const isContractValid = isFinnReport || (activeOption.key === 'behavior' && isBehavioralMemory);
 
   const metricItems = [
     ['Acties', metrics.actions_today ?? metrics.actions_7d ?? metrics.actions_30d],
@@ -195,6 +242,27 @@ function FinnReportsPanel() {
         </div>
 
         <div className="p-6 md:p-8">
+          <div className="mb-6 overflow-x-auto">
+            <div className="inline-flex min-w-full sm:min-w-0 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-1">
+              {FINN_REPORT_OPTIONS.map((option) => {
+                const active = option.key === activeFinnReport;
+                return (
+                  <button
+                    key={option.key}
+                    onClick={() => setActiveFinnReport(option.key)}
+                    className={`flex-1 sm:flex-none px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.16em] whitespace-nowrap transition-all ${
+                      active
+                        ? 'bg-white dark:bg-slate-950 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-800'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {finnLoading ? (
             <div className="flex items-center gap-3 text-sm font-bold text-slate-500 dark:text-slate-400">
               <Loader2 size={16} className="animate-spin text-blue-600" />
@@ -207,7 +275,7 @@ function FinnReportsPanel() {
                 {finnError}
               </div>
               <button
-                onClick={loadFinnReport}
+                onClick={() => loadFinnReport(activeOption, true)}
                 className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white dark:bg-slate-950 border border-red-200 dark:border-red-900/40 text-[10px] font-black uppercase tracking-widest text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors"
               >
                 Opnieuw
@@ -220,7 +288,7 @@ function FinnReportsPanel() {
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
                       <ClipboardList size={13} />
-                      Laatste Finn report
+                      {activeOption.eyebrow}
                     </span>
                     <span className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                       Gebruikersactiviteit
@@ -231,7 +299,7 @@ function FinnReportsPanel() {
                   </div>
 
                   <p className="text-sm md:text-[15px] leading-relaxed text-slate-700 dark:text-slate-300 max-w-3xl">
-                    {summary}
+                    {summary || activeOption.empty}
                   </p>
 
                   <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
@@ -263,7 +331,7 @@ function FinnReportsPanel() {
                     />
                   </button>
                   <button
-                    onClick={loadFinnReport}
+                    onClick={() => loadFinnReport(activeOption, true)}
                     className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-5 py-3 text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all active:scale-[0.98]"
                   >
                     <RefreshCw size={13} />
