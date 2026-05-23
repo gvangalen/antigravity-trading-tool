@@ -2220,6 +2220,26 @@ def test_behavioral_memory_friction_slows_repeated_bot_decisions():
     assert "review" in friction["safe_alternative"]
 
 
+def test_behavioral_memory_ack_blocks_bot_decision_until_ack():
+    service = _service()
+    friction = {
+        "type": "decision_churn",
+        "severity": "medium",
+        "message": "je recente memory laat decision-churn zien.",
+        "source": "behavioral_memory",
+        "evidence": ["1 expliciete decision-churn events"],
+    }
+
+    blocked = service._blocked_behavioral_memory_ack_response("BTC", 12, friction)
+
+    assert blocked["can_confirm"] is False
+    assert blocked["actions"] == []
+    assert blocked["next_question"] == "behavioral_memory_ack"
+    assert "behavioral_memory_ack" in blocked["missing_fields"]
+    assert blocked["state"]["memory_friction"]["requires_ack"] is True
+    assert service._is_behavioral_memory_ack("bewust doorgaan") is True
+
+
 def test_weekly_reflection_summarizes_behavioral_patterns():
     service = _service()
     activity = [

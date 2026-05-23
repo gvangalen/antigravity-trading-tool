@@ -1668,6 +1668,13 @@ class FinnPlanService:
         if not selected and len(bots) == 1:
             selected = bots[0]
 
+        if context.get("current_flow") == "bot_decision" and context.get("pending_behavioral_memory_friction"):
+            pending_friction = context.get("pending_behavioral_memory_friction")
+            if self._is_behavioral_memory_ack((query or "").lower()):
+                context["behavioral_memory_ack"] = True
+            elif selected:
+                return self._blocked_behavioral_memory_ack_response(asset, int(selected["id"]), pending_friction)
+
         if not selected:
             if not bots:
                 response = f"Ik vind nog geen bot voor {asset}. Maak eerst een bot of kies een bestaande strategie om een bot aan te maken."
@@ -1722,6 +1729,9 @@ class FinnPlanService:
         }
         open_reviews = await self._open_bot_reviews_for_bot(user_id, asset, int(selected["id"]))
         memory_friction = await self._behavioral_memory_friction_for_action(user_id, "generate_bot_decision")
+        memory_acknowledged = bool(context.get("behavioral_memory_ack")) or self._is_behavioral_memory_ack((query or "").lower())
+        if memory_friction and not open_reviews and not memory_acknowledged:
+            return self._blocked_behavioral_memory_ack_response(asset, int(selected["id"]), memory_friction)
         if open_reviews:
             open_decision_ids = [int(item["decision_id"]) for item in open_reviews if item.get("decision_id")]
             action["id"] = self._maintenance_action_id(
@@ -1737,7 +1747,9 @@ class FinnPlanService:
             }
             action["guardrails"]["open_decision_review_exists"] = True
         if memory_friction:
+            memory_friction = {**memory_friction, "acknowledged": memory_acknowledged}
             action["guardrails"]["behavioral_memory_friction"] = True
+            action["guardrails"]["behavioral_memory_acknowledged"] = memory_acknowledged
             action["payload"]["memory_friction"] = memory_friction
             if action.get("risk_level") != "high":
                 action["risk_level"] = "medium"
@@ -1751,7 +1763,7 @@ class FinnPlanService:
         elif memory_friction:
             response_prefix = (
                 f"Memory check: {memory_friction.get('message')} "
-                "Ik maak alleen een nieuw voorstel als je dit bewust bevestigt. "
+                "Je hebt dit bewust bevestigd; ik maak alleen een nieuw voorstel. "
             )
         return {
             "response": response_prefix + (
@@ -3056,6 +3068,67 @@ class FinnPlanService:
         if open_decision_ids:
             parts.extend(["open_review", *[str(decision_id) for decision_id in sorted(open_decision_ids)]])
         return parts
+
+    def _is_behavioral_memory_ack(self, q_lower: str) -> bool:
+        return any(phrase in q_lower for phrase in [
+            "bewust doorgaan",
+            "ik bevestig dit",
+            "toch decision maken",
+            "toch bot-decision",
+            "memory akkoord",
+            "gedrag akkoord",
+            "ik snap het",
+            "begrepen",
+            "ga door",
+        ])
+
+    def _blocked_behavioral_memory_ack_response(
+        self,
+        asset: str,
+        bot_id: int,
+        memory_friction: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        friction = {
+            **(memory_friction or {}),
+            "requires_ack": True,
+            "acknowledged": False,
+            "ack_phrase": "bewust doorgaan",
+        }
+        response = (
+            f"Memory check: {friction.get('message')} "
+            "Je vroeg eerder opnieuw bot-decisions aan terwijl review nog openstond. "
+            "Wil je dit bewust toch doen? Antwoord met 'bewust doorgaan' om pas daarna een nieuwe bot-decision klaar te zetten."
+        )
+        return {
+            "response": response,
+            "intent": "bot_decision",
+            "flow": "bot_decision",
+            "draft": None,
+            "missing_fields": ["behavioral_memory_ack"],
+            "invalid_fields": [],
+            "next_question": "behavioral_memory_ack",
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "status": "blocked_by_behavioral_memory",
+                "current_flow": "bot_decision",
+                "asset": asset,
+                "bot_id": bot_id,
+                "memory_friction": friction,
+                "pending_behavioral_memory_friction": friction,
+                "autonomy_level": "confirm_required",
+            },
+            "reasoning": {
+                "confidence_score": 0.84,
+                "risk_detected": True,
+                "reasons": [friction.get("message")],
+                "coaching_level": "behavioral_memory_guardrail",
+            },
+            "suggested_actions": [
+                "Review of skip eerst de open bot-decisions.",
+                "Antwoord 'bewust doorgaan' als je toch een nieuwe bot-decision wilt.",
+            ],
+        }
 
     async def _behavioral_memory_friction_for_action(self, user_id: int, action_type: str) -> Optional[Dict[str, Any]]:
         if not self.session or action_type != "generate_bot_decision":
