@@ -9,10 +9,26 @@ from backend.services.finn_plan_service import empty_indicator_config_draft
 from backend.services.ai_action_engine import _utc_db_timestamp
 from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.strategy_service import StrategyService
+from backend.schemas.assistant_schema import AssistantContextSchema
 
 
 def _service():
     return FinnPlanService(db_session=None)
+
+
+def test_assistant_context_preserves_transactional_follow_up_state():
+    context = AssistantContextSchema(
+        current_flow="bot_decision",
+        pending_behavioral_memory_friction={
+            "type": "decision_churn",
+            "requires_ack": True,
+        },
+    )
+
+    payload = context.dict(exclude_none=True)
+
+    assert payload["current_flow"] == "bot_decision"
+    assert payload["pending_behavioral_memory_friction"]["type"] == "decision_churn"
 
 
 def test_one_shot_weekly_dca_is_confirmable_and_creates_bot_by_default():

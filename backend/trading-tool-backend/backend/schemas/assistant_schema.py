@@ -16,6 +16,9 @@ class AssistantContextSchema(BaseModel):
     setup_name: Optional[str] = None
     finn_draft: Optional[Dict[str, Any]] = None
 
+    class Config:
+        extra = "allow"
+
 class AssistantChatRequest(BaseModel):
     query: str
     context: Optional[AssistantContextSchema] = None
