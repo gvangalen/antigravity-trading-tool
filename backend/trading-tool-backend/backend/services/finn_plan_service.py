@@ -560,6 +560,8 @@ class FinnPlanService:
             "portefeuille risico", "portfolio exposure", "te veel exposure",
             "risico per asset", "welke asset vraagt", "welke assets vragen",
             "welke bots stapelen", "welke plannen stapelen", "stapelen risico",
+            "welke setups conflicteren", "conflicterende setups", "bots met overlappende budgetten",
+            "overlappende budgetten", "dca en trade",
         ]
         if any(term in q for term in portfolio_risk_terms):
             return True
@@ -1554,19 +1556,23 @@ class FinnPlanService:
     ) -> Dict[str, Any]:
         context = context or {}
         asset_analyses: List[Dict[str, Any]] = []
+        setup_context_by_asset: Dict[str, Dict[str, Any]] = {}
 
         if self.session:
             score_repo = ScoreRepository(self.session)
             active_setups = await score_repo.fetch_active_setups(user_id)
             onboarding_status = await self._fetch_onboarding_status(user_id)
             best_setups_by_asset: Dict[str, Dict[str, Any]] = {}
+            setups_by_asset: Dict[str, List[Dict[str, Any]]] = {}
             for setup in active_setups:
                 symbol = str(setup.get("symbol") or "").upper()
                 if symbol not in SUPPORTED_ASSETS:
                     continue
+                setups_by_asset.setdefault(symbol, []).append(setup)
                 current = best_setups_by_asset.get(symbol)
                 if not current or (setup.get("is_active") and not current.get("is_active")):
                     best_setups_by_asset[symbol] = setup
+            setup_context_by_asset = self._portfolio_setup_context(setups_by_asset)
 
             for asset in sorted(best_setups_by_asset.keys()):
                 setup = best_setups_by_asset[asset]
@@ -1625,7 +1631,7 @@ class FinnPlanService:
             except Exception:
                 portfolio_context = {}
 
-        analysis = self._build_portfolio_daily_coach_analysis(asset_analyses, portfolio_context)
+        analysis = self._build_portfolio_daily_coach_analysis(asset_analyses, portfolio_context, setup_context_by_asset)
         analysis["question_focus"] = self._portfolio_question_focus(query)
         response = self._portfolio_daily_coach_message(analysis)
 
@@ -3867,6 +3873,11 @@ class FinnPlanService:
             "welke bots stapelen",
             "welke plannen stapelen",
             "stapelen risico",
+            "welke setups conflicteren",
+            "conflicterende setups",
+            "bots met overlappende budgetten",
+            "overlappende budgetten",
+            "dca en trade",
         ]
         return any(phrase in q for phrase in portfolio_phrases)
 
@@ -4377,6 +4388,7 @@ class FinnPlanService:
         self,
         asset_analyses: List[Dict[str, Any]],
         portfolio_context: Optional[Dict[str, Any]] = None,
+        setup_context_by_asset: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         ranked = sorted(asset_analyses, key=self._portfolio_priority_sort_key)
         actionable_assets = [a for a in ranked if a.get("stance") == "plan_is_active"]
@@ -4430,7 +4442,7 @@ class FinnPlanService:
             first = warning_assets[0]
             warning = ((first.get("indicator_summary") or {}).get("warnings") or ["indicator coverage is dun"])[0]
             suggested_actions.append(f"Verbeter data-dekking voor {first.get('asset')}: {warning}")
-        portfolio_risk = self._build_portfolio_risk_analysis(ranked, portfolio_context or {})
+        portfolio_risk = self._build_portfolio_risk_analysis(ranked, portfolio_context or {}, setup_context_by_asset or {})
         if portfolio_risk.get("top_asset"):
             suggested_actions.append(
                 f"Bekijk portfolio-risico voor {portfolio_risk.get('top_asset')}: {portfolio_risk.get('top_reason')}"
@@ -4471,7 +4483,9 @@ class FinnPlanService:
         self,
         asset_analyses: List[Dict[str, Any]],
         portfolio_context: Dict[str, Any],
+        setup_context_by_asset: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
+        setup_context_by_asset = setup_context_by_asset or {}
         bots = portfolio_context.get("bots") or []
         global_ctx = portfolio_context.get("global") or {}
         allocations = global_ctx.get("allocations_pct") or {}
@@ -4505,6 +4519,7 @@ class FinnPlanService:
             blockers = item.get("blockers") or []
             warnings = (item.get("indicator_summary") or {}).get("warnings") or []
             readiness = item.get("data_readiness") or {}
+            setup_context = setup_context_by_asset.get(asset) or {}
             bot_count = len(asset_bots)
             live_bot_count = len([bot for bot in asset_bots if bot.get("is_live")])
             active_bot_count = len([bot for bot in asset_bots if bot.get("is_active")])
@@ -4524,6 +4539,12 @@ class FinnPlanService:
                 risk_flags.append("multiple_bots")
             if live_bot_count:
                 risk_flags.append("live_bot")
+            if setup_context.get("setup_count", 0) > 1:
+                risk_flags.append("multiple_setups")
+            if setup_context.get("mixed_setup_types"):
+                risk_flags.append("mixed_setup_types")
+            if total_equity > 0 and budget_eur > total_equity:
+                risk_flags.append("budget_overlap")
 
             score = 0
             if item.get("stance") == "wait_for_plan":
@@ -4544,6 +4565,12 @@ class FinnPlanService:
                 score += 10
             if readiness.get("config_gaps"):
                 score += 8
+            if setup_context.get("setup_count", 0) > 1:
+                score += 8
+            if setup_context.get("mixed_setup_types"):
+                score += 12
+            if total_equity > 0 and budget_eur > total_equity:
+                score += 15
             score = min(score, 100)
             risk_level = "high" if score >= 75 else "medium" if score >= 50 else "low"
 
@@ -4560,6 +4587,38 @@ class FinnPlanService:
                     "asset": asset,
                     "severity": "medium",
                     "reason": f"{asset} heeft {bot_count} bot-configuraties; controleer overlap en budgetstapeling.",
+                })
+            if setup_context.get("setup_count", 0) > 1:
+                conflicts.append({
+                    "type": "multiple_setups_same_asset",
+                    "asset": asset,
+                    "severity": "medium",
+                    "reason": f"{asset} heeft {setup_context.get('setup_count')} setups; controleer of de regels elkaar niet tegenspreken.",
+                    "setup_ids": setup_context.get("setup_ids") or [],
+                    "setup_types": setup_context.get("setup_types") or [],
+                })
+            if setup_context.get("mixed_setup_types"):
+                conflicts.append({
+                    "type": "mixed_setup_types_same_asset",
+                    "asset": asset,
+                    "severity": "high",
+                    "reason": f"{asset} heeft DCA en trade setups tegelijk; Finn moet zeker weten welke intent vandaag leidend is.",
+                    "setup_ids": setup_context.get("setup_ids") or [],
+                    "setup_types": setup_context.get("setup_types") or [],
+                })
+            if total_equity > 0 and budget_eur > total_equity:
+                conflicts.append({
+                    "type": "bot_budget_overlap",
+                    "asset": asset,
+                    "severity": "high" if budget_eur >= total_equity * 1.5 else "medium",
+                    "reason": f"{asset} botbudgetten tellen op tot EUR {round(budget_eur, 2)}, boven portfolio equity EUR {round(total_equity, 2)}.",
+                })
+            if item.get("stance") == "plan_is_active" and allocation_pct is not None and allocation_pct >= 60:
+                conflicts.append({
+                    "type": "active_plan_high_exposure",
+                    "asset": asset,
+                    "severity": "medium",
+                    "reason": f"{asset} plan lijkt actief, maar de asset heeft al {allocation_pct}% allocatie; review exposure voordat je opschaalt.",
                 })
             if allocation_pct is not None and allocation_pct >= 60:
                 concentration_warnings.append({
@@ -4619,6 +4678,12 @@ class FinnPlanService:
                 stack_factors.append("live bot actief")
             if "data_gap" in risk_flags:
                 stack_factors.append("dunne datalaag")
+            if "multiple_setups" in risk_flags:
+                stack_factors.append("meerdere setups")
+            if "mixed_setup_types" in risk_flags:
+                stack_factors.append("DCA en trade tegelijk")
+            if "budget_overlap" in risk_flags:
+                stack_factors.append("botbudget boven equity")
             if len(stack_factors) >= 2:
                 risk_stacks.append({
                     "asset": asset,
@@ -4680,6 +4745,28 @@ class FinnPlanService:
             "concentration_warnings": concentration_warnings,
             "conflicts": conflicts,
         }
+
+    def _portfolio_setup_context(self, setups_by_asset: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
+        context: Dict[str, Dict[str, Any]] = {}
+        for asset, setups in (setups_by_asset or {}).items():
+            setup_types = sorted({
+                str(setup.get("setup_type") or "").lower()
+                for setup in setups
+                if setup.get("setup_type")
+            })
+            context[asset] = {
+                "setup_count": len(setups),
+                "setup_ids": [setup.get("id") for setup in setups if setup.get("id") is not None],
+                "setup_names": [setup.get("name") for setup in setups if setup.get("name")],
+                "setup_types": setup_types,
+                "timeframes": sorted({
+                    str(setup.get("timeframe") or "")
+                    for setup in setups
+                    if setup.get("timeframe")
+                }),
+                "mixed_setup_types": len(setup_types) > 1,
+            }
+        return context
 
     def _portfolio_priority_sort_key(self, analysis: Dict[str, Any]) -> tuple:
         stance_rank = {

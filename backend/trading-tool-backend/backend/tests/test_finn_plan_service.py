@@ -1415,6 +1415,8 @@ def test_daily_coach_portfolio_scope_only_for_generic_briefing_prompts():
     assert service.looks_like_daily_coach_request("Heb ik te veel exposure?") is True
     assert service.looks_like_daily_coach_request("Welke bots en plannen stapelen risico?") is True
     assert service._should_build_portfolio_daily_coach("Welke bots en plannen stapelen risico?", {}) is True
+    assert service.looks_like_daily_coach_request("Welke setups conflicteren?") is True
+    assert service._should_build_portfolio_daily_coach("Bots met overlappende budgetten", {}) is True
     assert service._portfolio_question_focus("Heb ik te veel exposure?") == "exposure"
     assert service._should_build_portfolio_daily_coach("Wat moet ik vandaag doen met mijn BTC setup?", {}) is False
     assert service._should_build_portfolio_daily_coach("Geef mijn ETH daily brief", {"symbol": "BTC"}) is False
@@ -1581,6 +1583,61 @@ def test_mission_control_adds_portfolio_risk_stack_to_workqueue():
     assert "hoge exposure" in stack_item["risk_factors"]
     assert stack_item["next_best_action"]["prompt"] == "Welke bots en plannen stapelen risico voor BTC?"
     assert mission["workqueue_groups"][0]["key"] == "review"
+
+
+def test_portfolio_risk_detects_setup_conflicts_and_budget_overlap():
+    service = _service()
+    active_btc = {
+        "asset": "BTC",
+        "stance": "plan_is_active",
+        "has_scores": True,
+        "setup": {"id": 12, "name": "BTC DCA"},
+        "blockers": [],
+        "bot_today": {"decision_count": 0},
+        "indicator_summary": {"warnings": []},
+        "data_readiness": {"status": "ready", "config_gaps": []},
+    }
+
+    analysis = service._build_portfolio_daily_coach_analysis(
+        [active_btc],
+        {
+            "global": {
+                "total_equity": 1000,
+                "current_position_value": 700,
+                "cash_balance": 300,
+                "allocations_pct": {"Cash": 30.0, "BTC": 70.0},
+            },
+            "bots": [
+                {"bot_id": 1, "symbol": "BTC", "position_value": 350, "budget_total": 900, "is_active": True, "is_live": False},
+                {"bot_id": 2, "symbol": "BTC", "position_value": 350, "budget_total": 800, "is_active": True, "is_live": False},
+            ],
+        },
+        {
+            "BTC": {
+                "setup_count": 2,
+                "setup_ids": [12, 13],
+                "setup_names": ["BTC DCA", "BTC Breakout"],
+                "setup_types": ["dca", "trade"],
+                "timeframes": ["1W", "4H"],
+                "mixed_setup_types": True,
+            }
+        },
+    )
+    risk = analysis["portfolio_risk"]
+    btc = risk["asset_risk"][0]
+    conflict_types = {conflict["type"] for conflict in risk["conflicts"]}
+
+    assert risk["status"] == "high_attention"
+    assert btc["asset"] == "BTC"
+    assert "mixed_setup_types" in btc["risk_flags"]
+    assert "multiple_setups" in btc["risk_flags"]
+    assert "budget_overlap" in btc["risk_flags"]
+    assert "multiple_setups_same_asset" in conflict_types
+    assert "mixed_setup_types_same_asset" in conflict_types
+    assert "bot_budget_overlap" in conflict_types
+    assert "active_plan_high_exposure" in conflict_types
+    assert "DCA en trade tegelijk" in risk["risk_stacks"][0]["factors"]
+    assert "botbudget boven equity" in risk["risk_stacks"][0]["factors"]
 
 
 def test_portfolio_exposure_question_answers_cash_before_blocked_plan_risk():
