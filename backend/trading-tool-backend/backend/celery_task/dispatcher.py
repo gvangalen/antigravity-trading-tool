@@ -1,7 +1,7 @@
 from celery import shared_task, current_app
 import logging
-import time
 from backend.utils.db import get_db_connection
+from backend.celery_task.queue_policy import resolve_task_queue, resolve_workload_class
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,19 @@ def dispatch_for_all_users(task_name: str, *, active_only: bool = True):
             logger.warning("⚠️ Geen users gevonden om te dispatchen")
             return
 
-        logger.info(f"🚀 Dispatch '{task_name}' voor {len(user_ids)} users")
+        queue_name = resolve_task_queue(task_name)
+        workload_class = resolve_workload_class(task_name)
+        user_count = len(user_ids)
+        max_countdown_seconds = max(0, (user_count - 1) * 2)
+
+        logger.info(
+            "🚀 Dispatch task=%s queue=%s workload=%s users=%s spread_seconds=%s",
+            task_name,
+            queue_name,
+            workload_class,
+            user_count,
+            max_countdown_seconds,
+        )
 
         task = current_app.tasks.get(task_name)
         if not task:
@@ -40,10 +52,18 @@ def dispatch_for_all_users(task_name: str, *, active_only: bool = True):
 
             task.apply_async(
                 kwargs={"user_id": user_id},
-                countdown=countdown_seconds
+                countdown=countdown_seconds,
+                queue=queue_name,
             )
 
-            logger.info(f"➡️ Task gepland voor user {user_id} over {countdown_seconds}s")
+            logger.info(
+                "➡️ Task gepland task=%s queue=%s workload=%s user=%s countdown=%ss",
+                task_name,
+                queue_name,
+                workload_class,
+                user_id,
+                countdown_seconds,
+            )
 
     except Exception as e:
         logger.error(f"❌ Dispatcher fout: {e}", exc_info=True)

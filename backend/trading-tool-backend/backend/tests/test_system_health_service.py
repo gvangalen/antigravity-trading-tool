@@ -83,3 +83,14 @@ def test_deep_health_returns_component_statuses(monkeypatch):
     assert response["components"]["broker"]["status"] == "down"
     assert response["components"]["celery"]["worker_count"] == 1
     assert response["duration_ms"] >= 0
+
+
+def test_workers_by_queue_maps_active_queue_names():
+    result = SystemHealthService._workers_by_queue({
+        "worker-a": [{"name": "market_data"}, {"name": "scoring"}],
+        "worker-b": [{"name": "market_data"}],
+    })
+
+    assert result["market_data"] == ["worker-a", "worker-b"]
+    assert result["scoring"] == ["worker-a"]
+    assert result["execution_critical"] == []

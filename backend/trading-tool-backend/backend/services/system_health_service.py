@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy import text
 
+from backend.celery_task.queue_policy import NAMED_QUEUES
 from backend.infrastructure.database import async_session_factory
 
 
@@ -90,12 +91,17 @@ class SystemHealthService:
             started = time.perf_counter()
             try:
                 await client.ping()
-                default_queue_depth = await client.llen(os.getenv("CELERY_DEFAULT_QUEUE", "celery"))
+                queue_depths = {
+                    queue_name: int(await client.llen(queue_name) or 0)
+                    for queue_name in NAMED_QUEUES
+                }
                 return _component(
                     "ok",
                     broker="redis",
                     latency_ms=round((time.perf_counter() - started) * 1000, 2),
-                    default_queue_depth=int(default_queue_depth or 0),
+                    default_queue_depth=queue_depths.get(os.getenv("CELERY_DEFAULT_QUEUE", "celery"), 0),
+                    queue_depths=queue_depths,
+                    total_queue_depth=sum(queue_depths.values()),
                 )
             finally:
                 await client.aclose()
@@ -108,10 +114,17 @@ class SystemHealthService:
             result = await asyncio.to_thread(SystemHealthService._celery_ping)
             workers = result or {}
             if not workers:
-                return _component("unknown", worker_count=0, workers=[])
-            return _component("ok", worker_count=len(workers), workers=sorted(workers.keys()))
+                return _component("unknown", worker_count=0, workers=[], workers_by_queue={})
+            active_queues = await asyncio.to_thread(SystemHealthService._celery_active_queues)
+            workers_by_queue = SystemHealthService._workers_by_queue(active_queues or {})
+            return _component(
+                "ok",
+                worker_count=len(workers),
+                workers=sorted(workers.keys()),
+                workers_by_queue=workers_by_queue,
+            )
         except Exception as exc:
-            return _component("error", error=str(exc), worker_count=0, workers=[])
+            return _component("error", error=str(exc), worker_count=0, workers=[], workers_by_queue={})
 
     @staticmethod
     def _celery_ping() -> Optional[Dict[str, Any]]:
@@ -119,6 +132,24 @@ class SystemHealthService:
 
         inspector = celery_app.control.inspect(timeout=1.0)
         return inspector.ping()
+
+    @staticmethod
+    def _celery_active_queues() -> Optional[Dict[str, Any]]:
+        from backend.celery_task.celery_app import celery_app
+
+        inspector = celery_app.control.inspect(timeout=1.0)
+        return inspector.active_queues()
+
+    @staticmethod
+    def _workers_by_queue(active_queues: Dict[str, Any]) -> Dict[str, Any]:
+        workers_by_queue = {queue_name: [] for queue_name in NAMED_QUEUES}
+        for worker_name, queues in active_queues.items():
+            for queue in queues or []:
+                queue_name = queue.get("name") if isinstance(queue, dict) else None
+                if not queue_name:
+                    continue
+                workers_by_queue.setdefault(queue_name, []).append(worker_name)
+        return {queue: sorted(workers) for queue, workers in workers_by_queue.items()}
 
     @staticmethod
     async def _check_latest_market_snapshot() -> Dict[str, Any]:

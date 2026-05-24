@@ -4,6 +4,7 @@ import logging
 from dotenv import load_dotenv
 from celery import Celery
 from celery.schedules import crontab
+from kombu import Queue
 
 # =========================================================
 # ⚙️ .env + sys.path
@@ -14,6 +15,8 @@ load_dotenv(dotenv_path=dotenv_path)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
+
+from backend.celery_task.queue_policy import NAMED_QUEUES, celery_task_routes
 
 # =========================================================
 # 🪵 Logging
@@ -43,6 +46,9 @@ celery_app = Celery(
 # =========================================================
 celery_app.conf.enable_utc = False
 celery_app.conf.timezone = "Europe/Amsterdam"
+celery_app.conf.task_default_queue = "celery"
+celery_app.conf.task_queues = tuple(Queue(queue_name) for queue_name in NAMED_QUEUES)
+celery_app.conf.task_routes = celery_task_routes()
 
 # =========================================================
 # ⚡ RATE LIMIT (BELANGRIJK)
@@ -62,16 +68,19 @@ celery_app.conf.beat_schedule = {
     "fetch_market_data": {
         "task": "backend.celery_task.market_task.fetch_market_data",
         "schedule": crontab(minute="*/15"),
+        "options": {"queue": "market_data"},
     },
 
     "fetch_market_data_7d": {
         "task": "backend.celery_task.market_task.fetch_market_data_7d",
         "schedule": crontab(hour=2, minute=10),
+        "options": {"queue": "market_data"},
     },
 
     "save_market_data_daily": {
         "task": "backend.celery_task.market_task.save_market_data_daily",
         "schedule": crontab(hour=2, minute=20),
+        "options": {"queue": "market_data"},
     },
 
     # =====================================================
@@ -107,6 +116,7 @@ celery_app.conf.beat_schedule = {
     "run_rule_based_scores": {
         "task": "backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores",
         "schedule": crontab(minute="*/15"),
+        "options": {"queue": "scoring"},
     },
 
     # =====================================================
@@ -191,6 +201,7 @@ celery_app.conf.beat_schedule = {
     "run_master_score_ai": {
         "task": "backend.celery_task.store_daily_scores_task.run_master_score_ai",
         "schedule": crontab(hour=5, minute=0),
+        "options": {"queue": "ai_generation"},
     },
 
     # =====================================================
