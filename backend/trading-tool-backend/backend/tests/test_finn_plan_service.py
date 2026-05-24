@@ -2265,6 +2265,8 @@ def test_agent_controller_ranks_verdicts_and_biases_mission_queue():
     assert updated["agent_accountability"]["followed_count"] == 1
     assert updated["agent_learning"]["status"] == "ready"
     assert updated["agent_learning"]["agents"][0]["agent"] == "risk_agent"
+    assert updated["operating_rules"]["status"] == "ready"
+    assert any(rule["id"] == "risk_agent_first" for rule in updated["operating_rules"]["rules"])
     assert updated["agent_accountability"]["performance_light"]["agents"][0]["agent"] == "risk_agent"
     assert updated["agent_accountability"]["performance_light"]["agents"][0]["followed"] == 1
     assert updated["agent_accountability"]["performance_light"]["policy"]["uses_pnl"] is False
@@ -2307,6 +2309,8 @@ def test_agent_controller_handoff_activity_counts_in_finn_report():
     assert report["agent_accountability"]["by_agent"]["risk_agent"] == 1
     assert report["agent_learning"]["agents"][0]["agent"] == "risk_agent"
     assert report["agent_learning"]["policy"]["uses_pnl"] is False
+    assert report["operating_rules"]["policy"]["stores_new_preferences"] is False
+    assert any(rule["id"] == "risk_agent_first" for rule in report["operating_rules"]["rules"])
     assert report["agent_accountability"]["performance_light"]["agents"][0]["followed"] == 1
     assert any(item["type"] == "agent_controller_handoff" for item in report["risk_officer_interventions"])
     assert "Agent accountability:" in message
@@ -3196,9 +3200,12 @@ def test_weekly_reflection_includes_agent_rhythm_without_performance_claims():
     assert reflection["agent_learning"]["policy"]["claims_performance"] is False
     assert reflection["agent_rhythm"]["status"] == "ready"
     assert reflection["agent_rhythm"]["policy"]["uses_pnl"] is False
+    assert reflection["operating_rules"]["policy"]["coaching_only"] is True
+    assert any(rule["id"] == "risk_agent_first" for rule in reflection["operating_rules"]["rules"])
     assert any("Risk Agent" in item for item in reflection["agent_rhythm"]["followed_patterns"])
     assert any("Execution Agent" in item for item in reflection["agent_rhythm"]["friction_patterns"])
     assert "Agent-ritme:" in message
+    assert "Personal operating rules:" in message
 
 
 def test_behavioral_event_from_bot_update_detects_budget_and_live_pressure():

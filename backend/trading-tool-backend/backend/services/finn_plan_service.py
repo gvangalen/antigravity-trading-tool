@@ -5149,6 +5149,8 @@ class FinnPlanService:
             "agent_controller": mission.get("agent_controller") or agent_controller,
             "agent_accountability": mission.get("agent_accountability") or {},
             "agent_learning": mission.get("agent_learning") or {},
+            "agent_rhythm": mission.get("agent_rhythm") or {},
+            "operating_rules": mission.get("operating_rules") or {},
             "data_readiness": analysis.get("data_readiness") or {},
             "portfolio_risk": mission.get("portfolio_risk") or analysis.get("portfolio_risk") or {},
             "source": {
@@ -5486,6 +5488,105 @@ class FinnPlanService:
             "policy": policy,
         }
 
+    def _personal_operating_rules(
+        self,
+        agent_rhythm: Dict[str, Any],
+        metrics: Optional[Dict[str, Any]] = None,
+        interventions: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        metrics = metrics or {}
+        intervention_types = {item.get("type") for item in (interventions or []) if isinstance(item, dict)}
+        rules: List[Dict[str, Any]] = []
+
+        def add_rule(rule_id: str, title: str, trigger: str, rule: str, evidence: Dict[str, Any]):
+            if any(existing.get("id") == rule_id for existing in rules):
+                return
+            rules.append({
+                "id": rule_id,
+                "title": title,
+                "trigger": trigger,
+                "rule": rule,
+                "mode": "coaching_only",
+                "source": "finn_operator_audit",
+                "evidence": evidence,
+            })
+
+        summary = agent_rhythm.get("summary") or ""
+        rhythm_text = " ".join(
+            [summary]
+            + (agent_rhythm.get("followed_patterns") or [])
+            + (agent_rhythm.get("friction_patterns") or [])
+        )
+        if "Risk Agent" in rhythm_text:
+            add_rule(
+                "risk_agent_first",
+                "Risk Agent eerst",
+                "Risk Agent stuurt je werkvolgorde.",
+                "Los eerst het bovenste Mission Control risico-item op voordat je nieuwe decisions of execution start.",
+                {"agent_rhythm": summary},
+            )
+        if "Execution Agent" in rhythm_text or metrics.get("execution_pressure_events") or metrics.get("live_order_blocks") or "execution_pressure" in intervention_types:
+            add_rule(
+                "execution_friction_preflight_first",
+                "Execution-frictie betekent eerst preflight",
+                "Execution Agent of live guardrails remmen af.",
+                "Start geen live/manual order zonder verse preflight, idempotency en expliciete risk acknowledgement.",
+                {
+                    "execution_pressure_events": metrics.get("execution_pressure_events", 0),
+                    "live_order_blocks": metrics.get("live_order_blocks", 0),
+                },
+            )
+        if metrics.get("decision_churn_events") or metrics.get("decision_churn_events_7d") or "decision_churn" in intervention_types:
+            add_rule(
+                "review_before_new_decision",
+                "Eerst review, dan pas nieuwe decision",
+                "Decision-churn is geregistreerd.",
+                "Maak geen nieuwe bot-decision voordat open reviews zijn afgehandeld, geskipt of bewust gemonitord.",
+                {
+                    "decision_churn_events": metrics.get("decision_churn_events", metrics.get("decision_churn_events_7d", 0)),
+                },
+            )
+        if metrics.get("plan_deviation_events") or metrics.get("plan_deviation_events_7d") or "plan_deviation" in intervention_types:
+            add_rule(
+                "deviation_requires_plan_check",
+                "Plan-afwijking vraagt setup-check",
+                "Je week of dag bevatte een bewuste plan-afwijking.",
+                "Check eerst setupstatus en blockers; ga alleen verder na bewuste override als je nog steeds achter de afwijking staat.",
+                {
+                    "plan_deviation_events": metrics.get("plan_deviation_events", metrics.get("plan_deviation_events_7d", 0)),
+                },
+            )
+        if metrics.get("snoozed") or metrics.get("monitor_today") or metrics.get("skipped") or metrics.get("snoozed_7d") or metrics.get("monitor_7d") or metrics.get("skipped_7d"):
+            add_rule(
+                "carryover_before_new_work",
+                "Carry-over eerst",
+                "Je hebt items gesnoozed, gemonitord of overgeslagen.",
+                "Begin de volgende sessie met carry-over items voordat je nieuwe flows start.",
+                {
+                    "skipped": metrics.get("skipped", metrics.get("skipped_7d", 0)),
+                    "snoozed": metrics.get("snoozed", metrics.get("snoozed_7d", 0)),
+                    "monitor": metrics.get("monitor_today", metrics.get("monitor_7d", 0)),
+                },
+            )
+
+        status = "ready" if rules else "not_enough_data"
+        return {
+            "status": status,
+            "summary": (
+                f"{len(rules)} persoonlijke operator-regel(s) afgeleid uit Finn-auditdata."
+                if rules else
+                "Nog geen persoonlijke operator-regels afgeleid; er is meer gevolgd/afgehandeld gedrag nodig."
+            ),
+            "rules": rules[:6],
+            "policy": {
+                "source": "ai_pending_actions_and_agent_rhythm",
+                "stores_new_preferences": False,
+                "coaching_only": True,
+                "uses_pnl": False,
+                "claims_performance": False,
+            },
+        }
+
     def _mission_item_matches_agent(self, item: Dict[str, Any], agent: Optional[str]) -> bool:
         if not agent:
             return False
@@ -5567,6 +5668,8 @@ class FinnPlanService:
             activity_feed or [],
         )
         mission["agent_learning"] = mission["agent_accountability"].get("performance_light") or {}
+        mission["agent_rhythm"] = self._agent_rhythm_from_learning(mission["agent_learning"])
+        mission["operating_rules"] = self._personal_operating_rules(mission["agent_rhythm"])
         return mission
 
     async def build_behavioral_intelligence_response(
@@ -5623,6 +5726,7 @@ class FinnPlanService:
                 "behavioral_insight": behavioral,
                 "agent_learning": reflection.get("agent_learning"),
                 "agent_rhythm": reflection.get("agent_rhythm"),
+                "operating_rules": reflection.get("operating_rules"),
                 "advice_only": True,
             },
             "suggested_actions": [
@@ -5697,6 +5801,7 @@ class FinnPlanService:
                 "behavioral_insight": behavioral,
                 "agent_learning": report.get("agent_learning"),
                 "agent_rhythm": report.get("agent_rhythm"),
+                "operating_rules": report.get("operating_rules"),
                 "advice_only": True,
                 "separate_from": report.get("separate_from"),
             },
@@ -5719,6 +5824,7 @@ class FinnPlanService:
         behavioral_profile = self._behavioral_profile_from_metrics(metrics, patterns)
         agent_learning = self._agent_performance_light(activity_feed)
         agent_rhythm = self._agent_rhythm_from_learning(agent_learning)
+        operating_rules = self._personal_operating_rules(agent_rhythm, metrics)
         enough_data = metrics.get("actions_7d", 0) >= 3 or bool(patterns and patterns != ["discipline_neutral"])
 
         strengths = []
@@ -5782,6 +5888,7 @@ class FinnPlanService:
             "week_over_week": week_over_week,
             "agent_learning": agent_learning,
             "agent_rhythm": agent_rhythm,
+            "operating_rules": operating_rules,
             "strengths": strengths,
             "watchouts": watchouts,
             "metrics": {
@@ -6286,6 +6393,7 @@ class FinnPlanService:
                 "count": metrics["skipped"] + metrics["snoozed"] + metrics["monitor_today"],
                 "meaning": "Je hebt items bewust overgeslagen, gemonitord of later gezet.",
             })
+        operating_rules = self._personal_operating_rules(agent_rhythm, metrics, interventions)
 
         configuration_total = (
             metrics["plans_created"]
@@ -6337,6 +6445,7 @@ class FinnPlanService:
                 "by_agent": metrics.get("agent_accountability_by_agent") or {},
                 "performance_light": metrics.get("agent_performance_light") or {},
                 "agent_rhythm": agent_rhythm,
+                "operating_rules": operating_rules,
             },
         }
 
@@ -6403,6 +6512,7 @@ class FinnPlanService:
             "agent_accountability": sections["agent_accountability"],
             "agent_learning": sections["agent_accountability"].get("performance_light") or {},
             "agent_rhythm": agent_rhythm,
+            "operating_rules": operating_rules,
             "behavioral_profile": behavioral.get("metrics") and self._behavioral_profile_from_metrics(
                 behavioral.get("metrics") or {},
                 behavioral.get("patterns") or [],
@@ -6526,6 +6636,11 @@ class FinnPlanService:
             rhythm = accountability.get("agent_rhythm") or report.get("agent_rhythm") or {}
             if rhythm.get("summary"):
                 lines.append(f"- Agent-ritme: {rhythm.get('summary')}")
+            rules = (accountability.get("operating_rules") or report.get("operating_rules") or {}).get("rules") or []
+            if rules:
+                lines.append("- Personal operating rules:")
+                for rule in rules[:3]:
+                    lines.append(f"  - {rule.get('title')}: {rule.get('rule')}")
         day_close = report.get("day_close") or {}
         if day_close:
             lines.append("Dagafsluiting:")
@@ -6667,6 +6782,12 @@ class FinnPlanService:
                 lines.extend([f"- {item}" for item in followed[:2]])
             if friction:
                 lines.extend([f"- Let op: {item}" for item in friction[:2]])
+        operating_rules = reflection.get("operating_rules") or {}
+        rules = operating_rules.get("rules") or []
+        if rules:
+            lines.append("Personal operating rules:")
+            for rule in rules[:3]:
+                lines.append(f"- {rule.get('title')}: {rule.get('rule')}")
         strengths = reflection.get("strengths") or []
         if strengths:
             lines.append("Sterk deze week:")
