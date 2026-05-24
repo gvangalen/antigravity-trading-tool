@@ -115,7 +115,7 @@ def test_deploy_script_has_no_user_specific_business_actions():
     assert "tradamind_deep_health.json" in source
     assert "json.load" in source
     assert "STRICT_DEEP_HEALTH" in source
-    assert '"down", "error"' in source
+    assert "'down', 'error'" in source or '"down", "error"' in source
     assert "pm2 delete celery-worker" in source
     assert "pm2 startOrReload ecosystem.config.js" in source
 

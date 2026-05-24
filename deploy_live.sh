@@ -60,32 +60,32 @@ import json
 import os
 import sys
 
-with open("/tmp/tradamind_deep_health.json", "r", encoding="utf-8") as handle:
+with open('/tmp/tradamind_deep_health.json', 'r', encoding='utf-8') as handle:
     payload = json.load(handle)
 
-status = payload.get("status")
-components = payload.get("components") or {}
+status = payload.get('status')
+components = payload.get('components') or {}
 blocking = {
     name: data
     for name, data in components.items()
-    if (data or {}).get("status") in {"down", "error"}
+    if (data or {}).get('status') in {'down', 'error'}
 }
 
 if blocking:
-    print(f"❌ Deep health gate failed: blocking components={blocking}", file=sys.stderr)
+    print('❌ Deep health gate failed: blocking components={}'.format(blocking), file=sys.stderr)
     sys.exit(1)
 
-if status == "degraded":
-    message = "⚠️ Deep health is degraded; rollout continues because STRICT_DEEP_HEALTH=false."
-    if os.getenv("STRICT_DEEP_HEALTH", "false").lower() in {"1", "true", "yes"}:
-        print("❌ Deep health gate failed: status=degraded and STRICT_DEEP_HEALTH=true", file=sys.stderr)
+if status == 'degraded':
+    message = '⚠️ Deep health is degraded; rollout continues because STRICT_DEEP_HEALTH=false.'
+    if os.getenv('STRICT_DEEP_HEALTH', 'false').lower() in {'1', 'true', 'yes'}:
+        print('❌ Deep health gate failed: status=degraded and STRICT_DEEP_HEALTH=true', file=sys.stderr)
         sys.exit(1)
     print(message, file=sys.stderr)
-elif status != "ok":
-    print(f"❌ Deep health gate failed: status={status}", file=sys.stderr)
+elif status != 'ok':
+    print('❌ Deep health gate failed: status={}'.format(status), file=sys.stderr)
     sys.exit(1)
 else:
-    print("✅ Deep health gate passed.")
+    print('✅ Deep health gate passed.')
 PY
   curl -fsSI http://127.0.0.1:5002/report | head -n 1
 "
