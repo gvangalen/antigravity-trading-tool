@@ -53,4 +53,5 @@ def test_summarize_legacy_queue_messages_counts_rerouteable_and_kept():
     assert summary["sample_size"] == 3
     assert summary["rerouteable_count"] == 1
     assert summary["kept_on_default_count"] == 2
+    assert summary["reroute_ratio"] == 0.3333
     assert summary["top_tasks"][0]["count"] >= 1

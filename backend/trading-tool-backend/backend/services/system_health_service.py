@@ -124,6 +124,7 @@ class SystemHealthService:
                 "sample_size": 0,
                 "rerouteable_count": 0,
                 "kept_on_default_count": 0,
+                "reroute_ratio": 0.0,
                 "top_tasks": [],
             }
         raw_messages = await client.lrange(queue_name, -sample_size, -1)

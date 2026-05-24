@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict
@@ -52,15 +53,38 @@ def inspect_legacy_queue(queue_name: str, sample_size: int) -> Dict[str, Any]:
         client.close()
 
 
-def drain_legacy_queue(queue_name: str, limit: int) -> Dict[str, Any]:
+def _read_queue_depths(client: redis.Redis) -> Dict[str, int]:
+    queue_names = [
+        "celery",
+        "market_data",
+        "scoring",
+        "portfolio",
+        "ai_generation",
+        "execution_critical",
+    ]
+    return {
+        queue_name: int(client.llen(queue_name) or 0)
+        for queue_name in queue_names
+    }
+
+
+def drain_legacy_queue(queue_name: str, limit: int, *, runtime_cap_seconds: float) -> Dict[str, Any]:
     client = _broker_client()
     temp_queue = f"{queue_name}__drain_tmp__{uuid.uuid4().hex}"
     processed = rerouted = kept = 0
     targets: Dict[str, int] = {}
+    started = time.monotonic()
+    before_depths = _read_queue_depths(client)
+    stop_reason = "limit_reached"
     try:
         while processed < limit:
+            if runtime_cap_seconds > 0 and (time.monotonic() - started) >= runtime_cap_seconds:
+                stop_reason = "runtime_cap_reached"
+                break
+
             raw_message = client.rpop(queue_name)
             if raw_message is None:
+                stop_reason = "queue_drained"
                 break
 
             decision = classify_legacy_queue_message(raw_message, source_queue=queue_name)
@@ -80,14 +104,21 @@ def drain_legacy_queue(queue_name: str, limit: int) -> Dict[str, Any]:
                 break
             client.rpush(queue_name, raw_message)
 
+        after_depths = _read_queue_depths(client)
         remaining_depth = int(client.llen(queue_name) or 0)
         return {
             "queue": queue_name,
+            "limit_requested": limit,
+            "runtime_cap_seconds": runtime_cap_seconds,
+            "elapsed_seconds": round(time.monotonic() - started, 3),
+            "stop_reason": stop_reason,
             "processed": processed,
             "rerouted": rerouted,
             "kept": kept,
             "remaining_depth": remaining_depth,
             "rerouted_by_target": targets,
+            "before_queue_depths": before_depths,
+            "after_queue_depths": after_depths,
         }
     finally:
         client.delete(temp_queue)
@@ -99,11 +130,16 @@ def main() -> None:
     parser.add_argument("--queue", default=DEFAULT_QUEUE, help="Source queue to inspect/drain.")
     parser.add_argument("--sample-size", type=int, default=200, help="How many oldest messages to sample in inspect mode.")
     parser.add_argument("--limit", type=int, default=1000, help="Maximum messages to process in apply mode.")
+    parser.add_argument("--runtime-cap-seconds", type=float, default=15.0, help="Maximum runtime for one drain run in apply mode.")
     parser.add_argument("--apply", action="store_true", help="Actually reroute messages instead of only inspecting.")
     args = parser.parse_args()
 
     if args.apply:
-        result = drain_legacy_queue(args.queue, args.limit)
+        result = drain_legacy_queue(
+            args.queue,
+            args.limit,
+            runtime_cap_seconds=args.runtime_cap_seconds,
+        )
     else:
         result = inspect_legacy_queue(args.queue, args.sample_size)
 

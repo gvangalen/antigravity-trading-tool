@@ -104,9 +104,19 @@ def summarize_legacy_queue_messages(
             "count": count,
         })
 
+    sample_size = len(decisions)
+    rerouteable_count = sum(1 for decision in decisions if decision.reroute)
+    kept_on_default_count = sample_size - rerouteable_count
+    reroute_ratio = (
+        round(rerouteable_count / sample_size, 4)
+        if sample_size > 0
+        else 0.0
+    )
+
     return {
-        "sample_size": len(decisions),
-        "rerouteable_count": sum(1 for decision in decisions if decision.reroute),
-        "kept_on_default_count": sum(1 for decision in decisions if not decision.reroute),
+        "sample_size": sample_size,
+        "rerouteable_count": rerouteable_count,
+        "kept_on_default_count": kept_on_default_count,
+        "reroute_ratio": reroute_ratio,
         "top_tasks": top_tasks,
     }
