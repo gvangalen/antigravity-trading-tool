@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Depends
 
 from backend.utils.auth_utils import get_current_user
+from backend.services.system_health_service import SystemHealthService
 from backend.services.system_service import SystemService
 from backend.schemas.system_schema import BootstrapAgentsResponse
 
@@ -14,6 +15,18 @@ dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 load_dotenv(dotenv_path=dotenv_path)
 
 logger.info("⚙️ system_api.py geladen – System endpoints (Clean Architecture).")
+
+
+# =====================================================
+# 🩺 SYSTEM HEALTH (deep, non-LB)
+# =====================================================
+@router.get("/system/health")
+async def system_health():
+    """
+    Deep operational health endpoint for deploy gates and operator dashboards.
+    Keep /api/health lightweight for load balancers.
+    """
+    return await SystemHealthService.deep_health()
 
 # =====================================================
 # 🚀 BOOTSTRAP AGENTS (na onboarding)

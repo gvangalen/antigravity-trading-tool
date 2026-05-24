@@ -101,6 +101,19 @@ def test_main_startup_is_schema_read_only():
     assert "ADD CONSTRAINT" not in source
 
 
+def test_deploy_script_has_no_user_specific_business_actions():
+    deploy_path = Path(__file__).resolve().parents[4] / "deploy_live.sh"
+    source = deploy_path.read_text()
+
+    assert "UID=30" not in source
+    assert "run_market_agent" not in source
+    assert "run_macro_agent" not in source
+    assert "run_technical_agent" not in source
+    assert "run_setup_agent" not in source
+    assert "/api/health" in source
+    assert "/api/system/health" in source
+
+
 class _FakeCursor:
     def __init__(self, prices, portfolios):
         self.prices = prices
