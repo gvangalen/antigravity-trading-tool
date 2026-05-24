@@ -7110,7 +7110,11 @@ class FinnPlanService:
             SELECT id, status, payload, created_at
             FROM ai_pending_actions
             WHERE user_id = :user_id
-              AND id LIKE 'finn%'
+              AND (
+                id LIKE 'finn%'
+                OR payload->'action'->>'type' = 'agent_controller_handoff'
+                OR payload->'result'->>'type' = 'agent_controller_handoff'
+              )
               AND status IN ('pending', 'executed', 'failed')
             ORDER BY created_at DESC
             LIMIT :limit

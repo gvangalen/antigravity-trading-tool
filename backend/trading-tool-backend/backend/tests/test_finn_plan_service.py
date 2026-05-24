@@ -2250,6 +2250,14 @@ def test_agent_controller_handoff_activity_counts_in_finn_report():
     assert "Agent accountability:" in message
 
 
+def test_recent_finn_activity_query_includes_agent_controller_handoffs():
+    service = _service()
+    query = service._get_recent_finn_activity.__code__.co_consts[1]
+
+    assert "payload->'action'->>'type' = 'agent_controller_handoff'" in query
+    assert "payload->'result'->>'type' = 'agent_controller_handoff'" in query
+
+
 def test_bot_decision_review_items_escalate_guardrail_risk():
     service = _service()
 
