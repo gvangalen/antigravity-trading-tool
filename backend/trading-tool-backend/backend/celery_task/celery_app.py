@@ -16,7 +16,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from backend.celery_task.queue_policy import NAMED_QUEUES, celery_task_routes
+from backend.celery_task.queue_policy import (
+    NAMED_QUEUES,
+    build_dispatch_schedule_entry,
+    build_task_schedule_entry,
+    celery_task_routes,
+)
 
 # =========================================================
 # 🪵 Logging
@@ -65,155 +70,114 @@ celery_app.conf.beat_schedule = {
     # =====================================================
     # 1️⃣ MARKET DATA (SAFE)
     # =====================================================
-    "fetch_market_data": {
-        "task": "backend.celery_task.market_task.fetch_market_data",
-        "schedule": crontab(minute="*/15"),
-        "options": {"queue": "market_data"},
-    },
+    "fetch_market_data": build_task_schedule_entry(
+        "backend.celery_task.market_task.fetch_market_data",
+        crontab(minute="*/15"),
+    ),
 
-    "fetch_market_data_7d": {
-        "task": "backend.celery_task.market_task.fetch_market_data_7d",
-        "schedule": crontab(hour=2, minute=10),
-        "options": {"queue": "market_data"},
-    },
+    "fetch_market_data_7d": build_task_schedule_entry(
+        "backend.celery_task.market_task.fetch_market_data_7d",
+        crontab(hour=2, minute=10),
+    ),
 
-    "save_market_data_daily": {
-        "task": "backend.celery_task.market_task.save_market_data_daily",
-        "schedule": crontab(hour=2, minute=20),
-        "options": {"queue": "market_data"},
-    },
+    "save_market_data_daily": build_task_schedule_entry(
+        "backend.celery_task.market_task.save_market_data_daily",
+        crontab(hour=2, minute=20),
+    ),
 
     # =====================================================
     # 2️⃣ INDICATORS (SPREAD OUT)
     # =====================================================
-    "dispatch_macro_indicators": {
-        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(hour="*/2", minute=5),
-        "kwargs": {
-            "task_name": "backend.celery_task.macro_task.fetch_macro_data"
-        },
-    },
+    "dispatch_macro_indicators": build_dispatch_schedule_entry(
+        "backend.celery_task.macro_task.fetch_macro_data",
+        crontab(hour="*/2", minute=5),
+    ),
 
-    "dispatch_technical_indicators": {
-        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(hour="*/2", minute=25),
-        "kwargs": {
-            "task_name": "backend.celery_task.technical_task.fetch_technical_data_day"
-        },
-    },
+    "dispatch_technical_indicators": build_dispatch_schedule_entry(
+        "backend.celery_task.technical_task.fetch_technical_data_day",
+        crontab(hour="*/2", minute=25),
+    ),
 
-    "dispatch_market_indicators": {
-        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(hour="*/2", minute=45),
-        "kwargs": {
-            "task_name": "backend.celery_task.market_task.fetch_market_indicators"
-        },
-    },
+    "dispatch_market_indicators": build_dispatch_schedule_entry(
+        "backend.celery_task.market_task.fetch_market_indicators",
+        crontab(hour="*/2", minute=45),
+    ),
 
     # =====================================================
     # 3️⃣ RULE BASED SCORES (NO AI)
     # =====================================================
-    "run_rule_based_scores": {
-        "task": "backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores",
-        "schedule": crontab(minute="*/15"),
-        "options": {"queue": "scoring"},
-    },
+    "run_rule_based_scores": build_task_schedule_entry(
+        "backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores",
+        crontab(minute="*/15"),
+    ),
 
     # =====================================================
     # 4️⃣ PORTFOLIO + SETUP + BOT (STAGGERED)
     # =====================================================
-    "dispatch_portfolio_snapshots": {
-        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(minute="*/15"),
-        "kwargs": {
-            "task_name": "backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot"
-        },
-    },
+    "dispatch_portfolio_snapshots": build_dispatch_schedule_entry(
+        "backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot",
+        crontab(minute="*/15"),
+    ),
 
-    "dispatch_setup_agent": {
-        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(minute="*/15"),
-        "kwargs": {
-            "task_name": "backend.celery_task.setup_task.run_setup_agent_daily"
-        },
-    },
+    "dispatch_setup_agent": build_dispatch_schedule_entry(
+        "backend.celery_task.setup_task.run_setup_agent_daily",
+        crontab(minute="*/15"),
+    ),
 
-    "dispatch_trading_bot": {
-        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(minute="*/15"),
-        "kwargs": {
-            "task_name": "backend.celery_task.trading_bot_task.run_daily_trading_bot"
-        },
-    },
+    "dispatch_trading_bot": build_dispatch_schedule_entry(
+        "backend.celery_task.trading_bot_task.run_daily_trading_bot",
+        crontab(minute="*/15"),
+    ),
 
     # =====================================================
     # 5️⃣ AI AGENTS (DIRECT - NIET VIA DISPATCHER)
     # =====================================================
-    "macro_ai": {
-        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(hour=4, minute=5),
-        "kwargs": {
-            "task_name": "backend.celery_task.macro_task.run_macro_agent_daily"
-        },
-    },
+    "macro_ai": build_dispatch_schedule_entry(
+        "backend.celery_task.macro_task.run_macro_agent_daily",
+        crontab(hour=4, minute=5),
+    ),
 
-    "market_ai": {
-        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(hour=4, minute=20),
-        "kwargs": {
-            "task_name": "backend.celery_task.market_task.run_market_agent_daily"
-        },
-    },
+    "market_ai": build_dispatch_schedule_entry(
+        "backend.celery_task.market_task.run_market_agent_daily",
+        crontab(hour=4, minute=20),
+    ),
 
-    "technical_ai": {
-        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(hour=4, minute=35),
-        "kwargs": {
-            "task_name": "backend.celery_task.technical_task.run_technical_agent_daily"
-        },
-    },
+    "technical_ai": build_dispatch_schedule_entry(
+        "backend.celery_task.technical_task.run_technical_agent_daily",
+        crontab(hour=4, minute=35),
+    ),
 
     # =====================================================
     # 6️⃣ REGIME MEMORY
     # =====================================================
-    "dispatch_regime_memory": {
-        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(hour=3, minute=30),
-        "kwargs": {
-            "task_name": "backend.celery_task.regime_memory_task.run_regime_memory"
-        },
-    },
+    "dispatch_regime_memory": build_dispatch_schedule_entry(
+        "backend.celery_task.regime_memory_task.run_regime_memory",
+        crontab(hour=3, minute=30),
+    ),
 
     # =====================================================
     # 7️⃣ STRATEGY SNAPSHOT
     # =====================================================
-    "dispatch_strategy_snapshot": {
-        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(hour="6,18", minute=20),
-        "kwargs": {
-            "task_name": "backend.celery_task.strategy_task.run_daily_strategy_snapshot"
-        },
-    },
+    "dispatch_strategy_snapshot": build_dispatch_schedule_entry(
+        "backend.celery_task.strategy_task.run_daily_strategy_snapshot",
+        crontab(hour="6,18", minute=20),
+    ),
 
     # =====================================================
     # 8️⃣ MASTER AI SCORE (GEÏSOLEERD)
     # =====================================================
-    "run_master_score_ai": {
-        "task": "backend.celery_task.store_daily_scores_task.run_master_score_ai",
-        "schedule": crontab(hour=5, minute=0),
-        "options": {"queue": "ai_generation"},
-    },
+    "run_master_score_ai": build_task_schedule_entry(
+        "backend.celery_task.store_daily_scores_task.run_master_score_ai",
+        crontab(hour=5, minute=0),
+    ),
 
     # =====================================================
     # 9️⃣ DAILY REPORT (LAATSTE)
     # =====================================================
-    "dispatch_daily_report": {
-        "task": "backend.celery_task.dispatcher.dispatch_for_all_users",
-        "schedule": crontab(hour=5, minute=20),
-        "kwargs": {
-            "task_name": "backend.celery_task.daily_report_task.generate_daily_report"
-        },
-    },
+    "dispatch_daily_report": build_dispatch_schedule_entry(
+        "backend.celery_task.daily_report_task.generate_daily_report",
+        crontab(hour=5, minute=20),
+    ),
 }
 
 logger.info("🚀 Celery Beat schedule geladen (OPTIMIZED)")

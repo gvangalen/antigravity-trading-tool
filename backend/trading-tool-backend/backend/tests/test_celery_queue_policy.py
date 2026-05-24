@@ -1,9 +1,14 @@
+import ast
+
 from backend.celery_task.queue_policy import (
+    ALLOWED_DEFAULT_TASKS,
+    DISPATCHER_TASK_NAME,
     NAMED_QUEUES,
     TASK_QUEUE_ROUTES,
     celery_task_routes,
     resolve_task_queue,
     resolve_workload_class,
+    unmapped_task_names,
 )
 
 
@@ -63,3 +68,43 @@ def test_celery_task_routes_shape_matches_policy():
     assert routes["backend.celery_task.market_task.fetch_market_data"] == {"queue": "market_data"}
     assert routes["backend.celery_task.trading_bot_task.run_daily_trading_bot"] == {"queue": "execution_critical"}
     assert set(routes.keys()) == set(TASK_QUEUE_ROUTES.keys())
+
+
+def test_all_shared_tasks_are_routed_or_explicit_default():
+    from pathlib import Path
+
+    backend_root = Path(__file__).resolve().parents[1]
+    task_names = set()
+
+    for path in backend_root.rglob("*.py"):
+        module_name = ".".join(path.relative_to(backend_root.parent).with_suffix("").parts)
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in tree.body:
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for decorator in node.decorator_list:
+                if not isinstance(decorator, ast.Call):
+                    continue
+                if not isinstance(decorator.func, ast.Name) or decorator.func.id != "shared_task":
+                    continue
+                explicit_name = None
+                for keyword in decorator.keywords:
+                    if keyword.arg == "name" and isinstance(keyword.value, ast.Constant):
+                        explicit_name = keyword.value.value
+                        break
+                task_names.add(explicit_name or f"{module_name}.{node.name}")
+
+    assert unmapped_task_names(task_names) == []
+    assert DISPATCHER_TASK_NAME in ALLOWED_DEFAULT_TASKS
+
+
+def test_beat_schedule_routes_dispatch_and_direct_tasks_to_policy_queue():
+    from backend.celery_task.celery_app import celery_app
+
+    for entry in celery_app.conf.beat_schedule.values():
+        if entry["task"] == DISPATCHER_TASK_NAME:
+            expected_queue = resolve_task_queue(entry["kwargs"]["task_name"])
+        else:
+            expected_queue = resolve_task_queue(entry["task"])
+
+        assert entry["options"]["queue"] == expected_queue

@@ -1,7 +1,8 @@
-from typing import Dict, List
+from typing import Dict, Iterable, List
 
 
 DEFAULT_QUEUE = "celery"
+DISPATCHER_TASK_NAME = "backend.celery_task.dispatcher.dispatch_for_all_users"
 NAMED_QUEUES: List[str] = [
     DEFAULT_QUEUE,
     "market_data",
@@ -12,6 +13,7 @@ NAMED_QUEUES: List[str] = [
 ]
 
 TASK_QUEUE_ROUTES: Dict[str, str] = {
+    "backend.ai_agents.score_ai_agent.generate_master_score": "ai_generation",
     "backend.celery_task.market_task.fetch_market_data": "market_data",
     "backend.celery_task.market_task.fetch_market_data_7d": "market_data",
     "backend.celery_task.market_task.save_market_data_daily": "market_data",
@@ -48,6 +50,10 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.daily_usage_reset.reset_daily_ai_quotas": "scoring",
 }
 
+ALLOWED_DEFAULT_TASKS = {
+    DISPATCHER_TASK_NAME,
+}
+
 WORKLOAD_CLASS_BY_QUEUE = {
     DEFAULT_QUEUE: "default_fallback",
     "market_data": "market_data",
@@ -68,3 +74,49 @@ def resolve_workload_class(task_name: str) -> str:
 
 def celery_task_routes() -> Dict[str, Dict[str, str]]:
     return {task_name: {"queue": queue} for task_name, queue in TASK_QUEUE_ROUTES.items()}
+
+
+def build_task_schedule_entry(
+    task_name: str,
+    schedule,
+    *,
+    kwargs: dict | None = None,
+) -> Dict[str, object]:
+    entry: Dict[str, object] = {
+        "task": task_name,
+        "schedule": schedule,
+        "options": {"queue": resolve_task_queue(task_name)},
+    }
+    if kwargs:
+        entry["kwargs"] = kwargs
+    return entry
+
+
+def build_dispatch_schedule_entry(
+    target_task_name: str,
+    schedule,
+    *,
+    active_only: bool = True,
+    batch_size: int | None = None,
+    max_spread_seconds: int | None = None,
+) -> Dict[str, object]:
+    kwargs = {
+        "task_name": target_task_name,
+        "active_only": active_only,
+    }
+    if batch_size is not None:
+        kwargs["batch_size"] = batch_size
+    if max_spread_seconds is not None:
+        kwargs["max_spread_seconds"] = max_spread_seconds
+
+    return {
+        "task": DISPATCHER_TASK_NAME,
+        "schedule": schedule,
+        "kwargs": kwargs,
+        "options": {"queue": resolve_task_queue(target_task_name)},
+    }
+
+
+def unmapped_task_names(task_names: Iterable[str]) -> List[str]:
+    known_task_names = set(TASK_QUEUE_ROUTES) | set(ALLOWED_DEFAULT_TASKS)
+    return sorted({task_name for task_name in task_names if task_name not in known_task_names})
