@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, Date, ForeignKey, text, JSON
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, Date, ForeignKey, text, JSON, UniqueConstraint
 from datetime import datetime
 
 from backend.infrastructure.database import Base
@@ -65,9 +65,12 @@ class AiUsageLog(Base):
 
 class AiResponseCache(Base):
     __tablename__ = 'ai_response_cache'
+    __table_args__ = (
+        UniqueConstraint("query_hash", "symbol", "timeframe", "category", name="ux_ai_response_cache_context"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    query_hash = Column(String, unique=True, nullable=False)
+    query_hash = Column(String, nullable=False)
     query_text = Column(String)
     normalized_query = Column(String)
     response_json = Column(JSONB)
@@ -415,4 +418,3 @@ class AiIntelligenceEvent(Base):
     payload = Column(JSON, nullable=True)  # Contextual parameters/attributes
     status = Column(String, nullable=False, default='active')  # 'active', 'archived'
     created_at = Column(DateTime, default=datetime.utcnow)
-

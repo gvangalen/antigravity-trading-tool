@@ -154,16 +154,13 @@ class AiGateway:
         stmt = text("""
             SELECT response_json, original_cost, created_at, ttl_minutes, symbol, timeframe, category
             FROM ai_response_cache 
-            WHERE query_hash = :h LIMIT 1
+            WHERE query_hash = :h AND symbol = :s AND timeframe = :t AND category = :c
+            LIMIT 1
         """)
-        res = await self.user_repo.db.execute(stmt, {"h": query_hash})
+        res = await self.user_repo.db.execute(stmt, {"h": query_hash, "s": symbol, "t": timeframe, "c": category})
         row = res.mappings().first()
         
         if row:
-            # Strikte Context Check
-            if row['symbol'] != symbol or row['timeframe'] != timeframe or row['category'] != category:
-                return None # Context mismatch
-                
             expiry = row['created_at'] + timedelta(minutes=row['ttl_minutes'])
             age = int((datetime.utcnow() - row['created_at']).total_seconds())
             
@@ -251,9 +248,12 @@ class AiGateway:
             stmt = text("""
                 INSERT INTO ai_response_cache (query_hash, query_text, normalized_query, response_json, original_cost, symbol, timeframe, category, ttl_minutes, embedding, created_at)
                 VALUES (:h, :t, :nt, :r, :c, :s, :tf, :cat, :ttl, :emb, :now)
-                ON CONFLICT (query_hash) DO UPDATE SET 
+                ON CONFLICT (query_hash, symbol, timeframe, category) DO UPDATE SET
+                    query_text = EXCLUDED.query_text,
+                    normalized_query = EXCLUDED.normalized_query,
                     response_json = EXCLUDED.response_json,
                     original_cost = EXCLUDED.original_cost,
+                    ttl_minutes = EXCLUDED.ttl_minutes,
                     created_at = EXCLUDED.created_at,
                     embedding = EXCLUDED.embedding
             """)

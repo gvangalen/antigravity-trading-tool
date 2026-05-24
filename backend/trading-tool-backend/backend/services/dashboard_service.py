@@ -179,26 +179,25 @@ class DashboardService:
         if not symbols:
             symbols = ["BTC", "ETH", "SOL"]
             
-        prices_task = self.repository.get_latest_prices_and_changes(user_id, symbols)
-        
         # We declare safe defaults for all sub-components so they are populated even under failure
         prices_data = {s: {"price": None, "change_24h": None} for s in symbols}
         bot_portfolios = []
         ai_insight = {}
+        raw_intel_events = []
 
-        # 3. Import and prepare Bot, AI & Intelligence services safely
+        # 3. Run DB-backed components sequentially. A single AsyncSession must
+        # not be shared across concurrent DB awaits.
+        try:
+            prices_data = await self.repository.get_latest_prices_and_changes(user_id, symbols) or prices_data
+        except Exception as e:
+            logger.error(f"❌ [MobileOverview] P1 Error: prices failed: {e}", exc_info=True)
+
         try:
             from backend.services.bot_service import BotService
             bot_service = BotService(self.session)
-            bot_portfolios_task = bot_service.get_bot_portfolios(user_id)
+            bot_portfolios = await bot_service.get_bot_portfolios(user_id) or []
         except Exception as e:
-            logger.error(f"⚠️ [MobileOverview] Failed to initialize BotService: {e}", exc_info=True)
-            bot_portfolios_task = asyncio.sleep(0, result=[])
-
-        # Keep AI/Finn briefing out of the parallel gather: it uses the same
-        # AsyncSession and must run after the other DB tasks to avoid asyncpg
-        # "another operation is in progress" errors on mobile cold start.
-        ai_insight_task = asyncio.sleep(0, result={})
+            logger.error(f"❌ [MobileOverview] P2 Error: bot portfolios failed: {e}", exc_info=True)
 
         try:
             from backend.services.intelligence_event_service import IntelligenceEventService
@@ -212,47 +211,9 @@ class DashboardService:
                 market_data_repo=MarketDataRepository(self.session),
                 score_repo=ScoreRepository(self.session)
             )
-            intel_task = intel_service.evaluate_and_generate_events(user_id)
+            raw_intel_events = await intel_service.evaluate_and_generate_events(user_id) or []
         except Exception as e:
-            logger.error(f"⚠️ [MobileOverview] Failed to initialize IntelligenceEventService: {e}", exc_info=True)
-            intel_task = asyncio.sleep(0, result=[])
-
-        # 4. Hardened asyncio.gather execution (return_exceptions=True)
-        # This completely guarantees that an outage in any service does not throw a 500 error!
-        results = await asyncio.gather(
-            prices_task,
-            bot_portfolios_task,
-            ai_insight_task,
-            intel_task,
-            return_exceptions=True
-        )
-
-        # Unpack results safely
-        # Result 1: prices
-        if isinstance(results[0], Exception):
-            logger.error(f"❌ [MobileOverview] P1 Error: prices_task failed: {results[0]}", exc_info=True)
-        else:
-            prices_data = results[0] or prices_data
-
-        # Result 2: bot portfolios
-        if isinstance(results[1], Exception):
-            logger.error(f"❌ [MobileOverview] P2 Error: bot_portfolios_task failed: {results[1]}", exc_info=True)
-        else:
-            bot_portfolios = results[1] or []
-
-        # Result 3: AI insights
-        if isinstance(results[2], Exception):
-            logger.error(f"❌ [MobileOverview] P3 Error: ai_insight_task failed: {results[2]}", exc_info=True)
-        else:
-            ai_insight = results[2] or {}
-
-        # Result 4: Active intelligence events
-        raw_intel_events = []
-        if len(results) > 3:
-            if isinstance(results[3], Exception):
-                logger.error(f"❌ [MobileOverview] P4 Error: intel_task failed: {results[3]}", exc_info=True)
-            else:
-                raw_intel_events = results[3] or []
+            logger.error(f"❌ [MobileOverview] P3 Error: intelligence events failed: {e}", exc_info=True)
 
         try:
             from backend.services.finn_plan_service import FinnPlanService

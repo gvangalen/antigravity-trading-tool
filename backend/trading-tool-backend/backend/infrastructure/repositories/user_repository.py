@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from backend.infrastructure.models import User
 from typing import Optional
 
@@ -57,9 +57,14 @@ class UserRepository:
         - adds cost to ai_usage_current
         - adds tokens to ai_tokens_used_month
         """
-        user = await self.get_by_id(user_id)
-        if user:
-            user.ai_requests_used_day = (user.ai_requests_used_day or 0) + requests
-            user.ai_usage_current = float(user.ai_usage_current or 0) + cost
-            user.ai_tokens_used_month = (user.ai_tokens_used_month or 0) + tokens
-            await self.db.commit()
+        stmt = (
+            update(User)
+            .where(User.id == user_id)
+            .values(
+                ai_requests_used_day=func.coalesce(User.ai_requests_used_day, 0) + requests,
+                ai_usage_current=func.coalesce(User.ai_usage_current, 0) + cost,
+                ai_tokens_used_month=func.coalesce(User.ai_tokens_used_month, 0) + tokens,
+            )
+        )
+        await self.db.execute(stmt)
+        await self.db.commit()

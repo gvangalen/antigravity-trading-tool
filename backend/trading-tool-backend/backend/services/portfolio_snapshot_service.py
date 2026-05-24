@@ -23,21 +23,21 @@ def floor_timestamp(dt: datetime, bucket: BucketType) -> datetime:
 
 
 # =====================================================
-# 💰 BTC Price
+# 💰 Symbol Price
 # =====================================================
 
-def _get_latest_btc_price(cur) -> float:
+def _get_latest_price(cur, symbol: str) -> float:
     cur.execute("""
         SELECT price
         FROM market_data
-        WHERE symbol = 'BTC'
+        WHERE symbol = %s
           AND price IS NOT NULL
         ORDER BY timestamp DESC
         LIMIT 1
-    """)
+    """, (symbol.upper(),))
     row = cur.fetchone()
     if not row:
-        raise RuntimeError("Geen BTC prijs gevonden")
+        raise RuntimeError(f"Geen {symbol.upper()} prijs gevonden")
     return float(row[0])
 
 
@@ -56,48 +56,48 @@ def snapshot_all_for_user(
         with conn.cursor() as cur:
 
             # =====================================================
-            # 📈 BTC PRIJS
-            # =====================================================
-            try:
-                price = _get_latest_btc_price(cur)
-            except Exception:
-                logger.exception("❌ BTC prijs ophalen mislukt")
-                return
-
-            # =====================================================
-            # 🤖 BOTS + BUDGET
-            # =====================================================
-            cur.execute("""
-                SELECT id, COALESCE(budget_total_eur,0)
-                FROM bot_configs
-                WHERE user_id=%s
-            """, (user_id,))
-
-            bots: List[Tuple[int, float]] = cur.fetchall()
-
-            # =====================================================
             # 🔁 PER BOT (FROM BOT_PORTFOLIOS)
             # =====================================================
 
             global_cash = 0.0
-            global_qty = 0.0
+            global_btc_qty = 0.0
+            global_position_value = 0.0
             global_invested = 0.0
             global_realized_pnl = 0.0
+            price_cache = {}
 
             cur.execute("""
                 SELECT 
-                    bot_id, cash_eur, position_qty, invested_eur, avg_entry, realized_pnl_eur
-                FROM bot_portfolios
-                WHERE user_id=%s
+                    bp.bot_id,
+                    COALESCE(NULLIF(UPPER(bc.symbol), ''), 'BTC') AS symbol,
+                    bp.cash_eur,
+                    bp.position_qty,
+                    bp.invested_eur,
+                    bp.avg_entry,
+                    bp.realized_pnl_eur
+                FROM bot_portfolios bp
+                LEFT JOIN bot_configs bc
+                    ON bc.id = bp.bot_id
+                   AND bc.user_id = bp.user_id
+                WHERE bp.user_id=%s
             """, (user_id,))
 
             portfolio_rows = cur.fetchall()
 
-            for bot_id, b_cash, b_qty, b_invested, b_avg, b_realized in portfolio_rows:
+            for bot_id, symbol, b_cash, b_qty, b_invested, b_avg, b_realized in portfolio_rows:
+                symbol = (symbol or "BTC").upper()
                 b_cash = float(b_cash or 0)
                 b_qty = float(b_qty or 0)
                 b_invested = float(b_invested or 0)
                 b_realized = float(b_realized or 0)
+
+                try:
+                    if symbol not in price_cache:
+                        price_cache[symbol] = _get_latest_price(cur, symbol)
+                    price = price_cache[symbol]
+                except Exception:
+                    logger.exception("❌ %s prijs ophalen mislukt; bot snapshot overgeslagen | bot=%s", symbol, bot_id)
+                    continue
 
                 # Position value at current market price
                 position_value = b_qty * price
@@ -110,7 +110,9 @@ def snapshot_all_for_user(
 
                 # Accumulate globals
                 global_cash += b_cash
-                global_qty += b_qty
+                global_position_value += position_value
+                if symbol == "BTC":
+                    global_btc_qty += b_qty
                 global_invested += b_invested
                 global_realized_pnl += b_realized
 
@@ -132,12 +134,12 @@ def snapshot_all_for_user(
                         equity_eur   = EXCLUDED.equity_eur,
                         invested_eur = EXCLUDED.invested_eur
                 """, (
-                    user_id, bot_id, bucket, ts, "BTC",
+                    user_id, bot_id, bucket, ts, symbol,
                     b_qty, b_cash, price, bot_equity, b_invested
                 ))
 
                 logger.info(
-                    f"📊 Bot accurate snapshot | bot={bot_id} | equity={round(bot_equity,2)} "
+                    f"📊 Bot accurate snapshot | bot={bot_id} | symbol={symbol} | equity={round(bot_equity,2)} "
                     f"| realized={round(b_realized,2)}"
                 )
 
@@ -145,9 +147,8 @@ def snapshot_all_for_user(
             # 🌍 GLOBAL SNAPSHOT (PRO)
             # =====================================================
 
-            global_btc_value = global_qty * price
-            global_equity = global_cash + global_btc_value
-            global_unrealized = global_btc_value - global_invested
+            global_equity = global_cash + global_position_value
+            global_unrealized = global_position_value - global_invested
 
             cur.execute("""
                 INSERT INTO portfolio_balance_snapshots
@@ -177,8 +178,8 @@ def snapshot_all_for_user(
                 ts,
                 global_equity,
                 global_cash,
-                global_qty,
-                global_btc_value,
+                global_btc_qty,
+                global_position_value,
                 global_invested,
                 global_unrealized
             ))
@@ -186,7 +187,7 @@ def snapshot_all_for_user(
             logger.info(
                 f"🌍 Global snapshot | equity={round(global_equity,2)} "
                 f"| cash={round(global_cash,2)} "
-                f"| btc={round(global_qty,6)} "
+                f"| btc={round(global_btc_qty,6)} "
                 f"| invested={round(global_invested,2)} "
                 f"| unrealized={round(global_unrealized,2)}"
             )

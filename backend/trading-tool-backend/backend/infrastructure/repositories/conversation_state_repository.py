@@ -29,41 +29,24 @@ class ConversationStateRepository:
         return None
 
     async def save_state(self, user_id: int, current_flow: Optional[str], asset: Optional[str], slots: Dict[str, Any]):
-        # Check if row exists
-        check_query = text("SELECT id FROM conversation_state WHERE user_id = :user_id")
-        result = await self.session.execute(check_query, {"user_id": user_id})
-        exists = result.fetchone() is not None
-
         slots_json = json.dumps(slots) if isinstance(slots, dict) else "{}"
 
-        if exists:
-            update_query = text("""
-                UPDATE conversation_state
-                SET current_flow = :current_flow,
-                    asset = :asset,
-                    slots = :slots,
-                    updated_at = :now
-                WHERE user_id = :user_id
-            """)
-            await self.session.execute(update_query, {
-                "user_id": user_id,
-                "current_flow": current_flow,
-                "asset": asset,
-                "slots": slots_json,
-                "now": datetime.utcnow()
-            })
-        else:
-            insert_query = text("""
-                INSERT INTO conversation_state (user_id, current_flow, asset, slots, updated_at)
-                VALUES (:user_id, :current_flow, :asset, :slots, :now)
-            """)
-            await self.session.execute(insert_query, {
-                "user_id": user_id,
-                "current_flow": current_flow,
-                "asset": asset,
-                "slots": slots_json,
-                "now": datetime.utcnow()
-            })
+        upsert_query = text("""
+            INSERT INTO conversation_state (user_id, current_flow, asset, slots, updated_at)
+            VALUES (:user_id, :current_flow, :asset, CAST(:slots AS jsonb), :now)
+            ON CONFLICT (user_id) DO UPDATE SET
+                current_flow = EXCLUDED.current_flow,
+                asset = EXCLUDED.asset,
+                slots = EXCLUDED.slots,
+                updated_at = EXCLUDED.updated_at
+        """)
+        await self.session.execute(upsert_query, {
+            "user_id": user_id,
+            "current_flow": current_flow,
+            "asset": asset,
+            "slots": slots_json,
+            "now": datetime.utcnow()
+        })
         await self.session.commit()
 
     async def clear_state(self, user_id: int):
