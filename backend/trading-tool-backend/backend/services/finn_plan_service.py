@@ -6163,6 +6163,7 @@ class FinnPlanService:
         metrics: Dict[str, Any],
         interventions: List[Dict[str, Any]],
         agent_rhythm: Optional[Dict[str, Any]] = None,
+        operating_rules: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         handled_count = (
             metrics.get("resolved", 0)
@@ -6246,6 +6247,7 @@ class FinnPlanService:
             "blocked_or_slowed": blocked,
             "risk_officer_interventions": interventions,
             "agent_rhythm": agent_rhythm or {},
+            "operating_rules": operating_rules or {},
             "tomorrow_focus": tomorrow_focus,
             "closing_line": (
                 "Niet meer forceren vandaag; begin morgen met review van de open punten."
@@ -6468,7 +6470,7 @@ class FinnPlanService:
 
         day_close = None
         if period.get("mode") == "day_close":
-            day_close = self._build_finn_day_close(items, metrics, interventions, agent_rhythm)
+            day_close = self._build_finn_day_close(items, metrics, interventions, agent_rhythm, operating_rules)
             if day_close["status"] == "review_before_tomorrow":
                 status = "day_close_attention"
                 headline = "Dagafsluiting: er zijn risk-officer punten die je morgen eerst moet reviewen."

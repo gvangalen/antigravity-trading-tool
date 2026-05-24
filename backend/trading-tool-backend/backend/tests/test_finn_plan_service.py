@@ -285,6 +285,8 @@ def test_finn_day_close_carries_agent_rhythm_into_tomorrow_focus():
 
     assert report["agent_rhythm"]["status"] == "ready"
     assert report["day_close"]["agent_rhythm"]["status"] == "ready"
+    assert report["day_close"]["operating_rules"]["status"] == "ready"
+    assert report["day_close"]["operating_rules"] == report["operating_rules"]
     assert any("agent-adviezen" in item for item in report["day_close"]["tomorrow_focus"])
     assert "Agent-ritme voor morgen:" in message
 
