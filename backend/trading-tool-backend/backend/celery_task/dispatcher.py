@@ -1,7 +1,11 @@
 from celery import shared_task, current_app
 import logging
 from backend.utils.db import get_db_connection
-from backend.celery_task.queue_policy import resolve_task_queue, resolve_workload_class
+from backend.celery_task.queue_policy import (
+    resolve_task_queue,
+    resolve_task_rate_limit,
+    resolve_workload_class,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +74,7 @@ def dispatch_for_all_users(
 
         queue_name = resolve_task_queue(task_name)
         workload_class = resolve_workload_class(task_name)
+        rate_limit = resolve_task_rate_limit(task_name) or "none"
         user_count = len(user_ids)
         plan = _dispatch_plan(
             user_count,
@@ -78,10 +83,11 @@ def dispatch_for_all_users(
         )
 
         logger.info(
-            "🚀 Dispatch task=%s queue=%s workload=%s users=%s batch_size=%s batches=%s max_spread_seconds=%s max_countdown=%s",
+            "🚀 Dispatch task=%s queue=%s workload=%s rate_limit=%s users=%s batch_size=%s batches=%s max_spread_seconds=%s max_countdown=%s",
             task_name,
             queue_name,
             workload_class,
+            rate_limit,
             user_count,
             plan["batch_size"],
             plan["batch_count"],
@@ -108,10 +114,11 @@ def dispatch_for_all_users(
             )
 
             logger.info(
-                "➡️ Task gepland task=%s queue=%s workload=%s user=%s batch=%s countdown=%ss",
+                "➡️ Task gepland task=%s queue=%s workload=%s rate_limit=%s user=%s batch=%s countdown=%ss",
                 task_name,
                 queue_name,
                 workload_class,
+                rate_limit,
                 user_id,
                 i // plan["batch_size"],
                 countdown_seconds,

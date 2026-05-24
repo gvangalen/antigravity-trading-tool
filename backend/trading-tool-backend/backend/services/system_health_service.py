@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy import text
 
-from backend.celery_task.queue_policy import NAMED_QUEUES
+from backend.celery_task.queue_policy import NAMED_QUEUES, rate_limit_summary_by_queue
 from backend.infrastructure.database import async_session_factory
 
 
@@ -122,9 +122,17 @@ class SystemHealthService:
                 worker_count=len(workers),
                 workers=sorted(workers.keys()),
                 workers_by_queue=workers_by_queue,
+                rate_limits_by_queue=rate_limit_summary_by_queue(),
             )
         except Exception as exc:
-            return _component("error", error=str(exc), worker_count=0, workers=[], workers_by_queue={})
+            return _component(
+                "error",
+                error=str(exc),
+                worker_count=0,
+                workers=[],
+                workers_by_queue={},
+                rate_limits_by_queue=rate_limit_summary_by_queue(),
+            )
 
     @staticmethod
     def _celery_ping() -> Optional[Dict[str, Any]]:

@@ -20,6 +20,7 @@ from backend.celery_task.queue_policy import (
     NAMED_QUEUES,
     build_dispatch_schedule_entry,
     build_task_schedule_entry,
+    celery_task_annotations,
     celery_task_routes,
 )
 
@@ -56,11 +57,9 @@ celery_app.conf.task_queues = tuple(Queue(queue_name) for queue_name in NAMED_QU
 celery_app.conf.task_routes = celery_task_routes()
 
 # =========================================================
-# ⚡ RATE LIMIT (BELANGRIJK)
+# ⚡ RATE LIMITS (PER WORKLOAD/PROVIDER)
 # =========================================================
-celery_app.conf.task_annotations = {
-    "*": {"rate_limit": "10/m"}  # max 10 tasks per minuut
-}
+celery_app.conf.task_annotations = celery_task_annotations()
 
 # =========================================================
 # 🚀 CELERY BEAT SCHEDULE (GEOPTIMALISEERD)

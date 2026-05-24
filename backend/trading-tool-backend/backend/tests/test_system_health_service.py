@@ -57,7 +57,14 @@ def test_deep_health_returns_component_statuses(monkeypatch):
         return {"status": "down", "error": "redis unavailable"}
 
     async def ok_celery():
-        return {"status": "ok", "worker_count": 1, "workers": ["worker@example"]}
+        return {
+            "status": "ok",
+            "worker_count": 1,
+            "workers": ["worker@example"],
+            "rate_limits_by_queue": {
+                "market_data": {"rate_limit": "20/m", "task_count": 1, "throttled": True},
+            },
+        }
 
     async def ok_market():
         return {
@@ -82,6 +89,7 @@ def test_deep_health_returns_component_statuses(monkeypatch):
     assert response["components"]["database"]["status"] == "ok"
     assert response["components"]["broker"]["status"] == "down"
     assert response["components"]["celery"]["worker_count"] == 1
+    assert response["components"]["celery"]["rate_limits_by_queue"]["market_data"]["rate_limit"] == "20/m"
     assert response["duration_ms"] >= 0
 
 
@@ -94,3 +102,19 @@ def test_workers_by_queue_maps_active_queue_names():
     assert result["market_data"] == ["worker-a", "worker-b"]
     assert result["scoring"] == ["worker-a"]
     assert result["execution_critical"] == []
+
+
+def test_check_celery_includes_rate_limit_summary(monkeypatch):
+    monkeypatch.setattr(SystemHealthService, "_celery_ping", staticmethod(lambda: {"worker-a": {"ok": "pong"}}))
+    monkeypatch.setattr(
+        SystemHealthService,
+        "_celery_active_queues",
+        staticmethod(lambda: {"worker-a": [{"name": "market_data"}]}),
+    )
+
+    result = asyncio.run(SystemHealthService._check_celery())
+
+    assert result["status"] == "ok"
+    assert result["workers_by_queue"]["market_data"] == ["worker-a"]
+    assert result["rate_limits_by_queue"]["market_data"]["rate_limit"] == "20/m"
+    assert result["rate_limits_by_queue"]["portfolio"]["rate_limit"] is None

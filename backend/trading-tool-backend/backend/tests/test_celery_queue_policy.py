@@ -4,9 +4,13 @@ from backend.celery_task.queue_policy import (
     ALLOWED_DEFAULT_TASKS,
     DISPATCHER_TASK_NAME,
     NAMED_QUEUES,
+    QUEUE_RATE_LIMITS,
     TASK_QUEUE_ROUTES,
+    celery_task_annotations,
     celery_task_routes,
+    rate_limit_summary_by_queue,
     resolve_task_queue,
+    resolve_task_rate_limit,
     resolve_workload_class,
     unmapped_task_names,
 )
@@ -62,12 +66,39 @@ def test_workload_class_resolution_follows_queue():
     assert resolve_workload_class("unknown.task") == "default_fallback"
 
 
+def test_rate_limit_resolution_follows_queue_policy():
+    assert resolve_task_rate_limit("backend.celery_task.market_task.fetch_market_data") == "20/m"
+    assert resolve_task_rate_limit("backend.celery_task.daily_report_task.generate_daily_report") == "6/m"
+    assert resolve_task_rate_limit("backend.celery_task.trading_bot_task.run_daily_trading_bot") == "30/m"
+    assert resolve_task_rate_limit("backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot") is None
+
+
 def test_celery_task_routes_shape_matches_policy():
     routes = celery_task_routes()
 
     assert routes["backend.celery_task.market_task.fetch_market_data"] == {"queue": "market_data"}
     assert routes["backend.celery_task.trading_bot_task.run_daily_trading_bot"] == {"queue": "execution_critical"}
     assert set(routes.keys()) == set(TASK_QUEUE_ROUTES.keys())
+
+
+def test_celery_task_annotations_are_explicit_and_non_global():
+    annotations = celery_task_annotations()
+
+    assert "*" not in annotations
+    assert annotations["backend.celery_task.market_task.fetch_market_data"] == {"rate_limit": "20/m"}
+    assert annotations["backend.celery_task.daily_report_task.generate_daily_report"] == {"rate_limit": "6/m"}
+    assert annotations["backend.celery_task.trading_bot_task.run_daily_trading_bot"] == {"rate_limit": "30/m"}
+    assert "backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot" not in annotations
+
+
+def test_rate_limit_summary_by_queue_matches_policy():
+    summary = rate_limit_summary_by_queue()
+
+    assert summary["market_data"]["rate_limit"] == QUEUE_RATE_LIMITS["market_data"]
+    assert summary["ai_generation"]["rate_limit"] == QUEUE_RATE_LIMITS["ai_generation"]
+    assert summary["execution_critical"]["rate_limit"] == QUEUE_RATE_LIMITS["execution_critical"]
+    assert summary["portfolio"]["rate_limit"] is None
+    assert summary["scoring"]["throttled"] is False
 
 
 def test_all_shared_tasks_are_routed_or_explicit_default():

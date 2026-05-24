@@ -1,4 +1,4 @@
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional
 
 
 DEFAULT_QUEUE = "celery"
@@ -63,6 +63,12 @@ WORKLOAD_CLASS_BY_QUEUE = {
     "execution_critical": "execution_critical",
 }
 
+QUEUE_RATE_LIMITS: Dict[str, str] = {
+    "market_data": "20/m",
+    "ai_generation": "6/m",
+    "execution_critical": "30/m",
+}
+
 
 def resolve_task_queue(task_name: str) -> str:
     return TASK_QUEUE_ROUTES.get(task_name, DEFAULT_QUEUE)
@@ -74,6 +80,19 @@ def resolve_workload_class(task_name: str) -> str:
 
 def celery_task_routes() -> Dict[str, Dict[str, str]]:
     return {task_name: {"queue": queue} for task_name, queue in TASK_QUEUE_ROUTES.items()}
+
+
+def resolve_task_rate_limit(task_name: str) -> Optional[str]:
+    return QUEUE_RATE_LIMITS.get(resolve_task_queue(task_name))
+
+
+def celery_task_annotations() -> Dict[str, Dict[str, str]]:
+    annotations: Dict[str, Dict[str, str]] = {}
+    for task_name in TASK_QUEUE_ROUTES:
+        rate_limit = resolve_task_rate_limit(task_name)
+        if rate_limit:
+            annotations[task_name] = {"rate_limit": rate_limit}
+    return annotations
 
 
 def build_task_schedule_entry(
@@ -120,3 +139,19 @@ def build_dispatch_schedule_entry(
 def unmapped_task_names(task_names: Iterable[str]) -> List[str]:
     known_task_names = set(TASK_QUEUE_ROUTES) | set(ALLOWED_DEFAULT_TASKS)
     return sorted({task_name for task_name in task_names if task_name not in known_task_names})
+
+
+def rate_limit_summary_by_queue() -> Dict[str, Dict[str, object]]:
+    summary: Dict[str, Dict[str, object]] = {}
+    for queue_name in NAMED_QUEUES:
+        task_names = sorted(
+            task_name for task_name, mapped_queue in TASK_QUEUE_ROUTES.items()
+            if mapped_queue == queue_name
+        )
+        rate_limit = QUEUE_RATE_LIMITS.get(queue_name)
+        summary[queue_name] = {
+            "rate_limit": rate_limit,
+            "task_count": len(task_names),
+            "throttled": rate_limit is not None,
+        }
+    return summary
