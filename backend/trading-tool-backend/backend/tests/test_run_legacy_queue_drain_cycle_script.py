@@ -4,10 +4,34 @@ from backend.scripts import run_legacy_queue_drain_cycle as cycle_script
 def test_run_drain_cycle_stops_when_reroute_ratio_drops(monkeypatch):
     samples = iter(
         [
-            {"queue": "celery", "total_depth": 100, "rerouteable_count": 80, "reroute_ratio": 0.8},
-            {"queue": "celery", "total_depth": 100, "rerouteable_count": 80, "reroute_ratio": 0.8},
-            {"queue": "celery", "total_depth": 20, "rerouteable_count": 4, "reroute_ratio": 0.2},
-            {"queue": "celery", "total_depth": 20, "rerouteable_count": 4, "reroute_ratio": 0.2},
+            {
+                "queue": "celery",
+                "total_depth": 100,
+                "rerouteable_count": 80,
+                "reroute_ratio": 0.8,
+                "top_tasks": [{"task_name": "task-a", "count": 80}],
+            },
+            {
+                "queue": "celery",
+                "total_depth": 100,
+                "rerouteable_count": 80,
+                "reroute_ratio": 0.8,
+                "top_tasks": [{"task_name": "task-a", "count": 80}],
+            },
+            {
+                "queue": "celery",
+                "total_depth": 20,
+                "rerouteable_count": 4,
+                "reroute_ratio": 0.2,
+                "top_tasks": [{"task_name": "task-b", "count": 4}],
+            },
+            {
+                "queue": "celery",
+                "total_depth": 20,
+                "rerouteable_count": 4,
+                "reroute_ratio": 0.2,
+                "top_tasks": [{"task_name": "task-b", "count": 4}],
+            },
         ]
     )
     drains = []
@@ -42,6 +66,14 @@ def test_run_drain_cycle_stops_when_reroute_ratio_drops(monkeypatch):
     assert result["stop_reason"] == "reroute_ratio_below_threshold"
     assert result["totals"]["processed"] == 50
     assert result["totals"]["rerouted"] == 40
+    assert result["operator_summary"]["reroute_ratio_before"] == 0.8
+    assert result["operator_summary"]["reroute_ratio_after"] == 0.2
+    assert result["operator_summary"]["processed"] == 50
+    assert result["operator_summary"]["rerouted"] == 40
+    assert result["operator_summary"]["kept"] == 10
+    assert result["operator_summary"]["top_tasks_before"] == [{"task_name": "task-a", "count": 80}]
+    assert result["operator_summary"]["top_tasks_after"] == [{"task_name": "task-b", "count": 4}]
+    assert result["operator_summary"]["stop_reason"] == "reroute_ratio_below_threshold"
     assert len(result["runs"]) == 1
     assert drains == [("celery", 50, 10.0)]
 

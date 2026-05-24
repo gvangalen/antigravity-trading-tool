@@ -29,6 +29,25 @@ from backend.scripts.drain_legacy_celery_queue import (
 logger = logging.getLogger(__name__)
 
 
+def _operator_summary(
+    *,
+    initial_sample: Dict[str, Any],
+    final_sample: Dict[str, Any],
+    totals: Dict[str, int],
+    stop_reason: str,
+) -> Dict[str, Any]:
+    return {
+        "reroute_ratio_before": float(initial_sample.get("reroute_ratio") or 0.0),
+        "reroute_ratio_after": float(final_sample.get("reroute_ratio") or 0.0),
+        "processed": int(totals.get("processed") or 0),
+        "rerouted": int(totals.get("rerouted") or 0),
+        "kept": int(totals.get("kept") or 0),
+        "top_tasks_before": list(initial_sample.get("top_tasks") or []),
+        "top_tasks_after": list(final_sample.get("top_tasks") or []),
+        "stop_reason": stop_reason,
+    }
+
+
 def run_drain_cycle(
     queue_name: str,
     *,
@@ -152,6 +171,12 @@ def run_drain_cycle(
         "stop_reason": stop_reason,
         "initial_sample": initial_sample,
         "final_sample": final_sample,
+        "operator_summary": _operator_summary(
+            initial_sample=initial_sample,
+            final_sample=final_sample,
+            totals=totals,
+            stop_reason=stop_reason,
+        ),
         "totals": totals,
         "runs": runs,
     }
