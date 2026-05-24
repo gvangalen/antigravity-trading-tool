@@ -5148,6 +5148,7 @@ class FinnPlanService:
             "agent_verdicts": agent_verdicts,
             "agent_controller": mission.get("agent_controller") or agent_controller,
             "agent_accountability": mission.get("agent_accountability") or {},
+            "agent_learning": mission.get("agent_learning") or {},
             "data_readiness": analysis.get("data_readiness") or {},
             "portfolio_risk": mission.get("portfolio_risk") or analysis.get("portfolio_risk") or {},
             "source": {
@@ -5637,6 +5638,7 @@ class FinnPlanService:
                 "source": report.get("source"),
                 "agent_controller": report.get("agent_controller"),
                 "behavioral_insight": behavioral,
+                "agent_learning": report.get("agent_learning"),
                 "advice_only": True,
                 "separate_from": report.get("separate_from"),
             },
