@@ -2221,6 +2221,8 @@ def test_agent_controller_ranks_verdicts_and_biases_mission_queue():
     assert updated["agent_controller"]["primary_item_id"] == updated["workqueue"][0]["id"]
     assert updated["agent_accountability"]["dominant_agent"] == "risk_agent"
     assert updated["agent_accountability"]["followed_count"] == 1
+    assert updated["agent_learning"]["status"] == "ready"
+    assert updated["agent_learning"]["agents"][0]["agent"] == "risk_agent"
     assert updated["agent_accountability"]["performance_light"]["agents"][0]["agent"] == "risk_agent"
     assert updated["agent_accountability"]["performance_light"]["agents"][0]["followed"] == 1
     assert updated["agent_accountability"]["performance_light"]["policy"]["uses_pnl"] is False
@@ -2261,6 +2263,8 @@ def test_agent_controller_handoff_activity_counts_in_finn_report():
     assert report["metrics"]["agent_performance_light"]["agents"][0]["agent"] == "risk_agent"
     assert report["metrics"]["agent_performance_light"]["policy"]["claims_performance"] is False
     assert report["agent_accountability"]["by_agent"]["risk_agent"] == 1
+    assert report["agent_learning"]["agents"][0]["agent"] == "risk_agent"
+    assert report["agent_learning"]["policy"]["uses_pnl"] is False
     assert report["agent_accountability"]["performance_light"]["agents"][0]["followed"] == 1
     assert any(item["type"] == "agent_controller_handoff" for item in report["risk_officer_interventions"])
     assert "Agent accountability:" in message

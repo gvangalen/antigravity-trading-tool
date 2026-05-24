@@ -5510,6 +5510,7 @@ class FinnPlanService:
             mission["workqueue"],
             activity_feed or [],
         )
+        mission["agent_learning"] = mission["agent_accountability"].get("performance_light") or {}
         return mission
 
     async def build_behavioral_intelligence_response(
@@ -6328,6 +6329,7 @@ class FinnPlanService:
             "agent_verdicts": agent_verdicts,
             "agent_controller": agent_controller,
             "agent_accountability": sections["agent_accountability"],
+            "agent_learning": sections["agent_accountability"].get("performance_light") or {},
             "behavioral_profile": behavioral.get("metrics") and self._behavioral_profile_from_metrics(
                 behavioral.get("metrics") or {},
                 behavioral.get("patterns") or [],
