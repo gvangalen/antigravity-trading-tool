@@ -21,7 +21,7 @@ module.exports = {
     {
       name: 'celery-worker',
       script: '/home/ubuntu/.local/bin/celery',
-      args: '-A backend.celery_task.celery_app worker --loglevel=info --concurrency=1',
+      args: '-A backend.celery_task.celery_app worker --loglevel=info --concurrency=1 -Q celery,market_data,scoring,portfolio,ai_generation,execution_critical',
       cwd: '/home/ubuntu/antigravity-trading-tool/backend/trading-tool-backend',
       interpreter: 'none',
       max_memory_restart: '300M'

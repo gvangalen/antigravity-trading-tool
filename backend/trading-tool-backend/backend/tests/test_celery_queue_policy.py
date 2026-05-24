@@ -7,6 +7,16 @@ from backend.celery_task.queue_policy import (
 )
 
 
+def test_single_worker_pm2_config_listens_to_all_named_queues():
+    from pathlib import Path
+
+    ecosystem_path = Path(__file__).resolve().parents[4] / "ecosystem.config.js"
+    source = ecosystem_path.read_text()
+
+    expected = ",".join(NAMED_QUEUES)
+    assert f"-Q {expected}" in source
+
+
 def test_named_queues_include_default_and_workload_classes():
     assert NAMED_QUEUES == [
         "celery",
