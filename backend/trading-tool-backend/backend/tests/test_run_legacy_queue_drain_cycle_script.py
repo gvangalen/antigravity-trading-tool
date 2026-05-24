@@ -114,3 +114,30 @@ def test_run_drain_cycle_respects_max_processed_total(monkeypatch):
     assert result["totals"]["processed"] == 180
     assert requested_limits == [100, 80]
     assert len(result["runs"]) == 2
+
+
+def test_write_result_artifact_creates_timestamped_json(tmp_path, monkeypatch):
+    class _FixedDatetime:
+        @staticmethod
+        def now(_tz):
+            from datetime import datetime, timezone
+
+            return datetime(2026, 5, 24, 17, 30, 0, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(cycle_script, "datetime", _FixedDatetime)
+
+    result = {
+        "queue": "celery",
+        "apply": True,
+        "operator_summary": {"reroute_ratio_before": 1.0, "stop_reason": "max_runs_reached"},
+    }
+
+    artifact_path = cycle_script.write_result_artifact(
+        result,
+        output_dir=str(tmp_path),
+    )
+
+    assert artifact_path is not None
+    assert artifact_path.endswith("legacy-queue-drain-celery-apply-20260524T173000Z.json")
+    payload = __import__("json").loads((tmp_path / "legacy-queue-drain-celery-apply-20260524T173000Z.json").read_text())
+    assert payload["operator_summary"]["reroute_ratio_before"] == 1.0

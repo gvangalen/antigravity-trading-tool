@@ -12,6 +12,7 @@ import json
 import logging
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -46,6 +47,28 @@ def _operator_summary(
         "top_tasks_after": list(final_sample.get("top_tasks") or []),
         "stop_reason": stop_reason,
     }
+
+
+def write_result_artifact(
+    result: Dict[str, Any],
+    *,
+    output_dir: Optional[str] = None,
+    output_file: Optional[str] = None,
+) -> Optional[str]:
+    if not output_dir and not output_file:
+        return None
+
+    if output_file:
+        target = Path(output_file)
+    else:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        mode = "apply" if result.get("apply") else "inspect"
+        queue_name = str(result.get("queue") or DEFAULT_QUEUE).replace("/", "_")
+        target = Path(output_dir) / f"legacy-queue-drain-{queue_name}-{mode}-{timestamp}.json"
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return str(target)
 
 
 def run_drain_cycle(
@@ -193,6 +216,8 @@ def main() -> None:
     parser.add_argument("--min-reroute-ratio", type=float, default=0.5, help="Stop if rerouteable ratio falls below this threshold.")
     parser.add_argument("--max-processed-total", type=int, default=None, help="Optional cap across the whole cycle.")
     parser.add_argument("--max-rerouted-total", type=int, default=None, help="Optional reroute cap across the whole cycle.")
+    parser.add_argument("--output-dir", default=None, help="Optional directory for timestamped JSON artifacts.")
+    parser.add_argument("--output-file", default=None, help="Optional explicit JSON artifact path.")
     parser.add_argument("--apply", action="store_true", help="Actually reroute messages instead of only inspecting.")
     args = parser.parse_args()
 
@@ -208,6 +233,13 @@ def main() -> None:
         max_processed_total=args.max_processed_total,
         max_rerouted_total=args.max_rerouted_total,
     )
+    artifact_path = write_result_artifact(
+        result,
+        output_dir=args.output_dir,
+        output_file=args.output_file,
+    )
+    if artifact_path:
+        result["artifact_path"] = artifact_path
     print(json.dumps(result, indent=2, sort_keys=True))
 
 
