@@ -5129,7 +5129,7 @@ class FinnPlanService:
             behavioral_insight,
         )
         agent_controller = self._build_agent_controller(agent_verdicts, context="mission_control")
-        mission = self._apply_agent_controller_to_mission(mission, agent_controller)
+        mission = self._apply_agent_controller_to_mission(mission, agent_controller, activity_feed=activity_feed)
         return {
             "ok": True,
             "intent": "mission_control",
@@ -5412,6 +5412,8 @@ class FinnPlanService:
         self,
         mission: Dict[str, Any],
         controller: Dict[str, Any],
+        *,
+        activity_feed: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         dominant_agent = controller.get("dominant_agent")
         if not dominant_agent:
@@ -5458,7 +5460,7 @@ class FinnPlanService:
         mission["agent_accountability"] = self._build_agent_accountability_summary(
             controller,
             mission["workqueue"],
-            [],
+            activity_feed or [],
         )
         return mission
 

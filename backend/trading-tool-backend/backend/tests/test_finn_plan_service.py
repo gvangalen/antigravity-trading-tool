@@ -2202,7 +2202,16 @@ def test_agent_controller_ranks_verdicts_and_biases_mission_queue():
         },
     ], context="mission_control")
 
-    updated = service._apply_agent_controller_to_mission(mission, controller)
+    activity_feed = [{
+        "type": "agent_controller_handoff",
+        "status": "executed",
+        "resolve_state": "resolved",
+        "agent_accountability": {
+            "dominant_agent": "risk_agent",
+            "dominant_label": "Risk Agent",
+        },
+    }]
+    updated = service._apply_agent_controller_to_mission(mission, controller, activity_feed=activity_feed)
 
     assert controller["dominant_agent"] == "risk_agent"
     assert controller.get("primary_action") is None
@@ -2211,6 +2220,7 @@ def test_agent_controller_ranks_verdicts_and_biases_mission_queue():
     assert updated["agent_controller"]["primary_action"]["prompt"]
     assert updated["agent_controller"]["primary_item_id"] == updated["workqueue"][0]["id"]
     assert updated["agent_accountability"]["dominant_agent"] == "risk_agent"
+    assert updated["agent_accountability"]["followed_count"] == 1
     assert updated["agent_accountability"]["influenced_items"][0]["id"] == "blocked_plan:BTC:1"
     assert updated["workqueue_groups"][0]["key"] == "first"
     assert updated["workqueue"][0]["type"] == "blocked_plan"
