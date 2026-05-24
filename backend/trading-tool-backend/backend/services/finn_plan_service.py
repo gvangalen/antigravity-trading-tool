@@ -5431,6 +5431,61 @@ class FinnPlanService:
             },
         }
 
+    def _agent_rhythm_from_learning(self, agent_learning: Dict[str, Any]) -> Dict[str, Any]:
+        agents = agent_learning.get("agents") or []
+        policy = {
+            "source": "agent_learning_light",
+            "uses_pnl": False,
+            "claims_performance": False,
+            "advice_only": True,
+        }
+        if not agents:
+            return {
+                "status": "not_enough_data",
+                "summary": "Nog geen agent-ritme zichtbaar; volg of handel eerst een paar controller-acties af.",
+                "followed_patterns": [],
+                "friction_patterns": [],
+                "tomorrow_focus": [],
+                "policy": policy,
+            }
+
+        followed_patterns = []
+        friction_patterns = []
+        for agent in agents:
+            label = agent.get("label") or agent.get("agent")
+            handoffs = int(agent.get("handoffs") or 0)
+            followed = int(agent.get("followed") or 0)
+            skipped = int(agent.get("skipped") or 0)
+            monitored = int(agent.get("monitored") or 0)
+            if followed:
+                followed_patterns.append(f"Je volgde {label} {followed} van {handoffs} keer.")
+            if skipped or monitored:
+                parts = []
+                if skipped:
+                    parts.append(f"{skipped} overgeslagen")
+                if monitored:
+                    parts.append(f"{monitored} gemonitord/later gezet")
+                friction_patterns.append(f"{label}: {', '.join(parts)}.")
+
+        top = agents[0]
+        summary = (
+            f"Je operator-ritme wordt nu vooral gestuurd door {top.get('label') or top.get('agent')} "
+            f"({top.get('handoffs', 0)} handoff(s))."
+        )
+        tomorrow_focus = []
+        if friction_patterns:
+            tomorrow_focus.append("Review eerst agent-adviezen die je hebt gesnoozed, gemonitord of overgeslagen.")
+        else:
+            tomorrow_focus.append("Start morgen opnieuw vanuit de dominante agent en werk Mission Control van boven naar beneden af.")
+        return {
+            "status": "ready",
+            "summary": summary,
+            "followed_patterns": followed_patterns[:4],
+            "friction_patterns": friction_patterns[:4],
+            "tomorrow_focus": tomorrow_focus,
+            "policy": policy,
+        }
+
     def _mission_item_matches_agent(self, item: Dict[str, Any], agent: Optional[str]) -> bool:
         if not agent:
             return False
@@ -5566,6 +5621,8 @@ class FinnPlanService:
                 "current_flow": "weekly_reflection",
                 "analysis": reflection,
                 "behavioral_insight": behavioral,
+                "agent_learning": reflection.get("agent_learning"),
+                "agent_rhythm": reflection.get("agent_rhythm"),
                 "advice_only": True,
             },
             "suggested_actions": [
@@ -5639,6 +5696,7 @@ class FinnPlanService:
                 "agent_controller": report.get("agent_controller"),
                 "behavioral_insight": behavioral,
                 "agent_learning": report.get("agent_learning"),
+                "agent_rhythm": report.get("agent_rhythm"),
                 "advice_only": True,
                 "separate_from": report.get("separate_from"),
             },
@@ -5659,6 +5717,8 @@ class FinnPlanService:
         patterns = behavioral.get("patterns") or []
         week_over_week = self._behavioral_week_over_week(metrics)
         behavioral_profile = self._behavioral_profile_from_metrics(metrics, patterns)
+        agent_learning = self._agent_performance_light(activity_feed)
+        agent_rhythm = self._agent_rhythm_from_learning(agent_learning)
         enough_data = metrics.get("actions_7d", 0) >= 3 or bool(patterns and patterns != ["discipline_neutral"])
 
         strengths = []
@@ -5720,6 +5780,8 @@ class FinnPlanService:
             "patterns": patterns,
             "behavioral_profile": behavioral_profile,
             "week_over_week": week_over_week,
+            "agent_learning": agent_learning,
+            "agent_rhythm": agent_rhythm,
             "strengths": strengths,
             "watchouts": watchouts,
             "metrics": {
@@ -5749,6 +5811,8 @@ class FinnPlanService:
             },
             "evidence": self._weekly_reflection_evidence(activity_feed),
             "safe_next_step": (
+                agent_rhythm["tomorrow_focus"][0]
+                if agent_rhythm.get("status") == "ready" and agent_rhythm.get("tomorrow_focus") else
                 "Gebruik volgende week Mission Control als werkqueue: eerst reviewen, dan pas nieuwe decisions maken."
                 if status != "not_enough_data"
                 else "Laat Finn deze week je actions, skips en reviews vastleggen; daarna wordt de reflectie rijker."
@@ -5991,6 +6055,7 @@ class FinnPlanService:
         items: List[Dict[str, Any]],
         metrics: Dict[str, Any],
         interventions: List[Dict[str, Any]],
+        agent_rhythm: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         handled_count = (
             metrics.get("resolved", 0)
@@ -6060,6 +6125,8 @@ class FinnPlanService:
             tomorrow_focus.append("Controleer of de bewuste plan-afwijking nog steeds bij je setup past.")
         if metrics.get("decision_churn_events", 0):
             tomorrow_focus.append("Voorkom morgen nieuwe decisions voordat open reviews zijn afgehandeld.")
+        if agent_rhythm and agent_rhythm.get("status") == "ready":
+            tomorrow_focus.extend(agent_rhythm.get("tomorrow_focus") or [])
         if not tomorrow_focus:
             tomorrow_focus.append("Start morgen met Mission Control en werk de queue van boven naar beneden af.")
 
@@ -6071,6 +6138,7 @@ class FinnPlanService:
             "consciously_handled": consciously_handled,
             "blocked_or_slowed": blocked,
             "risk_officer_interventions": interventions,
+            "agent_rhythm": agent_rhythm or {},
             "tomorrow_focus": tomorrow_focus,
             "closing_line": (
                 "Niet meer forceren vandaag; begin morgen met review van de open punten."
@@ -6153,6 +6221,7 @@ class FinnPlanService:
             "decision_churn_events": event_counts.get("decision_churn", 0),
             "execution_pressure_events": event_counts.get("execution_pressure", 0),
         }
+        agent_rhythm = self._agent_rhythm_from_learning(metrics["agent_performance_light"])
         if period["key"] in {"today", "day_close"}:
             metrics.update({
                 "actions_today": metrics["actions"],
@@ -6267,6 +6336,7 @@ class FinnPlanService:
                 ],
                 "by_agent": metrics.get("agent_accountability_by_agent") or {},
                 "performance_light": metrics.get("agent_performance_light") or {},
+                "agent_rhythm": agent_rhythm,
             },
         }
 
@@ -6289,7 +6359,7 @@ class FinnPlanService:
 
         day_close = None
         if period.get("mode") == "day_close":
-            day_close = self._build_finn_day_close(items, metrics, interventions)
+            day_close = self._build_finn_day_close(items, metrics, interventions, agent_rhythm)
             if day_close["status"] == "review_before_tomorrow":
                 status = "day_close_attention"
                 headline = "Dagafsluiting: er zijn risk-officer punten die je morgen eerst moet reviewen."
@@ -6332,6 +6402,7 @@ class FinnPlanService:
             "agent_controller": agent_controller,
             "agent_accountability": sections["agent_accountability"],
             "agent_learning": sections["agent_accountability"].get("performance_light") or {},
+            "agent_rhythm": agent_rhythm,
             "behavioral_profile": behavioral.get("metrics") and self._behavioral_profile_from_metrics(
                 behavioral.get("metrics") or {},
                 behavioral.get("patterns") or [],
@@ -6452,6 +6523,9 @@ class FinnPlanService:
             performance = accountability.get("performance_light") or {}
             if performance.get("summary"):
                 lines.append(f"- Learning light: {performance.get('summary')}")
+            rhythm = accountability.get("agent_rhythm") or report.get("agent_rhythm") or {}
+            if rhythm.get("summary"):
+                lines.append(f"- Agent-ritme: {rhythm.get('summary')}")
         day_close = report.get("day_close") or {}
         if day_close:
             lines.append("Dagafsluiting:")
@@ -6469,6 +6543,10 @@ class FinnPlanService:
                 for item in blocked[:4]:
                     asset = f" {item.get('asset')}" if item.get("asset") else ""
                     lines.append(f"- {item.get('label') or item.get('type')}{asset}: {item.get('outcome')}")
+            rhythm = day_close.get("agent_rhythm") or {}
+            if rhythm.get("summary"):
+                lines.append("Agent-ritme voor morgen:")
+                lines.append(f"- {rhythm.get('summary')}")
             tomorrow = day_close.get("tomorrow_focus") or []
             if tomorrow:
                 lines.append("Meenemen naar morgen:")
@@ -6580,6 +6658,15 @@ class FinnPlanService:
         wow = reflection.get("week_over_week") or {}
         if wow.get("summary"):
             lines.append(f"Vergeleken met vorige week: {wow.get('summary')}")
+        agent_rhythm = reflection.get("agent_rhythm") or {}
+        if agent_rhythm.get("summary"):
+            lines.append(f"Agent-ritme: {agent_rhythm.get('summary')}")
+            followed = agent_rhythm.get("followed_patterns") or []
+            friction = agent_rhythm.get("friction_patterns") or []
+            if followed:
+                lines.extend([f"- {item}" for item in followed[:2]])
+            if friction:
+                lines.extend([f"- Let op: {item}" for item in friction[:2]])
         strengths = reflection.get("strengths") or []
         if strengths:
             lines.append("Sterk deze week:")

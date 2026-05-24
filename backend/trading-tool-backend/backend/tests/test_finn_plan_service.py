@@ -247,6 +247,48 @@ def test_finn_day_close_report_summarizes_closeout_and_tomorrow_focus():
     assert "los van je dagelijkse trading report" in message
 
 
+def test_finn_day_close_carries_agent_rhythm_into_tomorrow_focus():
+    service = _service()
+    now = _utc_now().isoformat()
+    activity = [
+        {
+            "type": "agent_controller_handoff",
+            "label": "Volg Risk Agent",
+            "status": "executed",
+            "resolve_state": "resolved",
+            "asset": "BTC",
+            "created_at": now,
+            "agent_accountability": {
+                "dominant_agent": "risk_agent",
+                "dominant_label": "Risk Agent",
+                "primary_action_label": "Portfolio-risico bekijken",
+            },
+        },
+        {
+            "type": "agent_controller_handoff",
+            "label": "Volg Execution Agent",
+            "status": "executed",
+            "resolve_state": "snoozed",
+            "asset": "ETH",
+            "created_at": now,
+            "agent_accountability": {
+                "dominant_agent": "execution_agent",
+                "dominant_label": "Execution Agent",
+                "primary_action_label": "Live preflight bekijken",
+            },
+        },
+    ]
+    behavioral = service._build_behavioral_insight_from_activity(activity)
+
+    report = service._build_finn_reflection_report(activity, behavioral, "Sluit mijn dag af")
+    message = service._finn_reflection_report_message(report)
+
+    assert report["agent_rhythm"]["status"] == "ready"
+    assert report["day_close"]["agent_rhythm"]["status"] == "ready"
+    assert any("agent-adviezen" in item for item in report["day_close"]["tomorrow_focus"])
+    assert "Agent-ritme voor morgen:" in message
+
+
 def test_finn_report_response_exposes_top_level_state_contract(monkeypatch):
     async def activity(user_id, limit=200):
         return []
@@ -3114,6 +3156,49 @@ def test_weekly_reflection_names_waiting_behavior():
     assert reflection["metrics"]["snoozed_7d"] == 1
     assert any("bewust niet doorgezet" in item for item in reflection["strengths"])
     assert any("uitgesteld" in item for item in reflection["strengths"])
+
+
+def test_weekly_reflection_includes_agent_rhythm_without_performance_claims():
+    service = _service()
+    now = _utc_now().isoformat()
+    activity = [
+        {
+            "type": "agent_controller_handoff",
+            "status": "executed",
+            "resolve_state": "resolved",
+            "asset": "BTC",
+            "created_at": now,
+            "agent_accountability": {
+                "dominant_agent": "risk_agent",
+                "dominant_label": "Risk Agent",
+                "primary_action_label": "Portfolio-risico bekijken",
+            },
+        },
+        {
+            "type": "agent_controller_handoff",
+            "status": "executed",
+            "resolve_state": "monitor_today",
+            "asset": "ETH",
+            "created_at": now,
+            "agent_accountability": {
+                "dominant_agent": "execution_agent",
+                "dominant_label": "Execution Agent",
+                "primary_action_label": "Live preflight bekijken",
+            },
+        },
+    ]
+    behavioral = service._build_behavioral_insight_from_activity(activity)
+
+    reflection = service._build_weekly_reflection_from_behavioral(behavioral, activity)
+    message = service._weekly_reflection_message(reflection)
+
+    assert reflection["agent_learning"]["status"] == "ready"
+    assert reflection["agent_learning"]["policy"]["claims_performance"] is False
+    assert reflection["agent_rhythm"]["status"] == "ready"
+    assert reflection["agent_rhythm"]["policy"]["uses_pnl"] is False
+    assert any("Risk Agent" in item for item in reflection["agent_rhythm"]["followed_patterns"])
+    assert any("Execution Agent" in item for item in reflection["agent_rhythm"]["friction_patterns"])
+    assert "Agent-ritme:" in message
 
 
 def test_behavioral_event_from_bot_update_detects_budget_and_live_pressure():
