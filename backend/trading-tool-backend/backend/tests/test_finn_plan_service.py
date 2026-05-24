@@ -184,6 +184,7 @@ def test_finn_reflection_report_summarizes_operator_activity():
     assert report["metrics"]["snoozed"] == 1
     assert report["risk_officer_interventions"][0]["type"] == "decision_churn"
     assert any(verdict["agent"] == "risk_agent" for verdict in report["agent_verdicts"])
+    assert report["agent_controller"]["dominant_agent"]
     assert "los van je dagelijkse trading report" in message
     assert "Agent-verdicts:" in message
 
@@ -2209,10 +2210,44 @@ def test_agent_controller_ranks_verdicts_and_biases_mission_queue():
     assert updated["summary"]["dominant_agent"] == "risk_agent"
     assert updated["agent_controller"]["primary_action"]["prompt"]
     assert updated["agent_controller"]["primary_item_id"] == updated["workqueue"][0]["id"]
+    assert updated["agent_accountability"]["dominant_agent"] == "risk_agent"
+    assert updated["agent_accountability"]["influenced_items"][0]["id"] == "blocked_plan:BTC:1"
     assert updated["workqueue_groups"][0]["key"] == "first"
     assert updated["workqueue"][0]["type"] == "blocked_plan"
     assert updated["workqueue"][0]["controller_rank_boost"] > 0
     assert updated["workqueue"][0]["dominant_agent"] == "risk_agent"
+
+
+def test_agent_controller_handoff_activity_counts_in_finn_report():
+    service = _service()
+    now = _utc_now().isoformat()
+    activity = [
+        {
+            "type": "agent_controller_handoff",
+            "label": "Agent-handoff gevolgd",
+            "status": "executed",
+            "resolve_state": "resolved",
+            "asset": "BTC",
+            "created_at": now,
+            "agent_accountability": {
+                "dominant_agent": "risk_agent",
+                "dominant_label": "Risk Agent",
+                "primary_action_label": "Portfolio-risico bekijken",
+                "primary_action_handoff": "daily_coach",
+            },
+        }
+    ]
+    behavioral = service._build_behavioral_insight_from_activity(activity)
+
+    report = service._build_finn_reflection_report(activity, behavioral, "Geef mijn Finn rapport van vandaag")
+    message = service._finn_reflection_report_message(report)
+
+    assert report["metrics"]["agent_controller_handoffs"] == 1
+    assert report["metrics"]["agent_accountability_events"] == 1
+    assert report["metrics"]["agent_accountability_by_agent"]["risk_agent"] == 1
+    assert report["agent_accountability"]["by_agent"]["risk_agent"] == 1
+    assert any(item["type"] == "agent_controller_handoff" for item in report["risk_officer_interventions"])
+    assert "Agent accountability:" in message
 
 
 def test_bot_decision_review_items_escalate_guardrail_risk():

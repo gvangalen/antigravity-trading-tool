@@ -5147,6 +5147,7 @@ class FinnPlanService:
             "behavioral_insight": behavioral_insight,
             "agent_verdicts": agent_verdicts,
             "agent_controller": mission.get("agent_controller") or agent_controller,
+            "agent_accountability": mission.get("agent_accountability") or {},
             "data_readiness": analysis.get("data_readiness") or {},
             "portfolio_risk": mission.get("portfolio_risk") or analysis.get("portfolio_risk") or {},
             "source": {
@@ -5329,6 +5330,58 @@ class FinnPlanService:
             "asset": asset,
         }
 
+    def _build_agent_accountability_summary(
+        self,
+        controller: Dict[str, Any],
+        workqueue: List[Dict[str, Any]],
+        activity_feed: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        dominant_agent = controller.get("dominant_agent")
+        primary_action = controller.get("primary_action") or {}
+        influenced_items = [
+            {
+                "id": item.get("id"),
+                "type": item.get("type"),
+                "asset": item.get("asset"),
+                "title": item.get("title"),
+                "controller_rank_boost": item.get("controller_rank_boost"),
+                "reason": item.get("controller_reason") or item.get("reason"),
+            }
+            for item in workqueue or []
+            if item.get("dominant_agent") == dominant_agent or item.get("controller_rank_boost")
+        ]
+        followed = []
+        skipped = []
+        monitored = []
+        for item in activity_feed or []:
+            accountability = item.get("agent_accountability") or {}
+            if accountability.get("dominant_agent") != dominant_agent:
+                continue
+            state = item.get("resolve_state")
+            if state == "resolved":
+                followed.append(item)
+            elif state == "skipped":
+                skipped.append(item)
+            elif state in {"monitor_today", "snoozed", "waiting_for_data"}:
+                monitored.append(item)
+        return {
+            "dominant_agent": dominant_agent,
+            "dominant_label": controller.get("dominant_label"),
+            "controller_status": controller.get("status"),
+            "controller_score": controller.get("dominant_score"),
+            "primary_action": primary_action,
+            "primary_item_id": controller.get("primary_item_id"),
+            "influenced_items": influenced_items[:5],
+            "followed_count": len(followed),
+            "skipped_count": len(skipped),
+            "monitored_count": len(monitored),
+            "policy": {
+                "source": "agent_controller",
+                "audit_only": True,
+                "does_not_execute": True,
+            },
+        }
+
     def _mission_item_matches_agent(self, item: Dict[str, Any], agent: Optional[str]) -> bool:
         if not agent:
             return False
@@ -5402,6 +5455,11 @@ class FinnPlanService:
             "dominant_agent_score": dominant_score,
             "workqueue_count": len(mission["workqueue"]),
         }
+        mission["agent_accountability"] = self._build_agent_accountability_summary(
+            controller,
+            mission["workqueue"],
+            [],
+        )
         return mission
 
     async def build_behavioral_intelligence_response(
@@ -6000,6 +6058,10 @@ class FinnPlanService:
             item.get("behavioral_event") for item in items
             if isinstance(item.get("behavioral_event"), dict)
         ]
+        agent_accountability_events = [
+            item.get("agent_accountability") for item in items
+            if isinstance(item.get("agent_accountability"), dict)
+        ]
         event_counts: Dict[str, int] = {}
         for event in behavioral_events:
             event_type = str(event.get("type") or "unknown")
@@ -6027,9 +6089,12 @@ class FinnPlanService:
             "live_order_blocks": count_type("live_manual_order_blocked"),
             "live_orders_confirmed": count_type("live_manual_order_confirmed"),
             "live_setup_block_acks": count_type("live_setup_block_acknowledged"),
+            "agent_controller_handoffs": count_type("agent_controller_handoff"),
             "mission_items_resolved": count_type("resolve_mission_item"),
             "mission_items_snoozed": count_type("snooze_mission_item"),
             "behavioral_events": len(behavioral_events),
+            "agent_accountability_events": len(agent_accountability_events),
+            "agent_accountability_by_agent": self._agent_accountability_counts(agent_accountability_events),
             "plan_deviation_events": event_counts.get("plan_deviation_attempt", 0) + event_counts.get("strategy_change_pressure", 0),
             "decision_churn_events": event_counts.get("decision_churn", 0),
             "execution_pressure_events": event_counts.get("execution_pressure", 0),
@@ -6084,6 +6149,13 @@ class FinnPlanService:
                 "count": metrics["live_setup_block_acks"],
                 "meaning": "Je hebt expliciet bevestigd dat je een live order bij een geblokkeerde setup wilde blijven beoordelen.",
             })
+        if metrics["agent_controller_handoffs"] > 0:
+            interventions.append({
+                "type": "agent_controller_handoff",
+                "label": "Agent-handoff gevolgd",
+                "count": metrics["agent_controller_handoffs"],
+                "meaning": "Je hebt een door Finn Controller gekozen primaire agent-actie gevolgd.",
+            })
         if metrics["skipped"] + metrics["snoozed"] + metrics["monitor_today"] > 0:
             interventions.append({
                 "type": "disciplined_waiting",
@@ -6132,6 +6204,14 @@ class FinnPlanService:
             "guardrails": {
                 "title": "Finn guardrails",
                 "items": interventions,
+            },
+            "agent_accountability": {
+                "title": "Agent accountability",
+                "items": [
+                    f"{metrics['agent_controller_handoffs']} controller-handoff(s) gevolgd",
+                    f"{metrics['agent_accountability_events']} agent-accountability event(s)",
+                ],
+                "by_agent": metrics.get("agent_accountability_by_agent") or {},
             },
         }
 
@@ -6195,6 +6275,7 @@ class FinnPlanService:
             "day_close": day_close,
             "agent_verdicts": agent_verdicts,
             "agent_controller": agent_controller,
+            "agent_accountability": sections["agent_accountability"],
             "behavioral_profile": behavioral.get("metrics") and self._behavioral_profile_from_metrics(
                 behavioral.get("metrics") or {},
                 behavioral.get("patterns") or [],
@@ -6209,6 +6290,13 @@ class FinnPlanService:
             },
             "safe_next_step": safe_next_step,
         }
+
+    def _agent_accountability_counts(self, events: List[Dict[str, Any]]) -> Dict[str, int]:
+        counts: Dict[str, int] = {}
+        for event in events or []:
+            agent = str(event.get("dominant_agent") or "unknown")
+            counts[agent] = counts.get(agent, 0) + 1
+        return counts
 
     def _build_report_agent_verdicts(
         self,
@@ -6300,6 +6388,11 @@ class FinnPlanService:
             lines.append(
                 f"Finn Controller: eerst {controller.get('dominant_label')} volgen - {controller.get('reason')}"
             )
+        accountability = report.get("agent_accountability") or {}
+        if accountability.get("items"):
+            lines.append("Agent accountability:")
+            for item in accountability.get("items")[:3]:
+                lines.append(f"- {item}")
         day_close = report.get("day_close") or {}
         if day_close:
             lines.append("Dagafsluiting:")
@@ -7066,6 +7159,7 @@ class FinnPlanService:
             "live_manual_order_blocked": "Live order geblokkeerd",
             "live_setup_block_acknowledged": "Geblokkeerde setup bewust bevestigd",
             "live_manual_order_confirmed": "Live manual order geplaatst",
+            "agent_controller_handoff": "Agent-handoff gevolgd",
             "resolve_mission_item": "Mission Control item bijgewerkt",
             "snooze_mission_item": "Mission Control item uitgesteld",
         }
@@ -7098,6 +7192,7 @@ class FinnPlanService:
             "outcome": outcome,
             "verified": verified,
             "behavioral_event": result.get("behavioral_event") if isinstance(result.get("behavioral_event"), dict) else None,
+            "agent_accountability": result.get("agent_accountability") if isinstance(result.get("agent_accountability"), dict) else None,
             "entity_ids": {
                 "setup_id": result.get("setup_id") or (action.get("payload") or {}).get("setup_id"),
                 "strategy_id": result.get("strategy_id") or (action.get("payload") or {}).get("strategy_id"),
@@ -8215,6 +8310,8 @@ class FinnPlanService:
             return await self._execute_resolve_mission_item_action(user_id, action)
         if action and action.get("type") == "snooze_mission_item":
             return await self._execute_resolve_mission_item_action(user_id, action)
+        if action and action.get("type") == "agent_controller_handoff":
+            return await self._execute_agent_controller_handoff_action(user_id, action)
         if action and action.get("type") == "configure_indicator":
             return await self._execute_indicator_config_action(user_id, action)
         if action and action.get("type") == "create_bot":
@@ -8652,6 +8749,43 @@ class FinnPlanService:
             "snooze_until": payload.get("snooze_until"),
             "source_ids": payload.get("source_ids") or {},
             "verified": {"mission_item_resolved": True},
+        }
+        await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
+        return result
+
+    async def _execute_agent_controller_handoff_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        payload = action.get("payload") or {}
+        controller = payload.get("agent_controller") if isinstance(payload.get("agent_controller"), dict) else {}
+        primary_action = payload.get("primary_action") if isinstance(payload.get("primary_action"), dict) else {}
+        dominant_agent = controller.get("dominant_agent") or payload.get("dominant_agent")
+        action_id = f"{action.get('id') or self._maintenance_action_id('agent_controller_handoff', [dominant_agent or 'agent', primary_action.get('prompt') or 'handoff'])}-u{user_id}"
+        acquired = await self._try_create_pending_action(user_id, action_id, action)
+        if not acquired:
+            existing_result = await self._wait_for_action_result(user_id, action_id)
+            if existing_result:
+                return existing_result
+            raise HTTPException(409, "Deze agent-handoff wordt al vastgelegd. Probeer zo opnieuw.")
+
+        result = {
+            "ok": True,
+            "message": "Agent-handoff vastgelegd voor accountability.",
+            "action_id": action_id,
+            "type": "agent_controller_handoff",
+            "dominant_agent": dominant_agent,
+            "dominant_label": controller.get("dominant_label"),
+            "primary_action": primary_action,
+            "asset": primary_action.get("asset") or payload.get("asset"),
+            "status": "followed",
+            "verified": {"agent_handoff_logged": True},
+            "agent_accountability": {
+                "dominant_agent": dominant_agent,
+                "dominant_label": controller.get("dominant_label"),
+                "controller_status": controller.get("status"),
+                "controller_score": controller.get("dominant_score"),
+                "primary_action_label": primary_action.get("label"),
+                "primary_action_handoff": primary_action.get("handoff"),
+                "primary_item_id": controller.get("primary_item_id"),
+            },
         }
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         return result

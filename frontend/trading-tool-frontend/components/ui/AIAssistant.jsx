@@ -331,6 +331,46 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     await handleChat(action.prompt);
   };
 
+  const buildAgentHandoffAuditAction = (action, controller) => {
+    if (!action?.prompt || !controller?.dominant_agent) return null;
+    return {
+      id: `agent-handoff-${controller.dominant_agent}-${Date.now()}`,
+      type: "agent_controller_handoff",
+      label: `Volg ${controller.dominant_label || controller.dominant_agent}`,
+      payload: {
+        agent_controller: controller,
+        primary_action: action,
+        dominant_agent: controller.dominant_agent,
+        asset: action.asset,
+      },
+      risk_level: "low",
+      requires_confirmation: false,
+      autonomy_level: "user_initiated",
+      guardrails: {
+        requires_confirmation: false,
+        can_execute_without_user: false,
+        writes_trading_config: false,
+        executes_order: false,
+      },
+    };
+  };
+
+  const logAgentHandoff = async (action, controller) => {
+    const auditAction = buildAgentHandoffAuditAction(action, controller);
+    if (!auditAction) return;
+    try {
+      await executeAssistantAction(auditAction);
+      fetchMissionControl();
+    } catch (err) {
+      console.warn("Agent handoff audit failed", err);
+    }
+  };
+
+  const handleAgentControllerAction = async (action, controller) => {
+    await logAgentHandoff(action, controller);
+    await handleFollowUpAction(action);
+  };
+
   const renderFollowUpButtons = (actions, compact = false) => (
     <div className={`flex flex-wrap gap-2 ${compact ? "" : "mt-4 pt-3 border-t border-slate-100/50 dark:border-slate-800/50"}`}>
       {!compact && (
@@ -445,10 +485,15 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             {controller.next_action}
           </p>
         )}
+        {controller.primary_item_id && (
+          <p className="mt-1 text-[8px] font-black uppercase tracking-widest opacity-65">
+            Accountability: {controller.primary_item_id}
+          </p>
+        )}
         {controller.primary_action?.prompt && (
           <button
             type="button"
-            onClick={() => handleFollowUpAction(controller.primary_action)}
+            onClick={() => handleAgentControllerAction(controller.primary_action, controller)}
             className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white/80 dark:bg-slate-950/45 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest shadow-sm transition hover:bg-white dark:hover:bg-slate-950"
           >
             {followUpIcon(controller.primary_action.handoff)}
@@ -1980,6 +2025,11 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                       {item.entity_ids?.decision_id && (
                         <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
                           decision #{item.entity_ids.decision_id}
+                        </span>
+                      )}
+                      {item.agent_accountability?.dominant_label && (
+                        <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-300">
+                          {item.agent_accountability.dominant_label}
                         </span>
                       )}
                     </div>

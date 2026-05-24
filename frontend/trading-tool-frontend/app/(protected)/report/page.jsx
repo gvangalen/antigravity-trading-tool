@@ -232,6 +232,11 @@ function FinnAgentController({ controller }) {
           Primaire handoff: {controller.primary_action.label || controller.primary_action.prompt}
         </div>
       )}
+      {controller.primary_item_id && (
+        <p className="mt-2 text-[9px] font-black uppercase tracking-[0.14em] opacity-65">
+          Accountability item: {controller.primary_item_id}
+        </p>
+      )}
     </div>
   );
 }
