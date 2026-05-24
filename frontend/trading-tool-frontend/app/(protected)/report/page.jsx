@@ -417,6 +417,16 @@ function FinnReportsPanel() {
                   </div>
 
                   <FinnAgentController controller={analysis?.agent_controller} />
+                  {analysis?.agent_accountability?.performance_light?.summary && (
+                    <div className="mt-5 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 p-4 text-blue-700 dark:text-blue-300">
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em] mb-2">
+                        Agent learning light
+                      </div>
+                      <p className="text-sm font-semibold leading-relaxed">
+                        {analysis.agent_accountability.performance_light.summary}
+                      </p>
+                    </div>
+                  )}
                   <FinnAgentVerdicts verdicts={analysis?.agent_verdicts || []} />
                 </div>
 

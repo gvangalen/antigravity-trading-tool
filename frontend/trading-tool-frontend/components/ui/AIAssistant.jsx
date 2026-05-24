@@ -1852,6 +1852,16 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                   </span>
                 </div>
                 {renderAgentController(missionControl.agent_controller, true)}
+                {missionControl.agent_accountability?.performance_light?.summary && (
+                  <div className="mt-2 rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 px-3 py-2 text-blue-700 dark:text-blue-300">
+                    <div className="text-[8px] font-black uppercase tracking-widest opacity-75">
+                      Agent learning light
+                    </div>
+                    <p className="mt-1 text-[10px] font-semibold leading-snug">
+                      {missionControl.agent_accountability.performance_light.summary}
+                    </p>
+                  </div>
+                )}
                 {renderAgentVerdicts(missionControl.agent_verdicts, true)}
               </div>
             )}

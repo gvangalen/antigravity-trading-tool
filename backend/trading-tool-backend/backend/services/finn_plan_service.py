@@ -5375,10 +5375,58 @@ class FinnPlanService:
             "followed_count": len(followed),
             "skipped_count": len(skipped),
             "monitored_count": len(monitored),
+            "performance_light": self._agent_performance_light(activity_feed),
             "policy": {
                 "source": "agent_controller",
                 "audit_only": True,
+                "uses_pnl": False,
                 "does_not_execute": True,
+            },
+        }
+
+    def _agent_performance_light(self, activity_feed: List[Dict[str, Any]]) -> Dict[str, Any]:
+        stats: Dict[str, Dict[str, Any]] = {}
+        for item in activity_feed or []:
+            accountability = item.get("agent_accountability") or {}
+            agent = accountability.get("dominant_agent")
+            if not agent:
+                continue
+            label = accountability.get("dominant_label") or agent
+            entry = stats.setdefault(agent, {
+                "agent": agent,
+                "label": label,
+                "handoffs": 0,
+                "followed": 0,
+                "skipped": 0,
+                "monitored": 0,
+                "last_action": accountability.get("primary_action_label"),
+            })
+            entry["handoffs"] += 1
+            entry["last_action"] = accountability.get("primary_action_label") or entry.get("last_action")
+            state = item.get("resolve_state")
+            if state == "resolved":
+                entry["followed"] += 1
+            elif state == "skipped":
+                entry["skipped"] += 1
+            elif state in {"monitor_today", "snoozed", "waiting_for_data"}:
+                entry["monitored"] += 1
+        ranked = sorted(stats.values(), key=lambda value: (-value.get("handoffs", 0), value.get("agent", "")))
+        top = ranked[0] if ranked else None
+        if top:
+            summary = (
+                f"{top.get('label')} gaf het vaakst de doorslag: "
+                f"{top.get('handoffs')} handoff(s), {top.get('followed')} gevolgd."
+            )
+        else:
+            summary = "Nog geen agent-handoff historie om patronen uit af te leiden."
+        return {
+            "status": "ready" if ranked else "not_enough_data",
+            "summary": summary,
+            "agents": ranked[:6],
+            "policy": {
+                "source": "agent_controller_handoff_audit",
+                "uses_pnl": False,
+                "claims_performance": False,
             },
         }
 
@@ -6097,6 +6145,7 @@ class FinnPlanService:
             "behavioral_events": len(behavioral_events),
             "agent_accountability_events": len(agent_accountability_events),
             "agent_accountability_by_agent": self._agent_accountability_counts(agent_accountability_events),
+            "agent_performance_light": self._agent_performance_light(items),
             "plan_deviation_events": event_counts.get("plan_deviation_attempt", 0) + event_counts.get("strategy_change_pressure", 0),
             "decision_churn_events": event_counts.get("decision_churn", 0),
             "execution_pressure_events": event_counts.get("execution_pressure", 0),
@@ -6214,6 +6263,7 @@ class FinnPlanService:
                     f"{metrics['agent_accountability_events']} agent-accountability event(s)",
                 ],
                 "by_agent": metrics.get("agent_accountability_by_agent") or {},
+                "performance_light": metrics.get("agent_performance_light") or {},
             },
         }
 
@@ -6395,6 +6445,9 @@ class FinnPlanService:
             lines.append("Agent accountability:")
             for item in accountability.get("items")[:3]:
                 lines.append(f"- {item}")
+            performance = accountability.get("performance_light") or {}
+            if performance.get("summary"):
+                lines.append(f"- Learning light: {performance.get('summary')}")
         day_close = report.get("day_close") or {}
         if day_close:
             lines.append("Dagafsluiting:")
