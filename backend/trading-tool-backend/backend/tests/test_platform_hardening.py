@@ -1,5 +1,6 @@
 import inspect
 import asyncio
+from pathlib import Path
 
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
@@ -86,6 +87,18 @@ def test_mobile_overview_does_not_parallelize_shared_session_work():
     assert "asyncio.gather" not in source
     assert "get_latest_prices_and_changes" in source
     assert "get_bot_portfolios" in source
+
+
+def test_main_startup_is_schema_read_only():
+    main_path = Path(__file__).resolve().parents[1] / "main.py"
+    source = main_path.read_text()
+
+    assert "async def database_migrations" not in source
+    assert "ALTER TABLE" not in source
+    assert "CREATE TABLE" not in source
+    assert "CREATE INDEX" not in source
+    assert "DROP CONSTRAINT" not in source
+    assert "ADD CONSTRAINT" not in source
 
 
 class _FakeCursor:
