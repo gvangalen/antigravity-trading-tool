@@ -7,14 +7,30 @@ from backend.celery_task.queue_policy import (
 )
 
 
-def test_single_worker_pm2_config_listens_to_all_named_queues():
+def test_pm2_config_splits_named_queue_workers():
     from pathlib import Path
 
     ecosystem_path = Path(__file__).resolve().parents[4] / "ecosystem.config.js"
     source = ecosystem_path.read_text()
 
-    expected = ",".join(NAMED_QUEUES)
-    assert f"-Q {expected}" in source
+    assert "celery-worker-default" in source
+    assert "celery-worker-market-portfolio" in source
+    assert "celery-worker-scoring-execution" in source
+    assert "celery-worker-ai-reporting" in source
+    assert "-Q celery -n default@%h" in source
+    assert "-Q market_data,portfolio -n market-portfolio@%h" in source
+    assert "-Q scoring,execution_critical -n scoring-execution@%h" in source
+    assert "-Q ai_generation -n ai-reporting@%h" in source
+
+
+def test_all_named_queues_are_assigned_to_pm2_workers():
+    from pathlib import Path
+
+    ecosystem_path = Path(__file__).resolve().parents[4] / "ecosystem.config.js"
+    source = ecosystem_path.read_text()
+
+    for queue_name in NAMED_QUEUES:
+        assert queue_name in source
 
 
 def test_named_queues_include_default_and_workload_classes():

@@ -40,7 +40,8 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_24_runtime_ddl_to_migrations.py
 
   cd ../..
-  pm2 restart ecosystem.config.js --update-env || (pm2 delete all || true; pm2 start ecosystem.config.js --update-env)
+  pm2 delete celery-worker || true
+  pm2 startOrReload ecosystem.config.js --update-env || (pm2 delete all || true; pm2 start ecosystem.config.js --update-env)
   pm2 save
 
   for i in \$(seq 1 60); do
