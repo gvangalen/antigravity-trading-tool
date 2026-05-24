@@ -118,3 +118,26 @@ def test_check_celery_includes_rate_limit_summary(monkeypatch):
     assert result["workers_by_queue"]["market_data"] == ["worker-a"]
     assert result["rate_limits_by_queue"]["market_data"]["rate_limit"] == "20/m"
     assert result["rate_limits_by_queue"]["portfolio"]["rate_limit"] is None
+
+
+def test_queue_sample_summary_reports_legacy_breakdown():
+    class _FakeRedis:
+        async def llen(self, queue_name):
+            assert queue_name == "celery"
+            return 2
+
+        async def lrange(self, queue_name, start, end):
+            assert queue_name == "celery"
+            return [
+                b'{"headers":{"task":"backend.celery_task.dispatcher.dispatch_for_all_users"}}',
+                b'{"headers":{"task":"backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores"}}',
+            ]
+
+    result = asyncio.run(
+        SystemHealthService._queue_sample_summary(_FakeRedis(), queue_name="celery", sample_size=200)
+    )
+
+    assert result["queue"] == "celery"
+    assert result["sample_size"] == 2
+    assert result["rerouteable_count"] == 1
+    assert result["kept_on_default_count"] == 1

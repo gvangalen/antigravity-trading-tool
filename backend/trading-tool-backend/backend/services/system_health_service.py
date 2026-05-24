@@ -6,7 +6,8 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy import text
 
-from backend.celery_task.queue_policy import NAMED_QUEUES, rate_limit_summary_by_queue
+from backend.celery_task.legacy_queue_drain import summarize_legacy_queue_messages
+from backend.celery_task.queue_policy import DEFAULT_QUEUE, NAMED_QUEUES, rate_limit_summary_by_queue
 from backend.infrastructure.database import async_session_factory
 
 
@@ -95,11 +96,17 @@ class SystemHealthService:
                     queue_name: int(await client.llen(queue_name) or 0)
                     for queue_name in NAMED_QUEUES
                 }
+                default_queue_sample = await cls._queue_sample_summary(
+                    client,
+                    queue_name=DEFAULT_QUEUE,
+                    sample_size=200,
+                )
                 return _component(
                     "ok",
                     broker="redis",
                     latency_ms=round((time.perf_counter() - started) * 1000, 2),
                     default_queue_depth=queue_depths.get(os.getenv("CELERY_DEFAULT_QUEUE", "celery"), 0),
+                    default_queue_sample=default_queue_sample,
                     queue_depths=queue_depths,
                     total_queue_depth=sum(queue_depths.values()),
                 )
@@ -107,6 +114,21 @@ class SystemHealthService:
                 await client.aclose()
         except Exception as exc:
             return _component("down", broker="redis", error=str(exc))
+
+    @staticmethod
+    async def _queue_sample_summary(client: Any, *, queue_name: str, sample_size: int) -> Dict[str, Any]:
+        total_depth = int(await client.llen(queue_name) or 0)
+        if total_depth <= 0:
+            return {
+                "queue": queue_name,
+                "sample_size": 0,
+                "rerouteable_count": 0,
+                "kept_on_default_count": 0,
+                "top_tasks": [],
+            }
+        raw_messages = await client.lrange(queue_name, -sample_size, -1)
+        summary = summarize_legacy_queue_messages(raw_messages, source_queue=queue_name)
+        return {"queue": queue_name, **summary}
 
     @staticmethod
     async def _check_celery() -> Dict[str, Any]:
