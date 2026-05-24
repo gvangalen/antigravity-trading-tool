@@ -112,6 +112,10 @@ def test_deploy_script_has_no_user_specific_business_actions():
     assert "run_setup_agent" not in source
     assert "/api/health" in source
     assert "/api/system/health" in source
+    assert "tradamind_deep_health.json" in source
+    assert "json.load" in source
+    assert "STRICT_DEEP_HEALTH" in source
+    assert '"down", "error"' in source
 
 
 class _FakeCursor:
