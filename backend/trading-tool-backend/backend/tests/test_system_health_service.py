@@ -141,3 +141,33 @@ def test_queue_sample_summary_reports_legacy_breakdown():
     assert result["sample_size"] == 2
     assert result["rerouteable_count"] == 1
     assert result["kept_on_default_count"] == 1
+
+
+def test_check_broker_includes_default_queue_sample(monkeypatch):
+    class _FakeRedis:
+        async def ping(self):
+            return True
+
+        async def llen(self, queue_name):
+            if queue_name == "celery":
+                return 3
+            return 0
+
+        async def lrange(self, queue_name, start, end):
+            assert queue_name == "celery"
+            return [
+                b'{"headers":{"task":"backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores"}}',
+            ]
+
+        async def aclose(self):
+            return None
+
+    import redis.asyncio as redis
+
+    monkeypatch.setattr(redis, "from_url", lambda *args, **kwargs: _FakeRedis())
+
+    result = asyncio.run(SystemHealthService._check_broker())
+
+    assert result["status"] == "ok"
+    assert result["default_queue_depth"] == 3
+    assert result["default_queue_sample"]["rerouteable_count"] == 1

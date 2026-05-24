@@ -96,7 +96,7 @@ class SystemHealthService:
                     queue_name: int(await client.llen(queue_name) or 0)
                     for queue_name in NAMED_QUEUES
                 }
-                default_queue_sample = await cls._queue_sample_summary(
+                default_queue_sample = await SystemHealthService._queue_sample_summary(
                     client,
                     queue_name=DEFAULT_QUEUE,
                     sample_size=200,
