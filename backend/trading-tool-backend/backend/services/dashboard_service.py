@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import os
 from datetime import datetime, timezone
 from typing import List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,7 +34,9 @@ def sync_get_scores_for_symbol(user_id: int, symbol: str = "BTC") -> dict:
         return get_scores_for_symbol(include_metadata=True)
 
 class DashboardService:
-    # In-memory temporary cache to prevent database/AI load on rapid app open/resumes
+    # Optional in-memory cache to prevent load on rapid app open/resumes.
+    # Disabled by default because process-local cache is not consistency-safe
+    # across multiple backend instances.
     # Key: user_id (int) -> Value: (utc_timestamp, MobileOverviewResponse)
     _overview_cache: Dict[int, Any] = {}
     _cache_ttl_seconds = 15
@@ -41,6 +44,15 @@ class DashboardService:
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
         self.repository = DashboardRepository(db_session)
+
+    @classmethod
+    def mobile_overview_cache_enabled(cls) -> bool:
+        return os.getenv("DASHBOARD_OVERVIEW_CACHE_ENABLED", "false").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
 
     @classmethod
     def invalidate_cache(cls, user_id: int):
@@ -160,7 +172,8 @@ class DashboardService:
 
     async def get_mobile_overview(self, user_id: int, bypass_cache: bool = False) -> MobileOverviewResponse:
         # 1. Check in-memory payload cache if bypass_cache is False
-        if not bypass_cache:
+        cache_enabled = self.mobile_overview_cache_enabled()
+        if cache_enabled and not bypass_cache:
             cached = self._overview_cache.get(user_id)
             if cached:
                 cache_time, response_payload = cached
@@ -394,7 +407,8 @@ class DashboardService:
             intelligence_events=formatted_events
         )
 
-        # 9. Store in cache
-        self._overview_cache[user_id] = (datetime.now(timezone.utc), response_payload)
+        # 9. Store in cache only when explicitly enabled.
+        if cache_enabled:
+            self._overview_cache[user_id] = (datetime.now(timezone.utc), response_payload)
 
         return response_payload
