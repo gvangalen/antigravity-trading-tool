@@ -19,7 +19,10 @@ def test_deploy_script_gates_pm2_processes_and_has_fallback_rebuild():
 
     assert "expected_pm2_apps=" in source
     assert "check_pm2_apps_online" in source
+    assert "for attempt in" in source
     assert "tradamind_pm2_jlist.json" in source
+    assert "raw.splitlines()" in source
+    assert "jlist JSON payload not found" in source
     assert "PM2 gate failed" in source
     assert "pm2 startOrReload ecosystem.config.js --update-env && check_pm2_apps_online" in source
     assert "pm2 delete all || true" in source

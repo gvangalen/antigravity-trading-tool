@@ -42,15 +42,30 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   cd ../..
   expected_pm2_apps='frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-beat'
   check_pm2_apps_online() {
-    pm2 jlist >/tmp/tradamind_pm2_jlist.json
-    EXPECTED_PM2_APPS=\"\$expected_pm2_apps\" python3 - <<'PY'
+    for attempt in \$(seq 1 12); do
+      pm2 jlist >/tmp/tradamind_pm2_jlist.json
+      if EXPECTED_PM2_APPS=\"\$expected_pm2_apps\" python3 - <<'PY'
 import json
 import os
 import sys
 
 expected = os.environ.get('EXPECTED_PM2_APPS', '').split()
 with open('/tmp/tradamind_pm2_jlist.json', 'r', encoding='utf-8') as handle:
-    processes = json.load(handle)
+    raw = handle.read()
+
+json_payload = None
+lines = raw.splitlines()
+for index, line in enumerate(lines):
+    stripped = line.lstrip()
+    if stripped == '[' or stripped.startswith('[{'):
+        json_payload = '\n'.join(lines[index:])
+        break
+
+if not json_payload:
+    print('❌ PM2 gate failed: jlist JSON payload not found', file=sys.stderr)
+    sys.exit(1)
+
+processes = json.loads(json_payload)
 
 by_name = {process.get('name'): process for process in processes}
 missing = [name for name in expected if name not in by_name]
@@ -66,6 +81,13 @@ if missing or not_online:
 
 print('✅ PM2 gate passed: all expected apps online.')
 PY
+      then
+        return 0
+      fi
+      echo \"⏳ Waiting for PM2 apps to settle (attempt \$attempt/12)...\" >&2
+      sleep 2
+    done
+    return 1
   }
 
   pm2 delete celery-worker || true
