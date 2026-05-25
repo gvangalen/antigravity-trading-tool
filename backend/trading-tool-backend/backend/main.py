@@ -3,6 +3,7 @@ import os
 import logging
 import importlib
 import traceback
+import uuid
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -35,6 +36,15 @@ logger = logging.getLogger(__name__)
 # 🚀 FastAPI app
 # ------------------------------------------------------------
 app = FastAPI(title="Market Dashboard API", version="1.0")
+
+
+@app.middleware("http")
+async def request_trace_id_middleware(request, call_next):
+    trace_id = request.headers.get("x-trace-id") or f"trdm-req-{uuid.uuid4().hex[:12]}"
+    request.state.trace_id = trace_id
+    response = await call_next(request)
+    response.headers["X-Trace-Id"] = trace_id
+    return response
 
 # 🌍 CORS — Dynamic Configuration
 frontend_urls = [

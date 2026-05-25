@@ -20,7 +20,7 @@ The main remaining risk is operational scale, not core request correctness:
 - legacy `celery` backlog still needs controlled drain cycles
 - old psycopg2/background flows remain as explicit legacy boundaries
 - frontend polling/read-amplification has a first V1 reduction in place
-- stronger enterprise rollout/tracing is still future work
+- first enterprise rollout/tracing controls are in place
 
 ## Phase Status
 
@@ -33,6 +33,7 @@ The main remaining risk is operational scale, not core request correctness:
 | Phase 5 - Observability & Deployment Safety | Green | `/api/health` remains lightweight; `/api/system/health` reports DB, broker, workers, queues, market/scores freshness; deploy gate parses deep health and supports strict degraded handling. |
 | Phase 6 - Cleanup & Consistency | Green | Notifications API is authenticated-user scoped and async; dashboard/intelligence process caches are opt-in; API sync DB patterns and psycopg2 boundaries are tested. |
 | Step 5 - Frontend Cache/Polling | Green | Authenticated GET helpers no longer force global `no-store`; dashboard polling is visibility-aware and single-flight. |
+| Step 6 - Enterprise Safety Slice | Green | API responses carry `X-Trace-Id`; deploy verifies expected PM2 apps are online and rebuilds the process list if reload leaves gaps. |
 
 ## Current Live Baseline
 
@@ -124,8 +125,8 @@ Latest local regression:
 
 ### Enterprise later
 
-- End-to-end tracing per decision/order/report.
-- Rollback automation beyond documented commands.
+- Deep end-to-end tracing per decision/order/report beyond the request `X-Trace-Id`.
+- Rollback automation beyond documented commands and PM2 process-state gates.
 - Multi-instance cache coordination.
 - Stronger replay protection and exactly-once semantics across all execution-adjacent flows.
 

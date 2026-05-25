@@ -40,9 +40,44 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_24_runtime_ddl_to_migrations.py
 
   cd ../..
+  expected_pm2_apps='frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-beat'
+  check_pm2_apps_online() {
+    pm2 jlist >/tmp/tradamind_pm2_jlist.json
+    EXPECTED_PM2_APPS=\"\$expected_pm2_apps\" python3 - <<'PY'
+import json
+import os
+import sys
+
+expected = os.environ.get('EXPECTED_PM2_APPS', '').split()
+with open('/tmp/tradamind_pm2_jlist.json', 'r', encoding='utf-8') as handle:
+    processes = json.load(handle)
+
+by_name = {process.get('name'): process for process in processes}
+missing = [name for name in expected if name not in by_name]
+not_online = {
+    name: ((by_name.get(name) or {}).get('pm2_env') or {}).get('status')
+    for name in expected
+    if name in by_name and ((by_name.get(name) or {}).get('pm2_env') or {}).get('status') != 'online'
+}
+
+if missing or not_online:
+    print('❌ PM2 gate failed: missing={} not_online={}'.format(missing, not_online), file=sys.stderr)
+    sys.exit(1)
+
+print('✅ PM2 gate passed: all expected apps online.')
+PY
+  }
+
   pm2 delete celery-worker || true
-  pm2 startOrReload ecosystem.config.js --update-env || (pm2 delete all || true; pm2 start ecosystem.config.js --update-env)
-  pm2 save
+  if pm2 startOrReload ecosystem.config.js --update-env && check_pm2_apps_online; then
+    echo \"✅ PM2 reload completed with all expected apps online.\"
+  else
+    echo \"⚠️ PM2 reload did not leave every expected app online; rebuilding process list.\" >&2
+    pm2 delete all || true
+    pm2 start ecosystem.config.js --update-env
+    check_pm2_apps_online
+  fi
+  pm2 save --force
 
   health_ready=false
   for i in \$(seq 1 90); do
