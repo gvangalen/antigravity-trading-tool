@@ -598,9 +598,13 @@ async def get_finn_state(
 async def get_finn_mission_control(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
-    finn = FinnPlanService(db)
-    return await finn.build_mission_control_response(
+    trace_id = getattr(request.state, "trace_id", None) if request else None
+    finn = FinnPlanService(db, trace_id=trace_id)
+    response = await finn.build_mission_control_response(
         current_user["id"],
         {"page": "assistant", "scope": "mission_control"},
     )
+    await finn.issue_response_actions(current_user["id"], response)
+    return response

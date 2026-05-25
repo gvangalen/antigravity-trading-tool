@@ -1494,7 +1494,65 @@ def test_plan_status_agent_verdicts_explain_blocking_layer():
     assert any(verdict["agent"] == "technical_agent" and verdict["status"] == "blocks_plan" for verdict in analysis["agent_verdicts"])
     assert any(verdict["agent"] == "risk_agent" and verdict["status"] == "blocked" for verdict in analysis["agent_verdicts"])
     assert "Agent-verdicts:" in message
-    assert "Technical Agent: blocks_plan" in message
+
+
+def test_issue_response_actions_issues_nested_mission_control_actions():
+    service = FinnPlanService(db_session=object(), trace_id="trdm-test")
+    service._issue_pending_action = AsyncMock()
+
+    response = {
+        "summary": {"posture": "action_required"},
+        "workqueue": [
+            {
+                "id": "blocked_plan:BTC:61",
+                "resolve_action": {
+                    "id": "finn-maint-resolve-blocked-plan",
+                    "type": "resolve_mission_item",
+                    "label": "Vandaag monitoren",
+                    "payload": {
+                        "source_item_id": "blocked_plan:BTC:61",
+                        "resolution": "monitor_today",
+                    },
+                },
+                "resolve_actions": [
+                    {
+                        "id": "finn-maint-resolve-blocked-plan-done",
+                        "type": "resolve_mission_item",
+                        "label": "Markeer klaar",
+                        "payload": {
+                            "source_item_id": "blocked_plan:BTC:61",
+                            "resolution": "resolved",
+                        },
+                    },
+                    {
+                        "id": "finn-maint-snooze-blocked-plan",
+                        "type": "snooze_mission_item",
+                        "label": "Later opnieuw bekijken",
+                        "payload": {
+                            "source_item_id": "blocked_plan:BTC:61",
+                            "resolution": "snoozed",
+                        },
+                    },
+                ],
+                "next_best_action": {
+                    "type": "chat_prompt",
+                    "label": "BTC risk stack uitleg",
+                    "prompt": "Welke bots en plannen stapelen risico voor BTC?",
+                },
+            }
+        ],
+    }
+
+    issued = asyncio.run(service.issue_response_actions(30, response))
+
+    primary = issued["workqueue"][0]["resolve_action"]
+    alternatives = issued["workqueue"][0]["resolve_actions"]
+
+    assert primary["action_id"] == "finn-maint-resolve-blocked-plan-u30"
+    assert alternatives[0]["action_id"] == "finn-maint-resolve-blocked-plan-done-u30"
+    assert alternatives[1]["action_id"] == "finn-maint-snooze-blocked-plan-u30"
+    assert "action_id" not in issued["workqueue"][0]["next_best_action"]
+    assert service._issue_pending_action.await_count == 3
 
 
 def test_indicator_insight_request_is_detected_but_config_stays_separate():

@@ -9725,19 +9725,48 @@ class FinnPlanService:
         return acquired
 
     async def issue_response_actions(self, user_id: int, response: Dict[str, Any]) -> Dict[str, Any]:
-        actions = response.get("actions")
-        if not isinstance(actions, list) or not actions:
+        if not isinstance(response, dict):
             return response
-        issued_actions = []
-        for action in actions:
-            if not isinstance(action, dict) or not action.get("type"):
-                issued_actions.append(action)
-                continue
-            action_id = f"{action.get('id') or self._maintenance_action_id(action.get('type'), [json.dumps(action, sort_keys=True, default=str)])}-u{user_id}"
-            await self._issue_pending_action(user_id, action_id, action)
-            issued_actions.append({**action, "action_id": action_id})
-        response["actions"] = issued_actions
+        await self._issue_actions_in_structure(user_id, response)
         return response
+
+    async def _issue_actions_in_structure(self, user_id: int, node: Any) -> Any:
+        if isinstance(node, list):
+            for item in node:
+                await self._issue_actions_in_structure(user_id, item)
+            return node
+        if not isinstance(node, dict):
+            return node
+
+        if self._is_server_issued_action(node):
+            action_id = node.get("action_id") or f"{node.get('id') or self._maintenance_action_id(node.get('type'), [json.dumps(node, sort_keys=True, default=str)])}-u{user_id}"
+            await self._issue_pending_action(user_id, action_id, node)
+            node["action_id"] = action_id
+
+        for value in node.values():
+            await self._issue_actions_in_structure(user_id, value)
+        return node
+
+    def _is_server_issued_action(self, action: Dict[str, Any]) -> bool:
+        if not isinstance(action, dict):
+            return False
+        action_type = action.get("type")
+        if not action_type or action_type == "chat_prompt":
+            return False
+        return action_type in {
+            "create_plan",
+            "refresh_daily_scores",
+            "generate_bot_decision",
+            "skip_bot_decision",
+            "paper_execute_bot_decision",
+            "live_preflight_bot_decision",
+            "resolve_mission_item",
+            "snooze_mission_item",
+            "agent_controller_handoff",
+            "configure_indicator",
+            "create_bot",
+            "create_strategy",
+        }
 
     async def _issue_pending_action(self, user_id: int, action_id: str, action: Dict[str, Any]) -> None:
         if not self.session:
