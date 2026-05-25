@@ -144,8 +144,8 @@ Latest local regression:
    - Legacy messages without a publish timestamp intentionally report `age_source = unavailable`.
 
 3. Continue with the remaining platform cleanup sequence.
-   - Next: psycopg2 legacy boundary migration/isolation.
-   - Then: PushService sync DB cleanup.
+   - psycopg2 legacy boundary migration/isolation is complete at the driver boundary: direct driver imports are centralized in `backend/utils/db.py`.
+   - Next: PushService sync DB cleanup.
    - Then: frontend polling / `no-store` reduction.
 
 4. Then return to product OS work.

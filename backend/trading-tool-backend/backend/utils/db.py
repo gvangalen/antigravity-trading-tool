@@ -1,13 +1,22 @@
 import psycopg2
 import os
 import logging
+from typing import Any
 from dotenv import load_dotenv  # ✅ Zorg dat .env automatisch geladen wordt
+from psycopg2.extras import Json
 
 # ✅ .env-bestand laden (alleen nodig als dit bestand los wordt aangeroepen)
 load_dotenv()
 
 # ✅ Logging instellen
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+LEGACY_SYNC_DB_BOUNDARY = True
+
+
+def jsonb_param(value: Any) -> Json:
+    """Return a psycopg2 JSON adapter without leaking psycopg2 into callers."""
+    return Json(value)
 
 def get_db_connection():
     """Maakt een verbinding met de PostgreSQL database op basis van omgevingsvariabelen."""

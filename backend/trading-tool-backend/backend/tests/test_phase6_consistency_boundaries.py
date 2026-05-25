@@ -31,9 +31,6 @@ def test_process_local_caches_are_disabled_or_removed_for_phase6():
 
 def test_psycopg2_usage_is_limited_to_explicit_legacy_boundaries():
     allowed = {
-        BACKEND_ROOT / "ai_core" / "regime_memory.py",
-        BACKEND_ROOT / "celery_task" / "daily_report_task.py",
-        BACKEND_ROOT / "scripts" / "database.py",
         BACKEND_ROOT / "utils" / "db.py",
     }
     matches = {
@@ -44,6 +41,25 @@ def test_psycopg2_usage_is_limited_to_explicit_legacy_boundaries():
     }
 
     assert matches == allowed
+
+
+def test_json_adapter_is_hidden_behind_legacy_db_boundary():
+    forbidden = "from psycopg2.extras import Json"
+    matches = {
+        path
+        for path in BACKEND_ROOT.rglob("*.py")
+        if forbidden in _read(path)
+        and "tests" not in path.parts
+    }
+
+    assert matches == {BACKEND_ROOT / "utils" / "db.py"}
+
+
+def test_legacy_script_database_module_is_compatibility_wrapper():
+    source = _read(BACKEND_ROOT / "scripts" / "database.py")
+
+    assert "import psycopg2" not in source
+    assert "from backend.utils.db import get_db_connection" in source
 
 
 def test_root_pytest_collects_maintained_backend_suite_only():

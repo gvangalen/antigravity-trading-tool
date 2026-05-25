@@ -5,9 +5,8 @@ from decimal import Decimal
 
 from celery import shared_task
 from dotenv import load_dotenv
-from psycopg2.extras import Json
 
-from backend.utils.db import get_db_connection
+from backend.utils.db import get_db_connection, jsonb_param
 from backend.ai_agents.report_ai_agent import generate_daily_report_sections
 
 # 🧠 Regime memory
@@ -45,15 +44,15 @@ def to_float(v):
 
 def jsonb(v, fallback=None):
     if v is None:
-        return Json(fallback) if fallback is not None else None
+        return jsonb_param(fallback) if fallback is not None else None
     if isinstance(v, (dict, list)):
-        return Json(v)
+        return jsonb_param(v)
     if isinstance(v, str):
         try:
-            return Json(json.loads(v))
+            return jsonb_param(json.loads(v))
         except Exception:
-            return Json(v)
-    return Json(v)
+            return jsonb_param(v)
+    return jsonb_param(v)
 
 
 # =====================================================

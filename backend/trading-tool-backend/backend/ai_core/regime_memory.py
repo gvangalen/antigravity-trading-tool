@@ -3,9 +3,7 @@ import logging
 from datetime import date
 from typing import Any, Dict, Optional
 
-from psycopg2.extras import Json
-
-from backend.utils.db import get_db_connection
+from backend.utils.db import get_db_connection, jsonb_param
 from backend.engine.transition_detector import compute_transition_detector
 
 logger = logging.getLogger(__name__)
@@ -129,7 +127,7 @@ def store_regime_memory(user_id: int) -> Dict[str, Any]:
                     today,
                     regime_label,
                     regime_conf,
-                    Json(_safe_json(signals_json)),
+                    jsonb_param(_safe_json(signals_json)),
                     narrative,
                 ),
             )
