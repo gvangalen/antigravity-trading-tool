@@ -113,7 +113,7 @@ def test_deploy_script_has_no_user_specific_business_actions():
     assert "/api/health" in source
     assert "/api/system/health" in source
     assert "tradamind_deep_health.json" in source
-    assert "seq 1 90" in source
+    assert "seq 1 180" in source
     assert "health_ready=false" in source
     assert "--max-time 30" in source
     assert "json.load" in source

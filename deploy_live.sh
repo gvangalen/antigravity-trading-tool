@@ -118,7 +118,7 @@ PY
   pm2 save --force
 
   health_ready=false
-  for i in \$(seq 1 90); do
+  for i in \$(seq 1 180); do
     if curl --max-time 5 -fsS http://127.0.0.1:8000/api/health >/tmp/tradamind_health.json 2>/dev/null; then
       health_ready=true
       break
