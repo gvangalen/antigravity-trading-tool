@@ -85,12 +85,17 @@ function withCacheBust(path: string) {
   return `${path}${sep}_=${Date.now()}`;
 }
 
+type FetchAuthOptions = RequestInit & {
+  _retry?: boolean;
+  forceFresh?: boolean;
+};
+
 async function fetchAuthInternal(
   path: string,
-  options: RequestInit & { _retry?: boolean } = {}
+  options: FetchAuthOptions = {}
 ): Promise<any> {
   const method = String(options.method || "GET").toUpperCase();
-  const cacheMode = (options as any)?.cache ?? (method === "GET" ? "default" : "no-store");
+  const cacheMode = options.cache ?? (options.forceFresh || method !== "GET" ? "no-store" : "default");
   const noStoreHeaders =
     cacheMode === "no-store"
       ? {

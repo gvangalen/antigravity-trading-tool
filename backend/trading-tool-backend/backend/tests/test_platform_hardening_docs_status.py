@@ -9,8 +9,8 @@ PHASE6_DOC = REPO_ROOT / "docs" / "operations" / "platform-hardening-phase6-qa.m
 def test_platform_status_reflects_latest_deployed_hardening_baseline():
     source = STATUS_DOC.read_text()
 
-    assert "`b65aa92` - `Platform reliability step 2 legacy queue drain`" in source
-    assert "`pytest -q`: `286 passed`" in source
+    assert "`81339f8` - `Platform reliability step 3 legacy DB boundary`" in source
+    assert "`pytest -q`: `289 passed`" in source
     assert "Step 5 - Frontend Cache/Polling" in source
     assert "Step 6 - Enterprise Safety Slice" in source
 

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 
 import {
   fetchMacroInsight,
@@ -22,11 +23,14 @@ export function useAgentData(category) {
   const [insight, setInsight] = useState(null);
   const [reflections, setReflections] = useState([]);
   const [loading, setLoading] = useState(true);
+  const isFetchingRef = useRef(false);
 
   const { isAuthenticated } = useAuth();
 
   const load = async () => {
     if (!category || !isAuthenticated) return;
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
 
     console.log(`🧠 [useAgentData] load voor categorie: ${category}`);
 
@@ -71,24 +75,20 @@ export function useAgentData(category) {
       setReflections([]);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
   };
 
-  useEffect(() => {
+  useVisibilityPolling(() => {
     setLoading(true);
     load();
-
-    // 🔥 FIX: auto refresh elke 10 sec (alleen indien ingelogd)
-    const interval = setInterval(() => {
-      if (isAuthenticated) {
-        load();
-      } else {
-        clearInterval(interval);
-      }
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [category, isAuthenticated]);
+  }, {
+    enabled: Boolean(category && isAuthenticated),
+    intervalMs: 10000,
+    backgroundIntervalMs: 60000,
+    runImmediately: true,
+    deps: [category, isAuthenticated],
+  });
 
   return {
     insight,

@@ -35,6 +35,7 @@ import DashboardErrorBoundary from '@/components/ui/DashboardErrorBoundary';
 
 import ReportGenerateOverlay from '@/components/ui/ReportGenerateOverlay';
 import { useModal } from '@/components/modal/ModalProvider';
+import { waitUntilVisible } from '@/hooks/useVisibilityPolling';
 
 import {
   Download,
@@ -591,11 +592,12 @@ GENERATE
       if (pollTokenRef.current !== token) return;
 
       await sleep(POLL_INTERVAL_MS);
+      await waitUntilVisible();
 
       const data =
         preferDate === 'latest'
-          ? await current.getLatest()
-          : await current.getByDate(preferDate);
+          ? await current.getLatest({ forceFresh: true })
+          : await current.getByDate(preferDate, { forceFresh: true });
 
       const sig = getReportSignature(data);
 

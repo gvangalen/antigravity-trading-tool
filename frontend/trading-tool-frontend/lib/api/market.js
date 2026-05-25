@@ -10,7 +10,15 @@ import { fetchAuth } from "@/lib/api/auth";
 //
 
 export const fetchMarketData7d = (symbol = "BTC") => fetchWithRetry(`/api/market_data/7d?symbol=${symbol}`, "GET");
-export const fetchLatestPrice = (symbol = "BTC") => fetchWithRetry(`/api/market_data/${symbol}/latest`, "GET");
+export const fetchLatestPrice = (symbol = "BTC", options = {}) =>
+  fetchWithRetry(
+    `/api/market_data/${symbol}/latest`,
+    "GET",
+    null,
+    3,
+    2000,
+    options.forceFresh === false ? {} : { cache: "no-store" }
+  );
 export const fetchLatestBTC = () => fetchLatestPrice("BTC"); // Fallback
 
 export const syncMarketData7d = (symbol = "BTC", overwrite = false) =>

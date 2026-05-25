@@ -7,14 +7,14 @@ import { fetchAuth } from '@/lib/api/auth';
 // 🔹 DAILY
 // =====================================================
 //
-export const fetchDailyReportLatest = async () =>
-  fetchAuth('/api/report/daily/latest');
+export const fetchDailyReportLatest = async (options = {}) =>
+  fetchAuth('/api/report/daily/latest', options);
 
-export const fetchDailyReportByDate = async (date) =>
-  fetchAuth(`/api/report/daily/by-date?date=${encodeURIComponent(date)}`);
+export const fetchDailyReportByDate = async (date, options = {}) =>
+  fetchAuth(`/api/report/daily/by-date?date=${encodeURIComponent(date)}`, options);
 
-export const fetchDailyReportDates = async () =>
-  fetchAuth('/api/report/daily/history');
+export const fetchDailyReportDates = async (options = {}) =>
+  fetchAuth('/api/report/daily/history', options);
 
 export const generateDailyReport = async () =>
   fetchAuth('/api/report/daily/generate', { method: 'POST' });
@@ -30,14 +30,14 @@ export const fetchDailyReportPDF = async (date) =>
 // 🔹 WEEKLY
 // =====================================================
 //
-export const fetchWeeklyReportLatest = async () =>
-  fetchAuth('/api/report/weekly/latest');
+export const fetchWeeklyReportLatest = async (options = {}) =>
+  fetchAuth('/api/report/weekly/latest', options);
 
-export const fetchWeeklyReportByDate = async (date) =>
-  fetchAuth(`/api/report/weekly/by-date?date=${encodeURIComponent(date)}`);
+export const fetchWeeklyReportByDate = async (date, options = {}) =>
+  fetchAuth(`/api/report/weekly/by-date?date=${encodeURIComponent(date)}`, options);
 
-export const fetchWeeklyReportDates = async () =>
-  fetchAuth('/api/report/weekly/history');
+export const fetchWeeklyReportDates = async (options = {}) =>
+  fetchAuth('/api/report/weekly/history', options);
 
 export const generateWeeklyReport = async () =>
   fetchAuth('/api/report/weekly/generate', { method: 'POST' });
@@ -53,14 +53,14 @@ export const fetchWeeklyReportPDF = async (date) =>
 // 🔹 MONTHLY
 // =====================================================
 //
-export const fetchMonthlyReportLatest = async () =>
-  fetchAuth('/api/report/monthly/latest');
+export const fetchMonthlyReportLatest = async (options = {}) =>
+  fetchAuth('/api/report/monthly/latest', options);
 
-export const fetchMonthlyReportByDate = async (date) =>
-  fetchAuth(`/api/report/monthly/by-date?date=${encodeURIComponent(date)}`);
+export const fetchMonthlyReportByDate = async (date, options = {}) =>
+  fetchAuth(`/api/report/monthly/by-date?date=${encodeURIComponent(date)}`, options);
 
-export const fetchMonthlyReportDates = async () =>
-  fetchAuth('/api/report/monthly/history');
+export const fetchMonthlyReportDates = async (options = {}) =>
+  fetchAuth('/api/report/monthly/history', options);
 
 export const generateMonthlyReport = async () =>
   fetchAuth('/api/report/monthly/generate', { method: 'POST' });
@@ -76,14 +76,14 @@ export const fetchMonthlyReportPDF = async (date) =>
 // 🔹 QUARTERLY
 // =====================================================
 //
-export const fetchQuarterlyReportLatest = async () =>
-  fetchAuth('/api/report/quarterly/latest');
+export const fetchQuarterlyReportLatest = async (options = {}) =>
+  fetchAuth('/api/report/quarterly/latest', options);
 
-export const fetchQuarterlyReportByDate = async (date) =>
-  fetchAuth(`/api/report/quarterly/by-date?date=${encodeURIComponent(date)}`);
+export const fetchQuarterlyReportByDate = async (date, options = {}) =>
+  fetchAuth(`/api/report/quarterly/by-date?date=${encodeURIComponent(date)}`, options);
 
-export const fetchQuarterlyReportDates = async () =>
-  fetchAuth('/api/report/quarterly/history');
+export const fetchQuarterlyReportDates = async (options = {}) =>
+  fetchAuth('/api/report/quarterly/history', options);
 
 export const generateQuarterlyReport = async () =>
   fetchAuth('/api/report/quarterly/generate', { method: 'POST' });

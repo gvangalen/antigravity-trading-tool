@@ -17,7 +17,8 @@ def test_api_client_get_no_longer_forces_no_store_by_default():
 def test_fetch_auth_uses_method_aware_cache_policy():
     source = (FRONTEND_ROOT / "lib" / "api" / "auth.ts").read_text()
 
-    assert 'method === "GET" ? "default" : "no-store"' in source
+    assert "options.forceFresh || method !== \"GET\"" in source
+    assert "forceFresh?: boolean" in source
     assert 'const cacheMode = (options as any)?.cache ?? "no-store"' not in source
     assert "Cache-Control" in source
 

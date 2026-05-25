@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { waitUntilVisible } from '@/hooks/useVisibilityPolling';
 import {
   fetchDailyReportLatest,
   fetchDailyReportByDate,
@@ -109,10 +110,11 @@ export function useReportData(reportType = 'daily') {
       setError(null);
 
       try {
+        const fetchOptions = isGeneratingRef.current ? { forceFresh: true } : undefined;
         const data =
           selectedDate === 'latest'
-            ? await current.getLatest()
-            : await current.getByDate(selectedDate);
+            ? await current.getLatest(fetchOptions)
+            : await current.getByDate(selectedDate, fetchOptions);
 
         if (cancelled) return;
 
@@ -142,7 +144,10 @@ export function useReportData(reportType = 'daily') {
             return;
           }
 
-          setTimeout(loadReport, POLL_INTERVAL);
+          setTimeout(async () => {
+            await waitUntilVisible();
+            loadReport();
+          }, POLL_INTERVAL);
           return;
         }
 

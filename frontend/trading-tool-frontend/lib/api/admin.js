@@ -33,10 +33,11 @@ export const updateAdminUser = (userId, updates) => {
 /**
  * Haalt systeemlogs op met filters.
  */
-export const fetchAdminLogs = (filters = {}) => {
+export const fetchAdminLogs = (filters = {}, options = {}) => {
   const query = new URLSearchParams(filters).toString();
   return fetchAuth(`/api/admin/logs?${query}`, {
     method: 'GET',
+    ...options,
   });
 };
 

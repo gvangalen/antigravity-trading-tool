@@ -8,7 +8,8 @@ export async function fetchWithRetry(
   method = "GET",
   body = null,
   retries = 3,
-  delay = 2000
+  delay = 2000,
+  fetchOptions = {}
 ) {
   const baseUrl = API_BASE_URL;
 
@@ -28,6 +29,7 @@ export async function fetchWithRetry(
   while (attempts < retries) {
     try {
       const options = {
+        ...fetchOptions,
         method,
 
         // 🔥 FIX HIER:
@@ -36,6 +38,14 @@ export async function fetchWithRetry(
 
         headers: {
           "Content-Type": "application/json",
+          ...(fetchOptions.cache === "no-store"
+            ? {
+                "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+                Pragma: "no-cache",
+                Expires: "0",
+              }
+            : {}),
+          ...(fetchOptions.headers || {}),
         },
       };
 

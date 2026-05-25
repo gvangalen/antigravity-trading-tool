@@ -39,7 +39,7 @@ The main remaining risk is operational scale, not core request correctness:
 
 Latest deployed hardening commit:
 
-- `b65aa92` - `Platform reliability step 2 legacy queue drain`
+- `81339f8` - `Platform reliability step 3 legacy DB boundary`
 
 Latest smoke results from deploy:
 
@@ -50,7 +50,7 @@ Latest smoke results from deploy:
 
 Latest local regression:
 
-- `pytest -q`: `286 passed`
+- `pytest -q`: `289 passed`
 
 ## What Is Done
 
@@ -119,7 +119,7 @@ Latest local regression:
 
 ### Scale tuning later
 
-- Frontend polling and `no-store` read amplification have a first pass complete; deeper page-by-page polling tuning can follow once traffic data shows the next hotspot.
+- Frontend polling and `no-store` read amplification have a broader pass complete across dashboard, admin logs, intelligence events, market price hooks, and report generation polling.
 - Process-local read caches should remain opt-in unless moved to Redis/shared cache with explicit invalidation.
 - Queue age/throughput metrics would make backlog health easier to interpret than depth alone.
 
@@ -149,7 +149,7 @@ Latest local regression:
    - psycopg2 legacy boundary migration/isolation is complete at the driver boundary: direct driver imports are centralized in `backend/utils/db.py`.
    - regime memory and daily report writes now use repository boundaries instead of direct `get_db_connection()` calls.
    - PushService sync DB cleanup is complete: PushService is async-first and the sync method is compatibility-only.
-   - Frontend polling / `no-store` reduction is complete for the shared auth clients and dashboard scores hook.
+   - Frontend polling / `no-store` reduction is complete for the shared auth clients, dashboard scores hook, admin logs, intelligence events, market price hooks, and report generation polling.
 
 4. Then return to product OS work.
    - Portfolio Risk 2.0 or Reports/Reflection 2.0 are now safer to build on top of this platform base.
@@ -172,6 +172,8 @@ pytest -q \
   backend/trading-tool-backend/backend/tests/test_celery_queue_policy.py \
   backend/trading-tool-backend/backend/tests/test_system_health_service.py \
   backend/trading-tool-backend/backend/tests/test_run_legacy_queue_drain_cycle_script.py
+  backend/trading-tool-backend/backend/tests/test_frontend_cache_polling_policy.py
+  backend/trading-tool-backend/backend/tests/test_frontend_polling_policy.py
 ```
 
 Live smoke:

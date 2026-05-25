@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { fetchAdminLogs, analyzeAdminLogs } from "@/lib/api/admin";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { 
   FileText, 
   Search, 
@@ -46,23 +47,28 @@ export default function AdminLogsPage() {
     source: "",
     search: ""
   });
+  const isFetchingRef = useRef(false);
 
-  useEffect(() => {
-    loadLogs();
-    const interval = setInterval(loadLogs, 10000); // Auto refresh every 10s
-    return () => clearInterval(interval);
-  }, [filters.level, filters.source]);
-
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
-      const data = await fetchAdminLogs(filters);
+      const data = await fetchAdminLogs(filters, { forceFresh: true });
       setLogs(data);
     } catch (err) {
       console.error("Failed to load logs", err);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
-  };
+  }, [filters]);
+
+  useVisibilityPolling(loadLogs, {
+    intervalMs: 10000,
+    backgroundIntervalMs: 60000,
+    runImmediately: true,
+    deps: [filters.level, filters.source, filters.search],
+  });
 
   const handleAnalyze = async () => {
     setAnalyzing(true);

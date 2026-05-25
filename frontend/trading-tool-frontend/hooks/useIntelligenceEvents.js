@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { apiGet, apiPost } from "@/lib/api/apiClient";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 
 export default function useIntelligenceEvents() {
   const [events, setEvents] = useState([]);
@@ -15,7 +16,7 @@ export default function useIntelligenceEvents() {
     if (!silent) setLoading(true);
     
     try {
-      const data = await apiGet("/api/assistant/events");
+      const data = await apiGet("/api/assistant/events", { forceFresh: true });
       setEvents(data || []);
       setError(null);
     } catch (err) {
@@ -42,16 +43,11 @@ export default function useIntelligenceEvents() {
     }
   };
 
-  useEffect(() => {
-    fetchEvents();
-
-    // Poll for real-time events every 15 seconds to keep the Terminal feel
-    const interval = setInterval(() => {
-      fetchEvents(true);
-    }, 15000);
-
-    return () => clearInterval(interval);
-  }, []);
+  useVisibilityPolling(() => fetchEvents(true), {
+    intervalMs: 15000,
+    backgroundIntervalMs: 60000,
+    runImmediately: true,
+  });
 
   return {
     events,

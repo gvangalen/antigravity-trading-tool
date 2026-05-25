@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import CardWrapper from "@/components/ui/CardWrapper";
 import { formatChange, formatNumber } from "@/components/market/utils";
 import { fetchLatestPrice } from "@/lib/api/market";
 import { MarketCardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 
 // Lucide icons
 import {
@@ -21,23 +22,26 @@ export default function MarketLiveCard({ symbol = "BTC", data = null, loading: p
   const [internalPrice, setInternalPrice] = useState(null);
   const [internalLoading, setInternalLoading] = useState(true);
   const [internalError, setInternalError] = useState("");
+  const isFetchingRef = useRef(false);
 
   const asset = data || internalPrice;
   const loading = propLoading || (data ? false : internalLoading);
   const error = propError || (data ? "" : internalError);
 
-  useEffect(() => {
-    if (!data && symbol) {
-      loadData();
-      const interval = setInterval(loadData, 30000); // 30s update for "Live" feel
-      return () => clearInterval(interval);
-    }
-  }, [data, symbol]);
+  useVisibilityPolling(loadData, {
+    enabled: !data && Boolean(symbol),
+    intervalMs: 30000,
+    backgroundIntervalMs: 120000,
+    runImmediately: true,
+    deps: [data, symbol],
+  });
 
   async function loadData() {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setInternalLoading(true);
     try {
-      const resp = await fetchLatestPrice(symbol);
+      const resp = await fetchLatestPrice(symbol, { forceFresh: true });
       setInternalPrice(resp);
       setInternalError("");
     } catch (err) {
@@ -45,6 +49,7 @@ export default function MarketLiveCard({ symbol = "BTC", data = null, loading: p
       setInternalError(`Fout bij ophalen ${symbol}-data`);
     } finally {
       setInternalLoading(false);
+      isFetchingRef.current = false;
     }
   }
 

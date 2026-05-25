@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useModal } from "@/components/modal/ModalProvider";
 import TradePanel from "./TradePanel";
 import OrderPreviewModal from "./OrderPreviewModal";
 import { fetchTradePlan, createManualOrder, preflightManualOrder, previewManualOrder } from "@/lib/api/botApi";
 import { fetchLatestPrice } from "@/lib/api/market";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 
 export default function TradePanelContainer({
   bot,
@@ -26,6 +27,7 @@ export default function TradePanelContainer({
   ).toUpperCase();
 
   const [price, setPrice] = useState(null);
+  const priceFetchingRef = useRef(false);
 
   const [balanceQuote, setBalanceQuote] = useState(0);
   const [availableQuote, setAvailableQuote] = useState(0);
@@ -159,23 +161,21 @@ export default function TradePanelContainer({
      PRICE POLLING
   ===================================================== */
 
-  useEffect(() => {
-
-    if (!botId) return;
-
-    loadPrice();
-
-    const interval = setInterval(loadPrice, 60000);
-
-    return () => clearInterval(interval);
-
-  }, [botId, tradeSymbol]);
+  useVisibilityPolling(loadPrice, {
+    enabled: Boolean(botId),
+    intervalMs: 60000,
+    backgroundIntervalMs: 300000,
+    runImmediately: true,
+    deps: [botId, tradeSymbol],
+  });
 
   async function loadPrice() {
+    if (priceFetchingRef.current) return;
+    priceFetchingRef.current = true;
 
     try {
 
-      const latest = await fetchLatestPrice(tradeSymbol);
+      const latest = await fetchLatestPrice(tradeSymbol, { forceFresh: true });
 
       if (latest?.price) {
         setPrice(Number(latest.price));
@@ -185,6 +185,8 @@ export default function TradePanelContainer({
 
       console.error("Price load error:", err);
 
+    } finally {
+      priceFetchingRef.current = false;
     }
 
   }

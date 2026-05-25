@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 
 import {
   fetchMarketData7d,
@@ -56,15 +57,21 @@ export function useMarketData(symbol = "BTC") {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const livePriceFetchingRef = useRef(false);
 
   /* --------------------------------------------------------
      INIT
   -------------------------------------------------------- */
   useEffect(() => {
     loadAll();
-    const interval = setInterval(loadLivePrice, 60000);
-    return () => clearInterval(interval);
   }, [symbol]);
+
+  useVisibilityPolling(loadLivePrice, {
+    intervalMs: 60000,
+    backgroundIntervalMs: 300000,
+    runImmediately: false,
+    deps: [symbol],
+  });
 
   /* --------------------------------------------------------
      LOAD ALLES
@@ -121,10 +128,14 @@ export function useMarketData(symbol = "BTC") {
      LIVE PRICE
   -------------------------------------------------------- */
   async function loadLivePrice() {
+    if (livePriceFetchingRef.current) return;
+    livePriceFetchingRef.current = true;
     try {
-      setBtcLive(await fetchLatestPrice(symbol));
+      setBtcLive(await fetchLatestPrice(symbol, { forceFresh: true }));
     } catch {
       setBtcLive(null);
+    } finally {
+      livePriceFetchingRef.current = false;
     }
   }
 
