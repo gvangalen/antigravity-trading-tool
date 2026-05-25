@@ -44,15 +44,21 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   pm2 startOrReload ecosystem.config.js --update-env || (pm2 delete all || true; pm2 start ecosystem.config.js --update-env)
   pm2 save
 
-  for i in \$(seq 1 60); do
-    if curl -fsS http://127.0.0.1:8000/api/health >/tmp/tradamind_health.json 2>/dev/null; then
+  health_ready=false
+  for i in \$(seq 1 90); do
+    if curl --max-time 5 -fsS http://127.0.0.1:8000/api/health >/tmp/tradamind_health.json 2>/dev/null; then
+      health_ready=true
       break
     fi
     sleep 2
   done
-  curl -fsS http://127.0.0.1:8000/api/health
+  if [ \"\$health_ready\" != \"true\" ]; then
+    echo \"❌ Lightweight health did not become ready within deploy timeout.\" >&2
+    exit 1
+  fi
+  curl --max-time 10 -fsS http://127.0.0.1:8000/api/health
   echo
-  curl -fsS http://127.0.0.1:8000/api/system/health >/tmp/tradamind_deep_health.json
+  curl --max-time 30 -fsS http://127.0.0.1:8000/api/system/health >/tmp/tradamind_deep_health.json
   cat /tmp/tradamind_deep_health.json
   echo
   python3 - <<'PY'
@@ -87,7 +93,7 @@ elif status != 'ok':
 else:
     print('✅ Deep health gate passed.')
 PY
-  curl -fsSI http://127.0.0.1:5002/report | head -n 1
+  curl --max-time 10 -fsSI http://127.0.0.1:5002/report | head -n 1
 "
 
 echo "✅ Deployment complete for ${TARGET_COMMIT}."
