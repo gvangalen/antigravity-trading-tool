@@ -1,10 +1,11 @@
 import logging
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, delete
+from sqlalchemy import select, and_, delete, text
 
 from backend.infrastructure.models import AiPendingAction, Watchlist
 from backend.infrastructure.repositories.user_repository import UserRepository
@@ -79,6 +80,23 @@ class AiActionEngine:
             logger.warning(f"🚨 Pending action not found or unauthorized: {action_id} for user {user_id}")
             raise HTTPException(status_code=404, detail="Gevraagde actie niet gevonden of niet geautoriseerd.")
 
+        if action_record.status == "executed":
+            stored_payload = action_record.payload or {}
+            stored_result = (
+                stored_payload.get("_execution_result")
+                if isinstance(stored_payload, dict)
+                else None
+            )
+            if isinstance(stored_result, dict):
+                return {
+                    "status": "success",
+                    "action_id": action_id,
+                    "type": action_record.type,
+                    "result": stored_result,
+                    "trace_id": trace_id or action_record.trace_id,
+                    "replayed": True,
+                }
+
         if action_record.status != "pending":
             logger.warning(f"🚨 Attempted to execute action {action_id} with status: {action_record.status}")
             raise HTTPException(status_code=400, detail=f"Deze actie is al verwerkt (status: {action_record.status}).")
@@ -93,6 +111,24 @@ class AiActionEngine:
             await self.session.commit()
             logger.warning(f"🚨 Action {action_id} has expired.")
             raise HTTPException(status_code=400, detail="Deze goedkeuringstoken is verlopen. Vraag FINN opnieuw om dit in te stellen.")
+
+        claim = await self.session.execute(text("""
+            UPDATE ai_pending_actions
+            SET status = 'executing',
+                trace_id = COALESCE(:trace_id, trace_id)
+            WHERE id = :id
+              AND user_id = :user_id
+              AND status = 'pending'
+            RETURNING id
+        """), {
+            "id": action_id,
+            "user_id": user_id,
+            "trace_id": trace_id,
+        })
+        if claim.fetchone() is None:
+            await self.session.rollback()
+            logger.warning("🚨 Pending action replay race blocked: %s for user %s", action_id, user_id)
+            raise HTTPException(status_code=409, detail="Deze actie wordt al verwerkt of is net verwerkt.")
 
         action_type = action_record.type
         payload = action_record.payload or {}
@@ -165,8 +201,17 @@ class AiActionEngine:
             else:
                 raise HTTPException(status_code=400, detail=f"Onbekend of niet ondersteund actie-type: {action_type}")
 
-            # Mark action as executed
+            # Mark action as executed and persist the deterministic response so
+            # safe retries can return the same result without repeating side
+            # effects.
             action_record.status = "executed"
+            action_record.trace_id = execution_trace_id
+            action_record.payload = {
+                **payload,
+                "_execution_result": result_data,
+                "_executed_at": _utc_db_timestamp().isoformat(),
+                "_trace_id": execution_trace_id,
+            }
             await self.session.commit()
             
             # Proactively trigger cache invalidation so mobile and web stay perfectly synchronized
@@ -183,6 +228,26 @@ class AiActionEngine:
 
         except Exception as e:
             await self.session.rollback()
+            fail_stmt = text("""
+                UPDATE ai_pending_actions
+                SET status = 'failed',
+                    payload = CAST(:payload AS JSONB)
+                WHERE id = :id
+                  AND user_id = :user_id
+                  AND status = 'executing'
+            """)
+            failed_payload = {
+                **(payload if isinstance(payload, dict) else {}),
+                "_execution_error": str(getattr(e, "detail", e)),
+                "_trace_id": execution_trace_id,
+                "_failed_at": _utc_db_timestamp().isoformat(),
+            }
+            await self.session.execute(fail_stmt, {
+                "id": action_id,
+                "user_id": user_id,
+                "payload": json.dumps(failed_payload),
+            })
+            await self.session.commit()
             logger.error(f"❌ Error during pending action {action_id} execution: {e}", exc_info=True)
             if isinstance(e, HTTPException):
                 raise e

@@ -35,16 +35,17 @@ The main remaining risk is operational scale, not core request correctness:
 | Step 5 - Frontend Cache/Polling | Green | Authenticated GET helpers no longer force global `no-store`; dashboard polling is visibility-aware and single-flight. |
 | Step 6 - Enterprise Safety Slice | Green | API responses carry `X-Trace-Id`; deploy verifies expected PM2 apps, rebuilds the process list if reload leaves gaps, persists `LAST_GOOD_COMMIT`, and ships an explicit rollback helper. |
 | Step 7 - Multi-Instance Cache Coordination | Green | Mobile/dashboard, market-intelligence, and transition-risk process-local caches are removed; future caching must be shared/Redis-backed with explicit invalidation. |
+| Step 8 - Replay/Exactly-Once Hardening | Green | Assistant pending actions are atomically claimed before side effects; stored execution results support safe retries; replay inventory documents execution-adjacent guards. |
 
 ## Current Live Baseline
 
 Latest deployed hardening commit:
 
-- `d5aea63` - `Platform reliability step 6 rollback automation`
+- `ab02798` - `Platform reliability step 7 multi-instance cache coordination`
 
 Current rollout candidate:
 
-- `Platform reliability step 7 multi-instance cache coordination`
+- `Platform reliability step 8 replay/exactly-once hardening`
 
 Latest smoke results from deploy:
 
@@ -55,7 +56,7 @@ Latest smoke results from deploy:
 
 Latest local regression:
 
-- `pytest -q`: `294 passed`
+- `pytest -q`: `298 passed`
 
 ## What Is Done
 
@@ -119,6 +120,14 @@ Latest local regression:
 - psycopg2 usage is explicitly allowlisted to legacy/background boundaries.
 - Regime memory and daily report writes no longer call the legacy psycopg2 helper directly; they use SQLAlchemy repository boundaries.
 
+### Replay/exactly-once
+
+- Assistant pending action execution now atomically claims `pending -> executing` before side effects.
+- Executed assistant actions persist `_execution_result`, allowing safe retry responses without repeating the action.
+- Failed assistant action executions are marked `failed` with `_execution_error` context.
+- Finn maintenance actions keep deterministic action ids and existing `ON CONFLICT (id) DO NOTHING` guards.
+- Manual orders, live preflight tokens, bot decisions, snapshots, and reports are documented in `docs/operations/replay-exactly-once-inventory.md`.
+
 ## Remaining Risks
 
 ### V1 operations
@@ -145,8 +154,7 @@ Latest local regression:
 
 - Deep end-to-end tracing per decision/order/report beyond the request `X-Trace-Id`.
 - Admin search/report trace surfacing can be expanded further once QA decides which operator screens need trace-first filtering.
-- Multi-instance cache coordination.
-- Stronger replay protection and exactly-once semantics across all execution-adjacent flows.
+- Wider exactly-once semantics can still be expanded into provider/exchange replay protection if external exchange APIs expose stronger idempotency contracts.
 
 ## Recommended Next Work
 
@@ -171,7 +179,7 @@ Latest local regression:
 
 4. Then return to product OS work.
    - Portfolio Risk 2.0 or Reports/Reflection 2.0 are now safer to build on top of this platform base.
-   - Before that, finish the remaining reliability remainder steps: multi-instance cache coordination and replay/exactly-once hardening.
+   - The 8-step reliability remainder is now complete at V1 scope.
 
 ## QA Reference
 
@@ -194,6 +202,7 @@ pytest -q \
   backend/trading-tool-backend/backend/tests/test_frontend_cache_polling_policy.py
   backend/trading-tool-backend/backend/tests/test_frontend_polling_policy.py
   backend/trading-tool-backend/backend/tests/test_traceability_step5.py
+  backend/trading-tool-backend/backend/tests/test_replay_exactly_once_step8.py
 ```
 
 Live smoke:
