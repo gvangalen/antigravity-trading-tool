@@ -67,6 +67,24 @@ For each cycle, keep the artifact and note:
 - `reroute_ratio_after`
 - `top_tasks_after`
 - default queue `total_depth`
+- `/api/system/health` `queue_metrics.<queue>.depth`
+- `/api/system/health` `queue_metrics.<queue>.timestamped_sample_size`
+- `/api/system/health` `queue_metrics.<queue>.oldest_message_age_seconds`
+- `/api/system/health` `queue_metrics.<queue>.estimated_drain_per_minute`
+
+## Queue Age And Throughput Notes
+
+New Celery tasks are stamped with a `published_at` header before they enter Redis. Deep health uses that header to report queue age for sampled messages.
+
+Older legacy messages often do not have a timestamp. In that case deep health reports:
+
+- `timestamped_sample_size = 0`
+- `oldest_message_age_seconds = null`
+- `age_source = unavailable`
+
+That is expected. Do not infer freshness for unstamped legacy messages.
+
+`estimated_drain_per_minute` is a trend signal based on the previous `/api/system/health` call served by the same backend process. It is useful for operator comparisons during drain work, but it is not a durable Celery event counter.
 
 ## Current Baseline
 

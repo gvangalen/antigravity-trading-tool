@@ -1,9 +1,11 @@
 import os
 import sys
 import logging
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import before_task_publish
 from kombu import Queue
 
 # =========================================================
@@ -60,6 +62,13 @@ celery_app.conf.task_routes = celery_task_routes()
 # ⚡ RATE LIMITS (PER WORKLOAD/PROVIDER)
 # =========================================================
 celery_app.conf.task_annotations = celery_task_annotations()
+
+
+@before_task_publish.connect
+def stamp_task_publish_time(headers=None, **kwargs):
+    """Stamp newly published tasks so deep health can report queue age."""
+    if isinstance(headers, dict) and "published_at" not in headers:
+        headers["published_at"] = datetime.now(timezone.utc).isoformat()
 
 # =========================================================
 # 🚀 CELERY BEAT SCHEDULE (GEOPTIMALISEERD)

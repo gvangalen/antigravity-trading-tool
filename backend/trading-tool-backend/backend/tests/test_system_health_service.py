@@ -21,6 +21,53 @@ def test_age_seconds_handles_date_without_crashing():
     assert isinstance(_age_seconds(date.today()), int)
 
 
+def test_queue_age_summary_uses_published_at_header(monkeypatch):
+    fixed_now = datetime(2026, 5, 25, 10, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        "backend.services.system_health_service._utcnow",
+        lambda: fixed_now,
+    )
+
+    result = SystemHealthService._queue_age_summary([
+        b'{"headers":{"published_at":"2026-05-25T09:59:00+00:00"}}',
+        b'{"headers":{"published_at":"2026-05-25T09:58:00+00:00"}}',
+        b'{"headers":{"task":"legacy.without.timestamp"}}',
+    ])
+
+    assert result["sample_size"] == 3
+    assert result["timestamped_sample_size"] == 2
+    assert result["timestamp_coverage_ratio"] == 0.6667
+    assert result["oldest_message_age_seconds"] == 120
+    assert result["newest_message_age_seconds"] == 60
+    assert result["average_message_age_seconds"] == 90
+    assert result["age_source"] == "celery_published_at_header"
+
+
+def test_queue_age_summary_marks_unknown_when_no_timestamps():
+    result = SystemHealthService._queue_age_summary([
+        b'{"headers":{"task":"legacy.without.timestamp"}}',
+    ])
+
+    assert result["timestamped_sample_size"] == 0
+    assert result["oldest_message_age_seconds"] is None
+    assert result["age_source"] == "unavailable"
+
+
+def test_queue_depth_trend_reports_drain_rate(monkeypatch):
+    SystemHealthService._last_queue_depths_snapshot = {
+        "checked_at_monotonic": 100.0,
+        "queue_depths": {"celery": 100},
+    }
+    monkeypatch.setattr("backend.services.system_health_service.time.time", lambda: 160.0)
+
+    result = SystemHealthService._queue_depth_trend({"celery": 70})
+
+    assert result["celery"]["depth_delta_since_last_check"] == -30
+    assert result["celery"]["depth_delta_per_minute"] == -30.0
+    assert result["celery"]["estimated_drain_per_minute"] == 30.0
+    assert result["celery"]["trend_source"] == "in_process_previous_health_check"
+
+
 def test_overall_status_degrades_on_stale_component():
     status = SystemHealthService._overall_status({
         "database": {"status": "ok"},
@@ -144,6 +191,8 @@ def test_queue_sample_summary_reports_legacy_breakdown():
 
 
 def test_check_broker_includes_default_queue_sample(monkeypatch):
+    SystemHealthService._last_queue_depths_snapshot = None
+
     class _FakeRedis:
         async def ping(self):
             return True
@@ -154,10 +203,11 @@ def test_check_broker_includes_default_queue_sample(monkeypatch):
             return 0
 
         async def lrange(self, queue_name, start, end):
-            assert queue_name == "celery"
-            return [
-                b'{"headers":{"task":"backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores"}}',
-            ]
+            if queue_name == "celery":
+                return [
+                    b'{"headers":{"task":"backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores","published_at":"2026-05-25T09:59:00+00:00"}}',
+                ]
+            return []
 
         async def aclose(self):
             return None
@@ -171,3 +221,6 @@ def test_check_broker_includes_default_queue_sample(monkeypatch):
     assert result["status"] == "ok"
     assert result["default_queue_depth"] == 3
     assert result["default_queue_sample"]["rerouteable_count"] == 1
+    assert result["queue_metrics"]["celery"]["depth"] == 3
+    assert result["queue_metrics"]["celery"]["timestamped_sample_size"] == 1
+    assert result["queue_metrics"]["market_data"]["depth"] == 0

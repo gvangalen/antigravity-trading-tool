@@ -139,3 +139,13 @@ def test_beat_schedule_routes_dispatch_and_direct_tasks_to_policy_queue():
             expected_queue = resolve_task_queue(entry["task"])
 
         assert entry["options"]["queue"] == expected_queue
+
+
+def test_celery_publisher_stamps_published_at_header():
+    from backend.celery_task.celery_app import stamp_task_publish_time
+
+    headers = {}
+    stamp_task_publish_time(headers=headers)
+
+    assert "published_at" in headers
+    assert headers["published_at"].endswith("+00:00")

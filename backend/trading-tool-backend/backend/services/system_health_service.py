@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import time
 from datetime import date, datetime, timezone
@@ -27,8 +28,29 @@ def _as_utc(value: Any) -> Optional[datetime]:
     return None
 
 
+def _parse_timestamp(value: Any) -> Optional[datetime]:
+    if isinstance(value, (date, datetime)):
+        return _as_utc(value)
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc)
+        except (OSError, OverflowError, ValueError):
+            return None
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if normalized.endswith("Z"):
+            normalized = f"{normalized[:-1]}+00:00"
+        try:
+            return _as_utc(datetime.fromisoformat(normalized))
+        except ValueError:
+            return None
+    return None
+
+
 def _age_seconds(value: Any) -> Optional[int]:
-    dt = _as_utc(value)
+    dt = _parse_timestamp(value)
     if not dt:
         return None
     return max(0, int((_utcnow() - dt).total_seconds()))
@@ -40,6 +62,8 @@ def _component(status: str, **extra: Any) -> Dict[str, Any]:
 
 class SystemHealthService:
     """Best-effort deep health checks for ops dashboards and deploy gates."""
+
+    _last_queue_depths_snapshot: Optional[Dict[str, Any]] = None
 
     @classmethod
     async def deep_health(cls) -> Dict[str, Any]:
@@ -96,6 +120,11 @@ class SystemHealthService:
                     queue_name: int(await client.llen(queue_name) or 0)
                     for queue_name in NAMED_QUEUES
                 }
+                queue_metrics = await SystemHealthService._queue_metrics(
+                    client,
+                    queue_depths=queue_depths,
+                    sample_size=200,
+                )
                 default_queue_sample = await SystemHealthService._queue_sample_summary(
                     client,
                     queue_name=DEFAULT_QUEUE,
@@ -108,6 +137,7 @@ class SystemHealthService:
                     default_queue_depth=queue_depths.get(os.getenv("CELERY_DEFAULT_QUEUE", "celery"), 0),
                     default_queue_sample=default_queue_sample,
                     queue_depths=queue_depths,
+                    queue_metrics=queue_metrics,
                     total_queue_depth=sum(queue_depths.values()),
                 )
             finally:
@@ -130,6 +160,129 @@ class SystemHealthService:
         raw_messages = await client.lrange(queue_name, -sample_size, -1)
         summary = summarize_legacy_queue_messages(raw_messages, source_queue=queue_name)
         return {"queue": queue_name, **summary}
+
+    @staticmethod
+    def _decode_queue_message(raw_message: Any) -> Optional[Dict[str, Any]]:
+        if raw_message is None:
+            return None
+        if isinstance(raw_message, bytes):
+            raw_message = raw_message.decode("utf-8")
+        if not isinstance(raw_message, str):
+            return None
+        try:
+            payload = json.loads(raw_message)
+        except json.JSONDecodeError:
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    @staticmethod
+    def _message_published_at(raw_message: Any) -> Optional[datetime]:
+        payload = SystemHealthService._decode_queue_message(raw_message)
+        if not payload:
+            return None
+
+        headers = payload.get("headers") if isinstance(payload.get("headers"), dict) else {}
+        properties = payload.get("properties") if isinstance(payload.get("properties"), dict) else {}
+
+        candidates = [
+            headers.get("published_at"),
+            headers.get("sent_at"),
+            headers.get("created_at"),
+            properties.get("published_at"),
+            properties.get("sent_at"),
+            properties.get("timestamp"),
+        ]
+        for candidate in candidates:
+            parsed = _parse_timestamp(candidate)
+            if parsed:
+                return parsed
+        return None
+
+    @staticmethod
+    def _queue_age_summary(raw_messages: list[Any]) -> Dict[str, Any]:
+        ages = [
+            _age_seconds(timestamp)
+            for timestamp in (
+                SystemHealthService._message_published_at(raw_message)
+                for raw_message in raw_messages
+            )
+        ]
+        ages = [age for age in ages if age is not None]
+        sample_size = len(raw_messages)
+
+        if not ages:
+            return {
+                "sample_size": sample_size,
+                "timestamped_sample_size": 0,
+                "timestamp_coverage_ratio": 0.0,
+                "oldest_message_age_seconds": None,
+                "newest_message_age_seconds": None,
+                "average_message_age_seconds": None,
+                "age_source": "unavailable",
+            }
+
+        return {
+            "sample_size": sample_size,
+            "timestamped_sample_size": len(ages),
+            "timestamp_coverage_ratio": round(len(ages) / sample_size, 4) if sample_size else 0.0,
+            "oldest_message_age_seconds": max(ages),
+            "newest_message_age_seconds": min(ages),
+            "average_message_age_seconds": round(sum(ages) / len(ages), 2),
+            "age_source": "celery_published_at_header",
+        }
+
+    @classmethod
+    def _queue_depth_trend(cls, queue_depths: Dict[str, int]) -> Dict[str, Dict[str, Any]]:
+        now = time.time()
+        previous = cls._last_queue_depths_snapshot
+        cls._last_queue_depths_snapshot = {
+            "checked_at_monotonic": now,
+            "queue_depths": dict(queue_depths),
+        }
+
+        trend: Dict[str, Dict[str, Any]] = {}
+        for queue_name, depth in queue_depths.items():
+            metric: Dict[str, Any] = {
+                "depth_delta_since_last_check": None,
+                "depth_delta_per_minute": None,
+                "estimated_drain_per_minute": None,
+                "trend_source": "needs_previous_health_check",
+            }
+            if previous:
+                elapsed_seconds = max(0.001, now - float(previous["checked_at_monotonic"]))
+                previous_depth = int(previous["queue_depths"].get(queue_name, 0))
+                delta = int(depth) - previous_depth
+                delta_per_minute = round(delta / (elapsed_seconds / 60), 2)
+                metric = {
+                    "depth_delta_since_last_check": delta,
+                    "depth_delta_per_minute": delta_per_minute,
+                    "estimated_drain_per_minute": abs(delta_per_minute) if delta_per_minute < 0 else 0.0,
+                    "trend_source": "in_process_previous_health_check",
+                }
+            trend[queue_name] = metric
+        return trend
+
+    @classmethod
+    async def _queue_metrics(
+        cls,
+        client: Any,
+        *,
+        queue_depths: Dict[str, int],
+        sample_size: int,
+    ) -> Dict[str, Dict[str, Any]]:
+        depth_trends = cls._queue_depth_trend(queue_depths)
+        metrics: Dict[str, Dict[str, Any]] = {}
+        for queue_name, depth in queue_depths.items():
+            raw_messages = []
+            if depth > 0:
+                raw_messages = await client.lrange(queue_name, -sample_size, -1)
+            age_summary = cls._queue_age_summary(list(raw_messages))
+            metrics[queue_name] = {
+                "depth": depth,
+                **age_summary,
+                **depth_trends.get(queue_name, {}),
+            }
+        return metrics
 
     @staticmethod
     async def _check_celery() -> Dict[str, Any]:
