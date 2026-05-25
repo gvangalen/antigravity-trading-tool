@@ -12,7 +12,7 @@ class EncryptionUtils:
         if cls._fernet is None:
             key = os.getenv("ENCRYPTION_KEY")
             if not key:
-                raise ValueError("❌ ENCRYPTION_KEY not found in environment variables")
+                raise RuntimeError("ENCRYPTION_KEY is required; refusing to use exchange-key encryption without it.")
             cls._fernet = Fernet(key.encode())
         return cls._fernet
 

@@ -356,14 +356,9 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   };
 
   const logAgentHandoff = async (action, controller) => {
-    const auditAction = buildAgentHandoffAuditAction(action, controller);
-    if (!auditAction) return;
-    try {
-      await executeAssistantAction(auditAction);
-      fetchMissionControl();
-    } catch (err) {
-      console.warn("Agent handoff audit failed", err);
-    }
+    // Security: client-built handoff audit payloads are not executable. The
+    // server must issue an action_id before any Finn action can be confirmed.
+    return;
   };
 
   const handleAgentControllerAction = async (action, controller) => {

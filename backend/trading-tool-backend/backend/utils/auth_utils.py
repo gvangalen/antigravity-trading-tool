@@ -6,12 +6,26 @@ import jwt
 from jwt import PyJWTError
 from fastapi import Cookie, Header, HTTPException, status
 import bcrypt
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # =========================================================
 # 🔐 CONFIG
 # =========================================================
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "CHANGE_ME_IN_PRODUCTION")
+def _require_secret(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"{name} is required; refusing to start with an unsafe default secret.")
+    if value in {"CHANGE_ME_IN_PRODUCTION", "change-me", "secret", "dev-secret"}:
+        raise RuntimeError(f"{name} uses an unsafe default value; configure a strong secret.")
+    if len(value) < 32:
+        raise RuntimeError(f"{name} must be at least 32 characters.")
+    return value
+
+
+SECRET_KEY = _require_secret("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))

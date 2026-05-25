@@ -129,6 +129,38 @@ async def get_assistant_service(db: AsyncSession = Depends(get_db)):
         score_repo, setup_repo, report_repo, bot_repo, user_repo, 
         market_data_repo, strategy_repo, state_repo, ai_gateway, context_repo
     )
+
+
+async def _finalize_finn_response(
+    finn: FinnPlanService,
+    user_id: int,
+    response: dict,
+    trace_id: str,
+    *,
+    persist_state: bool = False,
+) -> AssistantChatResponse:
+    response["trace_id"] = trace_id
+    await finn.issue_response_actions(user_id, response)
+    if persist_state:
+        await finn.persist_response_state(user_id, response)
+    return AssistantChatResponse(**response)
+
+
+async def _prepare_finn_envelope(
+    finn: FinnPlanService,
+    user_id: int,
+    envelope: dict,
+    trace_id: str,
+    *,
+    persist_state: bool = False,
+) -> dict:
+    envelope["trace_id"] = trace_id
+    await finn.issue_response_actions(user_id, envelope)
+    if persist_state:
+        await finn.persist_response_state(user_id, envelope)
+    return envelope
+
+
 @router.post("/assistant/chat", response_model=AssistantChatResponse)
 async def assistant_chat(
     request: AssistantChatRequest,
@@ -152,78 +184,56 @@ async def assistant_chat(
         )
         if finn.looks_like_daily_score_refresh_request(request.query):
             finn_response = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id)
         if finn.looks_like_bot_decision_request(request.query) or (
             context_payload.get("current_flow") == "bot_decision"
             and context_payload.get("pending_behavioral_memory_friction")
         ):
             finn_response = await finn.build_bot_decision_response(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            await finn.persist_response_state(user_id, finn_response)
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id, persist_state=True)
         if finn.looks_like_bot_decision_review_request(request.query):
             finn_response = await finn.build_bot_decision_review_response(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id)
         if finn.looks_like_bot_execution_decision_request(request.query):
             finn_response = await finn.build_bot_execution_decision_response(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id)
         if finn.looks_like_finn_report_request(request.query):
             finn_response = await finn.build_finn_report_response(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id)
         if finn.looks_like_behavioral_memory_request(request.query):
             finn_response = await finn.build_behavioral_memory_response(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id)
         if finn.looks_like_weekly_reflection_request(request.query):
             finn_response = await finn.build_weekly_reflection_response(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id)
         if finn.looks_like_behavioral_intelligence_request(request.query):
             finn_response = await finn.build_behavioral_intelligence_response(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id)
         if finn.looks_like_daily_coach_request(request.query):
             finn_response = await finn.build_daily_coach_response(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id)
         if finn.is_cancel_request(request.query):
             finn_response = await finn.build_cancel_response(user_id, context_payload)
             if finn_response:
-                finn_response["trace_id"] = trace_id
-                await finn.persist_response_state(user_id, finn_response)
-                return AssistantChatResponse(**finn_response)
+                return await _finalize_finn_response(finn, user_id, finn_response, trace_id, persist_state=True)
         if finn.looks_like_indicator_insight_request(request.query):
             finn_response = await finn.build_indicator_insight_response(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id)
         if finn.looks_like_status_request(request.query):
             finn_response = await finn.build_status_response(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id)
         if finn.looks_like_indicator_config_request(request.query, context_payload):
             finn_response = await finn.build_indicator_config_response_for_user(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            await finn.persist_response_state(user_id, finn_response)
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id, persist_state=True)
         if finn.looks_like_bot_request(request.query, context_payload):
             finn_response = await finn.build_bot_response_for_user(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            await finn.persist_response_state(user_id, finn_response)
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id, persist_state=True)
         if finn.looks_like_strategy_request(request.query, context_payload):
             finn_response = await finn.build_strategy_response_for_user(user_id, request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            await finn.persist_response_state(user_id, finn_response)
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id, persist_state=True)
         if finn.looks_like_plan_request(request.query, context_payload.get("finn_draft")):
             finn_response = finn.build_response(request.query, context_payload)
-            finn_response["trace_id"] = trace_id
-            await finn.persist_response_state(user_id, finn_response)
-            return AssistantChatResponse(**finn_response)
+            return await _finalize_finn_response(finn, user_id, finn_response, trace_id, persist_state=True)
 
         response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
             user_id, request.query, request.history, request.context, trace_id=trace_id, session_id=request.session_id
@@ -378,7 +388,7 @@ async def assistant_chat_stream(
             )
             if finn.looks_like_daily_score_refresh_request(request.query):
                 envelope = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id)
                 yield _sse_event("envelope", envelope)
                 return
 
@@ -387,98 +397,92 @@ async def assistant_chat_stream(
                 and context_payload.get("pending_behavioral_memory_friction")
             ):
                 envelope = await finn.build_bot_decision_response(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
-                await finn.persist_response_state(user_id, envelope)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_bot_decision_review_request(request.query):
                 envelope = await finn.build_bot_decision_review_response(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_bot_execution_decision_request(request.query):
                 envelope = await finn.build_bot_execution_decision_response(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_finn_report_request(request.query):
                 envelope = await finn.build_finn_report_response(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_behavioral_memory_request(request.query):
                 envelope = await finn.build_behavioral_memory_response(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_weekly_reflection_request(request.query):
                 envelope = await finn.build_weekly_reflection_response(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_behavioral_intelligence_request(request.query):
                 envelope = await finn.build_behavioral_intelligence_response(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_daily_coach_request(request.query):
                 envelope = await finn.build_daily_coach_response(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.is_cancel_request(request.query):
                 envelope = await finn.build_cancel_response(user_id, context_payload)
                 if envelope:
-                    envelope["trace_id"] = trace_id
-                    await finn.persist_response_state(user_id, envelope)
+                    envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True)
                     yield _sse_event("envelope", envelope)
                     return
 
             if finn.looks_like_indicator_insight_request(request.query):
                 envelope = await finn.build_indicator_insight_response(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_status_request(request.query):
                 envelope = await finn.build_status_response(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_indicator_config_request(request.query, context_payload):
                 envelope = await finn.build_indicator_config_response_for_user(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
-                await finn.persist_response_state(user_id, envelope)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_bot_request(request.query, context_payload):
                 envelope = await finn.build_bot_response_for_user(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
-                await finn.persist_response_state(user_id, envelope)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_strategy_request(request.query, context_payload):
                 envelope = await finn.build_strategy_response_for_user(user_id, request.query, context_payload)
-                envelope["trace_id"] = trace_id
-                await finn.persist_response_state(user_id, envelope)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_plan_request(request.query, context_payload.get("finn_draft")):
                 envelope = finn.build_response(request.query, context_payload)
-                envelope["trace_id"] = trace_id
-                await finn.persist_response_state(user_id, envelope)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True)
                 yield _sse_event("envelope", envelope)
                 return
 
@@ -565,21 +569,20 @@ async def execute_pending_action(
     engine: AiActionEngine = Depends(get_ai_action_engine),
 ):
     trace_id = getattr(request.state, "trace_id", None)
-    if payload.get("action"):
-        try:
-            finn = FinnPlanService(db, trace_id=trace_id)
-            return await finn.execute_action(current_user["id"], payload["action"])
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"❌ AI Assistant Action Error: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail="Fout bij Finn action")
-
     action_id = payload.get("action_id")
     if not action_id:
         raise HTTPException(status_code=400, detail="Action ID is verplicht.")
     
     user_id = current_user["id"]
+    if str(action_id).startswith("finn-"):
+        try:
+            finn = FinnPlanService(db, trace_id=trace_id)
+            return await finn.execute_issued_action(user_id, str(action_id))
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ AI Assistant Action Error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Fout bij Finn action")
     return await engine.execute_pending_action(action_id, user_id, trace_id=trace_id)
 
 @router.get("/assistant/finn/state")

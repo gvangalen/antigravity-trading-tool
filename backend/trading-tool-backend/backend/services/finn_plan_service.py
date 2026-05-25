@@ -8926,6 +8926,32 @@ class FinnPlanService:
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         return result
 
+    async def execute_issued_action(self, user_id: int, action_id: str) -> Dict[str, Any]:
+        if not self.session:
+            raise HTTPException(503, "Finn action store is niet beschikbaar.")
+        row = await self.session.execute(text("""
+            SELECT payload, status
+            FROM ai_pending_actions
+            WHERE id = :id AND user_id = :user_id
+            LIMIT 1
+        """), {"id": action_id, "user_id": user_id})
+        existing = row.mappings().first()
+        if not existing:
+            raise HTTPException(404, "Finn action token niet gevonden of niet geautoriseerd.")
+        payload = existing["payload"] or {}
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        if existing["status"] == "executed":
+            result = payload.get("result")
+            if isinstance(result, dict):
+                return {**result, "replayed": True}
+        if existing["status"] not in {"pending", "executing"}:
+            raise HTTPException(409, f"Finn action token is niet uitvoerbaar (status: {existing['status']}).")
+        action = payload.get("action")
+        if not isinstance(action, dict):
+            raise HTTPException(409, "Finn action token mist server-side action payload.")
+        return await self.execute_action(user_id, action)
+
     async def _execute_generate_bot_decision_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
         payload = action.get("payload") or {}
         bot_id = int(payload.get("bot_id") or 0)
@@ -9680,8 +9706,61 @@ class FinnPlanService:
             "trace_id": self.trace_id,
         })
         acquired = row.fetchone() is not None
+        if not acquired:
+            claim = await self.session.execute(text("""
+                UPDATE ai_pending_actions
+                SET status = 'executing',
+                    trace_id = COALESCE(:trace_id, trace_id)
+                WHERE id = :id
+                  AND user_id = :user_id
+                  AND status = 'pending'
+                RETURNING id
+            """), {
+                "id": action_id,
+                "user_id": user_id,
+                "trace_id": self.trace_id,
+            })
+            acquired = claim.fetchone() is not None
         await self.session.commit()
         return acquired
+
+    async def issue_response_actions(self, user_id: int, response: Dict[str, Any]) -> Dict[str, Any]:
+        actions = response.get("actions")
+        if not isinstance(actions, list) or not actions:
+            return response
+        issued_actions = []
+        for action in actions:
+            if not isinstance(action, dict) or not action.get("type"):
+                issued_actions.append(action)
+                continue
+            action_id = f"{action.get('id') or self._maintenance_action_id(action.get('type'), [json.dumps(action, sort_keys=True, default=str)])}-u{user_id}"
+            await self._issue_pending_action(user_id, action_id, action)
+            issued_actions.append({**action, "action_id": action_id})
+        response["actions"] = issued_actions
+        return response
+
+    async def _issue_pending_action(self, user_id: int, action_id: str, action: Dict[str, Any]) -> None:
+        if not self.session:
+            return
+        payload = {
+            "action": action,
+            "result": None,
+            "trace_id": self.trace_id,
+            "updated_at": _utc_now().isoformat(),
+            "issued_by": "finn_server",
+        }
+        await self.session.execute(text("""
+            INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at, trace_id)
+            VALUES (:id, :user_id, 'finn_create_plan', CAST(:payload AS JSONB), 'pending', :expires_at, :trace_id)
+            ON CONFLICT (id) DO NOTHING
+        """), {
+            "id": action_id,
+            "user_id": user_id,
+            "payload": json.dumps(payload),
+            "expires_at": _utc_db_timestamp() + timedelta(days=7),
+            "trace_id": self.trace_id,
+        })
+        await self.session.commit()
 
     async def _wait_for_action_result(self, user_id: int, action_id: str) -> Optional[Dict[str, Any]]:
         for _ in range(24):
