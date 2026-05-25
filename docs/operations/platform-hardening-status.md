@@ -145,8 +145,8 @@ Latest local regression:
 
 3. Continue with the remaining platform cleanup sequence.
    - psycopg2 legacy boundary migration/isolation is complete at the driver boundary: direct driver imports are centralized in `backend/utils/db.py`.
-   - Next: PushService sync DB cleanup.
-   - Then: frontend polling / `no-store` reduction.
+   - PushService sync DB cleanup is complete: PushService is async-first and the sync method is compatibility-only.
+   - Next: frontend polling / `no-store` reduction.
 
 4. Then return to product OS work.
    - Portfolio Risk 2.0 or Reports/Reflection 2.0 are now safer to build on top of this platform base.
