@@ -50,7 +50,7 @@ Latest smoke results from deploy:
 
 Latest local regression:
 
-- `pytest -q`: `283 passed`
+- `pytest -q`: `285 passed`
 
 ## What Is Done
 
@@ -136,8 +136,8 @@ Latest local regression:
    - Use `docs/operations/legacy-celery-queue-drain.md`.
    - Save artifacts and compare `operator_summary`.
    - Stop based on `reroute_ratio_after` and `top_tasks_after`, not total backlog alone.
-   - Latest controlled run processed `9000`, rerouted `8782`, kept `218`, then stopped on `reroute_ratio_below_threshold`.
-   - Do not continue immediately when named queues are already materially fuller; wait for them to drain first.
+   - Latest controlled run processed `1500`, rerouted `1500`, kept `0`, then stopped on `max_processed_total_reached`.
+   - Default queue was about `48714` after the follow-up health check; wait for named queues to visibly drain before another larger cycle.
 
 2. Use queue age/throughput fields in deep health while draining.
    - `queue_metrics.<queue>.oldest_message_age_seconds` is available for newly published tasks stamped with `published_at`.

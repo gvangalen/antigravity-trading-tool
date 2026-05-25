@@ -90,26 +90,26 @@ That is expected. Do not infer freshness for unstamped legacy messages.
 
 Latest controlled apply cycle:
 
-- artifact: `ops/queue-drain-artifacts/legacy-queue-drain-celery-apply-20260525T064122Z.json`
-- `processed = 9000`
-- `rerouted = 8782`
-- `kept = 218`
-- `reroute_ratio_before = 0.97`
-- `reroute_ratio_after = 0.695`
-- `stop_reason = reroute_ratio_below_threshold`
-- default queue depth moved from about `67830` to `59034` during the run
+- artifact: `ops/queue-drain-artifacts/legacy-queue-drain-celery-apply-20260525T121201Z.json`
+- `processed = 1500`
+- `rerouted = 1500`
+- `kept = 0`
+- `reroute_ratio_before = 1.0`
+- `reroute_ratio_after = 1.0`
+- `stop_reason = max_processed_total_reached`
+- default queue depth moved from `50888` to `49384` during the run
 
-This was a successful controlled drain, and it stopped for the intended safety reason. After the run, named queues were materially fuller, so do not immediately keep draining just because the default queue still has depth.
+This was a successful controlled drain, and it stopped on the explicit operator cap. The follow-up deep-health sample stayed `ok`.
 
 Latest post-run health showed:
 
-- `celery` depth about `59012`
-- `celery` sample reroute ratio about `0.8`
-- `scoring`, `portfolio`, `ai_generation`, and `execution_critical` queues materially increased because legacy work was moved to the correct lanes
-- market snapshot was temporarily `stale`
+- `celery` depth about `48714`
+- `celery` sample reroute ratio `1.0`
+- `market_data` stayed low, while `scoring`, `portfolio`, and `execution_critical` remain the queues to watch before additional large drain cycles
+- market snapshot was `ok`
 
 Recommended next drain operation:
 
-- wait until named queues visibly drain and market snapshot health is `ok`
+- wait until named queues visibly drain enough to absorb another batch
 - inspect first with `--sample-size 200`
 - apply again only if `reroute_ratio_after >= 0.75` and dispatcher/default work is not dominant

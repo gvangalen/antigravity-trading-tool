@@ -10,7 +10,7 @@ def test_platform_status_reflects_latest_deployed_hardening_baseline():
     source = STATUS_DOC.read_text()
 
     assert "`d8199a2` - `Fix PM2 deploy gate parser`" in source
-    assert "`pytest -q`: `283 passed`" in source
+    assert "`pytest -q`: `285 passed`" in source
     assert "Step 5 - Frontend Cache/Polling" in source
     assert "Step 6 - Enterprise Safety Slice" in source
 

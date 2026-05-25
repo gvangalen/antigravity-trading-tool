@@ -1,0 +1,286 @@
+{
+  "apply": true,
+  "final_sample": {
+    "kept_on_default_count": 0,
+    "queue": "celery",
+    "reroute_ratio": 1.0,
+    "rerouteable_count": 200,
+    "sample_size": 200,
+    "top_tasks": [
+      {
+        "count": 167,
+        "reason": "reroute_to_named_queue",
+        "reroute": true,
+        "target_queue": "market_data",
+        "task_name": "backend.celery_task.market_task.fetch_market_indicators"
+      },
+      {
+        "count": 33,
+        "reason": "reroute_to_named_queue",
+        "reroute": true,
+        "target_queue": "portfolio",
+        "task_name": "backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot"
+      }
+    ],
+    "total_depth": 49384
+  },
+  "initial_sample": {
+    "kept_on_default_count": 0,
+    "queue": "celery",
+    "reroute_ratio": 1.0,
+    "rerouteable_count": 200,
+    "sample_size": 200,
+    "top_tasks": [
+      {
+        "count": 187,
+        "reason": "reroute_to_named_queue",
+        "reroute": true,
+        "target_queue": "market_data",
+        "task_name": "backend.celery_task.technical_task.fetch_technical_data_day"
+      },
+      {
+        "count": 13,
+        "reason": "reroute_to_named_queue",
+        "reroute": true,
+        "target_queue": "execution_critical",
+        "task_name": "backend.celery_task.trading_bot_task.run_daily_trading_bot"
+      }
+    ],
+    "total_depth": 50888
+  },
+  "limit_per_run": 500,
+  "max_processed_total": 1500,
+  "max_rerouted_total": null,
+  "max_runs": 3,
+  "min_reroute_ratio": 0.75,
+  "operator_summary": {
+    "kept": 0,
+    "processed": 1500,
+    "reroute_ratio_after": 1.0,
+    "reroute_ratio_before": 1.0,
+    "rerouted": 1500,
+    "stop_reason": "max_processed_total_reached",
+    "top_tasks_after": [
+      {
+        "count": 167,
+        "reason": "reroute_to_named_queue",
+        "reroute": true,
+        "target_queue": "market_data",
+        "task_name": "backend.celery_task.market_task.fetch_market_indicators"
+      },
+      {
+        "count": 33,
+        "reason": "reroute_to_named_queue",
+        "reroute": true,
+        "target_queue": "portfolio",
+        "task_name": "backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot"
+      }
+    ],
+    "top_tasks_before": [
+      {
+        "count": 187,
+        "reason": "reroute_to_named_queue",
+        "reroute": true,
+        "target_queue": "market_data",
+        "task_name": "backend.celery_task.technical_task.fetch_technical_data_day"
+      },
+      {
+        "count": 13,
+        "reason": "reroute_to_named_queue",
+        "reroute": true,
+        "target_queue": "execution_critical",
+        "task_name": "backend.celery_task.trading_bot_task.run_daily_trading_bot"
+      }
+    ]
+  },
+  "queue": "celery",
+  "runs": [
+    {
+      "drain": {
+        "after_queue_depths": {
+          "ai_generation": 7308,
+          "celery": 50386,
+          "execution_critical": 17817,
+          "market_data": 407,
+          "portfolio": 5822,
+          "scoring": 17720
+        },
+        "before_queue_depths": {
+          "ai_generation": 7308,
+          "celery": 50888,
+          "execution_critical": 17606,
+          "market_data": 223,
+          "portfolio": 5823,
+          "scoring": 17618
+        },
+        "elapsed_seconds": 2.5,
+        "kept": 0,
+        "limit_requested": 500,
+        "processed": 500,
+        "queue": "celery",
+        "remaining_depth": 50386,
+        "rerouted": 500,
+        "rerouted_by_target": {
+          "execution_critical": 212,
+          "market_data": 185,
+          "scoring": 103
+        },
+        "runtime_cap_seconds": 15.0,
+        "stop_reason": "limit_reached"
+      },
+      "run": 1,
+      "sample_before": {
+        "kept_on_default_count": 0,
+        "queue": "celery",
+        "reroute_ratio": 1.0,
+        "rerouteable_count": 200,
+        "sample_size": 200,
+        "top_tasks": [
+          {
+            "count": 187,
+            "reason": "reroute_to_named_queue",
+            "reroute": true,
+            "target_queue": "market_data",
+            "task_name": "backend.celery_task.technical_task.fetch_technical_data_day"
+          },
+          {
+            "count": 13,
+            "reason": "reroute_to_named_queue",
+            "reroute": true,
+            "target_queue": "execution_critical",
+            "task_name": "backend.celery_task.trading_bot_task.run_daily_trading_bot"
+          }
+        ],
+        "total_depth": 50888
+      }
+    },
+    {
+      "drain": {
+        "after_queue_depths": {
+          "ai_generation": 7308,
+          "celery": 49886,
+          "execution_critical": 17996,
+          "market_data": 406,
+          "portfolio": 6033,
+          "scoring": 17829
+        },
+        "before_queue_depths": {
+          "ai_generation": 7308,
+          "celery": 50386,
+          "execution_critical": 17817,
+          "market_data": 406,
+          "portfolio": 5821,
+          "scoring": 17720
+        },
+        "elapsed_seconds": 1.226,
+        "kept": 0,
+        "limit_requested": 500,
+        "processed": 500,
+        "queue": "celery",
+        "remaining_depth": 49886,
+        "rerouted": 500,
+        "rerouted_by_target": {
+          "execution_critical": 179,
+          "portfolio": 212,
+          "scoring": 109
+        },
+        "runtime_cap_seconds": 15.0,
+        "stop_reason": "limit_reached"
+      },
+      "run": 2,
+      "sample_before": {
+        "kept_on_default_count": 0,
+        "queue": "celery",
+        "reroute_ratio": 1.0,
+        "rerouteable_count": 200,
+        "sample_size": 200,
+        "top_tasks": [
+          {
+            "count": 109,
+            "reason": "reroute_to_named_queue",
+            "reroute": true,
+            "target_queue": "scoring",
+            "task_name": "backend.celery_task.setup_task.run_setup_agent_daily"
+          },
+          {
+            "count": 91,
+            "reason": "reroute_to_named_queue",
+            "reroute": true,
+            "target_queue": "portfolio",
+            "task_name": "backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot"
+          }
+        ],
+        "total_depth": 50386
+      }
+    },
+    {
+      "drain": {
+        "after_queue_depths": {
+          "ai_generation": 7307,
+          "celery": 49384,
+          "execution_critical": 18029,
+          "market_data": 450,
+          "portfolio": 6244,
+          "scoring": 18039
+        },
+        "before_queue_depths": {
+          "ai_generation": 7307,
+          "celery": 49886,
+          "execution_critical": 17996,
+          "market_data": 406,
+          "portfolio": 6032,
+          "scoring": 17829
+        },
+        "elapsed_seconds": 1.399,
+        "kept": 0,
+        "limit_requested": 500,
+        "processed": 500,
+        "queue": "celery",
+        "remaining_depth": 49384,
+        "rerouted": 500,
+        "rerouted_by_target": {
+          "execution_critical": 33,
+          "market_data": 45,
+          "portfolio": 212,
+          "scoring": 210
+        },
+        "runtime_cap_seconds": 15.0,
+        "stop_reason": "limit_reached"
+      },
+      "run": 3,
+      "sample_before": {
+        "kept_on_default_count": 0,
+        "queue": "celery",
+        "reroute_ratio": 1.0,
+        "rerouteable_count": 200,
+        "sample_size": 200,
+        "top_tasks": [
+          {
+            "count": 167,
+            "reason": "reroute_to_named_queue",
+            "reroute": true,
+            "target_queue": "scoring",
+            "task_name": "backend.celery_task.setup_task.run_setup_agent_daily"
+          },
+          {
+            "count": 33,
+            "reason": "reroute_to_named_queue",
+            "reroute": true,
+            "target_queue": "execution_critical",
+            "task_name": "backend.celery_task.trading_bot_task.run_daily_trading_bot"
+          }
+        ],
+        "total_depth": 49886
+      }
+    }
+  ],
+  "runtime_cap_seconds": 15.0,
+  "sample_size": 200,
+  "sleep_seconds": 1.0,
+  "stop_reason": "max_processed_total_reached",
+  "totals": {
+    "kept": 0,
+    "processed": 1500,
+    "rerouted": 1500
+  }
+}
