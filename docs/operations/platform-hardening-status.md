@@ -130,10 +130,12 @@ Latest local regression:
 
 ## Recommended Next Work
 
-1. Continue controlled legacy queue drain operations.
+1. Controlled legacy queue drain operations are active.
    - Use `docs/operations/legacy-celery-queue-drain.md`.
    - Save artifacts and compare `operator_summary`.
    - Stop based on `reroute_ratio_after` and `top_tasks_after`, not total backlog alone.
+   - Latest controlled run processed `9000`, rerouted `8782`, kept `218`, then stopped on `reroute_ratio_below_threshold`.
+   - Do not continue immediately when named queues are already materially fuller; wait for them to drain first.
 
 2. Use queue age/throughput fields in deep health while draining.
    - `queue_metrics.<queue>.oldest_message_age_seconds` is available for newly published tasks stamped with `published_at`.
@@ -141,7 +143,12 @@ Latest local regression:
    - `queue_metrics.<queue>.estimated_drain_per_minute` is based on the previous health check in the current backend process.
    - Legacy messages without a publish timestamp intentionally report `age_source = unavailable`.
 
-3. Then return to product OS work.
+3. Continue with the remaining platform cleanup sequence.
+   - Next: psycopg2 legacy boundary migration/isolation.
+   - Then: PushService sync DB cleanup.
+   - Then: frontend polling / `no-store` reduction.
+
+4. Then return to product OS work.
    - Portfolio Risk 2.0 or Reports/Reflection 2.0 are now safer to build on top of this platform base.
 
 ## QA Reference
