@@ -39,7 +39,7 @@ The main remaining risk is operational scale, not core request correctness:
 
 Latest deployed hardening commit:
 
-- See git history for the latest platform hardening deploy commit.
+- `d8199a2` - `Fix PM2 deploy gate parser`
 
 Latest smoke results from deploy:
 
@@ -50,7 +50,7 @@ Latest smoke results from deploy:
 
 Latest local regression:
 
-- `pytest -q`: `279 passed`
+- `pytest -q`: `283 passed`
 
 ## What Is Done
 
@@ -110,7 +110,7 @@ Latest local regression:
 
 ### Legacy boundaries
 
-- `PushService` still uses sync SQLAlchemy style internally; it is outside the hardened request-path convention for now.
+- `PushService` is async-first; its sync compatibility method opens an async session and does not carry sync query logic.
 - psycopg2 remains in explicit background/scoring/reporting paths:
   - `backend/ai_core/regime_memory.py`
   - `backend/celery_task/daily_report_task.py`

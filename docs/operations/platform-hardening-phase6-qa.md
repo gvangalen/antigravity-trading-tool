@@ -125,6 +125,6 @@ Note: deep health can be slower during queue drain/load windows. Treat a timeout
 
 ## Remaining Phase 6 Follow-Ups
 
-- Keep sync `PushService` DB usage isolated to legacy/background notification dispatch paths.
+- Keep `PushService` async-first. Its sync compatibility method may remain for legacy callers, but it must not reintroduce sync SQLAlchemy query logic.
 - Later migrate legacy psycopg2 usage out of scoring/reporting/background paths when those flows are being touched.
 - Frontend polling / `no-store` read-amplification remains a later scale-tuning track, not a request-path correctness blocker.
