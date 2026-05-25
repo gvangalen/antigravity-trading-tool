@@ -27,6 +27,40 @@ DASHBOARD_OVERVIEW_CACHE_ENABLED=true
 
 - This avoids consistency-sensitive mobile/dashboard state depending on a single backend process.
 
+### Market intelligence cache policy
+
+`backend/services/intelligence_service.py`
+
+- Process-local market-intelligence cache is disabled by default.
+- Cache can only be enabled explicitly with:
+
+```bash
+INTELLIGENCE_SERVICE_CACHE_ENABLED=true
+```
+
+- This keeps market-intelligence state consistent across backend processes by default.
+
+### Removed unused service caches
+
+`backend/services/macro_data_service.py`
+`backend/services/technical_data_service.py`
+
+- Removed unused class-level process-local cache placeholders.
+- This keeps the service boundary honest: if a cache is needed later, it must be intentionally configured and tested.
+
+### Legacy sync DB boundary
+
+The request/API layer is guarded against sync `Session` / `.query()` patterns.
+
+Known psycopg2 usage remains isolated to explicit legacy/background boundaries:
+
+- `backend/ai_core/regime_memory.py`
+- `backend/celery_task/daily_report_task.py`
+- `backend/scripts/database.py`
+- `backend/utils/db.py`
+
+Those paths are not part of the new async request-path convention and can be migrated later when their owning flows are touched.
+
 ### Test discovery hygiene
 
 `pytest.ini`
@@ -54,6 +88,8 @@ cd backend/trading-tool-backend
 PYTHONPATH=. pytest \
   backend/tests/test_notifications_api_hardening.py \
   backend/tests/test_dashboard_cache_policy.py \
+  backend/tests/test_intelligence_cache_policy.py \
+  backend/tests/test_phase6_consistency_boundaries.py \
   -q
 ```
 
@@ -63,6 +99,9 @@ Expected:
 - notifications API uses authenticated user context
 - dashboard mobile overview cache is disabled by default
 - dashboard mobile overview cache only enables through explicit env flag
+- market-intelligence cache is disabled by default
+- API modules do not use sync `Session` / `.query()` request-path patterns
+- psycopg2 imports stay inside the explicit legacy allowlist
 
 ## Live Smoke
 
@@ -86,6 +125,6 @@ Note: deep health can be slower during queue drain/load windows. Treat a timeout
 
 ## Remaining Phase 6 Follow-Ups
 
-- Review process-local read caches in macro/technical/intelligence services and decide which are acceptable read-through caches versus consistency-sensitive state.
 - Keep sync `PushService` DB usage isolated to legacy/background notification dispatch paths.
 - Later migrate legacy psycopg2 usage out of scoring/reporting/background paths when those flows are being touched.
+- Frontend polling / `no-store` read-amplification remains a later scale-tuning track, not a request-path correctness blocker.

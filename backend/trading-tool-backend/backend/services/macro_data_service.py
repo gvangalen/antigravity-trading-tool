@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 
 from fastapi import HTTPException
@@ -15,10 +14,6 @@ from backend.schemas.macro_data_schema import (
 logger = logging.getLogger(__name__)
 
 class MacroDataService:
-    # 🕒 Global cache for heavy aggregations
-    _cache = {}
-    _CACHE_TTL = 60
-
     def __init__(self, session: AsyncSession):
         self.session = session
         self.repository = MacroDataRepository(session)

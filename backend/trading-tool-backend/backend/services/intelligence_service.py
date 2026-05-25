@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import os
 from typing import Dict, Any
 
 from backend.infrastructure.repositories.intelligence_repository import IntelligenceRepository
@@ -10,10 +11,11 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 class IntelligenceService:
-    # 🕒 In-memory cache om 'thread exhaustion' te voorkomen
+    # In-memory cache is opt-in only. It is useful during bursty local use, but
+    # consistency-sensitive deployments should not depend on process-local state.
     # user_id -> { "data": dict, "expires_at": datetime }
     _cache = {}
-    _CACHE_TTL_SECONDS = 30 # Kortere TTL voor live gevoel, maar lang genoeg om bursts te stoppen
+    _CACHE_TTL_SECONDS = 30
     
     # 🛡️ Semaphore om te voorkomen dat er teveel 'heavy' threads tegelijk draaien
     _semaphore = asyncio.Semaphore(5)
@@ -21,14 +23,23 @@ class IntelligenceService:
     def __init__(self, repository: IntelligenceRepository):
         self.repository = repository
 
+    @classmethod
+    def cache_enabled(cls) -> bool:
+        return os.getenv("INTELLIGENCE_SERVICE_CACHE_ENABLED", "false").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
     async def get_market_intelligence(self, user_id: int, symbol: str = "BTC") -> Dict[str, Any]:
-        # 1. Check Cache
         now = datetime.now()
         cache_key = f"{user_id}_{symbol}"
-        cached = self._cache.get(cache_key)
-        if cached and cached["expires_at"] > now:
-            # logger.info(f"🎯 Cache HIT voor Market Intelligence (user: {user_id}, symbol: {symbol})")
-            return cached["data"]
+        cache_enabled = self.cache_enabled()
+        if cache_enabled:
+            cached = self._cache.get(cache_key)
+            if cached and cached["expires_at"] > now:
+                return cached["data"]
 
         # 2. Fetch scores (Async)
         daily_score = await self.repository.get_latest_daily_scores(user_id, symbol)
@@ -57,10 +68,10 @@ class IntelligenceService:
                 scores=scores
             )
 
-        # 4. Save to Cache
-        self._cache[cache_key] = {
-            "data": result,
-            "expires_at": now + timedelta(seconds=self._CACHE_TTL_SECONDS)
-        }
+        if cache_enabled:
+            self._cache[cache_key] = {
+                "data": result,
+                "expires_at": now + timedelta(seconds=self._CACHE_TTL_SECONDS),
+            }
 
         return result

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,10 +13,6 @@ from backend.services.onboarding_service import mark_step_completed
 logger = logging.getLogger(__name__)
 
 class TechnicalDataService:
-    # 🕒 Global cache for heavy scoring ops
-    _cache = {}
-    _CACHE_TTL = 60
-
     def __init__(self, session: AsyncSession):
         self.session = session
         self.repository = TechnicalDataRepository(session)
