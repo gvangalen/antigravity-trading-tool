@@ -129,6 +129,7 @@ class _FakeCursor:
         self.portfolios = portfolios
         self._rows = []
         self.inserted_bot_snapshots = []
+        self.inserted_global_snapshots = []
 
     def execute(self, sql, params=None):
         sql_lower = sql.lower()
@@ -143,6 +144,10 @@ class _FakeCursor:
             return
         if "insert into bot_portfolio_snapshots" in sql_lower:
             self.inserted_bot_snapshots.append(params)
+            self._rows = []
+            return
+        if "insert into portfolio_balance_snapshots" in sql_lower:
+            self.inserted_global_snapshots.append(params)
             self._rows = []
             return
         self._rows = []
@@ -191,6 +196,26 @@ def test_portfolio_snapshot_uses_bot_symbol_price(monkeypatch):
     assert params[4] == "ETH"
     assert params[7] == 2500
     assert params[8] == 5100
+
+
+def test_portfolio_global_snapshot_keeps_btc_value_symbol_specific(monkeypatch):
+    cursor = _FakeCursor(
+        prices={"BTC": 50000, "ETH": 2500},
+        portfolios=[
+            (101, "ETH", 100, 2, 4000, 2000, 0),
+            (102, "BTC", 50, 0.1, 4500, 45000, 0),
+        ],
+    )
+    monkeypatch.setattr(portfolio_snapshot_service, "get_db_connection", lambda: _FakeConnection(cursor))
+
+    portfolio_snapshot_service.snapshot_all_for_user(9)
+
+    assert len(cursor.inserted_bot_snapshots) == 2
+    assert cursor.inserted_global_snapshots
+    params = cursor.inserted_global_snapshots[0]
+    assert params[3] == 10150  # equity: cash 150 + ETH 5000 + BTC 5000
+    assert params[5] == 0.1
+    assert params[6] == 5000  # btc_value_eur must not include ETH position value
 
 
 def test_portfolio_snapshot_skips_bot_when_symbol_price_missing(monkeypatch):

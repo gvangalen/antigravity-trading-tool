@@ -61,6 +61,7 @@ def snapshot_all_for_user(
 
             global_cash = 0.0
             global_btc_qty = 0.0
+            global_btc_value = 0.0
             global_position_value = 0.0
             global_invested = 0.0
             global_realized_pnl = 0.0
@@ -113,6 +114,7 @@ def snapshot_all_for_user(
                 global_position_value += position_value
                 if symbol == "BTC":
                     global_btc_qty += b_qty
+                    global_btc_value += position_value
                 global_invested += b_invested
                 global_realized_pnl += b_realized
 
@@ -179,7 +181,7 @@ def snapshot_all_for_user(
                 global_equity,
                 global_cash,
                 global_btc_qty,
-                global_position_value,
+                global_btc_value,
                 global_invested,
                 global_unrealized
             ))
