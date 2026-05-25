@@ -18,7 +18,7 @@ The core platform hardening track is now green for V1 correctness:
 The main remaining risk is operational scale, not core request correctness:
 
 - legacy `celery` backlog still needs controlled drain cycles
-- old psycopg2/background flows remain as explicit legacy boundaries
+- old psycopg2/background flows remain explicit legacy boundaries, with regime memory and daily report writes moved behind repositories
 - frontend polling/read-amplification has a first V1 reduction in place
 - first enterprise rollout/tracing controls are in place
 
@@ -39,7 +39,7 @@ The main remaining risk is operational scale, not core request correctness:
 
 Latest deployed hardening commit:
 
-- `d8199a2` - `Fix PM2 deploy gate parser`
+- `b65aa92` - `Platform reliability step 2 legacy queue drain`
 
 Latest smoke results from deploy:
 
@@ -50,7 +50,7 @@ Latest smoke results from deploy:
 
 Latest local regression:
 
-- `pytest -q`: `285 passed`
+- `pytest -q`: `286 passed`
 
 ## What Is Done
 
@@ -99,6 +99,7 @@ Latest local regression:
 - New API modules are guarded against sync `Session` / `.query()` patterns.
 - Process-local dashboard and intelligence caches are disabled by default.
 - psycopg2 usage is explicitly allowlisted to legacy/background boundaries.
+- Regime memory and daily report writes no longer call the legacy psycopg2 helper directly; they use SQLAlchemy repository boundaries.
 
 ## Remaining Risks
 
@@ -111,11 +112,10 @@ Latest local regression:
 ### Legacy boundaries
 
 - `PushService` is async-first; its sync compatibility method opens an async session and does not carry sync query logic.
-- psycopg2 remains in explicit background/scoring/reporting paths:
+- psycopg2 remains directly imported only in `backend/utils/db.py`; older background/scoring/reporting paths that still need sync access must go through an explicit boundary instead of importing the driver.
+- Recently migrated off direct helper calls:
   - `backend/ai_core/regime_memory.py`
   - `backend/celery_task/daily_report_task.py`
-  - `backend/scripts/database.py`
-  - `backend/utils/db.py`
 
 ### Scale tuning later
 
@@ -147,6 +147,7 @@ Latest local regression:
 
 3. Continue with the remaining platform cleanup sequence.
    - psycopg2 legacy boundary migration/isolation is complete at the driver boundary: direct driver imports are centralized in `backend/utils/db.py`.
+   - regime memory and daily report writes now use repository boundaries instead of direct `get_db_connection()` calls.
    - PushService sync DB cleanup is complete: PushService is async-first and the sync method is compatibility-only.
    - Frontend polling / `no-store` reduction is complete for the shared auth clients and dashboard scores hook.
 

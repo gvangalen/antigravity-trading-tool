@@ -3,8 +3,9 @@ import logging
 from datetime import date
 from typing import Any, Dict, Optional
 
-from backend.utils.db import get_db_connection, jsonb_param
 from backend.engine.transition_detector import compute_transition_detector
+from backend.infrastructure.database import SessionLocal
+from backend.infrastructure.repositories.regime_memory_repository import RegimeMemoryRepository
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -24,35 +25,8 @@ def _safe_json(obj: Any) -> Any:
 
 
 def get_regime_memory(user_id: int) -> Optional[Dict[str, Any]]:
-    conn = get_db_connection()
-    if not conn:
-        return None
-
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT date, regime_label, confidence, signals_json, narrative
-                FROM regime_memory
-                WHERE user_id = %s
-                ORDER BY date DESC
-                LIMIT 1;
-                """,
-                (user_id,),
-            )
-            row = cur.fetchone()
-            if not row:
-                return None
-
-            return {
-                "date": row[0].isoformat() if row[0] else None,
-                "regime_label": row[1],
-                "confidence": float(row[2]) if row[2] is not None else None,
-                "signals_json": row[3],
-                "narrative": row[4],
-            }
-    finally:
-        conn.close()
+    with SessionLocal() as db:
+        return RegimeMemoryRepository(db).get_latest(user_id)
 
 
 def store_regime_memory(user_id: int) -> Dict[str, Any]:
@@ -96,43 +70,18 @@ def store_regime_memory(user_id: int) -> Dict[str, Any]:
     # hedge-fund narrative
     narrative = transition.get("narrative") or "Regime persistent. No clear transition signature."
 
-    conn = get_db_connection()
-    if not conn:
-        logger.error("❌ No DB connection in store_regime_memory")
-        return {
-            "regime_label": regime_label,
-            "confidence": regime_conf,
-            "signals_json": signals_json,
-            "narrative": narrative,
-        }
-
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO regime_memory (
-                    user_id, date, regime_label, confidence, signals_json, narrative
-                )
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (user_id, date)
-                DO UPDATE SET
-                    regime_label = EXCLUDED.regime_label,
-                    confidence   = EXCLUDED.confidence,
-                    signals_json = EXCLUDED.signals_json,
-                    narrative    = EXCLUDED.narrative,
-                    created_at   = NOW();
-                """,
-                (
-                    user_id,
-                    today,
-                    regime_label,
-                    regime_conf,
-                    jsonb_param(_safe_json(signals_json)),
-                    narrative,
-                ),
+        with SessionLocal() as db:
+            RegimeMemoryRepository(db).upsert(
+                user_id=user_id,
+                memory_date=today,
+                regime_label=regime_label,
+                confidence=regime_conf,
+                signals_json=_safe_json(signals_json),
+                narrative=narrative,
             )
+            db.commit()
 
-        conn.commit()
         logger.info("🧠 regime_memory stored | user_id=%s | label=%s | risk=%s", user_id, regime_label, r)
 
         return {
@@ -144,7 +93,4 @@ def store_regime_memory(user_id: int) -> Dict[str, Any]:
 
     except Exception:
         logger.error("❌ store_regime_memory failed", exc_info=True)
-        conn.rollback()
         raise
-    finally:
-        conn.close()

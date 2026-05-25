@@ -62,6 +62,29 @@ def test_legacy_script_database_module_is_compatibility_wrapper():
     assert "from backend.utils.db import get_db_connection" in source
 
 
+def test_regime_memory_and_daily_report_use_repository_boundaries():
+    regime_source = _read(BACKEND_ROOT / "ai_core" / "regime_memory.py")
+    daily_report_source = _read(BACKEND_ROOT / "celery_task" / "daily_report_task.py")
+    regime_repo_source = _read(
+        BACKEND_ROOT / "infrastructure" / "repositories" / "regime_memory_repository.py"
+    )
+    daily_report_repo_source = _read(
+        BACKEND_ROOT / "infrastructure" / "repositories" / "daily_report_repository.py"
+    )
+
+    for source in (regime_source, daily_report_source):
+        assert "from backend.utils.db import" not in source
+        assert "get_db_connection" not in source
+        assert "jsonb_param" not in source
+
+    assert "RegimeMemoryRepository" in regime_source
+    assert "DailyReportWriteRepository" in daily_report_source
+    assert "bindparam" in regime_repo_source
+    assert "type_=JSONB" in regime_repo_source
+    assert "bindparam" in daily_report_repo_source
+    assert "type_=JSONB" in daily_report_repo_source
+
+
 def test_root_pytest_collects_maintained_backend_suite_only():
     pytest_ini = _read(REPO_ROOT / "pytest.ini")
 

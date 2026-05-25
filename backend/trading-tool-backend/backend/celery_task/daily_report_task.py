@@ -6,8 +6,9 @@ from decimal import Decimal
 from celery import shared_task
 from dotenv import load_dotenv
 
-from backend.utils.db import get_db_connection, jsonb_param
 from backend.ai_agents.report_ai_agent import generate_daily_report_sections
+from backend.infrastructure.database import SessionLocal
+from backend.infrastructure.repositories.daily_report_repository import DailyReportWriteRepository
 
 # 🧠 Regime memory
 from backend.ai_core.regime_memory import (
@@ -44,15 +45,15 @@ def to_float(v):
 
 def jsonb(v, fallback=None):
     if v is None:
-        return jsonb_param(fallback) if fallback is not None else None
+        return fallback if fallback is not None else None
     if isinstance(v, (dict, list)):
-        return jsonb_param(v)
+        return v
     if isinstance(v, str):
         try:
-            return jsonb_param(json.loads(v))
+            return json.loads(v)
         except Exception:
-            return jsonb_param(v)
-    return jsonb_param(v)
+            return v
+    return v
 
 
 # =====================================================
@@ -65,16 +66,9 @@ def generate_daily_report(user_id: int):
     today = date.today()
     logger.info(f"📄 Daily report | user_id={user_id} | {today}")
 
-    conn = get_db_connection()
-    if not conn:
-        logger.error("❌ Geen databaseverbinding")
-        return
-
-    cursor = None
+    db = SessionLocal()
 
     try:
-        cursor = conn.cursor()
-
         # 🧠 REGIME MEMORY
         get_regime_memory(user_id)
         store_regime_memory(user_id)
@@ -120,66 +114,35 @@ def generate_daily_report(user_id: int):
         top_setups      = jsonb(report.get("top_setups"), [])
         active_strategy = jsonb(report.get("active_strategy"))
 
-        # -------------------------------------------------
-        # 2️⃣ UPSERT REPORT
-        # -------------------------------------------------
-        cursor.execute("""
-            INSERT INTO daily_reports (
-                report_date, user_id,
-                executive_summary, market_analysis, macro_context,
-                technical_analysis, setup_validation, strategy_implication, outlook,
-                bot_strategy, bot_snapshot,
-                price, change_24h, volume,
-                macro_score, technical_score, market_score, setup_score,
-                market_indicator_highlights, macro_indicator_highlights, technical_indicator_highlights,
-                best_setup, top_setups, active_strategy
-            )
-            VALUES (
-                %s,%s,
-                %s,%s,%s,%s,%s,%s,%s,
-                %s,%s,
-                %s,%s,%s,
-                %s,%s,%s,%s,
-                %s,%s,%s,
-                %s,%s,%s
-            )
-            ON CONFLICT (user_id, report_date)
-            DO UPDATE SET
-                executive_summary = EXCLUDED.executive_summary,
-                market_analysis = EXCLUDED.market_analysis,
-                macro_context = EXCLUDED.macro_context,
-                technical_analysis = EXCLUDED.technical_analysis,
-                setup_validation = EXCLUDED.setup_validation,
-                strategy_implication = EXCLUDED.strategy_implication,
-                outlook = EXCLUDED.outlook,
-                bot_strategy = EXCLUDED.bot_strategy,
-                bot_snapshot = EXCLUDED.bot_snapshot,
-                price = EXCLUDED.price,
-                change_24h = EXCLUDED.change_24h,
-                volume = EXCLUDED.volume,
-                macro_score = EXCLUDED.macro_score,
-                technical_score = EXCLUDED.technical_score,
-                market_score = EXCLUDED.market_score,
-                setup_score = EXCLUDED.setup_score,
-                market_indicator_highlights = EXCLUDED.market_indicator_highlights,
-                macro_indicator_highlights = EXCLUDED.macro_indicator_highlights,
-                technical_indicator_highlights = EXCLUDED.technical_indicator_highlights,
-                best_setup = EXCLUDED.best_setup,
-                top_setups = EXCLUDED.top_setups,
-                active_strategy = EXCLUDED.active_strategy,
-                generated_at = NOW();
-        """, (
-            today, user_id,
-            executive_summary, market_analysis, macro_context,
-            technical_analysis, setup_validation, strategy_implication, outlook,
-            bot_strategy, bot_snapshot,
-            price, change_24h, volume,
-            macro_score, technical_score, market_score, setup_score,
-            market_indicators, macro_indicators, technical_indicators,
-            best_setup, top_setups, active_strategy
-        ))
-
-        conn.commit()
+        DailyReportWriteRepository(db).upsert_daily_report(
+            user_id=user_id,
+            report_date=today,
+            sections={
+                "executive_summary": executive_summary,
+                "market_analysis": market_analysis,
+                "macro_context": macro_context,
+                "technical_analysis": technical_analysis,
+                "setup_validation": setup_validation,
+                "strategy_implication": strategy_implication,
+                "outlook": outlook,
+                "bot_strategy": bot_strategy,
+                "bot_snapshot": bot_snapshot,
+                "market_indicator_highlights": market_indicators,
+                "macro_indicator_highlights": macro_indicators,
+                "technical_indicator_highlights": technical_indicators,
+                "best_setup": best_setup,
+                "top_setups": top_setups,
+                "active_strategy": active_strategy,
+            },
+            price=price,
+            change_24h=change_24h,
+            volume=volume,
+            macro_score=macro_score,
+            technical_score=technical_score,
+            market_score=market_score,
+            setup_score=setup_score,
+        )
+        db.commit()
         logger.info("💾 daily_reports opgeslagen")
 
         # -------------------------------------------------
@@ -199,12 +162,10 @@ def generate_daily_report(user_id: int):
 
     except Exception:
         logger.exception("❌ Fout in daily_report_task")
-        conn.rollback()
+        db.rollback()
 
     finally:
-        if cursor:
-            cursor.close()
-        conn.close()
+        db.close()
         logger.info("✅ Daily report task afgerond")
 
         # -------------------------------------------------
@@ -212,20 +173,15 @@ def generate_daily_report(user_id: int):
         # -------------------------------------------------
         try:
             from backend.services.push_service import push_service
-            from backend.infrastructure.database import SessionLocal
-            
-            db = SessionLocal()
-            try:
-                msg = f"Je dagelijkse rapport voor {today} staat voor je klaar."
-                push_service.notify_user(
-                    db=db, 
-                    user_id=user_id, 
-                    title="Nieuw Rapport Beschikbaar", 
-                    message=msg,
-                    url="/reports"
-                )
-                logger.info(f"🔔 Push notification sent to user {user_id}")
-            finally:
-                db.close()
+
+            msg = f"Je dagelijkse rapport voor {today} staat voor je klaar."
+            push_service.notify_user(
+                db=None,
+                user_id=user_id,
+                title="Nieuw Rapport Beschikbaar",
+                message=msg,
+                url="/reports",
+            )
+            logger.info(f"🔔 Push notification sent to user {user_id}")
         except Exception as e:
             logger.error(f"⚠️ Failed to send push notification: {e}")
