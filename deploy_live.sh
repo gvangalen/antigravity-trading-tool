@@ -24,12 +24,28 @@ else
 fi
 
 TARGET_COMMIT="$(git rev-parse --short HEAD)"
-echo "🌐 2. Deploying commit ${TARGET_COMMIT} to Oracle..."
+REMOTE_LAST_GOOD="$(
+  ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
+    cd $REMOTE_DIR 2>/dev/null || exit 0
+    if [ -f ops/deploy/LAST_GOOD_COMMIT ]; then
+      cat ops/deploy/LAST_GOOD_COMMIT
+    else
+      git rev-parse --short HEAD 2>/dev/null || true
+    fi
+  " 2>/dev/null | tail -n 1
+)"
+ROLLBACK_COMMIT="${REMOTE_LAST_GOOD:-$(git rev-parse --short HEAD~1 2>/dev/null || git rev-parse --short HEAD)}"
+ROLLBACK_COMMAND="ssh -i \"$SSH_KEY\" ubuntu@$SERVER_IP 'cd $REMOTE_DIR && ./rollback_live.sh $ROLLBACK_COMMIT'"
 
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
+echo "🌐 2. Deploying commit ${TARGET_COMMIT} to Oracle..."
+echo "🧭 Previous known-good commit: ${ROLLBACK_COMMIT}"
+
+if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   set -euo pipefail
   export PATH=$NODE_BIN:\$PATH
   cd $REMOTE_DIR
+  mkdir -p ops/deploy
+  printf '%s\n' '$ROLLBACK_COMMIT' > ops/deploy/PREVIOUS_GOOD_COMMIT
   rm -f .git/index.lock .git/refs/remotes/origin/main
   git fetch origin main
   git reset --hard $TARGET_COMMIT
@@ -151,8 +167,14 @@ else:
     print('✅ Deep health gate passed.')
 PY
   curl --max-time 10 -fsSI http://127.0.0.1:5002/report | head -n 1
-"
+  printf '%s\n' '$TARGET_COMMIT' > ops/deploy/LAST_GOOD_COMMIT
+"; then
+  echo "❌ Deployment failed for ${TARGET_COMMIT}." >&2
+  echo "Rollback command:" >&2
+  echo "  ${ROLLBACK_COMMAND}" >&2
+  exit 1
+fi
 
 echo "✅ Deployment complete for ${TARGET_COMMIT}."
 echo "Rollback if needed:"
-echo "  ssh -i \"$SSH_KEY\" ubuntu@$SERVER_IP 'cd $REMOTE_DIR && git reset --hard <previous_commit> && pm2 restart ecosystem.config.js --update-env'"
+echo "  ${ROLLBACK_COMMAND}"

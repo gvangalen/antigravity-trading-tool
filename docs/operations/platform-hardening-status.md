@@ -12,7 +12,7 @@ The core platform hardening track is now green for V1 correctness:
 - Portfolio snapshots no longer silently price every bot as BTC.
 - App startup is schema-read-only; runtime DDL moved to explicit migrations.
 - Celery routing is named, observable, and backed by split workers.
-- Deploys are gated by lightweight and deep health checks.
+- Deploys are gated by lightweight/deep health checks and now print a concrete rollback helper command.
 - Request-path consistency is guarded by tests; process-local caches are disabled or explicit.
 
 The main remaining risk is operational scale, not core request correctness:
@@ -30,16 +30,20 @@ The main remaining risk is operational scale, not core request correctness:
 | Phase 2 - Portfolio & Execution Invariants | Green | Bot snapshots use real symbols, missing symbol price skips that bot, BTC aggregate fields are BTC-specific, manual order idempotency and live preflight invariants are regression-tested. |
 | Phase 3 - Runtime DDL To Migrations | Green | `main.py` startup is schema-read-only; prior startup DDL moved to explicit migration scripts. |
 | Phase 4 - Queue & Celery Throughput | Green for architecture, operations ongoing | Named queues, split PM2 workers, centralized queue policy, bounded dispatcher, workload rate limits, deep-health queue visibility, and legacy drain tooling are in place. |
-| Phase 5 - Observability & Deployment Safety | Green | `/api/health` remains lightweight; `/api/system/health` reports DB, broker, workers, queues, market/scores freshness; deploy gate parses deep health and supports strict degraded handling. |
+| Phase 5 - Observability & Deployment Safety | Green | `/api/health` remains lightweight; `/api/system/health` reports DB, broker, workers, queues, market/scores freshness; deploy gate parses deep health, supports strict degraded handling, and records rollback artifacts. |
 | Phase 6 - Cleanup & Consistency | Green | Notifications API is authenticated-user scoped and async; dashboard/intelligence process caches are opt-in; API sync DB patterns and psycopg2 boundaries are tested. |
 | Step 5 - Frontend Cache/Polling | Green | Authenticated GET helpers no longer force global `no-store`; dashboard polling is visibility-aware and single-flight. |
-| Step 6 - Enterprise Safety Slice | Green | API responses carry `X-Trace-Id`; deploy verifies expected PM2 apps are online and rebuilds the process list if reload leaves gaps. |
+| Step 6 - Enterprise Safety Slice | Green | API responses carry `X-Trace-Id`; deploy verifies expected PM2 apps, rebuilds the process list if reload leaves gaps, persists `LAST_GOOD_COMMIT`, and ships an explicit rollback helper. |
 
 ## Current Live Baseline
 
 Latest deployed hardening commit:
 
-- `efedb20` - `Platform reliability step 4 frontend polling tuning`
+- `eb6bc71` - `Platform reliability step 5 traceability`
+
+Current rollout candidate:
+
+- `Platform reliability step 6 rollback automation`
 
 Latest smoke results from deploy:
 
@@ -50,7 +54,7 @@ Latest smoke results from deploy:
 
 Latest local regression:
 
-- `pytest -q`: `292 passed`
+- `pytest -q`: `294 passed`
 
 ## What Is Done
 
@@ -92,6 +96,10 @@ Latest local regression:
 - Deep health is operationally useful and rollout-gated.
 - Deploy script no longer runs user-specific business actions.
 - Deploy readiness window is robust enough for current backend startup time.
+- Deploy captures the previous known-good commit in `ops/deploy/PREVIOUS_GOOD_COMMIT`.
+- Successful deploys write `ops/deploy/LAST_GOOD_COMMIT`.
+- Failed deploys print a ready-to-run `rollback_live.sh <commit>` command.
+- `rollback_live.sh` resets code, reloads PM2, gates expected apps, and smokes `/api/health`, `/api/system/health`, and `/report` without running schema migrations.
 
 ### Traceability
 
@@ -135,7 +143,6 @@ Latest local regression:
 
 - Deep end-to-end tracing per decision/order/report beyond the request `X-Trace-Id`.
 - Admin search/report trace surfacing can be expanded further once QA decides which operator screens need trace-first filtering.
-- Rollback automation beyond documented commands and PM2 process-state gates.
 - Multi-instance cache coordination.
 - Stronger replay protection and exactly-once semantics across all execution-adjacent flows.
 
@@ -162,6 +169,7 @@ Latest local regression:
 
 4. Then return to product OS work.
    - Portfolio Risk 2.0 or Reports/Reflection 2.0 are now safer to build on top of this platform base.
+   - Before that, finish the remaining reliability remainder steps: multi-instance cache coordination and replay/exactly-once hardening.
 
 ## QA Reference
 
@@ -192,4 +200,10 @@ Live smoke:
 curl -fsS http://127.0.0.1:8000/api/health
 curl -fsS http://127.0.0.1:8000/api/system/health
 curl -fsSI http://127.0.0.1:5002/report | head -n 1
+```
+
+Rollback helper smoke:
+
+```bash
+./rollback_live.sh <previous_good_commit>
 ```
