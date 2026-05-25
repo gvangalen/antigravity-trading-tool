@@ -9,11 +9,12 @@ PHASE6_DOC = REPO_ROOT / "docs" / "operations" / "platform-hardening-phase6-qa.m
 def test_platform_status_reflects_latest_deployed_hardening_baseline():
     source = STATUS_DOC.read_text()
 
-    assert "`eb6bc71` - `Platform reliability step 5 traceability`" in source
-    assert "`Platform reliability step 6 rollback automation`" in source
+    assert "`d5aea63` - `Platform reliability step 6 rollback automation`" in source
+    assert "`Platform reliability step 7 multi-instance cache coordination`" in source
     assert "`pytest -q`: `294 passed`" in source
     assert "Step 5 - Frontend Cache/Polling" in source
     assert "Step 6 - Enterprise Safety Slice" in source
+    assert "Step 7 - Multi-Instance Cache Coordination" in source
     assert "LAST_GOOD_COMMIT" in source
     assert "rollback_live.sh <commit>" in source
 

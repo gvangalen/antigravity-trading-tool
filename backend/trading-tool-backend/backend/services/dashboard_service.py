@@ -1,6 +1,5 @@
 import logging
 import asyncio
-import os
 from datetime import datetime, timezone
 from typing import List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,31 +33,23 @@ def sync_get_scores_for_symbol(user_id: int, symbol: str = "BTC") -> dict:
         return get_scores_for_symbol(include_metadata=True)
 
 class DashboardService:
-    # Optional in-memory cache to prevent load on rapid app open/resumes.
-    # Disabled by default because process-local cache is not consistency-safe
-    # across multiple backend instances.
-    # Key: user_id (int) -> Value: (utc_timestamp, MobileOverviewResponse)
-    _overview_cache: Dict[int, Any] = {}
-    _cache_ttl_seconds = 15
-
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
         self.repository = DashboardRepository(db_session)
 
     @classmethod
     def mobile_overview_cache_enabled(cls) -> bool:
-        return os.getenv("DASHBOARD_OVERVIEW_CACHE_ENABLED", "false").lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
+        # Multi-instance safety: mobile/dashboard state is write-sensitive and
+        # must not be served from process-local memory. Re-enable this only via
+        # a shared cache with explicit invalidation.
+        return False
 
     @classmethod
     def invalidate_cache(cls, user_id: int):
-        if user_id in cls._overview_cache:
-            del cls._overview_cache[user_id]
-            logger.info(f"🗑️ [MobileOverview] Cache explicitly invalidated for user_id={user_id}")
+        logger.debug(
+            "Mobile overview cache invalidation skipped for user_id=%s; process-local cache is disabled.",
+            user_id,
+        )
 
     async def get_dashboard_data(self, user_id: int, symbol: str = "BTC") -> DashboardResponse:
         try:
@@ -171,18 +162,7 @@ class DashboardService:
         return {"status": "ok"}
 
     async def get_mobile_overview(self, user_id: int, bypass_cache: bool = False) -> MobileOverviewResponse:
-        # 1. Check in-memory payload cache if bypass_cache is False
-        cache_enabled = self.mobile_overview_cache_enabled()
-        if cache_enabled and not bypass_cache:
-            cached = self._overview_cache.get(user_id)
-            if cached:
-                cache_time, response_payload = cached
-                age = (datetime.now(timezone.utc) - cache_time).total_seconds()
-                if age < self._cache_ttl_seconds:
-                    logger.info(f"⚡ [MobileOverview] Cache HIT for user_id={user_id} (Age: {age:.2f}s) served in <1ms")
-                    return response_payload
-
-        logger.info(f"🔄 [MobileOverview] Cache MISS/Bypass for user_id={user_id}. Executing hardened composition...")
+        logger.info(f"🔄 [MobileOverview] Executing hardened composition for user_id={user_id}.")
 
         # 2. Setup symbols and default fallback structs
         # Fetch real watchlist for user from database
@@ -406,9 +386,5 @@ class DashboardService:
             finn_briefing=finn_briefing,
             intelligence_events=formatted_events
         )
-
-        # 9. Store in cache only when explicitly enabled.
-        if cache_enabled:
-            self._overview_cache[user_id] = (datetime.now(timezone.utc), response_payload)
 
         return response_payload

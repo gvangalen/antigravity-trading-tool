@@ -13,7 +13,7 @@ The core platform hardening track is now green for V1 correctness:
 - App startup is schema-read-only; runtime DDL moved to explicit migrations.
 - Celery routing is named, observable, and backed by split workers.
 - Deploys are gated by lightweight/deep health checks and now print a concrete rollback helper command.
-- Request-path consistency is guarded by tests; process-local caches are disabled or explicit.
+- Request-path consistency is guarded by tests; write-sensitive process-local caches are removed unless a future shared cache is added.
 
 The main remaining risk is operational scale, not core request correctness:
 
@@ -31,19 +31,20 @@ The main remaining risk is operational scale, not core request correctness:
 | Phase 3 - Runtime DDL To Migrations | Green | `main.py` startup is schema-read-only; prior startup DDL moved to explicit migration scripts. |
 | Phase 4 - Queue & Celery Throughput | Green for architecture, operations ongoing | Named queues, split PM2 workers, centralized queue policy, bounded dispatcher, workload rate limits, deep-health queue visibility, and legacy drain tooling are in place. |
 | Phase 5 - Observability & Deployment Safety | Green | `/api/health` remains lightweight; `/api/system/health` reports DB, broker, workers, queues, market/scores freshness; deploy gate parses deep health, supports strict degraded handling, and records rollback artifacts. |
-| Phase 6 - Cleanup & Consistency | Green | Notifications API is authenticated-user scoped and async; dashboard/intelligence process caches are opt-in; API sync DB patterns and psycopg2 boundaries are tested. |
+| Phase 6 - Cleanup & Consistency | Green | Notifications API is authenticated-user scoped and async; dashboard/intelligence/transition process caches are removed for write-sensitive paths; API sync DB patterns and psycopg2 boundaries are tested. |
 | Step 5 - Frontend Cache/Polling | Green | Authenticated GET helpers no longer force global `no-store`; dashboard polling is visibility-aware and single-flight. |
 | Step 6 - Enterprise Safety Slice | Green | API responses carry `X-Trace-Id`; deploy verifies expected PM2 apps, rebuilds the process list if reload leaves gaps, persists `LAST_GOOD_COMMIT`, and ships an explicit rollback helper. |
+| Step 7 - Multi-Instance Cache Coordination | Green | Mobile/dashboard, market-intelligence, and transition-risk process-local caches are removed; future caching must be shared/Redis-backed with explicit invalidation. |
 
 ## Current Live Baseline
 
 Latest deployed hardening commit:
 
-- `eb6bc71` - `Platform reliability step 5 traceability`
+- `d5aea63` - `Platform reliability step 6 rollback automation`
 
 Current rollout candidate:
 
-- `Platform reliability step 6 rollback automation`
+- `Platform reliability step 7 multi-instance cache coordination`
 
 Latest smoke results from deploy:
 
@@ -113,7 +114,8 @@ Latest local regression:
 
 - Notifications API no longer trusts `user_id` from request body for ownership.
 - New API modules are guarded against sync `Session` / `.query()` patterns.
-- Process-local dashboard and intelligence caches are disabled by default.
+- Process-local dashboard, intelligence, and transition-risk caches are removed for write-sensitive paths.
+- Old dashboard/intelligence cache env flags no longer enable per-process state.
 - psycopg2 usage is explicitly allowlisted to legacy/background boundaries.
 - Regime memory and daily report writes no longer call the legacy psycopg2 helper directly; they use SQLAlchemy repository boundaries.
 

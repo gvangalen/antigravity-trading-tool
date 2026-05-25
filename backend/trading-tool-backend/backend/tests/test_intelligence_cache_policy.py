@@ -11,7 +11,7 @@ def test_intelligence_cache_enabled_only_by_explicit_truthy_values(monkeypatch):
     for value in ("1", "true", "yes", "on"):
         monkeypatch.setenv("INTELLIGENCE_SERVICE_CACHE_ENABLED", value)
 
-        assert IntelligenceService.cache_enabled() is True
+        assert IntelligenceService.cache_enabled() is False
 
 
 def test_intelligence_cache_rejects_unknown_values(monkeypatch):

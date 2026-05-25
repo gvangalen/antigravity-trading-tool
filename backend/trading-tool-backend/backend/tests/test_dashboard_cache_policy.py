@@ -11,7 +11,7 @@ def test_mobile_overview_cache_can_be_enabled_explicitly(monkeypatch):
     for value in ["1", "true", "yes", "on"]:
         monkeypatch.setenv("DASHBOARD_OVERVIEW_CACHE_ENABLED", value)
 
-        assert DashboardService.mobile_overview_cache_enabled() is True
+        assert DashboardService.mobile_overview_cache_enabled() is False
 
 
 def test_mobile_overview_cache_rejects_unknown_values(monkeypatch):

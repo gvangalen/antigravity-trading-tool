@@ -19,12 +19,8 @@ Phase 6 focuses on cleanup and consistency after the DB/state, migrations, obser
 `backend/services/dashboard_service.py`
 
 - Process-local mobile overview cache is disabled by default.
-- Cache can only be enabled explicitly with:
-
-```bash
-DASHBOARD_OVERVIEW_CACHE_ENABLED=true
-```
-
+- The old env-opt-in process cache has been removed.
+- Reintroduce caching only through a shared cache, such as Redis, with TTL and explicit invalidation.
 - This avoids consistency-sensitive mobile/dashboard state depending on a single backend process.
 
 ### Market intelligence cache policy
@@ -32,20 +28,18 @@ DASHBOARD_OVERVIEW_CACHE_ENABLED=true
 `backend/services/intelligence_service.py`
 
 - Process-local market-intelligence cache is disabled by default.
-- Cache can only be enabled explicitly with:
-
-```bash
-INTELLIGENCE_SERVICE_CACHE_ENABLED=true
-```
-
+- The old env-opt-in process cache has been removed.
+- Reintroduce caching only through a shared cache, such as Redis, with TTL and explicit invalidation.
 - This keeps market-intelligence state consistent across backend processes by default.
 
 ### Removed unused service caches
 
 `backend/services/macro_data_service.py`
 `backend/services/technical_data_service.py`
+`backend/engine/transition_detector.py`
 
 - Removed unused class-level process-local cache placeholders.
+- Removed transition-risk `lru_cache`; transition state is risk-sensitive and must not diverge per process.
 - This keeps the service boundary honest: if a cache is needed later, it must be intentionally configured and tested.
 
 ### Legacy sync DB boundary
@@ -98,8 +92,9 @@ Expected:
 - notifications API has no sync `.query()` request path
 - notifications API uses authenticated user context
 - dashboard mobile overview cache is disabled by default
-- dashboard mobile overview cache only enables through explicit env flag
+- dashboard mobile overview cache cannot be enabled through process-local env flags
 - market-intelligence cache is disabled by default
+- market-intelligence cache cannot be enabled through process-local env flags
 - API modules do not use sync `Session` / `.query()` request-path patterns
 - psycopg2 imports stay inside the explicit legacy allowlist
 

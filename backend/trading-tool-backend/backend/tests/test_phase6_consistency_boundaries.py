@@ -22,11 +22,18 @@ def test_process_local_caches_are_disabled_or_removed_for_phase6():
     intelligence_source = _read(BACKEND_ROOT / "services" / "intelligence_service.py")
     macro_source = _read(BACKEND_ROOT / "services" / "macro_data_service.py")
     technical_source = _read(BACKEND_ROOT / "services" / "technical_data_service.py")
+    transition_source = _read(BACKEND_ROOT / "engine" / "transition_detector.py")
 
-    assert "DASHBOARD_OVERVIEW_CACHE_ENABLED" in dashboard_source
-    assert "INTELLIGENCE_SERVICE_CACHE_ENABLED" in intelligence_source
+    assert "_overview_cache:" not in dashboard_source
+    assert "self._overview_cache" not in dashboard_source
+    assert "DashboardService._overview_cache" not in dashboard_source
+    assert "DASHBOARD_OVERVIEW_CACHE_ENABLED" not in dashboard_source
+    assert "INTELLIGENCE_SERVICE_CACHE_ENABLED" not in intelligence_source
+    assert "_cache = {}" not in intelligence_source
     assert "_cache = {}" not in macro_source
     assert "_cache = {}" not in technical_source
+    assert "lru_cache" not in transition_source
+    assert "@lru_cache" not in transition_source
 
 
 def test_psycopg2_usage_is_limited_to_explicit_legacy_boundaries():

@@ -3,7 +3,6 @@ import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Dict, List, Optional
-from functools import lru_cache
 
 from backend.utils.db import get_db_connection
 
@@ -318,16 +317,15 @@ def compute_transition_detector(user_id: int, lookback_days: int = 14) -> Dict[s
 
 
 # =========================================================
-# ENGINE HELPER (CACHED — HUGE PERFORMANCE WIN)
+# ENGINE HELPER
 # =========================================================
 
-@lru_cache(maxsize=32)
 def get_transition_risk_value(user_id: int, today: date = date.today()) -> float:
     """
     Clean engine accessor.
 
-    Cached per day.
-    Prevents multiple DB hits.
+    Intentionally uncached: transition state is strategy/risk sensitive, and
+    process-local cache would diverge across backend instances.
 
     Always returns float.
     Never crashes the bot.
