@@ -39,7 +39,7 @@ The main remaining risk is operational scale, not core request correctness:
 
 Latest deployed hardening commit:
 
-- `81339f8` - `Platform reliability step 3 legacy DB boundary`
+- `efedb20` - `Platform reliability step 4 frontend polling tuning`
 
 Latest smoke results from deploy:
 
@@ -50,7 +50,7 @@ Latest smoke results from deploy:
 
 Latest local regression:
 
-- `pytest -q`: `289 passed`
+- `pytest -q`: `292 passed`
 
 ## What Is Done
 
@@ -93,6 +93,14 @@ Latest local regression:
 - Deploy script no longer runs user-specific business actions.
 - Deploy readiness window is robust enough for current backend startup time.
 
+### Traceability
+
+- `X-Trace-Id` is generated on every request and returned on responses.
+- Assistant action execution passes the request trace into Finn action audit rows.
+- Manual live order/preflight responses and execution-audit events include the request trace.
+- Bot decision trigger/skip/mark-executed responses carry the request trace.
+- Mission Control activity feed exposes trace ids from `ai_pending_actions`.
+
 ### Cleanup/consistency
 
 - Notifications API no longer trusts `user_id` from request body for ownership.
@@ -126,6 +134,7 @@ Latest local regression:
 ### Enterprise later
 
 - Deep end-to-end tracing per decision/order/report beyond the request `X-Trace-Id`.
+- Admin search/report trace surfacing can be expanded further once QA decides which operator screens need trace-first filtering.
 - Rollback automation beyond documented commands and PM2 process-state gates.
 - Multi-instance cache coordination.
 - Stronger replay protection and exactly-once semantics across all execution-adjacent flows.
@@ -174,6 +183,7 @@ pytest -q \
   backend/trading-tool-backend/backend/tests/test_run_legacy_queue_drain_cycle_script.py
   backend/trading-tool-backend/backend/tests/test_frontend_cache_polling_policy.py
   backend/trading-tool-backend/backend/tests/test_frontend_polling_policy.py
+  backend/trading-tool-backend/backend/tests/test_traceability_step5.py
 ```
 
 Live smoke:

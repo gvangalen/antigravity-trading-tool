@@ -559,13 +559,15 @@ async def get_ai_action_engine(db: AsyncSession = Depends(get_db)):
 @router.post("/assistant/actions/execute")
 async def execute_pending_action(
     payload: dict,
+    request: Request,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     engine: AiActionEngine = Depends(get_ai_action_engine),
 ):
+    trace_id = getattr(request.state, "trace_id", None)
     if payload.get("action"):
         try:
-            finn = FinnPlanService(db)
+            finn = FinnPlanService(db, trace_id=trace_id)
             return await finn.execute_action(current_user["id"], payload["action"])
         except HTTPException:
             raise
@@ -578,7 +580,7 @@ async def execute_pending_action(
         raise HTTPException(status_code=400, detail="Action ID is verplicht.")
     
     user_id = current_user["id"]
-    return await engine.execute_pending_action(action_id, user_id)
+    return await engine.execute_pending_action(action_id, user_id, trace_id=trace_id)
 
 @router.get("/assistant/finn/state")
 async def get_finn_state(

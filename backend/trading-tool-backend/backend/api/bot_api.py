@@ -82,26 +82,38 @@ async def get_bot_history(
 @router.post("/bot/generate/today")
 async def generate_bot_today(
     payload: BotGenerateTodaySchema,
+    request: Request,
     current_user: dict = Depends(get_current_user),
     service: BotService = Depends(get_bot_service)
 ):
-    return await service.run_bot_agent_generate(payload.bot_id, payload.report_date, current_user["id"])
+    return await service.run_bot_agent_generate(
+        payload.bot_id,
+        payload.report_date,
+        current_user["id"],
+        trace_id=getattr(request.state, "trace_id", None),
+    )
 
 @router.post("/bot/skip")
 async def skip_bot_today(
     payload: BotSkipSchema,
+    request: Request,
     current_user: dict = Depends(get_current_user),
     service: BotService = Depends(get_bot_service)
 ):
-    return await service.skip_bot_today(payload.bot_id, payload.report_date, current_user["id"])
+    result = await service.skip_bot_today(payload.bot_id, payload.report_date, current_user["id"])
+    result["trace_id"] = getattr(request.state, "trace_id", None)
+    return result
 
 @router.post("/bot/mark_executed")
 async def mark_bot_executed(
     payload: BotMarkExecutedSchema,
+    request: Request,
     current_user: dict = Depends(get_current_user),
     service: BotService = Depends(get_bot_service)
 ):
-    return await service.mark_bot_executed(payload.bot_id, payload.decision_id, current_user["id"])
+    result = await service.mark_bot_executed(payload.bot_id, payload.decision_id, current_user["id"])
+    result["trace_id"] = getattr(request.state, "trace_id", None)
+    return result
 
 # ==========================================================
 # 🟡 MANUAL ORDERS (PAPER TRADE / DISCRETIONARY)
@@ -124,34 +136,40 @@ async def preview_manual_order(
 @router.post("/orders/manual")
 async def create_manual_order(
     payload: BotManualOrderSchema,
+    request: Request,
     current_user: dict = Depends(get_current_user),
     service: BotService = Depends(get_bot_service)
 ):
+    trace_id = getattr(request.state, "trace_id", None)
     try:
-        return await service.create_manual_order(payload, current_user["id"])
+        return await service.create_manual_order(payload, current_user["id"], trace_id=trace_id)
     except HTTPException as exc:
         await service.record_live_order_block_from_exception(
             payload,
             current_user["id"],
             exc,
             source="manual_order_execute",
+            trace_id=trace_id,
         )
         raise
 
 @router.post("/orders/manual/preflight")
 async def preflight_manual_order(
     payload: BotManualOrderSchema,
+    request: Request,
     current_user: dict = Depends(get_current_user),
     service: BotService = Depends(get_bot_service)
 ):
+    trace_id = getattr(request.state, "trace_id", None)
     try:
-        return await service.preflight_manual_order(payload, current_user["id"])
+        return await service.preflight_manual_order(payload, current_user["id"], trace_id=trace_id)
     except HTTPException as exc:
         await service.record_live_order_block_from_exception(
             payload,
             current_user["id"],
             exc,
             source="manual_order_preflight",
+            trace_id=trace_id,
         )
         raise
 

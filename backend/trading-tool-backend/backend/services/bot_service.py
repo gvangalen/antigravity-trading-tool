@@ -903,6 +903,7 @@ class BotService:
         result: Optional[Dict[str, Any]] = None,
         block_detail: Optional[Dict[str, Any]] = None,
         source: str,
+        trace_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         result = result or {}
         block_detail = block_detail or {}
@@ -915,6 +916,7 @@ class BotService:
         execution_audit = {
             "type": event_type,
             "source": source,
+            "trace_id": trace_id,
             "bot_id": payload.bot_id,
             "strategy_id": (bot or {}).get("strategy_id"),
             "setup_id": (bot or {}).get("setup_id"),
@@ -960,26 +962,36 @@ class BotService:
                     "no_exchange_order": result.get("exchange_order_created") is False if result else None,
                 },
                 "execution_audit": execution_audit,
+                "trace_id": trace_id,
                 "behavioral_event": block_detail.get("behavioral_event") if isinstance(block_detail.get("behavioral_event"), dict) else None,
             },
         }
 
-    async def _record_execution_audit_event(self, user_id: int, event_type: str, audit_payload: Dict[str, Any]) -> None:
+    async def _record_execution_audit_event(
+        self,
+        user_id: int,
+        event_type: str,
+        audit_payload: Dict[str, Any],
+        *,
+        trace_id: Optional[str] = None,
+    ) -> None:
         try:
             now = _utc_db_timestamp()
             payload = {
                 **audit_payload,
+                "trace_id": trace_id,
                 "updated_at": now.isoformat(),
             }
             await self.session.execute(text("""
-                INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at)
-                VALUES (:id, :user_id, :type, CAST(:payload AS JSONB), 'executed', :expires_at)
+                INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at, trace_id)
+                VALUES (:id, :user_id, :type, CAST(:payload AS JSONB), 'executed', :expires_at, :trace_id)
             """), {
                 "id": f"finn-exec-{uuid.uuid4().hex[:16]}",
                 "user_id": user_id,
                 "type": event_type,
                 "payload": json.dumps(payload),
                 "expires_at": now + timedelta(days=30),
+                "trace_id": trace_id,
             })
             await self.session.commit()
         except Exception as exc:
@@ -992,6 +1004,7 @@ class BotService:
         exc: HTTPException,
         *,
         source: str,
+        trace_id: Optional[str] = None,
     ) -> None:
         detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
         code = str(detail.get("code") or "")
@@ -1007,8 +1020,9 @@ class BotService:
                 notional=notional,
                 block_detail=detail,
                 source=source,
+                trace_id=trace_id,
             )
-            await self._record_execution_audit_event(user_id, "live_manual_order_blocked", audit_payload)
+            await self._record_execution_audit_event(user_id, "live_manual_order_blocked", audit_payload, trace_id=trace_id)
             if payload.setup_block_acknowledged:
                 await self._record_execution_audit_event(
                     user_id,
@@ -1020,7 +1034,9 @@ class BotService:
                         notional=notional,
                         block_detail=detail,
                         source=source,
+                        trace_id=trace_id,
                     ),
+                    trace_id=trace_id,
                 )
         except Exception as audit_exc:
             logger.warning("Kon live order block audit niet loggen: %s", audit_exc)
@@ -1281,7 +1297,7 @@ class BotService:
             "draft": draft,
         }
 
-    async def create_manual_order(self, payload: BotManualOrderSchema, user_id: int) -> dict:
+    async def create_manual_order(self, payload: BotManualOrderSchema, user_id: int, trace_id: Optional[str] = None) -> dict:
         self._validate_manual_order_payload(payload)
 
         # 1. Fetch bot config to get limits
@@ -1330,6 +1346,7 @@ class BotService:
                 "price": float(existing.get("limit_price")) if existing and existing.get("limit_price") is not None else payload.price,
                 "notional_eur": float(existing.get("quote_amount_eur")) if existing and existing.get("quote_amount_eur") is not None else notional,
                 "mode": "manual",
+                "trace_id": trace_id,
             }
 
         if payload.side == "buy":
@@ -1414,6 +1431,7 @@ class BotService:
             "notional_eur": notional,
             "mode": "manual",
             "duplicate": False,
+            "trace_id": trace_id,
         }
         if behavioral_event:
             result["risk_acknowledged"] = True
@@ -1437,11 +1455,13 @@ class BotService:
                         "exchange_order_created": True,
                     },
                     source="manual_order_execute",
+                    trace_id=trace_id,
                 ),
+                trace_id=trace_id,
             )
         return result
 
-    async def preflight_manual_order(self, payload: BotManualOrderSchema, user_id: int) -> dict:
+    async def preflight_manual_order(self, payload: BotManualOrderSchema, user_id: int, trace_id: Optional[str] = None) -> dict:
         self._validate_manual_order_payload(payload)
         bot = await self.repository.get_bot_config(user_id, payload.bot_id)
         if not bot:
@@ -1473,6 +1493,7 @@ class BotService:
             "live_market_price": live_context.get("live_market_price"),
             "live_order_guardrails": live_context.get("live_order_guardrails"),
             "bot_guardrails": bot_guardrails,
+            "trace_id": trace_id,
             "verified": {
                 "manual_order_preflight": True,
                 "not_persisted": True,
@@ -1494,7 +1515,9 @@ class BotService:
                     notional=notional,
                     result=result,
                     source="manual_order_preflight",
+                    trace_id=trace_id,
                 ),
+                trace_id=trace_id,
             )
             if payload.setup_block_acknowledged:
                 await self._record_execution_audit_event(
@@ -1507,7 +1530,9 @@ class BotService:
                         notional=notional,
                         result=result,
                         source="manual_order_preflight",
+                        trace_id=trace_id,
                     ),
+                    trace_id=trace_id,
                 )
         return result
 
@@ -1547,15 +1572,21 @@ class BotService:
     # ==========================
     # AGENT TRIGGERS
     # ==========================
-    async def run_bot_agent_generate(self, bot_id: int, report_date_str: Optional[str], user_id: int) -> dict:
+    async def run_bot_agent_generate(
+        self,
+        bot_id: int,
+        report_date_str: Optional[str],
+        user_id: int,
+        trace_id: Optional[str] = None,
+    ) -> dict:
         report_date = date.fromisoformat(report_date_str) if report_date_str else date.today()
         
         await asyncio.to_thread(sync_run_daily_strategy_snapshot, user_id)
         result = await asyncio.to_thread(sync_run_trading_bot_agent, user_id, report_date, bot_id)
         
         if not result or not getattr(result, "get", lambda k: False)("ok"):
-            return {"ok": False}
-        return {"ok": True, "bot_id": bot_id, "date": str(report_date)}
+            return {"ok": False, "trace_id": trace_id}
+        return {"ok": True, "bot_id": bot_id, "date": str(report_date), "trace_id": trace_id}
 
     async def mark_bot_executed(self, bot_id: int, decision_id: int, user_id: int) -> dict:
         try:

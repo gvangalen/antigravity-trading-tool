@@ -63,7 +63,7 @@ class AiActionEngine:
         logger.info(f"⏳ Registered pending human-in-the-loop action: {action_id} [Type: {action_type}, User: {user_id}]")
         return action_id
 
-    async def execute_pending_action(self, action_id: str, user_id: int) -> Dict[str, Any]:
+    async def execute_pending_action(self, action_id: str, user_id: int, trace_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Retrieves, validates, and executes a registered pending action.
         Evaluates the Human-in-the-Loop levels before dispatching execution.
@@ -96,6 +96,7 @@ class AiActionEngine:
 
         action_type = action_record.type
         payload = action_record.payload or {}
+        execution_trace_id = trace_id or action_record.trace_id
         result_data = {}
 
         try:
@@ -176,7 +177,8 @@ class AiActionEngine:
                 "status": "success",
                 "action_id": action_id,
                 "type": action_type,
-                "result": result_data
+                "result": result_data,
+                "trace_id": execution_trace_id,
             }
 
         except Exception as e:

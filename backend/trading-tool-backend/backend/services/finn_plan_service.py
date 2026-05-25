@@ -297,8 +297,9 @@ def _asset_mentions(text: str) -> List[str]:
 
 
 class FinnPlanService:
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session: AsyncSession, trace_id: Optional[str] = None):
         self.session = db_session
+        self.trace_id = trace_id
 
     def is_cancel_request(self, query: str) -> bool:
         q = (query or "").lower()
@@ -7376,7 +7377,7 @@ class FinnPlanService:
         if not self.session:
             return []
         rows = await self.session.execute(text("""
-            SELECT id, status, payload, created_at
+            SELECT id, status, payload, trace_id, created_at
             FROM ai_pending_actions
             WHERE user_id = :user_id
               AND (
@@ -7461,6 +7462,7 @@ class FinnPlanService:
             "asset": asset,
             "created_at": created_at,
             "updated_at": payload.get("updated_at"),
+            "trace_id": row.get("trace_id") or payload.get("trace_id") or result.get("trace_id"),
             "result_status": result_status,
             "outcome": outcome,
             "verified": verified,
@@ -9662,11 +9664,12 @@ class FinnPlanService:
         payload = {
             "action": action,
             "result": None,
+            "trace_id": self.trace_id,
             "updated_at": _utc_now().isoformat(),
         }
         row = await self.session.execute(text("""
-            INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at)
-            VALUES (:id, :user_id, 'finn_create_plan', CAST(:payload AS JSONB), 'pending', :expires_at)
+            INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at, trace_id)
+            VALUES (:id, :user_id, 'finn_create_plan', CAST(:payload AS JSONB), 'pending', :expires_at, :trace_id)
             ON CONFLICT (id) DO NOTHING
             RETURNING id
         """), {
@@ -9674,6 +9677,7 @@ class FinnPlanService:
             "user_id": user_id,
             "payload": json.dumps(payload),
             "expires_at": _utc_db_timestamp() + timedelta(days=7),
+            "trace_id": self.trace_id,
         })
         acquired = row.fetchone() is not None
         await self.session.commit()
@@ -9716,17 +9720,21 @@ class FinnPlanService:
     ) -> None:
         if not self.session:
             return
+        if isinstance(result, dict) and self.trace_id and not result.get("trace_id"):
+            result = {**result, "trace_id": self.trace_id}
         payload = {
             "action": action,
             "result": result,
+            "trace_id": self.trace_id,
             "updated_at": _utc_now().isoformat(),
         }
         await self.session.execute(text("""
-            INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at)
-            VALUES (:id, :user_id, 'finn_create_plan', CAST(:payload AS JSONB), :status, :expires_at)
+            INSERT INTO ai_pending_actions (id, user_id, type, payload, status, expires_at, trace_id)
+            VALUES (:id, :user_id, 'finn_create_plan', CAST(:payload AS JSONB), :status, :expires_at, :trace_id)
             ON CONFLICT (id) DO UPDATE SET
                 payload = EXCLUDED.payload,
-                status = EXCLUDED.status
+                status = EXCLUDED.status,
+                trace_id = COALESCE(EXCLUDED.trace_id, ai_pending_actions.trace_id)
             WHERE ai_pending_actions.user_id = EXCLUDED.user_id
         """), {
             "id": action_id,
@@ -9734,6 +9742,7 @@ class FinnPlanService:
             "payload": json.dumps(payload),
             "status": status,
             "expires_at": _utc_db_timestamp() + timedelta(days=7),
+            "trace_id": self.trace_id,
         })
         await self.session.commit()
 
