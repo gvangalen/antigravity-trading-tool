@@ -1,10 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getDailyScores } from '@/lib/api/scores'; // 👈 jouw bestaande route
+
+const FOREGROUND_POLL_INTERVAL_MS = 120000;
+const BACKGROUND_POLL_INTERVAL_MS = 300000;
 
 export function useDashboardData() {
   const [loading, setLoading] = useState(true);
+  const loadingRef = useRef(false);
 
   const [macroScore, setMacroScore] = useState(0);
   const [technicalScore, setTechnicalScore] = useState(0);
@@ -23,8 +27,12 @@ export function useDashboardData() {
 
   useEffect(() => {
     let mounted = true;
+    let interval = null;
 
     async function load() {
+      if (loadingRef.current) return;
+      loadingRef.current = true;
+
       try {
         setLoading(true);
 
@@ -52,15 +60,38 @@ export function useDashboardData() {
       } catch (err) {
         console.error('❌ Fout bij useDashboardData:', err);
       } finally {
+        loadingRef.current = false;
         if (mounted) setLoading(false);
       }
     }
 
+    function scheduleNextPoll() {
+      if (interval) clearInterval(interval);
+      const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+      const intervalMs = isHidden ? BACKGROUND_POLL_INTERVAL_MS : FOREGROUND_POLL_INTERVAL_MS;
+      interval = setInterval(load, intervalMs);
+    }
+
+    function handleVisibilityChange() {
+      scheduleNextPoll();
+      if (document.visibilityState === 'visible') {
+        load();
+      }
+    }
+
     load();
-    const interval = setInterval(load, 60000);
+    scheduleNextPoll();
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
     return () => {
       mounted = false;
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
     };
   }, []);
 

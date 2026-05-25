@@ -19,7 +19,7 @@ The main remaining risk is operational scale, not core request correctness:
 
 - legacy `celery` backlog still needs controlled drain cycles
 - old psycopg2/background flows remain as explicit legacy boundaries
-- frontend polling/read-amplification remains a later tuning track
+- frontend polling/read-amplification has a first V1 reduction in place
 - stronger enterprise rollout/tracing is still future work
 
 ## Phase Status
@@ -32,12 +32,13 @@ The main remaining risk is operational scale, not core request correctness:
 | Phase 4 - Queue & Celery Throughput | Green for architecture, operations ongoing | Named queues, split PM2 workers, centralized queue policy, bounded dispatcher, workload rate limits, deep-health queue visibility, and legacy drain tooling are in place. |
 | Phase 5 - Observability & Deployment Safety | Green | `/api/health` remains lightweight; `/api/system/health` reports DB, broker, workers, queues, market/scores freshness; deploy gate parses deep health and supports strict degraded handling. |
 | Phase 6 - Cleanup & Consistency | Green | Notifications API is authenticated-user scoped and async; dashboard/intelligence process caches are opt-in; API sync DB patterns and psycopg2 boundaries are tested. |
+| Step 5 - Frontend Cache/Polling | Green | Authenticated GET helpers no longer force global `no-store`; dashboard polling is visibility-aware and single-flight. |
 
 ## Current Live Baseline
 
 Latest deployed hardening commit:
 
-- `f596cd3` - `Close phase 2 portfolio execution invariants`
+- See git history for the latest platform hardening deploy commit.
 
 Latest smoke results from deploy:
 
@@ -48,7 +49,7 @@ Latest smoke results from deploy:
 
 Latest local regression:
 
-- `pytest -q`: `267 passed`
+- `pytest -q`: `279 passed`
 
 ## What Is Done
 
@@ -117,7 +118,7 @@ Latest local regression:
 
 ### Scale tuning later
 
-- Frontend polling and `no-store` read amplification still need a separate performance pass.
+- Frontend polling and `no-store` read amplification have a first pass complete; deeper page-by-page polling tuning can follow once traffic data shows the next hotspot.
 - Process-local read caches should remain opt-in unless moved to Redis/shared cache with explicit invalidation.
 - Queue age/throughput metrics would make backlog health easier to interpret than depth alone.
 
@@ -146,7 +147,7 @@ Latest local regression:
 3. Continue with the remaining platform cleanup sequence.
    - psycopg2 legacy boundary migration/isolation is complete at the driver boundary: direct driver imports are centralized in `backend/utils/db.py`.
    - PushService sync DB cleanup is complete: PushService is async-first and the sync method is compatibility-only.
-   - Next: frontend polling / `no-store` reduction.
+   - Frontend polling / `no-store` reduction is complete for the shared auth clients and dashboard scores hook.
 
 4. Then return to product OS work.
    - Portfolio Risk 2.0 or Reports/Reflection 2.0 are now safer to build on top of this platform base.

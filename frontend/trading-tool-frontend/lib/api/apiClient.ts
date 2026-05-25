@@ -1,24 +1,46 @@
 import { API_BASE_URL } from "@/lib/config";
 import { apiRefresh, clearStoredAuth, buildAuthHeaders } from "@/lib/api/auth";
 
+type ApiRequestInit = RequestInit & {
+  _retry?: boolean;
+  forceFresh?: boolean;
+};
+
+function resolveCacheMode(method: string, init?: ApiRequestInit): RequestCache {
+  if (init?.cache) return init.cache;
+  if (init?.forceFresh || method !== "GET") return "no-store";
+  return "default";
+}
+
+function buildJsonHeaders(init: ApiRequestInit | undefined, cacheMode: RequestCache) {
+  const headers = new Headers(init?.headers || {});
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (cacheMode === "no-store") {
+    headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    headers.set("Pragma", "no-cache");
+    headers.set("Expires", "0");
+  }
+
+  return Object.fromEntries(buildAuthHeaders(headers).entries());
+}
+
 //----------------------------------------------------------
 // 📡 GET
 //----------------------------------------------------------
 
-export async function apiGet<T>(path: string, init?: RequestInit & { _retry?: boolean }): Promise<T> {
+export async function apiGet<T>(path: string, init?: ApiRequestInit): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
+  const cacheMode = resolveCacheMode("GET", init);
 
   const res = await fetch(url, {
     ...init,
     method: "GET",
     credentials: "include",
-    headers: Object.fromEntries(
-      buildAuthHeaders({
-        "Content-Type": "application/json",
-        ...(init?.headers || {}),
-      }).entries()
-    ),
-    cache: "no-store",
+    headers: buildJsonHeaders(init, cacheMode),
+    cache: cacheMode,
   });
 
   if (!res.ok) {
@@ -52,20 +74,17 @@ export async function apiGet<T>(path: string, init?: RequestInit & { _retry?: bo
 export async function apiPost<T>(
   path: string,
   body?: any,
-  init?: RequestInit & { _retry?: boolean }
+  init?: ApiRequestInit
 ): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
+  const cacheMode = resolveCacheMode("POST", init);
 
   const res = await fetch(url, {
     ...init,
     method: "POST",
     credentials: "include",
-    headers: Object.fromEntries(
-      buildAuthHeaders({
-        "Content-Type": "application/json",
-        ...(init?.headers || {}),
-      }).entries()
-    ),
+    headers: buildJsonHeaders(init, cacheMode),
+    cache: cacheMode,
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -100,20 +119,17 @@ export async function apiPost<T>(
 export async function apiPut<T>(
   path: string,
   body?: any,
-  init?: RequestInit & { _retry?: boolean }
+  init?: ApiRequestInit
 ): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
+  const cacheMode = resolveCacheMode("PUT", init);
 
   const res = await fetch(url, {
     ...init,
     method: "PUT",
     credentials: "include",
-    headers: Object.fromEntries(
-      buildAuthHeaders({
-        "Content-Type": "application/json",
-        ...(init?.headers || {}),
-      }).entries()
-    ),
+    headers: buildJsonHeaders(init, cacheMode),
+    cache: cacheMode,
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -145,19 +161,16 @@ export async function apiPut<T>(
 // 📡 DELETE
 //----------------------------------------------------------
 
-export async function apiDelete<T>(path: string, init?: RequestInit & { _retry?: boolean }): Promise<T> {
+export async function apiDelete<T>(path: string, init?: ApiRequestInit): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
+  const cacheMode = resolveCacheMode("DELETE", init);
 
   const res = await fetch(url, {
     ...init,
     method: "DELETE",
     credentials: "include",
-    headers: Object.fromEntries(
-      buildAuthHeaders({
-        "Content-Type": "application/json",
-        ...(init?.headers || {}),
-      }).entries()
-    ),
+    headers: buildJsonHeaders(init, cacheMode),
+    cache: cacheMode,
   });
 
   if (!res.ok) {

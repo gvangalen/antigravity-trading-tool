@@ -76,7 +76,7 @@ export function clearCurrentUserId() {
 }
 
 /* =======================================================
-   🌐 fetchAuth — NO CACHE + STATUS DOORGAVE (🔥 FIX)
+   🌐 fetchAuth — AUTH + EXPLICIT CACHE POLICY
 ======================================================= */
 
 function withCacheBust(path: string) {
@@ -89,21 +89,24 @@ async function fetchAuthInternal(
   path: string,
   options: RequestInit & { _retry?: boolean } = {}
 ): Promise<any> {
-  // ✅ default no-store (maar laat caller override toe)
-  const cacheMode = (options as any)?.cache ?? "no-store";
+  const method = String(options.method || "GET").toUpperCase();
+  const cacheMode = (options as any)?.cache ?? (method === "GET" ? "default" : "no-store");
+  const noStoreHeaders =
+    cacheMode === "no-store"
+      ? {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        }
+      : {};
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     credentials: "include",
-
-    // 🔥 BELANGRIJK: voorkom cached responses
     cache: cacheMode as RequestCache,
-
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-      Pragma: "no-cache",
-      Expires: "0",
+      ...noStoreHeaders,
       ...Object.fromEntries(buildAuthHeaders(options.headers).entries()),
     },
   });
