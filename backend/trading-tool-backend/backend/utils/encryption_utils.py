@@ -1,8 +1,10 @@
 import os
+from pathlib import Path
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 
 load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=False)
 
 class EncryptionUtils:
     _fernet = None

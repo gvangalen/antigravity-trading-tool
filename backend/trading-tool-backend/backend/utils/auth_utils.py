@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Dict, Any
 
 import jwt
@@ -9,6 +10,7 @@ import bcrypt
 from dotenv import load_dotenv
 
 load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=False)
 
 # =========================================================
 # 🔐 CONFIG
