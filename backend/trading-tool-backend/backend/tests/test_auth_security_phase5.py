@@ -101,6 +101,7 @@ def test_login_creates_persisted_refresh_session(monkeypatch):
     stored = repo.refresh_sessions[refresh_jti]
     assert stored.user_id == user.id
     assert stored.token_hash == f"hash:{result['refresh_token']}"
+    assert stored.expires_at.tzinfo is None
     assert repo.last_login_updates and repo.last_login_updates[0][0] == user.id
 
 
@@ -191,6 +192,16 @@ def test_logout_revokes_current_refresh_session(monkeypatch):
     assert revoked is True
     assert session.revoked_reason == "logout"
     assert session.revoked_at is not None
+    assert session.revoked_at.tzinfo is None
+
+
+def test_refresh_session_timestamps_are_db_safe_naive_utc():
+    now = AuthService._db_utc_now()
+    expiry = AuthService._refresh_expiry()
+
+    assert now.tzinfo is None
+    assert expiry.tzinfo is None
+    assert expiry > now
 
 
 def test_refresh_migration_exists():

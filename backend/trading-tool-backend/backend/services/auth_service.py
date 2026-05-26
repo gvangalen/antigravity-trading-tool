@@ -34,10 +34,14 @@ class AuthService:
         )
 
     @staticmethod
-    def _refresh_expiry() -> datetime:
+    def _db_utc_now() -> datetime:
+        return datetime.now(timezone.utc).replace(tzinfo=None)
+
+    @classmethod
+    def _refresh_expiry(cls) -> datetime:
         from backend.utils.auth_utils import REFRESH_TOKEN_EXPIRE_DAYS
 
-        return datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        return cls._db_utc_now() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
     async def _issue_refresh_session(self, user) -> tuple[str, str]:
         refresh_jti = str(uuid.uuid4())
@@ -89,7 +93,7 @@ class AuthService:
         access_token = create_access_token(payload)
         refresh_token, _ = await self._issue_refresh_session(user)
 
-        await self.repository.update_last_login(user.id, datetime.utcnow())
+        await self.repository.update_last_login(user.id, self._db_utc_now())
 
         return {
             "access_token": access_token,
@@ -145,7 +149,7 @@ class AuthService:
         await self.repository.rotate_refresh_session(
             session,
             replaced_by_jti=new_refresh_jti,
-            rotated_at=now,
+            rotated_at=self._db_utc_now(),
         )
 
         return {
@@ -179,6 +183,6 @@ class AuthService:
         await self.repository.revoke_refresh_session(
             session,
             reason=reason,
-            revoked_at=datetime.now(timezone.utc),
+            revoked_at=self._db_utc_now(),
         )
         return True
