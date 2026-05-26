@@ -9815,7 +9815,9 @@ class FinnPlanService:
         if isinstance(payload, str):
             payload = json.loads(payload)
         result = payload.get("result")
-        return result if isinstance(result, dict) else None
+        if isinstance(result, dict):
+            return {**result, "replayed": True}
+        return None
 
     async def _upsert_action_audit(
         self,

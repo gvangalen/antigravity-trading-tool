@@ -138,11 +138,6 @@ async def get_latest_price(
 ):
     try:
         service = MarketDataService(db)
-        
-        # 🔥 RUNTIME TRIGGER: Altijd actuele live koers ophalen direct via Binance
-        logger.info(f"🚀 Live koers ophalen voor {symbol}...")
-        await service.sync_live_price(symbol)
-        
         result = await service.repository.get_latest_snapshot(symbol.upper())
         if not result:
             raise HTTPException(404, f"Geen {symbol} data gevonden")
@@ -176,6 +171,7 @@ async def fetch_interpreted_data(
 async def fill_7day_data(
     symbol: str = Query("BTC"),
     overwrite: bool = Query(False),
+    current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
@@ -192,15 +188,7 @@ async def get_market_data_7d(
 ):
     try:
         service = MarketDataService(db)
-        data = await service.get_market_data_7d(symbol)
-        
-        # 🔥 RUNTIME TRIGGER: Haal automatisch data op via CoinGecko als tabel leeg is
-        if not data:
-            logger.info(f"🚀 Geen 7D data gevonden voor {symbol}. Haal data on-the-fly op via CoinGecko...")
-            await service.sync_symbol_7day_data(symbol, overwrite=False)
-            data = await service.get_market_data_7d(symbol)
-            
-        return data
+        return await service.get_market_data_7d(symbol)
     except Exception as e:
         logger.error(f"❌ [7d] {symbol} Fout: {e}")
         raise HTTPException(500, "Fout bij ophalen 7-daagse data.")

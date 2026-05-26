@@ -15,6 +15,17 @@ async def get_report_service(db: AsyncSession = Depends(get_db)):
     repo = ReportRepository(db)
     return ReportService(repo)
 
+
+def _report_value_error(exc: ValueError) -> HTTPException:
+    message = str(exc).lower()
+    if "gevonden" in message:
+        return HTTPException(status_code=404, detail="Rapport niet gevonden.")
+    return HTTPException(status_code=400, detail="Ongeldige rapportaanvraag.")
+
+
+def _report_internal_error(message: str = "Rapportverwerking mislukt.") -> HTTPException:
+    return HTTPException(status_code=500, detail=message)
+
 # ======================================================
 # 🟢 DAILY REPORTS
 # ======================================================
@@ -28,7 +39,7 @@ async def get_daily_latest(
     try:
         return await service.get_latest_report(current_user["id"], "daily_reports", symbol=symbol, format_type=format)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise _report_value_error(e)
 
 @router.get("/report/daily/by-date")
 async def get_daily_by_date(
@@ -40,7 +51,7 @@ async def get_daily_by_date(
     try:
         return await service.get_report_by_date(current_user["id"], "daily_reports", date, format_type=format)
     except ValueError as e:
-        raise HTTPException(status_code=404 if "gevonden" in str(e).lower() else 400, detail=str(e))
+        raise _report_value_error(e)
 
 @router.get("/report/daily/history")
 async def get_daily_report_history(
@@ -57,7 +68,8 @@ async def preview_daily_report(
     try:
         return await service.preview_daily_report(current_user["id"])
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ preview_daily_report failed: %s", e, exc_info=True)
+        raise _report_internal_error()
 
 @router.post("/report/daily/generate")
 async def generate_daily(
@@ -67,7 +79,8 @@ async def generate_daily(
     try:
         return await service.generate_report(current_user["id"], "daily")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ generate_daily failed: %s", e, exc_info=True)
+        raise _report_internal_error()
 
 @router.get("/report/daily/export/pdf")
 async def export_daily_pdf(
@@ -78,7 +91,7 @@ async def export_daily_pdf(
     try:
         return await service.export_pdf(current_user["id"], "daily_reports", "daily", date)
     except ValueError as e:
-        raise HTTPException(status_code=404 if "gevonden" in str(e).lower() else 400, detail=str(e))
+        raise _report_value_error(e)
 
 
 # ======================================================
@@ -93,7 +106,8 @@ async def get_weekly_latest(
     try:
         return await service.get_latest_report(current_user["id"], "weekly_reports", format_type=format)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ get_weekly_latest failed: %s", e, exc_info=True)
+        raise _report_internal_error()
 
 @router.get("/report/weekly/by-date")
 async def get_weekly_by_date(
@@ -105,7 +119,7 @@ async def get_weekly_by_date(
     try:
         return await service.get_report_by_date(current_user["id"], "weekly_reports", date, format_type=format)
     except ValueError as e:
-        raise HTTPException(status_code=404 if "gevonden" in str(e).lower() else 400, detail=str(e))
+        raise _report_value_error(e)
 
 @router.get("/report/weekly/history")
 async def get_weekly_report_history(
@@ -122,7 +136,8 @@ async def generate_weekly(
     try:
         return await service.generate_report(current_user["id"], "weekly")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ generate_weekly failed: %s", e, exc_info=True)
+        raise _report_internal_error()
 
 @router.get("/report/weekly/export/pdf")
 async def export_weekly_pdf(
@@ -133,7 +148,7 @@ async def export_weekly_pdf(
     try:
         return await service.export_pdf(current_user["id"], "weekly_reports", "weekly", date)
     except ValueError as e:
-        raise HTTPException(status_code=404 if "gevonden" in str(e).lower() else 400, detail=str(e))
+        raise _report_value_error(e)
 
 
 # ======================================================
@@ -148,7 +163,8 @@ async def get_monthly_latest(
     try:
         return await service.get_latest_report(current_user["id"], "monthly_reports", format_type=format)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ get_monthly_latest failed: %s", e, exc_info=True)
+        raise _report_internal_error()
 
 @router.get("/report/monthly/by-date")
 async def get_monthly_by_date(
@@ -160,7 +176,7 @@ async def get_monthly_by_date(
     try:
         return await service.get_report_by_date(current_user["id"], "monthly_reports", date, format_type=format)
     except ValueError as e:
-        raise HTTPException(status_code=404 if "gevonden" in str(e).lower() else 400, detail=str(e))
+        raise _report_value_error(e)
 
 @router.get("/report/monthly/history")
 async def get_monthly_report_history(
@@ -177,7 +193,8 @@ async def generate_monthly(
     try:
         return await service.generate_report(current_user["id"], "monthly")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ generate_monthly failed: %s", e, exc_info=True)
+        raise _report_internal_error()
 
 @router.get("/report/monthly/export/pdf")
 async def export_monthly_pdf(
@@ -188,7 +205,7 @@ async def export_monthly_pdf(
     try:
         return await service.export_pdf(current_user["id"], "monthly_reports", "monthly", date)
     except ValueError as e:
-        raise HTTPException(status_code=404 if "gevonden" in str(e).lower() else 400, detail=str(e))
+        raise _report_value_error(e)
 
 
 # ======================================================
@@ -203,7 +220,8 @@ async def get_quarterly_latest(
     try:
         return await service.get_latest_report(current_user["id"], "quarterly_reports", format_type=format)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ get_quarterly_latest failed: %s", e, exc_info=True)
+        raise _report_internal_error()
 
 @router.get("/report/quarterly/by-date")
 async def get_quarterly_by_date(
@@ -215,7 +233,7 @@ async def get_quarterly_by_date(
     try:
         return await service.get_report_by_date(current_user["id"], "quarterly_reports", date, format_type=format)
     except ValueError as e:
-        raise HTTPException(status_code=404 if "gevonden" in str(e).lower() else 400, detail=str(e))
+        raise _report_value_error(e)
 
 @router.get("/report/quarterly/history")
 async def get_quarterly_report_history(
@@ -232,7 +250,8 @@ async def generate_quarterly(
     try:
         return await service.generate_report(current_user["id"], "quarterly")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ generate_quarterly failed: %s", e, exc_info=True)
+        raise _report_internal_error()
 
 @router.get("/report/quarterly/export/pdf")
 async def export_quarterly_pdf(
@@ -243,5 +262,4 @@ async def export_quarterly_pdf(
     try:
         return await service.export_pdf(current_user["id"], "quarterly_reports", "quarterly", date)
     except ValueError as e:
-        raise HTTPException(status_code=404 if "gevonden" in str(e).lower() else 400, detail=str(e))
-
+        raise _report_value_error(e)

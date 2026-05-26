@@ -2,6 +2,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.api import ai_assistant_api
+from backend.utils.rate_limit import InMemoryRateLimiter
 
 
 class _Client:
@@ -65,7 +66,7 @@ def test_real_ip_gets_user_and_ip_limits(monkeypatch):
 
 
 def test_limiter_returns_retry_after_header():
-    limiter = ai_assistant_api.InMemoryRateLimiter(requests_limit=1, window_seconds=60)
+    limiter = InMemoryRateLimiter(requests_limit=1, window_seconds=60)
     limiter.check_rate_limit("user_test")
 
     with pytest.raises(HTTPException) as exc:

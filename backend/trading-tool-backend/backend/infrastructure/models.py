@@ -37,6 +37,22 @@ class User(Base):
         "risk_profile": "balanced"
     })
 
+
+class AuthRefreshSession(Base):
+    __tablename__ = "auth_refresh_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    jti = Column(String, unique=True, nullable=False)
+    token_hash = Column(String, unique=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+    rotated_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True)
+    revoked_reason = Column(String, nullable=True)
+    replaced_by_jti = Column(String, nullable=True)
+
 class AiUsageLog(Base):
     __tablename__ = 'ai_usage_logs'
 

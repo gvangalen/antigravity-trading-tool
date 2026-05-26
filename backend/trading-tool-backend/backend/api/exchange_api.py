@@ -35,7 +35,8 @@ async def save_exchange_keys(
             await client.fetch_balance()
         except Exception as e:
             await client.close()
-            raise HTTPException(status_code=400, detail=f"❌ Verbinding mislukt: {str(e)}")
+            logger.warning("❌ Exchange connection test failed for %s: %s", payload.exchange_name, e)
+            raise HTTPException(status_code=400, detail="Exchange-verbinding mislukt.")
         finally:
             await client.close()
 

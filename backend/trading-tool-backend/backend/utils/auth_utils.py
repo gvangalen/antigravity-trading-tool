@@ -1,4 +1,5 @@
 import os
+import hashlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Any
@@ -78,9 +79,18 @@ def create_refresh_token(data: Dict[str, Any]):
     )
 
 
-def decode_token(token: str) -> Dict[str, Any]:
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def decode_token(token: str, *, verify_exp: bool = True) -> Dict[str, Any]:
     try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"verify_exp": verify_exp},
+        )
     except PyJWTError as e:
         raise ValueError(f"Invalid token: {e}")
 

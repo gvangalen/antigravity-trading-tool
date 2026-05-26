@@ -1,39 +1,20 @@
 import logging
 import uuid
-import time
-import collections
 from typing import Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-class InMemoryRateLimiter:
-    def __init__(self, requests_limit: int, window_seconds: int):
-        self.requests_limit = requests_limit
-        self.window_seconds = window_seconds
-        self.history = collections.defaultdict(list)
-
-    def check_rate_limit(self, identifier: str, *, limit: Optional[int] = None, window_seconds: Optional[int] = None):
-        now = time.time()
-        active_limit = limit or self.requests_limit
-        active_window = window_seconds or self.window_seconds
-        # Clean old timestamps
-        self.history[identifier] = [t for t in self.history[identifier] if now - t < active_window]
-        if len(self.history[identifier]) >= active_limit:
-            logger.warning(f"🛑 Rate limit exceeded for identifier: {identifier}")
-            retry_after = max(1, int(active_window - (now - self.history[identifier][0]))) if self.history[identifier] else active_window
-            raise HTTPException(
-                status_code=429,
-                detail="Te veel verzoeken. Wacht kort en probeer opnieuw.",
-                headers={"Retry-After": str(retry_after)},
-            )
-        self.history[identifier].append(now)
-
 # Primary assistant limits. Authenticated Finn users get enough room for
 # multi-turn draft repair, while anonymous/IP fallback remains stricter.
+from backend.utils.rate_limit import InMemoryRateLimiter, client_ip
+
 chat_rate_limiter = InMemoryRateLimiter(requests_limit=30, window_seconds=60)
+execute_rate_limiter = InMemoryRateLimiter(requests_limit=20, window_seconds=60)
 ASSISTANT_USER_LIMIT = 30
 ASSISTANT_FINN_DRAFT_LIMIT = 45
 ASSISTANT_IP_FALLBACK_LIMIT = 20
+ASSISTANT_EXECUTE_USER_LIMIT = 20
+ASSISTANT_EXECUTE_IP_LIMIT = 30
 LOCAL_PROXY_IPS = {"127.0.0.1", "::1", "localhost"}
 
 from typing import List
@@ -71,15 +52,7 @@ logger = logging.getLogger(__name__)
 
 
 def _client_ip(raw_request: Request) -> str:
-    forwarded = raw_request.headers.get("x-forwarded-for")
-    if forwarded:
-        first = forwarded.split(",", 1)[0].strip()
-        if first:
-            return first
-    real_ip = raw_request.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip.strip()
-    return raw_request.client.host if raw_request.client else "unknown"
+    return client_ip(raw_request)
 
 
 def _is_finn_transactional_request(query: str, context: dict) -> bool:
@@ -114,6 +87,28 @@ def _apply_assistant_rate_limit(
         logger.debug("Skipping assistant IP rate limit for local proxy IP %s on %s", ip_addr, endpoint)
     return ip_addr, user_limit
 
+
+def _apply_assistant_execute_rate_limit(*, user_id: int, raw_request: Request) -> None:
+    ip_addr = _client_ip(raw_request)
+    execute_rate_limiter.check_rate_limit(
+        f"user_{user_id}:assistant_execute",
+        limit=ASSISTANT_EXECUTE_USER_LIMIT,
+        detail="Te veel Finn execute-verzoeken. Wacht kort en probeer opnieuw.",
+    )
+    if ip_addr not in LOCAL_PROXY_IPS:
+        execute_rate_limiter.check_rate_limit(
+            f"ip_{ip_addr}:assistant_execute",
+            limit=ASSISTANT_EXECUTE_IP_LIMIT,
+            detail="Te veel Finn execute-verzoeken vanaf dit IP-adres. Wacht kort en probeer opnieuw.",
+        )
+
+
+def _redact_assistant_reasoning(payload: Optional[dict]) -> Optional[dict]:
+    if not isinstance(payload, dict):
+        return payload
+    payload["reasoning"] = None
+    return payload
+
 async def get_assistant_service(db: AsyncSession = Depends(get_db)):
     score_repo = ScoreRepository(db)
     setup_repo = SetupRepository(db)
@@ -140,6 +135,7 @@ async def _finalize_finn_response(
     persist_state: bool = False,
 ) -> AssistantChatResponse:
     response["trace_id"] = trace_id
+    _redact_assistant_reasoning(response)
     await finn.issue_response_actions(user_id, response)
     if persist_state:
         await finn.persist_response_state(user_id, response)
@@ -155,6 +151,7 @@ async def _prepare_finn_envelope(
     persist_state: bool = False,
 ) -> dict:
     envelope["trace_id"] = trace_id
+    _redact_assistant_reasoning(envelope)
     await finn.issue_response_actions(user_id, envelope)
     if persist_state:
         await finn.persist_response_state(user_id, envelope)
@@ -245,8 +242,7 @@ async def assistant_chat(
             draft = None
         if not isinstance(state, dict):
             state = None
-        if not isinstance(reasoning, dict):
-            reasoning = None
+        reasoning = None
         if not isinstance(suggested_actions, list):
             suggested_actions = None
         return AssistantChatResponse(
@@ -574,6 +570,7 @@ async def execute_pending_action(
         raise HTTPException(status_code=400, detail="Action ID is verplicht.")
     
     user_id = current_user["id"]
+    _apply_assistant_execute_rate_limit(user_id=user_id, raw_request=request)
     if str(action_id).startswith("finn-"):
         try:
             finn = FinnPlanService(db, trace_id=trace_id)

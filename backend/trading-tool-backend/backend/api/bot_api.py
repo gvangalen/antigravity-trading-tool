@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
+from backend.utils.rate_limit import InMemoryRateLimiter, client_ip
 from backend.services.bot_service import BotService
 from backend.schemas.bot_schema import (
     BotConfigCreateSchema,
@@ -18,6 +19,25 @@ from backend.schemas.bot_schema import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+order_rate_limiter = InMemoryRateLimiter(requests_limit=20, window_seconds=60)
+ORDER_USER_LIMIT = 20
+ORDER_IP_LIMIT = 30
+LOCAL_PROXY_IPS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _apply_sensitive_order_rate_limit(*, user_id: int, request: Request, action_key: str) -> None:
+    ip_addr = client_ip(request)
+    order_rate_limiter.check_rate_limit(
+        f"user_{user_id}:{action_key}",
+        limit=ORDER_USER_LIMIT,
+        detail="Te veel gevoelige orderverzoeken. Wacht kort en probeer opnieuw.",
+    )
+    if ip_addr not in LOCAL_PROXY_IPS:
+        order_rate_limiter.check_rate_limit(
+            f"ip_{ip_addr}:{action_key}",
+            limit=ORDER_IP_LIMIT,
+            detail="Te veel gevoelige orderverzoeken vanaf dit IP-adres. Wacht kort en probeer opnieuw.",
+        )
 
 async def get_bot_service(db: AsyncSession = Depends(get_db)):
     return BotService(db)
@@ -141,6 +161,7 @@ async def create_manual_order(
     service: BotService = Depends(get_bot_service)
 ):
     trace_id = getattr(request.state, "trace_id", None)
+    _apply_sensitive_order_rate_limit(user_id=current_user["id"], request=request, action_key="manual_order")
     try:
         return await service.create_manual_order(payload, current_user["id"], trace_id=trace_id)
     except HTTPException as exc:
@@ -161,6 +182,7 @@ async def preflight_manual_order(
     service: BotService = Depends(get_bot_service)
 ):
     trace_id = getattr(request.state, "trace_id", None)
+    _apply_sensitive_order_rate_limit(user_id=current_user["id"], request=request, action_key="manual_order_preflight")
     try:
         return await service.preflight_manual_order(payload, current_user["id"], trace_id=trace_id)
     except HTTPException as exc:

@@ -1,7 +1,10 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update
-from backend.infrastructure.models import User
+from datetime import datetime
 from typing import Optional
+
+from sqlalchemy import select, func, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.infrastructure.models import User, AuthRefreshSession
 
 class UserRepository:
     def __init__(self, db: AsyncSession):
@@ -67,4 +70,54 @@ class UserRepository:
             )
         )
         await self.db.execute(stmt)
+        await self.db.commit()
+
+    async def create_refresh_session(
+        self,
+        user_id: int,
+        jti: str,
+        token_hash: str,
+        expires_at,
+    ) -> AuthRefreshSession:
+        session = AuthRefreshSession(
+            user_id=user_id,
+            jti=jti,
+            token_hash=token_hash,
+            expires_at=expires_at,
+        )
+        self.db.add(session)
+        await self.db.commit()
+        await self.db.refresh(session)
+        return session
+
+    async def get_refresh_session(self, jti: str) -> Optional[AuthRefreshSession]:
+        result = await self.db.execute(
+            select(AuthRefreshSession).where(AuthRefreshSession.jti == jti)
+        )
+        return result.scalars().first()
+
+    async def rotate_refresh_session(
+        self,
+        current_session: AuthRefreshSession,
+        *,
+        replaced_by_jti: str,
+        rotated_at: datetime,
+    ) -> None:
+        current_session.rotated_at = rotated_at
+        current_session.revoked_at = rotated_at
+        current_session.revoked_reason = "rotated"
+        current_session.replaced_by_jti = replaced_by_jti
+        current_session.last_used_at = rotated_at
+        await self.db.commit()
+
+    async def revoke_refresh_session(
+        self,
+        current_session: AuthRefreshSession,
+        *,
+        reason: str,
+        revoked_at: datetime,
+    ) -> None:
+        current_session.revoked_at = revoked_at
+        current_session.revoked_reason = reason
+        current_session.last_used_at = revoked_at
         await self.db.commit()

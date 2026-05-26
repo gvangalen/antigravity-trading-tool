@@ -1,7 +1,7 @@
 import os
 import logging
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 
 from backend.utils.auth_utils import get_current_user
 from backend.services.system_health_service import SystemHealthService
@@ -17,11 +17,28 @@ load_dotenv(dotenv_path=dotenv_path)
 logger.info("⚙️ system_api.py geladen – System endpoints (Clean Architecture).")
 
 
+async def require_operator(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Deep ops endpoints stay private to authenticated operators."""
+    client_host = getattr(request.client, "host", None)
+    if client_host in {"127.0.0.1", "::1", "localhost"}:
+        return {"id": "loopback", "role": "admin"}
+    if current_user.get("role") != "admin":
+        logger.warning(
+            "🚫 Unauthorized system health access by user %s",
+            current_user.get("id"),
+        )
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return current_user
+
+
 # =====================================================
 # 🩺 SYSTEM HEALTH (deep, non-LB)
 # =====================================================
 @router.get("/system/health")
-async def system_health():
+async def system_health(current_user: dict = Depends(require_operator)):
     """
     Deep operational health endpoint for deploy gates and operator dashboards.
     Keep /api/health lightweight for load balancers.
