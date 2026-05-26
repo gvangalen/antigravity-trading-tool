@@ -1,9 +1,9 @@
 import os
 import logging
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Cookie, Header
 
-from backend.utils.auth_utils import get_current_user
+from backend.utils.auth_utils import decode_token
 from backend.services.system_health_service import SystemHealthService
 from backend.services.system_service import SystemService
 from backend.schemas.system_schema import BootstrapAgentsResponse
@@ -19,12 +19,34 @@ logger.info("⚙️ system_api.py geladen – System endpoints (Clean Architectu
 
 async def require_operator(
     request: Request,
-    current_user: dict = Depends(get_current_user),
+    access_token: str = Cookie(default=None),
+    authorization: str = Header(default=None),
 ):
     """Deep ops endpoints stay private to authenticated operators."""
     client_host = getattr(request.client, "host", None)
     if client_host in {"127.0.0.1", "::1", "localhost"}:
         return {"id": "loopback", "role": "admin"}
+
+    bearer_token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        bearer_token = authorization.split(" ", 1)[1].strip()
+
+    token = access_token or bearer_token
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing access token")
+
+    try:
+        payload = decode_token(token)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=401, detail="Invalid token type")
+
+    current_user = {
+        "id": int(payload.get("sub")),
+        "role": payload.get("role"),
+    }
     if current_user.get("role") != "admin":
         logger.warning(
             "🚫 Unauthorized system health access by user %s",
