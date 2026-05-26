@@ -3,7 +3,7 @@ import logging
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Depends, Request, Cookie, Header
 
-from backend.utils.auth_utils import decode_token
+from backend.utils.auth_utils import decode_token, get_current_user
 from backend.services.system_health_service import SystemHealthService
 from backend.services.system_service import SystemService
 from backend.schemas.system_schema import BootstrapAgentsResponse
