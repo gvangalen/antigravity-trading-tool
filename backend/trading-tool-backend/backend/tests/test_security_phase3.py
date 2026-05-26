@@ -14,10 +14,9 @@ def test_system_health_is_operator_only():
     source = _read(BACKEND_ROOT / "api" / "system_api.py")
 
     assert "async def require_operator" in source
-    assert 'from backend.utils.rate_limit import client_ip' in source
-    assert "forwarded_client_ip = client_ip(request)" in source
+    assert 'host_header = (request.headers.get("host") or "").split(":", 1)[0].strip().lower()' in source
     assert 'client_host in {"127.0.0.1", "::1", "localhost"}' in source
-    assert 'forwarded_client_ip in {"127.0.0.1", "::1", "localhost"}' in source
+    assert 'host_header in {"127.0.0.1", "::1", "localhost"}' in source
     assert 'current_user.get("role") != "admin"' in source
     assert 'detail="Admin access required."' in source
     assert 'async def system_health(current_user: dict = Depends(require_operator))' in source

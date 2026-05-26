@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Depends, Request, Cookie, Header
 
 from backend.utils.auth_utils import decode_token, get_current_user
-from backend.utils.rate_limit import client_ip
 from backend.services.system_health_service import SystemHealthService
 from backend.services.system_service import SystemService
 from backend.schemas.system_schema import BootstrapAgentsResponse
@@ -25,10 +24,10 @@ async def require_operator(
 ):
     """Deep ops endpoints stay private to authenticated operators."""
     client_host = getattr(request.client, "host", None)
-    forwarded_client_ip = client_ip(request)
+    host_header = (request.headers.get("host") or "").split(":", 1)[0].strip().lower()
     if (
         client_host in {"127.0.0.1", "::1", "localhost"}
-        and forwarded_client_ip in {"127.0.0.1", "::1", "localhost"}
+        and host_header in {"127.0.0.1", "::1", "localhost"}
     ):
         return {"id": "loopback", "role": "admin"}
 
