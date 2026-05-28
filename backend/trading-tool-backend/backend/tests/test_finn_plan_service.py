@@ -140,6 +140,9 @@ def test_finn_report_request_is_separate_from_trading_report():
 
     assert service.looks_like_finn_report_request("Geef mijn Finn rapport van vandaag")
     assert service.looks_like_finn_report_request("Wat heeft Finn vandaag geblokkeerd?")
+    assert service.looks_like_finn_report_request("Wat heb ik vandaag met Finn gedaan?")
+    assert service.looks_like_finn_report_request("Waar week ik af vandaag?")
+    assert service.looks_like_finn_report_request("Waar week ik af met Finn?")
     assert not service.looks_like_finn_report_request("Geef mijn daily trading report")
 
 
@@ -183,10 +186,16 @@ def test_finn_reflection_report_summarizes_operator_activity():
     assert report["metrics"]["decision_churn_events"] == 1
     assert report["metrics"]["snoozed"] == 1
     assert report["risk_officer_interventions"][0]["type"] == "decision_churn"
+    assert report["sections"]["activity_journal"]["entries"]
+    assert report["sections"]["blocked_summary"]["entries"]
+    assert report["sections"]["plan_adherence"]["status"] == "attention"
     assert any(verdict["agent"] == "risk_agent" for verdict in report["agent_verdicts"])
     assert report["agent_controller"]["dominant_agent"]
     assert "los van je dagelijkse trading report" in message
     assert "Agent-verdicts:" in message
+    assert "Wat heb ik gedaan?" in message
+    assert "Wat heeft Finn geblokkeerd?" in message
+    assert "Waar week ik af?" in message
 
 
 def test_finn_day_close_report_summarizes_closeout_and_tomorrow_focus():
@@ -240,9 +249,15 @@ def test_finn_day_close_report_summarizes_closeout_and_tomorrow_focus():
     assert report["metrics"]["live_order_blocks_today"] == 1
     assert report["day_close"]["status"] == "review_before_tomorrow"
     assert report["day_close"]["carryover_count"] == 1
+    assert report["day_close"]["what_i_did_today"]["entries"]
+    assert report["day_close"]["what_finn_blocked"]["entries"]
+    assert report["day_close"]["where_i_deviated"]["status"] == "attention"
     assert any(verdict["agent"] == "execution_agent" for verdict in report["agent_verdicts"])
     assert any("live orders geblokkeerd" in item.lower() for item in report["day_close"]["tomorrow_focus"])
     assert "Dagafsluiting:" in message
+    assert "Wat heb ik vandaag gedaan?" in message
+    assert "Wat heeft Finn geblokkeerd?" in message
+    assert "Waar week ik af?" in message
     assert "Meenemen naar morgen:" in message
     assert "los van je dagelijkse trading report" in message
 

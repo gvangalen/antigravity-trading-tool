@@ -48,6 +48,9 @@ import {
   ShieldCheck,
   ClipboardList,
   ChevronDown,
+  Activity,
+  ShieldAlert,
+  CheckCircle2,
 } from 'lucide-react';
 
 /* =====================================================
@@ -342,6 +345,172 @@ function FinnPortfolioRisk({ portfolioRisk }) {
   );
 }
 
+function FinnReflectionSectionCard({ icon: Icon, title, summary, entries = [], accent = 'slate', renderEntry }) {
+  const tones = {
+    slate: 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 text-slate-700 dark:text-slate-300',
+    amber: 'border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300',
+    rose: 'border-rose-200 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300',
+    emerald: 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300',
+  };
+
+  const tone = tones[accent] || tones.slate;
+  if (!summary && (!Array.isArray(entries) || entries.length === 0)) return null;
+
+  return (
+    <div className={`rounded-2xl border p-4 ${tone}`}>
+      <div className="flex items-center gap-2">
+        <Icon size={14} />
+        <span className="text-[10px] font-black uppercase tracking-[0.16em]">
+          {title}
+        </span>
+      </div>
+      {summary && (
+        <p className="mt-3 text-sm font-semibold leading-relaxed">
+          {summary}
+        </p>
+      )}
+      {Array.isArray(entries) && entries.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {entries.slice(0, 4).map((entry, index) => (
+            <div
+              key={`${title}-${entry.type || entry.label || index}`}
+              className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3"
+            >
+              {renderEntry ? renderEntry(entry, index) : (
+                <>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[10px] font-black uppercase tracking-[0.14em]">
+                      {entry.label || entry.type || 'Item'}
+                    </span>
+                    {entry.asset && (
+                      <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                        {entry.asset}
+                      </span>
+                    )}
+                  </div>
+                  {(entry.message || entry.outcome) && (
+                    <p className="mt-2 text-xs font-semibold leading-relaxed">
+                      {entry.message || entry.outcome}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FinnReflectionBlocks({ analysis }) {
+  const sections = analysis?.sections || {};
+  const dayClose = analysis?.day_close || {};
+
+  const whatIDid = dayClose?.what_i_did_today || sections?.activity_journal || null;
+  const whatFinnBlocked = dayClose?.what_finn_blocked || sections?.blocked_summary || null;
+  const whereIDeviated = dayClose?.where_i_deviated || sections?.plan_adherence || null;
+
+  if (!whatIDid && !whatFinnBlocked && !whereIDeviated) return null;
+
+  return (
+    <div className="mt-5 grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <FinnReflectionSectionCard
+        icon={ClipboardList}
+        title={whatIDid?.title || 'Wat heb ik gedaan?'}
+        summary={whatIDid?.summary}
+        entries={whatIDid?.entries || []}
+        accent="slate"
+        renderEntry={(entry) => (
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[10px] font-black uppercase tracking-[0.14em]">
+                {entry.label || entry.type || 'Finn-actie'}
+              </span>
+              {entry.asset && (
+                <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                  {entry.asset}
+                </span>
+              )}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-[0.12em] opacity-75">
+              {entry.status && <span>{entry.status}</span>}
+              {entry.resolve_state && <span>{entry.resolve_state}</span>}
+            </div>
+          </>
+        )}
+      />
+
+      <FinnReflectionSectionCard
+        icon={ShieldAlert}
+        title={whatFinnBlocked?.title || 'Wat heeft Finn geblokkeerd?'}
+        summary={whatFinnBlocked?.summary}
+        entries={whatFinnBlocked?.entries || []}
+        accent="rose"
+        renderEntry={(entry) => (
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[10px] font-black uppercase tracking-[0.14em]">
+                {entry.label || entry.type || 'Guardrail'}
+              </span>
+              <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                {entry.asset || entry.severity || 'review'}
+              </span>
+            </div>
+            <p className="mt-2 text-xs font-semibold leading-relaxed">
+              {entry.outcome || 'Geen extra toelichting.'}
+            </p>
+          </>
+        )}
+      />
+
+      <FinnReflectionSectionCard
+        icon={Activity}
+        title={whereIDeviated?.title || 'Waar week ik af?'}
+        summary={whereIDeviated?.summary}
+        entries={whereIDeviated?.entries || []}
+        accent={whereIDeviated?.status === 'steady' ? 'emerald' : whereIDeviated?.status === 'disciplined' ? 'amber' : 'amber'}
+        renderEntry={(entry) => (
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[10px] font-black uppercase tracking-[0.14em]">
+                {entry.label || entry.type || 'Afwijking'}
+              </span>
+              <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                {entry.asset || entry.severity || 'review'}
+              </span>
+            </div>
+            <p className="mt-2 text-xs font-semibold leading-relaxed">
+              {entry.message || 'Geen extra toelichting.'}
+            </p>
+          </>
+        )}
+      />
+
+      {dayClose?.tomorrow_focus?.length > 0 && (
+        <div className="xl:col-span-3 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 p-4 text-emerald-700 dark:text-emerald-300">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={14} />
+            <span className="text-[10px] font-black uppercase tracking-[0.16em]">
+              Morgen meenemen
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+            {dayClose.tomorrow_focus.slice(0, 4).map((item) => (
+              <div
+                key={item}
+                className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3 text-xs font-semibold leading-relaxed"
+              >
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FinnReportsPanel() {
   const [activeFinnReport, setActiveFinnReport] = useState(FINN_REPORT_OPTIONS[0].key);
   const [finnReportCache, setFinnReportCache] = useState({});
@@ -531,6 +700,7 @@ function FinnReportsPanel() {
                     </div>
                   )}
                   <FinnAgentVerdicts verdicts={analysis?.agent_verdicts || []} />
+                  <FinnReflectionBlocks analysis={analysis} />
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row xl:flex-col xl:min-w-[180px]">

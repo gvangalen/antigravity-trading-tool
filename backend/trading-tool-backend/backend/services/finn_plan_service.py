@@ -623,11 +623,14 @@ class FinnPlanService:
             "risk officer rapport", "guardrail rapport", "wat heeft finn geblokkeerd",
             "wat heeft finn vandaag gedaan", "wat heb ik vandaag met finn gedaan",
             "dagafsluiting", "dag afsluiting", "einde dag", "sluit mijn dag af",
+            "waar week ik af", "waar wijk ik af", "waar week ik af vandaag",
+            "waar wijk ik af vandaag", "waar week ik af met finn", "waar wijk ik af met finn",
         ]
         report_terms = [
             "rapport", "verslag", "samenvatting", "overzicht", "afsluiting",
             "geblokkeerd", "afgeremd", "overrides", "afwijkingen", "skips",
-            "snoozes", "guardrails", "finn acties",
+            "snoozes", "guardrails", "finn acties", "week ik af", "wijk ik af",
+            "wat heb ik gedaan", "wat deed finn", "geborgd", "afremde",
         ]
         return any(term in q for term in finn_terms) or ("finn" in q and any(term in q for term in report_terms))
 
@@ -6413,6 +6416,145 @@ class FinnPlanService:
             return {"key": "last_7_days", "days": 7, "label": "laatste 7 dagen", "mode": "reflection"}
         return {"key": "today", "days": 1, "label": "vandaag", "mode": "reflection"}
 
+    def _humanize_finn_activity_type(self, action_type: str) -> str:
+        labels = {
+            "create_plan": "Plan of setup gemaakt",
+            "create_strategy": "Strategy aangepast",
+            "create_bot": "Bot aangemaakt",
+            "bot_config_update": "Bot bijgewerkt",
+            "configure_indicator": "Indicator aangepast",
+            "generate_bot_decision": "Bot-decision gegenereerd",
+            "skip_bot_decision": "Bot-decision overgeslagen",
+            "paper_execute_bot_decision": "Paper execution uitgevoerd",
+            "live_preflight_bot_decision": "Live decision preflight gedaan",
+            "live_manual_order_preflight": "Live order preflight gedaan",
+            "live_manual_order_confirmed": "Live manual order bevestigd",
+            "live_manual_order_blocked": "Live manual order geblokkeerd",
+            "live_setup_block_acknowledged": "Geblokkeerde setup bewust bevestigd",
+            "resolve_mission_item": "Mission Control item afgehandeld",
+            "snooze_mission_item": "Mission Control item later gezet",
+            "agent_controller_handoff": "Controller-handoff gevolgd",
+        }
+        if action_type in labels:
+            return labels[action_type]
+        return str(action_type or "Finn-actie").replace("_", " ").strip().capitalize()
+
+    def _build_report_activity_journal(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        relevant = []
+        for item in items:
+            action_type = str(item.get("type") or "")
+            if action_type in {
+                "create_plan",
+                "create_strategy",
+                "create_bot",
+                "bot_config_update",
+                "configure_indicator",
+                "generate_bot_decision",
+                "skip_bot_decision",
+                "paper_execute_bot_decision",
+                "live_preflight_bot_decision",
+                "live_manual_order_preflight",
+                "live_manual_order_confirmed",
+                "resolve_mission_item",
+                "snooze_mission_item",
+                "agent_controller_handoff",
+            }:
+                relevant.append(
+                    {
+                        "type": action_type,
+                        "label": item.get("label") or self._humanize_finn_activity_type(action_type),
+                        "asset": item.get("asset"),
+                        "status": item.get("status"),
+                        "resolve_state": item.get("resolve_state"),
+                        "created_at": item.get("created_at"),
+                    }
+                )
+        return {
+            "title": "Wat heb ik gedaan?",
+            "summary": (
+                f"{len(relevant)} bewuste Finn-actie(s) vastgelegd."
+                if relevant else
+                "Nog weinig expliciete Finn-acties vastgelegd in deze periode."
+            ),
+            "entries": relevant[:8],
+        }
+
+    def _build_report_blocked_summary(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        blocked_entries = []
+        for item in items:
+            action_type = str(item.get("type") or "")
+            behavioral_event = item.get("behavioral_event") if isinstance(item.get("behavioral_event"), dict) else {}
+            if action_type in {
+                "live_manual_order_blocked",
+                "live_setup_block_acknowledged",
+                "blocked_plan",
+                "blocker_explanation",
+            } or behavioral_event.get("type") in {
+                "plan_deviation_attempt",
+                "strategy_change_pressure",
+                "decision_churn",
+                "execution_pressure",
+            }:
+                blocked_entries.append(
+                    {
+                        "type": action_type or behavioral_event.get("type"),
+                        "label": item.get("label") or self._humanize_finn_activity_type(action_type or behavioral_event.get("type")),
+                        "asset": item.get("asset"),
+                        "outcome": item.get("outcome") or behavioral_event.get("message") or behavioral_event.get("type"),
+                        "severity": behavioral_event.get("severity") or item.get("severity") or "medium",
+                        "created_at": item.get("created_at"),
+                    }
+                )
+        return {
+            "title": "Wat heeft Finn geblokkeerd?",
+            "summary": (
+                f"Finn heeft {len(blocked_entries)} keer actief afgeremd, geblokkeerd of extra frictie toegevoegd."
+                if blocked_entries else
+                "In deze periode hoefde Finn niets hard af te remmen."
+            ),
+            "entries": blocked_entries[:8],
+        }
+
+    def _build_report_plan_adherence(self, items: List[Dict[str, Any]], metrics: Dict[str, Any]) -> Dict[str, Any]:
+        deviations = []
+        for item in items:
+            behavioral_event = item.get("behavioral_event") if isinstance(item.get("behavioral_event"), dict) else None
+            if not behavioral_event:
+                continue
+            event_type = behavioral_event.get("type")
+            if event_type not in {"plan_deviation_attempt", "strategy_change_pressure", "decision_churn", "execution_pressure"}:
+                continue
+            deviations.append(
+                {
+                    "type": event_type,
+                    "label": item.get("label") or self._humanize_finn_activity_type(item.get("type") or event_type),
+                    "asset": item.get("asset"),
+                    "message": behavioral_event.get("message") or behavioral_event.get("type"),
+                    "severity": behavioral_event.get("severity") or "medium",
+                    "created_at": item.get("created_at"),
+                }
+            )
+
+        if deviations:
+            status = "attention"
+            summary = f"Ik zag {len(deviations)} moment(en) waarop je van plan, reviewvolgorde of execution-discipline wilde afwijken."
+        elif metrics.get("skipped", 0) or metrics.get("monitor_today", 0):
+            status = "disciplined"
+            summary = "Je week af zonder te forceren: Finn logde vooral bewust wachten, monitoren of overslaan."
+        else:
+            status = "steady"
+            summary = "Ik zie geen duidelijke plan-afwijkingen in deze periode."
+
+        return {
+            "title": "Waar week ik af?",
+            "status": status,
+            "summary": summary,
+            "entries": deviations[:6],
+            "skipped": metrics.get("skipped", 0),
+            "monitor_today": metrics.get("monitor_today", 0),
+            "snoozed": metrics.get("snoozed", 0),
+        }
+
     def _build_finn_day_close(
         self,
         items: List[Dict[str, Any]],
@@ -6494,6 +6636,10 @@ class FinnPlanService:
         if not tomorrow_focus:
             tomorrow_focus.append("Start morgen met Mission Control en werk de queue van boven naar beneden af.")
 
+        activity_journal = self._build_report_activity_journal(items)
+        blocked_summary = self._build_report_blocked_summary(items)
+        adherence = self._build_report_plan_adherence(items, metrics)
+
         return {
             "status": closeout_status,
             "handled_count": handled_count,
@@ -6504,6 +6650,9 @@ class FinnPlanService:
             "risk_officer_interventions": interventions,
             "agent_rhythm": agent_rhythm or {},
             "operating_rules": operating_rules or {},
+            "what_i_did_today": activity_journal,
+            "what_finn_blocked": blocked_summary,
+            "where_i_deviated": adherence,
             "tomorrow_focus": tomorrow_focus,
             "closing_line": (
                 "Niet meer forceren vandaag; begin morgen met review van de open punten."
@@ -6705,6 +6854,9 @@ class FinnPlanService:
                 "agent_rhythm": agent_rhythm,
                 "operating_rules": operating_rules,
             },
+            "activity_journal": self._build_report_activity_journal(items),
+            "blocked_summary": self._build_report_blocked_summary(items),
+            "plan_adherence": self._build_report_plan_adherence(items, metrics),
         }
 
         if not items:
@@ -6899,13 +7051,33 @@ class FinnPlanService:
                 lines.append("- Personal operating rules:")
                 for rule in rules[:3]:
                     lines.append(f"  - {rule.get('title')}: {rule.get('rule')}")
+        sections = report.get("sections") or {}
+        if not report.get("day_close"):
+            journal = sections.get("activity_journal") or {}
+            if journal.get("summary"):
+                lines.append(f"Wat heb ik gedaan? {journal.get('summary')}")
+            blocked_summary = sections.get("blocked_summary") or {}
+            if blocked_summary.get("summary"):
+                lines.append(f"Wat heeft Finn geblokkeerd? {blocked_summary.get('summary')}")
+            adherence = sections.get("plan_adherence") or {}
+            if adherence.get("summary"):
+                lines.append(f"Waar week ik af? {adherence.get('summary')}")
         day_close = report.get("day_close") or {}
         if day_close:
             lines.append("Dagafsluiting:")
+            what_i_did = day_close.get("what_i_did_today") or {}
+            if what_i_did.get("summary"):
+                lines.append(f"Wat ik vandaag deed: {what_i_did.get('summary')}")
             completed = day_close.get("completed") or []
             if completed:
                 lines.append("Vandaag afgerond:")
                 lines.extend([f"- {item}" for item in completed[:5]])
+            journal_entries = what_i_did.get("entries") or []
+            if journal_entries:
+                lines.append("Wat heb ik vandaag gedaan?")
+                for item in journal_entries[:4]:
+                    asset = f" ({item.get('asset')})" if item.get("asset") else ""
+                    lines.append(f"- {item.get('label')}{asset}")
             handled = day_close.get("consciously_handled") or []
             if handled:
                 lines.append("Bewust afgehandeld:")
@@ -6916,6 +7088,22 @@ class FinnPlanService:
                 for item in blocked[:4]:
                     asset = f" {item.get('asset')}" if item.get("asset") else ""
                     lines.append(f"- {item.get('label') or item.get('type')}{asset}: {item.get('outcome')}")
+            blocked_summary = day_close.get("what_finn_blocked") or {}
+            blocked_entries = blocked_summary.get("entries") or []
+            if blocked_entries:
+                lines.append("Wat heeft Finn geblokkeerd?")
+                for item in blocked_entries[:4]:
+                    asset = f" ({item.get('asset')})" if item.get("asset") else ""
+                    detail = item.get("outcome") or item.get("label") or item.get("type")
+                    lines.append(f"- {item.get('label') or item.get('type')}{asset}: {detail}")
+            adherence = day_close.get("where_i_deviated") or {}
+            if adherence.get("summary"):
+                lines.append(f"Waar week ik af? {adherence.get('summary')}")
+            adherence_entries = adherence.get("entries") or []
+            if adherence_entries:
+                for item in adherence_entries[:3]:
+                    asset = f" ({item.get('asset')})" if item.get("asset") else ""
+                    lines.append(f"- {item.get('label') or item.get('type')}{asset}: {item.get('message')}")
             rhythm = day_close.get("agent_rhythm") or {}
             if rhythm.get("summary"):
                 lines.append("Agent-ritme voor morgen:")
