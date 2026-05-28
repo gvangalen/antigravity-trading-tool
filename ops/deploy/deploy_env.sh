@@ -18,7 +18,7 @@ STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
 
 case "$ENVIRONMENT" in
   production)
-    PM2_CONFIG="ecosystem.production.config.js"
+    PM2_CONFIG="ecosystem.config.js"
     BACKEND_PORT="${BACKEND_PORT:-8000}"
     FRONTEND_PORT="${FRONTEND_PORT:-5002}"
     EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-beat}"
@@ -89,6 +89,15 @@ if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_26_auth_refresh_sessions.py
 
   cd ../..
+  if [ ! -f "$PM2_CONFIG" ]; then
+    if [ -f ecosystem.config.js ]; then
+      echo "⚠️ PM2 config $PM2_CONFIG not found; falling back to ecosystem.config.js." >&2
+      PM2_CONFIG="ecosystem.config.js"
+    else
+      echo "❌ PM2 config $PM2_CONFIG not found on remote host." >&2
+      exit 1
+    fi
+  fi
   check_pm2_apps_online() {
     for attempt in \$(seq 1 20); do
       pm2 jlist >/tmp/tradamind_pm2_jlist.json
