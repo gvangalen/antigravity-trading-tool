@@ -93,12 +93,12 @@ if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_26_auth_refresh_sessions.py
 
   cd ../..
-  if [ ! -f "$PM2_CONFIG" ]; then
+  if [ ! -f \"$PM2_CONFIG\" ]; then
     if [ -f ecosystem.config.js ]; then
-      echo "⚠️ PM2 config $PM2_CONFIG not found; falling back to ecosystem.config.js." >&2
-      PM2_CONFIG="ecosystem.config.js"
+      echo \"⚠️ PM2 config $PM2_CONFIG not found; falling back to ecosystem.config.js.\" >&2
+      PM2_CONFIG=\"ecosystem.config.js\"
     else
-      echo "❌ PM2 config $PM2_CONFIG not found on remote host." >&2
+      echo \"❌ PM2 config $PM2_CONFIG not found on remote host.\" >&2
       exit 1
     fi
   fi
