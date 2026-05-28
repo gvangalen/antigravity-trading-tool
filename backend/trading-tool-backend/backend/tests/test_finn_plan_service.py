@@ -323,6 +323,51 @@ def test_finn_report_response_exposes_top_level_state_contract(monkeypatch):
     assert result["state"]["source"] == result["state"]["analysis"]["source"]
 
 
+def test_mission_control_exposes_richer_behavioral_surface(monkeypatch):
+    service = _service()
+
+    async def daily_response(user_id, query, context=None):
+        return {
+            "state": {
+                "analysis": {
+                    "assets": [],
+                    "follow_up_actions": [],
+                    "asset_count": 0,
+                    "date": _utc_now().date().isoformat(),
+                }
+            }
+        }
+
+    async def activity(user_id, limit=40):
+        return [
+            service._mission_activity_item({
+                "id": f"finn-review-{idx}",
+                "status": "executed",
+                "created_at": _utc_now() - timedelta(hours=idx),
+                "payload": {
+                    "action": {"type": "skip_bot_decision" if idx % 2 == 0 else "snooze_mission_item"},
+                    "result": {"ok": True, "status": "skipped" if idx % 2 == 0 else "snoozed"},
+                },
+            })
+            for idx in range(3)
+        ]
+
+    async def resolved_ids(user_id):
+        return []
+
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", daily_response)
+    monkeypatch.setattr(service, "_get_recent_finn_activity", activity)
+    monkeypatch.setattr(service, "_get_today_resolved_mission_item_ids", resolved_ids)
+
+    result = asyncio.run(service.build_mission_control_response(1))
+
+    assert result["intent"] == "mission_control"
+    assert result["behavioral_profile"]["type"] == "review_anchored"
+    assert "summary" in result["trend"]
+    assert isinstance(result["risk_flags"], list)
+    assert isinstance(result["habit_cards"], list)
+
+
 def test_one_shot_weekly_dca_is_confirmable_and_creates_bot_by_default():
     result = _service().build_response("Maak een wekelijkse BTC DCA van 100 euro")
 

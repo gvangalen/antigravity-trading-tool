@@ -2173,6 +2173,37 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                     {missionControl.behavioral_insight.coaching.safe_next_step}
                   </p>
                 )}
+                {(missionControl.behavioral_profile?.label || missionControl.trend?.summary || Array.isArray(missionControl.risk_flags) && missionControl.risk_flags.length > 0) && (
+                  <div className="mt-2 rounded-lg border border-white/60 dark:border-slate-900/40 bg-white/70 dark:bg-slate-950/35 p-2.5 space-y-2">
+                    {missionControl.behavioral_profile?.label && (
+                      <div>
+                        <div className="text-[7px] font-black uppercase tracking-widest opacity-70">Gedragsprofiel</div>
+                        <div className="text-[10px] font-semibold leading-snug">{missionControl.behavioral_profile.label}</div>
+                      </div>
+                    )}
+                    {missionControl.trend?.summary && (
+                      <div>
+                        <div className="text-[7px] font-black uppercase tracking-widest opacity-70">Meerweekse trend</div>
+                        <div className="text-[10px] font-semibold leading-snug">{missionControl.trend.summary}</div>
+                      </div>
+                    )}
+                    {Array.isArray(missionControl.risk_flags) && missionControl.risk_flags.length > 0 && (
+                      <div>
+                        <div className="text-[7px] font-black uppercase tracking-widest opacity-70">Waar Finn rem houdt</div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {missionControl.risk_flags.slice(0, 2).map((flag) => (
+                            <span
+                              key={flag.id || flag.label}
+                              className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest"
+                            >
+                              {flag.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

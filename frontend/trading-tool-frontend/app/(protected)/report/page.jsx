@@ -525,13 +525,25 @@ function FinnBehavioralIntelligenceBlocks({ analysis }) {
 
   return (
     <div className="mt-5 space-y-4">
+      <div className="rounded-2xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/70 dark:bg-violet-950/20 p-4 text-violet-700 dark:text-violet-300">
+        <div className="flex items-center gap-2">
+          <Brain size={14} />
+          <span className="text-[10px] font-black uppercase tracking-[0.16em]">
+            Behavioral Intelligence 2.0+
+          </span>
+        </div>
+        <p className="mt-2 text-sm font-semibold leading-relaxed">
+          Finn laat hier je gedragsprofiel, meerweekse trend, remsignalen en werkstijl apart zien in plaats van alleen in prose.
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         {profile && (
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-4">
             <div className="flex items-center justify-between gap-3">
               <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                 <Brain size={13} className="text-blue-600 dark:text-blue-400" />
-                Behavioral profile
+                Gedragsprofiel
               </span>
               {profile.confidence && (
                 <span className="rounded-full bg-slate-50 dark:bg-slate-900 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800">
@@ -558,7 +570,7 @@ function FinnBehavioralIntelligenceBlocks({ analysis }) {
             <div className="flex items-center justify-between gap-3">
               <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
                 <Activity size={13} />
-                Trend
+                Meerweekse trend
               </span>
               {(trend.status || trend.momentum) && (
                 <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
