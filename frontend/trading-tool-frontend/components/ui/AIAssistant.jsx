@@ -297,6 +297,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       bot_decision: "Proposal",
       bot_decision_review: "Review",
       bot_execution_decision: "Confirm",
+      bot_execution_console: "Execute",
       indicator_insight: "Insight",
       plan_status: "Status",
       daily_coach: "Coach",
@@ -313,10 +314,30 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     if (handoff === "bot_decision") return <Bot size={11} className="text-violet-500 shrink-0" />;
     if (handoff === "bot_decision_review") return <ListChecks size={11} className="text-violet-500 shrink-0" />;
     if (handoff === "bot_execution_decision") return <Shield size={11} className="text-rose-500 shrink-0" />;
+    if (handoff === "bot_execution_console") return <Shield size={11} className="text-rose-500 shrink-0" />;
     if (handoff === "indicator_insight") return <Brain size={11} className="text-amber-500 shrink-0" />;
     if (handoff === "resolve_mission_item") return <CheckCircle2 size={11} className="text-emerald-500 shrink-0" />;
     if (handoff === "snooze_mission_item") return <Activity size={11} className="text-slate-500 shrink-0" />;
     return <Zap size={11} className="text-amber-500 shrink-0" />;
+  };
+
+  const openExecutionConsole = (action = {}) => {
+    const botId = action.bot_id || action.botId || action.asset_bot_id || action.payload?.bot_id || null;
+    const symbol = action.asset || action.symbol || action.payload?.symbol || globalSymbol || "BTC";
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("execution-guardrail-handoff", {
+        detail: {
+          botId,
+          symbol,
+          focus: "trade",
+          source: action.source || "finn",
+        },
+      }));
+    }
+
+    router.push(botId ? `/bot?bot_id=${botId}&focus=trade` : `/bot?symbol=${symbol}&focus=trade`);
+    setIsOpen(false);
   };
 
   function emitFinnRefreshSignals() {
@@ -327,8 +348,27 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   }
 
   const handleFollowUpAction = async (action) => {
+    if (action?.handoff === "bot_execution_console" || action?.type === "open_bot_execution_console") {
+      openExecutionConsole(action);
+      return;
+    }
     if (!action?.prompt) return;
     await handleChat(action.prompt);
+  };
+
+  const buildExecutionConsoleAction = (action, res) => {
+    const botId = action?.payload?.bot_id || action?.bot_id || res?.bot_id || null;
+    const symbol = action?.payload?.symbol || action?.asset || res?.symbol || globalSymbol || "BTC";
+    if (!botId && !symbol) return null;
+    return {
+      label: "Open execution console",
+      handoff: "bot_execution_console",
+      type: "open_bot_execution_console",
+      bot_id: botId,
+      symbol,
+      asset: symbol,
+      source: "live_preflight",
+    };
   };
 
   const buildAgentHandoffAuditAction = (action, controller) => {
@@ -459,6 +499,26 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     return state.portfolio_risk || analysis.portfolio_risk || message?.portfolio_risk || null;
   };
 
+  const getMessageBehavioralAnalysis = (message) => {
+    const state = message?.state || {};
+    const analysis = state.analysis || message?.analysis || {};
+    const intent = message?.intent || state?.intent || null;
+    const flow = message?.flow || state?.current_flow || null;
+    const hasBehavioralShape = (
+      analysis?.behavioral_profile ||
+      analysis?.trend ||
+      analysis?.week_over_week ||
+      analysis?.memory_cards ||
+      analysis?.risk_flags ||
+      analysis?.habit_cards ||
+      analysis?.signals
+    );
+    if (!hasBehavioralShape && !["behavioral_intelligence", "behavioral_memory", "weekly_reflection"].includes(intent) && !["behavioral_intelligence", "behavioral_memory", "weekly_reflection"].includes(flow)) {
+      return null;
+    }
+    return analysis;
+  };
+
   const renderAgentController = (controller, compact = false) => {
     if (!controller?.dominant_agent) return null;
     const score = Number(controller.dominant_score || 0);
@@ -500,6 +560,135 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             {followUpIcon(controller.primary_action.handoff)}
             {controller.primary_action.label || controller.primary_action.prompt}
           </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderBehavioralIntelligenceCard = (analysis) => {
+    if (!analysis) return null;
+
+    const profile = analysis.behavioral_profile || null;
+    const trend = analysis.trend || analysis.week_over_week || analysis.month_over_month || null;
+    const riskFlags = Array.isArray(analysis.risk_flags) ? analysis.risk_flags : [];
+    const habitCards = Array.isArray(analysis.habit_cards) ? analysis.habit_cards : [];
+    const memoryCards = Array.isArray(analysis.memory_cards) ? analysis.memory_cards : [];
+    const signals = Array.isArray(analysis.signals) ? analysis.signals : [];
+    const balanceScore = analysis.behavioral_balance_score;
+
+    if (!profile && !trend && riskFlags.length === 0 && habitCards.length === 0 && memoryCards.length === 0 && signals.length === 0) {
+      return null;
+    }
+
+    const signalCards = riskFlags.length > 0 ? riskFlags : (memoryCards.length > 0 ? memoryCards : signals);
+
+    return (
+      <div className="mt-3 rounded-2xl border border-violet-100 dark:border-violet-900/40 bg-violet-50/60 dark:bg-violet-950/20 p-4 space-y-4 text-violet-900 dark:text-violet-100">
+        <div className="flex items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+            <Brain size={13} />
+            Behavioral Intelligence
+          </span>
+          {balanceScore !== undefined && balanceScore !== null && (
+            <span className="rounded-full border border-violet-200 dark:border-violet-900/50 bg-white/80 dark:bg-slate-950/40 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+              {balanceScore}/100
+            </span>
+          )}
+        </div>
+
+        {profile && (
+          <div className="rounded-xl border border-white/70 dark:border-slate-900/40 bg-white/75 dark:bg-slate-950/35 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+                {profile.label}
+              </span>
+              {profile.confidence && (
+                <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                  {profile.confidence}
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
+              {profile.summary}
+            </p>
+          </div>
+        )}
+
+        {trend?.summary && (
+          <div className="rounded-xl border border-white/70 dark:border-slate-900/40 bg-white/75 dark:bg-slate-950/35 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+                <Activity size={11} />
+                Trend
+              </span>
+              {(trend.status || trend.momentum) && (
+                <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                  {trend.status || trend.momentum}
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
+              {trend.summary}
+            </p>
+          </div>
+        )}
+
+        {signalCards.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+              Waar Finn nu op let
+            </div>
+            {signalCards.slice(0, 3).map((item, index) => (
+              <div
+                key={`${item.id || item.type || item.label || "signal"}-${index}`}
+                className="rounded-xl border border-white/70 dark:border-slate-900/40 bg-white/75 dark:bg-slate-950/35 p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+                    {item.label || item.type || "Signaal"}
+                  </span>
+                  {(item.severity || item.confidence) && (
+                    <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                      {item.severity || item.confidence}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
+                  {item.summary || item.message}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {habitCards.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+              Werkstijl die Finn herkent
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {habitCards.slice(0, 4).map((card) => (
+                <div
+                  key={card.id || card.label}
+                  className="rounded-xl border border-white/70 dark:border-slate-900/40 bg-white/75 dark:bg-slate-950/35 p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+                      {card.label}
+                    </span>
+                    {card.status && (
+                      <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                        {card.status}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
+                    {card.summary}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     );
@@ -1261,11 +1450,13 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
       }
 
       if (action.type === "live_preflight_bot_decision") {
+        const executionConsoleAction = buildExecutionConsoleAction(action, res);
         setMessages(prev => [...prev, {
           role: "assistant",
           text: res.message || "Live preflight gecontroleerd.",
           intent: "bot_live_preflight",
           isError: !res?.verified?.live_preflight,
+          suggestedActions: executionConsoleAction ? [executionConsoleAction] : [],
         }]);
         await loadInsight();
         await loadMissionControl();
@@ -1960,6 +2151,23 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 <p className="mt-1.5 text-[10px] font-semibold leading-snug">
                   {missionControl.behavioral_insight.coaching.primary_reflection}
                 </p>
+                {missionControl.behavioral_insight.behavioral_profile?.label && (
+                  <p className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-80">
+                    {missionControl.behavioral_insight.behavioral_profile.label}
+                  </p>
+                )}
+                {Array.isArray(missionControl.behavioral_insight.risk_flags) && missionControl.behavioral_insight.risk_flags.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {missionControl.behavioral_insight.risk_flags.slice(0, 2).map((flag) => (
+                      <span
+                        key={flag.id || flag.label}
+                        className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest"
+                      >
+                        {flag.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {missionControl.behavioral_insight.coaching.safe_next_step && (
                   <p className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-80">
                     {missionControl.behavioral_insight.coaching.safe_next_step}
@@ -2264,6 +2472,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 }`}>
                 <p className="text-sm leading-relaxed">{m.text}</p>
                 {m.role === "assistant" && m.isComplete !== false && renderAgentController(getMessageAgentController(m))}
+                {m.role === "assistant" && m.isComplete !== false && renderBehavioralIntelligenceCard(getMessageBehavioralAnalysis(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderPortfolioRisk(getMessagePortfolioRisk(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderAgentVerdicts(getMessageAgentVerdicts(m))}
                 {m.role === "assistant" && m.isComplete !== false && (() => {

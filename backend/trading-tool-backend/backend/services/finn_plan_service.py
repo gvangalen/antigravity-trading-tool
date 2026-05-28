@@ -6081,6 +6081,8 @@ class FinnPlanService:
         patterns = behavioral.get("patterns") or []
         week_over_week = self._behavioral_week_over_week(metrics)
         behavioral_profile = self._behavioral_profile_from_metrics(metrics, patterns)
+        risk_flags = self._behavioral_risk_flags(metrics, patterns)
+        habit_cards = self._behavioral_habit_cards(metrics, patterns)
         agent_learning = self._agent_performance_light(activity_feed)
         agent_rhythm = self._agent_rhythm_from_learning(agent_learning)
         operating_rules = self._personal_operating_rules(agent_rhythm, metrics)
@@ -6142,9 +6144,13 @@ class FinnPlanService:
             "advice_only": True,
             "headline": headline,
             "discipline_score": score,
+            "behavioral_balance_score": self._behavioral_balance_score(metrics, patterns),
             "patterns": patterns,
             "behavioral_profile": behavioral_profile,
             "week_over_week": week_over_week,
+            "trend": week_over_week,
+            "risk_flags": risk_flags,
+            "habit_cards": habit_cards,
             "agent_learning": agent_learning,
             "agent_rhythm": agent_rhythm,
             "operating_rules": operating_rules,
@@ -6331,14 +6337,23 @@ class FinnPlanService:
                 "evidence": [f"{metrics['actions_30d']} acties in {days_observed} dag(en)"],
             })
 
+        merged_metrics = {**(behavioral.get("metrics") or {}), **metrics}
+        merged_patterns = list(dict.fromkeys((behavioral.get("patterns") or []) + [card["type"] for card in memory_cards]))
         previous_delta = metrics["actions_30d"] - metrics["previous_actions_30d"]
+        risk_flags = self._behavioral_risk_flags(merged_metrics, merged_patterns)
+        habit_cards = self._behavioral_habit_cards(merged_metrics, merged_patterns)
+        trend = self._behavioral_month_over_month(metrics)
         return {
             "status": status,
             "period": "last_30_days",
             "advice_only": True,
             "metrics": metrics,
             "memory_cards": memory_cards,
-            "behavioral_profile": behavioral.get("metrics") and self._behavioral_profile_from_metrics(behavioral.get("metrics") or {}, behavioral.get("patterns") or []),
+            "behavioral_profile": self._behavioral_profile_from_metrics(merged_metrics, merged_patterns),
+            "trend": trend,
+            "risk_flags": risk_flags,
+            "habit_cards": habit_cards,
+            "behavioral_balance_score": self._behavioral_balance_score(merged_metrics, merged_patterns),
             "month_over_month": {
                 "current_actions": metrics["actions_30d"],
                 "previous_actions": metrics["previous_actions_30d"],
@@ -6390,11 +6405,27 @@ class FinnPlanService:
         mom = memory.get("month_over_month") or {}
         if mom.get("summary"):
             lines.append(f"Vergeleken met vorige periode: {mom.get('summary')}")
+        profile = memory.get("behavioral_profile") or {}
+        if profile.get("label"):
+            lines.append(f"Profiel: {profile.get('label')} - {profile.get('summary')}")
+        trend = memory.get("trend") or {}
+        if trend.get("summary"):
+            lines.append(f"Trend over meerdere weken: {trend.get('summary')}")
         cards = memory.get("memory_cards") or []
         if cards:
             lines.append("Wat Finn voorzichtig mag onthouden:")
             for card in cards[:4]:
                 lines.append(f"- {card.get('label')}: {card.get('summary')} ({card.get('confidence')} confidence)")
+        risk_flags = memory.get("risk_flags") or []
+        if risk_flags:
+            lines.append("Waar Finn extra frictie moet houden:")
+            for flag in risk_flags[:3]:
+                lines.append(f"- {flag.get('label')}: {flag.get('summary')}")
+        habit_cards = memory.get("habit_cards") or []
+        if habit_cards:
+            lines.append("Wat Finn al als werkstijl ziet:")
+            for card in habit_cards[:3]:
+                lines.append(f"- {card.get('label')}: {card.get('summary')}")
         policy = memory.get("memory_policy") or {}
         not_enough = policy.get("not_enough_for") or []
         if not_enough:
@@ -6402,6 +6433,180 @@ class FinnPlanService:
             lines.extend([f"- {item}" for item in not_enough[:3]])
         lines.append(f"Veilige volgende stap: {memory.get('safe_next_step')}")
         return "\n".join([line for line in lines if line])
+
+    def _behavioral_balance_score(self, metrics: Dict[str, Any], patterns: List[str]) -> Optional[int]:
+        enough = (metrics.get("actions_7d", 0) >= 3) or (metrics.get("actions_30d", 0) >= 8)
+        if not enough:
+            return None
+
+        score = 74
+        score -= min(18, int(metrics.get("decision_churn_events_7d", 0) or 0) * 8)
+        score -= min(16, int(metrics.get("execution_pressure_events_7d", 0) or 0) * 7)
+        score -= min(12, int(metrics.get("possible_overrides_7d", 0) or 0) * 5)
+        score -= 8 if "possible_fomo" in patterns else 0
+        score -= 6 if "configuration_churn" in patterns else 0
+        score += min(10, int(metrics.get("skipped_7d", 0) or 0) * 3)
+        score += min(8, int(metrics.get("snoozed_7d", 0) or 0) * 2)
+        score += 4 if "disciplined_waiting" in patterns else 0
+        score += 3 if int(metrics.get("monitor_7d", 0) or 0) > 0 else 0
+        return max(35, min(92, score))
+
+    def _behavioral_risk_flags(self, metrics: Dict[str, Any], patterns: List[str]) -> List[Dict[str, Any]]:
+        flags: List[Dict[str, Any]] = []
+        decisions_7d = int(metrics.get("bot_decisions_generated_7d") or 0)
+        paper_7d = int(metrics.get("paper_executions_7d") or 0)
+        live_preflights_7d = int(metrics.get("live_preflights_7d") or 0)
+        overrides_7d = int(metrics.get("possible_overrides_7d") or 0)
+        decision_churn_7d = int(metrics.get("decision_churn_events_7d") or 0)
+        execution_pressure_7d = int(metrics.get("execution_pressure_events_7d") or 0)
+        configuration_7d = int(metrics.get("configuration_changes_7d") or 0)
+        configuration_30d = int(metrics.get("configuration_changes_30d") or 0)
+        pending_today = int(metrics.get("pending_today") or 0)
+        blocked_context_7d = int(metrics.get("blocked_context_events_7d") or 0)
+
+        if decisions_7d >= 6 or (decision_churn_7d >= 1 and paper_7d + live_preflights_7d >= 2):
+            flags.append({
+                "id": "overtrading_pressure",
+                "label": "Overtrading-druk",
+                "severity": "high" if decisions_7d >= 8 else "medium",
+                "summary": "Je zoekt relatief vaak nieuwe decisions of execution-routes in korte tijd. Finn moet hier meer vertragen dan versnellen.",
+                "safe_counter_move": "Rond eerst open review of monitor-items af voordat je nieuwe decision-requests doet.",
+                "evidence": [
+                    f"{decisions_7d} bot-decisions in 7 dagen",
+                    f"{paper_7d + live_preflights_7d} execution-intentie events in 7 dagen",
+                ],
+            })
+        if "possible_fomo" in patterns:
+            flags.append({
+                "id": "fomo_pressure",
+                "label": "FOMO-druk",
+                "severity": "medium",
+                "summary": "Er zijn signalen van beslisdruk op dezelfde dag als execution-intentie. Finn moet hier extra context en wachttijd afdwingen.",
+                "safe_counter_move": "Gebruik eerst portfolio review of Mission Control voordat je opnieuw op dezelfde dag execution zoekt.",
+                "evidence": [
+                    f"{int(metrics.get('bot_decisions_generated') or 0)} bot-decisions vandaag",
+                    f"{int(metrics.get('paper_executions') or 0) + int(metrics.get('live_preflights') or 0)} execution-intentie events vandaag",
+                ],
+            })
+        if overrides_7d > 0 or execution_pressure_7d > 0:
+            flags.append({
+                "id": "execution_pressure",
+                "label": "Execution pressure",
+                "severity": "high" if overrides_7d >= 2 or execution_pressure_7d >= 2 else "medium",
+                "summary": "Er is recente guardrail-frictie rond execution. Finn hoort hier risk-officer te blijven, niet versnellen.",
+                "safe_counter_move": "Pak eerst de reden van de guardrail op en laat execution pas terugkomen als het blok echt weg is.",
+                "evidence": [
+                    f"{overrides_7d} override-/druksignalen in 7 dagen",
+                    f"{execution_pressure_7d} execution-pressure events in 7 dagen",
+                ],
+            })
+        if configuration_7d >= 6 or configuration_30d >= 10:
+            flags.append({
+                "id": "configuration_drift",
+                "label": "Configuratie-drift",
+                "severity": "medium",
+                "summary": "Je systeem beweegt veel. Finn moet vaker vragen of dit verfijning is of een richtingwissel onder druk.",
+                "safe_counter_move": "Werk in kleine iteraties en laat één wijzigingsronde landen voordat je weer execution of nieuwe bots zoekt.",
+                "evidence": [
+                    f"{configuration_7d} configuratiewijzigingen in 7 dagen",
+                    f"{configuration_30d} configuratiewijzigingen in 30 dagen",
+                ],
+            })
+        if blocked_context_7d > 0 and execution_pressure_7d > 0:
+            flags.append({
+                "id": "frustration_pressure",
+                "label": "Frustratie na blokkade",
+                "severity": "medium",
+                "summary": "Ik zie execution-druk terwijl setup of data blokkeerde. Dat is een nuttige guardrail-situatie, geen groen licht.",
+                "safe_counter_move": "Los eerst de blokkade op; Finn mag hier geen revenge-achtig gedrag suggereren zonder resultaatdata.",
+                "evidence": [
+                    f"{blocked_context_7d} event(s) met blokkerende setup/data-context",
+                    f"{execution_pressure_7d} execution-pressure events in 7 dagen",
+                ],
+            })
+        if pending_today >= 3:
+            flags.append({
+                "id": "review_backlog",
+                "label": "Review-backlog",
+                "severity": "low",
+                "summary": "Er staan meerdere open acties tegelijk. Finn moet de cockpit eerst schoonhouden voordat er nieuwe beslisdruk bijkomt.",
+                "safe_counter_move": "Werk eerst de bovenste open acties af of snooze bewust wat niet voor vandaag is.",
+                "evidence": [f"{pending_today} open Finn-acties vandaag"],
+            })
+
+        return flags[:4]
+
+    def _behavioral_habit_cards(self, metrics: Dict[str, Any], patterns: List[str]) -> List[Dict[str, Any]]:
+        cards: List[Dict[str, Any]] = []
+        waiting_total_7d = int(metrics.get("skipped_7d") or 0) + int(metrics.get("snoozed_7d") or 0) + int(metrics.get("monitor_7d") or 0)
+        review_actions_30d = int(metrics.get("review_actions_30d") or 0)
+        overrides_7d = int(metrics.get("possible_overrides_7d") or 0)
+        decisions_7d = int(metrics.get("bot_decisions_generated_7d") or 0)
+        config_30d = int(metrics.get("configuration_changes_30d") or 0)
+        pending_today = int(metrics.get("pending_today") or 0)
+
+        if waiting_total_7d >= 2 or "disciplined_waiting" in patterns:
+            cards.append({
+                "id": "disciplined_waiting",
+                "label": "Bewust wachten",
+                "status": "strength",
+                "summary": "Je gebruikt skip, snooze of monitor als echte frictie in plaats van direct door te drukken.",
+            })
+        if review_actions_30d >= 4 or waiting_total_7d >= 3:
+            cards.append({
+                "id": "review_anchored",
+                "label": "Review-gedreven operator",
+                "status": "strength",
+                "summary": "Je laat Finn relatief vaak review- en resolve-werk vastleggen voordat je verder gaat.",
+            })
+        if config_30d >= 6 and overrides_7d == 0:
+            cards.append({
+                "id": "measured_iteration",
+                "label": "Meetbare iteratie",
+                "status": "neutral",
+                "summary": "Je verandert best veel aan je systeem, maar zonder veel override-druk. Dat wijst eerder op zoeken naar fit dan op puur impulsief gedrag.",
+            })
+        if decisions_7d >= 6 and waiting_total_7d <= 1:
+            cards.append({
+                "id": "momentum_bias",
+                "label": "Momentum-bias",
+                "status": "watch",
+                "summary": "Je ritme helt richting opnieuw beslissen in plaats van eerst reviewen. Finn moet daar frictie blijven toevoegen.",
+            })
+        if pending_today >= 3:
+            cards.append({
+                "id": "cockpit_overload",
+                "label": "Cockpit wordt vol",
+                "status": "watch",
+                "summary": "Open acties stapelen zich op. Een volle cockpit verhoogt de kans op reactief gedrag.",
+            })
+
+        return cards[:4]
+
+    def _behavioral_month_over_month(self, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        current = int(metrics.get("actions_30d") or 0)
+        previous = int(metrics.get("previous_actions_30d") or 0)
+        delta = current - previous
+        if previous == 0:
+            status = "early_baseline"
+            summary = "Nog geen sterke vorige 30-dagen baseline; Finn bouwt hier nu pas langere geheugencontext op."
+        elif delta > 6:
+            status = "ramping_up"
+            summary = f"Je Finn-activiteit ligt {delta} acties hoger dan de vorige 30 dagen. Kijk of dat gecontroleerde groei is of extra druk."
+        elif delta < -6:
+            status = "cooling_down"
+            summary = f"Je Finn-activiteit ligt {abs(delta)} acties lager dan de vorige 30 dagen. Dat kan rustiger gedrag zijn, of simpelweg minder handelsdruk."
+        else:
+            status = "steady"
+            summary = "Je 30-dagenritme ligt dicht bij de vorige periode. Geen grote gedragsverschuiving zichtbaar."
+        return {
+            "period": "last_30_days_vs_previous_30_days",
+            "status": status,
+            "current": current,
+            "previous": previous,
+            "delta": delta,
+            "summary": summary,
+        }
 
     def _finn_report_period_from_query(self, query: str) -> Dict[str, Any]:
         q = (query or "").lower()
@@ -7117,40 +7322,88 @@ class FinnPlanService:
         return "\n".join([line for line in lines if line])
 
     def _behavioral_profile_from_metrics(self, metrics: Dict[str, Any], patterns: List[str]) -> Dict[str, Any]:
-        if metrics.get("actions_7d", 0) < 3:
+        actions_7d = int(metrics.get("actions_7d") or 0)
+        actions_30d = int(metrics.get("actions_30d") or 0)
+        decision_churn_7d = int(metrics.get("decision_churn_events_7d") or 0)
+        overrides_7d = int(metrics.get("possible_overrides_7d") or 0)
+        live_preflights_7d = int(metrics.get("live_preflights_7d") or 0)
+        paper_7d = int(metrics.get("paper_executions_7d") or 0)
+        review_brakes_7d = int(metrics.get("skipped_7d") or 0) + int(metrics.get("snoozed_7d") or 0) + int(metrics.get("monitor_7d") or 0)
+        configuration_7d = int(metrics.get("configuration_changes_7d") or 0)
+        configuration_30d = int(metrics.get("configuration_changes_30d") or 0)
+
+        if actions_7d < 3 and actions_30d < 8:
             return {
                 "type": "insufficient_history",
                 "label": "Nog te weinig historie",
                 "summary": "Finn heeft meer review-, skip- en decision-data nodig voordat dit profiel stevig is.",
+                "confidence": "low",
             }
-        if metrics.get("possible_overrides_7d", 0) > 0 or "execution_friction" in patterns:
+        if overrides_7d >= 2 and decision_churn_7d >= 1 and (live_preflights_7d + paper_7d) >= 2:
+            return {
+                "type": "pressure_spiker",
+                "label": "Drukpieken onder guardrails",
+                "summary": "Je gedrag laat korte pieken zien waarin execution-druk, nieuwe decisions en guardrail-frictie samenkomen.",
+                "confidence": "medium",
+                "watch_for": "Laat Finn in piekmomenten eerst review of monitor afdwingen.",
+            }
+        if actions_7d >= 6 and decision_churn_7d >= 1 and review_brakes_7d <= 1:
+            return {
+                "type": "overtrading_risk",
+                "label": "Overtrading-risico",
+                "summary": "Je ritme helt richting opnieuw beslissen en execution zoeken zonder genoeg tegenwicht van review-frictie.",
+                "confidence": "medium",
+                "watch_for": "Meer beslissen is niet automatisch beter; bewaak review- en wachtritme.",
+            }
+        if overrides_7d > 0 or "execution_friction" in patterns:
             return {
                 "type": "execution_pressure",
                 "label": "Execution pressure",
                 "summary": "Je week bevat signalen waarbij extra frictie rond execution verstandig blijft.",
+                "confidence": "medium",
+                "watch_for": "Finn moet hier risk-officer blijven, niet alleen facilitator.",
+            }
+        if configuration_30d >= 8 and overrides_7d == 0:
+            return {
+                "type": "exploratory_optimizer",
+                "label": "Zoekt via iteratie",
+                "summary": "Je leert zichtbaar via setup-, strategy- en bot-iteraties. Dat kan sterk zijn, zolang execution niet gaat rennen voor het plan uit.",
+                "confidence": "medium",
+                "watch_for": "Rond iteraties af voordat je nieuwe live frictie opzoekt.",
+            }
+        if review_brakes_7d >= 2 and overrides_7d == 0:
+            return {
+                "type": "review_anchored",
+                "label": "Review-gedreven operator",
+                "summary": "Je laat Finn relatief vaak review of vertraging toevoegen voordat je verder gaat. Dat is een gezonde operatorstijl.",
+                "confidence": "medium",
             }
         if "decision_churn" in patterns:
             return {
                 "type": "decision_heavy",
                 "label": "Decision-heavy",
                 "summary": "Je gebruikt Finn intensief voor decisions; bewaak dat dit geen herhaald zoeken naar bevestiging wordt.",
+                "confidence": "medium",
             }
-        if "configuration_churn" in patterns:
+        if "configuration_churn" in patterns or configuration_7d >= 5:
             return {
                 "type": "configuration_heavy",
                 "label": "Veel configuratiebeweging",
                 "summary": "Je bent je systeem veel aan het aanpassen; rond wijzigingen bewust af voordat je execution zoekt.",
+                "confidence": "medium",
             }
         if "disciplined_waiting" in patterns:
             return {
                 "type": "disciplined_waiting",
                 "label": "Gedisciplineerd wachten",
                 "summary": "Je laat Finn je helpen om niet elke open actie direct door te drukken.",
+                "confidence": "medium",
             }
         return {
             "type": "steady_operator",
             "label": "Stabiele operator",
             "summary": "Geen duidelijke onrustsignalen in de recente Finn-activiteit.",
+            "confidence": "low",
         }
 
     def _behavioral_week_over_week(self, metrics: Dict[str, Any]) -> Dict[str, Any]:
@@ -7161,6 +7414,8 @@ class FinnPlanService:
             ("configuration_changes_7d", "configuratiewijzigingen"),
             ("skipped_7d", "skips"),
             ("snoozed_7d", "later gezet"),
+            ("decision_churn_events_7d", "decision-churn events"),
+            ("execution_pressure_events_7d", "execution-pressure events"),
         ]:
             previous_key = f"previous_{key}"
             current = int(metrics.get(key) or 0)
@@ -7175,14 +7430,34 @@ class FinnPlanService:
                 "direction": "up" if delta > 0 else ("down" if delta < 0 else "flat"),
             })
         meaningful = [item for item in comparisons if item["delta"] != 0]
+        decision_delta = int(metrics.get("decision_churn_events_7d") or 0) - int(metrics.get("previous_decision_churn_events_7d") or 0)
+        pressure_delta = int(metrics.get("execution_pressure_events_7d") or 0) - int(metrics.get("previous_execution_pressure_events_7d") or 0)
+        review_brakes_delta = (
+            (int(metrics.get("skipped_7d") or 0) + int(metrics.get("snoozed_7d") or 0) + int(metrics.get("monitor_7d") or 0))
+            - (int(metrics.get("previous_skipped_7d") or 0) + int(metrics.get("previous_snoozed_7d") or 0) + int(metrics.get("previous_monitor_7d") or 0))
+        )
         if not meaningful:
-            summary = "nog geen duidelijke verandering of te weinig vorige-weekdata."
+            status = "steady"
+            momentum = "flat"
+            summary = "Nog geen duidelijke verandering of te weinig vorige-weekdata."
+        elif decision_delta > 0 or pressure_delta > 0:
+            status = "heating_up"
+            momentum = "rising_pressure"
+            summary = "Je gedragsdruk loopt op vergeleken met vorige week: meer churn of execution-frictie vraagt om extra rem."
+        elif review_brakes_delta > 0 and decision_delta <= 0 and pressure_delta <= 0:
+            status = "stabilising"
+            momentum = "cooling"
+            summary = "Je gebruikt meer review-frictie dan vorige week. Dat oogt als stabieler of bewuster gedrag."
         else:
+            status = "mixed"
+            momentum = "mixed"
             lead = max(meaningful, key=lambda item: abs(item["delta"]))
             direction = "meer" if lead["delta"] > 0 else "minder"
             summary = f"{abs(lead['delta'])} {lead['label']} {direction} dan vorige week."
         return {
             "period": "last_7_days_vs_previous_7_days",
+            "status": status,
+            "momentum": momentum,
             "summary": summary,
             "comparisons": comparisons,
         }
@@ -7219,6 +7494,16 @@ class FinnPlanService:
         wow = reflection.get("week_over_week") or {}
         if wow.get("summary"):
             lines.append(f"Vergeleken met vorige week: {wow.get('summary')}")
+        risk_flags = reflection.get("risk_flags") or []
+        if risk_flags:
+            lines.append("Waar Finn nu extra op moet letten:")
+            for flag in risk_flags[:3]:
+                lines.append(f"- {flag.get('label')}: {flag.get('summary')}")
+        habit_cards = reflection.get("habit_cards") or []
+        if habit_cards:
+            lines.append("Werkstijl die Finn nu ziet:")
+            for card in habit_cards[:3]:
+                lines.append(f"- {card.get('label')}: {card.get('summary')}")
         agent_rhythm = reflection.get("agent_rhythm") or {}
         if agent_rhythm.get("summary"):
             lines.append(f"Agent-ritme: {agent_rhythm.get('summary')}")
@@ -7290,6 +7575,10 @@ class FinnPlanService:
             item.get("behavioral_event") for item in seven_day_items
             if isinstance(item.get("behavioral_event"), dict)
         ]
+        previous_behavioral_events = [
+            item.get("behavioral_event") for item in previous_seven_day_items
+            if isinstance(item.get("behavioral_event"), dict)
+        ]
         possible_overrides = [
             event for event in behavioral_events
             if event.get("type") in {"plan_deviation_attempt", "execution_pressure", "strategy_change_pressure"}
@@ -7306,6 +7595,33 @@ class FinnPlanService:
             event for event in behavioral_events
             if event.get("type") == "execution_pressure"
         ]
+        previous_decision_churn_events = [
+            event for event in previous_behavioral_events
+            if event.get("type") == "decision_churn"
+        ]
+        previous_execution_pressure_events = [
+            event for event in previous_behavioral_events
+            if event.get("type") == "execution_pressure"
+        ]
+        previous_plan_deviation_events = [
+            event for event in previous_behavioral_events
+            if event.get("type") in {"plan_deviation_attempt", "strategy_change_pressure"}
+        ]
+        blocked_context_events = [
+            event for event in possible_overrides
+            if (event.get("context") or {}).get("status") in {"blocked", "data_missing"}
+        ]
+
+        items_30d = []
+        previous_30d = []
+        for item in activity_feed:
+            created_at = self._parse_mission_timestamp(item.get("created_at"))
+            if not created_at:
+                continue
+            if created_at >= now - timedelta(days=30):
+                items_30d.append(item)
+            elif created_at >= now - timedelta(days=60):
+                previous_30d.append(item)
 
         metrics = {
             "actions_today": len(today_items),
@@ -7343,10 +7659,29 @@ class FinnPlanService:
             "previous_snoozed_7d": count_resolution(previous_seven_day_items, "snoozed"),
             "previous_monitor_7d": count_resolution(previous_seven_day_items, "monitor_today"),
             "behavioral_events_7d": len(behavioral_events),
+            "previous_behavioral_events_7d": len(previous_behavioral_events),
             "possible_overrides_7d": len(possible_overrides),
             "plan_deviation_events_7d": len(plan_deviation_events),
             "decision_churn_events_7d": len(decision_churn_events),
             "execution_pressure_events_7d": len(execution_pressure_events),
+            "previous_decision_churn_events_7d": len(previous_decision_churn_events),
+            "previous_execution_pressure_events_7d": len(previous_execution_pressure_events),
+            "previous_plan_deviation_events_7d": len(previous_plan_deviation_events),
+            "blocked_context_events_7d": len(blocked_context_events),
+            "actions_30d": len(items_30d),
+            "previous_actions_30d": len(previous_30d),
+            "configuration_changes_30d": (
+                count_type(items_30d, "create_plan")
+                + count_type(items_30d, "create_strategy")
+                + count_type(items_30d, "create_bot")
+                + count_type(items_30d, "bot_config_update")
+                + count_type(items_30d, "configure_indicator")
+            ),
+            "plan_deviation_events_30d": len([
+                item for item in items_30d
+                if isinstance(item.get("behavioral_event"), dict)
+                and item.get("behavioral_event", {}).get("type") in {"plan_deviation_attempt", "strategy_change_pressure"}
+            ]),
         }
 
         signals: List[Dict[str, Any]] = []
@@ -7376,12 +7711,8 @@ class FinnPlanService:
                     f"{metrics['live_preflights_7d']} live preflight checks in 7 dagen",
                     f"{metrics['possible_overrides_7d']} mogelijke plan-afwijking events",
                 ]
-                blocked_contexts = [
-                    event for event in possible_overrides
-                    if (event.get("context") or {}).get("status") in {"blocked", "data_missing"}
-                ]
-                if blocked_contexts:
-                    evidence.append(f"{len(blocked_contexts)} event(s) terwijl setup/data blokkeerde")
+                if blocked_context_events:
+                    evidence.append(f"{len(blocked_context_events)} event(s) terwijl setup/data blokkeerde")
                 signals.append({
                     "type": "execution_friction",
                     "severity": "medium",
@@ -7445,17 +7776,27 @@ class FinnPlanService:
             )
 
         do_not_do = "Gebruik dit niet als koop- of verkoopadvies; dit is alleen gedragscoaching op basis van je eigen Finn-activiteit."
+        patterns = [signal["type"] for signal in signals]
+        behavioral_profile = self._behavioral_profile_from_metrics(metrics, patterns)
+        trend = self._behavioral_week_over_week(metrics)
+        risk_flags = self._behavioral_risk_flags(metrics, patterns)
+        habit_cards = self._behavioral_habit_cards(metrics, patterns)
         return {
                 "status": status,
                 "period": "today_and_7d",
                 "advice_only": True,
                 "signals": signals,
-                "patterns": [signal["type"] for signal in signals],
+                "patterns": patterns,
                 "behavioral_events": behavioral_events[:5],
                 "metrics": metrics,
+                "behavioral_profile": behavioral_profile,
+                "trend": trend,
+                "risk_flags": risk_flags,
+                "habit_cards": habit_cards,
                 "coaching": {
                     "primary_reflection": primary,
                     "safe_next_step": safe_next_step,
+                    "focus_now": risk_flags[0]["safe_counter_move"] if risk_flags else None,
                     "do_not_do": do_not_do,
                 },
             "evidence_source": "ai_pending_actions",
@@ -7469,10 +7810,26 @@ class FinnPlanService:
             "Ik kijk hier alleen naar je recente Finn-gedrag, niet naar marktvoorspellingen.",
             coaching.get("primary_reflection") or "Ik heb nog geen harde gedragsconclusie.",
         ]
+        profile = insight.get("behavioral_profile") or {}
+        if profile.get("label"):
+            lines.append(f"Profiel: {profile.get('label')} - {profile.get('summary')}")
         if signals:
             lines.append("Signalen:")
             for signal in signals[:3]:
                 lines.append(f"- {signal.get('message')}")
+        trend = insight.get("trend") or {}
+        if trend.get("summary"):
+            lines.append(f"Trend: {trend.get('summary')}")
+        risk_flags = insight.get("risk_flags") or []
+        if risk_flags:
+            lines.append("Gedragsrisico's die Finn nu ziet:")
+            for flag in risk_flags[:3]:
+                lines.append(f"- {flag.get('label')}: {flag.get('summary')}")
+        habit_cards = insight.get("habit_cards") or []
+        if habit_cards:
+            lines.append("Werkstijl die Finn herkent:")
+            for card in habit_cards[:2]:
+                lines.append(f"- {card.get('label')}: {card.get('summary')}")
         lines.append(
             "Vandaag: "
             f"{metrics.get('actions_today', 0)} acties, "
@@ -7489,6 +7846,8 @@ class FinnPlanService:
             f"{metrics.get('plan_deviation_events_7d', 0)} plan-afwijking events, "
             f"{metrics.get('decision_churn_events_7d', 0)} decision-churn events."
         )
+        if coaching.get("focus_now"):
+            lines.append(f"Focus nu: {coaching.get('focus_now')}")
         lines.append(f"Veilige volgende stap: {coaching.get('safe_next_step')}")
         return "\n".join([line for line in lines if line])
 

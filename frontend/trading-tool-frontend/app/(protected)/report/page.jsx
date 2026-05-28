@@ -80,7 +80,7 @@ const FINN_REPORT_OPTIONS = [
     key: 'week',
     label: 'Weekreflectie',
     eyebrow: 'Discipline weekbeeld',
-    prompt: 'Maak een Finn weekrapport',
+    prompt: 'Geef mijn weekreflectie',
     empty: 'Nog te weinig weekhistorie. Finn toont hier pas patronen wanneer er auditdata is.',
   },
   {
@@ -511,6 +511,143 @@ function FinnReflectionBlocks({ analysis }) {
   );
 }
 
+function FinnBehavioralIntelligenceBlocks({ analysis }) {
+  const profile = analysis?.behavioral_profile || null;
+  const trend = analysis?.trend || analysis?.week_over_week || analysis?.month_over_month || null;
+  const riskFlags = Array.isArray(analysis?.risk_flags) ? analysis.risk_flags : [];
+  const habitCards = Array.isArray(analysis?.habit_cards) ? analysis.habit_cards : [];
+  const memoryCards = Array.isArray(analysis?.memory_cards) ? analysis.memory_cards : [];
+  const balanceScore = analysis?.behavioral_balance_score;
+
+  if (!profile && !trend && riskFlags.length === 0 && habitCards.length === 0 && memoryCards.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-5 space-y-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        {profile && (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                <Brain size={13} className="text-blue-600 dark:text-blue-400" />
+                Behavioral profile
+              </span>
+              {profile.confidence && (
+                <span className="rounded-full bg-slate-50 dark:bg-slate-900 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800">
+                  {profile.confidence}
+                </span>
+              )}
+            </div>
+            <div className="mt-3 text-sm font-black text-slate-900 dark:text-slate-100">
+              {profile.label}
+            </div>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700 dark:text-slate-300">
+              {profile.summary}
+            </p>
+            {profile.watch_for && (
+              <p className="mt-3 text-[11px] font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                Let op: {profile.watch_for}
+              </p>
+            )}
+          </div>
+        )}
+
+        {trend && (
+          <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 p-4 text-amber-700 dark:text-amber-300">
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
+                <Activity size={13} />
+                Trend
+              </span>
+              {(trend.status || trend.momentum) && (
+                <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
+                  {trend.status || trend.momentum}
+                </span>
+              )}
+            </div>
+            <p className="mt-3 text-sm font-semibold leading-relaxed">
+              {trend.summary}
+            </p>
+            {balanceScore !== undefined && balanceScore !== null && (
+              <div className="mt-3 rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
+                <div className="text-[9px] font-black uppercase tracking-[0.14em] opacity-70">
+                  Behavioral balance score
+                </div>
+                <div className="mt-1 text-lg font-black">
+                  {balanceScore}/100
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {(riskFlags.length > 0 || memoryCards.length > 0) && (
+          <div className="rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20 p-4 text-rose-700 dark:text-rose-300">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
+              <ShieldAlert size={13} />
+              Waar Finn rem houdt
+            </div>
+            <div className="mt-3 space-y-2">
+              {(riskFlags.length > 0 ? riskFlags : memoryCards).slice(0, 3).map((item) => (
+                <div
+                  key={item.id || item.type || item.label}
+                  className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[10px] font-black uppercase tracking-[0.14em]">
+                      {item.label || item.type}
+                    </span>
+                    {(item.severity || item.confidence) && (
+                      <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                        {item.severity || item.confidence}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs font-semibold leading-relaxed">
+                    {item.summary}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {habitCards.length > 0 && (
+        <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 p-4 text-emerald-700 dark:text-emerald-300">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
+            <CheckCircle2 size={13} />
+            Werkstijl die Finn herkent
+          </div>
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+            {habitCards.slice(0, 4).map((card) => (
+              <div
+                key={card.id || card.label}
+                className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.14em]">
+                    {card.label}
+                  </span>
+                  {card.status && (
+                    <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                      {card.status}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 text-xs font-semibold leading-relaxed">
+                  {card.summary}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FinnReportsPanel() {
   const [activeFinnReport, setActiveFinnReport] = useState(FINN_REPORT_OPTIONS[0].key);
   const [finnReportCache, setFinnReportCache] = useState({});
@@ -567,7 +704,12 @@ function FinnReportsPanel() {
   const separateFrom = finnReport?.state?.separate_from || analysis?.separate_from || 'daily_trading_report';
   const isFinnReport = finnReport?.intent === 'finn_report' && finnReport?.flow === 'finn_report';
   const isBehavioralMemory = finnReport?.intent === 'behavioral_memory' && finnReport?.flow === 'behavioral_memory';
-  const isContractValid = isFinnReport || (activeOption.key === 'behavior' && isBehavioralMemory);
+  const isWeeklyReflection = finnReport?.intent === 'weekly_reflection' && finnReport?.flow === 'weekly_reflection';
+  const isContractValid = (
+    isFinnReport ||
+    (activeOption.key === 'behavior' && isBehavioralMemory) ||
+    (activeOption.key === 'week' && isWeeklyReflection)
+  );
 
   const metricItems = [
     ['Acties', metrics.actions_today ?? metrics.actions_7d ?? metrics.actions_30d],
@@ -689,6 +831,7 @@ function FinnReportsPanel() {
 
                   <FinnAgentController controller={analysis?.agent_controller} />
                   <FinnPortfolioRisk portfolioRisk={portfolioRisk} />
+                  <FinnBehavioralIntelligenceBlocks analysis={analysis} />
                   {analysis?.agent_accountability?.performance_light?.summary && (
                     <div className="mt-5 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 p-4 text-blue-700 dark:text-blue-300">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] mb-2">

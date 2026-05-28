@@ -3029,6 +3029,10 @@ def test_behavioral_insight_flags_decision_churn():
     assert any(signal["type"] == "decision_churn" for signal in insight["signals"])
     assert insight["metrics"]["bot_decisions_generated"] == 3
     assert insight["metrics"]["bot_decisions_generated_7d"] == 3
+    assert insight["behavioral_profile"]["type"] == "decision_heavy"
+    assert insight["trend"]["period"] == "last_7_days_vs_previous_7_days"
+    assert isinstance(insight["risk_flags"], list)
+    assert isinstance(insight["habit_cards"], list)
 
 
 def test_generate_bot_decision_event_marks_open_review_churn():
@@ -3153,6 +3157,10 @@ def test_behavioral_memory_report_uses_30_day_evidence_without_new_writes():
     assert memory["metrics"]["plan_deviation_events_30d"] == 1
     assert memory["memory_policy"]["stores_new_memory"] is False
     assert any(card["type"] == "decision_churn" for card in memory["memory_cards"])
+    assert memory["trend"]["period"] == "last_30_days_vs_previous_30_days"
+    assert "behavioral_profile" in memory
+    assert isinstance(memory["risk_flags"], list)
+    assert isinstance(memory["habit_cards"], list)
     assert "Wat Finn voorzichtig mag onthouden" in message
     assert "Wat Finn nog niet mag concluderen" in message
 
@@ -3230,6 +3238,9 @@ def test_weekly_reflection_summarizes_behavioral_patterns():
     assert reflection["metrics"]["bot_decisions_generated_7d"] == 5
     assert reflection["strengths"]
     assert reflection["watchouts"]
+    assert reflection["behavioral_balance_score"] is not None
+    assert isinstance(reflection["risk_flags"], list)
+    assert isinstance(reflection["habit_cards"], list)
     assert "Weekreflectie" in message
 
 
@@ -3319,8 +3330,57 @@ def test_weekly_reflection_includes_week_over_week_and_profile():
     assert reflection["week_over_week"]["comparisons"][1]["current"] == 5
     assert reflection["week_over_week"]["comparisons"][1]["previous"] == 1
     assert reflection["metrics"]["previous_bot_decisions_generated_7d"] == 1
+    assert reflection["trend"]["period"] == "last_7_days_vs_previous_7_days"
     assert "Profiel deze week" in message
     assert "Vergeleken met vorige week" in message
+
+
+def test_behavioral_profile_can_mark_overtrading_risk():
+    service = _service()
+    activity = [
+        service._mission_activity_item({
+            "id": f"finn-overtrade-{idx}",
+            "status": "executed",
+            "created_at": _utc_now() - timedelta(hours=idx),
+            "payload": {
+                "action": {"type": "generate_bot_decision"},
+                "result": {
+                    "ok": True,
+                    "status": "generated",
+                    "behavioral_event": {
+                        "type": "decision_churn",
+                        "severity": "medium",
+                    } if idx == 0 else None,
+                },
+            },
+        })
+        for idx in range(6)
+    ]
+    activity.extend([
+        service._mission_activity_item({
+            "id": "finn-overtrade-paper",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "paper_execute_bot_decision"},
+                "result": {"ok": True, "status": "executed"},
+            },
+        }),
+        service._mission_activity_item({
+            "id": "finn-overtrade-live",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "live_preflight_bot_decision"},
+                "result": {"ok": True, "status": "ok"},
+            },
+        }),
+    ])
+
+    behavioral = service._build_behavioral_insight_from_activity(activity)
+
+    assert behavioral["behavioral_profile"]["type"] == "overtrading_risk"
+    assert any(flag["id"] == "overtrading_pressure" for flag in behavioral["risk_flags"])
 
 
 def test_weekly_reflection_names_waiting_behavior():
