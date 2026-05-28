@@ -19,6 +19,7 @@ STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
 case "$ENVIRONMENT" in
   production)
     PM2_CONFIG="ecosystem.config.js"
+    PM2_DEPLOY_MODE="${PM2_DEPLOY_MODE:-phased}"
     BACKEND_PORT="${BACKEND_PORT:-8000}"
     FRONTEND_PORT="${FRONTEND_PORT:-5002}"
     CORE_PM2_APPS="${CORE_PM2_APPS:-frontend,backend}"
@@ -28,6 +29,7 @@ case "$ENVIRONMENT" in
     ;;
   staging)
     PM2_CONFIG="ecosystem.staging.config.js"
+    PM2_DEPLOY_MODE="${PM2_DEPLOY_MODE:-reload_then_fallback}"
     BACKEND_PORT="${BACKEND_PORT:-8100}"
     FRONTEND_PORT="${FRONTEND_PORT:-5102}"
     CORE_PM2_APPS="${CORE_PM2_APPS:-frontend-staging,backend-staging}"
@@ -173,15 +175,19 @@ PY
     check_pm2_apps_online
   }
 
-  if pm2 startOrReload $PM2_CONFIG --update-env && check_pm2_apps_online; then
-    echo \"✅ PM2 reload completed with all expected apps online.\"
+  if [ \"$PM2_DEPLOY_MODE\" = \"phased\" ]; then
+    rebuild_pm2_processes
   else
-    rebuild_pm2_processes
-  fi
+    if pm2 startOrReload $PM2_CONFIG --update-env && check_pm2_apps_online; then
+      echo \"✅ PM2 reload completed with all expected apps online.\"
+    else
+      rebuild_pm2_processes
+    fi
 
-  if ! wait_for_backend_health 45; then
-    echo \"⚠️ Backend did not become healthy after reload; retrying with clean PM2 rebuild.\" >&2
-    rebuild_pm2_processes
+    if ! wait_for_backend_health 45; then
+      echo \"⚠️ Backend did not become healthy after reload; retrying with clean PM2 rebuild.\" >&2
+      rebuild_pm2_processes
+    fi
   fi
 
   if ! wait_for_backend_health 120; then
