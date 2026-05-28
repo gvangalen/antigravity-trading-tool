@@ -242,6 +242,106 @@ function FinnAgentController({ controller }) {
   );
 }
 
+function FinnPortfolioRisk({ portfolioRisk }) {
+  if (!portfolioRisk?.status || portfolioRisk.status === 'balanced' || portfolioRisk.status === 'no_assets') {
+    return null;
+  }
+
+  const ignoreToday = Array.isArray(portfolioRisk.ignore_today_assets) ? portfolioRisk.ignore_today_assets.slice(0, 3) : [];
+  const liveHotspots = Array.isArray(portfolioRisk.live_bot_hotspots) ? portfolioRisk.live_bot_hotspots.slice(0, 3) : [];
+  const rankedConflicts = Array.isArray(portfolioRisk.ranked_conflicts) ? portfolioRisk.ranked_conflicts.slice(0, 3) : [];
+
+  if (ignoreToday.length === 0 && liveHotspots.length === 0 && rankedConflicts.length === 0) {
+    return null;
+  }
+
+  const tone = portfolioRisk.status === 'high_attention'
+    ? 'border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300'
+    : 'border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300';
+
+  return (
+    <div className={`mt-5 rounded-2xl border p-4 ${tone}`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
+          <ShieldCheck size={13} />
+          Portfolio Risk
+        </span>
+        <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
+          {portfolioRisk.status}
+        </span>
+      </div>
+      {portfolioRisk.message && (
+        <p className="mt-3 text-sm font-semibold leading-relaxed">
+          {portfolioRisk.message}
+        </p>
+      )}
+
+      {ignoreToday.length > 0 && (
+        <div className="mt-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] opacity-75">
+            Vandaag liever negeren
+          </div>
+          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+            {ignoreToday.map((item) => (
+              <div key={`ignore-${item.asset}`} className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.14em]">{item.asset}</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                    score {item.risk_score}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs font-semibold leading-relaxed">{item.reason}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {liveHotspots.length > 0 && (
+        <div className="mt-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] opacity-75">
+            Live bot-hotspots
+          </div>
+          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+            {liveHotspots.map((item) => (
+              <div key={`hotspot-${item.asset}`} className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.14em]">{item.asset}</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                    {item.live_bot_count} live
+                  </span>
+                </div>
+                <p className="mt-2 text-xs font-semibold leading-relaxed">{item.summary}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {rankedConflicts.length > 0 && (
+        <div className="mt-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] opacity-75">
+            Topconflicten
+          </div>
+          <div className="mt-2 space-y-2">
+            {rankedConflicts.map((item, index) => (
+              <div key={`conflict-${item.asset || 'portfolio'}-${index}`} className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.14em]">{item.asset || 'Portfolio'}</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                    {item.severity || item.risk_level || 'review'}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs font-semibold leading-relaxed">{item.reason}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FinnReportsPanel() {
   const [activeFinnReport, setActiveFinnReport] = useState(FINN_REPORT_OPTIONS[0].key);
   const [finnReportCache, setFinnReportCache] = useState({});
@@ -290,6 +390,7 @@ function FinnReportsPanel() {
   }, [activeFinnReport]);
 
   const analysis = finnReport?.state?.analysis || finnReport?.analysis || {};
+  const portfolioRisk = analysis?.portfolio_risk || finnReport?.state?.portfolio_risk || null;
   const metrics = analysis?.metrics || {};
   const source = formatFinnReportSource(finnReport);
   const summary = getFinnReportSummary(finnReport);
@@ -418,6 +519,7 @@ function FinnReportsPanel() {
                   </div>
 
                   <FinnAgentController controller={analysis?.agent_controller} />
+                  <FinnPortfolioRisk portfolioRisk={portfolioRisk} />
                   {analysis?.agent_accountability?.performance_light?.summary && (
                     <div className="mt-5 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 p-4 text-blue-700 dark:text-blue-300">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] mb-2">

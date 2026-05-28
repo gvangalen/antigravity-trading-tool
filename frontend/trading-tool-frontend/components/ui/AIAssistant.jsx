@@ -453,6 +453,12 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     return state.agent_controller || analysis.agent_controller || message?.agent_controller || null;
   };
 
+  const getMessagePortfolioRisk = (message) => {
+    const state = message?.state || {};
+    const analysis = state.analysis || message?.analysis || {};
+    return state.portfolio_risk || analysis.portfolio_risk || message?.portfolio_risk || null;
+  };
+
   const renderAgentController = (controller, compact = false) => {
     if (!controller?.dominant_agent) return null;
     const score = Number(controller.dominant_score || 0);
@@ -536,6 +542,108 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
             </div>
           ))}
         </div>
+      </div>
+    );
+  };
+
+  const renderPortfolioRisk = (portfolioRisk, compact = false) => {
+    if (!portfolioRisk?.status || portfolioRisk.status === "balanced" || portfolioRisk.status === "no_assets") {
+      return null;
+    }
+
+    const ignoreToday = Array.isArray(portfolioRisk.ignore_today_assets) ? portfolioRisk.ignore_today_assets.slice(0, compact ? 2 : 3) : [];
+    const liveHotspots = Array.isArray(portfolioRisk.live_bot_hotspots) ? portfolioRisk.live_bot_hotspots.slice(0, compact ? 2 : 3) : [];
+    const rankedConflicts = Array.isArray(portfolioRisk.ranked_conflicts) ? portfolioRisk.ranked_conflicts.slice(0, compact ? 2 : 3) : [];
+
+    if (ignoreToday.length === 0 && liveHotspots.length === 0 && rankedConflicts.length === 0) {
+      return null;
+    }
+
+    const tone = portfolioRisk.status === "high_attention"
+      ? "border-rose-100 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300"
+      : portfolioRisk.status === "needs_data" || portfolioRisk.status === "watch" || portfolioRisk.status === "concentrated"
+        ? "border-amber-100 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300"
+        : "border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/45 text-slate-600 dark:text-slate-300";
+
+    return (
+      <div className={`${compact ? "mt-2" : "mt-4"} rounded-xl border px-3 py-3 ${tone}`}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+            <Shield size={11} />
+            Portfolio Risk
+          </span>
+          <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
+            {portfolioRisk.status}
+          </span>
+        </div>
+        {portfolioRisk.message && (
+          <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">
+            {portfolioRisk.message}
+          </p>
+        )}
+
+        {ignoreToday.length > 0 && (
+          <div className="mt-2">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">
+              Vandaag liever negeren
+            </div>
+            <div className="mt-1 space-y-1">
+              {ignoreToday.map((item) => (
+                <div key={`ignore-${item.asset}`} className="rounded-lg bg-white/70 dark:bg-slate-950/35 px-2.5 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest">{item.asset}</span>
+                    <span className="text-[7px] font-black uppercase tracking-widest opacity-70">
+                      score {item.risk_score}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{item.reason}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {liveHotspots.length > 0 && (
+          <div className="mt-2">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">
+              Live bot-hotspots
+            </div>
+            <div className="mt-1 space-y-1">
+              {liveHotspots.map((item) => (
+                <div key={`hotspot-${item.asset}`} className="rounded-lg bg-white/70 dark:bg-slate-950/35 px-2.5 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest">{item.asset}</span>
+                    <span className="text-[7px] font-black uppercase tracking-widest opacity-70">
+                      {item.live_bot_count} live
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{item.summary}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!compact && rankedConflicts.length > 0 && (
+          <div className="mt-2">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">
+              Topconflicten
+            </div>
+            <div className="mt-1 space-y-1">
+              {rankedConflicts.map((item, index) => (
+                <div key={`conflict-${item.asset || "portfolio"}-${index}`} className="rounded-lg bg-white/70 dark:bg-slate-950/35 px-2.5 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest">{item.asset || "Portfolio"}</span>
+                    <span className="text-[7px] font-black uppercase tracking-widest opacity-70">
+                      {item.severity || item.risk_level || "review"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{item.reason}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1787,6 +1895,31 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
               ))}
             </div>
 
+            {(missionControl.summary.portfolio_ignore_today_count > 0 || missionControl.summary.portfolio_live_hotspot_count > 0) && (
+              <div className="grid grid-cols-2 gap-2">
+                {missionControl.summary.portfolio_ignore_today_count > 0 && (
+                  <div className="rounded-xl border border-rose-100 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/20 p-2.5">
+                    <div className="text-sm font-black tabular-nums text-rose-600 dark:text-rose-300">
+                      {missionControl.summary.portfolio_ignore_today_count}
+                    </div>
+                    <div className="text-[8px] font-black uppercase tracking-widest text-rose-500 dark:text-rose-300/80">
+                      Ignore today
+                    </div>
+                  </div>
+                )}
+                {missionControl.summary.portfolio_live_hotspot_count > 0 && (
+                  <div className="rounded-xl border border-amber-100 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 p-2.5">
+                    <div className="text-sm font-black tabular-nums text-amber-700 dark:text-amber-300">
+                      {missionControl.summary.portfolio_live_hotspot_count}
+                    </div>
+                    <div className="text-[8px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-300/80">
+                      Live hotspots
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {missionControl.day_log?.handled_count > 0 && (
               <div className="rounded-xl border border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-2">
                 <div className="flex items-center justify-between gap-3">
@@ -1860,6 +1993,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 {renderAgentVerdicts(missionControl.agent_verdicts, true)}
               </div>
             )}
+
+            {renderPortfolioRisk(missionControl.portfolio_risk, true)}
 
             {Array.isArray(missionControl.workqueue) && missionControl.workqueue.length > 0 && (
               <div className="space-y-2">
@@ -2129,6 +2264,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 }`}>
                 <p className="text-sm leading-relaxed">{m.text}</p>
                 {m.role === "assistant" && m.isComplete !== false && renderAgentController(getMessageAgentController(m))}
+                {m.role === "assistant" && m.isComplete !== false && renderPortfolioRisk(getMessagePortfolioRisk(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderAgentVerdicts(getMessageAgentVerdicts(m))}
                 {m.role === "assistant" && m.isComplete !== false && (() => {
                   const suggestions = getMessageFollowUpActions(m);

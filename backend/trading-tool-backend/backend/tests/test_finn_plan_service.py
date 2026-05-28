@@ -1662,10 +1662,15 @@ def test_daily_coach_portfolio_scope_only_for_generic_briefing_prompts():
     assert service._should_build_portfolio_daily_coach("Waar zit mijn grootste portfolio risico?", {"symbol": "BTC"}) is True
     assert service.looks_like_daily_coach_request("Welke asset vraagt vandaag aandacht?") is True
     assert service.looks_like_daily_coach_request("Heb ik te veel exposure?") is True
+    assert service.looks_like_daily_coach_request("Welke assets moet ik vandaag negeren?") is True
+    assert service._should_build_portfolio_daily_coach("Welke assets moet ik vandaag negeren?", {"symbol": "BTC"}) is True
+    assert service.looks_like_daily_coach_request("Welke live bots vragen vandaag review?") is True
+    assert service._should_build_portfolio_daily_coach("Welke live bots vragen vandaag review?", {"symbol": "BTC"}) is True
     assert service.looks_like_daily_coach_request("Welke bots en plannen stapelen risico?") is True
     assert service._should_build_portfolio_daily_coach("Welke bots en plannen stapelen risico?", {}) is True
     assert service.looks_like_daily_coach_request("Welke setups conflicteren?") is True
     assert service._should_build_portfolio_daily_coach("Bots met overlappende budgetten", {}) is True
+    assert service._portfolio_question_focus("Welke assets moet ik vandaag negeren?") == "ignore_today"
     assert service._portfolio_question_focus("Welke setups conflicteren?") == "setup_conflicts"
     assert service._portfolio_question_focus("Bots met overlappende budgetten") == "budget_overlap"
     assert service._portfolio_question_focus("DCA en trade") == "setup_conflicts"
@@ -1789,11 +1794,17 @@ def test_portfolio_risk_detects_concentration_and_bot_conflicts():
     assert "high_exposure" in btc["risk_flags"]
     assert "multiple_bots" in btc["risk_flags"]
     assert any(conflict["type"] == "blocked_setup_with_bot" for conflict in risk["conflicts"])
+    assert risk["ranked_conflicts"][0]["asset"] == "BTC"
+    assert risk["ranked_conflicts"][0]["live_bot_count"] == 1
+    assert risk["live_bot_hotspots"][0]["asset"] == "BTC"
+    assert risk["live_bot_hotspots"][0]["live_bot_count"] == 1
     assert any(verdict["agent"] == "execution_agent" for verdict in analysis["agent_verdicts"])
     assert any(verdict["agent"] == "risk_agent" and verdict["status"] == "high_attention" for verdict in analysis["agent_verdicts"])
     assert any(warning["asset"] == "BTC" for warning in risk["concentration_warnings"])
     assert risk["asset_priority"][0]["asset"] == "BTC"
     assert risk["asset_priority"][0]["priority"] == "eerst oplossen"
+    assert risk["ignore_today_assets"][0]["asset"] == "BTC"
+    assert risk["ignore_today_assets"][0]["reason"] == "setup blokkeert nog"
     assert risk["risk_stacks"][0]["asset"] == "BTC"
     assert "setup geblokkeerd" in risk["risk_stacks"][0]["factors"]
     assert "hoge exposure" in risk["risk_stacks"][0]["factors"]
@@ -1845,6 +1856,8 @@ def test_mission_control_adds_portfolio_risk_stack_to_workqueue():
     assert "hoge exposure" in stack_item["risk_factors"]
     assert stack_item["next_best_action"]["prompt"] == "Welke bots en plannen stapelen risico voor BTC?"
     assert mission["workqueue_groups"][0]["key"] == "review"
+    assert mission["summary"]["portfolio_ignore_today_count"] == 1
+    assert mission["summary"]["portfolio_live_hotspot_count"] == 0
 
 
 def test_portfolio_risk_detects_setup_conflicts_and_budget_overlap():
@@ -1898,8 +1911,64 @@ def test_portfolio_risk_detects_setup_conflicts_and_budget_overlap():
     assert "mixed_setup_types_same_asset" in conflict_types
     assert "bot_budget_overlap" in conflict_types
     assert "active_plan_high_exposure" in conflict_types
+    assert risk["ignore_today_assets"][0]["asset"] == "BTC"
+    assert risk["ignore_today_assets"][0]["reason"] in {
+        "botbudgetten stapelen boven portfolio-equity",
+        "DCA en trade-intentie lopen door elkaar",
+    }
     assert "DCA en trade tegelijk" in risk["risk_stacks"][0]["factors"]
     assert "botbudget boven equity" in risk["risk_stacks"][0]["factors"]
+    assert risk["ranked_conflicts"][0]["priority_rank"] >= risk["ranked_conflicts"][-1]["priority_rank"]
+
+
+def test_portfolio_risk_detects_live_bot_and_strategy_conflicts():
+    service = _service()
+    blocked_btc = {
+        "asset": "BTC",
+        "stance": "wait_for_plan",
+        "has_scores": True,
+        "setup": {"id": 12, "name": "BTC DCA"},
+        "blockers": [{"category": "macro", "score": 10, "range": [30, 70]}],
+        "bot_today": {"decision_count": 1},
+        "indicator_summary": {"warnings": []},
+        "data_readiness": {"status": "ready", "config_gaps": []},
+        "active_strategy": {"active": True, "strategy": {"id": 88, "name": "BTC Active Ladder"}},
+    }
+
+    analysis = service._build_portfolio_daily_coach_analysis(
+        [blocked_btc],
+        {
+            "global": {
+                "total_equity": 1000,
+                "current_position_value": 800,
+                "cash_balance": 200,
+                "allocations_pct": {"Cash": 20.0, "BTC": 80.0},
+            },
+            "bots": [
+                {"bot_id": 1, "symbol": "BTC", "position_value": 400, "budget_total": 500, "is_active": True, "is_live": True},
+                {"bot_id": 2, "symbol": "BTC", "position_value": 400, "budget_total": 500, "is_active": True, "is_live": True},
+            ],
+        },
+    )
+    risk = analysis["portfolio_risk"]
+    conflict_types = {conflict["type"] for conflict in risk["conflicts"]}
+    prompts = {action["prompt"] for action in analysis["follow_up_actions"]}
+
+    assert "multiple_live_bots" in risk["asset_risk"][0]["risk_flags"]
+    assert "live_strategy_conflict" in risk["asset_risk"][0]["risk_flags"]
+    assert "multiple_live_bots_same_asset" in conflict_types
+    assert "live_strategy_conflict" in conflict_types
+    assert risk["live_bot_hotspots"][0]["asset"] == "BTC"
+    assert "meerdere live bots" in risk["live_bot_hotspots"][0]["summary"]
+    assert risk["ignore_today_assets"][0]["reason"] == "meerdere live bots sturen op dezelfde asset"
+    assert "Welke live bots vragen vandaag review voor BTC?" in prompts
+    assert "Welke bots en plannen stapelen risico voor BTC?" in prompts
+
+    mission = service._build_mission_control_from_daily_analysis(analysis)
+    hotspot_item = next(item for item in mission["workqueue"] if item["type"] == "portfolio_live_hotspot")
+    assert hotspot_item["asset"] == "BTC"
+    assert hotspot_item["resolve_state"] == "monitor_today"
+    assert mission["summary"]["portfolio_live_hotspot_count"] == 1
 
 
 def test_portfolio_budget_overlap_is_flagged_when_equity_is_zero():
@@ -2007,6 +2076,55 @@ def test_portfolio_exposure_question_explains_overallocated_negative_cash():
     assert "negatief" in message
     assert "overallocatie" in message
     assert "overlappende botbudgetten" in message
+
+
+def test_portfolio_ignore_today_question_lists_assets_and_reentry_condition():
+    service = _service()
+    blocked_btc = {
+        "asset": "BTC",
+        "stance": "wait_for_plan",
+        "has_scores": True,
+        "setup": {"id": 2, "name": "BTC DCA"},
+        "blockers": [{"category": "macro", "score": 10, "range": [30, 70]}],
+        "bot_today": {"decision_count": 0},
+        "indicator_summary": {"warnings": []},
+        "data_readiness": {"status": "ready", "config_gaps": []},
+    }
+    scoreless_sol = {
+        "asset": "SOL",
+        "stance": "wait_for_scores",
+        "has_scores": False,
+        "setup": {"id": 3, "name": "SOL DCA"},
+        "blockers": [],
+        "bot_today": {"decision_count": 0},
+        "indicator_summary": {"warnings": []},
+        "data_readiness": {"status": "onboarding_incomplete", "config_gaps": ["macro"]},
+    }
+
+    analysis = service._build_portfolio_daily_coach_analysis(
+        [blocked_btc, scoreless_sol],
+        {
+            "global": {
+                "total_equity": 1000,
+                "current_position_value": 400,
+                "cash_balance": 600,
+                "allocations_pct": {"Cash": 60.0, "BTC": 40.0},
+            },
+            "bots": [
+                {"bot_id": 1, "symbol": "BTC", "position_value": 400, "budget_total": 500, "is_active": True, "is_live": False},
+            ],
+        },
+    )
+    analysis["question_focus"] = "ignore_today"
+
+    message = service._portfolio_daily_coach_message(analysis)
+
+    assert analysis["portfolio_risk"]["ignore_today_assets"][0]["asset"] == "BTC"
+    assert any(item["asset"] == "SOL" for item in analysis["portfolio_risk"]["ignore_today_assets"])
+    assert "Vandaag liever negeren:" in message
+    assert "BTC: setup blokkeert nog." in message
+    assert "SOL: daily score of datalaag is nog niet betrouwbaar." in message
+    assert "Opnieuw oppakken als:" in message
 
 
 def test_daily_score_fetch_uses_runtime_refresh_when_raw_scores_are_missing(monkeypatch):

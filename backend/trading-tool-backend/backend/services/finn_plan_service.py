@@ -560,6 +560,11 @@ class FinnPlanService:
             "grootste portfolio risico", "grootste risico", "portfolio risico",
             "portefeuille risico", "portfolio exposure", "te veel exposure",
             "risico per asset", "welke asset vraagt", "welke assets vragen",
+            "welke assets moet ik vandaag negeren", "welke asset moet ik vandaag negeren",
+            "welke assets laat ik vandaag liggen", "welke asset laat ik vandaag liggen",
+            "welke assets negeren", "assets negeren", "assets laten liggen",
+            "welke live bots botsen", "live bots botsen", "live bots conflict",
+            "live bot conflict", "welke live bots vragen review",
             "welke bots stapelen", "welke plannen stapelen", "stapelen risico",
             "welke setups conflicteren", "conflicterende setups", "bots met overlappende budgetten",
             "overlappende budgetten", "dca en trade",
@@ -3887,6 +3892,18 @@ class FinnPlanService:
             "welke bots stapelen",
             "welke plannen stapelen",
             "stapelen risico",
+            "welke assets moet ik vandaag negeren",
+            "welke asset moet ik vandaag negeren",
+            "welke assets laat ik vandaag liggen",
+            "welke asset laat ik vandaag liggen",
+            "assets negeren",
+            "assets laten liggen",
+            "welke live bots vragen review",
+            "welke live bots vragen vandaag review",
+            "welke live bots botsen",
+            "live bots botsen",
+            "live bots conflict",
+            "live bot conflict",
             "welke setups conflicteren",
             "conflicterende setups",
             "bots met overlappende budgetten",
@@ -3897,6 +3914,25 @@ class FinnPlanService:
 
     def _portfolio_question_focus(self, query: str) -> str:
         q = (query or "").lower()
+        if any(phrase in q for phrase in [
+            "welke assets moet ik vandaag negeren",
+            "welke asset moet ik vandaag negeren",
+            "welke assets laat ik vandaag liggen",
+            "welke asset laat ik vandaag liggen",
+            "assets negeren",
+            "asset negeren",
+            "assets laten liggen",
+            "asset laten liggen",
+        ]):
+            return "ignore_today"
+        if any(phrase in q for phrase in [
+            "welke live bots botsen",
+            "live bots botsen",
+            "live bots conflict",
+            "live bot conflict",
+            "welke live bots vragen review",
+        ]):
+            return "live_bot_conflicts"
         if any(phrase in q for phrase in ["te veel exposure", "portfolio exposure", "exposure", "allocatie", "allocation"]):
             return "exposure"
         if any(phrase in q for phrase in ["overlappende budgetten", "bots met overlappende budgetten", "budget overlap", "budgetten"]):
@@ -4567,6 +4603,10 @@ class FinnPlanService:
             suggested_actions.append(
                 f"Bekijk portfolio-risico voor {portfolio_risk.get('top_asset')}: {portfolio_risk.get('top_reason')}"
             )
+        ignore_today_assets = portfolio_risk.get("ignore_today_assets") or []
+        if ignore_today_assets:
+            assets = ", ".join(item.get("asset") for item in ignore_today_assets[:3] if item.get("asset"))
+            suggested_actions.append(f"Laat vandaag liever liggen: {assets}.")
         for action in portfolio_readiness.get("suggested_actions") or []:
             if action not in suggested_actions:
                 suggested_actions.append(action)
@@ -4579,7 +4619,7 @@ class FinnPlanService:
         else:
             reasons.append(f"{len(asset_analyses)} setup-assets gecontroleerd.")
             reasons.append(f"{len(actionable_assets)} actief, {len(blocked_assets)} geblokkeerd, {len(scoreless_assets)} zonder daily scores.")
-        follow_up_actions = self._portfolio_follow_up_actions(ranked, portfolio_readiness)
+        follow_up_actions = self._portfolio_follow_up_actions(ranked, portfolio_readiness, portfolio_risk)
         agent_verdicts = self._build_portfolio_agent_verdicts(
             ranked,
             portfolio_risk,
@@ -4729,6 +4769,8 @@ class FinnPlanService:
             bot_count = len(asset_bots)
             live_bot_count = len([bot for bot in asset_bots if bot.get("is_live")])
             active_bot_count = len([bot for bot in asset_bots if bot.get("is_active")])
+            active_strategy = item.get("active_strategy") or {}
+            strategy_active = bool(active_strategy.get("active"))
 
             risk_flags = []
             if item.get("stance") == "wait_for_plan":
@@ -4745,6 +4787,8 @@ class FinnPlanService:
                 risk_flags.append("multiple_bots")
             if live_bot_count:
                 risk_flags.append("live_bot")
+            if live_bot_count > 1:
+                risk_flags.append("multiple_live_bots")
             if setup_context.get("setup_count", 0) > 1:
                 risk_flags.append("multiple_setups")
             if setup_context.get("mixed_setup_types"):
@@ -4755,6 +4799,13 @@ class FinnPlanService:
             )
             if budget_overlap:
                 risk_flags.append("budget_overlap")
+            if strategy_active and live_bot_count and (
+                item.get("stance") != "plan_is_active"
+                or bool(blockers)
+                or setup_context.get("mixed_setup_types")
+                or budget_overlap
+            ):
+                risk_flags.append("live_strategy_conflict")
 
             score = 0
             if item.get("stance") == "wait_for_plan":
@@ -4773,6 +4824,8 @@ class FinnPlanService:
             score += min(max(bot_count - 1, 0) * 8, 16)
             if live_bot_count:
                 score += 10
+            if live_bot_count > 1:
+                score += 12
             if readiness.get("config_gaps"):
                 score += 8
             if setup_context.get("setup_count", 0) > 1:
@@ -4781,6 +4834,8 @@ class FinnPlanService:
                 score += 12
             if budget_overlap:
                 score += 15
+            if "live_strategy_conflict" in risk_flags:
+                score += 18
             score = min(score, 100)
             risk_level = "high" if score >= 75 else "medium" if score >= 50 else "low"
 
@@ -4797,6 +4852,13 @@ class FinnPlanService:
                     "asset": asset,
                     "severity": "medium",
                     "reason": f"{asset} heeft {bot_count} bot-configuraties; controleer overlap en budgetstapeling.",
+                })
+            if live_bot_count > 1:
+                conflicts.append({
+                    "type": "multiple_live_bots_same_asset",
+                    "asset": asset,
+                    "severity": "high",
+                    "reason": f"{asset} heeft {live_bot_count} live bots tegelijk; review execution-volgorde en dubbele exposure.",
                 })
             if setup_context.get("setup_count", 0) > 1:
                 conflicts.append({
@@ -4823,6 +4885,16 @@ class FinnPlanService:
                     "asset": asset,
                     "severity": "high" if total_equity <= 0 or budget_eur >= total_equity * 1.5 else "medium",
                     "reason": f"{asset} botbudgetten tellen op tot EUR {round(budget_eur, 2)}, tegenover {equity_label}.",
+                })
+            if "live_strategy_conflict" in risk_flags:
+                conflicts.append({
+                    "type": "live_strategy_conflict",
+                    "asset": asset,
+                    "severity": "high" if live_bot_count > 1 or item.get("stance") == "wait_for_plan" else "medium",
+                    "reason": (
+                        f"{asset} heeft een actieve strategie én {live_bot_count} live bot(s), "
+                        "maar de setup/risklaag is niet schoon genoeg om execution blind te vertrouwen."
+                    ),
                 })
             if item.get("stance") == "plan_is_active" and allocation_pct is not None and allocation_pct >= 60:
                 conflicts.append({
@@ -4887,6 +4959,8 @@ class FinnPlanService:
                 stack_factors.append("meerdere bots")
             if "live_bot" in risk_flags:
                 stack_factors.append("live bot actief")
+            if "multiple_live_bots" in risk_flags:
+                stack_factors.append("meerdere live bots")
             if "data_gap" in risk_flags:
                 stack_factors.append("dunne datalaag")
             if "multiple_setups" in risk_flags:
@@ -4895,6 +4969,8 @@ class FinnPlanService:
                 stack_factors.append("DCA en trade tegelijk")
             if "budget_overlap" in risk_flags:
                 stack_factors.append("botbudget boven equity")
+            if "live_strategy_conflict" in risk_flags:
+                stack_factors.append("live bot en strategie wringen")
             if len(stack_factors) >= 2:
                 risk_stacks.append({
                     "asset": asset,
@@ -4907,11 +4983,25 @@ class FinnPlanService:
 
         asset_risk = sorted(asset_risk, key=lambda item: (-item["risk_score"], item["asset"]))
         risk_stacks = sorted(risk_stacks, key=lambda item: (-item["risk_score"], item["asset"]))
+        ranked_conflicts = self._portfolio_ranked_conflicts(conflicts, asset_risk)
+        live_bot_hotspots = self._portfolio_live_bot_hotspots(asset_risk)
         high_assets = [item for item in asset_risk if item["risk_level"] == "high"]
         medium_assets = [item for item in asset_risk if item["risk_level"] == "medium"]
+        ignore_today_assets = self._portfolio_ignore_today_assets(asset_risk)
+        hard_ignore_assets = [
+            item for item in ignore_today_assets
+            if item.get("risk_level") == "high"
+            or item.get("reason") not in {
+                "setup blokkeert nog",
+                "daily score of datalaag is nog niet betrouwbaar",
+            }
+        ]
         if not asset_analyses:
             status = "no_assets"
             message = "Geen setups gevonden om portfolio-risk te bepalen."
+        elif hard_ignore_assets:
+            status = "high_attention"
+            message = "Er zijn assets die je vandaag beter laat liggen totdat de risk stack rustiger is."
         elif high_assets or conflicts:
             status = "high_attention"
             message = "Er zijn portfolio-risico's die vandaag aandacht vragen."
@@ -4952,10 +5042,146 @@ class FinnPlanService:
             "top_reason": top.get("top_reason"),
             "asset_priority": asset_priority,
             "asset_risk": asset_risk,
+            "ignore_today_assets": ignore_today_assets,
+            "ranked_conflicts": ranked_conflicts,
+            "live_bot_hotspots": live_bot_hotspots,
             "risk_stacks": risk_stacks,
             "concentration_warnings": concentration_warnings,
             "conflicts": conflicts,
         }
+
+    def _portfolio_ignore_today_assets(self, asset_risk: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        ignore_today = []
+
+        for item in asset_risk:
+            flags = set(item.get("risk_flags") or [])
+            asset = item.get("asset")
+            reason = None
+            unblock_condition = None
+
+            if "multiple_live_bots" in flags:
+                reason = "meerdere live bots sturen op dezelfde asset"
+                unblock_condition = "Beperk eerst welke live bot vandaag leidend is voordat je verder uitvoert."
+            elif "live_strategy_conflict" in flags:
+                reason = "live bot en strategie-intentie lopen niet netjes in lijn"
+                unblock_condition = "Maak eerst de strategie-intentie en live execution-lagen weer consistent."
+            elif "blocked_setup" in flags:
+                reason = "setup blokkeert nog"
+                unblock_condition = "Wacht tot de setup niet meer blokkeert voordat je deze asset opnieuw oppakt."
+            elif "score_missing" in flags or "data_gap" in flags:
+                reason = "daily score of datalaag is nog niet betrouwbaar"
+                unblock_condition = "Ververs eerst daily scores of rond de ontbrekende datalaag af."
+            elif "budget_overlap" in flags:
+                reason = "botbudgetten stapelen boven portfolio-equity"
+                unblock_condition = "Maak eerst botbudgetten en portfolio-equity consistent."
+            elif "mixed_setup_types" in flags:
+                reason = "DCA en trade-intentie lopen door elkaar"
+                unblock_condition = "Kies eerst welke setup-intent vandaag leidend is."
+            elif "high_exposure" in flags and ("multiple_bots" in flags or (item.get("live_bot_count") or 0) > 0):
+                reason = "exposure is al hoog terwijl meerdere botlagen actief zijn"
+                unblock_condition = "Review eerst open exposure en actieve bots voordat je opschaalt."
+
+            if not reason:
+                continue
+
+            ignore_today.append({
+                "asset": asset,
+                "risk_score": item.get("risk_score"),
+                "risk_level": item.get("risk_level"),
+                "reason": reason,
+                "top_reason": item.get("top_reason"),
+                "unblock_condition": unblock_condition,
+                "next_best_action": item.get("next_best_action"),
+            })
+
+        return sorted(
+            ignore_today,
+            key=lambda entry: (
+                -(self._to_float(entry.get("risk_score")) or 0.0),
+                str(entry.get("asset") or ""),
+            ),
+        )
+
+    def _portfolio_ranked_conflicts(
+        self,
+        conflicts: List[Dict[str, Any]],
+        asset_risk: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        asset_lookup = {
+            str(item.get("asset") or "").upper(): item
+            for item in (asset_risk or [])
+            if item.get("asset")
+        }
+        severity_rank = {"high": 3, "medium": 2, "low": 1}
+        ranked = []
+
+        for conflict in conflicts or []:
+            asset = str(conflict.get("asset") or "").upper()
+            risk = asset_lookup.get(asset) or {}
+            severity = str(conflict.get("severity") or risk.get("risk_level") or "low").lower()
+            ranked.append({
+                **conflict,
+                "asset": asset or conflict.get("asset"),
+                "risk_score": risk.get("risk_score"),
+                "risk_level": risk.get("risk_level"),
+                "live_bot_count": risk.get("live_bot_count"),
+                "priority_rank": severity_rank.get(severity, 0),
+            })
+
+        return sorted(
+            ranked,
+            key=lambda item: (
+                -int(item.get("priority_rank") or 0),
+                -(self._to_float(item.get("risk_score")) or 0.0),
+                str(item.get("asset") or ""),
+            ),
+        )
+
+    def _portfolio_live_bot_hotspots(self, asset_risk: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        hotspots = []
+
+        for item in asset_risk or []:
+            live_bot_count = int(item.get("live_bot_count") or 0)
+            if live_bot_count <= 0:
+                continue
+            if item.get("risk_level") == "low" and "multiple_bots" not in (item.get("risk_flags") or []):
+                continue
+
+            flags = item.get("risk_flags") or []
+            summary_bits = []
+            if "high_exposure" in flags:
+                summary_bits.append("hoge exposure")
+            elif "elevated_exposure" in flags:
+                summary_bits.append("verhoogde exposure")
+            if "multiple_bots" in flags:
+                summary_bits.append("meerdere bots")
+            if "multiple_live_bots" in flags:
+                summary_bits.append("meerdere live bots")
+            if "blocked_setup" in flags:
+                summary_bits.append("setup blokkeert")
+            if "budget_overlap" in flags:
+                summary_bits.append("budget overlap")
+            if "live_strategy_conflict" in flags:
+                summary_bits.append("strategie wringt met live bot")
+
+            hotspots.append({
+                "asset": item.get("asset"),
+                "risk_score": item.get("risk_score"),
+                "risk_level": item.get("risk_level"),
+                "live_bot_count": live_bot_count,
+                "reason": item.get("top_reason"),
+                "summary": ", ".join(summary_bits[:3]) if summary_bits else "live bot vraagt review",
+                "next_best_action": item.get("next_best_action"),
+            })
+
+        return sorted(
+            hotspots,
+            key=lambda item: (
+                -(self._to_float(item.get("risk_score")) or 0.0),
+                -int(item.get("live_bot_count") or 0),
+                str(item.get("asset") or ""),
+            ),
+        )
 
     def _portfolio_setup_context(self, setups_by_asset: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
         context: Dict[str, Dict[str, Any]] = {}
@@ -5052,9 +5278,11 @@ class FinnPlanService:
         self,
         asset_analyses: List[Dict[str, Any]],
         readiness: Dict[str, Any],
+        portfolio_risk: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         actions = []
         first_asset = (asset_analyses[0].get("asset") if asset_analyses else "BTC") or "BTC"
+        portfolio_risk = portfolio_risk or {}
         if readiness.get("config_gap_assets"):
             actions.append({
                 "type": "chat_prompt",
@@ -5092,6 +5320,33 @@ class FinnPlanService:
                 "handoff": "daily_coach",
                 "requires_confirmation": False,
             })
+            top_ignore = (portfolio_risk.get("ignore_today_assets") or [None])[0]
+            if top_ignore and top_ignore.get("asset"):
+                actions.append({
+                    "type": "chat_prompt",
+                    "label": "Assets vandaag laten liggen",
+                    "prompt": "Welke assets moet ik vandaag negeren?",
+                    "handoff": "daily_coach",
+                    "requires_confirmation": False,
+                })
+            top_live_hotspot = (portfolio_risk.get("live_bot_hotspots") or [None])[0]
+            if top_live_hotspot and top_live_hotspot.get("asset"):
+                actions.append({
+                    "type": "chat_prompt",
+                    "label": "Live bots reviewen",
+                    "prompt": f"Welke live bots vragen vandaag review voor {top_live_hotspot.get('asset')}?",
+                    "handoff": "daily_coach",
+                    "requires_confirmation": False,
+                })
+            top_conflict = (portfolio_risk.get("ranked_conflicts") or [None])[0]
+            if top_conflict and top_conflict.get("asset"):
+                actions.append({
+                    "type": "chat_prompt",
+                    "label": "Portfolio-conflict uitleg",
+                    "prompt": f"Welke bots en plannen stapelen risico voor {top_conflict.get('asset')}?",
+                    "handoff": "daily_coach",
+                    "requires_confirmation": False,
+                })
             actions.append({
                 "type": "confirmable_action_prompt",
                 "label": "Bot-decision maken",
@@ -5099,7 +5354,7 @@ class FinnPlanService:
                 "handoff": "bot_decision",
                 "requires_confirmation": True,
             })
-        return actions[:6]
+        return actions[:8]
 
     async def build_mission_control_response(
         self,
@@ -7085,6 +7340,8 @@ class FinnPlanService:
         portfolio_risk = analysis.get("portfolio_risk") or {}
         for stack in (portfolio_risk.get("risk_stacks") or [])[:3]:
             workqueue.append(self._mission_workqueue_from_portfolio_risk_stack(stack))
+        for hotspot in (portfolio_risk.get("live_bot_hotspots") or [])[:2]:
+            workqueue.append(self._mission_workqueue_from_live_bot_hotspot(hotspot))
 
         open_actions = self._dedupe_mission_actions(open_actions)[:8]
         for action in open_actions:
@@ -7107,6 +7364,8 @@ class FinnPlanService:
                 "workqueue_count": len(workqueue),
                 "portfolio_risk_status": portfolio_risk.get("status"),
                 "portfolio_risk_top_asset": portfolio_risk.get("top_asset"),
+                "portfolio_ignore_today_count": len(portfolio_risk.get("ignore_today_assets") or []),
+                "portfolio_live_hotspot_count": len(portfolio_risk.get("live_bot_hotspots") or []),
                 "posture": "action_required" if open_actions or blocked_count or data_missing_count else "stable",
             },
             "workqueue": workqueue,
@@ -7163,6 +7422,52 @@ class FinnPlanService:
             "risk_factors": stack.get("factors") or [],
         }
 
+    def _mission_workqueue_from_live_bot_hotspot(self, hotspot: Dict[str, Any]) -> Dict[str, Any]:
+        asset = hotspot.get("asset") or "portfolio"
+        item_id = f"portfolio_live_hotspot:{asset}"
+        risk_score = self._to_float(hotspot.get("risk_score")) or 0.0
+        priority = "high" if risk_score >= 75 else "medium"
+        priority_rank = 6 if priority == "high" else 16
+        next_action = {
+            "type": "chat_prompt",
+            "label": f"{asset} live bots review",
+            "prompt": f"Welke live bots vragen vandaag review voor {asset}?",
+            "handoff": "daily_coach",
+            "requires_confirmation": False,
+        }
+        freshness = self._mission_freshness(None, fallback_status="unknown")
+        return {
+            "id": item_id,
+            "type": "portfolio_live_hotspot",
+            "priority": priority,
+            "priority_rank": priority_rank,
+            "sort_rank": priority_rank,
+            "status": "live_hotspot",
+            "resolve_state": self._mission_resolve_state("portfolio_live_hotspot", "live_hotspot", next_action, freshness=freshness),
+            "asset": asset,
+            "title": f"{asset} live bots vragen review",
+            "reason": hotspot.get("summary") or hotspot.get("reason"),
+            "next_best_action": next_action,
+            "resolve_action": self._mission_resolve_action(
+                item_id,
+                "monitor_today",
+                asset=asset,
+                label="Vandaag monitoren",
+                reason=hotspot.get("summary") or hotspot.get("reason"),
+                source_ids={"asset": asset},
+            ),
+            "resolve_actions": self._mission_resolve_actions(
+                item_id,
+                asset=asset,
+                reason=hotspot.get("summary") or hotspot.get("reason"),
+                source_ids={"asset": asset},
+            ),
+            "freshness": freshness,
+            "source_ids": {"asset": asset},
+            "risk_score": hotspot.get("risk_score"),
+            "live_bot_count": hotspot.get("live_bot_count"),
+        }
+
     def _mission_workqueue_labels(self) -> Dict[str, str]:
         return {
             "first": "Eerst dit",
@@ -7176,7 +7481,7 @@ class FinnPlanService:
             return "first"
         if state in {"needs_user_confirmation", "waiting_for_data"} or (item.get("freshness") or {}).get("status") == "stale":
             return "first"
-        if state == "monitor_today" or item.get("type") in {"blocked_plan", "blocker_explanation", "portfolio_risk_stack"}:
+        if state == "monitor_today" or item.get("type") in {"blocked_plan", "blocker_explanation", "portfolio_risk_stack", "portfolio_live_hotspot"}:
             return "review"
         return "later"
 
@@ -8156,6 +8461,20 @@ class FinnPlanService:
             if exposure_note:
                 lines.append(f"- {exposure_note}")
             lines.append(f"- {portfolio_risk.get('message')}")
+            ignore_today_assets = portfolio_risk.get("ignore_today_assets") or []
+            if ignore_today_assets:
+                lines.append("Vandaag liever negeren:")
+                for item in ignore_today_assets[:3]:
+                    lines.append(f"- {item.get('asset')}: {item.get('reason')}.")
+                    if analysis.get("question_focus") == "ignore_today" and item.get("unblock_condition"):
+                        lines.append(f"  - Opnieuw oppakken als: {item.get('unblock_condition')}")
+            live_bot_hotspots = portfolio_risk.get("live_bot_hotspots") or []
+            if live_bot_hotspots:
+                lines.append("Live bot-hotspots:")
+                for item in live_bot_hotspots[:2]:
+                    lines.append(
+                        f"- {item.get('asset')}: {item.get('live_bot_count')} live bot(s), {item.get('summary')}."
+                    )
             for item in (portfolio_risk.get("asset_risk") or [])[:3]:
                 flags = item.get("risk_flags") or []
                 flag_text = f" ({', '.join(flags[:3])})" if flags else ""
@@ -8164,7 +8483,7 @@ class FinnPlanService:
                 )
             for stack in (portfolio_risk.get("risk_stacks") or [])[:2]:
                 lines.append(f"- Risk stack: {stack.get('reason')}")
-            for conflict in (portfolio_risk.get("conflicts") or [])[:2]:
+            for conflict in (portfolio_risk.get("ranked_conflicts") or portfolio_risk.get("conflicts") or [])[:2]:
                 lines.append(f"- Conflict: {conflict.get('reason')}")
 
         verdicts = analysis.get("agent_verdicts") or []
