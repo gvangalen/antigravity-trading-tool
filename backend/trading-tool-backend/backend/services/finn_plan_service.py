@@ -6440,7 +6440,13 @@ class FinnPlanService:
         return "\n".join([line for line in lines if line])
 
     def _behavioral_balance_score(self, metrics: Dict[str, Any], patterns: List[str]) -> Optional[int]:
-        enough = (metrics.get("actions_7d", 0) >= 3) or (metrics.get("actions_30d", 0) >= 8)
+        meaningful_patterns = [pattern for pattern in (patterns or []) if pattern != "discipline_neutral"]
+        enough = (
+            (metrics.get("actions_7d", 0) >= 3)
+            or (metrics.get("actions_30d", 0) >= 8)
+            or bool(meaningful_patterns)
+            or (int(metrics.get("skipped_7d", 0) or 0) + int(metrics.get("snoozed_7d", 0) or 0) + int(metrics.get("monitor_7d", 0) or 0) >= 2)
+        )
         if not enough:
             return None
 

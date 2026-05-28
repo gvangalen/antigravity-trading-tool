@@ -535,6 +535,26 @@ function FinnBehavioralIntelligenceBlocks({ analysis }) {
         <p className="mt-2 text-sm font-semibold leading-relaxed">
           Finn laat hier je gedragsprofiel, meerweekse trend, remsignalen en werkstijl apart zien in plaats van alleen in prose.
         </p>
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+          {[
+            ['Gedragsprofiel', profile?.label || 'Nog opbouwen'],
+            ['Meerweekse trend', trend?.status || trend?.momentum || 'Nog opbouwen'],
+            ['Waar Finn rem houdt', riskFlags[0]?.label || memoryCards[0]?.label || 'Geen extra rem nu'],
+            ['Werkstijl die Finn herkent', habitCards[0]?.label || 'Nog opbouwen'],
+          ].map(([label, value]) => (
+            <div
+              key={label}
+              className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3"
+            >
+              <div className="text-[9px] font-black uppercase tracking-[0.14em] opacity-80">
+                {label}
+              </div>
+              <div className="mt-1 text-xs font-semibold leading-snug text-violet-900 dark:text-violet-100">
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
