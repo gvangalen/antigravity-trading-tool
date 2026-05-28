@@ -79,7 +79,7 @@ const FINN_REPORT_OPTIONS = [
   {
     key: 'week',
     label: 'Weekreflectie',
-    eyebrow: 'Discipline weekbeeld',
+    eyebrow: 'Behavioral Intelligence 2.0+ · Discipline weekbeeld',
     prompt: 'Geef mijn weekreflectie',
     empty: 'Nog te weinig weekhistorie. Finn toont hier pas patronen wanneer er auditdata is.',
   },
@@ -93,7 +93,7 @@ const FINN_REPORT_OPTIONS = [
   {
     key: 'behavior',
     label: '30 dagen gedrag',
-    eyebrow: 'Behavioral memory',
+    eyebrow: 'Behavioral Intelligence 2.0+ · Behavioral memory',
     prompt: 'Geef mijn gedragsrapport van de laatste 30 dagen',
     empty: 'Nog te weinig gedragsdata over 30 dagen. Finn verzint hier geen profiel zonder bewijs.',
   },
@@ -532,7 +532,7 @@ function FinnReflectionBlocks({ analysis }) {
   );
 }
 
-function FinnBehavioralIntelligenceBlocks({ analysis }) {
+function FinnBehavioralIntelligenceBlocks({ analysis, forceVisible = false }) {
   const profile = analysis?.behavioral_profile || null;
   const trend = analysis?.trend || analysis?.week_over_week || analysis?.month_over_month || null;
   const riskFlags = Array.isArray(analysis?.risk_flags) ? analysis.risk_flags : [];
@@ -540,7 +540,7 @@ function FinnBehavioralIntelligenceBlocks({ analysis }) {
   const memoryCards = Array.isArray(analysis?.memory_cards) ? analysis.memory_cards : [];
   const balanceScore = analysis?.behavioral_balance_score;
 
-  if (!profile && !trend && riskFlags.length === 0 && habitCards.length === 0 && memoryCards.length === 0) {
+  if (!forceVisible && !profile && !trend && riskFlags.length === 0 && habitCards.length === 0 && memoryCards.length === 0) {
     return null;
   }
 
@@ -889,7 +889,10 @@ function FinnReportsPanel() {
 
                   <FinnAgentController controller={analysis?.agent_controller} />
                   <FinnPortfolioRisk portfolioRisk={portfolioRisk} />
-                  <FinnBehavioralIntelligenceBlocks analysis={behavioralAnalysis} />
+                  <FinnBehavioralIntelligenceBlocks
+                    analysis={behavioralAnalysis}
+                    forceVisible={activeOption.key === 'week' || activeOption.key === 'behavior'}
+                  />
                   {analysis?.agent_accountability?.performance_light?.summary && (
                     <div className="mt-5 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 p-4 text-blue-700 dark:text-blue-300">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] mb-2">
