@@ -1,0 +1,235 @@
+#!/bin/bash
+set -euo pipefail
+
+ENVIRONMENT="${1:-}"
+BRANCH="${2:-}"
+COMMIT_MSG="${3:-Deploy ${ENVIRONMENT}}"
+
+if [ -z "$ENVIRONMENT" ] || [ -z "$BRANCH" ]; then
+  echo "Usage: $0 <environment> <branch> [commit message]" >&2
+  exit 1
+fi
+
+SSH_KEY="${SSH_KEY:-$HOME/Documents/market_dashboard/Oracle_Keys/ssh-key-2025-05-06.pem}"
+SERVER_IP="${SERVER_IP:-}"
+REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/antigravity-trading-tool}"
+NODE_BIN="${NODE_BIN:-/home/ubuntu/.nvm/versions/node/v18.20.8/bin}"
+STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
+
+case "$ENVIRONMENT" in
+  production)
+    PM2_CONFIG="ecosystem.production.config.js"
+    BACKEND_PORT="${BACKEND_PORT:-8000}"
+    FRONTEND_PORT="${FRONTEND_PORT:-5002}"
+    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-beat}"
+    DEPLOY_REF="origin/${BRANCH}"
+    ;;
+  staging)
+    PM2_CONFIG="ecosystem.staging.config.js"
+    BACKEND_PORT="${BACKEND_PORT:-8100}"
+    FRONTEND_PORT="${FRONTEND_PORT:-5102}"
+    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-market-portfolio-staging celery-worker-scoring-execution-staging celery-worker-ai-reporting-staging celery-beat-staging}"
+    DEPLOY_REF="origin/${BRANCH}"
+    ;;
+  *)
+    echo "Unknown environment: $ENVIRONMENT" >&2
+    exit 1
+    ;;
+esac
+
+if [ -z "$SERVER_IP" ]; then
+  echo "SERVER_IP is required for $ENVIRONMENT deploy." >&2
+  exit 1
+fi
+
+DEPLOY_STATE_DIR="ops/deploy/${ENVIRONMENT}"
+
+echo "📦 1. Committing & pushing to GitHub for ${ENVIRONMENT}..."
+if ! git diff --cached --quiet; then
+  git commit -m "$COMMIT_MSG"
+elif ! git diff --quiet; then
+  echo "⚠️ Working tree has unstaged changes; deploy_env.sh will deploy the current HEAD only." >&2
+fi
+git push origin HEAD
+
+TARGET_COMMIT="$(git rev-parse --short HEAD)"
+REMOTE_LAST_GOOD="$(
+  ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
+    cd $REMOTE_DIR 2>/dev/null || exit 0
+    if [ -f ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT ]; then
+      cat ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
+    else
+      git rev-parse --short HEAD 2>/dev/null || true
+    fi
+  " 2>/dev/null | tail -n 1
+)"
+ROLLBACK_COMMIT="${REMOTE_LAST_GOOD:-$(git rev-parse --short HEAD~1 2>/dev/null || git rev-parse --short HEAD)}"
+ROLLBACK_COMMAND="ssh -i \"$SSH_KEY\" ubuntu@$SERVER_IP 'cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT'"
+
+echo "🌐 2. Deploying ${ENVIRONMENT} commit ${TARGET_COMMIT}..."
+echo "🧭 Previous known-good commit: ${ROLLBACK_COMMIT}"
+
+if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
+  set -euo pipefail
+  export PATH=$NODE_BIN:\$PATH
+  export APP_ENV=$ENVIRONMENT
+  export BACKEND_PORT=$BACKEND_PORT
+  export FRONTEND_PORT=$FRONTEND_PORT
+  cd $REMOTE_DIR
+  mkdir -p $DEPLOY_STATE_DIR
+  printf '%s\n' '$ROLLBACK_COMMIT' > ${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT
+  rm -f .git/index.lock .git/refs/remotes/origin/$BRANCH
+  git fetch origin $BRANCH
+  git reset --hard $DEPLOY_REF
+
+  cd backend/trading-tool-backend
+  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_18_manual_order_idempotency.py
+  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_24_platform_hardening_phase1.py
+  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_24_runtime_ddl_to_migrations.py
+  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_26_auth_refresh_sessions.py
+
+  cd ../..
+  check_pm2_apps_online() {
+    for attempt in \$(seq 1 20); do
+      pm2 jlist >/tmp/tradamind_pm2_jlist.json
+      if EXPECTED_PM2_APPS=\"$EXPECTED_PM2_APPS\" python3 - <<'PY'
+import json
+import os
+import sys
+
+expected = os.environ.get('EXPECTED_PM2_APPS', '').split()
+with open('/tmp/tradamind_pm2_jlist.json', 'r', encoding='utf-8') as handle:
+    raw = handle.read()
+
+json_payload = None
+lines = raw.splitlines()
+for index, line in enumerate(lines):
+    stripped = line.lstrip()
+    if stripped == '[' or stripped.startswith('[{'):
+        json_payload = '\n'.join(lines[index:])
+        break
+
+if not json_payload:
+    print('❌ PM2 gate failed: jlist JSON payload not found', file=sys.stderr)
+    sys.exit(1)
+
+processes = json.loads(json_payload)
+by_name = {process.get('name'): process for process in processes}
+missing = [name for name in expected if name not in by_name]
+not_online = {
+    name: ((by_name.get(name) or {}).get('pm2_env') or {}).get('status')
+    for name in expected
+    if name in by_name and ((by_name.get(name) or {}).get('pm2_env') or {}).get('status') != 'online'
+}
+
+if missing or not_online:
+    print('❌ PM2 gate failed: missing={} not_online={}'.format(missing, not_online), file=sys.stderr)
+    sys.exit(1)
+
+print('✅ PM2 gate passed: all expected apps online.')
+PY
+      then
+        return 0
+      fi
+      echo \"⏳ Waiting for PM2 apps to settle (attempt \$attempt/20)...\" >&2
+      sleep 3
+    done
+    return 1
+  }
+
+  wait_for_backend_health() {
+    local attempts=\"\${1:-120}\"
+    for i in \$(seq 1 \"\$attempts\"); do
+      if curl --max-time 5 -fsS -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/health >/tmp/tradamind_health.json 2>/dev/null; then
+        return 0
+      fi
+      sleep 2
+    done
+    return 1
+  }
+
+  rebuild_pm2_processes() {
+    echo \"⚠️ Rebuilding PM2 process list for a clean restart.\" >&2
+    pm2 delete all || true
+    pm2 start $PM2_CONFIG --update-env
+    check_pm2_apps_online
+  }
+
+  if pm2 startOrReload $PM2_CONFIG --update-env && check_pm2_apps_online; then
+    echo \"✅ PM2 reload completed with all expected apps online.\"
+  else
+    rebuild_pm2_processes
+  fi
+
+  if ! wait_for_backend_health 45; then
+    echo \"⚠️ Backend did not become healthy after reload; retrying with clean PM2 rebuild.\" >&2
+    rebuild_pm2_processes
+  fi
+
+  if ! wait_for_backend_health 120; then
+    echo \"❌ Lightweight health did not become ready after clean PM2 rebuild.\" >&2
+    exit 1
+  fi
+
+  pm2 save --force
+
+  health_ready=false
+  for i in \$(seq 1 240); do
+    if curl --max-time 5 -fsS -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/health >/tmp/tradamind_health.json 2>/dev/null; then
+      health_ready=true
+      break
+    fi
+    sleep 2
+  done
+  if [ \"\$health_ready\" != \"true\" ]; then
+    echo \"❌ Lightweight health did not become ready within deploy timeout.\" >&2
+    exit 1
+  fi
+  curl --max-time 10 -fsS -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/health
+  echo
+  curl --max-time 45 -fsS -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/system/health >/tmp/tradamind_deep_health.json
+  cat /tmp/tradamind_deep_health.json
+  echo
+  python3 - <<'PY'
+import json
+import os
+import sys
+
+with open('/tmp/tradamind_deep_health.json', 'r', encoding='utf-8') as handle:
+    payload = json.load(handle)
+
+status = payload.get('status')
+components = payload.get('components') or {}
+blocking = {
+    name: data
+    for name, data in components.items()
+    if (data or {}).get('status') in {'down', 'error'}
+}
+
+if blocking:
+    print('❌ Deep health gate failed: blocking components={}'.format(blocking), file=sys.stderr)
+    sys.exit(1)
+
+if status == 'degraded':
+    if os.getenv('STRICT_DEEP_HEALTH', 'false').lower() in {'1', 'true', 'yes'}:
+        print('❌ Deep health gate failed: status=degraded and STRICT_DEEP_HEALTH=true', file=sys.stderr)
+        sys.exit(1)
+    print('⚠️ Deep health is degraded; rollout continues because STRICT_DEEP_HEALTH=false.', file=sys.stderr)
+elif status != 'ok':
+    print('❌ Deep health gate failed: status={}'.format(status), file=sys.stderr)
+    sys.exit(1)
+else:
+    print('✅ Deep health gate passed.')
+PY
+  curl --max-time 10 -fsSI http://127.0.0.1:$FRONTEND_PORT/report | head -n 1
+  printf '%s\n' '$TARGET_COMMIT' > ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
+"; then
+  echo "❌ ${ENVIRONMENT} deployment failed for ${TARGET_COMMIT}." >&2
+  echo "Rollback command:" >&2
+  echo "  ${ROLLBACK_COMMAND}" >&2
+  exit 1
+fi
+
+echo "✅ ${ENVIRONMENT} deployment complete for ${TARGET_COMMIT}."
+echo "Rollback if needed:"
+echo "  ${ROLLBACK_COMMAND}"
