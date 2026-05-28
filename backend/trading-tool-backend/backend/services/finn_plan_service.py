@@ -5383,6 +5383,20 @@ class FinnPlanService:
             "snoozed_today_count": day_log["snoozed_count"],
         }
         behavioral_insight = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        if behavioral_insight.get("behavioral_balance_score") is None:
+            extended_activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
+            extended_day_log = self._mission_day_log(extended_activity_feed)
+            extended_behavioral = self._build_behavioral_insight_from_activity(extended_activity_feed, extended_day_log)
+            memory = self._build_behavioral_memory_report(extended_activity_feed, extended_behavioral)
+            behavioral_insight["behavioral_balance_score"] = memory.get("behavioral_balance_score")
+            if not behavioral_insight.get("habit_cards"):
+                behavioral_insight["habit_cards"] = memory.get("habit_cards") or []
+            if not behavioral_insight.get("risk_flags"):
+                behavioral_insight["risk_flags"] = memory.get("risk_flags") or []
+            if not behavioral_insight.get("trend"):
+                behavioral_insight["trend"] = memory.get("trend") or {}
+            if not (behavioral_insight.get("behavioral_profile") or {}).get("type"):
+                behavioral_insight["behavioral_profile"] = memory.get("behavioral_profile") or {}
         agent_verdicts = self._merge_mission_agent_verdicts(
             analysis.get("agent_verdicts") or mission.get("agent_verdicts") or [],
             behavioral_insight,

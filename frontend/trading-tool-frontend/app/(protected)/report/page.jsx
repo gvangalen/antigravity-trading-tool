@@ -124,6 +124,27 @@ function getNested(obj, path, fallback = null) {
   return path.split('.').reduce((acc, key) => acc?.[key], obj) ?? fallback;
 }
 
+function mergeBehavioralAnalysis(...sources) {
+  return sources.reduce((merged, source) => {
+    if (!source || typeof source !== 'object') return merged;
+    return {
+      ...merged,
+      ...source,
+      behavioral_profile: source.behavioral_profile || merged.behavioral_profile || null,
+      trend: source.trend || merged.trend || null,
+      week_over_week: source.week_over_week || merged.week_over_week || null,
+      month_over_month: source.month_over_month || merged.month_over_month || null,
+      risk_flags: Array.isArray(source.risk_flags) && source.risk_flags.length ? source.risk_flags : (merged.risk_flags || []),
+      habit_cards: Array.isArray(source.habit_cards) && source.habit_cards.length ? source.habit_cards : (merged.habit_cards || []),
+      memory_cards: Array.isArray(source.memory_cards) && source.memory_cards.length ? source.memory_cards : (merged.memory_cards || []),
+      behavioral_balance_score:
+        source.behavioral_balance_score !== undefined && source.behavioral_balance_score !== null
+          ? source.behavioral_balance_score
+          : merged.behavioral_balance_score,
+    };
+  }, {});
+}
+
 function getFinnReportSummary(report) {
   const text = report?.response || '';
   if (!text) {
@@ -728,6 +749,11 @@ function FinnReportsPanel() {
   }, [activeFinnReport]);
 
   const analysis = finnReport?.state?.analysis || finnReport?.analysis || {};
+  const behavioralAnalysis = mergeBehavioralAnalysis(
+    finnReport?.state?.behavioral_insight,
+    analysis?.behavioral_insight,
+    analysis
+  );
   const portfolioRisk = analysis?.portfolio_risk || finnReport?.state?.portfolio_risk || null;
   const metrics = analysis?.metrics || {};
   const source = formatFinnReportSource(finnReport);
@@ -863,7 +889,7 @@ function FinnReportsPanel() {
 
                   <FinnAgentController controller={analysis?.agent_controller} />
                   <FinnPortfolioRisk portfolioRisk={portfolioRisk} />
-                  <FinnBehavioralIntelligenceBlocks analysis={analysis} />
+                  <FinnBehavioralIntelligenceBlocks analysis={behavioralAnalysis} />
                   {analysis?.agent_accountability?.performance_light?.summary && (
                     <div className="mt-5 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 p-4 text-blue-700 dark:text-blue-300">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] mb-2">
