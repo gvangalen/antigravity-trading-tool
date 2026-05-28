@@ -21,6 +21,8 @@ case "$ENVIRONMENT" in
     PM2_CONFIG="ecosystem.config.js"
     BACKEND_PORT="${BACKEND_PORT:-8000}"
     FRONTEND_PORT="${FRONTEND_PORT:-5002}"
+    CORE_PM2_APPS="${CORE_PM2_APPS:-frontend,backend}"
+    AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default,celery-worker-market-portfolio,celery-worker-scoring-execution,celery-worker-ai-reporting,celery-beat}"
     EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-beat}"
     DEPLOY_REF="origin/${BRANCH}"
     ;;
@@ -28,6 +30,8 @@ case "$ENVIRONMENT" in
     PM2_CONFIG="ecosystem.staging.config.js"
     BACKEND_PORT="${BACKEND_PORT:-8100}"
     FRONTEND_PORT="${FRONTEND_PORT:-5102}"
+    CORE_PM2_APPS="${CORE_PM2_APPS:-frontend-staging,backend-staging}"
+    AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default-staging,celery-worker-market-portfolio-staging,celery-worker-scoring-execution-staging,celery-worker-ai-reporting-staging,celery-beat-staging}"
     EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-market-portfolio-staging celery-worker-scoring-execution-staging celery-worker-ai-reporting-staging celery-beat-staging}"
     DEPLOY_REF="origin/${BRANCH}"
     ;;
@@ -158,9 +162,14 @@ PY
   }
 
   rebuild_pm2_processes() {
-    echo \"⚠️ Rebuilding PM2 process list for a clean restart.\" >&2
+    echo \"⚠️ Rebuilding PM2 process list with phased startup.\" >&2
     pm2 delete all || true
-    pm2 start $PM2_CONFIG --update-env
+    pm2 start $PM2_CONFIG --only \"$CORE_PM2_APPS\" --update-env
+    if ! wait_for_backend_health 120; then
+      echo \"❌ Backend did not become healthy during phased core startup.\" >&2
+      exit 1
+    fi
+    pm2 start $PM2_CONFIG --only \"$AUX_PM2_APPS\" --update-env
     check_pm2_apps_online
   }
 
