@@ -763,6 +763,7 @@ function FinnReportsPanel() {
   const isFinnReport = finnReport?.intent === 'finn_report' && finnReport?.flow === 'finn_report';
   const isBehavioralMemory = finnReport?.intent === 'behavioral_memory' && finnReport?.flow === 'behavioral_memory';
   const isWeeklyReflection = finnReport?.intent === 'weekly_reflection' && finnReport?.flow === 'weekly_reflection';
+  const showBehavioralTabLegend = activeOption.key === 'week' || activeOption.key === 'behavior';
   const isContractValid = (
     isFinnReport ||
     (activeOption.key === 'behavior' && isBehavioralMemory) ||
@@ -866,6 +867,32 @@ function FinnReportsPanel() {
                       Auditdata
                     </span>
                   </div>
+
+                  {showBehavioralTabLegend && (
+                    <div className="mb-4 rounded-2xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/70 dark:bg-violet-950/20 p-4 text-violet-700 dark:text-violet-300">
+                      <div className="flex items-center gap-2">
+                        <Brain size={14} />
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em]">
+                          Behavioral Intelligence 2.0+
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {[
+                          'Gedragsprofiel',
+                          'Meerweekse trend',
+                          'Waar Finn rem houdt',
+                          'Werkstijl die Finn herkent',
+                        ].map((label) => (
+                          <span
+                            key={label}
+                            className="inline-flex items-center rounded-full border border-white/70 dark:border-slate-900/50 bg-white/80 dark:bg-slate-950/35 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-violet-900 dark:text-violet-100"
+                          >
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <p className="text-sm md:text-[15px] leading-relaxed text-slate-700 dark:text-slate-300 max-w-3xl">
                     {summary || activeOption.empty}
