@@ -2055,13 +2055,19 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     );
   };
 
-  const scrollToBottom = () => {
+  const keepDashboardShellPinned = pathname === "/dashboard" && !!missionControl;
+
+  const scrollAssistantViewport = () => {
+    if (keepDashboardShellPinned) {
+      scrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, loading, activeState]);
+    scrollAssistantViewport();
+  }, [messages, loading, activeState, missionControl, keepDashboardShellPinned]);
 
   const progress = activeState ? getFlowProgress(activeState) : null;
   const activeStep = progress ? Math.min(progress.filled + 1, progress.total) : 1;
