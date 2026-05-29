@@ -68,6 +68,7 @@ export const fetchFinnState = () => {
 export const fetchFinnMissionControl = () => {
   return fetchAuth(`/api/assistant/mission-control`, {
     method: 'GET',
+    forceFresh: true,
   });
 };
 
