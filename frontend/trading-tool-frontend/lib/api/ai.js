@@ -70,6 +70,32 @@ export const fetchFinnMissionControl = () => {
   return fetchAuth(`/api/assistant/mission-control${cacheBust}`, {
     method: 'GET',
     forceFresh: true,
+  }).then(async (res) => {
+    if (res) return res;
+
+    const fallback = await fetch(`${API_BASE_URL}/api/assistant/mission-control${cacheBust}`, {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+      },
+    });
+
+    if (!fallback.ok) {
+      throw new Error(`Mission Control fallback request failed (${fallback.status})`);
+    }
+
+    const text = await fallback.text();
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      console.error('Finn Mission Control fallback JSON parse failed', text.slice(0, 1000));
+      throw err;
+    }
   });
 };
 
