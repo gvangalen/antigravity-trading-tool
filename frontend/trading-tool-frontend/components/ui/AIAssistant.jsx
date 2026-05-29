@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2 } from "lucide-react";
@@ -2068,6 +2068,31 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   useEffect(() => {
     scrollAssistantViewport();
   }, [messages, loading, activeState, missionControl, keepDashboardShellPinned]);
+
+  useLayoutEffect(() => {
+    if (!isOpen || !keepDashboardShellPinned || !scrollRef.current) return undefined;
+
+    const pinToTop = () => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = 0;
+      }
+    };
+
+    pinToTop();
+    const raf1 = requestAnimationFrame(pinToTop);
+    const raf2 = requestAnimationFrame(() => requestAnimationFrame(pinToTop));
+    const t1 = window.setTimeout(pinToTop, 0);
+    const t2 = window.setTimeout(pinToTop, 150);
+    const t3 = window.setTimeout(pinToTop, 600);
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+    };
+  }, [isOpen, keepDashboardShellPinned, missionControl, messages.length, loading, activeState?.current_flow]);
 
   const progress = activeState ? getFlowProgress(activeState) : null;
   const activeStep = progress ? Math.min(progress.filled + 1, progress.total) : 1;
