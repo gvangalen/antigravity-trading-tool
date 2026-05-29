@@ -4,9 +4,12 @@ import React from "react";
 import { Brain } from "lucide-react";
 
 export default function AIFloatingButton({ isOpen, onClick }) {
+  const assistantBuild = "mc-shell-v2";
   return (
     <button
       onClick={onClick}
+      data-assistant-build={assistantBuild}
+      aria-label="Open FINN assistant"
       className={`fixed bottom-6 right-6 z-50 w-14 h-14 flex items-center justify-center rounded-full transition-all duration-300 group ${
         isOpen 
           ? "bg-slate-800 border-slate-700 opacity-80 ring-2 ring-blue-500/20" 

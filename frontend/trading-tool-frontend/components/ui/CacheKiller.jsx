@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 export default function CacheKiller() {
-  const CURRENT_BUILD = "v2190";
+  const CURRENT_BUILD = "v2191";
 
   useEffect(() => {
     if (typeof window !== "undefined") {
