@@ -42,6 +42,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   const [contextMetric, setContextMetric] = useState(null);
   const [finnDraft, setFinnDraft] = useState(null);
   const [missionControl, setMissionControl] = useState(null);
+  const [missionControlLoadError, setMissionControlLoadError] = useState(null);
   const [executingAction, setExecutingAction] = useState(false);
   
   const messagesEndRef = useRef(null);
@@ -1111,13 +1112,63 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
   }
 
   async function loadMissionControl() {
-    try {
-      const res = await fetchFinnMissionControl();
-      setMissionControl(res || null);
-    } catch (err) {
-      console.error("Finn Mission Control laden mislukt", err);
-      setMissionControl(null);
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const res = await fetchFinnMissionControl();
+        const normalized = res
+          ? {
+              ...res,
+              coaching_loop:
+                res.coaching_loop ||
+                res.analysis?.coaching_loop ||
+                res.state?.analysis?.coaching_loop ||
+                null,
+              summary:
+                res.summary ||
+                res.analysis?.summary ||
+                res.state?.analysis?.summary ||
+                null,
+              behavioral_insight:
+                res.behavioral_insight ||
+                res.analysis?.behavioral_insight ||
+                res.state?.analysis?.behavioral_insight ||
+                null,
+              behavioral_profile:
+                res.behavioral_profile ||
+                res.analysis?.behavioral_profile ||
+                res.state?.analysis?.behavioral_profile ||
+                null,
+              trend:
+                res.trend ||
+                res.analysis?.trend ||
+                res.state?.analysis?.trend ||
+                null,
+              risk_flags:
+                res.risk_flags ||
+                res.analysis?.risk_flags ||
+                res.state?.analysis?.risk_flags ||
+                null,
+              habit_cards:
+                res.habit_cards ||
+                res.analysis?.habit_cards ||
+                res.state?.analysis?.habit_cards ||
+                null,
+            }
+          : null;
+        setMissionControl(normalized);
+        setMissionControlLoadError(null);
+        return normalized;
+      } catch (err) {
+        lastError = err;
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+        }
+      }
     }
+    console.error("Finn Mission Control laden mislukt", lastError);
+    setMissionControlLoadError(lastError?.message || "Mission Control tijdelijk niet beschikbaar.");
+    return null;
   }
 
   async function handleActionClick(action) {
@@ -2614,6 +2665,17 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                   {renderFollowUpButtons(missionControl.coaching_loop.operator_handoffs, true)}
                 </div>
               )}
+            </div>
+          )}
+
+          {!missionControl?.coaching_loop && missionControlLoadError && (
+            <div className="rounded-xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2">
+              <div className="text-[8px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-300">
+                Mission Control opnieuw laden
+              </div>
+              <p className="mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
+                De coaching-loop kwam net niet schoon binnen. Ik probeer de shell bij de volgende refresh opnieuw aan te vullen.
+              </p>
             </div>
           )}
 
