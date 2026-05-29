@@ -2469,6 +2469,73 @@ def test_mission_control_builds_open_actions_and_plan_health_from_daily_analysis
     assert review["review_actions"][0]["handoff"] == "bot_decision_review"
 
 
+def test_mission_control_builds_coaching_loop_from_workqueue_behavior_and_risk():
+    service = _service()
+    daily_analysis = service._build_portfolio_daily_coach_analysis([
+        {
+            "asset": "BTC",
+            "stance": "wait_for_plan",
+            "has_scores": True,
+            "setup": {"id": 12, "name": "BTC DCA"},
+            "setup_match_percentage": 33,
+            "blockers": [{"category": "macro", "score": 10, "range": [30, 70]}],
+            "active_strategy": {
+                "active": False,
+                "strategy_exists": True,
+                "strategy": {"id": 91, "name": "BTC DCA Strategy"},
+            },
+            "bot_today": {"decision_count": 0, "decisions": []},
+            "indicator_summary": {"warnings": ["macro-laag is dun"]},
+            "data_readiness": {"status": "ready_with_gaps", "config_gaps": ["macro"]},
+            "follow_up_actions": service._daily_follow_up_actions(
+                "BTC",
+                {"status": "ready_with_gaps", "config_gaps": ["macro"]},
+                [{"category": "macro"}],
+                [],
+            ),
+        },
+        {
+            "asset": "ETH",
+            "stance": "plan_is_active",
+            "has_scores": True,
+            "setup": {"id": 13, "name": "ETH DCA"},
+            "setup_match_percentage": 100,
+            "blockers": [],
+            "bot_today": {"decision_count": 1, "decisions": [{"id": 7, "bot_id": 3, "action": "buy", "status": "proposed"}]},
+            "indicator_summary": {"warnings": []},
+            "data_readiness": {"status": "ready", "config_gaps": []},
+            "follow_up_actions": [],
+        },
+    ])
+    daily_analysis["portfolio_risk"] = {
+        "ignore_today_assets": [
+            {"asset": "BTC", "reason": "setup blokkeert nog", "unblock_condition": "Wacht tot setup niet meer blokkeert."}
+        ],
+        "live_bot_hotspots": [
+            {"asset": "ETH", "summary": "live bot vraagt review", "risk_score": 82, "live_bot_count": 1}
+        ],
+    }
+    mission = service._build_mission_control_from_daily_analysis(daily_analysis)
+    coaching_loop = service._build_mission_coaching_loop(
+        mission,
+        daily_analysis,
+        {
+            "coaching": {
+                "focus_now": "Beperk je tot de bovenste werkqueue-items.",
+                "do_not_do": "Forceer geen nieuwe overrides buiten je topprioriteiten.",
+            }
+        },
+    )
+
+    assert coaching_loop["status"] in {"action_required", "watchful"}
+    assert coaching_loop["headline"]
+    assert coaching_loop["daily_priority_stack"]
+    assert any(item["lane"] == "act_now" for item in coaching_loop["daily_priority_stack"])
+    assert any(item["title"] == "BTC vandaag laten liggen" for item in coaching_loop["suppressed_items"])
+    assert coaching_loop["operator_handoffs"]
+    assert coaching_loop["do_not_do"] == "Forceer geen nieuwe overrides buiten je topprioriteiten."
+
+
 def test_mission_agent_verdicts_add_memory_agent():
     service = _service()
     verdicts = service._merge_mission_agent_verdicts(
@@ -2568,6 +2635,75 @@ def test_agent_controller_ranks_verdicts_and_biases_mission_queue():
     assert updated["workqueue"][0]["type"] == "blocked_plan"
     assert updated["workqueue"][0]["controller_rank_boost"] > 0
     assert updated["workqueue"][0]["dominant_agent"] == "risk_agent"
+
+
+def test_build_mission_control_response_exposes_coaching_loop(monkeypatch):
+    service = _service()
+
+    async def daily_response(user_id, query, context=None):
+        return {
+            "state": {
+                "analysis": {
+                    "assets": [
+                        {
+                            "asset": "BTC",
+                            "stance": "wait_for_plan",
+                            "has_scores": True,
+                            "setup": {"id": 12, "name": "BTC DCA"},
+                            "setup_match_percentage": 33,
+                            "blockers": [{"category": "macro", "score": 10, "range": [30, 70]}],
+                            "bot_today": {"decision_count": 1, "decisions": [{"id": 7, "bot_id": 3, "action": "buy", "status": "proposed"}]},
+                            "indicator_summary": {"warnings": ["macro-laag is dun"]},
+                            "data_readiness": {"status": "ready_with_gaps", "config_gaps": ["macro"]},
+                            "follow_up_actions": service._daily_follow_up_actions(
+                                "BTC",
+                                {"status": "ready_with_gaps", "config_gaps": ["macro"]},
+                                [{"category": "macro"}],
+                                [],
+                            ),
+                        }
+                    ],
+                    "portfolio_risk": {
+                        "ignore_today_assets": [
+                            {"asset": "BTC", "reason": "setup blokkeert nog", "unblock_condition": "Wacht tot setup niet meer blokkeert."}
+                        ],
+                        "live_bot_hotspots": [
+                            {"asset": "BTC", "summary": "live bot vraagt review", "risk_score": 82, "live_bot_count": 1}
+                        ],
+                    },
+                    "follow_up_actions": [],
+                    "asset_count": 1,
+                    "date": _utc_now().date().isoformat(),
+                }
+            }
+        }
+
+    async def activity(user_id, limit=40):
+        return [
+            service._mission_activity_item({
+                "id": "finn-review-1",
+                "status": "executed",
+                "created_at": _utc_now() - timedelta(hours=1),
+                "payload": {
+                    "action": {"type": "snooze_mission_item"},
+                    "result": {"ok": True, "status": "snoozed"},
+                },
+            })
+        ]
+
+    async def resolved_ids(user_id):
+        return []
+
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", daily_response)
+    monkeypatch.setattr(service, "_get_recent_finn_activity", activity)
+    monkeypatch.setattr(service, "_get_today_resolved_mission_item_ids", resolved_ids)
+
+    result = asyncio.run(service.build_mission_control_response(1))
+
+    assert result["coaching_loop"]["daily_priority_stack"]
+    assert result["coaching_loop"]["operator_handoffs"]
+    assert result["summary"]["daily_priority_count"] >= 1
+    assert result["summary"]["suppressed_count"] >= 1
 
 
 def test_agent_controller_handoff_activity_counts_in_finn_report():

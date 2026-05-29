@@ -5403,6 +5403,16 @@ class FinnPlanService:
         )
         agent_controller = self._build_agent_controller(agent_verdicts, context="mission_control")
         mission = self._apply_agent_controller_to_mission(mission, agent_controller, activity_feed=activity_feed)
+        coaching_loop = self._build_mission_coaching_loop(mission, analysis, behavioral_insight)
+        mission["coaching_loop"] = coaching_loop
+        mission["summary"] = {
+            **(mission.get("summary") or {}),
+            "daily_priority_count": len(coaching_loop.get("daily_priority_stack") or []),
+            "act_now_count": len(coaching_loop.get("act_now") or []),
+            "monitor_only_count": len(coaching_loop.get("monitor_only") or []),
+            "suppressed_count": len(coaching_loop.get("suppressed_items") or []),
+            "coaching_loop_status": coaching_loop.get("status"),
+        }
         return {
             "ok": True,
             "intent": "mission_control",
@@ -5429,6 +5439,7 @@ class FinnPlanService:
             "agent_learning": mission.get("agent_learning") or {},
             "agent_rhythm": mission.get("agent_rhythm") or {},
             "operating_rules": mission.get("operating_rules") or {},
+            "coaching_loop": coaching_loop,
             "data_readiness": analysis.get("data_readiness") or {},
             "portfolio_risk": mission.get("portfolio_risk") or analysis.get("portfolio_risk") or {},
             "source": {
@@ -7947,6 +7958,192 @@ class FinnPlanService:
             "plan_health": plan_health,
             "bot_review_queue": bot_review_queue[:8],
             "portfolio_risk": portfolio_risk,
+        }
+
+    def _mission_coaching_lane(self, item: Dict[str, Any]) -> str:
+        state = str(item.get("resolve_state") or item.get("status") or "").lower()
+        freshness = str((item.get("freshness") or {}).get("status") or "").lower()
+        item_type = str(item.get("type") or "").lower()
+        if state == "needs_user_confirmation" or freshness == "stale":
+            return "act_now"
+        if item_type in {"bot_decision", "data_gap", "score_refresh", "indicator_gap"}:
+            return "act_now"
+        if state in {"waiting_for_data", "monitor_today"}:
+            return "review_then_act"
+        if item_type in {"blocked_plan", "blocker_explanation", "portfolio_risk_stack", "portfolio_live_hotspot"}:
+            return "review_then_act"
+        return "monitor_only"
+
+    def _mission_coaching_priority_entry(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        lane = self._mission_coaching_lane(item)
+        action = item.get("next_best_action") or item.get("resolve_action")
+        freshness = item.get("freshness") or {}
+        signals = []
+        if item.get("asset"):
+            signals.append(item.get("asset"))
+        if item.get("dominant_agent"):
+            signals.append(f"{item.get('dominant_agent')} eerst")
+        if freshness.get("label"):
+            signals.append(freshness.get("label"))
+        elif freshness.get("status"):
+            signals.append(freshness.get("status"))
+        if item.get("health_grade"):
+            signals.append(item.get("health_grade"))
+        if item.get("risk_score") is not None:
+            signals.append(f"risk {int(self._to_float(item.get('risk_score')) or 0)}")
+        why_now = (
+            "Nu uitvoeren voorkomt extra drift of gemiste review."
+            if lane == "act_now"
+            else "Eerst begrijpen of monitoren voordat je iets forceert."
+            if lane == "review_then_act"
+            else "Niet escaleren; alleen volgen zolang het signaal niet verslechtert."
+        )
+        return {
+            "id": item.get("id"),
+            "asset": item.get("asset"),
+            "title": item.get("title"),
+            "reason": item.get("reason"),
+            "priority": item.get("priority"),
+            "priority_rank": item.get("priority_rank"),
+            "lane": lane,
+            "status": item.get("resolve_state") or item.get("status"),
+            "why_now": why_now,
+            "supporting_signals": signals[:4],
+            "action": action if isinstance(action, dict) else None,
+        }
+
+    def _mission_coaching_suppressions(
+        self,
+        mission: Dict[str, Any],
+        portfolio_risk: Dict[str, Any],
+        behavioral_insight: Dict[str, Any],
+        priority_assets: set,
+    ) -> List[Dict[str, Any]]:
+        suppressed: List[Dict[str, Any]] = []
+        for item in (portfolio_risk.get("ignore_today_assets") or [])[:3]:
+            asset = item.get("asset")
+            prompt_asset = asset or "deze asset"
+            suppressed.append({
+                "id": f"ignore_today:{asset or len(suppressed)}",
+                "asset": asset,
+                "title": f"{prompt_asset} vandaag laten liggen",
+                "reason": item.get("reason") or "Vandaag niet forceren zolang dit signaal actief is.",
+                "why_not_now": item.get("unblock_condition") or "Pas opnieuw oppakken zodra het blokkerende signaal weg is.",
+                "source": "portfolio_risk",
+                "action": {
+                    "type": "chat_prompt",
+                    "label": f"{prompt_asset} ignore-uitleg",
+                    "prompt": f"Welke assets moet ik vandaag negeren?",
+                    "handoff": "daily_coach",
+                    "requires_confirmation": False,
+                },
+            })
+
+        for plan in mission.get("plan_health") or []:
+            asset = plan.get("asset")
+            if (
+                plan.get("status") == "active"
+                and asset
+                and asset not in priority_assets
+                and len(suppressed) < 5
+            ):
+                suppressed.append({
+                    "id": f"steady_plan:{asset}",
+                    "asset": asset,
+                    "title": f"{asset} niet extra forceren",
+                    "reason": plan.get("reason") or "Plan staat stabiel genoeg om niet extra aan te zitten.",
+                    "why_not_now": "Geen extra actie nodig zolang je plan actief en gezond blijft.",
+                    "source": "plan_health",
+                    "action": None,
+                })
+
+        coaching = behavioral_insight.get("coaching") or {}
+        if coaching.get("do_not_do"):
+            suppressed.append({
+                "id": "behavioral_do_not_do",
+                "asset": None,
+                "title": "Geen extra impuls of override-jacht",
+                "reason": coaching.get("do_not_do"),
+                "why_not_now": coaching.get("safe_next_step") or "Hou je aandacht bij de prioriteiten hierboven.",
+                "source": "behavioral",
+                "action": None,
+            })
+        return suppressed[:5]
+
+    def _mission_coaching_handoffs(
+        self,
+        priorities: List[Dict[str, Any]],
+        controller: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        actions = []
+        controller_action = controller.get("primary_action") if isinstance(controller, dict) else None
+        if isinstance(controller_action, dict) and controller_action.get("prompt"):
+            actions.append({
+                "label": controller_action.get("label") or controller_action.get("prompt"),
+                "prompt": controller_action.get("prompt"),
+                "handoff": controller_action.get("handoff") or "chat",
+                "asset": controller_action.get("asset"),
+                "requires_confirmation": bool(controller_action.get("requires_confirmation")),
+            })
+        for item in priorities:
+            action = item.get("action") or {}
+            if action.get("prompt"):
+                actions.append({
+                    "label": action.get("label") or action.get("prompt"),
+                    "prompt": action.get("prompt"),
+                    "handoff": action.get("handoff") or "chat",
+                    "asset": item.get("asset") or action.get("asset"),
+                    "requires_confirmation": bool(action.get("requires_confirmation")),
+                })
+        return self._dedupe_mission_actions(actions)[:4]
+
+    def _build_mission_coaching_loop(
+        self,
+        mission: Dict[str, Any],
+        analysis: Dict[str, Any],
+        behavioral_insight: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        workqueue = mission.get("workqueue") or []
+        priorities = [self._mission_coaching_priority_entry(item) for item in workqueue[:6]]
+        act_now = [item for item in priorities if item.get("lane") == "act_now"][:3]
+        review_then_act = [item for item in priorities if item.get("lane") == "review_then_act"][:3]
+        monitor_only = [item for item in priorities if item.get("lane") == "monitor_only"][:3]
+        priority_stack = (act_now + review_then_act + monitor_only)[:3]
+        priority_assets = {item.get("asset") for item in priority_stack if item.get("asset")}
+        portfolio_risk = mission.get("portfolio_risk") or analysis.get("portfolio_risk") or {}
+        controller = mission.get("agent_controller") or {}
+        suppressions = self._mission_coaching_suppressions(
+            mission,
+            portfolio_risk,
+            behavioral_insight,
+            priority_assets,
+        )
+        handoffs = self._mission_coaching_handoffs(priority_stack, controller)
+        focus_now = ((behavioral_insight.get("coaching") or {}).get("focus_now")
+                     or (priority_stack[0].get("why_now") if priority_stack else None))
+        headline = (
+            f"Pak eerst {priority_stack[0].get('title')} op."
+            if priority_stack
+            else "Vandaag geen harde interventie nodig; blijf alleen monitoren."
+        )
+        status = (
+            "action_required"
+            if act_now
+            else "watchful"
+            if review_then_act
+            else "stable"
+        )
+        return {
+            "status": status,
+            "headline": headline,
+            "today_focus": focus_now,
+            "do_not_do": (behavioral_insight.get("coaching") or {}).get("do_not_do"),
+            "daily_priority_stack": priority_stack,
+            "act_now": act_now,
+            "review_then_act": review_then_act,
+            "monitor_only": monitor_only,
+            "suppressed_items": suppressions,
+            "operator_handoffs": handoffs,
         }
 
     def _mission_workqueue_from_portfolio_risk_stack(self, stack: Dict[str, Any]) -> Dict[str, Any]:

@@ -884,6 +884,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
   const missionPrimaryAction = (item) => item.next_best_action?.prompt ? item.next_best_action : item.resolve_action;
 
+  const coachingLoopAction = (item) => item?.action || null;
+
   const handleMissionPrimaryAction = async (action) => {
     if (!action) return;
     if (action.prompt) {
@@ -893,6 +895,66 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     if (action.type) {
       await handleExecuteAction(action);
     }
+  };
+
+  const renderCoachingLoopEntry = (item, tone = "slate") => {
+    if (!item) return null;
+    const action = coachingLoopAction(item);
+    const toneClasses = tone === "rose"
+      ? "border-rose-100 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20"
+      : tone === "amber"
+        ? "border-amber-100 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20"
+        : "border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/30";
+
+    return (
+      <div key={item.id || item.title} className={`rounded-xl border px-3 py-2 ${toneClasses}`}>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 leading-tight">
+            {item.title}
+          </span>
+          {item.priority && (
+            <span className={`text-[8px] font-black uppercase tracking-widest ${
+              item.priority === "high" ? "text-rose-600" : item.priority === "medium" ? "text-amber-600" : "text-emerald-600"
+            }`}>
+              {item.priority}
+            </span>
+          )}
+        </div>
+        {item.reason && (
+          <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
+            {item.reason}
+          </p>
+        )}
+        {item.why_now && (
+          <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+            {item.why_now}
+          </p>
+        )}
+        {Array.isArray(item.supporting_signals) && item.supporting_signals.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {item.supporting_signals.slice(0, 4).map((signal) => (
+              <span
+                key={`${item.id || item.title}-${signal}`}
+                className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400"
+              >
+                {signal}
+              </span>
+            ))}
+          </div>
+        )}
+        {action && (
+          <button
+            type="button"
+            onClick={() => handleMissionPrimaryAction(action)}
+            disabled={executingAction}
+            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 shadow-sm transition-all hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 active:scale-[0.98] disabled:opacity-60"
+          >
+            {followUpIcon(action.handoff || action.type)}
+            <span className="normal-case tracking-normal text-[11px] leading-tight">{action.label}</span>
+          </button>
+        )}
+      </div>
+    );
   };
 
   const renderMissionWorkqueueItem = (item) => {
@@ -2202,6 +2264,73 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {missionControl.coaching_loop && (
+              <div className="rounded-2xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/15 p-3 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+                      <Target size={11} />
+                      Coaching Loop 3.0
+                    </div>
+                    <p className="mt-1 text-[11px] font-black text-slate-900 dark:text-slate-100 leading-snug">
+                      {missionControl.coaching_loop.headline}
+                    </p>
+                    {missionControl.coaching_loop.today_focus && (
+                      <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
+                        {missionControl.coaching_loop.today_focus}
+                      </p>
+                    )}
+                  </div>
+                  <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+                    {missionControl.coaching_loop.status}
+                  </span>
+                </div>
+
+                {Array.isArray(missionControl.coaching_loop.daily_priority_stack) && missionControl.coaching_loop.daily_priority_stack.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">Vandaag eerst</div>
+                    {missionControl.coaching_loop.daily_priority_stack.slice(0, 3).map((item) => renderCoachingLoopEntry(
+                      item,
+                      item.lane === "act_now" ? "rose" : item.lane === "review_then_act" ? "amber" : "slate",
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-3">
+                  {Array.isArray(missionControl.coaching_loop.monitor_only) && missionControl.coaching_loop.monitor_only.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">Alleen monitoren</div>
+                      {missionControl.coaching_loop.monitor_only.slice(0, 2).map((item) => renderCoachingLoopEntry(item, "slate"))}
+                    </div>
+                  )}
+                  {Array.isArray(missionControl.coaching_loop.suppressed_items) && missionControl.coaching_loop.suppressed_items.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">Vandaag bewust niet doen</div>
+                      {missionControl.coaching_loop.suppressed_items.slice(0, 3).map((item) => renderCoachingLoopEntry(item, "amber"))}
+                    </div>
+                  )}
+                </div>
+
+                {Array.isArray(missionControl.coaching_loop.operator_handoffs) && missionControl.coaching_loop.operator_handoffs.length > 0 && (
+                  <div>
+                    <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-2">Hand-offs</div>
+                    {renderFollowUpButtons(missionControl.coaching_loop.operator_handoffs, true)}
+                  </div>
+                )}
+
+                {missionControl.coaching_loop.do_not_do && (
+                  <div className="rounded-xl border border-violet-100 dark:border-violet-900/40 bg-white/75 dark:bg-slate-950/30 px-3 py-2">
+                    <div className="text-[8px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+                      Niet doen vandaag
+                    </div>
+                    <p className="mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
+                      {missionControl.coaching_loop.do_not_do}
+                    </p>
                   </div>
                 )}
               </div>
