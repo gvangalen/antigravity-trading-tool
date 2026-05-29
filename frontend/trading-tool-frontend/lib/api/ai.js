@@ -66,7 +66,8 @@ export const fetchFinnState = () => {
 };
 
 export const fetchFinnMissionControl = () => {
-  return fetchAuth(`/api/assistant/mission-control`, {
+  const cacheBust = typeof window !== 'undefined' ? `?_=${Date.now()}` : '';
+  return fetchAuth(`/api/assistant/mission-control${cacheBust}`, {
     method: 'GET',
     forceFresh: true,
   });

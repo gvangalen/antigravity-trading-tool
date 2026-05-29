@@ -2119,7 +2119,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         </div>
 
         {/* SECTION 1B — FINN Mission Control */}
-        {missionControl?.summary && (
+        {(missionControl?.summary || missionControl?.coaching_loop || missionControl?.behavioral_insight) && (
           <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f172a] space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
@@ -2127,14 +2127,15 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Mission Control</span>
               </div>
               <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
-                missionControl.summary.posture === "stable"
+                missionControl.summary?.posture === "stable"
                   ? "bg-emerald-50 text-emerald-600 border-emerald-200/70 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800/50"
                   : "bg-amber-50 text-amber-700 border-amber-200/70 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800/50"
               }`}>
-                {missionControl.summary.open_action_count || 0} open
+                {missionControl.summary?.open_action_count || missionControl.coaching_loop?.daily_priority_stack?.length || 0} open
               </span>
             </div>
 
+            {missionControl.summary && (
             <div className="grid grid-cols-3 gap-2">
               {[
                 ["Actief", missionControl.summary.active_count || 0, "text-emerald-600"],
@@ -2147,8 +2148,9 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 </div>
               ))}
             </div>
+            )}
 
-            {(missionControl.summary.portfolio_ignore_today_count > 0 || missionControl.summary.portfolio_live_hotspot_count > 0) && (
+            {missionControl.summary && (missionControl.summary.portfolio_ignore_today_count > 0 || missionControl.summary.portfolio_live_hotspot_count > 0) && (
               <div className="grid grid-cols-2 gap-2">
                 {missionControl.summary.portfolio_ignore_today_count > 0 && (
                   <div className="rounded-xl border border-rose-100 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/20 p-2.5">
