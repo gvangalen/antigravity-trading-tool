@@ -1581,6 +1581,10 @@ class FinnPlanService:
         context = context or {}
         asset_analyses: List[Dict[str, Any]] = []
         setup_context_by_asset: Dict[str, Dict[str, Any]] = {}
+        mission_control_fast = bool(
+            context.get("scope") == "mission_control"
+            or context.get("mission_control_fast")
+        )
 
         if self.session:
             score_repo = ScoreRepository(self.session)
@@ -1600,7 +1604,11 @@ class FinnPlanService:
 
             for asset in sorted(best_setups_by_asset.keys()):
                 setup = best_setups_by_asset[asset]
-                daily_scores = await self._fetch_daily_scores_with_runtime_refresh(user_id, asset)
+                daily_scores = await self._fetch_daily_scores_with_runtime_refresh(
+                    user_id,
+                    asset,
+                    allow_refresh=not mission_control_fast,
+                )
                 setup_analysis = self._evaluate_setup_row(setup, daily_scores)
                 active_strategy = {"active": False, "portfolio_scope": True}
                 try:
@@ -1618,24 +1626,31 @@ class FinnPlanService:
                 except Exception as exc:
                     active_strategy = {"active": False, "portfolio_scope": True, "error": str(exc)}
                 try:
-                    bot_today = await BotService(self.session).get_bot_today(user_id, symbol=asset)
+                    bot_today = await BotService(self.session).get_bot_today(
+                        user_id,
+                        symbol=asset,
+                        lean=mission_control_fast,
+                    )
                 except Exception as exc:
                     bot_today = {"decisions": [], "scores": {}, "orders": [], "executions": [], "error": str(exc)}
-                try:
-                    insight = await self.build_indicator_insight_response(
-                        user_id,
-                        f"Welke macro technical market data gebruikt Finn voor {asset} vandaag?",
-                        {**context, "symbol": asset},
-                    )
-                    indicator_analysis = (insight.get("state") or {}).get("analysis") or {}
-                except Exception as exc:
-                    indicator_analysis = {
-                        "asset": asset,
-                        "has_daily_scores": bool(daily_scores),
-                        "categories": {},
-                        "warnings": [f"Indicatoranalyse voor {asset} kon niet worden geladen: {exc}"],
-                        "suggestions": [],
-                    }
+                if mission_control_fast:
+                    indicator_analysis = await self._build_indicator_analysis_fast(user_id, asset, daily_scores)
+                else:
+                    try:
+                        insight = await self.build_indicator_insight_response(
+                            user_id,
+                            f"Welke macro technical market data gebruikt Finn voor {asset} vandaag?",
+                            {**context, "symbol": asset},
+                        )
+                        indicator_analysis = (insight.get("state") or {}).get("analysis") or {}
+                    except Exception as exc:
+                        indicator_analysis = {
+                            "asset": asset,
+                            "has_daily_scores": bool(daily_scores),
+                            "categories": {},
+                            "warnings": [f"Indicatoranalyse voor {asset} kon niet worden geladen: {exc}"],
+                            "suggestions": [],
+                        }
 
                 asset_analyses.append(self._build_daily_coach_analysis(
                     asset=asset,
@@ -3973,18 +3988,81 @@ class FinnPlanService:
             return "risk"
         return "brief"
 
-    async def _fetch_daily_scores_with_runtime_refresh(self, user_id: int, asset: str) -> Optional[Dict[str, Any]]:
+    async def _fetch_daily_scores_with_runtime_refresh(
+        self,
+        user_id: int,
+        asset: str,
+        *,
+        allow_refresh: bool = True,
+    ) -> Optional[Dict[str, Any]]:
         if not self.session:
             return None
         score_repo = ScoreRepository(self.session)
         scores = await score_repo.fetch_daily_scores(user_id, asset)
-        if scores:
+        if scores or not allow_refresh:
             return scores
         try:
             await ScoreService(score_repo).get_daily_scores(user_id, asset)
             return await score_repo.fetch_daily_scores(user_id, asset)
         except Exception:
             return scores
+
+    async def _build_indicator_analysis_fast(
+        self,
+        user_id: int,
+        asset: str,
+        daily_scores: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        if not self.session:
+            return {
+                "asset": asset,
+                "has_daily_scores": bool(daily_scores),
+                "categories": {},
+                "warnings": [],
+                "suggestions": [],
+            }
+
+        macro_repo = MacroDataRepository(self.session)
+        technical_repo = TechnicalDataRepository(self.session)
+        market_repo = MarketDataRepository(self.session)
+
+        try:
+            macro_rows = await macro_repo.get_active_day_macro_data(user_id)
+        except Exception:
+            macro_rows = []
+        try:
+            technical_rows = await technical_repo.get_day_data(user_id, asset)
+        except Exception:
+            technical_rows = []
+        try:
+            market_rows = await market_repo.get_active_day_indicators(user_id, asset)
+        except Exception:
+            market_rows = []
+
+        categories = {
+            "macro": {"active_count": len(macro_rows)},
+            "technical": {"active_count": len(technical_rows)},
+            "market": {"active_count": len(market_rows)},
+        }
+        warnings: List[str] = []
+        suggestions: List[str] = []
+
+        for category in ["macro", "technical", "market"]:
+            if categories[category]["active_count"] == 0:
+                warnings.append(f"Geen actieve {category}-data voor {asset}.")
+                suggestions.append(f"Controleer of {category} voor {asset} goed is ingericht.")
+
+        if not daily_scores:
+            warnings.append(f"Daily score ontbreekt nog voor {asset}.")
+            suggestions.append(f"Genereer of ververs daily scores voor {asset} voordat je dit forceert.")
+
+        return {
+            "asset": asset,
+            "has_daily_scores": bool(daily_scores),
+            "categories": categories,
+            "warnings": warnings[:4],
+            "suggestions": suggestions[:4],
+        }
 
     async def _fetch_onboarding_status(self, user_id: int) -> Dict[str, bool]:
         if not self.session:
@@ -5390,12 +5468,16 @@ class FinnPlanService:
         daily = await self.build_portfolio_daily_coach_response(
             user_id,
             "Geef mijn daily brief",
-            context or {"page": "mission_control"},
+            {
+                **(context or {"page": "mission_control"}),
+                "mission_control_fast": True,
+            },
         )
         analysis = (daily.get("state") or {}).get("analysis") or {}
         mission = self._build_mission_control_from_daily_analysis(analysis)
-        activity_feed = await self._get_recent_finn_activity(user_id, limit=40)
-        day_log = self._mission_day_log(activity_feed)
+        activity_window = await self._get_recent_finn_activity(user_id, limit=180)
+        activity_feed = activity_window[:40]
+        day_log = self._mission_day_log(activity_window)
         resolved_item_ids = await self._get_today_resolved_mission_item_ids(user_id)
         if resolved_item_ids:
             mission = self._filter_resolved_mission_items(mission, resolved_item_ids)
@@ -5407,10 +5489,8 @@ class FinnPlanService:
         }
         behavioral_insight = self._build_behavioral_insight_from_activity(activity_feed, day_log)
         if behavioral_insight.get("behavioral_balance_score") is None:
-            extended_activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
-            extended_day_log = self._mission_day_log(extended_activity_feed)
-            extended_behavioral = self._build_behavioral_insight_from_activity(extended_activity_feed, extended_day_log)
-            memory = self._build_behavioral_memory_report(extended_activity_feed, extended_behavioral)
+            extended_behavioral = self._build_behavioral_insight_from_activity(activity_window, day_log)
+            memory = self._build_behavioral_memory_report(activity_window, extended_behavioral)
             behavioral_insight["behavioral_balance_score"] = memory.get("behavioral_balance_score")
             if not behavioral_insight.get("habit_cards"):
                 behavioral_insight["habit_cards"] = memory.get("habit_cards") or []

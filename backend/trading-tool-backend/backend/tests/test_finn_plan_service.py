@@ -2776,6 +2776,54 @@ def test_build_mission_control_response_exposes_coaching_loop(monkeypatch):
     assert result["summary"]["suppressed_count"] >= 1
 
 
+def test_build_mission_control_response_uses_fast_context_and_single_activity_fetch(monkeypatch):
+    service = _service()
+    seen_contexts = []
+    seen_limits = []
+
+    async def daily_response(user_id, query, context=None):
+        seen_contexts.append(context or {})
+        return {
+            "state": {
+                "analysis": {
+                    "assets": [],
+                    "follow_up_actions": [],
+                    "asset_count": 0,
+                    "date": _utc_now().date().isoformat(),
+                }
+            }
+        }
+
+    async def activity(user_id, limit=40):
+        seen_limits.append(limit)
+        return [
+            service._mission_activity_item({
+                "id": f"finn-review-{idx}",
+                "status": "executed",
+                "created_at": _utc_now() - timedelta(hours=idx),
+                "payload": {
+                    "action": {"type": "skip_bot_decision" if idx % 2 == 0 else "snooze_mission_item"},
+                    "result": {"ok": True, "status": "skipped" if idx % 2 == 0 else "snoozed"},
+                },
+            })
+            for idx in range(8)
+        ]
+
+    async def resolved_ids(user_id):
+        return []
+
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", daily_response)
+    monkeypatch.setattr(service, "_get_recent_finn_activity", activity)
+    monkeypatch.setattr(service, "_get_today_resolved_mission_item_ids", resolved_ids)
+
+    result = asyncio.run(service.build_mission_control_response(1, {"page": "assistant", "scope": "mission_control"}))
+
+    assert result["intent"] == "mission_control"
+    assert seen_contexts
+    assert seen_contexts[0]["mission_control_fast"] is True
+    assert seen_limits == [180]
+
+
 def test_agent_controller_handoff_activity_counts_in_finn_report():
     service = _service()
     now = _utc_now().isoformat()
