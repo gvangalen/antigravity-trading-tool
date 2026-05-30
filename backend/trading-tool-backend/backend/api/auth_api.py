@@ -158,6 +158,8 @@ async def login(
     except ValueError as e:
         sys_logger.log_warning(f"Login failed for {body.email}: {str(e)}", source="auth", endpoint="/auth/login")
         raise _safe_auth_error("Ongeldige inloggegevens.", 401)
+    except HTTPException:
+        raise
     except Exception as e:
         sys_logger.log_error(f"Critical login error for {body.email}: {str(e)}", source="auth", endpoint="/auth/login")
         logger.exception("❌ Fout tijdens login")

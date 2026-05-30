@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import ProgrammingError
 
 from backend.infrastructure.database import get_db
 from backend.infrastructure.models import PushSubscription, MobilePushToken
@@ -10,6 +11,11 @@ from typing import Optional
 from loguru import logger
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+
+def _is_missing_mobile_push_table(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "mobile_push_tokens" in message and ("does not exist" in message or "undefinedtable" in message or "no such table" in message)
 
 class SubscriptionInfo(BaseModel):
     endpoint: str
@@ -117,6 +123,13 @@ async def mobile_subscribe(
         return {"status": "success", "message": "Mobile push token registered successfully"}
     except HTTPException:
         raise
+    except ProgrammingError as e:
+        await db.rollback()
+        if _is_missing_mobile_push_table(e):
+            logger.warning("Mobile push subscribe skipped: mobile_push_tokens table ontbreekt nog.")
+            raise HTTPException(status_code=503, detail="Mobile push registratie is tijdelijk niet beschikbaar.")
+        logger.exception(f"Error in mobile subscribe: {e}")
+        raise HTTPException(status_code=500, detail="Could not subscribe mobile token")
     except Exception as e:
         await db.rollback()
         logger.exception(f"Error in mobile subscribe: {e}")
@@ -140,5 +153,8 @@ async def mobile_unsubscribe(
         return {"status": "success", "message": "Mobile token unsubscribed successfully"}
     except Exception as e:
         await db.rollback()
+        if _is_missing_mobile_push_table(e):
+            logger.warning("Mobile push unsubscribe skipped: mobile_push_tokens table ontbreekt nog.")
+            raise HTTPException(status_code=503, detail="Mobile push registratie is tijdelijk niet beschikbaar.")
         logger.exception(f"Error in mobile unsubscribe: {e}")
         raise HTTPException(status_code=500, detail="Could not unsubscribe mobile token")

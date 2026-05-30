@@ -34,3 +34,11 @@ def test_notifications_unsubscribe_is_user_scoped():
 
     assert "PushSubscription.user_id == user_id" in source
     assert "MobilePushToken.user_id == user_id" in source
+
+
+def test_mobile_push_routes_degrade_cleanly_when_table_is_missing():
+    source = _source()
+
+    assert "def _is_missing_mobile_push_table" in source
+    assert "mobile_push_tokens" in source
+    assert 'detail="Mobile push registratie is tijdelijk niet beschikbaar."' in source

@@ -1,4 +1,5 @@
 from fastapi import HTTPException
+from starlette.responses import Response
 
 from backend.api import auth_api
 
@@ -107,3 +108,31 @@ def test_auth_refresh_rate_limit_applies_per_ip(monkeypatch):
             "Te veel refresh-verzoeken. Wacht kort en probeer opnieuw.",
         )
     ]
+
+
+def test_login_preserves_http_exception_rate_limit(monkeypatch):
+    class _Service:
+        async def login_user(self, body):
+            raise AssertionError("login_user should not run when limiter blocks first")
+
+    def explode(*args, **kwargs):
+        raise HTTPException(status_code=429, detail="Te veel loginpogingen. Wacht kort en probeer opnieuw.")
+
+    monkeypatch.setattr(auth_api, "_apply_auth_login_rate_limit", explode)
+
+    try:
+        import asyncio
+
+        asyncio.run(
+            auth_api.login(
+                body=type("Body", (), {"email": "henk@example.com", "password": "test123"})(),
+                request=_Request({"x-real-ip": "198.51.100.7"}),
+                response=Response(),
+                service=_Service(),
+                x_tradamind_client=None,
+            )
+        )
+        assert False, "Expected HTTPException"
+    except HTTPException as exc:
+        assert exc.status_code == 429
+        assert "Te veel loginpogingen" in exc.detail
