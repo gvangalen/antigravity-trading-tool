@@ -49,17 +49,51 @@ For each prompt, the audit now logs:
   - `legacy_assistant`
   - `exception`
 
-## Important Scope Note
+## Measured Live Sample
 
-This instrumentation is now present in code and validated locally, but not yet presented here as a full live dataset.
+After the instrumentation rollout, a controlled live promptset was run against production with real authenticated context. The first measured sample showed a strong stale-draft failure mode:
 
-So the root-cause analysis below is based on:
+- `Hoi FINN, wat kun je voor mij doen?` -> `bot_creation`
+- `Wat is RSI in simpele taal?` -> `bot_creation`
+- `Wat is DCA?` -> `bot_creation`
+- `Welke strategie bekijk ik nu?` -> `bot_creation`
+- `Leg mijn setup uit` -> `bot_creation`
+- `Ik voel FOMO, wat moet ik doen?` -> `bot_creation`
 
-- the production QA report
-- current backend routing code
-- current state hydration code
-- current legacy assistant fallback behavior
-- local validation of the new audit hooks
+The audit logs showed the same pattern:
+
+- `draft_used = true`
+- `draft_kind = bot`
+- stale draft carried `asset = ETH`, `strategy_id = 257`, `existing_bot_id = 130`
+- route source stayed inside deterministic FINN, but the stale transactional draft won almost every turn
+
+This turned the main P0 hypothesis into a measured fact:
+
+- **stale transactional draft reuse was the primary front-door routing bug**
+
+After the first routing/state-isolation fix, a second live sample showed:
+
+- `Hoi FINN, wat kun je voor mij doen?` -> `general_help`
+- `Wat is RSI in simpele taal?` -> `education`
+- `Wat is DCA?` -> `education`
+- `Maak een wekelijkse BTC setup voor een breakout long` -> `plan_creation`
+
+That confirmed the first P0 fix direction was correct.
+
+The same second sample also exposed the next concrete gaps:
+
+- `Welke strategie bekijk ik nu?` hit a deterministic explain path but failed on a missing import (`StrategyRepository`)
+- `Leg mijn setup uit` still slipped into the legacy assistant path
+- `Ik voel FOMO, wat moet ik doen?` still slipped into the legacy assistant path
+- those legacy fallbacks then degraded because live OpenAI quota returned `429 insufficient_quota`
+
+So the measured sequence was:
+
+1. stale draft hijack dominated the first sample
+2. after isolating drafts, the remaining failures became much narrower:
+   - explain-path coverage
+   - coaching detection
+   - legacy fallback quota sensitivity
 
 ## Root Cause Summary
 
