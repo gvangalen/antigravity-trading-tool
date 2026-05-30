@@ -16,6 +16,7 @@ REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/antigravity-trading-tool}"
 NODE_BIN="${NODE_BIN:-/home/ubuntu/.nvm/versions/node/v18.20.8/bin}"
 STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
 DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
+AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"
 
 case "$ENVIRONMENT" in
   production)
@@ -265,6 +266,11 @@ PY
   fi
 "; then
   echo "❌ ${ENVIRONMENT} deployment failed for ${TARGET_COMMIT}." >&2
+  if [ "${AUTO_ROLLBACK_ON_FAILURE,,}" = "true" ]; then
+    echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" \
+      "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
+  fi
   echo "Rollback command:" >&2
   echo "  ${ROLLBACK_COMMAND}" >&2
   exit 1
@@ -294,16 +300,28 @@ check_external() {
   return 1
 }
 
-check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health"
-check_external "${EXTERNAL_BASE_URL}/api/system/health" "401" "external deep health gate"
-check_external "${EXTERNAL_BASE_URL}/report" "200" "external report"
+if ! check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health" \
+  || ! check_external "${EXTERNAL_BASE_URL}/api/system/health" "401" "external deep health gate" \
+  || ! check_external "${EXTERNAL_BASE_URL}/report" "200" "external report"; then
+  echo "❌ External smoke failed for ${TARGET_COMMIT}." >&2
+  if [ "${AUTO_ROLLBACK_ON_FAILURE,,}" = "true" ]; then
+    echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" \
+      "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
+  fi
+  echo "Rollback command:" >&2
+  echo "  ${ROLLBACK_COMMAND}" >&2
+  exit 1
+fi
 
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   set -euo pipefail
   cd $REMOTE_DIR
   printf '%s\n' '$TARGET_COMMIT' > ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
+  printf '%s\n' '$ROLLBACK_COMMIT' > ${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT
   if [ -d /var/www/tradamind/ops/deploy ]; then
     printf '%s\n' '$TARGET_COMMIT' | sudo tee /var/www/tradamind/ops/deploy/LAST_GOOD_COMMIT >/dev/null
+    printf '%s\n' '$ROLLBACK_COMMIT' | sudo tee /var/www/tradamind/ops/deploy/PREVIOUS_GOOD_COMMIT >/dev/null
   fi
 "
 

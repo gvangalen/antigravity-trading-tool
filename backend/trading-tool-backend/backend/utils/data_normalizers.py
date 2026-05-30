@@ -1,4 +1,5 @@
 import logging
+import json
 from decimal import Decimal
 from typing import Any, List, Optional
 
@@ -157,8 +158,25 @@ def normalize_targets(value: Any) -> List[float]:
             return targets
 
         if isinstance(value, str):
+            raw = value.strip()
 
-            parts = value.split(",")
+            if raw == "":
+                return []
+
+            # Eerst JSON-lijsten of Python-achtige lijststrings proberen,
+            # zodat "[2700.0, 2900.0]" niet als twee halve floats wordt gelogd.
+            if raw.startswith("[") and raw.endswith("]"):
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    parsed = None
+
+                if isinstance(parsed, list):
+                    return normalize_targets(parsed)
+
+                raw = raw[1:-1]
+
+            parts = raw.split(",")
 
             for p in parts:
 

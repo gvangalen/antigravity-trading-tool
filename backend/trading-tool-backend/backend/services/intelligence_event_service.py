@@ -11,6 +11,15 @@ from backend.services.push_service import push_service
 
 logger = logging.getLogger(__name__)
 
+
+def _is_missing_mobile_push_table(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "mobile_push_tokens" in message and (
+        "does not exist" in message
+        or "undefinedtable" in message
+        or "no such table" in message
+    )
+
 class IntelligenceEventService:
     def __init__(
         self,
@@ -277,7 +286,10 @@ class IntelligenceEventService:
                         await push_service.notify_user_async(self.session, user_id, title, message)
                         logger.info(f"📱 Proactieve push notification verzonden voor kritiek event: {ev.title} (User: {user_id})")
                     except Exception as ex:
-                        logger.error(f"⚠️ Push notification dispatch mislukt: {ex}")
+                        if _is_missing_mobile_push_table(ex):
+                            logger.warning("Push notification dispatch overgeslagen: mobile_push_tokens table ontbreekt nog.")
+                        else:
+                            logger.error(f"⚠️ Push notification dispatch mislukt: {ex}")
                         await self.session.rollback()
 
         return new_events
