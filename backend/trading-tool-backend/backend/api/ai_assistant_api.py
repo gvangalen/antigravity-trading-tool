@@ -212,6 +212,14 @@ def _apply_assistant_execute_rate_limit(*, user_id: int, raw_request: Request) -
         )
 
 
+def _legacy_bot_decision_resume(query: str, context: Optional[dict]) -> bool:
+    payload = context or {}
+    return bool(
+        payload.get("current_flow") == "bot_decision"
+        and payload.get("pending_behavioral_memory_friction")
+    )
+
+
 def _redact_assistant_reasoning(payload: Optional[dict]) -> Optional[dict]:
     if not isinstance(payload, dict):
         return payload
@@ -352,7 +360,7 @@ async def assistant_chat(
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
             )
-        if finn.looks_like_bot_decision_request(request.query) or finn.should_resume_bot_decision_flow(
+        if finn.looks_like_bot_decision_request(request.query) or _legacy_bot_decision_resume(
             request.query,
             context_payload,
         ):
@@ -626,7 +634,7 @@ async def assistant_chat_stream(
                 yield _sse_event("envelope", envelope)
                 return
 
-            if finn.looks_like_bot_decision_request(request.query) or finn.should_resume_bot_decision_flow(
+            if finn.looks_like_bot_decision_request(request.query) or _legacy_bot_decision_resume(
                 request.query,
                 context_payload,
             ):
