@@ -1,7 +1,9 @@
 import logging
+import os
 import time
 import uuid
-from typing import Optional, Tuple
+from copy import deepcopy
+from typing import Any, Dict, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,6 +52,8 @@ from backend.infrastructure.repositories.assistant_context_repository import Ass
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+MISSION_CONTROL_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_CACHE_TTL_SECONDS", "20"))
+_mission_control_cache: Dict[int, Dict[str, Any]] = {}
 
 
 def _client_ip(raw_request: Request) -> str:
@@ -109,6 +113,27 @@ def _redact_assistant_reasoning(payload: Optional[dict]) -> Optional[dict]:
         return payload
     payload["reasoning"] = None
     return payload
+
+
+def _get_cached_mission_control(user_id: int) -> Optional[dict]:
+    cached = _mission_control_cache.get(int(user_id))
+    if not cached:
+        return None
+    if cached["expires_at"] <= time.time():
+        _mission_control_cache.pop(int(user_id), None)
+        return None
+    return deepcopy(cached["response"])
+
+
+def _store_cached_mission_control(user_id: int, response: dict) -> None:
+    _mission_control_cache[int(user_id)] = {
+        "expires_at": time.time() + max(1, MISSION_CONTROL_CACHE_TTL_SECONDS),
+        "response": deepcopy(response),
+    }
+
+
+def _invalidate_mission_control_cache(user_id: int) -> None:
+    _mission_control_cache.pop(int(user_id), None)
 
 async def get_assistant_service(db: AsyncSession = Depends(get_db)):
     score_repo = ScoreRepository(db)
@@ -575,7 +600,9 @@ async def execute_pending_action(
     if str(action_id).startswith("finn-"):
         try:
             finn = FinnPlanService(db, trace_id=trace_id)
-            return await finn.execute_issued_action(user_id, str(action_id))
+            result = await finn.execute_issued_action(user_id, str(action_id))
+            _invalidate_mission_control_cache(user_id)
+            return result
         except HTTPException:
             raise
         except Exception as e:
@@ -599,10 +626,14 @@ async def get_finn_mission_control(
     request: Request = None,
 ):
     trace_id = getattr(request.state, "trace_id", None) if request else None
+    cached = _get_cached_mission_control(current_user["id"])
+    if cached:
+        return cached
     finn = FinnPlanService(db, trace_id=trace_id)
     response = await finn.build_mission_control_response(
         current_user["id"],
         {"page": "assistant", "scope": "mission_control"},
     )
     await finn.issue_response_actions(current_user["id"], response)
+    _store_cached_mission_control(current_user["id"], response)
     return response

@@ -36,3 +36,25 @@ def test_rollback_env_persists_previous_commit_and_pm2_fallback():
     assert "PM2 config $PM2_CONFIG not found; falling back to ecosystem.config.js." in source
     assert 'printf "%s\\n" "$CURRENT_COMMIT" > "${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT"' in source
     assert 'sudo tee /var/www/tradamind/ops/deploy/PREVIOUS_GOOD_COMMIT' in source
+
+
+def test_mission_control_api_uses_short_ttl_cache_and_invalidates_after_finn_execute():
+    source = (BACKEND_ROOT / "api" / "ai_assistant_api.py").read_text(encoding="utf-8")
+
+    assert 'MISSION_CONTROL_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_CACHE_TTL_SECONDS", "20"))' in source
+    assert "_mission_control_cache" in source
+    assert "def _get_cached_mission_control" in source
+    assert "def _store_cached_mission_control" in source
+    assert "def _invalidate_mission_control_cache" in source
+    assert "cached = _get_cached_mission_control(current_user[\"id\"])" in source
+    assert "_store_cached_mission_control(current_user[\"id\"], response)" in source
+    assert "_invalidate_mission_control_cache(user_id)" in source
+
+
+def test_portfolio_intelligence_context_batches_market_prices():
+    source = (BACKEND_ROOT / "infrastructure" / "repositories" / "bot_repository.py").read_text(encoding="utf-8")
+
+    assert "async def get_market_prices(self, symbols: List[str]) -> Dict[str, float]:" in source
+    assert "SELECT DISTINCT ON (symbol) symbol, price" in source
+    assert "WHERE symbol = ANY(:symbols)" in source
+    assert "prices = await self.get_market_prices(symbols)" in source

@@ -445,6 +445,27 @@ class BotRepository:
         snapshot = await self.get_market_price_snapshot(symbol)
         return snapshot.get("price") if snapshot else None
 
+    async def get_market_prices(self, symbols: List[str]) -> Dict[str, float]:
+        normalized = sorted({str(symbol or "").upper() for symbol in symbols if str(symbol or "").strip()})
+        if not normalized:
+            return {}
+
+        query = text("""
+            SELECT DISTINCT ON (symbol) symbol, price
+            FROM market_data
+            WHERE symbol = ANY(:symbols)
+            ORDER BY symbol, timestamp DESC
+        """)
+        result = await self.session.execute(query, {"symbols": normalized})
+
+        prices: Dict[str, float] = {}
+        for row in result.fetchall():
+            mapping = row._mapping
+            symbol = str(mapping["symbol"]).upper()
+            price = mapping["price"]
+            prices[symbol] = float(price) if price is not None else 0.0
+        return prices
+
     # ==========================
     # BOT TRADES
     # ==========================
@@ -571,11 +592,9 @@ class BotRepository:
         result = await self.session.execute(query, {"user_id": user_id})
         rows = result.fetchall()
         
-        # Get unique symbols and retrieve their live market prices
-        symbols = list(set(row._mapping["symbol"] for row in rows))
-        prices = {}
-        for sym in symbols:
-            prices[sym] = await self.get_market_price(sym) or 0.0
+        # Get unique symbols and retrieve their live market prices in one query
+        symbols = [row._mapping["symbol"] for row in rows]
+        prices = await self.get_market_prices(symbols)
             
         bot_states = []
         global_cash = 0.0
