@@ -34,6 +34,9 @@ SUPPORTED_ASSETS = {"BTC", "ETH", "SOL"}
 KNOWN_ASSET_CANDIDATES = ("BTC", "ETH", "SOL", "DOGE", "XRP", "ADA", "BNB", "AVAX", "LINK", "MATIC", "PEPE")
 NUMBER_WITH_DELIMITER = r"([0-9][0-9.,]*)(?=\s|,|/|$)"
 FINN_STATE_VERSION = 2
+TRANSACTIONAL_FLOWS = {"plan_creation", "strategy_creation", "bot_creation", "indicator_config"}
+TRANSACTIONAL_STATE_TTL_MINUTES = 45
+BOT_DECISION_STATE_TTL_MINUTES = 20
 
 
 def _utc_now() -> datetime:
@@ -305,6 +308,72 @@ class FinnPlanService:
     def _normalized_query(self, query: str) -> str:
         return (query or "").strip().lower()
 
+    def _parse_iso_datetime(self, value: Any) -> Optional[datetime]:
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        if isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            except ValueError:
+                return None
+        return None
+
+    def _state_is_fresh(self, updated_at: Any, ttl_minutes: int) -> bool:
+        parsed = self._parse_iso_datetime(updated_at)
+        if not parsed:
+            return False
+        return (_utc_now() - parsed) <= timedelta(minutes=ttl_minutes)
+
+    def _extract_numeric_reference(self, query: str, labels: List[str]) -> Optional[int]:
+        q = self._normalized_query(query)
+        for label in labels:
+            match = re.search(rf"\b{label}\s*#?\s*(\d+)\b", q)
+            if match:
+                return int(match.group(1))
+        return None
+
+    def _draft_conflicts_with_query_or_context(
+        self,
+        query: str,
+        draft: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        context = context or {}
+        draft_asset = str(draft.get("asset") or "").upper() or None
+        context_asset = str(context.get("symbol") or context.get("asset") or "").upper() or None
+        query_assets = _asset_mentions(query)
+
+        if draft_asset and context_asset and draft_asset != context_asset:
+            return True
+        if draft_asset and len(query_assets) == 1 and query_assets[0] != draft_asset:
+            return True
+
+        draft_setup_id = draft.get("setup_id")
+        if draft_setup_id and context.get("setup_id") and draft_setup_id != context.get("setup_id"):
+            return True
+        query_setup_id = self._extract_numeric_reference(query, ["setup", "plan"])
+        if draft_setup_id and query_setup_id and draft_setup_id != query_setup_id:
+            return True
+
+        draft_strategy_id = draft.get("strategy_id") or draft.get("existing_strategy_id")
+        if draft_strategy_id and context.get("strategy_id") and draft_strategy_id != context.get("strategy_id"):
+            return True
+        query_strategy_id = self._extract_numeric_reference(query, ["strategie", "strategy"])
+        if draft_strategy_id and query_strategy_id and draft_strategy_id != query_strategy_id:
+            return True
+
+        draft_bot_id = draft.get("bot_id") or draft.get("existing_bot_id")
+        if draft_bot_id and context.get("bot_id") and draft_bot_id != context.get("bot_id"):
+            return True
+        query_bot_id = self._extract_numeric_reference(query, ["bot"])
+        if draft_bot_id and query_bot_id and draft_bot_id != query_bot_id:
+            return True
+
+        return False
+
     def _has_explain_intent(self, query: str) -> bool:
         q = self._normalized_query(query)
         return (
@@ -399,11 +468,26 @@ class FinnPlanService:
         draft = payload.get("finn_draft") if isinstance(payload.get("finn_draft"), dict) else None
         if not draft:
             return payload
+        finn_state = payload.get("finn_state") if isinstance(payload.get("finn_state"), dict) else {}
+        current_flow = payload.get("current_flow") or finn_state.get("current_flow")
+        if current_flow in TRANSACTIONAL_FLOWS and not self._state_is_fresh(
+            finn_state.get("updated_at"),
+            TRANSACTIONAL_STATE_TTL_MINUTES,
+        ):
+            payload.pop("finn_draft", None)
+            payload.pop("finn_state", None)
+            payload.pop("current_flow", None)
+            return payload
+        if self._draft_conflicts_with_query_or_context(query, draft, payload):
+            payload.pop("finn_draft", None)
+            payload.pop("finn_state", None)
+            payload.pop("current_flow", None)
+            return payload
         if self._looks_like_transactional_follow_up(query, draft):
             return payload
         payload.pop("finn_draft", None)
         payload.pop("finn_state", None)
-        if payload.get("current_flow") in {"plan_creation", "strategy_creation", "bot_creation", "indicator_config"}:
+        if payload.get("current_flow") in TRANSACTIONAL_FLOWS:
             payload.pop("current_flow", None)
         return payload
 
@@ -422,17 +506,28 @@ class FinnPlanService:
         if hydrated.get("finn_draft") or not self.session:
             return hydrated
 
-        state = await ConversationStateRepository(self.session).get_state(user_id)
+        repo = ConversationStateRepository(self.session)
+        state = await repo.get_state(user_id)
         slots = (state or {}).get("slots") or {}
         draft = slots.get("draft")
-        if state and state.get("current_flow") in {"plan_creation", "strategy_creation", "bot_creation", "indicator_config"} and isinstance(draft, dict):
+        state_updated_at = slots.get("updated_at") or (state or {}).get("updated_at")
+        if state and state.get("current_flow") in TRANSACTIONAL_FLOWS and isinstance(draft, dict):
+            if not self._state_is_fresh(state_updated_at, TRANSACTIONAL_STATE_TTL_MINUTES):
+                await repo.clear_state(user_id)
+                return hydrated
+            if self._draft_conflicts_with_query_or_context("", draft, hydrated):
+                await repo.clear_state(user_id)
+                return hydrated
             hydrated["finn_draft"] = draft
             hydrated["finn_state"] = {
                 "version": slots.get("version"),
-                "updated_at": slots.get("updated_at"),
+                "updated_at": state_updated_at,
                 "current_flow": state.get("current_flow"),
             }
         elif state and state.get("current_flow") == "bot_decision":
+            if not self._state_is_fresh(state_updated_at, BOT_DECISION_STATE_TTL_MINUTES):
+                await repo.clear_state(user_id)
+                return hydrated
             bot_decision_state = slots.get("state") if isinstance(slots.get("state"), dict) else {}
             if bot_decision_state.get("pending_behavioral_memory_friction"):
                 hydrated.update({
@@ -472,7 +567,10 @@ class FinnPlanService:
             if stored and stored.get("current_flow") == "bot_decision":
                 await repo.clear_state(user_id)
             return
-        if response.get("flow") not in {"plan_creation", "strategy_creation", "bot_creation", "indicator_config"} or not isinstance(response.get("draft"), dict):
+        if response.get("flow") not in TRANSACTIONAL_FLOWS or not isinstance(response.get("draft"), dict):
+            stored = await repo.get_state(user_id)
+            if stored and stored.get("current_flow") in (TRANSACTIONAL_FLOWS | {"bot_decision"}):
+                await repo.clear_state(user_id)
             return
 
         draft = response["draft"]

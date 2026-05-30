@@ -63,6 +63,10 @@ def test_sanitize_context_keeps_bot_draft_for_real_transactional_follow_up():
             "operation": "create",
             "strategy_id": 257,
         },
+        "finn_state": {
+            "current_flow": "bot_creation",
+            "updated_at": _utc_now().isoformat(),
+        },
         "current_flow": "bot_creation",
     }
 
@@ -103,6 +107,45 @@ def test_sanitize_context_drops_stale_plan_draft_for_fomo_prompt():
     sanitized = service.sanitize_context_for_query("Ik voel FOMO, wat moet ik doen?", context)
 
     assert "finn_draft" not in sanitized
+    assert sanitized.get("current_flow") is None
+
+
+def test_sanitize_context_drops_conflicting_transactional_draft_for_other_asset():
+    service = _service()
+    context = {
+        "symbol": "BTC",
+        "current_flow": "plan_creation",
+        "finn_state": {"current_flow": "plan_creation", "updated_at": _utc_now().isoformat()},
+        "finn_draft": {
+            "plan_type": "trade",
+            "asset": "ETH",
+        },
+    }
+
+    sanitized = service.sanitize_context_for_query("Maak een BTC setup", context)
+
+    assert "finn_draft" not in sanitized
+    assert "finn_state" not in sanitized
+    assert sanitized.get("current_flow") is None
+
+
+def test_sanitize_context_drops_expired_transactional_draft():
+    service = _service()
+    stale = (_utc_now() - timedelta(minutes=90)).isoformat()
+    context = {
+        "current_flow": "bot_creation",
+        "finn_state": {"current_flow": "bot_creation", "updated_at": stale},
+        "finn_draft": {
+            "draft_kind": "bot",
+            "asset": "BTC",
+            "strategy_id": 257,
+        },
+    }
+
+    sanitized = service.sanitize_context_for_query("strategie 257", context)
+
+    assert "finn_draft" not in sanitized
+    assert "finn_state" not in sanitized
     assert sanitized.get("current_flow") is None
 
 
@@ -182,6 +225,127 @@ def test_bot_decision_ack_state_persists_and_hydrates_without_client_context(mon
         "state": {"status": "ready_for_confirmation", "current_flow": "bot_decision"},
     }
     asyncio.run(service.persist_response_state(1, ready))
+
+    assert saved == {}
+
+
+def test_hydrate_context_clears_expired_transactional_state(monkeypatch):
+    saved = {
+        1: {
+            "current_flow": "plan_creation",
+            "asset": "BTC",
+            "updated_at": _utc_now(),
+            "slots": {
+                "draft": {"plan_type": "trade", "asset": "BTC"},
+                "updated_at": (_utc_now() - timedelta(minutes=90)).isoformat(),
+            },
+        }
+    }
+
+    class Repo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_state(self, user_id):
+            return saved.get(user_id)
+
+        async def save_state(self, user_id, current_flow, asset, slots):
+            saved[user_id] = {
+                "current_flow": current_flow,
+                "asset": asset,
+                "slots": slots,
+            }
+
+        async def clear_state(self, user_id):
+            saved.pop(user_id, None)
+
+    monkeypatch.setattr("backend.services.finn_plan_service.ConversationStateRepository", Repo)
+    service = FinnPlanService(db_session=object())
+
+    hydrated = asyncio.run(service.hydrate_context(1, {"symbol": "BTC"}))
+
+    assert "finn_draft" not in hydrated
+    assert saved == {}
+
+
+def test_hydrate_context_clears_conflicting_transactional_state(monkeypatch):
+    saved = {
+        1: {
+            "current_flow": "strategy_creation",
+            "asset": "ETH",
+            "updated_at": _utc_now(),
+            "slots": {
+                "draft": {"draft_kind": "strategy", "asset": "ETH", "strategy_id": 257},
+                "updated_at": _utc_now().isoformat(),
+            },
+        }
+    }
+
+    class Repo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_state(self, user_id):
+            return saved.get(user_id)
+
+        async def save_state(self, user_id, current_flow, asset, slots):
+            saved[user_id] = {
+                "current_flow": current_flow,
+                "asset": asset,
+                "slots": slots,
+            }
+
+        async def clear_state(self, user_id):
+            saved.pop(user_id, None)
+
+    monkeypatch.setattr("backend.services.finn_plan_service.ConversationStateRepository", Repo)
+    service = FinnPlanService(db_session=object())
+
+    hydrated = asyncio.run(service.hydrate_context(1, {"symbol": "BTC"}))
+
+    assert "finn_draft" not in hydrated
+    assert saved == {}
+
+
+def test_persist_response_state_clears_transactional_state_after_non_transactional_turn(monkeypatch):
+    saved = {
+        1: {
+            "current_flow": "bot_creation",
+            "asset": "BTC",
+            "updated_at": _utc_now(),
+            "slots": {
+                "draft": {"draft_kind": "bot", "asset": "BTC", "strategy_id": 257},
+                "updated_at": _utc_now().isoformat(),
+            },
+        }
+    }
+
+    class Repo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_state(self, user_id):
+            return saved.get(user_id)
+
+        async def save_state(self, user_id, current_flow, asset, slots):
+            saved[user_id] = {
+                "current_flow": current_flow,
+                "asset": asset,
+                "slots": slots,
+            }
+
+        async def clear_state(self, user_id):
+            saved.pop(user_id, None)
+
+    monkeypatch.setattr("backend.services.finn_plan_service.ConversationStateRepository", Repo)
+    service = FinnPlanService(db_session=object())
+
+    asyncio.run(service.persist_response_state(1, {
+        "intent": "context_explain",
+        "flow": "context_explain",
+        "response": "Je bekijkt strategie 257.",
+        "state": {"current_flow": "context_explain", "strategy_id": 257},
+    }))
 
     assert saved == {}
 

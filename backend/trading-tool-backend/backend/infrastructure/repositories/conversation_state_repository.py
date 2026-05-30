@@ -10,7 +10,7 @@ class ConversationStateRepository:
 
     async def get_state(self, user_id: int) -> Optional[Dict[str, Any]]:
         query = text("""
-            SELECT current_flow, asset, slots
+            SELECT current_flow, asset, slots, updated_at
             FROM conversation_state
             WHERE user_id = :user_id
             LIMIT 1
@@ -24,7 +24,8 @@ class ConversationStateRepository:
             return {
                 "current_flow": row["current_flow"],
                 "asset": row["asset"],
-                "slots": slots or {}
+                "slots": slots or {},
+                "updated_at": row["updated_at"],
             }
         return None
 
