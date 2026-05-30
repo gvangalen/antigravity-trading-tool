@@ -84,7 +84,7 @@ REMOTE_LAST_GOOD="$(
   " 2>/dev/null | tail -n 1
 )"
 ROLLBACK_COMMIT="${REMOTE_LAST_GOOD:-$(git rev-parse --short HEAD~1 2>/dev/null || git rev-parse --short HEAD)}"
-ROLLBACK_COMMAND="ssh -i \"$SSH_KEY\" ubuntu@$SERVER_IP 'cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT'"
+ROLLBACK_COMMAND="ssh -i \"$SSH_KEY\" ubuntu@$SERVER_IP 'cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT'"
 
 echo "🌐 2. Deploying ${ENVIRONMENT} commit ${TARGET_COMMIT}..."
 echo "🧭 Previous known-good commit: ${ROLLBACK_COMMIT}"
@@ -283,7 +283,7 @@ PY
   if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
     echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
     ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" \
-      "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
+      "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
   fi
   echo "Rollback command:" >&2
   echo "  ${ROLLBACK_COMMAND}" >&2
@@ -321,7 +321,7 @@ if ! check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health
   if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
     echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
     ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" \
-      "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
+      "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
   fi
   echo "Rollback command:" >&2
   echo "  ${ROLLBACK_COMMAND}" >&2
