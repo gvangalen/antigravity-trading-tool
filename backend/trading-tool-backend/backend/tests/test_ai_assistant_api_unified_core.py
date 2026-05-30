@@ -102,6 +102,23 @@ def test_build_finn_core_rescue_envelope_prefers_context_explain_builder():
     assert response["intent"] == "context_explain"
 
 
+def test_build_finn_core_rescue_envelope_prefers_product_help_builder():
+    finn = _finn()
+    finn.build_product_help_response = AsyncMock(return_value={"intent": "product_help", "flow": "product_help"})
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Wat kan ik hier doen?",
+            context_payload={"page": "/dashboard", "page_type": "Dashboard", "symbol": "BTC"},
+        )
+    )
+
+    finn.build_product_help_response.assert_awaited_once()
+    assert response["intent"] == "product_help"
+
+
 def test_build_finn_core_rescue_envelope_prefers_behavioral_builder():
     finn = _finn()
     finn.build_behavioral_intelligence_response = AsyncMock(

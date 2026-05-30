@@ -146,7 +146,9 @@ def _query_prefers_non_transactional_finn_response(
     context_payload = context_payload or {}
     return any([
         finn.looks_like_general_capability_request(query),
+        finn.looks_like_product_help_request(query, context_payload),
         finn.looks_like_education_request(query),
+        finn.looks_like_mission_control_explain_request(query, context_payload),
         finn.looks_like_entity_explain_request(query, context_payload),
         finn.looks_like_behavioral_intelligence_request(query),
         finn.looks_like_weekly_reflection_request(query),
@@ -188,8 +190,12 @@ async def _build_finn_core_rescue_envelope(
     context_payload = context_payload or {}
     if finn.looks_like_general_capability_request(query):
         return await finn.build_general_capability_response(user_id, query, context_payload)
+    if finn.looks_like_product_help_request(query, context_payload):
+        return await finn.build_product_help_response(user_id, query, context_payload)
     if finn.looks_like_education_request(query):
         return await finn.build_education_response(user_id, query, context_payload)
+    if finn.looks_like_mission_control_explain_request(query, context_payload):
+        return await finn.build_mission_control_explain_response(user_id, query, context_payload)
     if finn.looks_like_entity_explain_request(query, context_payload):
         return await finn.build_context_explain_response(user_id, query, context_payload)
     if finn.looks_like_behavioral_intelligence_request(query):
@@ -224,6 +230,11 @@ def _log_finn_prompt_audit(
     draft_summary: Optional[Dict[str, Any]],
     response_type: str,
     success: str,
+    mode: Optional[str] = None,
+    context_confidence: Optional[Dict[str, Any]] = None,
+    draft_rejected_reason: Optional[str] = None,
+    legacy_rescue_reason: Optional[str] = None,
+    latency_ms: Optional[float] = None,
 ) -> None:
     audit_payload = {
         "trace_id": trace_id,
@@ -239,6 +250,11 @@ def _log_finn_prompt_audit(
         "response_type": response_type,
         "success": success,
         "route_source": route_source,
+        "mode": mode,
+        "context_confidence": context_confidence,
+        "draft_rejected_reason": draft_rejected_reason,
+        "legacy_rescue_reason": legacy_rescue_reason,
+        "latency_ms": latency_ms,
     }
     logger.info("📋 [FINN-P0-AUDIT] %s", json.dumps(audit_payload, ensure_ascii=False, default=str))
 
@@ -357,8 +373,11 @@ async def _finalize_finn_response(
     prompt: Optional[str] = None,
     context_payload: Optional[dict] = None,
     route_source: str = "finn",
+    legacy_rescue_reason: Optional[str] = None,
+    latency_ms: Optional[float] = None,
 ) -> AssistantChatResponse:
     response["trace_id"] = trace_id
+    response = finn._build_response_analysis_metadata(response, context_payload, route_source=route_source)
     _redact_assistant_reasoning(response)
     await finn.issue_response_actions(user_id, response)
     if persist_state:
@@ -378,6 +397,11 @@ async def _finalize_finn_response(
         draft_summary=_audit_draft_summary((context_payload or {}).get("finn_draft")),
         response_type=_audit_response_type(response),
         success=_audit_success_label(response),
+        mode=(response.get("analysis") or {}).get("mode"),
+        context_confidence=(response.get("analysis") or {}).get("context_confidence"),
+        draft_rejected_reason=((context_payload or {}).get("_finn_sanitization") or {}).get("draft_rejected_reason"),
+        legacy_rescue_reason=legacy_rescue_reason,
+        latency_ms=latency_ms,
     )
     return AssistantChatResponse(**response)
 
@@ -392,8 +416,11 @@ async def _prepare_finn_envelope(
     prompt: Optional[str] = None,
     context_payload: Optional[dict] = None,
     route_source: str = "finn_stream",
+    legacy_rescue_reason: Optional[str] = None,
+    latency_ms: Optional[float] = None,
 ) -> dict:
     envelope["trace_id"] = trace_id
+    envelope = finn._build_response_analysis_metadata(envelope, context_payload, route_source=route_source)
     _redact_assistant_reasoning(envelope)
     await finn.issue_response_actions(user_id, envelope)
     if persist_state:
@@ -413,6 +440,11 @@ async def _prepare_finn_envelope(
         draft_summary=_audit_draft_summary((context_payload or {}).get("finn_draft")),
         response_type=_audit_response_type(envelope),
         success=_audit_success_label(envelope),
+        mode=(envelope.get("analysis") or {}).get("mode"),
+        context_confidence=(envelope.get("analysis") or {}).get("context_confidence"),
+        draft_rejected_reason=((context_payload or {}).get("_finn_sanitization") or {}).get("draft_rejected_reason"),
+        legacy_rescue_reason=legacy_rescue_reason,
+        latency_ms=latency_ms,
     )
     return envelope
 
@@ -427,6 +459,7 @@ async def assistant_chat(
     db: AsyncSession = Depends(get_db),
 ):
     trace_id = x_trace_id or f"trdm-trace-{uuid.uuid4().hex[:8]}-{hex(int(time.time()))[2:]}"
+    started_at = time.perf_counter()
     try:
         user_id = current_user["id"]
         finn = FinnPlanService(db)
@@ -447,17 +480,27 @@ async def assistant_chat(
         if finn.looks_like_general_capability_request(request.query):
             finn_response = await finn.build_general_capability_response(user_id, request.query, context_payload)
             return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
+            )
+        if finn.looks_like_product_help_request(request.query, context_payload):
+            finn_response = await finn.build_product_help_response(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
             )
         if finn.looks_like_education_request(request.query):
             finn_response = await finn.build_education_response(user_id, request.query, context_payload)
             return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
+            )
+        if finn.looks_like_mission_control_explain_request(request.query, context_payload):
+            finn_response = await finn.build_mission_control_explain_response(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
             )
         if finn.looks_like_entity_explain_request(request.query, context_payload):
             finn_response = await finn.build_context_explain_response(user_id, request.query, context_payload)
             return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
             )
         if finn.looks_like_bot_decision_request(request.query) or _legacy_bot_decision_resume(
             request.query,
@@ -559,6 +602,8 @@ async def assistant_chat(
                 prompt=request.query,
                 context_payload=context_payload,
                 route_source="finn_core_rescue_exception",
+                legacy_rescue_reason="legacy_exception",
+                latency_ms=(time.perf_counter() - started_at) * 1000,
             )
         intent = service._classify_intent(request.query)
         if not isinstance(action, dict):
@@ -593,6 +638,8 @@ async def assistant_chat(
                 prompt=request.query,
                 context_payload=context_payload,
                 route_source="finn_core_rescue_legacy",
+                legacy_rescue_reason="legacy_non_transactional_misroute_or_generic_failure",
+                latency_ms=(time.perf_counter() - started_at) * 1000,
             )
         legacy_response = {
             "response": response,
@@ -602,6 +649,11 @@ async def assistant_chat(
             "state": state,
             "actions": action and [action] or [],
         }
+        legacy_response = finn._build_response_analysis_metadata(
+            legacy_response,
+            context_payload,
+            route_source="legacy",
+        )
         _log_finn_prompt_audit(
             trace_id=trace_id,
             user_id=user_id,
@@ -616,13 +668,17 @@ async def assistant_chat(
             draft_summary=_audit_draft_summary(draft),
             response_type=_audit_response_type(legacy_response),
             success=_audit_success_label(legacy_response),
+            mode=(legacy_response.get("analysis") or {}).get("mode") or finn._response_mode_for_flow((state or {}).get("current_flow"), draft),
+            context_confidence=(legacy_response.get("analysis") or {}).get("context_confidence"),
+            draft_rejected_reason=(context_payload.get("_finn_sanitization") or {}).get("draft_rejected_reason"),
+            latency_ms=(time.perf_counter() - started_at) * 1000,
         )
         return AssistantChatResponse(
             response=response,
             intent=intent,
             action=action,
             draft=draft,
-            state=state,
+            state=legacy_response.get("state"),
             reasoning=reasoning,
             suggested_actions=suggested_actions,
             trace_id=trace_id,
@@ -645,6 +701,8 @@ async def assistant_chat(
             draft_summary=_audit_draft_summary((_assistant_context_payload(request.context) or {}).get("finn_draft")),
             response_type="exception",
             success="failure",
+            draft_rejected_reason=((_assistant_context_payload(request.context) or {}).get("_finn_sanitization") or {}).get("draft_rejected_reason"),
+            latency_ms=(time.perf_counter() - started_at) * 1000,
         )
         logger.error(f"❌ AI Assistant Chat Error: {e} | Trace: {trace_id}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij AI Assistant")
@@ -757,6 +815,7 @@ async def assistant_chat_stream(
     user_id = current_user["id"]
 
     trace_id = x_trace_id or f"trdm-trace-{uuid.uuid4().hex[:8]}-{hex(int(time.time()))[2:]}"
+    started_at = time.perf_counter()
 
     async def event_generator():
         try:
@@ -778,19 +837,31 @@ async def assistant_chat_stream(
 
             if finn.looks_like_general_capability_request(request.query):
                 envelope = await finn.build_general_capability_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_product_help_request(request.query, context_payload):
+                envelope = await finn.build_product_help_response(user_id, request.query, context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_education_request(request.query):
                 envelope = await finn.build_education_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_mission_control_explain_request(request.query, context_payload):
+                envelope = await finn.build_mission_control_explain_response(user_id, request.query, context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
                 yield _sse_event("envelope", envelope)
                 return
 
             if finn.looks_like_entity_explain_request(request.query, context_payload):
                 envelope = await finn.build_context_explain_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
                 yield _sse_event("envelope", envelope)
                 return
 
@@ -925,6 +996,8 @@ async def assistant_chat_stream(
                                 prompt=request.query,
                                 context_payload=context_payload,
                                 route_source="finn_core_rescue_stream",
+                                legacy_rescue_reason="legacy_stream_non_transactional_misroute_or_generic_failure",
+                                latency_ms=(time.perf_counter() - started_at) * 1000,
                             )
                             yield _sse_event("envelope", rescue)
                             return
@@ -946,6 +1019,8 @@ async def assistant_chat_stream(
                     prompt=request.query,
                     context_payload=context_payload,
                     route_source="finn_core_rescue_stream_exception",
+                    legacy_rescue_reason="legacy_stream_exception",
+                    latency_ms=(time.perf_counter() - started_at) * 1000,
                 )
                 yield _sse_event("envelope", rescue)
                 return

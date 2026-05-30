@@ -36,8 +36,24 @@ KNOWN_ASSET_CANDIDATES = ("BTC", "ETH", "SOL", "DOGE", "XRP", "ADA", "BNB", "AVA
 NUMBER_WITH_DELIMITER = r"([0-9][0-9.,]*)(?=\s|,|/|$)"
 FINN_STATE_VERSION = 2
 TRANSACTIONAL_FLOWS = {"plan_creation", "strategy_creation", "bot_creation", "indicator_config"}
+READ_ONLY_FLOWS = {
+    "general_help",
+    "education",
+    "product_help",
+    "context_explain",
+    "mission_control_explain",
+    "behavioral_intelligence",
+    "weekly_reflection",
+    "behavioral_memory",
+    "finn_report",
+    "daily_coach",
+    "indicator_insight",
+    "status",
+}
 TRANSACTIONAL_STATE_TTL_MINUTES = 45
 BOT_DECISION_STATE_TTL_MINUTES = 20
+READ_ONLY_STATE_TTL_MINUTES = 20
+INTENT_HISTORY_LIMIT = 8
 
 
 def _utc_now() -> datetime:
@@ -47,6 +63,15 @@ def _utc_now() -> datetime:
 def _utc_db_timestamp() -> datetime:
     """Return UTC normalized for existing naive timestamp columns."""
     return _utc_now().replace(tzinfo=None)
+
+
+def _normalized_route_source(route_source: Optional[str]) -> str:
+    source = str(route_source or "finn").lower()
+    if source.startswith("legacy"):
+        return "legacy"
+    if "rescue" in source:
+        return "finn_rescue"
+    return "finn"
 
 
 WEEKDAYS = {
@@ -380,10 +405,70 @@ class FinnPlanService:
         return (
             any(phrase in q for phrase in [
             "leg uit", "uitleg", "verklaar", "waarom", "wat is", "wat doet",
-            "welke", "bekijk ik", "heb ik open", "simpele taal",
+            "welke", "bekijk ik", "heb ik open", "simpele taal", "samenvat",
+            "vat", "leg dit scherm uit", "wat bekijk ik nu", "wat betekent",
             ])
             or ("leg" in q and "uit" in q)
         )
+
+    def _response_mode_for_flow(self, flow: Optional[str], draft: Optional[Dict[str, Any]] = None) -> str:
+        flow = str(flow or "").lower()
+        if flow in TRANSACTIONAL_FLOWS or isinstance(draft, dict):
+            return "transactional"
+        return "read_only"
+
+    def _state_bucket_for_flow(self, flow: Optional[str]) -> str:
+        flow = str(flow or "").lower()
+        if flow in TRANSACTIONAL_FLOWS:
+            return "transactional_state"
+        if flow == "behavioral_intelligence":
+            return "coaching_state"
+        if flow in {"context_explain", "mission_control_explain"}:
+            return "explain_state"
+        return "read_only_state"
+
+    def _append_intent_history(
+        self,
+        previous_state: Optional[Dict[str, Any]],
+        *,
+        flow: Optional[str],
+        intent: Optional[str],
+        mode: str,
+    ) -> List[Dict[str, Any]]:
+        previous_slots = (previous_state or {}).get("slots") or {}
+        history = list(previous_slots.get("intent_history") or [])
+        history.append(
+            {
+                "flow": flow,
+                "intent": intent,
+                "mode": mode,
+                "at": _utc_now().isoformat(),
+            }
+        )
+        return history[-INTENT_HISTORY_LIMIT:]
+
+    def _build_response_analysis_metadata(
+        self,
+        response: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+        *,
+        route_source: str = "finn",
+    ) -> Dict[str, Any]:
+        context = context or {}
+        analysis = response.get("analysis") if isinstance(response.get("analysis"), dict) else {}
+        flow = response.get("flow") or (response.get("state") or {}).get("current_flow")
+        mode = self._response_mode_for_flow(flow, response.get("draft") if isinstance(response.get("draft"), dict) else None)
+        if mode == "read_only" and "context_confidence" not in analysis:
+            analysis["context_confidence"] = self._context_confidence(context)
+        analysis["mode"] = mode
+        analysis["route_source"] = _normalized_route_source(route_source)
+        response["analysis"] = analysis
+        state = response.get("state") if isinstance(response.get("state"), dict) else {}
+        state_analysis = state.get("analysis") if isinstance(state.get("analysis"), dict) else {}
+        state_analysis.update(analysis)
+        state["analysis"] = state_analysis
+        response["state"] = state
+        return response
 
     def looks_like_general_capability_request(self, query: str) -> bool:
         q = self._normalized_query(query)
@@ -392,6 +477,31 @@ class FinnPlanService:
             "wat doe je", "hoe ondersteun", "hoe help", "waar help je mee",
         ]
         return any(phrase in q for phrase in capability_phrases)
+
+    def looks_like_product_help_request(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
+        q = self._normalized_query(query)
+        context = context or {}
+        if any(word in q for word in ["maak ", "aanmaken", "creeer", "creeër", "bouw", "update", "wijzig", "pas "]):
+            return False
+        help_phrases = [
+            "wat bekijk ik nu",
+            "wat is dit scherm",
+            "leg dit scherm uit",
+            "wat kan ik hier doen",
+            "wat doet tradamind hier",
+            "hoe werkt dit rapport",
+            "wat kan ik met deze setup",
+            "wat kan ik met deze strategie",
+            "wat kan ik met deze bot",
+            "wat betekent deze score",
+            "wat betekent deze setup",
+            "wat betekent deze strategie",
+            "wat betekent deze bot",
+        ]
+        if any(phrase in q for phrase in help_phrases):
+            return True
+        page_type = str(context.get("page_type") or "").lower()
+        return bool(page_type and any(phrase in q for phrase in ["hier doen", "dit scherm", "deze pagina", "bekijk ik nu"]))
 
     def looks_like_education_request(self, query: str) -> bool:
         q = self._normalized_query(query)
@@ -420,13 +530,30 @@ class FinnPlanService:
         has_explain = self._has_explain_intent(query)
         if not has_explain:
             return False
+        if any(phrase in q for phrase in ["mission control", "dit scherm", "deze pagina", "wat kan ik hier doen"]):
+            return False
         if context.get("setup_id") and any(term in q for term in ["setup", "plan", "open"]):
             return True
         if context.get("strategy_id") and any(term in q for term in ["strategie", "strategy", "open"]):
             return True
         if context.get("bot_id") and "bot" in q:
             return True
-        return any(term in q for term in ["setup", "strategie", "strategy", "bot", "rapport", "report", "score"])
+        if any(phrase in q for phrase in ["wat bekijk ik nu", "heb ik nu open", "wat zie ik nu"]):
+            return True
+        return any(term in q for term in ["setup", "strategie", "strategy", "bot", "rapport", "report", "score", "scherm", "pagina"])
+
+    def looks_like_mission_control_explain_request(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
+        q = self._normalized_query(query)
+        context = context or {}
+        page_type = str(context.get("page_type") or "").lower()
+        has_mc = "mission control" in q or context.get("scope") == "mission_control"
+        if not has_mc and "dashboard" not in page_type:
+            return False
+        explain_terms = [
+            "samenvat", "vat", "uitleg", "leg uit", "wat zegt", "drie bullets",
+            "prioriteiten", "wat moet ik vandaag doen", "wat gebeurt hier",
+        ]
+        return has_mc and any(term in q for term in explain_terms)
 
     def _looks_like_transactional_follow_up(self, query: str, draft: Dict[str, Any]) -> bool:
         q = self._normalized_query(query)
@@ -434,9 +561,13 @@ class FinnPlanService:
             return True
         if self.looks_like_general_capability_request(query):
             return False
+        if self.looks_like_product_help_request(query, {}):
+            return False
         if self.looks_like_education_request(query):
             return False
         if self.looks_like_entity_explain_request(query, {}):
+            return False
+        if self.looks_like_mission_control_explain_request(query, {}):
             return False
         if self.looks_like_behavioral_intelligence_request(query):
             return False
@@ -482,17 +613,20 @@ class FinnPlanService:
             finn_state.get("updated_at"),
             TRANSACTIONAL_STATE_TTL_MINUTES,
         ):
+            payload["_finn_sanitization"] = {"draft_rejected_reason": "transactional_state_expired"}
             payload.pop("finn_draft", None)
             payload.pop("finn_state", None)
             payload.pop("current_flow", None)
             return payload
         if self._draft_conflicts_with_query_or_context(query, draft, payload):
+            payload["_finn_sanitization"] = {"draft_rejected_reason": "entity_conflict_or_query_conflict"}
             payload.pop("finn_draft", None)
             payload.pop("finn_state", None)
             payload.pop("current_flow", None)
             return payload
         if self._looks_like_transactional_follow_up(query, draft):
             return payload
+        payload["_finn_sanitization"] = {"draft_rejected_reason": "non_transactional_turn"}
         payload.pop("finn_draft", None)
         payload.pop("finn_state", None)
         if payload.get("current_flow") in TRANSACTIONAL_FLOWS:
@@ -545,12 +679,33 @@ class FinnPlanService:
                     "memory_friction": bot_decision_state.get("memory_friction"),
                     "pending_behavioral_memory_friction": bot_decision_state.get("pending_behavioral_memory_friction"),
                 })
+        elif state and state.get("current_flow") in READ_ONLY_FLOWS:
+            if not self._state_is_fresh(state_updated_at, READ_ONLY_STATE_TTL_MINUTES):
+                await repo.clear_state(user_id)
+                return hydrated
+            hydrated["current_flow"] = state.get("current_flow")
+            hydrated["finn_state"] = {
+                "version": slots.get("version"),
+                "updated_at": state_updated_at,
+                "current_flow": state.get("current_flow"),
+                "state_bucket": slots.get("state_bucket"),
+                "intent_history": slots.get("intent_history") or [],
+            }
         return hydrated
 
     async def persist_response_state(self, user_id: int, response: Dict[str, Any]) -> None:
         if not self.session:
             return
         repo = ConversationStateRepository(self.session)
+        flow = response.get("flow")
+        mode = self._response_mode_for_flow(flow, response.get("draft") if isinstance(response.get("draft"), dict) else None)
+        stored = await repo.get_state(user_id)
+        intent_history = self._append_intent_history(
+            stored,
+            flow=flow,
+            intent=response.get("intent"),
+            mode=mode,
+        )
         if response.get("intent") in {"plan_creation_cancelled", "strategy_creation_cancelled", "bot_creation_cancelled", "indicator_config_cancelled"}:
             await repo.clear_state(user_id)
             return
@@ -567,17 +722,32 @@ class FinnPlanService:
                         "missing_fields": response.get("missing_fields", []),
                         "invalid_fields": response.get("invalid_fields", []),
                         "can_confirm": response.get("can_confirm", False),
+                        "state_bucket": "transactional_state",
+                        "intent_history": intent_history,
                         "updated_at": _utc_now().isoformat(),
                     },
                 )
                 return
-            stored = await repo.get_state(user_id)
             if stored and stored.get("current_flow") == "bot_decision":
                 await repo.clear_state(user_id)
             return
         if response.get("flow") not in TRANSACTIONAL_FLOWS or not isinstance(response.get("draft"), dict):
-            stored = await repo.get_state(user_id)
-            if stored and stored.get("current_flow") in (TRANSACTIONAL_FLOWS | {"bot_decision"}):
+            lightweight_state = {
+                "version": FINN_STATE_VERSION,
+                "state_bucket": self._state_bucket_for_flow(flow),
+                "intent_history": intent_history,
+                "analysis": response.get("analysis") if isinstance(response.get("analysis"), dict) else {},
+                "updated_at": _utc_now().isoformat(),
+            }
+            if flow in READ_ONLY_FLOWS:
+                await repo.save_state(
+                    user_id,
+                    current_flow=flow,
+                    asset=(response.get("state") or {}).get("asset") or (response.get("analysis") or {}).get("entity", {}).get("asset"),
+                    slots=lightweight_state,
+                )
+                return
+            if stored and stored.get("current_flow") in (TRANSACTIONAL_FLOWS | {"bot_decision"} | READ_ONLY_FLOWS):
                 await repo.clear_state(user_id)
             return
 
@@ -592,6 +762,8 @@ class FinnPlanService:
                 "missing_fields": response.get("missing_fields", []),
                 "invalid_fields": response.get("invalid_fields", []),
                 "can_confirm": response.get("can_confirm", False),
+                "state_bucket": "transactional_state",
+                "intent_history": intent_history,
                 "updated_at": _utc_now().isoformat(),
             },
         )
@@ -676,7 +848,7 @@ class FinnPlanService:
             return True
         if draft and draft.get("draft_kind") == "strategy":
             return False
-        if self.looks_like_general_capability_request(query) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query):
+        if self.looks_like_general_capability_request(query) or self.looks_like_product_help_request(query) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query) or self.looks_like_mission_control_explain_request(query):
             return False
         if self.looks_like_daily_coach_request(query):
             return False
@@ -712,7 +884,7 @@ class FinnPlanService:
         draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else {}
         if draft.get("draft_kind") == "strategy" and self._looks_like_transactional_follow_up(query, draft):
             return True
-        if self.looks_like_general_capability_request(query) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query, context):
+        if self.looks_like_general_capability_request(query) or self.looks_like_product_help_request(query, context) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query, context) or self.looks_like_mission_control_explain_request(query, context):
             return False
         if self.looks_like_status_request(query):
             return False
@@ -729,7 +901,7 @@ class FinnPlanService:
         draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else {}
         if draft.get("draft_kind") == "bot" and self._looks_like_transactional_follow_up(query, draft):
             return True
-        if self.looks_like_general_capability_request(query) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query, context):
+        if self.looks_like_general_capability_request(query) or self.looks_like_product_help_request(query, context) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query, context) or self.looks_like_mission_control_explain_request(query, context):
             return False
         if self.looks_like_status_request(query):
             return False
@@ -748,7 +920,7 @@ class FinnPlanService:
         draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else {}
         if draft.get("draft_kind") == "indicator_config" and self._looks_like_transactional_follow_up(query, draft):
             return True
-        if self.looks_like_general_capability_request(query) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query, context):
+        if self.looks_like_general_capability_request(query) or self.looks_like_product_help_request(query, context) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query, context) or self.looks_like_mission_control_explain_request(query, context):
             return False
         if self.looks_like_status_request(query):
             return False
@@ -815,11 +987,13 @@ class FinnPlanService:
             "impulsief", "impulsieve", "emotie", "emotioneel", "overtrade",
             "overtrading", "afwijk", "wijk ik af", "plan gevolgd", "trading gedrag",
             "heb ik mijn plan", "weekreflectie", "reflectie", "patroon", "patronen",
+            "all-in", "all in", "bang", "twijfel", "twijfelachtig", "panic", "paniek",
+            "jagen", "forceren", "te groot", "te veel risico",
         ]
         coaching_terms = [
             "hoe", "zie", "check", "controleer", "analyseer", "waar", "wat zegt",
             "spiegel", "coach", "ben ik", "heb ik", "wijk", "wat moet ik doen",
-            "nu doen", "help me",
+            "nu doen", "help me", "moet ik", "zal ik", "denk eraan",
         ]
         return any(term in q for term in behavioral_terms) and any(term in q for term in coaching_terms)
 
@@ -936,12 +1110,88 @@ class FinnPlanService:
                 "asset": asset,
             },
             "analysis": {
-                "mode": "general_help",
+                "mode": "read_only",
+                "route_source": "finn",
                 "examples": [
                     "Leg mijn setup uit",
                     "Waarom blokkeert technical mijn BTC setup?",
                     "Wat moet ik vandaag doen?",
                 ],
+            },
+            "actions": [],
+        }
+
+    def _product_capability_inventory(self, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        page_type = str(context.get("page_type") or context.get("page") or "Tradamind")
+        current_entity = {
+            "symbol": context.get("symbol") or context.get("asset"),
+            "setup_id": context.get("setup_id"),
+            "strategy_id": context.get("strategy_id"),
+            "bot_id": context.get("bot_id"),
+        }
+        return {
+            "page": page_type,
+            "current_entity": {k: v for k, v in current_entity.items() if v not in (None, "", [], {})},
+            "supported_read_only": [
+                "setup_uitleg",
+                "strategie_uitleg",
+                "bot_uitleg",
+                "score_uitleg",
+                "rapport_uitleg",
+                "coaching",
+                "mission_control_samenvatting",
+            ],
+            "supported_mutations": [
+                "setup_aanmaken",
+                "strategie_genereren",
+                "bot_aanmaken",
+                "bot_decision_review",
+            ],
+            "not_supported_yet": [
+                "watchlist_wijzigen_via_finn",
+                "brede_portfolio_mutaties",
+            ],
+        }
+
+    async def build_product_help_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        page = context.get("page_type") or context.get("page") or "Tradamind"
+        inventory = self._product_capability_inventory(context)
+        supported_now = ", ".join([
+            "uitleg van je huidige scherm",
+            "score/setup/strategie/bot uitleg",
+            "coaching",
+            "Mission Control samenvatten",
+        ])
+        mutations = ", ".join([
+            "setup aanmaken",
+            "strategie genereren",
+            "bot aanmaken",
+            "bot-decisions reviewen",
+        ])
+        response = (
+            f"Je zit nu op {page}. Hier help ik je vooral met begrijpen en veilig beslissen. "
+            f"Wat ik nu direct voor je kan doen: {supported_now}. "
+            f"Als je echt iets wilt bouwen of wijzigen, kan ik ook helpen met: {mutations}. "
+            "Wat ik nog niet breed zelf doet: watchlists aanpassen en vrije portfolio-mutaties."
+        )
+        return {
+            "response": response,
+            "intent": "product_help",
+            "flow": "product_help",
+            "state": {
+                "current_flow": "product_help",
+                "page": context.get("page"),
+                "analysis": {
+                    "mode": "read_only",
+                    "route_source": "finn",
+                },
+            },
+            "analysis": {
+                "mode": "read_only",
+                "route_source": "finn",
+                "product_help": inventory,
             },
             "actions": [],
         }
@@ -1038,23 +1288,36 @@ class FinnPlanService:
                 "response": "Ik kan basis trading-concepten simpel uitleggen, zoals RSI, MA200, Wyckoff, DCA, stop loss, position sizing, risk management en wanneer juist niets doen verstandig is.",
                 "analysis": {
                     "topic": None,
-                    "style": "simple_explain",
+                    "difficulty": "simple",
                     "confidence": "medium",
+                    "what_it_is": None,
+                    "why_it_matters": None,
+                    "how_to_use_it_safely": None,
+                    "common_mistake": None,
                 },
             }
+        safe_use = (
+            "Gebruik dit samen met trend, context en je plan; laat het niet alleen beslissen of je iets doet."
+        )
+        common_mistake = topic["not_enough_on_its_own"]
         response = (
             f"{topic['simple']}\n"
             f"Wat het is: {topic['what_it_is']}\n"
             f"Waarom het telt: {topic['why_it_matters']}\n"
-            f"Let op: {topic['not_enough_on_its_own']}"
+            f"Veilig gebruiken: {safe_use}\n"
+            f"Veelgemaakte fout: {common_mistake}"
         )
         return {
             "response": response,
             "analysis": {
                 "topic": topic_key,
                 "topic_label": topic["title"],
-                "style": "simple_explain",
+                "difficulty": "simple" if "simpele taal" in self._normalized_query(query) or "eenvoudig" in self._normalized_query(query) else "standard",
                 "confidence": "high",
+                "what_it_is": topic["what_it_is"],
+                "why_it_matters": topic["why_it_matters"],
+                "how_to_use_it_safely": safe_use,
+                "common_mistake": common_mistake,
             },
         }
 
@@ -1066,18 +1329,18 @@ class FinnPlanService:
         bot_id = context.get("bot_id")
 
         if strategy_id and "strategy" in page_type:
-            return {"level": "high", "entity_type": "strategy", "reason": "strategy page with strategy_id"}
+            return {"level": "high", "entity_type": "strategy", "entity_id": strategy_id, "reason": "strategy page with strategy_id", "why": "strategy page with strategy_id"}
         if setup_id and ("setup" in page_type or "setups" in page_type):
-            return {"level": "high", "entity_type": "setup", "reason": "setup page with setup_id"}
+            return {"level": "high", "entity_type": "setup", "entity_id": setup_id, "reason": "setup page with setup_id", "why": "setup page with setup_id"}
         if bot_id and "bot" in page_type:
-            return {"level": "high", "entity_type": "bot", "reason": "bot page with bot_id"}
+            return {"level": "high", "entity_type": "bot", "entity_id": bot_id, "reason": "bot page with bot_id", "why": "bot page with bot_id"}
         if strategy_id:
-            return {"level": "medium", "entity_type": "strategy", "reason": "strategy_id without strong page confirmation"}
+            return {"level": "medium", "entity_type": "strategy", "entity_id": strategy_id, "reason": "strategy_id without strong page confirmation", "why": "strategy_id without strong page confirmation"}
         if setup_id:
-            return {"level": "medium", "entity_type": "setup", "reason": "setup_id without strong page confirmation"}
+            return {"level": "medium", "entity_type": "setup", "entity_id": setup_id, "reason": "setup_id without strong page confirmation", "why": "setup_id without strong page confirmation"}
         if bot_id:
-            return {"level": "medium", "entity_type": "bot", "reason": "bot_id without strong page confirmation"}
-        return {"level": "low", "entity_type": "unknown", "reason": "no strong entity context"}
+            return {"level": "medium", "entity_type": "bot", "entity_id": bot_id, "reason": "bot_id without strong page confirmation", "why": "bot_id without strong page confirmation"}
+        return {"level": "low", "entity_type": "unknown", "entity_id": None, "reason": "no strong entity context", "why": "no strong entity context"}
 
     def _context_confidence_for_target(
         self,
@@ -1093,45 +1356,49 @@ class FinnPlanService:
 
         if entity_type == "score":
             if asset and any(token in page_type for token in ["dashboard", "score", "market", "setup", "strategy", "bot"]):
-                return {"level": "high", "entity_type": "score", "reason": "asset context available for score explanation"}
+                return {"level": "high", "entity_type": "score", "entity_id": asset, "reason": "asset context available for score explanation", "why": "asset context available for score explanation"}
             if asset:
-                return {"level": "medium", "entity_type": "score", "reason": "asset inferred without strong score surface confirmation"}
-            return {"level": "low", "entity_type": "score", "reason": "score requested without confident asset context"}
+                return {"level": "medium", "entity_type": "score", "entity_id": asset, "reason": "asset inferred without strong score surface confirmation", "why": "asset inferred without strong score surface confirmation"}
+            return {"level": "low", "entity_type": "score", "entity_id": None, "reason": "score requested without confident asset context", "why": "score requested without confident asset context"}
 
         if entity_type == "report":
             if "report" in page_type:
-                return {"level": "high", "entity_type": "report", "reason": "report page context available"}
-            return {"level": "medium", "entity_type": "report", "reason": "report requested without explicit report page"}
+                return {"level": "high", "entity_type": "report", "entity_id": self._report_table_from_query_or_context("", context), "reason": "report page context available", "why": "report page context available"}
+            return {"level": "medium", "entity_type": "report", "entity_id": self._report_table_from_query_or_context("", context), "reason": "report requested without explicit report page", "why": "report requested without explicit report page"}
 
         if entity_type == "bot":
             bot_id = context.get("bot_id")
             if bot_id and "bot" in page_type:
-                return {"level": "high", "entity_type": "bot", "reason": "bot page with bot_id"}
+                return {"level": "high", "entity_type": "bot", "entity_id": bot_id, "reason": "bot page with bot_id", "why": "bot page with bot_id"}
             if bot_id:
-                return {"level": "medium", "entity_type": "bot", "reason": "bot_id without strong page confirmation"}
-            return {"level": "low", "entity_type": "bot", "reason": "bot requested without bot context"}
+                return {"level": "medium", "entity_type": "bot", "entity_id": bot_id, "reason": "bot_id without strong page confirmation", "why": "bot_id without strong page confirmation"}
+            return {"level": "low", "entity_type": "bot", "entity_id": None, "reason": "bot requested without bot context", "why": "bot requested without bot context"}
 
         if entity_type == "strategy":
             strategy_id = context.get("strategy_id")
             if strategy_id and "strategy" in page_type:
-                return {"level": "high", "entity_type": "strategy", "reason": "strategy page with strategy_id"}
+                return {"level": "high", "entity_type": "strategy", "entity_id": strategy_id, "reason": "strategy page with strategy_id", "why": "strategy page with strategy_id"}
             if strategy_id:
-                return {"level": "medium", "entity_type": "strategy", "reason": "strategy_id without strong page confirmation"}
-            return {"level": "low", "entity_type": "strategy", "reason": "strategy requested without strategy context"}
+                return {"level": "medium", "entity_type": "strategy", "entity_id": strategy_id, "reason": "strategy_id without strong page confirmation", "why": "strategy_id without strong page confirmation"}
+            return {"level": "low", "entity_type": "strategy", "entity_id": None, "reason": "strategy requested without strategy context", "why": "strategy requested without strategy context"}
 
         if entity_type == "setup":
             setup_id = context.get("setup_id")
             if setup_id and ("setup" in page_type or "setups" in page_type):
-                return {"level": "high", "entity_type": "setup", "reason": "setup page with setup_id"}
+                return {"level": "high", "entity_type": "setup", "entity_id": setup_id, "reason": "setup page with setup_id", "why": "setup page with setup_id"}
             if setup_id:
-                return {"level": "medium", "entity_type": "setup", "reason": "setup_id without strong page confirmation"}
-            return {"level": "low", "entity_type": "setup", "reason": "setup requested without setup context"}
+                return {"level": "medium", "entity_type": "setup", "entity_id": setup_id, "reason": "setup_id without strong page confirmation", "why": "setup_id without strong page confirmation"}
+            return {"level": "low", "entity_type": "setup", "entity_id": None, "reason": "setup requested without setup context", "why": "setup requested without setup context"}
 
         return base
 
     def _context_explain_target(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
         q = self._normalized_query(query)
         context = context or {}
+        if any(phrase in q for phrase in ["wat bekijk ik nu", "leg dit scherm uit", "wat zie ik nu", "welke pagina", "dit scherm", "deze pagina"]):
+            return "page"
+        if "mission control" in q:
+            return "mission_control"
         if any(term in q for term in ["rapport", "report"]):
             return "report"
         if "score" in q:
@@ -1150,6 +1417,8 @@ class FinnPlanService:
             return "bot"
         if context.get("symbol") or context.get("asset"):
             return "score"
+        if context.get("page_type") or context.get("page"):
+            return "page"
         return "unknown"
 
     def _report_table_from_query_or_context(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
@@ -1190,6 +1459,74 @@ class FinnPlanService:
             "actions": actions or [],
         }
 
+    def _page_summary_message(self, context: Optional[Dict[str, Any]] = None) -> str:
+        context = context or {}
+        page_type = str(context.get("page_type") or context.get("page") or "Tradamind")
+        page = str(context.get("page") or "").lower()
+        symbol = context.get("symbol") or context.get("asset")
+        setup_id = context.get("setup_id")
+        strategy_id = context.get("strategy_id")
+        bot_id = context.get("bot_id")
+
+        if "dashboard" in page_type.lower() or "dashboard" in page:
+            return "Je zit op het dashboard. Hier zie je vooral je actuele asset-context, dagelijkse scores, Mission Control en snelle coaching over wat vandaag aandacht vraagt."
+        if "setup" in page_type.lower() or setup_id:
+            return f"Je zit op een setup-scherm{f' voor setup #{setup_id}' if setup_id else ''}. Hier kijk je of een setup logisch is, welke score-ranges gelden en of deze context klaar is voor een strategie."
+        if "strategy" in page_type.lower() or strategy_id:
+            return f"Je zit op een strategie-scherm{f' voor strategie #{strategy_id}' if strategy_id else ''}. Hier beoordeel je hoe een setup vertaald wordt naar entry-, stop-, target- en risicoregels."
+        if "bot" in page_type.lower() or bot_id:
+            return f"Je zit op een bot-scherm{f' voor bot #{bot_id}' if bot_id else ''}. Hier kijk je vooral naar automation, review-openingen en of de bot veilig live of paper draait."
+        if "report" in page_type.lower() or "report" in page:
+            return "Je zit op de report-surface. Hier vat FINN je reflectie, gedrag en rapportcontext samen zodat je sneller ziet wat je hebt gedaan en wat aandacht vraagt."
+        if symbol:
+            return f"Je zit in een {page_type}-context rond {symbol}. Ik kan hier vooral scores, blockers en je actieve productcontext uitleggen."
+        return f"Je zit op {page_type}. Ik kan hier het scherm uitleggen, de actieve entiteit duiden en helpen bepalen wat nu lezen is en wat echt een actie vraagt."
+
+    async def build_mission_control_explain_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        mission = await self.build_mission_control_response(
+            user_id,
+            {**(context or {}), "scope": "mission_control"},
+        )
+        coaching_loop = mission.get("coaching_loop") or {}
+        priorities = coaching_loop.get("daily_priority_stack") or []
+        suppressed = coaching_loop.get("suppressed_items") or []
+        response_lines = ["Mission Control zegt nu in het kort:"]
+        if priorities:
+            response_lines.append("Vandaag eerst:")
+            for item in priorities[:3]:
+                response_lines.append(f"- {item.get('title') or item.get('label')}")
+        if suppressed:
+            response_lines.append("Vandaag bewust niet doen:")
+            for item in suppressed[:2]:
+                response_lines.append(f"- {item.get('title') or item.get('label')}")
+        if mission.get("summary"):
+            response_lines.append(
+                f"Open nu: {mission['summary'].get('open_count', 0)} items, "
+                f"{mission['summary'].get('high_priority_count', 0)} met hoge prioriteit."
+            )
+        return {
+            "response": "\n".join(response_lines),
+            "intent": "mission_control_explain",
+            "flow": "mission_control_explain",
+            "state": {
+                "current_flow": "mission_control_explain",
+                "analysis": {
+                    "mission_control": mission,
+                    "context_confidence": {"level": "high", "entity_type": "mission_control", "entity_id": "mission_control", "reason": "mission control summary requested", "why": "mission control summary requested"},
+                },
+            },
+            "analysis": {
+                "mission_control": mission,
+                "context_confidence": {"level": "high", "entity_type": "mission_control", "entity_id": "mission_control", "reason": "mission control summary requested", "why": "mission control summary requested"},
+            },
+            "actions": [],
+        }
+
     async def build_education_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         topic = self._match_education_topic(query)
         message = self._build_education_message(topic, query)
@@ -1213,6 +1550,25 @@ class FinnPlanService:
         setup_id = context.get("setup_id")
         bot_id = context.get("bot_id")
         confidence = self._context_confidence_for_target(context, target)
+
+        if target == "mission_control":
+            return await self.build_mission_control_explain_response(user_id, query, context)
+
+        if target == "page":
+            page_type = str(context.get("page_type") or context.get("page") or "Tradamind")
+            page_confidence = {
+                "level": "high" if context.get("page") or context.get("page_type") else "medium",
+                "entity_type": "page",
+                "entity_id": context.get("page") or page_type,
+                "reason": "page context available" if context.get("page") or context.get("page_type") else "page inferred from generic context",
+                "why": "page context available" if context.get("page") or context.get("page_type") else "page inferred from generic context",
+            }
+            return self._context_explain_payload(
+                response=self._page_summary_message(context),
+                confidence=page_confidence,
+                entity_type="page",
+                entity={"page": context.get("page"), "page_type": page_type},
+            )
 
         if target == "score":
             asset = self._asset_from_query_or_context(query, context)
@@ -6244,6 +6600,17 @@ class FinnPlanService:
             "coaching_loop": coaching_loop,
             "data_readiness": analysis.get("data_readiness") or {},
             "portfolio_risk": mission.get("portfolio_risk") or analysis.get("portfolio_risk") or {},
+            "analysis": {
+                "mode": "read_only",
+                "route_source": "finn",
+                "context_confidence": {
+                    "level": "high",
+                    "entity_type": "mission_control",
+                    "entity_id": "mission_control",
+                    "reason": "mission control response built directly from deterministic Finn analysis",
+                    "why": "mission control response built directly from deterministic Finn analysis",
+                },
+            },
             "source": {
                 "flow": "daily_coach",
                 "date": analysis.get("date"),
@@ -6772,6 +7139,14 @@ class FinnPlanService:
         activity_feed = await self._get_recent_finn_activity(user_id, limit=50)
         day_log = self._mission_day_log(activity_feed)
         insight = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        coaching = insight.get("coaching") or {}
+        risk_flags = insight.get("risk_flags") or []
+        primary_flag = risk_flags[0] if risk_flags else {}
+        insight["risk_signal"] = primary_flag.get("id") or insight.get("status")
+        insight["what_i_notice"] = coaching.get("primary_reflection") or insight.get("trend", {}).get("summary")
+        insight["why_this_is_risky"] = primary_flag.get("summary") or "Emotionele of impulsieve druk maakt het makkelijker om je plan te verlaten."
+        insight["what_to_do_now"] = coaching.get("safe_next_step")
+        insight["what_not_to_do"] = coaching.get("do_not_do")
         response = self._behavioral_intelligence_message(insight)
         return {
             "response": response,

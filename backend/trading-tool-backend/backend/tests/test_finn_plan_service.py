@@ -252,9 +252,12 @@ def test_education_and_general_request_detection_are_explicit():
     service = _service()
 
     assert service.looks_like_general_capability_request("Hoi FINN, wat kun je voor mij doen?") is True
+    assert service.looks_like_product_help_request("Wat kan ik hier doen?", {"page_type": "Dashboard"}) is True
+    assert service.looks_like_mission_control_explain_request("Vat Mission Control samen in drie bullets", {"scope": "mission_control"}) is True
     assert service.looks_like_education_request("Wat is RSI in simpele taal?") is True
     assert service.looks_like_education_request("Wat is DCA?") is True
     assert service.looks_like_behavioral_intelligence_request("Ik voel FOMO, wat moet ik doen?") is True
+    assert service.looks_like_behavioral_intelligence_request("Ik denk eraan om all-in te gaan, wat moet ik doen?") is True
     assert service.looks_like_entity_explain_request(
         "Welke strategie bekijk ik nu?",
         {"strategy_id": 257, "page": "/strategy"},
@@ -274,10 +277,16 @@ def test_build_education_response_covers_core_topic_in_simple_mode():
     assert result["flow"] == "education"
     assert result["state"]["topic"] == "wyckoff"
     assert result["analysis"]["topic_label"] == "Wyckoff"
+    assert result["analysis"]["difficulty"] == "simple"
     assert result["analysis"]["confidence"] == "high"
     assert "Wat het is:" in result["response"]
     assert "Waarom het telt:" in result["response"]
-    assert "Let op:" in result["response"]
+    assert "Veilig gebruiken:" in result["response"]
+    assert "Veelgemaakte fout:" in result["response"]
+    assert result["analysis"]["what_it_is"]
+    assert result["analysis"]["why_it_matters"]
+    assert result["analysis"]["how_to_use_it_safely"]
+    assert result["analysis"]["common_mistake"]
 
 
 def test_build_education_response_handles_do_nothing_guidance():
@@ -302,6 +311,8 @@ def test_context_confidence_prefers_strong_page_entity():
 
     assert confidence["level"] == "high"
     assert confidence["entity_type"] == "strategy"
+    assert confidence["entity_id"] == 257
+    assert confidence["why"] == "strategy page with strategy_id"
 
 
 def test_context_confidence_stays_low_without_entity():
@@ -314,6 +325,7 @@ def test_context_confidence_stays_low_without_entity():
 
     assert confidence["level"] == "low"
     assert confidence["entity_type"] == "unknown"
+    assert confidence["entity_id"] is None
 
 
 def test_build_context_explain_response_returns_low_confidence_fallback_without_entity():
@@ -329,6 +341,64 @@ def test_build_context_explain_response_returns_low_confidence_fallback_without_
     assert result["analysis"]["entity_type"] == "unknown"
     assert result["analysis"]["context_confidence"]["level"] == "low"
     assert "niet genoeg zekere pagina-entiteit" in result["response"]
+
+
+def test_build_context_explain_response_can_explain_current_page():
+    service = _service()
+
+    result = asyncio.run(service.build_context_explain_response(30, "Wat bekijk ik nu?", {
+        "page": "/dashboard",
+        "page_type": "Dashboard",
+        "symbol": "BTC",
+    }))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "page"
+    assert result["analysis"]["context_confidence"]["level"] == "high"
+    assert "dashboard" in result["response"].lower()
+
+
+def test_build_product_help_response_includes_supported_and_not_supported_capabilities():
+    service = _service()
+
+    result = asyncio.run(service.build_product_help_response(30, "Wat kan ik hier doen?", {
+        "page": "/strategy/257",
+        "page_type": "Strategy",
+        "strategy_id": 257,
+        "symbol": "ETH",
+    }))
+
+    assert result["intent"] == "product_help"
+    assert result["flow"] == "product_help"
+    assert result["analysis"]["product_help"]["current_entity"]["strategy_id"] == 257
+    assert "watchlist_wijzigen_via_finn" in result["analysis"]["product_help"]["not_supported_yet"]
+    assert "uitleg van je huidige scherm" in result["response"]
+
+
+def test_build_behavioral_intelligence_response_exposes_safe_coaching_contract(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    service._get_recent_finn_activity = AsyncMock(return_value=[])
+    service._mission_day_log = lambda activity_feed: {"handled_count": 0, "skipped_count": 0, "snoozed_count": 0}
+    service._build_behavioral_insight_from_activity = lambda activity_feed, day_log: {
+        "status": "attention",
+        "trend": {"summary": "Je drukt wat hard op nieuwe acties."},
+        "coaching": {
+            "primary_reflection": "Ik zie druk om sneller te handelen dan je plan vraagt.",
+            "safe_next_step": "Wacht tot je plan weer helder actief is.",
+            "do_not_do": "Ga nu niet forceren of all-in.",
+        },
+        "risk_flags": [{"id": "fomo_pressure", "summary": "Je zoekt versnelling zonder extra duidelijkheid."}],
+    }
+
+    result = asyncio.run(service.build_behavioral_intelligence_response(30, "Ik voel FOMO, wat moet ik doen?"))
+
+    assert result["intent"] == "behavioral_intelligence"
+    analysis = result["state"]["analysis"]
+    assert analysis["risk_signal"] == "fomo_pressure"
+    assert analysis["what_i_notice"] == "Ik zie druk om sneller te handelen dan je plan vraagt."
+    assert analysis["why_this_is_risky"] == "Je zoekt versnelling zonder extra duidelijkheid."
+    assert analysis["what_to_do_now"] == "Wacht tot je plan weer helder actief is."
+    assert analysis["what_not_to_do"] == "Ga nu niet forceren of all-in."
 
 
 def test_build_context_explain_response_prioritizes_score_explain_when_asset_context_is_present(monkeypatch):
@@ -454,7 +524,8 @@ def test_multi_turn_regression_pack_keeps_non_transactional_turns_out_of_create_
     assert first_context.get("finn_draft") is None
     assert second_response["intent"] == "general_help"
     assert second_context.get("finn_draft") is None
-    assert _MemoryStateRepo.store == {}
+    assert _MemoryStateRepo.store[30]["current_flow"] == "general_help"
+    assert _MemoryStateRepo.store[30]["slots"]["state_bucket"] == "read_only_state"
 
     third_response, third_context = asyncio.run(_route_turn(service, 30, "Wat is RSI in simpele taal?", {"page": "/market/BTC", "page_type": "Market", "symbol": "BTC"}))
     fourth_response, fourth_context = asyncio.run(_route_turn(service, 30, "Ik voel FOMO, wat moet ik doen?", {"page": "/dashboard", "page_type": "Dashboard", "symbol": "BTC"}))
@@ -466,7 +537,9 @@ def test_multi_turn_regression_pack_keeps_non_transactional_turns_out_of_create_
     assert third_context.get("finn_draft") is None
     assert fourth_context.get("finn_draft") is None
     assert fifth_context.get("finn_draft") is None
-    assert _MemoryStateRepo.store == {}
+    assert _MemoryStateRepo.store[30]["current_flow"] == "context_explain"
+    assert _MemoryStateRepo.store[30]["slots"]["state_bucket"] == "explain_state"
+    assert len(_MemoryStateRepo.store[30]["slots"]["intent_history"]) >= 4
 
 
 def test_multi_turn_regression_pack_preserves_transactional_turns_without_hijacking_follow_up_explains(monkeypatch):
@@ -508,7 +581,8 @@ def test_multi_turn_regression_pack_preserves_transactional_turns_without_hijack
     assert second_context.get("finn_draft") is None
     assert third_context.get("finn_draft") is None
     assert fourth_context.get("finn_draft") is None
-    assert _MemoryStateRepo.store == {}
+    assert _MemoryStateRepo.store[30]["current_flow"] == "general_help"
+    assert _MemoryStateRepo.store[30]["slots"]["state_bucket"] == "read_only_state"
 
 
 def test_bot_decision_ack_state_persists_and_hydrates_without_client_context(monkeypatch):
@@ -676,7 +750,9 @@ def test_persist_response_state_clears_transactional_state_after_non_transaction
         "state": {"current_flow": "context_explain", "strategy_id": 257},
     }))
 
-    assert saved == {}
+    assert saved[1]["current_flow"] == "context_explain"
+    assert saved[1]["slots"]["state_bucket"] == "explain_state"
+    assert saved[1]["slots"]["intent_history"][-1]["intent"] == "context_explain"
 
 
 def test_live_preflight_rechecks_freshness_when_action_was_already_executed(monkeypatch):
