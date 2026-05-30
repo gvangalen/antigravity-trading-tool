@@ -528,7 +528,15 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
   const getMessageOperatorResolution = (message) => {
     const state = message?.state || {};
-    return state.operator_resolution || message?.operatorResolution || message?.operator_resolution || null;
+    const analysis = state.analysis || message?.analysis || {};
+    return (
+      state.operator_resolution ||
+      analysis.operator_resolution ||
+      analysis.action_follow_through ||
+      message?.operatorResolution ||
+      message?.operator_resolution ||
+      null
+    );
   };
 
   const renderAgentController = (controller, compact = false) => {

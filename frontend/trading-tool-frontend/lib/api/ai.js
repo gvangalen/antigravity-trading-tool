@@ -50,12 +50,13 @@ export const assistantChat = (query, context = {}, history = []) => {
 };
 
 export const executeAssistantAction = (action) => {
-  if (!action?.action_id) {
+  const actionId = action?.action_id || action?.id;
+  if (!actionId) {
     throw new Error("Deze Finn actie mist een server-issued action_id.");
   }
   return fetchAuth(`/api/assistant/actions/execute`, {
     method: 'POST',
-    body: JSON.stringify({ action_id: action.action_id }),
+    body: JSON.stringify({ action_id: actionId }),
   });
 };
 

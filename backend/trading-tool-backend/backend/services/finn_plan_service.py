@@ -2047,6 +2047,7 @@ class FinnPlanService:
         invalid_fields: List[Dict[str, Any]] = []
         response = ""
         next_question = None
+        operator_resolution_preview = None
 
         if execution_choice == "monitor":
             response = (
@@ -2057,6 +2058,20 @@ class FinnPlanService:
             action = self._bot_execution_action("skip_bot_decision", review, is_live=is_live)
             can_confirm = True
             response = f"Ik kan bot-decision #{review['decision_id']} overslaan. Dit annuleert bijbehorende open orders, maar voert geen trade uit."
+            operator_resolution_preview = {
+                "type": "operator_resolution",
+                "title": f"Wat verandert er als je bot-decision #{review['decision_id']} overslaat?",
+                "status": "preview",
+                "summary": "Finn legt dit vast als bewuste keuze om deze decision vandaag niet door te zetten.",
+                "what_changed": [
+                    f"Decision #{review['decision_id']} schuift uit je open review-stack zodra je bevestigt.",
+                    "Bijbehorende open orders of vervolgdruk worden niet verder nagejaagd vanuit deze decision.",
+                ],
+                "what_next": [
+                    "Pak liever de volgende open review of de hoogste Mission Control-prioriteit op.",
+                    "Kom alleen terug als de setup, context of overtuiging echt verandert.",
+                ],
+            }
         elif execution_choice == "live_preflight":
             action = self._bot_execution_action("live_preflight_bot_decision", review, is_live=is_live)
             can_confirm = True
@@ -2113,6 +2128,10 @@ class FinnPlanService:
                     "is_live": is_live,
                 },
                 "autonomy_level": "confirm_required" if can_confirm else "advice_only",
+                "analysis": {
+                    "operator_resolution": operator_resolution_preview,
+                    "action_follow_through": operator_resolution_preview,
+                } if operator_resolution_preview else {},
             },
             "reasoning": {
                 "confidence_score": 0.82,
@@ -10296,13 +10315,9 @@ class FinnPlanService:
     async def execute_issued_action(self, user_id: int, action_id: str) -> Dict[str, Any]:
         if not self.session:
             raise HTTPException(503, "Finn action store is niet beschikbaar.")
-        row = await self.session.execute(text("""
-            SELECT payload, status
-            FROM ai_pending_actions
-            WHERE id = :id AND user_id = :user_id
-            LIMIT 1
-        """), {"id": action_id, "user_id": user_id})
-        existing = row.mappings().first()
+        existing = await self._get_pending_action_row(user_id, action_id)
+        if not existing and str(action_id).startswith("finn-") and not str(action_id).endswith(f"-u{user_id}"):
+            existing = await self._get_pending_action_row(user_id, f"{action_id}-u{user_id}")
         if not existing:
             raise HTTPException(404, "Finn action token niet gevonden of niet geautoriseerd.")
         payload = existing["payload"] or {}
@@ -10318,6 +10333,15 @@ class FinnPlanService:
         if not isinstance(action, dict):
             raise HTTPException(409, "Finn action token mist server-side action payload.")
         return await self.execute_action(user_id, action)
+
+    async def _get_pending_action_row(self, user_id: int, action_id: str):
+        row = await self.session.execute(text("""
+            SELECT payload, status
+            FROM ai_pending_actions
+            WHERE id = :id AND user_id = :user_id
+            LIMIT 1
+        """), {"id": action_id, "user_id": user_id})
+        return row.mappings().first()
 
     async def _execute_generate_bot_decision_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
         payload = action.get("payload") or {}

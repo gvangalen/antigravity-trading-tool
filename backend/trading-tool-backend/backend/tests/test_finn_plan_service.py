@@ -4159,6 +4159,62 @@ def test_skip_bot_decision_action_returns_operator_resolution(monkeypatch):
     assert "bewust" in result["operator_resolution"]["summary"].lower()
 
 
+def test_skip_bot_decision_response_exposes_follow_through_preview(monkeypatch):
+    service = _service()
+
+    review = {
+        "id": 121110,
+        "bot_id": 17,
+        "symbol": "BTC",
+        "status": "proposed",
+        "action": "buy",
+        "risk_level": "medium",
+        "confidence": 0.64,
+        "guardrail_reason": None,
+        "guardrails_result": {"ok": True},
+        "setup_match": {"status": "aligned", "score": 82},
+    }
+
+    async def find_decision(user_id, query, context):
+        return review
+
+    monkeypatch.setattr(service, "_find_bot_decision_for_query", find_decision)
+
+    result = asyncio.run(service.build_bot_execution_decision_response(30, "Sla bot-decision 121110 over"))
+
+    assert result["can_confirm"] is True
+    assert result["actions"][0]["type"] == "skip_bot_decision"
+    preview = result["state"]["analysis"]["operator_resolution"]
+    assert preview["status"] == "preview"
+    assert "overslaat" in preview["title"].lower()
+    assert len(preview["what_changed"]) == 2
+    assert result["state"]["analysis"]["action_follow_through"] == preview
+
+
+def test_execute_issued_action_accepts_legacy_finn_id_without_user_suffix():
+    service = FinnPlanService(db_session=object())
+    service._get_pending_action_row = AsyncMock(side_effect=[
+        None,
+        {
+            "payload": {
+                "action": {
+                    "id": "finn-maint-resolve-blocked-plan",
+                    "type": "resolve_mission_item",
+                    "payload": {"source_item_id": "blocked_plan:BTC:61", "resolution": "monitor_today"},
+                }
+            },
+            "status": "pending",
+        },
+    ])
+    service.execute_action = AsyncMock(return_value={"ok": True, "verified": {"mission_item_resolved": True}})
+
+    result = asyncio.run(service.execute_issued_action(30, "finn-maint-resolve-blocked-plan"))
+
+    assert result["ok"] is True
+    assert service._get_pending_action_row.await_args_list[1].args == (30, "finn-maint-resolve-blocked-plan-u30")
+    service.execute_action.assert_awaited_once()
+
+
 def test_live_preflight_blocks_on_stale_decision_context(monkeypatch):
     service = _service()
 
