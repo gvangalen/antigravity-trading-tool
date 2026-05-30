@@ -520,6 +520,12 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     return analysis;
   };
 
+  const getMessageExecutionReview = (message) => {
+    const state = message?.state || {};
+    const analysis = state.analysis || message?.analysis || {};
+    return state.execution_review || analysis.execution_review || message?.execution_review || null;
+  };
+
   const renderAgentController = (controller, compact = false) => {
     if (!controller?.dominant_agent) return null;
     const score = Number(controller.dominant_score || 0);
@@ -832,6 +838,105 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderExecutionReviewCard = (review, compact = false) => {
+    if (!review?.title || !review?.summary) return null;
+
+    const tone = review.status === "blocked" || review.status === "needs_review"
+      ? "border-rose-100 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300"
+      : review.status === "waiting_for_data" || review.status === "attention" || review.status === "partial_data"
+        ? "border-amber-100 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300"
+        : "border-blue-100 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300";
+
+    const whyThis = Array.isArray(review.why_this) ? review.why_this.slice(0, compact ? 2 : 3) : [];
+    const whatNext = Array.isArray(review.what_next) ? review.what_next.slice(0, compact ? 2 : 3) : [];
+    const evidence = Array.isArray(review.evidence) ? review.evidence.slice(0, compact ? 3 : 5) : [];
+    const actions = normalizeFollowUpActions(review.actions || []);
+
+    return (
+      <div className={`${compact ? "mt-2" : "mt-4"} rounded-xl border px-3 py-3 ${tone}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+              <FileText size={11} />
+              Decision Explain
+            </div>
+            <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
+              {review.title}
+            </p>
+          </div>
+          {review.status && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
+              {review.status}
+            </span>
+          )}
+        </div>
+
+        <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">
+          {review.summary}
+        </p>
+
+        {whyThis.length > 0 && (
+          <div className="mt-3">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Waarom dit</div>
+            <div className="mt-1 space-y-1">
+              {whyThis.map((item, index) => (
+                <p key={`why-${index}`} className="text-[10px] font-semibold leading-snug opacity-90">
+                  {item}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {review.why_now && (
+          <div className="mt-3">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Waarom nu</div>
+            <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{review.why_now}</p>
+          </div>
+        )}
+
+        {whatNext.length > 0 && (
+          <div className="mt-3">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Wat nu</div>
+            <div className="mt-1 space-y-1">
+              {whatNext.map((item, index) => (
+                <p key={`next-${index}`} className="text-[10px] font-semibold leading-snug opacity-90">
+                  {item}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {review.do_not_do && (
+          <div className="mt-3 rounded-lg border border-white/70 dark:border-slate-900/40 bg-white/70 dark:bg-slate-950/30 px-2.5 py-2">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Niet doen</div>
+            <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{review.do_not_do}</p>
+          </div>
+        )}
+
+        {evidence.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {evidence.map((item, index) => (
+              <span
+                key={`${item.label || "evidence"}-${index}`}
+                className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest"
+              >
+                {item.label}: {item.value}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {actions.length > 0 && (
+          <div className="mt-3">
+            {renderFollowUpButtons(actions, true)}
           </div>
         )}
       </div>
@@ -2784,6 +2889,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 {m.role === "assistant" && m.isComplete !== false && renderAgentController(getMessageAgentController(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderBehavioralIntelligenceCard(getMessageBehavioralAnalysis(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderPortfolioRisk(getMessagePortfolioRisk(m))}
+                {m.role === "assistant" && m.isComplete !== false && renderExecutionReviewCard(getMessageExecutionReview(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderAgentVerdicts(getMessageAgentVerdicts(m))}
                 {m.role === "assistant" && m.isComplete !== false && (() => {
                   const suggestions = getMessageFollowUpActions(m);

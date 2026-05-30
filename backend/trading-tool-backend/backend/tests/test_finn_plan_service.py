@@ -1611,6 +1611,26 @@ def test_plan_status_agent_verdicts_explain_blocking_layer():
     assert "Agent-verdicts:" in message
 
 
+def test_plan_status_execution_review_explains_blocker_and_next_steps():
+    service = _service()
+    analysis = {
+        "has_scores": True,
+        "is_active": False,
+        "match_percentage": 67,
+        "blockers": [{"category": "market", "score": 42, "range": "60-100"}],
+        "setup": {"id": 14, "score": 73},
+    }
+
+    review = service._build_plan_status_execution_review("BTC", analysis, source="saved_setup")
+
+    assert review["topic"] == "plan_status"
+    assert review["status"] == "blocked"
+    assert "market" in review["why_now"].lower()
+    assert any(action["handoff"] == "indicator_insight" for action in review["actions"])
+    assert any(item["label"] == "Match" for item in review["evidence"])
+    assert "niet" in review["do_not_do"].lower()
+
+
 def test_issue_response_actions_issues_nested_mission_control_actions():
     service = FinnPlanService(db_session=object(), trace_id="trdm-test")
     service._issue_pending_action = AsyncMock()
@@ -1749,6 +1769,28 @@ def test_indicator_insight_message_is_advice_only_and_mentions_missing_data():
     assert "geen daily score van vandaag" in message
     assert "Geen actieve indicator-data" in message
     assert "Ik pas niets automatisch aan" in message
+
+
+def test_indicator_execution_review_uses_indicator_analysis_contract():
+    service = _service()
+    analysis = service._build_indicator_insight_analysis(
+        asset="BTC",
+        categories=["technical"],
+        daily_scores={"technical_score": 41},
+        macro_rows=[],
+        technical_rows=[],
+        market_rows=[],
+        market_snapshot=None,
+        available={"macro": [], "technical": [{"name": "rsi", "display_name": "RSI"}], "market": []},
+        configs={},
+    )
+
+    review = service._build_indicator_execution_review("BTC", analysis)
+
+    assert review["topic"] == "indicator_insight"
+    assert review["title"].startswith("Waarom bewegen je indicatoren")
+    assert review["actions"][0]["handoff"] == "plan_status"
+    assert review["evidence"][0]["value"] == "BTC"
 
 
 def test_daily_coach_request_detection_is_separate_from_status_and_plan_creation():
@@ -2835,6 +2877,34 @@ def test_bot_decision_review_summary_handles_hold_without_zero_amount():
 
     assert review["summary"] == "BTC: hold - geen orderbedrag"
     assert "EUR 0" not in review["summary"]
+
+
+def test_bot_decision_execution_review_explains_why_and_next_actions():
+    service = _service()
+    review = {
+        "decision_id": 108032,
+        "asset": "BTC",
+        "summary": "BTC: buy voor EUR 150 - guardrail aandacht",
+        "risk_level": "high",
+        "review_status": "needs_review",
+        "guardrail_reason": "Daglimiet overschreden",
+        "reasons": ["Macro setup is nog zwak", "Confidence is laag"],
+        "review_actions": [
+            {"label": "Decision uitleg", "prompt": "Leg bot-decision 108032 uit", "handoff": "bot_decision_review"},
+            {"label": "Paper uitvoeren", "prompt": "Voer bot-decision 108032 paper uit", "handoff": "bot_execution_decision", "requires_confirmation": True},
+        ],
+        "confidence": 0.48,
+        "amount_eur": 150,
+        "action": "buy",
+    }
+
+    card = service._build_bot_decision_execution_review(review)
+
+    assert card["topic"] == "bot_decision_review"
+    assert card["status"] == "needs_review"
+    assert "Daglimiet overschreden" in card["why_now"]
+    assert any(action["handoff"] == "bot_execution_decision" for action in card["actions"])
+    assert any(item["label"] == "Confidence" for item in card["evidence"])
 
 
 def test_mission_control_excludes_handled_bot_decisions():

@@ -1343,6 +1343,7 @@ class FinnPlanService:
             asset=asset,
         )
         analysis["agent_controller"] = agent_controller
+        analysis["execution_review"] = self._build_plan_status_execution_review(asset, analysis, source="draft" if draft and draft.get("asset") == asset else "saved_setup")
 
         return {
             "response": response,
@@ -1438,6 +1439,7 @@ class FinnPlanService:
         )
         response = self._indicator_insight_message(asset, analysis)
         reasons = self._indicator_insight_reasons(analysis)
+        analysis["execution_review"] = self._build_indicator_execution_review(asset, analysis)
 
         return {
             "response": response,
@@ -1971,6 +1973,7 @@ class FinnPlanService:
             lines.append("Belangrijkste redenen:")
             lines.extend(f"- {reason}" for reason in reasons[:3])
         lines.append("Ik voer niets uit. Gebruik dit als review voordat je handmatig of via bot-acties verdergaat.")
+        execution_review = self._build_bot_decision_execution_review(review)
 
         return {
             "response": "\n".join(lines),
@@ -1987,6 +1990,7 @@ class FinnPlanService:
                 "current_flow": "bot_decision_review",
                 "asset": review.get("asset"),
                 "review": review,
+                "analysis": {"execution_review": execution_review},
                 "autonomy_level": "advice_only",
             },
             "reasoning": {
@@ -9480,6 +9484,247 @@ class FinnPlanService:
         if setup:
             return [f"Setup-score: {setup.get('score')}"]
         return ["Onvoldoende scoredata voor betrouwbare uitleg."]
+
+    def _execution_review_action(
+        self,
+        *,
+        label: str,
+        prompt: str,
+        handoff: str,
+        asset: Optional[str] = None,
+        requires_confirmation: bool = False,
+    ) -> Dict[str, Any]:
+        return {
+            "type": "chat_prompt",
+            "label": label,
+            "prompt": prompt,
+            "handoff": handoff,
+            "requires_confirmation": requires_confirmation,
+            "asset": asset,
+        }
+
+    def _build_plan_status_execution_review(
+        self,
+        asset: str,
+        analysis: Dict[str, Any],
+        *,
+        source: str,
+    ) -> Dict[str, Any]:
+        blockers = analysis.get("blockers") or []
+        has_scores = bool(analysis.get("has_scores"))
+        active = bool(analysis.get("is_active"))
+        reasons = self._analysis_reasons(analysis)[:3]
+        dominant_blocker = blockers[0] if blockers else None
+        setup = analysis.get("setup") or {}
+
+        if not has_scores:
+            status = "waiting_for_data"
+            summary = f"Ik kan {asset} nog niet betrouwbaar vrijgeven, omdat de scorelaag vandaag nog niet compleet is."
+            why_now = "Zonder verse macro-, technical- en market-scores is een plancheck te dun om op te handelen."
+            what_next = [
+                "Ververs eerst de daily scores.",
+                "Controleer daarna opnieuw of je setup actief is.",
+            ]
+            actions = [
+                self._execution_review_action(
+                    label="Daily scores verversen",
+                    prompt=f"Ververs daily scores voor {asset}",
+                    handoff="daily_score_refresh",
+                    asset=asset,
+                    requires_confirmation=True,
+                ),
+            ]
+            do_not_do = "Forceer geen entry of override zolang de scorelaag van vandaag ontbreekt."
+        elif blockers:
+            status = "blocked"
+            blocker_category = dominant_blocker.get("category") if dominant_blocker else "score"
+            summary = f"Je {asset} setup wordt nu geblokkeerd door je eigen planranges."
+            why_now = (
+                f"De grootste blokkade zit nu in {blocker_category}: score {dominant_blocker.get('score')} valt buiten {dominant_blocker.get('range')}."
+                if dominant_blocker else
+                "Een of meer scorelagen vallen buiten je ingestelde ranges."
+            )
+            what_next = [
+                "Los eerst de blocker of datagat op.",
+                "Gebruik daarna pas een bot-decision of handmatige entry als tweede stap.",
+            ]
+            categories = [item.get("category") for item in blockers if item.get("category")]
+            actions = [
+                self._execution_review_action(
+                    label=f"Waarom blokkeert {category}?",
+                    prompt=f"Waarom blokkeert {category} mijn {asset} setup?",
+                    handoff="indicator_insight",
+                    asset=asset,
+                )
+                for category in categories[:2]
+            ]
+            actions.append(
+                self._execution_review_action(
+                    label="Live bots op dit asset reviewen",
+                    prompt=f"Welke live bots vragen vandaag review voor {asset}?",
+                    handoff="daily_coach",
+                    asset=asset,
+                )
+            )
+            do_not_do = "Gebruik een blokkade niet als excuus om je entry handmatig te forceren."
+        else:
+            status = "clear"
+            summary = f"Je {asset} setup ligt nu binnen je ranges; deze check geeft geen scoreblokkade."
+            why_now = "Deze explain-check bevestigt dat de scorelaag niet het probleem is, zodat je de volgende stap bewust kunt kiezen."
+            what_next = [
+                "Gebruik dit als plancheck, niet als automatisch koopsein.",
+                "Bekijk een bot-decision of dagelijkse prioriteiten als je nog richting zoekt.",
+            ]
+            actions = [
+                self._execution_review_action(
+                    label="Maak bot-decision",
+                    prompt=f"Maak bot-decision voor {asset}",
+                    handoff="bot_decision",
+                    asset=asset,
+                    requires_confirmation=True,
+                ),
+                self._execution_review_action(
+                    label="Daily coach",
+                    prompt=f"Wat moet ik vandaag doen met mijn {asset} setup?",
+                    handoff="daily_coach",
+                    asset=asset,
+                ),
+            ]
+            do_not_do = "Verwar 'geen blocker' niet met 'nu meteen uitvoeren'."
+
+        evidence = [
+            {"label": "Asset", "value": asset},
+            {"label": "Bron", "value": "conceptplan" if source == "draft" else "opgeslagen setup"},
+            {"label": "Status", "value": status},
+        ]
+        if setup.get("id"):
+            evidence.append({"label": "Setup", "value": f"#{setup.get('id')}"})
+        if analysis.get("match_percentage") is not None:
+            evidence.append({"label": "Match", "value": f"{analysis.get('match_percentage')}%"})
+
+        return {
+            "type": "execution_review",
+            "topic": "plan_status",
+            "title": f"Waarom deze planstatus voor {asset}?",
+            "status": status,
+            "summary": summary,
+            "why_this": reasons,
+            "why_now": why_now,
+            "what_next": what_next,
+            "do_not_do": do_not_do,
+            "evidence": evidence,
+            "actions": actions,
+        }
+
+    def _build_indicator_execution_review(self, asset: str, analysis: Dict[str, Any]) -> Dict[str, Any]:
+        reasons = self._indicator_insight_reasons(analysis)[:3]
+        warnings = analysis.get("warnings") or []
+        suggestions = analysis.get("suggestions") or []
+        categories = analysis.get("categories") or {}
+        has_scores = bool(analysis.get("has_daily_scores"))
+
+        status = "explain"
+        if warnings:
+            status = "attention"
+        if not has_scores:
+            status = "partial_data"
+
+        what_next = suggestions[:2] or ["Gebruik deze uitleg om je zwakste scorelaag gericht te reviewen."]
+        actions = [
+            self._execution_review_action(
+                label="Planstatus bekijken",
+                prompt=f"Waarom is mijn {asset} setup inactief?",
+                handoff="plan_status",
+                asset=asset,
+            ),
+        ]
+        if categories.get("technical"):
+            actions.append(
+                self._execution_review_action(
+                    label="Technical blockers",
+                    prompt=f"Waarom blokkeert technical mijn {asset} setup?",
+                    handoff="indicator_insight",
+                    asset=asset,
+                )
+            )
+
+        evidence = [{"label": "Asset", "value": asset}, {"label": "Scorelaag", "value": "indicator explain"}]
+        for category, summary in list(categories.items())[:3]:
+            score = summary.get("score")
+            if score is not None:
+                evidence.append({"label": category.capitalize(), "value": str(score)})
+
+        return {
+            "type": "execution_review",
+            "topic": "indicator_insight",
+            "title": f"Waarom bewegen je indicatoren zo voor {asset}?",
+            "status": status,
+            "summary": (
+                f"Finn legt hier uit welke indicatorlagen je {asset} score nu dragen of afremmen."
+                if has_scores else
+                f"Finn kan {asset} nog maar deels verklaren, omdat de daily score van vandaag ontbreekt."
+            ),
+            "why_this": reasons,
+            "why_now": warnings[:2] or ["Deze laag helpt je onderscheiden of het probleem in data, configuratie of echte marktzwakte zit."],
+            "what_next": what_next,
+            "do_not_do": "Ga geen indicatorconfig aanpassen alleen omdat één losse explain-check onrust geeft.",
+            "evidence": evidence,
+            "actions": actions,
+        }
+
+    def _build_bot_decision_execution_review(self, review: Dict[str, Any]) -> Dict[str, Any]:
+        confidence = review.get("confidence")
+        confidence_value = (
+            f"{round(confidence * 100)}%"
+            if isinstance(confidence, (int, float))
+            else "onbekend"
+        )
+        reasons = [reason for reason in (review.get("reasons") or [])[:3] if reason]
+        if not reasons:
+            reasons = ["Deze bot-decision is een voorstel, geen uitgevoerde order."]
+
+        status = review.get("review_status") or "review_ready"
+        if review.get("risk_level") == "high":
+            status = "needs_review"
+
+        what_next = []
+        if review.get("review_status") == "needs_review":
+            what_next.append("Review eerst guardrails, setup-match en bedrag voordat je iets uitvoert.")
+        if review.get("action") == "hold":
+            what_next.append("Gebruik hold als monitor-signaal, niet als verborgen execute-trigger.")
+        else:
+            what_next.append("Kies daarna bewust tussen paper, live preflight of overslaan.")
+
+        evidence = [
+            {"label": "Decision", "value": f"#{review.get('decision_id')}"},
+            {"label": "Asset", "value": review.get("asset")},
+            {"label": "Risico", "value": review.get("risk_level")},
+            {"label": "Confidence", "value": confidence_value},
+        ]
+        if review.get("amount_eur") is not None:
+            evidence.append({"label": "Bedrag", "value": f"EUR {review.get('amount_eur'):g}"})
+
+        why_now = (
+            f"Deze decision wacht nog op operator-review en raakt {review.get('asset')} direct."
+            if review.get("review_status") == "needs_review" else
+            "Deze decision is al afgehandeld; de waarde hier zit in begrijpen waarom hij zo stond."
+        )
+        if review.get("guardrail_reason"):
+            why_now = f"Guardrail aandacht: {review.get('guardrail_reason')}."
+
+        return {
+            "type": "execution_review",
+            "topic": "bot_decision_review",
+            "title": f"Waarom dit bot-voorstel voor {review.get('asset')}?",
+            "status": status,
+            "summary": review.get("summary") or f"{review.get('asset')}: {review.get('action')}",
+            "why_this": reasons,
+            "why_now": why_now,
+            "what_next": what_next,
+            "do_not_do": "Voer niets direct uit vanuit deze explain-flow; gebruik eerst paper, preflight of skip als bewuste vervolgstap.",
+            "evidence": evidence,
+            "actions": (review.get("review_actions") or [])[:4],
+        }
 
     def _build_plan_status_agent_verdicts(
         self,
