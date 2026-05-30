@@ -135,6 +135,34 @@ def test_live_preflight_rechecks_freshness_when_action_was_already_executed(monk
     service._wait_for_action_result.assert_not_awaited()
 
 
+def test_mission_resolve_actions_include_operator_lanes_and_summaries():
+    service = _service()
+
+    actions = service._mission_resolve_actions(
+        "blocked_plan:BTC:12",
+        asset="BTC",
+        reason="market blokkeert",
+        source_ids={"setup_id": 12},
+        include_waiting_for_data=True,
+    )
+
+    assert actions[0]["resolution"] == "waiting_for_data"
+    assert actions[0]["lane"] == "data"
+    assert any(action["lane"] == "monitor" for action in actions)
+    assert any(action["lane"] == "later" for action in actions)
+    assert all(action.get("summary") for action in actions)
+
+
+def test_snooze_action_carries_follow_through_metadata():
+    service = _service()
+
+    action = service._mission_snooze_action("blocked_plan:BTC:12", asset="BTC")
+
+    assert action["resolution"] == "snoozed"
+    assert action["lane"] == "later"
+    assert "tijdelijk" in action["summary"].lower()
+
+
 def test_finn_report_request_is_separate_from_trading_report():
     service = _service()
 
@@ -4105,6 +4133,32 @@ def test_bot_execution_actions_are_confirmable_and_guarded():
     assert live_action["risk_level"] == "high"
 
 
+def test_skip_bot_decision_action_returns_operator_resolution(monkeypatch):
+    service = _service()
+
+    class BotSvc:
+        def __init__(self, session):
+            self.session = session
+
+        async def skip_bot_today(self, bot_id, _, user_id):
+            return {"ok": True}
+
+    monkeypatch.setattr("backend.services.finn_plan_service.BotService", BotSvc)
+    service._try_create_pending_action = AsyncMock(return_value=True)
+    service._upsert_action_audit = AsyncMock()
+    service._read_bot_decision_status = AsyncMock(return_value="skipped")
+
+    result = asyncio.run(service._execute_skip_bot_decision_action(30, {
+        "id": "skip-bot-decision-108032",
+        "type": "skip_bot_decision",
+        "payload": {"bot_id": 17, "decision_id": 108032},
+    }))
+
+    assert result["verified"]["bot_decision_skipped"] is True
+    assert result["operator_resolution"]["status"] == "skipped"
+    assert "bewust" in result["operator_resolution"]["summary"].lower()
+
+
 def test_live_preflight_blocks_on_stale_decision_context(monkeypatch):
     service = _service()
 
@@ -4149,6 +4203,27 @@ def test_live_preflight_blocks_on_stale_decision_context(monkeypatch):
     assert result["verified"]["fresh_decision_context"] is False
     assert result["stale_data_block"]["code"] == "LIVE_EXECUTION_STALE_DATA"
     assert result["freshness"]["status"] == "stale"
+
+
+def test_resolve_mission_item_action_returns_operator_resolution():
+    service = _service()
+    service._try_create_pending_action = AsyncMock(return_value=True)
+    service._upsert_action_audit = AsyncMock()
+
+    result = asyncio.run(service._execute_resolve_mission_item_action(30, {
+        "id": "resolve-blocked-plan",
+        "type": "resolve_mission_item",
+        "payload": {
+            "source_item_id": "blocked_plan:BTC:12",
+            "resolution": "monitor_today",
+            "asset": "BTC",
+            "day_key": _utc_now().date().isoformat(),
+        },
+    }))
+
+    assert result["verified"]["mission_item_resolved"] is True
+    assert result["operator_resolution"]["status"] == "monitor_today"
+    assert "werkqueue" in result["operator_resolution"]["what_changed"][1].lower()
 
 
 def test_bot_decision_memory_friction_blocks_even_with_open_reviews(monkeypatch):

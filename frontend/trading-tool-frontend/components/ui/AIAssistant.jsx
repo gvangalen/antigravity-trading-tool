@@ -526,6 +526,11 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     return state.execution_review || analysis.execution_review || message?.execution_review || null;
   };
 
+  const getMessageOperatorResolution = (message) => {
+    const state = message?.state || {};
+    return state.operator_resolution || message?.operatorResolution || message?.operator_resolution || null;
+  };
+
   const renderAgentController = (controller, compact = false) => {
     if (!controller?.dominant_agent) return null;
     const score = Number(controller.dominant_score || 0);
@@ -943,6 +948,67 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     );
   };
 
+  const renderOperatorResolutionCard = (resolution) => {
+    if (!resolution?.title || !resolution?.summary) return null;
+
+    const tone = resolution.status === "resolved"
+      ? "border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300"
+      : resolution.status === "skipped" || resolution.status === "snoozed"
+        ? "border-amber-100 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300"
+        : "border-blue-100 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300";
+
+    const whatChanged = Array.isArray(resolution.what_changed) ? resolution.what_changed.slice(0, 3) : [];
+    const whatNext = Array.isArray(resolution.what_next) ? resolution.what_next.slice(0, 3) : [];
+
+    return (
+      <div className={`mt-4 rounded-xl border px-3 py-3 ${tone}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+            <CheckCircle2 size={11} />
+            Action Follow-through
+          </div>
+          {resolution.status && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
+              {resolution.status}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
+          {resolution.title}
+        </p>
+        <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">
+          {resolution.summary}
+        </p>
+
+        {whatChanged.length > 0 && (
+          <div className="mt-3">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Wat veranderde</div>
+            <div className="mt-1 space-y-1">
+              {whatChanged.map((item, index) => (
+                <p key={`changed-${index}`} className="text-[10px] font-semibold leading-snug opacity-90">
+                  {item}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {whatNext.length > 0 && (
+          <div className="mt-3">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Volgende veilige stap</div>
+            <div className="mt-1 space-y-1">
+              {whatNext.map((item, index) => (
+                <p key={`follow-${index}`} className="text-[10px] font-semibold leading-snug opacity-90">
+                  {item}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const missionWorkqueueSections = () => {
     if (Array.isArray(missionControl?.workqueue_groups) && missionControl.workqueue_groups.length > 0) {
       return missionControl.workqueue_groups.map((group) => ({
@@ -1065,6 +1131,15 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
 
   const renderMissionWorkqueueItem = (item) => {
     const action = missionPrimaryAction(item);
+    const resolutionTone = (resolveAction) => {
+      const lane = resolveAction?.lane || resolveAction?.resolution;
+      if (lane === "done" || lane === "resolved") return "border-emerald-200 dark:border-emerald-900/50 text-emerald-700 dark:text-emerald-300";
+      if (lane === "monitor" || lane === "monitor_today") return "border-blue-200 dark:border-blue-900/50 text-blue-700 dark:text-blue-300";
+      if (lane === "data" || lane === "waiting_for_data") return "border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-300";
+      if (lane === "later" || lane === "snoozed") return "border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300";
+      if (lane === "skip" || lane === "skipped") return "border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-300";
+      return "border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400";
+    };
     return (
       <div key={item.id} className={`rounded-xl border px-3 py-2 ${missionItemTone(item)}`}>
         <div className="flex items-center justify-between gap-3">
@@ -1119,18 +1194,28 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           </button>
         )}
         {Array.isArray(item.resolve_actions) && item.resolve_actions.length > 0 && (
-          <div className="mt-2 grid grid-cols-3 gap-1">
-            {item.resolve_actions.slice(0, 4).map((resolveAction) => (
-              <button
-                key={resolveAction.id}
-                type="button"
-                onClick={() => handleMissionPrimaryAction(resolveAction)}
-                disabled={executingAction}
-                className="rounded-lg border border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/40 px-2 py-1.5 text-[8px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 transition hover:border-emerald-200 hover:text-emerald-600 disabled:opacity-60"
-              >
-                {resolveAction.label}
-              </button>
-            ))}
+          <div className="mt-2 space-y-1.5">
+            <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">Afhandelen</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {item.resolve_actions.slice(0, 4).map((resolveAction) => (
+                <button
+                  key={resolveAction.id}
+                  type="button"
+                  onClick={() => handleMissionPrimaryAction(resolveAction)}
+                  disabled={executingAction}
+                  className={`rounded-lg border bg-white/70 dark:bg-slate-950/40 px-2 py-1.5 text-left transition hover:shadow-sm disabled:opacity-60 ${resolutionTone(resolveAction)}`}
+                >
+                  <div className="text-[8px] font-black uppercase tracking-wider">
+                    {resolveAction.label}
+                  </div>
+                  {resolveAction.summary && (
+                    <div className="mt-0.5 text-[9px] font-semibold normal-case tracking-normal opacity-80 leading-snug">
+                      {resolveAction.summary}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -1645,6 +1730,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           role: "assistant",
           text: res.message || "Bot-decision overgeslagen en geverifieerd.",
           intent: "bot_decision_skipped",
+          operatorResolution: res.operator_resolution,
         }]);
         await loadInsight();
         await loadMissionControl();
@@ -1690,6 +1776,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
           role: "assistant",
           text: res.message || "Mission Control item bijgewerkt.",
           intent: "mission_item_resolved",
+          operatorResolution: res.operator_resolution,
         }]);
         await loadMissionControl();
         emitFinnRefreshSignals();
@@ -2890,6 +2977,7 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 {m.role === "assistant" && m.isComplete !== false && renderBehavioralIntelligenceCard(getMessageBehavioralAnalysis(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderPortfolioRisk(getMessagePortfolioRisk(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderExecutionReviewCard(getMessageExecutionReview(m))}
+                {m.role === "assistant" && m.isComplete !== false && renderOperatorResolutionCard(getMessageOperatorResolution(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderAgentVerdicts(getMessageAgentVerdicts(m))}
                 {m.role === "assistant" && m.isComplete !== false && (() => {
                   const suggestions = getMessageFollowUpActions(m);
