@@ -16,6 +16,7 @@ from backend.infrastructure.repositories.indicator_config_repository import Indi
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.infrastructure.repositories.score_repository import ScoreRepository
+from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
@@ -306,10 +307,13 @@ class FinnPlanService:
 
     def _has_explain_intent(self, query: str) -> bool:
         q = self._normalized_query(query)
-        return any(phrase in q for phrase in [
+        return (
+            any(phrase in q for phrase in [
             "leg uit", "uitleg", "verklaar", "waarom", "wat is", "wat doet",
             "welke", "bekijk ik", "heb ik open", "simpele taal",
-        ])
+            ])
+            or ("leg" in q and "uit" in q)
+        )
 
     def looks_like_general_capability_request(self, query: str) -> bool:
         q = self._normalized_query(query)
@@ -708,7 +712,8 @@ class FinnPlanService:
         ]
         coaching_terms = [
             "hoe", "zie", "check", "controleer", "analyseer", "waar", "wat zegt",
-            "spiegel", "coach", "ben ik", "heb ik", "wijk",
+            "spiegel", "coach", "ben ik", "heb ik", "wijk", "wat moet ik doen",
+            "nu doen", "help me",
         ]
         return any(term in q for term in behavioral_terms) and any(term in q for term in coaching_terms)
 

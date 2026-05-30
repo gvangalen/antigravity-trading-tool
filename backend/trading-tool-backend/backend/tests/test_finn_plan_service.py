@@ -94,9 +94,14 @@ def test_education_and_general_request_detection_are_explicit():
     assert service.looks_like_general_capability_request("Hoi FINN, wat kun je voor mij doen?") is True
     assert service.looks_like_education_request("Wat is RSI in simpele taal?") is True
     assert service.looks_like_education_request("Wat is DCA?") is True
+    assert service.looks_like_behavioral_intelligence_request("Ik voel FOMO, wat moet ik doen?") is True
     assert service.looks_like_entity_explain_request(
         "Welke strategie bekijk ik nu?",
         {"strategy_id": 257, "page": "/strategy"},
+    ) is True
+    assert service.looks_like_entity_explain_request(
+        "Leg mijn setup uit",
+        {"setup_id": 62, "page": "/setup"},
     ) is True
 
 
