@@ -126,6 +126,89 @@ def _audit_success_label(response: Optional[dict]) -> str:
     return "success"
 
 
+def _legacy_response_is_generic_failure(response_text: Optional[str]) -> bool:
+    text = str(response_text or "").strip().lower()
+    if not text:
+        return True
+    return (
+        "kon geen analyse ophalen" in text
+        or "probeer opnieuw" in text and text.startswith("⚠️")
+        or "interne authenticatiefout" in text
+        or "insufficient_quota" in text
+    )
+
+
+def _query_prefers_non_transactional_finn_response(
+    finn: FinnPlanService,
+    query: str,
+    context_payload: Optional[dict],
+) -> bool:
+    context_payload = context_payload or {}
+    return any([
+        finn.looks_like_general_capability_request(query),
+        finn.looks_like_education_request(query),
+        finn.looks_like_entity_explain_request(query, context_payload),
+        finn.looks_like_behavioral_intelligence_request(query),
+        finn.looks_like_weekly_reflection_request(query),
+        finn.looks_like_behavioral_memory_request(query),
+        finn.looks_like_finn_report_request(query),
+        finn.looks_like_daily_coach_request(query),
+        finn.looks_like_indicator_insight_request(query),
+        finn.looks_like_status_request(query),
+    ])
+
+
+def _legacy_response_needs_finn_rescue(
+    finn: FinnPlanService,
+    query: str,
+    context_payload: Optional[dict],
+    *,
+    response_text: Optional[str],
+    action: Optional[dict],
+    draft: Optional[dict],
+    state: Optional[dict],
+) -> bool:
+    if action or draft:
+        return False
+    if _legacy_response_is_generic_failure(response_text):
+        return True
+    if not _query_prefers_non_transactional_finn_response(finn, query, context_payload):
+        return False
+    current_flow = str((state or {}).get("current_flow") or "").lower()
+    return current_flow in {"setup_creation", "strategy_creation", "bot_creation", "indicator_config"}
+
+
+async def _build_finn_core_rescue_envelope(
+    *,
+    finn: FinnPlanService,
+    user_id: int,
+    query: str,
+    context_payload: Optional[dict],
+) -> dict:
+    context_payload = context_payload or {}
+    if finn.looks_like_general_capability_request(query):
+        return await finn.build_general_capability_response(user_id, query, context_payload)
+    if finn.looks_like_education_request(query):
+        return await finn.build_education_response(user_id, query, context_payload)
+    if finn.looks_like_entity_explain_request(query, context_payload):
+        return await finn.build_context_explain_response(user_id, query, context_payload)
+    if finn.looks_like_behavioral_intelligence_request(query):
+        return await finn.build_behavioral_intelligence_response(user_id, query, context_payload)
+    if finn.looks_like_weekly_reflection_request(query):
+        return await finn.build_weekly_reflection_response(user_id, query, context_payload)
+    if finn.looks_like_behavioral_memory_request(query):
+        return await finn.build_behavioral_memory_response(user_id, query, context_payload)
+    if finn.looks_like_finn_report_request(query):
+        return await finn.build_finn_report_response(user_id, query, context_payload)
+    if finn.looks_like_daily_coach_request(query):
+        return await finn.build_daily_coach_response(user_id, query, context_payload)
+    if finn.looks_like_indicator_insight_request(query):
+        return await finn.build_indicator_insight_response(user_id, query, context_payload)
+    if finn.looks_like_status_request(query):
+        return await finn.build_status_response(user_id, query, context_payload)
+    return await finn.build_general_capability_response(user_id, query, context_payload)
+
+
 def _log_finn_prompt_audit(
     *,
     trace_id: str,
@@ -456,9 +539,27 @@ async def assistant_chat(
                 finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
             )
 
-        response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
-            user_id, request.query, request.history, request.context, trace_id=trace_id, session_id=request.session_id
-        )
+        try:
+            response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
+                user_id, request.query, request.history, request.context, trace_id=trace_id, session_id=request.session_id
+            )
+        except Exception as legacy_exc:
+            logger.warning("⚠️ Legacy assistant failed; trying FINN core rescue | Trace: %s | Error: %s", trace_id, legacy_exc)
+            rescue = await _build_finn_core_rescue_envelope(
+                finn=finn,
+                user_id=user_id,
+                query=request.query,
+                context_payload=context_payload,
+            )
+            return await _finalize_finn_response(
+                finn,
+                user_id,
+                rescue,
+                trace_id,
+                prompt=request.query,
+                context_payload=context_payload,
+                route_source="finn_core_rescue_exception",
+            )
         intent = service._classify_intent(request.query)
         if not isinstance(action, dict):
             action = None
@@ -469,6 +570,30 @@ async def assistant_chat(
         reasoning = None
         if not isinstance(suggested_actions, list):
             suggested_actions = None
+        if _legacy_response_needs_finn_rescue(
+            finn,
+            request.query,
+            context_payload,
+            response_text=response,
+            action=action,
+            draft=draft,
+            state=state,
+        ):
+            rescue = await _build_finn_core_rescue_envelope(
+                finn=finn,
+                user_id=user_id,
+                query=request.query,
+                context_payload=context_payload,
+            )
+            return await _finalize_finn_response(
+                finn,
+                user_id,
+                rescue,
+                trace_id,
+                prompt=request.query,
+                context_payload=context_payload,
+                route_source="finn_core_rescue_legacy",
+            )
         legacy_response = {
             "response": response,
             "intent": intent,
@@ -763,23 +888,67 @@ async def assistant_chat_stream(
                 yield _sse_event("envelope", envelope)
                 return
 
-            async for chunk in service.get_chat_response_stream(
-                user_id, request.query, request.history, request.context,
-                trace_id=trace_id, background_tasks=background_tasks
-            ):
-                # Hardened early client disconnect cleanup
-                if await raw_request.is_disconnected():
-                    logger.warning(f"🔌 Client disconnected mid-stream | Trace: {trace_id}. Aborting stream generator.")
-                    break
+            try:
+                async for chunk in service.get_chat_response_stream(
+                    user_id, request.query, request.history, request.context,
+                    trace_id=trace_id, background_tasks=background_tasks
+                ):
+                    if await raw_request.is_disconnected():
+                        logger.warning(f"🔌 Client disconnected mid-stream | Trace: {trace_id}. Aborting stream generator.")
+                        break
 
-                event_name = chunk["event"]
-                data_val = chunk["data"]
-                
-                # Inject trace_id into envelope payload so frontend has it immediately
-                if event_name == "envelope" and isinstance(data_val, dict):
-                    data_val["trace_id"] = trace_id
+                    event_name = chunk["event"]
+                    data_val = chunk["data"]
 
-                yield _sse_event(event_name, data_val)
+                    if event_name == "envelope" and isinstance(data_val, dict):
+                        data_val["trace_id"] = trace_id
+                        if _legacy_response_needs_finn_rescue(
+                            finn,
+                            request.query,
+                            context_payload,
+                            response_text=data_val.get("response"),
+                            action=data_val.get("action"),
+                            draft=data_val.get("draft"),
+                            state=data_val.get("state"),
+                        ):
+                            rescue = await _build_finn_core_rescue_envelope(
+                                finn=finn,
+                                user_id=user_id,
+                                query=request.query,
+                                context_payload=context_payload,
+                            )
+                            rescue = await _prepare_finn_envelope(
+                                finn,
+                                user_id,
+                                rescue,
+                                trace_id,
+                                prompt=request.query,
+                                context_payload=context_payload,
+                                route_source="finn_core_rescue_stream",
+                            )
+                            yield _sse_event("envelope", rescue)
+                            return
+
+                    yield _sse_event(event_name, data_val)
+            except Exception as legacy_exc:
+                logger.warning("⚠️ Legacy assistant stream failed; trying FINN core rescue | Trace: %s | Error: %s", trace_id, legacy_exc)
+                rescue = await _build_finn_core_rescue_envelope(
+                    finn=finn,
+                    user_id=user_id,
+                    query=request.query,
+                    context_payload=context_payload,
+                )
+                rescue = await _prepare_finn_envelope(
+                    finn,
+                    user_id,
+                    rescue,
+                    trace_id,
+                    prompt=request.query,
+                    context_payload=context_payload,
+                    route_source="finn_core_rescue_stream_exception",
+                )
+                yield _sse_event("envelope", rescue)
+                return
         except Exception as e:
             logger.error(f"❌ Error in SSE assistant stream generator | Trace: {trace_id}: {e}", exc_info=True)
             err_payload = json.dumps({"response": "⚠️ Externe stream fout opgetreden. Klik op retry.", "trace_id": trace_id})

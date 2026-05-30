@@ -113,6 +113,33 @@ That means the first measured P0 hardening result is now clear:
 
 - **general/help, education, explain, coaching, and transactional setup creation are no longer being front-door hijacked by stale transactional drafts in the measured live sample**
 
+After that, a first **Unified FINN Core / legacy fallback reduction** pass was added at the API boundary:
+
+- if the legacy assistant returns a generic failure such as `Kon geen analyse ophalen`
+- or if a non-transactional prompt still comes back in a legacy transactional flow like `bot_creation`
+- the API now rescues that turn back into a deterministic FINN response before returning it to the user
+
+That rescue layer now prefers deterministic FINN envelopes for:
+
+- general help
+- education
+- explain
+- behavioral coaching
+- weekly reflection
+- behavioral memory
+- Finn reports
+- daily coach
+- status
+- indicator insight
+
+This matters because it reduces how often:
+
+- OpenAI quota issues
+- coarse legacy intent classification
+- or stale legacy flow state
+
+can leak through as the visible first-line FINN experience.
+
 After the broader explain-first entity tranche and the new multi-turn regression pack were added, a fresh live sequence on production also held up across mixed prompt types in one run:
 
 - `Hoi FINN, wat kun je voor mij doen?` -> `general_help`
@@ -145,6 +172,24 @@ The current QA failures are not caused by one bug. They are caused by five inter
 3. explain and education intents do not have their own strong first-class path
 4. context is available, but not confidence-scored
 5. the legacy fallback path degrades into generic “analysis failed” output too easily
+
+## Current P0 Status
+
+As of the latest measured tranche:
+
+- **Phase 0 is functionally complete**
+- the biggest front-door routing failures are now covered by:
+  - stale draft isolation
+  - stronger non-transactional routing
+  - explicit education handling
+  - explain-first entity handling
+  - context confidence
+  - multi-turn drift regressions
+
+The next layer is no longer “find the root cause”. It is:
+
+- reduce dependence on the legacy assistant path
+- keep deterministic FINN responses as the primary user-facing brain
 
 ## Detailed Findings
 
