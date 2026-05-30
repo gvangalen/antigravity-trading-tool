@@ -1088,6 +1088,7 @@ class FinnPlanService:
             "state": {
                 "current_flow": "education",
                 "topic": topic,
+                "analysis": message["analysis"],
             },
             "analysis": message["analysis"],
             "actions": [],
@@ -1114,7 +1115,13 @@ class FinnPlanService:
                     "response": response,
                     "intent": "context_explain",
                     "flow": "context_explain",
-                    "state": {"current_flow": "context_explain", "strategy_id": strategy["id"], "setup_id": strategy.get("setup_id"), "asset": strategy.get("symbol")},
+                    "state": {
+                        "current_flow": "context_explain",
+                        "strategy_id": strategy["id"],
+                        "setup_id": strategy.get("setup_id"),
+                        "asset": strategy.get("symbol"),
+                        "analysis": {"entity_type": "strategy", "entity": strategy, "context_confidence": confidence},
+                    },
                     "analysis": {"entity_type": "strategy", "entity": strategy, "context_confidence": confidence},
                     "actions": [],
                 }
@@ -1131,7 +1138,12 @@ class FinnPlanService:
                     "response": response,
                     "intent": "context_explain",
                     "flow": "context_explain",
-                    "state": {"current_flow": "context_explain", "setup_id": setup["id"], "asset": setup.get("symbol")},
+                    "state": {
+                        "current_flow": "context_explain",
+                        "setup_id": setup["id"],
+                        "asset": setup.get("symbol"),
+                        "analysis": {"entity_type": "setup", "entity": setup, "context_confidence": confidence},
+                    },
                     "analysis": {"entity_type": "setup", "entity": setup, "context_confidence": confidence},
                     "actions": [],
                 }
@@ -1142,7 +1154,11 @@ class FinnPlanService:
                 "response": response,
                 "intent": "context_explain",
                 "flow": "context_explain",
-                "state": {"current_flow": "context_explain", "bot_id": bot_id},
+                "state": {
+                    "current_flow": "context_explain",
+                    "bot_id": bot_id,
+                    "analysis": {"entity_type": "bot", "entity": {"id": bot_id}, "context_confidence": confidence},
+                },
                 "analysis": {"entity_type": "bot", "entity": {"id": bot_id}, "context_confidence": confidence},
                 "actions": [],
             }
@@ -1156,7 +1172,10 @@ class FinnPlanService:
             "response": response,
             "intent": "context_explain",
             "flow": "context_explain",
-            "state": {"current_flow": "context_explain"},
+            "state": {
+                "current_flow": "context_explain",
+                "analysis": {"entity_type": "unknown", "context_confidence": confidence},
+            },
             "analysis": {"entity_type": "unknown", "context_confidence": confidence},
             "actions": [],
         }
