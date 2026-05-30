@@ -18,6 +18,10 @@ STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
 DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
 AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"
 
+lower_bool() {
+  printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]'
+}
+
 case "$ENVIRONMENT" in
   production)
     PM2_CONFIG="ecosystem.config.js"
@@ -94,8 +98,18 @@ if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   cd $REMOTE_DIR
   mkdir -p $DEPLOY_STATE_DIR
   printf '%s\n' '$ROLLBACK_COMMIT' > ${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT
-  rm -f .git/index.lock .git/refs/remotes/origin/$BRANCH
-  git fetch origin $BRANCH
+  sync_git_ref() {
+    for attempt in \$(seq 1 5); do
+      rm -f .git/index.lock .git/refs/remotes/origin/$BRANCH.lock .git/refs/remotes/origin/$BRANCH
+      if git fetch origin $BRANCH; then
+        return 0
+      fi
+      echo \"⏳ Waiting for git lock to clear (attempt \$attempt/5)...\" >&2
+      sleep 2
+    done
+    return 1
+  }
+  sync_git_ref
   git reset --hard $DEPLOY_REF
 
   cd backend/trading-tool-backend
@@ -266,7 +280,7 @@ PY
   fi
 "; then
   echo "❌ ${ENVIRONMENT} deployment failed for ${TARGET_COMMIT}." >&2
-  if [ "${AUTO_ROLLBACK_ON_FAILURE,,}" = "true" ]; then
+  if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
     echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
     ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" \
       "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
@@ -304,7 +318,7 @@ if ! check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health
   || ! check_external "${EXTERNAL_BASE_URL}/api/system/health" "401" "external deep health gate" \
   || ! check_external "${EXTERNAL_BASE_URL}/report" "200" "external report"; then
   echo "❌ External smoke failed for ${TARGET_COMMIT}." >&2
-  if [ "${AUTO_ROLLBACK_ON_FAILURE,,}" = "true" ]; then
+  if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
     echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
     ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" \
       "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true

@@ -21,8 +21,9 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
 
     assert 'DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"' in source
     assert 'AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"' in source
+    assert "lower_bool()" in source
     assert 'if [ "$DEPLOY_COMPONENT_SET" = "backend_only" ]; then' in source
-    assert 'if [ "${AUTO_ROLLBACK_ON_FAILURE,,}" = "true" ]; then' in source
+    assert 'if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then' in source
     assert "./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" in source
     assert "External smoke failed" in source
     assert "PREVIOUS_GOOD_COMMIT" in source
