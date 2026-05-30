@@ -64,6 +64,7 @@ python3 /Users/gvangalen/Documents/antigravity-trading-tool/backend/trading-tool
   --promptset /Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-qa-promptset-full.json \
   --output-json /tmp/finn-qa-report.json \
   --output-md /tmp/finn-qa-report.md \
+  --delay-seconds 2.5 \
   --strict
 ```
 
@@ -81,8 +82,11 @@ python3 /Users/gvangalen/Documents/antigravity-trading-tool/backend/trading-tool
   --password-env FINN_QA_PASSWORD \
   --output-json /tmp/finn-qa-report.json \
   --output-md /tmp/finn-qa-report.md \
+  --delay-seconds 2.5 \
   --strict
 ```
+
+If the local machine has a broken CA bundle for this environment, append `--insecure`.
 
 ## Notes
 

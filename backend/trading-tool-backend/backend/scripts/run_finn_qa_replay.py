@@ -14,6 +14,7 @@ import http.cookiejar
 import json
 import math
 import os
+import ssl
 import statistics
 import sys
 import time
@@ -87,9 +88,17 @@ def build_http_client(
     login_email: Optional[str],
     login_password: Optional[str],
     timeout_seconds: float,
+    insecure_ssl: bool = False,
 ) -> Tuple[urllib.request.OpenerDirector, Dict[str, str]]:
     cookie_jar = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    if insecure_ssl:
+        ssl_context = ssl._create_unverified_context()
+        opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(cookie_jar),
+            urllib.request.HTTPSHandler(context=ssl_context),
+        )
+    else:
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
     headers: Dict[str, str] = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -156,7 +165,10 @@ def perform_chat_request(
 
 
 def evaluate_case(case: Dict[str, Any], response: Dict[str, Any], latency_ms: float, http_status: int) -> Dict[str, Any]:
+    state = response.get("state") if isinstance(response.get("state"), dict) else {}
     analysis = response.get("analysis") if isinstance(response.get("analysis"), dict) else {}
+    if not analysis and isinstance(state.get("analysis"), dict):
+        analysis = state.get("analysis") or {}
     flow = response.get("flow")
     intent = response.get("intent")
     mode = analysis.get("mode")
@@ -287,6 +299,7 @@ def run_suite(
     base_url: str,
     promptset: Dict[str, Any],
     timeout_seconds: float,
+    delay_seconds: float,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     session_map: Dict[str, str] = {}
     results: List[Dict[str, Any]] = []
@@ -306,6 +319,8 @@ def run_suite(
         if conversation and response.get("session_id"):
             session_map[conversation] = response["session_id"]
         results.append(evaluate_case(case, response, latency_ms, http_status))
+        if delay_seconds > 0:
+            time.sleep(delay_seconds)
 
     summary = summarize_results(
         suite_name=promptset.get("name") or "finn-qa-suite",
@@ -328,6 +343,8 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument("--login-email", help="Optional web login email for cookie-based replay")
     parser.add_argument("--password-env", default="FINN_QA_PASSWORD", help="Env var containing the login password")
     parser.add_argument("--timeout-seconds", type=float, default=45.0, help="Per-request timeout")
+    parser.add_argument("--delay-seconds", type=float, default=0.0, help="Sleep between prompts to avoid noisy rate-limit false negatives")
+    parser.add_argument("--insecure", action="store_true", help="Disable TLS certificate verification for environments with broken local CA trust")
     parser.add_argument("--strict", action="store_true", help="Exit non-zero when the release gate fails")
     return parser.parse_args(list(argv) if argv is not None else None)
 
@@ -343,6 +360,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             login_email=args.login_email,
             login_password=login_password,
             timeout_seconds=args.timeout_seconds,
+            insecure_ssl=args.insecure,
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
@@ -355,6 +373,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         base_url=args.base_url,
         promptset=promptset,
         timeout_seconds=args.timeout_seconds,
+        delay_seconds=args.delay_seconds,
     )
 
     report_payload = {

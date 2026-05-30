@@ -482,11 +482,6 @@ async def assistant_chat(
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
             )
-        if finn.looks_like_product_help_request(request.query, context_payload):
-            finn_response = await finn.build_product_help_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
         if finn.looks_like_education_request(request.query):
             finn_response = await finn.build_education_response(user_id, request.query, context_payload)
             return await _finalize_finn_response(
@@ -499,6 +494,11 @@ async def assistant_chat(
             )
         if finn.looks_like_entity_explain_request(request.query, context_payload):
             finn_response = await finn.build_context_explain_response(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
+            )
+        if finn.looks_like_product_help_request(request.query, context_payload):
+            finn_response = await finn.build_product_help_response(user_id, request.query, context_payload)
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
             )

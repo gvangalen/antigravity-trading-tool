@@ -483,6 +483,8 @@ class FinnPlanService:
         context = context or {}
         if any(word in q for word in ["maak ", "aanmaken", "creeer", "creeër", "bouw", "update", "wijzig", "pas "]):
             return False
+        if self.looks_like_entity_explain_request(query, context) or self.looks_like_mission_control_explain_request(query, context):
+            return False
         help_phrases = [
             "wat bekijk ik nu",
             "wat is dit scherm",
