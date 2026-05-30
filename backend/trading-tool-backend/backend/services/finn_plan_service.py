@@ -10398,6 +10398,20 @@ class FinnPlanService:
             await self._upsert_action_audit(user_id, action_id, action, status="failed", result={"ok": False, "bot_id": bot_id, "decision_id": decision_id})
             raise
 
+        operator_resolution = {
+            "type": "operator_resolution",
+            "title": f"Bot-decision #{decision_id} bewust overgeslagen",
+            "status": "skipped",
+            "summary": "Je hebt deze decision niet doorgedrukt; Finn legt dat vast als bewuste frictie.",
+            "what_changed": [
+                f"Decision #{decision_id} staat nu op skipped.",
+                "Deze review telt niet meer als open actie voor vandaag.",
+            ],
+            "what_next": [
+                "Ga alleen opnieuw naar een decision als de context echt veranderd is.",
+                "Pak liever de volgende open review of prioriteit op.",
+            ],
+        }
         result = {
             "ok": bool(skipped.get("ok")),
             "message": f"Bot-decision #{decision_id} is overgeslagen.",
@@ -10406,19 +10420,13 @@ class FinnPlanService:
             "decision_id": decision_id,
             "status": status,
             "verified": {"bot_decision_skipped": status == "skipped"},
-            "operator_resolution": {
-                "type": "operator_resolution",
-                "title": f"Bot-decision #{decision_id} bewust overgeslagen",
-                "status": "skipped",
-                "summary": "Je hebt deze decision niet doorgedrukt; Finn legt dat vast als bewuste frictie.",
-                "what_changed": [
-                    f"Decision #{decision_id} staat nu op skipped.",
-                    "Deze review telt niet meer als open actie voor vandaag.",
-                ],
-                "what_next": [
-                    "Ga alleen opnieuw naar een decision als de context echt veranderd is.",
-                    "Pak liever de volgende open review of prioriteit op.",
-                ],
+            "operator_resolution": operator_resolution,
+            "action_follow_through": operator_resolution,
+            "state": {
+                "analysis": {
+                    "operator_resolution": operator_resolution,
+                    "action_follow_through": operator_resolution,
+                }
             },
         }
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
@@ -10443,6 +10451,25 @@ class FinnPlanService:
                 return existing_result
             raise HTTPException(409, "Deze Mission Control actie wordt al verwerkt. Probeer zo opnieuw.")
 
+        operator_resolution = {
+            "type": "operator_resolution",
+            "title": f"Mission Control: {resolution.replace('_', ' ')}",
+            "status": resolution,
+            "summary": self._mission_resolve_message(resolution),
+            "what_changed": [
+                f"Item {source_item_id} is vastgelegd als {resolution}.",
+                "Je werkqueue en daglog kunnen nu zonder dit item verder.",
+            ],
+            "what_next": [
+                {
+                    "resolved": "Ga door naar de volgende prioriteit met de meeste operatorwaarde.",
+                    "skipped": "Pak dit alleen opnieuw op als je context of overtuiging verandert.",
+                    "monitor_today": "Laat dit vandaag meelopen zonder nu te forceren.",
+                    "waiting_for_data": "Ververs of wacht op data voordat je dit opnieuw beoordeelt.",
+                    "snoozed": "Kom hier later bewust op terug in plaats van het half open te laten hangen.",
+                }.get(resolution, "Ga verder met de volgende stap in Mission Control.")
+            ],
+        }
         result = {
             "ok": True,
             "message": self._mission_resolve_message(resolution),
@@ -10455,24 +10482,13 @@ class FinnPlanService:
             "snooze_until": payload.get("snooze_until"),
             "source_ids": payload.get("source_ids") or {},
             "verified": {"mission_item_resolved": True},
-            "operator_resolution": {
-                "type": "operator_resolution",
-                "title": f"Mission Control: {resolution.replace('_', ' ')}",
-                "status": resolution,
-                "summary": self._mission_resolve_message(resolution),
-                "what_changed": [
-                    f"Item {source_item_id} is vastgelegd als {resolution}.",
-                    "Je werkqueue en daglog kunnen nu zonder dit item verder.",
-                ],
-                "what_next": [
-                    {
-                        "resolved": "Ga door naar de volgende prioriteit met de meeste operatorwaarde.",
-                        "skipped": "Pak dit alleen opnieuw op als je context of overtuiging verandert.",
-                        "monitor_today": "Laat dit vandaag meelopen zonder nu te forceren.",
-                        "waiting_for_data": "Ververs of wacht op data voordat je dit opnieuw beoordeelt.",
-                        "snoozed": "Kom hier later bewust op terug in plaats van het half open te laten hangen.",
-                    }.get(resolution, "Ga verder met de volgende stap in Mission Control.")
-                ],
+            "operator_resolution": operator_resolution,
+            "action_follow_through": operator_resolution,
+            "state": {
+                "analysis": {
+                    "operator_resolution": operator_resolution,
+                    "action_follow_through": operator_resolution,
+                }
             },
         }
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)

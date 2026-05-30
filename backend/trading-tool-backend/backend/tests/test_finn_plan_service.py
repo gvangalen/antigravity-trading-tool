@@ -4157,6 +4157,9 @@ def test_skip_bot_decision_action_returns_operator_resolution(monkeypatch):
     assert result["verified"]["bot_decision_skipped"] is True
     assert result["operator_resolution"]["status"] == "skipped"
     assert "bewust" in result["operator_resolution"]["summary"].lower()
+    assert result["action_follow_through"] == result["operator_resolution"]
+    assert result["state"]["analysis"]["operator_resolution"] == result["operator_resolution"]
+    assert result["state"]["analysis"]["action_follow_through"] == result["operator_resolution"]
 
 
 def test_skip_bot_decision_response_exposes_follow_through_preview(monkeypatch):
@@ -4280,6 +4283,9 @@ def test_resolve_mission_item_action_returns_operator_resolution():
     assert result["verified"]["mission_item_resolved"] is True
     assert result["operator_resolution"]["status"] == "monitor_today"
     assert "werkqueue" in result["operator_resolution"]["what_changed"][1].lower()
+    assert result["action_follow_through"] == result["operator_resolution"]
+    assert result["state"]["analysis"]["operator_resolution"] == result["operator_resolution"]
+    assert result["state"]["analysis"]["action_follow_through"] == result["operator_resolution"]
 
 
 def test_bot_decision_memory_friction_blocks_even_with_open_reviews(monkeypatch):
