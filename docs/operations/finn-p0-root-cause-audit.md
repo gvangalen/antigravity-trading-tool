@@ -113,6 +113,29 @@ That means the first measured P0 hardening result is now clear:
 
 - **general/help, education, explain, coaching, and transactional setup creation are no longer being front-door hijacked by stale transactional drafts in the measured live sample**
 
+After the broader explain-first entity tranche and the new multi-turn regression pack were added, a fresh live sequence on production also held up across mixed prompt types in one run:
+
+- `Hoi FINN, wat kun je voor mij doen?` -> `general_help`
+- `Wat is RSI in simpele taal?` -> `education`
+- `Maak een wekelijkse BTC setup voor een breakout long` -> `plan_creation`
+- `Ik voel FOMO, wat moet ik doen?` -> `behavioral_intelligence`
+- `Welke strategie bekijk ik nu?` -> `context_explain`
+- `Leg mijn setup uit` -> `context_explain`
+- `Welke score zie ik nu?` -> `context_explain`
+- `Leg mijn bot uit` -> `context_explain`
+
+This matters because it is the first measured sequence that mixes:
+
+- general help
+- education
+- transactional creation
+- coaching
+- setup/strategy explain
+- score explain
+- bot explain
+
+without drifting back into `bot_creation` or `strategy_creation` for the non-transactional turns.
+
 ## Root Cause Summary
 
 The current QA failures are not caused by one bug. They are caused by five interacting issues:

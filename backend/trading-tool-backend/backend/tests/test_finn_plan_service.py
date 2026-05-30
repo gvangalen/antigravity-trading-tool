@@ -18,6 +18,89 @@ def _service():
     return FinnPlanService(db_session=None)
 
 
+class _MemoryStateRepo:
+    store = {}
+
+    def __init__(self, session):
+        self.session = session
+
+    async def get_state(self, user_id):
+        return self.store.get(user_id)
+
+    async def save_state(self, user_id, current_flow, asset, slots):
+        self.store[user_id] = {
+            "current_flow": current_flow,
+            "asset": asset,
+            "updated_at": _utc_now(),
+            "slots": slots,
+        }
+
+    async def clear_state(self, user_id):
+        self.store.pop(user_id, None)
+
+
+async def _route_turn(service, user_id, query, context=None):
+    hydrated = await service.hydrate_context(user_id, context or {})
+    sanitized = service.sanitize_context_for_query(query, hydrated)
+    draft_used = bool(isinstance(sanitized.get("finn_draft"), dict))
+
+    if service.looks_like_general_capability_request(query):
+        response = {
+            "intent": "general_help",
+            "flow": "general_help",
+            "response": "help",
+            "state": {"current_flow": "general_help"},
+        }
+    elif service.looks_like_education_request(query):
+        response = {
+            "intent": "education",
+            "flow": "education",
+            "response": "education",
+            "state": {"current_flow": "education"},
+        }
+    elif service.looks_like_entity_explain_request(query, sanitized):
+        response = {
+            "intent": "context_explain",
+            "flow": "context_explain",
+            "response": "explain",
+            "state": {"current_flow": "context_explain"},
+        }
+    elif service.looks_like_behavioral_intelligence_request(query):
+        response = {
+            "intent": "behavioral_intelligence",
+            "flow": "behavioral_intelligence",
+            "response": "coaching",
+            "state": {"current_flow": "behavioral_intelligence"},
+        }
+    elif service.looks_like_bot_request(query, sanitized):
+        response = {
+            "intent": "bot_creation",
+            "flow": "bot_creation",
+            "response": "bot",
+            "draft": {
+                "draft_kind": "bot",
+                "asset": sanitized.get("symbol") or sanitized.get("asset") or "BTC",
+                "strategy_id": sanitized.get("strategy_id") or 257,
+            },
+            "state": {"current_flow": "bot_creation"},
+            "missing_fields": [],
+            "invalid_fields": [],
+            "can_confirm": False,
+        }
+    elif service.looks_like_plan_request(query, sanitized.get("finn_draft")):
+        response = service.build_response(query, sanitized)
+    else:
+        response = {
+            "intent": "unknown",
+            "flow": "unknown",
+            "response": "unknown",
+            "state": {"current_flow": "unknown"},
+        }
+
+    await service.persist_response_state(user_id, response)
+    return response, sanitized
+
+
 def test_assistant_context_preserves_transactional_follow_up_state():
     context = AssistantContextSchema(
         current_flow="bot_decision",
@@ -347,6 +430,85 @@ def test_build_context_explain_response_enriches_bot_entity_from_repository(monk
     assert result["analysis"]["context_confidence"]["level"] == "high"
     assert "BTC Review Bot" in result["response"]
     assert "Breakout long test" in result["response"]
+
+
+def test_multi_turn_regression_pack_keeps_non_transactional_turns_out_of_create_flows(monkeypatch):
+    _MemoryStateRepo.store = {}
+    monkeypatch.setattr("backend.services.finn_plan_service.ConversationStateRepository", _MemoryStateRepo)
+    service = FinnPlanService(db_session=object())
+
+    first_response, first_context = asyncio.run(_route_turn(
+        service,
+        30,
+        "Maak een bot voor strategie 257",
+        {"page": "/strategy/257", "page_type": "Strategy", "symbol": "ETH", "strategy_id": 257},
+    ))
+    second_response, second_context = asyncio.run(_route_turn(
+        service,
+        30,
+        "Hoi FINN, wat kun je voor mij doen?",
+        {"page": "/dashboard", "page_type": "Dashboard", "symbol": "BTC"},
+    ))
+
+    assert first_response["intent"] == "bot_creation"
+    assert first_context.get("finn_draft") is None
+    assert second_response["intent"] == "general_help"
+    assert second_context.get("finn_draft") is None
+    assert _MemoryStateRepo.store == {}
+
+    third_response, third_context = asyncio.run(_route_turn(service, 30, "Wat is RSI in simpele taal?", {"page": "/market/BTC", "page_type": "Market", "symbol": "BTC"}))
+    fourth_response, fourth_context = asyncio.run(_route_turn(service, 30, "Ik voel FOMO, wat moet ik doen?", {"page": "/dashboard", "page_type": "Dashboard", "symbol": "BTC"}))
+    fifth_response, fifth_context = asyncio.run(_route_turn(service, 30, "Welke strategie bekijk ik nu?", {"page": "/strategy/257", "page_type": "Strategy", "symbol": "ETH", "strategy_id": 257}))
+
+    assert third_response["intent"] == "education"
+    assert fourth_response["intent"] == "behavioral_intelligence"
+    assert fifth_response["intent"] == "context_explain"
+    assert third_context.get("finn_draft") is None
+    assert fourth_context.get("finn_draft") is None
+    assert fifth_context.get("finn_draft") is None
+    assert _MemoryStateRepo.store == {}
+
+
+def test_multi_turn_regression_pack_preserves_transactional_turns_without_hijacking_follow_up_explains(monkeypatch):
+    _MemoryStateRepo.store = {}
+    monkeypatch.setattr("backend.services.finn_plan_service.ConversationStateRepository", _MemoryStateRepo)
+    service = FinnPlanService(db_session=object())
+
+    first_response, first_context = asyncio.run(_route_turn(
+        service,
+        30,
+        "Maak een wekelijkse BTC setup voor een breakout long",
+        {"page": "/dashboard", "page_type": "Dashboard", "symbol": "BTC"},
+    ))
+    assert _MemoryStateRepo.store[30]["current_flow"] == "plan_creation"
+    second_response, second_context = asyncio.run(_route_turn(
+        service,
+        30,
+        "Leg mijn setup uit",
+        {"page": "/setup/62", "page_type": "Setup", "symbol": "BTC", "setup_id": 62, "setup_name": "Breakout long test"},
+    ))
+    third_response, third_context = asyncio.run(_route_turn(
+        service,
+        30,
+        "Welke score zie ik nu?",
+        {"page": "/dashboard", "page_type": "Dashboard", "symbol": "BTC"},
+    ))
+    fourth_response, fourth_context = asyncio.run(_route_turn(
+        service,
+        30,
+        "Wat kun je voor mij doen?",
+        {"page": "/dashboard", "page_type": "Dashboard", "symbol": "BTC"},
+    ))
+
+    assert first_response["intent"] == "plan_creation"
+    assert first_response["draft"]["asset"] == "BTC"
+    assert second_response["intent"] == "context_explain"
+    assert third_response["intent"] == "context_explain"
+    assert fourth_response["intent"] == "general_help"
+    assert second_context.get("finn_draft") is None
+    assert third_context.get("finn_draft") is None
+    assert fourth_context.get("finn_draft") is None
+    assert _MemoryStateRepo.store == {}
 
 
 def test_bot_decision_ack_state_persists_and_hydrates_without_client_context(monkeypatch):
