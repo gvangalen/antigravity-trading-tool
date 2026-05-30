@@ -10326,6 +10326,8 @@ class FinnPlanService:
         if existing["status"] == "executed":
             result = payload.get("result")
             if isinstance(result, dict):
+                action = payload.get("action") if isinstance(payload.get("action"), dict) else {}
+                result = self._hydrate_legacy_follow_through_result(action, result)
                 return {**result, "replayed": True}
         if existing["status"] not in {"pending", "executing"}:
             raise HTTPException(409, f"Finn action token is niet uitvoerbaar (status: {existing['status']}).")
@@ -11256,8 +11258,49 @@ class FinnPlanService:
             payload = json.loads(payload)
         result = payload.get("result")
         if isinstance(result, dict):
+            action = payload.get("action") if isinstance(payload.get("action"), dict) else {}
+            result = self._hydrate_legacy_follow_through_result(action, result)
             return {**result, "replayed": True}
         return None
+
+    def _hydrate_legacy_follow_through_result(self, action: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(action, dict) or not isinstance(result, dict):
+            return result
+        action_type = str(action.get("type") or "")
+        if action_type == "skip_bot_decision":
+            if result.get("operator_resolution") and result.get("action_follow_through"):
+                return result
+            decision_id = self._safe_int((result.get("decision_id")) or ((action.get("payload") or {}).get("decision_id")))
+            resolution = {
+                "type": "operator_resolution",
+                "title": f"Bot-decision #{decision_id} bewust overgeslagen" if decision_id else "Bot-decision bewust overgeslagen",
+                "status": "skipped",
+                "summary": "Je hebt deze decision niet doorgedrukt; Finn legt dat vast als bewuste frictie.",
+                "what_changed": [
+                    f"Decision #{decision_id} staat nu op skipped." if decision_id else "Deze decision staat nu op skipped.",
+                    "Deze review telt niet meer als open actie voor vandaag.",
+                ],
+                "what_next": [
+                    "Ga alleen opnieuw naar een decision als de context echt veranderd is.",
+                    "Pak liever de volgende open review of prioriteit op.",
+                ],
+            }
+            analysis = result.get("state", {}).get("analysis") if isinstance(result.get("state"), dict) else None
+            merged_analysis = {
+                **(analysis if isinstance(analysis, dict) else {}),
+                "operator_resolution": resolution,
+                "action_follow_through": resolution,
+            }
+            return {
+                **result,
+                "operator_resolution": resolution,
+                "action_follow_through": resolution,
+                "state": {
+                    **(result.get("state") if isinstance(result.get("state"), dict) else {}),
+                    "analysis": merged_analysis,
+                },
+            }
+        return result
 
     async def _upsert_action_audit(
         self,

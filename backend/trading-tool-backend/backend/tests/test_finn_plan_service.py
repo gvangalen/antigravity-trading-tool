@@ -4162,6 +4162,55 @@ def test_skip_bot_decision_action_returns_operator_resolution(monkeypatch):
     assert result["state"]["analysis"]["action_follow_through"] == result["operator_resolution"]
 
 
+def test_legacy_skip_result_gets_follow_through_hydrated():
+    service = _service()
+
+    hydrated = service._hydrate_legacy_follow_through_result(
+        {
+            "type": "skip_bot_decision",
+            "payload": {"bot_id": 17, "decision_id": 121110},
+        },
+        {
+            "ok": True,
+            "message": "Bot-decision #121110 is overgeslagen.",
+            "decision_id": 121110,
+            "verified": {"bot_decision_skipped": True},
+        },
+    )
+
+    assert hydrated["operator_resolution"]["status"] == "skipped"
+    assert hydrated["action_follow_through"] == hydrated["operator_resolution"]
+    assert hydrated["state"]["analysis"]["operator_resolution"] == hydrated["operator_resolution"]
+    assert hydrated["state"]["analysis"]["action_follow_through"] == hydrated["operator_resolution"]
+
+
+def test_execute_issued_action_replays_legacy_skip_result_with_follow_through():
+    service = FinnPlanService(db_session=object())
+    service._get_pending_action_row = AsyncMock(return_value={
+        "status": "executed",
+        "payload": {
+            "action": {
+                "type": "skip_bot_decision",
+                "payload": {"bot_id": 17, "decision_id": 121110},
+            },
+            "result": {
+                "ok": True,
+                "message": "Bot-decision #121110 is overgeslagen.",
+                "decision_id": 121110,
+                "verified": {"bot_decision_skipped": True},
+            },
+        },
+    })
+
+    result = asyncio.run(service.execute_issued_action(30, "finn-maint-skip-legacy-u30"))
+
+    assert result["replayed"] is True
+    assert result["operator_resolution"]["status"] == "skipped"
+    assert result["action_follow_through"] == result["operator_resolution"]
+    assert result["state"]["analysis"]["operator_resolution"] == result["operator_resolution"]
+    assert result["state"]["analysis"]["action_follow_through"] == result["operator_resolution"]
+
+
 def test_skip_bot_decision_response_exposes_follow_through_preview(monkeypatch):
     service = _service()
 
