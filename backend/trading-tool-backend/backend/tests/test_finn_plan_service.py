@@ -33,6 +33,73 @@ def test_assistant_context_preserves_transactional_follow_up_state():
     assert payload["pending_behavioral_memory_friction"]["type"] == "decision_churn"
 
 
+def test_sanitize_context_drops_stale_bot_draft_for_education_prompt():
+    service = _service()
+    context = {
+        "symbol": "BTC",
+        "finn_draft": {
+            "draft_kind": "bot",
+            "operation": "create",
+            "asset": "ETH",
+            "strategy_id": 257,
+            "existing_bot_id": 130,
+        },
+        "finn_state": {"current_flow": "bot_creation"},
+        "current_flow": "bot_creation",
+    }
+
+    sanitized = service.sanitize_context_for_query("Wat is RSI in simpele taal?", context)
+
+    assert "finn_draft" not in sanitized
+    assert "finn_state" not in sanitized
+    assert sanitized.get("current_flow") is None
+
+
+def test_sanitize_context_keeps_bot_draft_for_real_transactional_follow_up():
+    service = _service()
+    context = {
+        "finn_draft": {
+            "draft_kind": "bot",
+            "operation": "create",
+            "strategy_id": 257,
+        },
+        "current_flow": "bot_creation",
+    }
+
+    sanitized = service.sanitize_context_for_query("strategie 257", context)
+
+    assert sanitized["finn_draft"]["draft_kind"] == "bot"
+    assert sanitized["current_flow"] == "bot_creation"
+
+
+def test_bot_request_detection_does_not_hijack_general_or_explain_prompts():
+    service = _service()
+    context = {
+        "finn_draft": {
+            "draft_kind": "bot",
+            "operation": "create",
+            "strategy_id": 257,
+        },
+        "strategy_id": 257,
+    }
+
+    assert service.looks_like_bot_request("Hoi FINN, wat kun je voor mij doen?", context) is False
+    assert service.looks_like_bot_request("Welke strategie bekijk ik nu?", context) is False
+    assert service.looks_like_bot_request("Wat is RSI in simpele taal?", context) is False
+
+
+def test_education_and_general_request_detection_are_explicit():
+    service = _service()
+
+    assert service.looks_like_general_capability_request("Hoi FINN, wat kun je voor mij doen?") is True
+    assert service.looks_like_education_request("Wat is RSI in simpele taal?") is True
+    assert service.looks_like_education_request("Wat is DCA?") is True
+    assert service.looks_like_entity_explain_request(
+        "Welke strategie bekijk ik nu?",
+        {"strategy_id": 257, "page": "/strategy"},
+    ) is True
+
+
 def test_bot_decision_ack_state_persists_and_hydrates_without_client_context(monkeypatch):
     saved = {}
 

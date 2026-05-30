@@ -301,6 +301,108 @@ class FinnPlanService:
         self.session = db_session
         self.trace_id = trace_id
 
+    def _normalized_query(self, query: str) -> str:
+        return (query or "").strip().lower()
+
+    def _has_explain_intent(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        return any(phrase in q for phrase in [
+            "leg uit", "uitleg", "verklaar", "waarom", "wat is", "wat doet",
+            "welke", "bekijk ik", "heb ik open", "simpele taal",
+        ])
+
+    def looks_like_general_capability_request(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        capability_phrases = [
+            "wat kun je", "waar kun je mee helpen", "hoe kun je helpen",
+            "wat doe je", "hoe ondersteun", "hoe help", "waar help je mee",
+        ]
+        return any(phrase in q for phrase in capability_phrases)
+
+    def looks_like_education_request(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        topics = [
+            "rsi", "ma200", "ma 200", "wyckoff", "dca", "stop loss", "stoploss",
+            "position sizing", "risk management", "trading plan",
+        ]
+        explain_terms = [
+            "wat is", "leg uit", "uitleg", "verklaar", "simpele taal",
+            "eenvoudig", "betekent", "hoe werkt",
+        ]
+        if any(word in q for word in ["maak ", "aanmaken", "creeer", "creeër", "bouw", "update", "pas ", "wijzig"]):
+            return False
+        return any(topic in q for topic in topics) and any(term in q for term in explain_terms)
+
+    def looks_like_entity_explain_request(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
+        q = self._normalized_query(query)
+        context = context or {}
+        has_explain = self._has_explain_intent(query)
+        if not has_explain:
+            return False
+        if context.get("setup_id") and any(term in q for term in ["setup", "plan", "open"]):
+            return True
+        if context.get("strategy_id") and any(term in q for term in ["strategie", "strategy", "open"]):
+            return True
+        if context.get("bot_id") and "bot" in q:
+            return True
+        return any(term in q for term in ["setup", "strategie", "strategy", "bot", "rapport", "report", "score"])
+
+    def _looks_like_transactional_follow_up(self, query: str, draft: Dict[str, Any]) -> bool:
+        q = self._normalized_query(query)
+        if self.is_cancel_request(q):
+            return True
+        if self.looks_like_general_capability_request(query):
+            return False
+        if self.looks_like_education_request(query):
+            return False
+        if self.looks_like_entity_explain_request(query, {}):
+            return False
+        if self.looks_like_behavioral_intelligence_request(query):
+            return False
+        if self.looks_like_weekly_reflection_request(query):
+            return False
+        if self.looks_like_behavioral_memory_request(query):
+            return False
+        if self.looks_like_finn_report_request(query):
+            return False
+        if self.looks_like_daily_coach_request(query):
+            return False
+        if self.looks_like_indicator_insight_request(query):
+            return False
+        if self.looks_like_status_request(query):
+            return False
+
+        if re.fullmatch(r"\s*(ja|nee|ok|prima|doe maar|bevestig|confirm|annuleer|cancel|stop|\d+)\s*", q):
+            return True
+
+        continuation_terms = {
+            "bot": ["bot", "strategie", "strategy", "paper", "live", "manual", "auto", "budget", "daglimiet", "min order", "max order", "cadence", "risk", "risico"],
+            "strategy": ["strategie", "strategy", "setup", "entry", "stop", "target", "basisbedrag", "base amount", "market akkoord"],
+            "indicator_config": ["indicator", "macro", "technical", "node", "weging", "weight", "rule", "regel", "contrarian"],
+            "plan": ["setup", "dca", "trade", "entry", "stop", "target", "wekelijks", "maandelijks", "dagelijks", "btc", "eth", "sol"],
+        }
+        draft_kind = draft.get("draft_kind")
+        if draft_kind == "bot":
+            return any(term in q for term in continuation_terms["bot"])
+        if draft_kind == "strategy":
+            return any(term in q for term in continuation_terms["strategy"])
+        if draft_kind == "indicator_config":
+            return any(term in q for term in continuation_terms["indicator_config"])
+        return any(term in q for term in continuation_terms["plan"])
+
+    def sanitize_context_for_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        payload = dict(context or {})
+        draft = payload.get("finn_draft") if isinstance(payload.get("finn_draft"), dict) else None
+        if not draft:
+            return payload
+        if self._looks_like_transactional_follow_up(query, draft):
+            return payload
+        payload.pop("finn_draft", None)
+        payload.pop("finn_state", None)
+        if payload.get("current_flow") in {"plan_creation", "strategy_creation", "bot_creation", "indicator_config"}:
+            payload.pop("current_flow", None)
+        return payload
+
     def is_cancel_request(self, query: str) -> bool:
         q = (query or "").lower()
         cancel_patterns = [
@@ -460,9 +562,11 @@ class FinnPlanService:
 
     def looks_like_plan_request(self, query: str, draft: Optional[Dict[str, Any]] = None) -> bool:
         q = (query or "").lower()
-        if draft and draft.get("plan_type"):
+        if draft and draft.get("plan_type") and self._looks_like_transactional_follow_up(query, draft):
             return True
         if draft and draft.get("draft_kind") == "strategy":
+            return False
+        if self.looks_like_general_capability_request(query) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query):
             return False
         if self.looks_like_daily_coach_request(query):
             return False
@@ -496,8 +600,10 @@ class FinnPlanService:
         q = (query or "").lower()
         context = context or {}
         draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else {}
-        if draft.get("draft_kind") == "strategy":
+        if draft.get("draft_kind") == "strategy" and self._looks_like_transactional_follow_up(query, draft):
             return True
+        if self.looks_like_general_capability_request(query) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query, context):
+            return False
         if self.looks_like_status_request(query):
             return False
         has_strategy_word = any(word in q for word in ["strategie", "strategy"])
@@ -511,8 +617,10 @@ class FinnPlanService:
         q = (query or "").lower()
         context = context or {}
         draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else {}
-        if draft.get("draft_kind") == "bot":
+        if draft.get("draft_kind") == "bot" and self._looks_like_transactional_follow_up(query, draft):
             return True
+        if self.looks_like_general_capability_request(query) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query, context):
+            return False
         if self.looks_like_status_request(query):
             return False
         if any(phrase in q for phrase in NO_BOT_PHRASES):
@@ -528,8 +636,10 @@ class FinnPlanService:
         q = (query or "").lower()
         context = context or {}
         draft = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else {}
-        if draft.get("draft_kind") == "indicator_config":
+        if draft.get("draft_kind") == "indicator_config" and self._looks_like_transactional_follow_up(query, draft):
             return True
+        if self.looks_like_general_capability_request(query) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query, context):
+            return False
         if self.looks_like_status_request(query):
             return False
         has_category = any(word in q for word in ["macro", "technical", "technisch", "technische", "indicator", "indicatoren", "node", "score", "scoring", "contrarian", "standard", "standaard"])
@@ -694,6 +804,130 @@ class FinnPlanService:
             "setup", "plan", "bot", "trade", "dca", "markt", "market", "btc", "eth", "sol",
         ])
         return has_status and has_market_or_plan
+
+    async def build_general_capability_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        page = context.get("page_type") or context.get("page") or "Tradamind"
+        asset = context.get("symbol") or context.get("asset")
+        asset_text = f" rond {str(asset).upper()}" if asset else ""
+        response = (
+            f"Ik help je hier vooral met uitleg, coaching en review in {page}{asset_text}. "
+            "Denk aan: je actieve setup of strategie uitleggen, score- en blocker-uitleg geven, "
+            "dagcoaching doen, Mission Control samenvatten en bot-decisions reviewen voordat je iets uitvoert."
+        )
+        return {
+            "response": response,
+            "intent": "general_help",
+            "flow": "general_help",
+            "state": {
+                "current_flow": "general_help",
+                "page": context.get("page"),
+                "asset": asset,
+            },
+            "analysis": {
+                "mode": "general_help",
+                "examples": [
+                    "Leg mijn setup uit",
+                    "Waarom blokkeert technical mijn BTC setup?",
+                    "Wat moet ik vandaag doen?",
+                ],
+            },
+            "actions": [],
+        }
+
+    async def build_education_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        q = self._normalized_query(query)
+        topics = {
+            "rsi": "RSI meet of een markt op korte termijn relatief hard is opgelopen of gedaald. Hoog betekent vaak veel koopdruk; laag betekent vaak veel verkoopdruk. Het is een contextsignaal, geen koopknop op zichzelf.",
+            "ma200": "De MA200 is het gemiddelde van ongeveer 200 perioden en helpt je zien of de grotere trend omhoog of omlaag helt. Boven de MA200 voelt meestal sterker dan eronder.",
+            "wyckoff": "Wyckoff kijkt naar opbouw, distributie en de strijd tussen vraag en aanbod. Simpel gezegd: het probeert te laten zien of slim geld stil aan het opbouwen is of juist aan het lossen.",
+            "dca": "DCA betekent dat je in vaste stapjes koopt in plaats van in één keer. Daarmee spreid je timingrisico en voorkom je sneller dat één emotioneel moment je hele entry bepaalt.",
+            "stop loss": "Een stop loss is je vooraf gekozen uitstappunt als een trade ongeldig wordt. Het doel is niet perfect uitstappen, maar je verlies klein en gepland houden.",
+            "position sizing": "Position sizing gaat over hoe groot je positie mag zijn. Je bepaalt dus niet alleen wat je koopt, maar vooral hoeveel risico je op één idee wilt zetten.",
+            "risk management": "Risk management is de laag die bepaalt hoeveel je mag verliezen, hoeveel exposure je per asset neemt en wanneer je juist niets doet. Zonder die laag wordt zelfs een goed idee snel gevaarlijk.",
+            "trading plan": "Een trading plan is je vooraf afgesproken speelboek: wanneer je in- en uitstapt, hoeveel risico je neemt en wanneer je juist wacht. Het helpt je beslissen vóórdat emotie het overneemt.",
+        }
+        topic = next((key for key in topics if key in q), None)
+        if not topic and "ma 200" in q:
+            topic = "ma200"
+        body = topics.get(topic, "Ik kan basis trading-concepten simpel uitleggen, zoals RSI, MA200, DCA, stop loss, position sizing en risk management.")
+        return {
+            "response": body,
+            "intent": "education",
+            "flow": "education",
+            "state": {
+                "current_flow": "education",
+                "topic": topic,
+            },
+            "analysis": {
+                "topic": topic,
+                "style": "simple_explain",
+            },
+            "actions": [],
+        }
+
+    async def build_context_explain_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        strategy_id = context.get("strategy_id")
+        setup_id = context.get("setup_id")
+        bot_id = context.get("bot_id")
+
+        if strategy_id and self.session:
+            repo = StrategyRepository(self.session)
+            service = StrategyService(self.session)
+            row = await repo.get_raw_strategy_with_setup(int(strategy_id), user_id)
+            strategy = service._format_strategy_row(row) if row else None
+            if strategy:
+                response = (
+                    f"Je bekijkt nu strategie #{strategy['id']} '{strategy.get('name')}' voor {strategy.get('symbol')} "
+                    f"op {strategy.get('timeframe')}, gekoppeld aan setup #{strategy.get('setup_id')} '{strategy.get('setup_name')}'."
+                )
+                return {
+                    "response": response,
+                    "intent": "context_explain",
+                    "flow": "context_explain",
+                    "state": {"current_flow": "context_explain", "strategy_id": strategy["id"], "setup_id": strategy.get("setup_id"), "asset": strategy.get("symbol")},
+                    "analysis": {"entity_type": "strategy", "entity": strategy},
+                    "actions": [],
+                }
+
+        if setup_id and self.session:
+            service = SetupService(self.session)
+            setup = await service.get_setup_by_id(int(setup_id), user_id)
+            if setup:
+                response = (
+                    f"Je hebt nu setup #{setup['id']} '{setup.get('name')}' open voor {setup.get('symbol')} "
+                    f"op {setup.get('timeframe')}. Type: {setup.get('setup_type')}."
+                )
+                return {
+                    "response": response,
+                    "intent": "context_explain",
+                    "flow": "context_explain",
+                    "state": {"current_flow": "context_explain", "setup_id": setup["id"], "asset": setup.get("symbol")},
+                    "analysis": {"entity_type": "setup", "entity": setup},
+                    "actions": [],
+                }
+
+        if bot_id:
+            response = f"Je werkt nu met bot #{bot_id}. Als je wilt kan ik uitleggen waarom deze bot actief is, welke strategie hij volgt of welke review-openingen er zijn."
+            return {
+                "response": response,
+                "intent": "context_explain",
+                "flow": "context_explain",
+                "state": {"current_flow": "context_explain", "bot_id": bot_id},
+                "analysis": {"entity_type": "bot", "entity": {"id": bot_id}},
+                "actions": [],
+            }
+
+        response = "Ik kan je huidige context uitleggen, maar ik heb in deze prompt niet genoeg zekere pagina-entiteit om één specifieke setup, strategie of bot te benoemen."
+        return {
+            "response": response,
+            "intent": "context_explain",
+            "flow": "context_explain",
+            "state": {"current_flow": "context_explain"},
+            "analysis": {"entity_type": "unknown"},
+            "actions": [],
+        }
 
     def build_response(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}

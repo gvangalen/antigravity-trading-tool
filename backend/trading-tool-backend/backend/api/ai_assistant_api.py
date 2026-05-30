@@ -348,6 +348,7 @@ async def assistant_chat(
         user_id = current_user["id"]
         finn = FinnPlanService(db)
         context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
+        context_payload = finn.sanitize_context_for_query(request.query, context_payload)
         _apply_assistant_rate_limit(
             user_id=user_id,
             raw_request=raw_request,
@@ -357,6 +358,21 @@ async def assistant_chat(
         )
         if finn.looks_like_daily_score_refresh_request(request.query):
             finn_response = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+            )
+        if finn.looks_like_general_capability_request(request.query):
+            finn_response = await finn.build_general_capability_response(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+            )
+        if finn.looks_like_education_request(request.query):
+            finn_response = await finn.build_education_response(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+            )
+        if finn.looks_like_entity_explain_request(request.query, context_payload):
+            finn_response = await finn.build_context_explain_response(user_id, request.query, context_payload)
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
             )
@@ -621,6 +637,7 @@ async def assistant_chat_stream(
         try:
             finn = FinnPlanService(db)
             context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
+            context_payload = finn.sanitize_context_for_query(request.query, context_payload)
             _apply_assistant_rate_limit(
                 user_id=user_id,
                 raw_request=raw_request,
@@ -630,6 +647,24 @@ async def assistant_chat_stream(
             )
             if finn.looks_like_daily_score_refresh_request(request.query):
                 envelope = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_general_capability_request(request.query):
+                envelope = await finn.build_general_capability_response(user_id, request.query, context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_education_request(request.query):
+                envelope = await finn.build_education_response(user_id, request.query, context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_entity_explain_request(request.query, context_payload):
+                envelope = await finn.build_context_explain_response(user_id, request.query, context_payload)
                 envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
                 yield _sse_event("envelope", envelope)
                 return
