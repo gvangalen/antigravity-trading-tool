@@ -182,6 +182,72 @@ def test_education_and_general_request_detection_are_explicit():
     ) is True
 
 
+def test_build_education_response_covers_core_topic_in_simple_mode():
+    service = _service()
+
+    result = asyncio.run(service.build_education_response(30, "Wat is Wyckoff in simpele taal?"))
+
+    assert result["intent"] == "education"
+    assert result["flow"] == "education"
+    assert result["state"]["topic"] == "wyckoff"
+    assert result["analysis"]["topic_label"] == "Wyckoff"
+    assert result["analysis"]["confidence"] == "high"
+    assert "Wat het is:" in result["response"]
+    assert "Waarom het telt:" in result["response"]
+    assert "Let op:" in result["response"]
+
+
+def test_build_education_response_handles_do_nothing_guidance():
+    service = _service()
+
+    result = asyncio.run(service.build_education_response(30, "Wanneer zou jij zeggen dat ik beter even niets doe?"))
+
+    assert result["intent"] == "education"
+    assert result["state"]["topic"] == "do_nothing"
+    assert "Niets doen" in result["analysis"]["topic_label"]
+    assert "geen slechte trade" in result["response"].lower()
+
+
+def test_context_confidence_prefers_strong_page_entity():
+    service = _service()
+
+    confidence = service._context_confidence({
+        "page_type": "Strategy",
+        "strategy_id": 257,
+        "symbol": "ETH",
+    })
+
+    assert confidence["level"] == "high"
+    assert confidence["entity_type"] == "strategy"
+
+
+def test_context_confidence_stays_low_without_entity():
+    service = _service()
+
+    confidence = service._context_confidence({
+        "page_type": "Dashboard",
+        "symbol": "BTC",
+    })
+
+    assert confidence["level"] == "low"
+    assert confidence["entity_type"] == "unknown"
+
+
+def test_build_context_explain_response_returns_low_confidence_fallback_without_entity():
+    service = _service()
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welke setup heb ik nu open?", {
+        "page": "/dashboard",
+        "page_type": "Dashboard",
+        "symbol": "BTC",
+    }))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "unknown"
+    assert result["analysis"]["context_confidence"]["level"] == "low"
+    assert "niet genoeg zekere pagina-entiteit" in result["response"]
+
+
 def test_bot_decision_ack_state_persists_and_hydrates_without_client_context(monkeypatch):
     saved = {}
 

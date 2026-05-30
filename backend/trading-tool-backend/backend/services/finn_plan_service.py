@@ -396,15 +396,22 @@ class FinnPlanService:
         q = self._normalized_query(query)
         topics = [
             "rsi", "ma200", "ma 200", "wyckoff", "dca", "stop loss", "stoploss",
-            "position sizing", "risk management", "trading plan",
+            "position sizing", "risk management", "trading plan", "niets doen",
+            "even niets doen", "beter even niets doen",
         ]
         explain_terms = [
             "wat is", "leg uit", "uitleg", "verklaar", "simpele taal",
             "eenvoudig", "betekent", "hoe werkt",
         ]
+        do_nothing_terms = [
+            "wanneer", "beter", "niets doen", "even niets", "niet traden",
+            "geen trade", "wachten",
+        ]
         if any(word in q for word in ["maak ", "aanmaken", "creeer", "creeër", "bouw", "update", "pas ", "wijzig"]):
             return False
-        return any(topic in q for topic in topics) and any(term in q for term in explain_terms)
+        if any(topic in q for topic in topics) and any(term in q for term in explain_terms):
+            return True
+        return ("niets doen" in q or "even niets" in q) and any(term in q for term in do_nothing_terms)
 
     def looks_like_entity_explain_request(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
         q = self._normalized_query(query)
@@ -938,34 +945,151 @@ class FinnPlanService:
             "actions": [],
         }
 
-    async def build_education_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        q = self._normalized_query(query)
-        topics = {
-            "rsi": "RSI meet of een markt op korte termijn relatief hard is opgelopen of gedaald. Hoog betekent vaak veel koopdruk; laag betekent vaak veel verkoopdruk. Het is een contextsignaal, geen koopknop op zichzelf.",
-            "ma200": "De MA200 is het gemiddelde van ongeveer 200 perioden en helpt je zien of de grotere trend omhoog of omlaag helt. Boven de MA200 voelt meestal sterker dan eronder.",
-            "wyckoff": "Wyckoff kijkt naar opbouw, distributie en de strijd tussen vraag en aanbod. Simpel gezegd: het probeert te laten zien of slim geld stil aan het opbouwen is of juist aan het lossen.",
-            "dca": "DCA betekent dat je in vaste stapjes koopt in plaats van in één keer. Daarmee spreid je timingrisico en voorkom je sneller dat één emotioneel moment je hele entry bepaalt.",
-            "stop loss": "Een stop loss is je vooraf gekozen uitstappunt als een trade ongeldig wordt. Het doel is niet perfect uitstappen, maar je verlies klein en gepland houden.",
-            "position sizing": "Position sizing gaat over hoe groot je positie mag zijn. Je bepaalt dus niet alleen wat je koopt, maar vooral hoeveel risico je op één idee wilt zetten.",
-            "risk management": "Risk management is de laag die bepaalt hoeveel je mag verliezen, hoeveel exposure je per asset neemt en wanneer je juist niets doet. Zonder die laag wordt zelfs een goed idee snel gevaarlijk.",
-            "trading plan": "Een trading plan is je vooraf afgesproken speelboek: wanneer je in- en uitstapt, hoeveel risico je neemt en wanneer je juist wacht. Het helpt je beslissen vóórdat emotie het overneemt.",
-        }
-        topic = next((key for key in topics if key in q), None)
-        if not topic and "ma 200" in q:
-            topic = "ma200"
-        body = topics.get(topic, "Ik kan basis trading-concepten simpel uitleggen, zoals RSI, MA200, DCA, stop loss, position sizing en risk management.")
+    def _education_topic_catalog(self) -> Dict[str, Dict[str, Any]]:
         return {
-            "response": body,
+            "rsi": {
+                "aliases": ["rsi"],
+                "title": "RSI",
+                "simple": "RSI laat zien of prijs op korte termijn al hard is opgelopen of gedaald. Het helpt je zien of momentum heet of juist afgekoeld is.",
+                "what_it_is": "RSI is een momentum-indicator die vaak tussen 0 en 100 beweegt.",
+                "why_it_matters": "Het helpt je voorkomen dat je alleen naar gevoel kijkt als prijs snel beweegt.",
+                "not_enough_on_its_own": "RSI alleen is geen koop- of verkoopknop; je leest hem samen met trend en context.",
+            },
+            "ma200": {
+                "aliases": ["ma200", "ma 200"],
+                "title": "MA200",
+                "simple": "De MA200 is een lang gemiddelde dat helpt zien of de grotere trend eerder sterk of zwak is.",
+                "what_it_is": "De MA200 is het gemiddelde van ongeveer 200 candles of perioden.",
+                "why_it_matters": "Veel traders gebruiken hem als simpele scheidslijn tussen bovenliggende kracht en zwakte.",
+                "not_enough_on_its_own": "Hij zegt weinig over je precieze entry; hij geeft vooral trendcontext.",
+            },
+            "wyckoff": {
+                "aliases": ["wyckoff"],
+                "title": "Wyckoff",
+                "simple": "Wyckoff probeert te lezen of grote spelers rustig aan het opbouwen zijn of juist aan het uitstappen zijn.",
+                "what_it_is": "Het is een marktbenadering rond accumulatie, distributie en vraag-aanbod gedrag.",
+                "why_it_matters": "Het helpt prijsactie zien als een proces, niet alleen als losse candles.",
+                "not_enough_on_its_own": "Het vraagt context en oefening; het is geen snelle one-indicator check.",
+            },
+            "dca": {
+                "aliases": ["dca"],
+                "title": "DCA",
+                "simple": "DCA betekent dat je in vaste stapjes koopt in plaats van alles in één keer.",
+                "what_it_is": "Je spreidt entries over tijd, bijvoorbeeld wekelijks of maandelijks.",
+                "why_it_matters": "Dat vermindert timingdruk en maakt impulsbeslissingen minder dominant.",
+                "not_enough_on_its_own": "DCA beschermt niet tegen elk slecht plan; je blijft risk management nodig hebben.",
+            },
+            "stop_loss": {
+                "aliases": ["stop loss", "stoploss"],
+                "title": "Stop loss",
+                "simple": "Een stop loss is je vooraf gekozen punt waar je uitstapt als je trade ongeldig wordt.",
+                "what_it_is": "Het is een verdedigingsregel voor verliesbeperking.",
+                "why_it_matters": "Je beslist vooraf wat je maximaal wilt laten misgaan in plaats van dat emotie dat later doet.",
+                "not_enough_on_its_own": "Een stop loss werkt pas goed samen met positieomvang en marktstructuur.",
+            },
+            "position_sizing": {
+                "aliases": ["position sizing"],
+                "title": "Position sizing",
+                "simple": "Position sizing gaat over hoeveel je koopt, niet alleen wat je koopt.",
+                "what_it_is": "Je koppelt positiegrootte aan je totale kapitaal en aan het risico van één idee.",
+                "why_it_matters": "Zelfs een goed idee wordt gevaarlijk als je positie te groot is.",
+                "not_enough_on_its_own": "Goede sizing vervangt geen goed plan; het maakt een plan alleen veiliger uitvoerbaar.",
+            },
+            "risk_management": {
+                "aliases": ["risk management"],
+                "title": "Risk management",
+                "simple": "Risk management is de laag die bepaalt hoeveel je mag verliezen en wanneer je juist niets doet.",
+                "what_it_is": "Het combineert regels voor verlies, exposure, positiegrootte en discipline.",
+                "why_it_matters": "Zonder risk management kan één slechte beslissing te veel schade doen.",
+                "not_enough_on_its_own": "Het maakt slechte ideeën niet goed, maar het voorkomt dat slechte ideeën je opblazen.",
+            },
+            "trading_plan": {
+                "aliases": ["trading plan"],
+                "title": "Trading plan",
+                "simple": "Een trading plan is je vooraf afgesproken speelboek voor entry, exit, risico en wachten.",
+                "what_it_is": "Je legt vast wat je doet voordat de markt druk of emotie toevoegt.",
+                "why_it_matters": "Daardoor besluit je minder op adrenaline en meer op regels.",
+                "not_enough_on_its_own": "Een plan werkt pas als je het ook echt volgt en bijstuurt op basis van bewijs.",
+            },
+            "do_nothing": {
+                "aliases": ["niets doen", "even niets doen", "beter even niets doen"],
+                "title": "Niets doen",
+                "simple": "Niets doen is vaak verstandig als je plan niet actief is, je context onzeker is of je emotie hoger is dan je duidelijkheid.",
+                "what_it_is": "Het is geen passiviteit, maar een bewuste keuze om geen slechte trade te forceren.",
+                "why_it_matters": "Veel schade komt niet van te weinig trades, maar van geforceerde trades.",
+                "not_enough_on_its_own": "Wachten helpt alleen als je ook weet waar je later wél op wacht.",
+            },
+        }
+
+    def _match_education_topic(self, query: str) -> Optional[str]:
+        q = self._normalized_query(query)
+        if ("niets" in q and "doe" in q) or "even niets" in q:
+            return "do_nothing"
+        for key, meta in self._education_topic_catalog().items():
+            if any(alias in q for alias in meta.get("aliases", [])):
+                return key
+        return None
+
+    def _build_education_message(self, topic_key: Optional[str], query: str) -> Dict[str, Any]:
+        topic = self._education_topic_catalog().get(topic_key or "", {})
+        if not topic:
+            return {
+                "response": "Ik kan basis trading-concepten simpel uitleggen, zoals RSI, MA200, Wyckoff, DCA, stop loss, position sizing, risk management en wanneer juist niets doen verstandig is.",
+                "analysis": {
+                    "topic": None,
+                    "style": "simple_explain",
+                    "confidence": "medium",
+                },
+            }
+        response = (
+            f"{topic['simple']}\n"
+            f"Wat het is: {topic['what_it_is']}\n"
+            f"Waarom het telt: {topic['why_it_matters']}\n"
+            f"Let op: {topic['not_enough_on_its_own']}"
+        )
+        return {
+            "response": response,
+            "analysis": {
+                "topic": topic_key,
+                "topic_label": topic["title"],
+                "style": "simple_explain",
+                "confidence": "high",
+            },
+        }
+
+    def _context_confidence(self, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        page_type = str(context.get("page_type") or "").lower()
+        setup_id = context.get("setup_id")
+        strategy_id = context.get("strategy_id")
+        bot_id = context.get("bot_id")
+
+        if strategy_id and "strategy" in page_type:
+            return {"level": "high", "entity_type": "strategy", "reason": "strategy page with strategy_id"}
+        if setup_id and ("setup" in page_type or "setups" in page_type):
+            return {"level": "high", "entity_type": "setup", "reason": "setup page with setup_id"}
+        if bot_id and "bot" in page_type:
+            return {"level": "high", "entity_type": "bot", "reason": "bot page with bot_id"}
+        if strategy_id:
+            return {"level": "medium", "entity_type": "strategy", "reason": "strategy_id without strong page confirmation"}
+        if setup_id:
+            return {"level": "medium", "entity_type": "setup", "reason": "setup_id without strong page confirmation"}
+        if bot_id:
+            return {"level": "medium", "entity_type": "bot", "reason": "bot_id without strong page confirmation"}
+        return {"level": "low", "entity_type": "unknown", "reason": "no strong entity context"}
+
+    async def build_education_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        topic = self._match_education_topic(query)
+        message = self._build_education_message(topic, query)
+        return {
+            "response": message["response"],
             "intent": "education",
             "flow": "education",
             "state": {
                 "current_flow": "education",
                 "topic": topic,
             },
-            "analysis": {
-                "topic": topic,
-                "style": "simple_explain",
-            },
+            "analysis": message["analysis"],
             "actions": [],
         }
 
@@ -974,6 +1098,7 @@ class FinnPlanService:
         strategy_id = context.get("strategy_id")
         setup_id = context.get("setup_id")
         bot_id = context.get("bot_id")
+        confidence = self._context_confidence(context)
 
         if strategy_id and self.session:
             repo = StrategyRepository(self.session)
@@ -990,7 +1115,7 @@ class FinnPlanService:
                     "intent": "context_explain",
                     "flow": "context_explain",
                     "state": {"current_flow": "context_explain", "strategy_id": strategy["id"], "setup_id": strategy.get("setup_id"), "asset": strategy.get("symbol")},
-                    "analysis": {"entity_type": "strategy", "entity": strategy},
+                    "analysis": {"entity_type": "strategy", "entity": strategy, "context_confidence": confidence},
                     "actions": [],
                 }
 
@@ -1007,7 +1132,7 @@ class FinnPlanService:
                     "intent": "context_explain",
                     "flow": "context_explain",
                     "state": {"current_flow": "context_explain", "setup_id": setup["id"], "asset": setup.get("symbol")},
-                    "analysis": {"entity_type": "setup", "entity": setup},
+                    "analysis": {"entity_type": "setup", "entity": setup, "context_confidence": confidence},
                     "actions": [],
                 }
 
@@ -1018,17 +1143,21 @@ class FinnPlanService:
                 "intent": "context_explain",
                 "flow": "context_explain",
                 "state": {"current_flow": "context_explain", "bot_id": bot_id},
-                "analysis": {"entity_type": "bot", "entity": {"id": bot_id}},
+                "analysis": {"entity_type": "bot", "entity": {"id": bot_id}, "context_confidence": confidence},
                 "actions": [],
             }
 
-        response = "Ik kan je huidige context uitleggen, maar ik heb in deze prompt niet genoeg zekere pagina-entiteit om één specifieke setup, strategie of bot te benoemen."
+        response = (
+            "Ik kan je huidige context uitleggen, maar ik heb in deze prompt niet genoeg zekere pagina-entiteit "
+            "om één specifieke setup, strategie of bot te benoemen. Noem gerust het setup-, strategie- of bot-id, "
+            "of open die surface opnieuw zodat ik gerichter kan zijn."
+        )
         return {
             "response": response,
             "intent": "context_explain",
             "flow": "context_explain",
             "state": {"current_flow": "context_explain"},
-            "analysis": {"entity_type": "unknown"},
+            "analysis": {"entity_type": "unknown", "context_confidence": confidence},
             "actions": [],
         }
 
