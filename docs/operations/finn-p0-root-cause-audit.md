@@ -95,6 +95,24 @@ So the measured sequence was:
    - coaching detection
    - legacy fallback quota sensitivity
 
+After the explain/coaching routing tranche was deployed, a third live sample on production showed the narrower cases now routing correctly as deterministic FINN responses instead of falling into create/update or legacy fallback:
+
+- `Welke strategie bekijk ik nu?` -> `context_explain`
+- `Leg mijn setup uit` -> `context_explain`
+- `Ik voel FOMO, wat moet ik doen?` -> `behavioral_intelligence`
+- `Maak een wekelijkse BTC setup voor een breakout long` -> `plan_creation`
+
+The corresponding audit logs confirmed the intended shape:
+
+- `draft_used = false` for strategy explain
+- `draft_used = false` for setup explain
+- `draft_used = false` for coaching
+- `draft_used = true` only for the explicitly transactional setup-building turn
+
+That means the first measured P0 hardening result is now clear:
+
+- **general/help, education, explain, coaching, and transactional setup creation are no longer being front-door hijacked by stale transactional drafts in the measured live sample**
+
 ## Root Cause Summary
 
 The current QA failures are not caused by one bug. They are caused by five interacting issues:
