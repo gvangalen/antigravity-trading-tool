@@ -72,6 +72,40 @@ def test_sanitize_context_keeps_bot_draft_for_real_transactional_follow_up():
     assert sanitized["current_flow"] == "bot_creation"
 
 
+def test_sanitize_context_drops_stale_plan_draft_for_setup_explain_prompt():
+    service = _service()
+    context = {
+        "setup_id": 62,
+        "current_flow": "plan_creation",
+        "finn_draft": {
+            "plan_type": "trade",
+            "asset": "BTC",
+            "setup": {"name": "BTC Trade Plan"},
+        },
+    }
+
+    sanitized = service.sanitize_context_for_query("Leg mijn setup uit", context)
+
+    assert "finn_draft" not in sanitized
+    assert sanitized.get("current_flow") is None
+
+
+def test_sanitize_context_drops_stale_plan_draft_for_fomo_prompt():
+    service = _service()
+    context = {
+        "current_flow": "plan_creation",
+        "finn_draft": {
+            "plan_type": "trade",
+            "asset": "BTC",
+        },
+    }
+
+    sanitized = service.sanitize_context_for_query("Ik voel FOMO, wat moet ik doen?", context)
+
+    assert "finn_draft" not in sanitized
+    assert sanitized.get("current_flow") is None
+
+
 def test_bot_request_detection_does_not_hijack_general_or_explain_prompts():
     service = _service()
     context = {
