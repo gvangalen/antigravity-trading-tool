@@ -104,7 +104,8 @@ FINN V2 is split into seven phases. Each phase is intended to be complete enough
 ## Status Snapshot
 
 - **Phase 0 - FINN Core Experience Hardening:** functionally complete
-- **Phase 1 - Unified FINN Core:** now started with a first legacy fallback reduction layer at the API boundary
+- **Phase 1 - Unified FINN Core:** first legacy fallback reduction tranche shipped at the API boundary
+- **Phase G - Reliability + Observability Gate:** QA replay promptset, release-gate script, and pass/fail reporting assets are now in place
 
 That means FINN V2 no longer starts from “capability first”. It now starts from a hardened core assistant experience and a gradual reduction of legacy split-brain behavior.
 

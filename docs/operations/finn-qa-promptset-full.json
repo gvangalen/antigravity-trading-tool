@@ -1,0 +1,255 @@
+{
+  "name": "FINN 2.0 full QA gate",
+  "chat_latency_budget_ms": 8000,
+  "mission_control_latency_budget_ms": 20000,
+  "cases": [
+    {
+      "id": "general-help",
+      "query": "Hoi FINN, wat kun je voor mij doen?",
+      "expected_intents": ["general_help", "product_help"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "education-rsi-simple",
+      "query": "Wat is RSI in simpele taal?",
+      "expected_intents": ["education"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "education-ma200",
+      "query": "Wat is MA200?",
+      "expected_intents": ["education"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "education-wyckoff",
+      "query": "Wat is Wyckoff?",
+      "expected_intents": ["education"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "education-dca",
+      "query": "Wat is DCA?",
+      "expected_intents": ["education"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "education-do-nothing",
+      "query": "Wanneer zou jij zeggen dat ik beter even niets doe?",
+      "expected_intents": ["education"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "context-setup-open",
+      "query": "Welke setup heb ik nu open?",
+      "context": {
+        "page": "setup",
+        "page_type": "setup",
+        "setup_id": 62,
+        "setup_name": "Breakout long test",
+        "setup_symbol": "BTC",
+        "setup_timeframe": "1W",
+        "symbol": "BTC"
+      },
+      "expected_intents": ["context_explain"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only",
+      "require_context_confidence": true
+    },
+    {
+      "id": "context-strategy-open",
+      "query": "Welke strategie bekijk ik nu?",
+      "context": {
+        "page": "strategy",
+        "page_type": "strategy",
+        "strategy_id": 257,
+        "symbol": "ETH"
+      },
+      "expected_intents": ["context_explain"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only",
+      "require_context_confidence": true
+    },
+    {
+      "id": "context-asset-bot",
+      "query": "Met welke asset en bot werk ik nu?",
+      "context": {
+        "page": "bot",
+        "page_type": "bot",
+        "bot_id": 121110,
+        "symbol": "BTC"
+      },
+      "expected_intents": ["context_explain"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "explain-setup",
+      "query": "Leg mijn setup uit",
+      "context": {
+        "page": "setup",
+        "page_type": "setup",
+        "setup_id": 62,
+        "setup_name": "Breakout long test",
+        "setup_symbol": "BTC",
+        "setup_timeframe": "1W",
+        "symbol": "BTC"
+      },
+      "expected_intents": ["context_explain"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "explain-strategy",
+      "query": "Leg mijn strategie uit",
+      "context": {
+        "page": "strategy",
+        "page_type": "strategy",
+        "strategy_id": 257,
+        "symbol": "ETH"
+      },
+      "expected_intents": ["context_explain"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "explain-bot",
+      "query": "Leg mijn bot uit",
+      "context": {
+        "page": "bot",
+        "page_type": "bot",
+        "bot_id": 121110,
+        "symbol": "BTC"
+      },
+      "expected_intents": ["context_explain"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "explain-report",
+      "query": "Leg mijn rapport uit",
+      "context": {
+        "page": "report",
+        "page_type": "report",
+        "symbol": "BTC"
+      },
+      "expected_intents": ["context_explain"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "coach-fomo",
+      "query": "Ik voel FOMO, wat moet ik doen?",
+      "expected_intents": ["behavioral_intelligence"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "coach-all-in",
+      "query": "Ik denk eraan om all-in te gaan",
+      "expected_intents": ["behavioral_intelligence"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "mission-control-summary",
+      "query": "Vat Mission Control samen in drie bullets",
+      "context": {
+        "page": "dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC"
+      },
+      "expected_intents": ["mission_control_explain", "context_explain"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "product-help-screen",
+      "query": "Wat kan ik hier doen?",
+      "context": {
+        "page": "dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC"
+      },
+      "expected_intents": ["product_help", "general_help"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "create-setup-transactional",
+      "query": "Maak een wekelijkse BTC setup voor een breakout long",
+      "context": {
+        "page": "dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC"
+      },
+      "expected_intents": ["plan_creation"],
+      "expected_mode": "transactional",
+      "conversation": "mixed-20-turn"
+    },
+    {
+      "id": "mixed-01-help",
+      "query": "Hoi FINN, wat kun je voor mij doen?",
+      "expected_intents": ["general_help", "product_help"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only",
+      "conversation": "mixed-20-turn"
+    },
+    {
+      "id": "mixed-02-rsi",
+      "query": "Wat is RSI in simpele taal?",
+      "expected_intents": ["education"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only",
+      "conversation": "mixed-20-turn"
+    },
+    {
+      "id": "mixed-03-create",
+      "query": "Maak een wekelijkse BTC setup voor een breakout long",
+      "expected_intents": ["plan_creation"],
+      "expected_mode": "transactional",
+      "conversation": "mixed-20-turn"
+    },
+    {
+      "id": "mixed-04-fomo",
+      "query": "Ik voel FOMO, wat moet ik doen?",
+      "expected_intents": ["behavioral_intelligence"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only",
+      "conversation": "mixed-20-turn"
+    },
+    {
+      "id": "mixed-05-explain-strategy",
+      "query": "Welke strategie bekijk ik nu?",
+      "context": {
+        "page": "strategy",
+        "page_type": "strategy",
+        "strategy_id": 257,
+        "symbol": "ETH"
+      },
+      "expected_intents": ["context_explain"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only",
+      "conversation": "mixed-20-turn"
+    },
+    {
+      "id": "mixed-06-mission-control",
+      "query": "Wat zegt Mission Control?",
+      "context": {
+        "page": "dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC"
+      },
+      "expected_intents": ["mission_control_explain", "context_explain"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only",
+      "conversation": "mixed-20-turn"
+    }
+  ]
+}

@@ -1,0 +1,378 @@
+#!/usr/bin/env python3
+"""Run a QA-style FINN replay against a target environment.
+
+The goal of this script is to make the FINN 2.0 release gate reproducible.
+It replays a saved promptset against `/api/assistant/chat`, records latency and
+behavioral invariants, and emits JSON/Markdown summaries that can be attached
+to QA runs.
+"""
+
+from __future__ import annotations
+
+import argparse
+import http.cookiejar
+import json
+import math
+import os
+import statistics
+import sys
+import time
+import urllib.error
+import urllib.request
+import uuid
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+
+GENERIC_FAILURE_SNIPPETS = (
+    "kon geen analyse ophalen",
+    "probeer opnieuw",
+    "interne authenticatiefout",
+    "insufficient_quota",
+)
+
+DEFAULT_CHAT_LATENCY_BUDGET_MS = 8000.0
+DEFAULT_MISSION_CONTROL_LATENCY_BUDGET_MS = 20000.0
+
+
+def load_promptset(path: Path) -> Dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Promptset root must be an object.")
+    cases = payload.get("cases")
+    if not isinstance(cases, list) or not cases:
+        raise ValueError("Promptset must contain a non-empty 'cases' list.")
+
+    for index, case in enumerate(cases):
+        if not isinstance(case, dict):
+            raise ValueError(f"Case #{index} must be an object.")
+        if not case.get("id") or not case.get("query"):
+            raise ValueError(f"Case #{index} requires 'id' and 'query'.")
+    return payload
+
+
+def _is_generic_failure(response_text: Optional[str]) -> bool:
+    text = str(response_text or "").strip().lower()
+    if not text:
+        return True
+    return any(snippet in text for snippet in GENERIC_FAILURE_SNIPPETS)
+
+
+def _percentile(values: List[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    if len(values) == 1:
+        return round(values[0], 2)
+    values = sorted(values)
+    rank = (len(values) - 1) * percentile
+    lower = math.floor(rank)
+    upper = math.ceil(rank)
+    if lower == upper:
+        return round(values[lower], 2)
+    fraction = rank - lower
+    return round(values[lower] + (values[upper] - values[lower]) * fraction, 2)
+
+
+def _safe_json(response: bytes) -> Dict[str, Any]:
+    try:
+        return json.loads(response.decode("utf-8"))
+    except Exception as exc:  # pragma: no cover - defensive
+        raise ValueError(f"Invalid JSON response: {exc}") from exc
+
+
+def build_http_client(
+    *,
+    base_url: str,
+    bearer_token: Optional[str],
+    login_email: Optional[str],
+    login_password: Optional[str],
+    timeout_seconds: float,
+) -> Tuple[urllib.request.OpenerDirector, Dict[str, str]]:
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    headers: Dict[str, str] = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if bearer_token:
+        headers["Authorization"] = f"Bearer {bearer_token}"
+        return opener, headers
+
+    if login_email and login_password:
+        login_body = json.dumps({"email": login_email, "password": login_password}).encode("utf-8")
+        login_request = urllib.request.Request(
+            f"{base_url.rstrip('/')}/api/auth/login",
+            data=login_body,
+            method="POST",
+            headers=headers,
+        )
+        with opener.open(login_request, timeout=timeout_seconds) as response:
+            if int(response.status) != 200:  # pragma: no cover - defensive
+                raise RuntimeError(f"Login failed with status {response.status}")
+        return opener, headers
+
+    raise ValueError("Provide either a bearer token or login email/password.")
+
+
+def perform_chat_request(
+    *,
+    opener: urllib.request.OpenerDirector,
+    default_headers: Dict[str, str],
+    base_url: str,
+    query: str,
+    context: Optional[Dict[str, Any]] = None,
+    session_id: Optional[str] = None,
+    timeout_seconds: float = 45.0,
+) -> Tuple[Dict[str, Any], float, int]:
+    payload: Dict[str, Any] = {"query": query}
+    if context:
+        payload["context"] = context
+    if session_id:
+        payload["session_id"] = session_id
+
+    body = json.dumps(payload).encode("utf-8")
+    headers = {
+        **default_headers,
+        "X-Trace-Id": f"finn-qa-{uuid.uuid4()}",
+    }
+    request = urllib.request.Request(
+        f"{base_url.rstrip('/')}/api/assistant/chat",
+        data=body,
+        method="POST",
+        headers=headers,
+    )
+
+    started = time.perf_counter()
+    try:
+        with opener.open(request, timeout=timeout_seconds) as response:
+            raw = response.read()
+            latency_ms = (time.perf_counter() - started) * 1000
+            return _safe_json(raw), latency_ms, int(response.status)
+    except urllib.error.HTTPError as exc:
+        raw = exc.read()
+        latency_ms = (time.perf_counter() - started) * 1000
+        payload = _safe_json(raw) if raw else {"detail": str(exc)}
+        return payload, latency_ms, int(exc.code)
+
+
+def evaluate_case(case: Dict[str, Any], response: Dict[str, Any], latency_ms: float, http_status: int) -> Dict[str, Any]:
+    analysis = response.get("analysis") if isinstance(response.get("analysis"), dict) else {}
+    flow = response.get("flow")
+    intent = response.get("intent")
+    mode = analysis.get("mode")
+    context_confidence = analysis.get("context_confidence") if isinstance(analysis.get("context_confidence"), dict) else None
+    route_source = analysis.get("route_source")
+    response_text = response.get("response")
+    expected_intents = set(case.get("expected_intents") or [])
+    forbidden_flows = set(case.get("forbidden_flows") or [])
+    expected_mode = case.get("expected_mode")
+    require_context_confidence = bool(case.get("require_context_confidence"))
+
+    failures: List[str] = []
+
+    if http_status != 200:
+        failures.append(f"http_status:{http_status}")
+    if _is_generic_failure(response_text):
+        failures.append("generic_failure")
+    if expected_intents and intent not in expected_intents:
+        failures.append(f"unexpected_intent:{intent}")
+    if flow in forbidden_flows:
+        failures.append(f"forbidden_flow:{flow}")
+    if expected_mode and mode != expected_mode:
+        failures.append(f"unexpected_mode:{mode}")
+    if require_context_confidence and not context_confidence:
+        failures.append("missing_context_confidence")
+
+    return {
+        "id": case["id"],
+        "query": case["query"],
+        "conversation": case.get("conversation"),
+        "http_status": http_status,
+        "intent": intent,
+        "flow": flow,
+        "mode": mode,
+        "route_source": route_source,
+        "latency_ms": round(latency_ms, 2),
+        "context_confidence": context_confidence,
+        "response_preview": str(response_text or "")[:220],
+        "passed": not failures,
+        "failures": failures,
+        "expected_intents": list(expected_intents),
+        "forbidden_flows": list(forbidden_flows),
+        "response": response,
+    }
+
+
+def summarize_results(
+    *,
+    suite_name: str,
+    results: List[Dict[str, Any]],
+    chat_latency_budget_ms: float = DEFAULT_CHAT_LATENCY_BUDGET_MS,
+    mission_control_latency_budget_ms: float = DEFAULT_MISSION_CONTROL_LATENCY_BUDGET_MS,
+) -> Dict[str, Any]:
+    latencies = [float(result.get("latency_ms") or 0.0) for result in results]
+    mission_results = [result for result in results if result.get("intent") == "mission_control_explain"]
+    mission_latencies = [float(result.get("latency_ms") or 0.0) for result in mission_results]
+    failures = [result for result in results if not result.get("passed")]
+    generic_failures = [result for result in results if "generic_failure" in (result.get("failures") or [])]
+    transactional_misroutes = [
+        result
+        for result in results
+        if any(failure.startswith("forbidden_flow:") for failure in (result.get("failures") or []))
+    ]
+    mixed_conversation_failures = [
+        result for result in results if result.get("conversation") == "mixed-20-turn" and not result.get("passed")
+    ]
+
+    release_gate = {
+        "no_generic_failures": not generic_failures,
+        "no_transactional_misroutes": not transactional_misroutes,
+        "stable_mixed_session": not mixed_conversation_failures,
+        "chat_latency_budget_ok": _percentile(latencies, 0.95) <= chat_latency_budget_ms if latencies else True,
+        "mission_control_latency_budget_ok": (
+            max(mission_latencies) <= mission_control_latency_budget_ms if mission_latencies else True
+        ),
+    }
+    release_gate["overall_pass"] = all(release_gate.values()) and not failures
+
+    return {
+        "suite_name": suite_name,
+        "total_cases": len(results),
+        "passed_cases": sum(1 for result in results if result.get("passed")),
+        "failed_cases": len(failures),
+        "generic_failures": len(generic_failures),
+        "transactional_misroutes": len(transactional_misroutes),
+        "avg_latency_ms": round(statistics.mean(latencies), 2) if latencies else 0.0,
+        "p95_latency_ms": _percentile(latencies, 0.95),
+        "max_latency_ms": round(max(latencies), 2) if latencies else 0.0,
+        "mission_control_max_latency_ms": round(max(mission_latencies), 2) if mission_latencies else 0.0,
+        "release_gate": release_gate,
+        "failures": failures,
+    }
+
+
+def render_markdown_report(summary: Dict[str, Any], results: List[Dict[str, Any]]) -> str:
+    lines = [
+        f"# FINN QA Replay Report — {summary['suite_name']}",
+        "",
+        f"- Total cases: **{summary['total_cases']}**",
+        f"- Passed: **{summary['passed_cases']}**",
+        f"- Failed: **{summary['failed_cases']}**",
+        f"- Generic failures: **{summary['generic_failures']}**",
+        f"- Transactional misroutes: **{summary['transactional_misroutes']}**",
+        f"- Avg latency: **{summary['avg_latency_ms']} ms**",
+        f"- P95 latency: **{summary['p95_latency_ms']} ms**",
+        f"- Max latency: **{summary['max_latency_ms']} ms**",
+        "",
+        "## Release Gate",
+        "",
+    ]
+    for key, value in summary["release_gate"].items():
+        lines.append(f"- `{key}`: **{value}**")
+
+    lines.extend(["", "## Case Results", ""])
+    for result in results:
+        status = "PASS" if result["passed"] else "FAIL"
+        lines.append(
+            f"- `{result['id']}` [{status}] intent=`{result.get('intent')}` flow=`{result.get('flow')}` "
+            f"mode=`{result.get('mode')}` latency=`{result.get('latency_ms')}ms` failures=`{', '.join(result.get('failures') or []) or 'none'}`"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def run_suite(
+    *,
+    opener: urllib.request.OpenerDirector,
+    default_headers: Dict[str, str],
+    base_url: str,
+    promptset: Dict[str, Any],
+    timeout_seconds: float,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    session_map: Dict[str, str] = {}
+    results: List[Dict[str, Any]] = []
+
+    for case in promptset["cases"]:
+        conversation = case.get("conversation")
+        session_id = session_map.get(conversation) if conversation else None
+        response, latency_ms, http_status = perform_chat_request(
+            opener=opener,
+            default_headers=default_headers,
+            base_url=base_url,
+            query=case["query"],
+            context=case.get("context"),
+            session_id=session_id,
+            timeout_seconds=timeout_seconds,
+        )
+        if conversation and response.get("session_id"):
+            session_map[conversation] = response["session_id"]
+        results.append(evaluate_case(case, response, latency_ms, http_status))
+
+    summary = summarize_results(
+        suite_name=promptset.get("name") or "finn-qa-suite",
+        results=results,
+        chat_latency_budget_ms=float(promptset.get("chat_latency_budget_ms") or DEFAULT_CHAT_LATENCY_BUDGET_MS),
+        mission_control_latency_budget_ms=float(
+            promptset.get("mission_control_latency_budget_ms") or DEFAULT_MISSION_CONTROL_LATENCY_BUDGET_MS
+        ),
+    )
+    return results, summary
+
+
+def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Replay a FINN QA promptset against /api/assistant/chat.")
+    parser.add_argument("--base-url", required=True, help="Base URL, e.g. https://tradamind.com")
+    parser.add_argument("--promptset", required=True, help="Path to a JSON promptset file")
+    parser.add_argument("--output-json", help="Optional path for a JSON report")
+    parser.add_argument("--output-md", help="Optional path for a Markdown report")
+    parser.add_argument("--token-env", default="FINN_QA_BEARER_TOKEN", help="Env var containing the bearer token")
+    parser.add_argument("--login-email", help="Optional web login email for cookie-based replay")
+    parser.add_argument("--password-env", default="FINN_QA_PASSWORD", help="Env var containing the login password")
+    parser.add_argument("--timeout-seconds", type=float, default=45.0, help="Per-request timeout")
+    parser.add_argument("--strict", action="store_true", help="Exit non-zero when the release gate fails")
+    return parser.parse_args(list(argv) if argv is not None else None)
+
+
+def main(argv: Optional[Iterable[str]] = None) -> int:
+    args = parse_args(argv)
+    token = os.getenv(args.token_env)
+    login_password = os.getenv(args.password_env) if args.login_email else None
+    try:
+        opener, default_headers = build_http_client(
+            base_url=args.base_url,
+            bearer_token=token,
+            login_email=args.login_email,
+            login_password=login_password,
+            timeout_seconds=args.timeout_seconds,
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    promptset = load_promptset(Path(args.promptset))
+    results, summary = run_suite(
+        opener=opener,
+        default_headers=default_headers,
+        base_url=args.base_url,
+        promptset=promptset,
+        timeout_seconds=args.timeout_seconds,
+    )
+
+    report_payload = {
+        "promptset": promptset.get("name"),
+        "summary": summary,
+        "results": results,
+    }
+
+    if args.output_json:
+        Path(args.output_json).write_text(json.dumps(report_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    if args.output_md:
+        Path(args.output_md).write_text(render_markdown_report(summary, results), encoding="utf-8")
+
+    print(json.dumps(summary, indent=2, ensure_ascii=False))
+    if args.strict and not summary["release_gate"]["overall_pass"]:
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
