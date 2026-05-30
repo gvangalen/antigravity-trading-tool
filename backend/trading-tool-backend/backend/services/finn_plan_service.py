@@ -15,6 +15,7 @@ from backend.infrastructure.repositories.exchange_repository import ExchangeRepo
 from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
+from backend.infrastructure.repositories.report_repository import ReportRepository
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
@@ -1078,6 +1079,117 @@ class FinnPlanService:
             return {"level": "medium", "entity_type": "bot", "reason": "bot_id without strong page confirmation"}
         return {"level": "low", "entity_type": "unknown", "reason": "no strong entity context"}
 
+    def _context_confidence_for_target(
+        self,
+        context: Optional[Dict[str, Any]],
+        entity_type: str,
+        *,
+        asset: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        page_type = str(context.get("page_type") or "").lower()
+        base = self._context_confidence(context)
+        asset = str(asset or context.get("symbol") or context.get("asset") or "").upper() or None
+
+        if entity_type == "score":
+            if asset and any(token in page_type for token in ["dashboard", "score", "market", "setup", "strategy", "bot"]):
+                return {"level": "high", "entity_type": "score", "reason": "asset context available for score explanation"}
+            if asset:
+                return {"level": "medium", "entity_type": "score", "reason": "asset inferred without strong score surface confirmation"}
+            return {"level": "low", "entity_type": "score", "reason": "score requested without confident asset context"}
+
+        if entity_type == "report":
+            if "report" in page_type:
+                return {"level": "high", "entity_type": "report", "reason": "report page context available"}
+            return {"level": "medium", "entity_type": "report", "reason": "report requested without explicit report page"}
+
+        if entity_type == "bot":
+            bot_id = context.get("bot_id")
+            if bot_id and "bot" in page_type:
+                return {"level": "high", "entity_type": "bot", "reason": "bot page with bot_id"}
+            if bot_id:
+                return {"level": "medium", "entity_type": "bot", "reason": "bot_id without strong page confirmation"}
+            return {"level": "low", "entity_type": "bot", "reason": "bot requested without bot context"}
+
+        if entity_type == "strategy":
+            strategy_id = context.get("strategy_id")
+            if strategy_id and "strategy" in page_type:
+                return {"level": "high", "entity_type": "strategy", "reason": "strategy page with strategy_id"}
+            if strategy_id:
+                return {"level": "medium", "entity_type": "strategy", "reason": "strategy_id without strong page confirmation"}
+            return {"level": "low", "entity_type": "strategy", "reason": "strategy requested without strategy context"}
+
+        if entity_type == "setup":
+            setup_id = context.get("setup_id")
+            if setup_id and ("setup" in page_type or "setups" in page_type):
+                return {"level": "high", "entity_type": "setup", "reason": "setup page with setup_id"}
+            if setup_id:
+                return {"level": "medium", "entity_type": "setup", "reason": "setup_id without strong page confirmation"}
+            return {"level": "low", "entity_type": "setup", "reason": "setup requested without setup context"}
+
+        return base
+
+    def _context_explain_target(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
+        q = self._normalized_query(query)
+        context = context or {}
+        if any(term in q for term in ["rapport", "report"]):
+            return "report"
+        if "score" in q:
+            return "score"
+        if "bot" in q:
+            return "bot"
+        if any(term in q for term in ["strategie", "strategy"]):
+            return "strategy"
+        if any(term in q for term in ["setup", "plan"]):
+            return "setup"
+        if context.get("strategy_id"):
+            return "strategy"
+        if context.get("setup_id"):
+            return "setup"
+        if context.get("bot_id"):
+            return "bot"
+        if context.get("symbol") or context.get("asset"):
+            return "score"
+        return "unknown"
+
+    def _report_table_from_query_or_context(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
+        q = self._normalized_query(query)
+        page_type = str((context or {}).get("page_type") or "").lower()
+        if any(term in q for term in ["quarter", "kwartaal", "kwartaalrapport"]):
+            return "quarterly_reports"
+        if any(term in q for term in ["maand", "monthly", "30 dagen"]):
+            return "monthly_reports"
+        if any(term in q for term in ["week", "weekly", "weekreflectie"]):
+            return "weekly_reports"
+        if "report" in page_type and "week" in page_type:
+            return "weekly_reports"
+        if "report" in page_type and "maand" in page_type:
+            return "monthly_reports"
+        return "daily_reports"
+
+    def _context_explain_payload(
+        self,
+        *,
+        response: str,
+        confidence: Dict[str, Any],
+        entity_type: str,
+        entity: Optional[Dict[str, Any]] = None,
+        state_overrides: Optional[Dict[str, Any]] = None,
+        actions: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        analysis = {"entity_type": entity_type, "entity": entity or {}, "context_confidence": confidence}
+        state = {"current_flow": "context_explain", "analysis": analysis}
+        if state_overrides:
+            state.update(state_overrides)
+        return {
+            "response": response,
+            "intent": "context_explain",
+            "flow": "context_explain",
+            "state": state,
+            "analysis": analysis,
+            "actions": actions or [],
+        }
+
     async def build_education_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         topic = self._match_education_topic(query)
         message = self._build_education_message(topic, query)
@@ -1096,12 +1208,96 @@ class FinnPlanService:
 
     async def build_context_explain_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
+        target = self._context_explain_target(query, context)
         strategy_id = context.get("strategy_id")
         setup_id = context.get("setup_id")
         bot_id = context.get("bot_id")
-        confidence = self._context_confidence(context)
+        confidence = self._context_confidence_for_target(context, target)
 
-        if strategy_id and self.session:
+        if target == "score":
+            asset = self._asset_from_query_or_context(query, context)
+            score_confidence = self._context_confidence_for_target(context, "score", asset=asset)
+            if self.session:
+                daily_scores = await self._fetch_daily_scores_with_runtime_refresh(user_id, asset)
+                if daily_scores:
+                    score_map = {
+                        "macro": float(daily_scores.get("macro_score") or 0),
+                        "technical": float(daily_scores.get("technical_score") or 0),
+                        "market": float(daily_scores.get("market_score") or 0),
+                        "setup": float(daily_scores.get("setup_score") or 0),
+                    }
+                    weakest = min(
+                        [{"category": key, "score": value} for key, value in score_map.items()],
+                        key=lambda item: item["score"],
+                    )
+                    response = (
+                        f"Je kijkt nu naar de {asset} daily score. Macro is {score_map['macro']:.1f}, "
+                        f"technical {score_map['technical']:.1f}, market {score_map['market']:.1f} en setup {score_map['setup']:.1f}. "
+                        f"De grootste rem zit nu in {weakest['category']} met {weakest['score']:.1f}."
+                    )
+                    return self._context_explain_payload(
+                        response=response,
+                        confidence=score_confidence,
+                        entity_type="score",
+                        entity={
+                            "asset": asset,
+                            "daily_scores": daily_scores,
+                            "weakest_component": weakest,
+                        },
+                        state_overrides={"asset": asset},
+                    )
+
+            response = (
+                f"Ik wil je score voor {asset} uitleggen, maar ik heb in deze context nog geen betrouwbare daily score-rij "
+                "om veilig te citeren. Vraag gerust ook: ververs daily scores voor dit asset."
+            )
+            return self._context_explain_payload(
+                response=response,
+                confidence=score_confidence,
+                entity_type="score",
+                entity={"asset": asset},
+                state_overrides={"asset": asset},
+            )
+
+        if target == "report":
+            report_confidence = self._context_confidence_for_target(context, "report")
+            if self.session:
+                table_name = self._report_table_from_query_or_context(query, context)
+                report = await ReportRepository(self.session).get_latest_report(user_id, table_name)
+                if report:
+                    period_label = {
+                        "daily_reports": "dagrapport",
+                        "weekly_reports": "weekrapport",
+                        "monthly_reports": "maandrapport",
+                        "quarterly_reports": "kwartaalrapport",
+                    }.get(table_name, "rapport")
+                    report_date = report.get("report_date")
+                    summary = report.get("summary") or report.get("headline") or report.get("market_summary") or report.get("macro_summary")
+                    response = (
+                        f"Je kijkt nu naar je meest recente {period_label}"
+                        f"{f' van {report_date}' if report_date else ''}. "
+                        f"{summary if summary else 'Ik kan dit rapport verder uitsplitsen in score, risico en acties als je wilt.'}"
+                    )
+                    return self._context_explain_payload(
+                        response=response,
+                        confidence=report_confidence,
+                        entity_type="report",
+                        entity={"table_name": table_name, "report": report},
+                        state_overrides={"report_type": table_name},
+                    )
+
+            response = (
+                "Ik kan je rapport uitleggen, maar ik heb in deze context nog geen recente rapport-rij om veilig samen te vatten. "
+                "Open gerust het rapport opnieuw of vraag welk dag-, week- of maandrapport je bedoelt."
+            )
+            return self._context_explain_payload(
+                response=response,
+                confidence=report_confidence,
+                entity_type="report",
+                entity={"table_name": self._report_table_from_query_or_context(query, context)},
+            )
+
+        if target == "strategy" and strategy_id and self.session:
             repo = StrategyRepository(self.session)
             service = StrategyService(self.session)
             row = await repo.get_raw_strategy_with_setup(int(strategy_id), user_id)
@@ -1111,22 +1307,19 @@ class FinnPlanService:
                     f"Je bekijkt nu strategie #{strategy['id']} '{strategy.get('name')}' voor {strategy.get('symbol')} "
                     f"op {strategy.get('timeframe')}, gekoppeld aan setup #{strategy.get('setup_id')} '{strategy.get('setup_name')}'."
                 )
-                return {
-                    "response": response,
-                    "intent": "context_explain",
-                    "flow": "context_explain",
-                    "state": {
-                        "current_flow": "context_explain",
+                return self._context_explain_payload(
+                    response=response,
+                    confidence=self._context_confidence_for_target(context, "strategy"),
+                    entity_type="strategy",
+                    entity=strategy,
+                    state_overrides={
                         "strategy_id": strategy["id"],
                         "setup_id": strategy.get("setup_id"),
                         "asset": strategy.get("symbol"),
-                        "analysis": {"entity_type": "strategy", "entity": strategy, "context_confidence": confidence},
                     },
-                    "analysis": {"entity_type": "strategy", "entity": strategy, "context_confidence": confidence},
-                    "actions": [],
-                }
+                )
 
-        if setup_id and self.session:
+        if target == "setup" and setup_id and self.session:
             service = SetupService(self.session)
             setup = await service.get_setup_by_id(int(setup_id), user_id)
             if setup:
@@ -1134,51 +1327,72 @@ class FinnPlanService:
                     f"Je hebt nu setup #{setup['id']} '{setup.get('name')}' open voor {setup.get('symbol')} "
                     f"op {setup.get('timeframe')}. Type: {setup.get('setup_type')}."
                 )
-                return {
-                    "response": response,
-                    "intent": "context_explain",
-                    "flow": "context_explain",
-                    "state": {
-                        "current_flow": "context_explain",
+                return self._context_explain_payload(
+                    response=response,
+                    confidence=self._context_confidence_for_target(context, "setup"),
+                    entity_type="setup",
+                    entity=setup,
+                    state_overrides={
                         "setup_id": setup["id"],
                         "asset": setup.get("symbol"),
-                        "analysis": {"entity_type": "setup", "entity": setup, "context_confidence": confidence},
                     },
-                    "analysis": {"entity_type": "setup", "entity": setup, "context_confidence": confidence},
-                    "actions": [],
-                }
+                )
 
-        if bot_id:
+        if target == "bot" and bot_id:
+            bot = None
+            if self.session:
+                bot = await BotService(self.session).repository.get_bot_config(user_id, int(bot_id))
+            if bot:
+                status_bits = []
+                if bot.get("is_active"):
+                    status_bits.append("actief")
+                if bot.get("is_live"):
+                    status_bits.append("live")
+                status_text = ", ".join(status_bits) if status_bits else "niet actief"
+                setup_suffix = ""
+                if bot.get("setup_id"):
+                    setup_name = bot.get("setup_name")
+                    setup_suffix = f" op setup #{bot.get('setup_id')}"
+                    if setup_name:
+                        setup_suffix += f" '{setup_name}'"
+                response = (
+                    f"Je werkt nu met bot #{bot['id']} '{bot.get('name')}' voor {bot.get('symbol')}. "
+                    f"Status: {status_text}. "
+                    f"Deze bot volgt strategie #{bot.get('strategy_id')} '{bot.get('strategy_name')}'"
+                    f"{setup_suffix}."
+                )
+                return self._context_explain_payload(
+                    response=response,
+                    confidence=self._context_confidence_for_target(context, "bot"),
+                    entity_type="bot",
+                    entity=bot,
+                    state_overrides={
+                        "bot_id": bot["id"],
+                        "strategy_id": bot.get("strategy_id"),
+                        "setup_id": bot.get("setup_id"),
+                        "asset": bot.get("symbol"),
+                    },
+                )
+
             response = f"Je werkt nu met bot #{bot_id}. Als je wilt kan ik uitleggen waarom deze bot actief is, welke strategie hij volgt of welke review-openingen er zijn."
-            return {
-                "response": response,
-                "intent": "context_explain",
-                "flow": "context_explain",
-                "state": {
-                    "current_flow": "context_explain",
-                    "bot_id": bot_id,
-                    "analysis": {"entity_type": "bot", "entity": {"id": bot_id}, "context_confidence": confidence},
-                },
-                "analysis": {"entity_type": "bot", "entity": {"id": bot_id}, "context_confidence": confidence},
-                "actions": [],
-            }
+            return self._context_explain_payload(
+                response=response,
+                confidence=self._context_confidence_for_target(context, "bot"),
+                entity_type="bot",
+                entity={"id": bot_id},
+                state_overrides={"bot_id": bot_id},
+            )
 
         response = (
             "Ik kan je huidige context uitleggen, maar ik heb in deze prompt niet genoeg zekere pagina-entiteit "
-            "om één specifieke setup, strategie of bot te benoemen. Noem gerust het setup-, strategie- of bot-id, "
+            "om één specifieke setup, strategie, bot, score of rapport te benoemen. Noem gerust het setup-, strategie- of bot-id, "
             "of open die surface opnieuw zodat ik gerichter kan zijn."
         )
-        return {
-            "response": response,
-            "intent": "context_explain",
-            "flow": "context_explain",
-            "state": {
-                "current_flow": "context_explain",
-                "analysis": {"entity_type": "unknown", "context_confidence": confidence},
-            },
-            "analysis": {"entity_type": "unknown", "context_confidence": confidence},
-            "actions": [],
-        }
+        return self._context_explain_payload(
+            response=response,
+            confidence=confidence,
+            entity_type="unknown",
+        )
 
     def build_response(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}

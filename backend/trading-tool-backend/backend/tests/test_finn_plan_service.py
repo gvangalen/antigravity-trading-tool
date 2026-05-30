@@ -248,6 +248,107 @@ def test_build_context_explain_response_returns_low_confidence_fallback_without_
     assert "niet genoeg zekere pagina-entiteit" in result["response"]
 
 
+def test_build_context_explain_response_prioritizes_score_explain_when_asset_context_is_present(monkeypatch):
+    class ScoreRepo:
+        def __init__(self, session):
+            self.session = session
+
+        async def fetch_daily_scores(self, user_id, symbol):
+            return {
+                "macro_score": 50,
+                "technical_score": 42,
+                "market_score": 18,
+                "setup_score": 73,
+            }
+
+    monkeypatch.setattr("backend.services.finn_plan_service.ScoreRepository", ScoreRepo)
+    service = FinnPlanService(db_session=object())
+    service._fetch_daily_scores_with_runtime_refresh = AsyncMock(return_value={
+        "macro_score": 50,
+        "technical_score": 42,
+        "market_score": 18,
+        "setup_score": 73,
+    })
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welke score zie ik nu?", {
+        "page": "/dashboard",
+        "page_type": "Dashboard",
+        "symbol": "BTC",
+        "strategy_id": 257,
+    }))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "score"
+    assert result["analysis"]["entity"]["asset"] == "BTC"
+    assert result["analysis"]["entity"]["weakest_component"]["category"] == "market"
+    assert result["analysis"]["context_confidence"]["level"] == "high"
+    assert "Macro is 50.0" in result["response"]
+
+
+def test_build_context_explain_response_can_summarize_report_entity(monkeypatch):
+    class Repo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_latest_report(self, user_id, table_name, symbol=None):
+            return {
+                "id": 7,
+                "report_date": "2026-05-30",
+                "summary": "BTC bleef onder druk en vroeg vooral om geduld.",
+            }
+
+    monkeypatch.setattr("backend.services.finn_plan_service.ReportRepository", Repo)
+    service = FinnPlanService(db_session=object())
+
+    result = asyncio.run(service.build_context_explain_response(30, "Leg mijn weekrapport uit", {
+        "page": "/report",
+        "page_type": "Report",
+    }))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "report"
+    assert result["analysis"]["entity"]["table_name"] == "weekly_reports"
+    assert result["analysis"]["context_confidence"]["level"] == "high"
+    assert "weekrapport" in result["response"].lower()
+    assert "BTC bleef onder druk" in result["response"]
+
+
+def test_build_context_explain_response_enriches_bot_entity_from_repository(monkeypatch):
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            return {
+                "id": bot_id,
+                "name": "BTC Review Bot",
+                "symbol": "BTC",
+                "is_active": True,
+                "is_live": False,
+                "strategy_id": 257,
+                "strategy_name": "ETH Live QA Strategy 542357",
+                "setup_id": 62,
+                "setup_name": "Breakout long test",
+            }
+
+    class FakeBotService:
+        def __init__(self, session):
+            self.repository = Repo()
+
+    monkeypatch.setattr("backend.services.finn_plan_service.BotService", FakeBotService)
+    service = FinnPlanService(db_session=object())
+
+    result = asyncio.run(service.build_context_explain_response(30, "Leg mijn bot uit", {
+        "page": "/bot/17",
+        "page_type": "Bot",
+        "bot_id": 17,
+    }))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "bot"
+    assert result["analysis"]["entity"]["id"] == 17
+    assert result["analysis"]["context_confidence"]["level"] == "high"
+    assert "BTC Review Bot" in result["response"]
+    assert "Breakout long test" in result["response"]
+
+
 def test_bot_decision_ack_state_persists_and_hydrates_without_client_context(monkeypatch):
     saved = {}
 
