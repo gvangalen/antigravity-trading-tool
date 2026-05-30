@@ -15,6 +15,7 @@ SERVER_IP="${SERVER_IP:-}"
 REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/antigravity-trading-tool}"
 NODE_BIN="${NODE_BIN:-/home/ubuntu/.nvm/versions/node/v18.20.8/bin}"
 STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
+DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
 
 case "$ENVIRONMENT" in
   production)
@@ -26,6 +27,7 @@ case "$ENVIRONMENT" in
     AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default,celery-worker-market-portfolio,celery-worker-scoring-execution,celery-worker-ai-reporting,celery-beat}"
     EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-beat}"
     DEPLOY_REF="origin/${BRANCH}"
+    EXTERNAL_BASE_URL="${EXTERNAL_BASE_URL:-https://tradamind.com}"
     ;;
   staging)
     PM2_CONFIG="ecosystem.staging.config.js"
@@ -36,6 +38,7 @@ case "$ENVIRONMENT" in
     AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default-staging,celery-worker-market-portfolio-staging,celery-worker-scoring-execution-staging,celery-worker-ai-reporting-staging,celery-beat-staging}"
     EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-market-portfolio-staging celery-worker-scoring-execution-staging celery-worker-ai-reporting-staging celery-beat-staging}"
     DEPLOY_REF="origin/${BRANCH}"
+    EXTERNAL_BASE_URL="${EXTERNAL_BASE_URL:-https://staging.tradamind.com}"
     ;;
   *)
     echo "Unknown environment: $ENVIRONMENT" >&2
@@ -49,6 +52,12 @@ if [ -z "$SERVER_IP" ]; then
 fi
 
 DEPLOY_STATE_DIR="ops/deploy/${ENVIRONMENT}"
+
+if [ "$DEPLOY_COMPONENT_SET" = "backend_only" ]; then
+  CORE_PM2_APPS="${BACKEND_ONLY_PM2_APPS:-backend}"
+  AUX_PM2_APPS=""
+  EXPECTED_PM2_APPS="${BACKEND_ONLY_EXPECTED_PM2_APPS:-backend}"
+fi
 
 echo "📦 1. Committing & pushing to GitHub for ${ENVIRONMENT}..."
 if ! git diff --cached --quiet; then
@@ -165,13 +174,19 @@ PY
 
   rebuild_pm2_processes() {
     echo \"⚠️ Rebuilding PM2 process list with phased startup.\" >&2
-    pm2 delete all || true
+    if [ \"$DEPLOY_COMPONENT_SET\" = \"backend_only\" ]; then
+      pm2 delete backend || true
+    else
+      pm2 delete all || true
+    fi
     pm2 start $PM2_CONFIG --only \"$CORE_PM2_APPS\" --update-env
     if ! wait_for_backend_health 120; then
       echo \"❌ Backend did not become healthy during phased core startup.\" >&2
       exit 1
     fi
-    pm2 start $PM2_CONFIG --only \"$AUX_PM2_APPS\" --update-env
+    if [ -n \"$AUX_PM2_APPS\" ]; then
+      pm2 start $PM2_CONFIG --only \"$AUX_PM2_APPS\" --update-env
+    fi
     check_pm2_apps_online
   }
 
@@ -245,14 +260,52 @@ elif status != 'ok':
 else:
     print('✅ Deep health gate passed.')
 PY
-  curl --max-time 10 -fsSI http://127.0.0.1:$FRONTEND_PORT/report | head -n 1
-  printf '%s\n' '$TARGET_COMMIT' > ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
+  if [ \"$DEPLOY_COMPONENT_SET\" != \"backend_only\" ]; then
+    curl --max-time 10 -fsSI http://127.0.0.1:$FRONTEND_PORT/report | head -n 1
+  fi
 "; then
   echo "❌ ${ENVIRONMENT} deployment failed for ${TARGET_COMMIT}." >&2
   echo "Rollback command:" >&2
   echo "  ${ROLLBACK_COMMAND}" >&2
   exit 1
 fi
+
+echo "🌤️ 3. Verifying external smoke for ${ENVIRONMENT}..."
+check_external() {
+  local url="$1"
+  local expected="$2"
+  local label="$3"
+  local attempts="${4:-20}"
+  for attempt in $(seq 1 "$attempts"); do
+    local status
+    status="$(curl -sS -o /tmp/tradamind_external_check.txt -w '%{http_code}' "$url" || true)"
+    if [ "$status" = "$expected" ]; then
+      echo "✅ ${label}: ${status}"
+      return 0
+    fi
+    echo "⏳ Waiting for ${label} (attempt ${attempt}/${attempts}, got ${status})..." >&2
+    sleep 3
+  done
+  echo "❌ ${label} did not reach expected status ${expected}." >&2
+  if [ -f /tmp/tradamind_external_check.txt ]; then
+    head -c 500 /tmp/tradamind_external_check.txt >&2 || true
+    echo >&2
+  fi
+  return 1
+}
+
+check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health"
+check_external "${EXTERNAL_BASE_URL}/api/system/health" "401" "external deep health gate"
+check_external "${EXTERNAL_BASE_URL}/report" "200" "external report"
+
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
+  set -euo pipefail
+  cd $REMOTE_DIR
+  printf '%s\n' '$TARGET_COMMIT' > ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
+  if [ -d /var/www/tradamind/ops/deploy ]; then
+    printf '%s\n' '$TARGET_COMMIT' | sudo tee /var/www/tradamind/ops/deploy/LAST_GOOD_COMMIT >/dev/null
+  fi
+"
 
 echo "✅ ${ENVIRONMENT} deployment complete for ${TARGET_COMMIT}."
 echo "Rollback if needed:"
