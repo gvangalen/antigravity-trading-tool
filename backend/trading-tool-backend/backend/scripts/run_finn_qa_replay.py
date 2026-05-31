@@ -10,6 +10,7 @@ to QA runs.
 from __future__ import annotations
 
 import argparse
+import collections
 import http.cookiejar
 import json
 import math
@@ -304,6 +305,16 @@ def summarize_results(
         for result in results
         if any(failure.startswith("forbidden_flow:") for failure in (result.get("failures") or []))
     ]
+    repeated_fallback_phrases = collections.Counter()
+    vague_context_cases: List[str] = []
+    for result in results:
+        preview = str(result.get("response_preview") or "").lower()
+        if "ik zie nog geen zekere entiteit" in preview:
+            repeated_fallback_phrases["ik zie nog geen zekere entiteit"] += 1
+            vague_context_cases.append(str(result.get("id")))
+        if "ik kan je huidige context uitleggen" in preview:
+            repeated_fallback_phrases["ik kan je huidige context uitleggen"] += 1
+            vague_context_cases.append(str(result.get("id")))
     mixed_conversation_failures = [
         result for result in results if result.get("conversation") == "mixed-20-turn" and not result.get("passed")
     ]
@@ -333,6 +344,8 @@ def summarize_results(
         "mission_control_max_latency_ms": round(max(mission_latencies), 2) if mission_latencies else 0.0,
         "latency_buckets": latency_buckets,
         "failure_buckets": failure_buckets,
+        "top_repeated_fallback_phrases": repeated_fallback_phrases.most_common(5),
+        "top_vague_context_cases": vague_context_cases[:10],
         "release_gate": release_gate,
         "failures": failures,
     }
@@ -351,6 +364,11 @@ def render_markdown_report(summary: Dict[str, Any], results: List[Dict[str, Any]
         f"- P95 latency: **{summary['p95_latency_ms']} ms**",
         f"- Max latency: **{summary['max_latency_ms']} ms**",
         f"- Slowest prompt: **{summary.get('slowest_prompt_id') or 'n/a'}**",
+        "",
+        "## Quality Signals",
+        "",
+        f"- Top repeated fallback phrases: **{summary.get('top_repeated_fallback_phrases') or []}**",
+        f"- Top vague context cases: **{summary.get('top_vague_context_cases') or []}**",
         "",
         "## Failure Buckets",
         "",

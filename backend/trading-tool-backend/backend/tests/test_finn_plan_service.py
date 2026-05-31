@@ -342,9 +342,10 @@ def test_build_context_explain_response_returns_low_confidence_fallback_without_
     }))
 
     assert result["intent"] == "context_explain"
-    assert result["analysis"]["entity_type"] == "unknown"
+    assert result["analysis"]["entity_type"] == "setup"
     assert result["analysis"]["context_confidence"]["level"] == "low"
-    assert "nog geen zekere entiteit" in result["response"]
+    assert "BTC als je actieve asset-context" in result["response"]
+    assert "geen zekere setup-entiteit" in result["response"]
 
 
 def test_build_context_explain_response_can_explain_current_page():
@@ -515,11 +516,13 @@ def test_build_context_explain_response_enriches_bot_entity_from_repository(monk
     assert result["analysis"]["entity_type"] == "bot"
     assert result["analysis"]["entity"]["id"] == 17
     assert result["analysis"]["entity"]["what_this_bot_is"] == "Een paper/manual bot voor BTC"
+    assert result["analysis"]["entity"]["current_state"] == "reviewing"
     assert result["analysis"]["entity"]["open_decisions"][0]["id"] == 121110
     assert result["analysis"]["context_confidence"]["level"] == "high"
     assert "BTC Review Bot" in result["response"]
     assert "Breakout long test" in result["response"]
     assert "open bot-decision review" in result["response"]
+    assert "Review eerst de open bot-decisions" in result["response"]
 
 
 def test_entity_explain_detects_asset_and_bot_context_without_drifting_to_daily_coach():
@@ -547,6 +550,52 @@ def test_build_context_explain_response_can_answer_current_asset():
     assert result["analysis"]["context_entity_resolution"]["target"] == "asset"
     assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "explicit_prompt_or_context"
     assert result["analysis"]["context_entity_resolution"]["resolved_asset"] == "BTC"
+
+
+def test_build_context_explain_response_can_answer_current_asset_and_bot(monkeypatch):
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            return {
+                "id": bot_id,
+                "name": "BTC Review Bot",
+                "symbol": "BTC",
+                "strategy_id": 257,
+            }
+
+    class FakeBotService:
+        def __init__(self, session):
+            self.repository = Repo()
+
+    monkeypatch.setattr("backend.services.finn_plan_service.BotService", FakeBotService)
+    service = FinnPlanService(db_session=object())
+
+    result = asyncio.run(service.build_context_explain_response(30, "Met welke asset en bot werk ik nu?", {
+        "page": "/bot/17",
+        "page_type": "Bot",
+        "symbol": "BTC",
+        "bot_id": 17,
+    }))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "asset"
+    assert result["analysis"]["context_entity_resolution"]["target"] == "asset"
+    assert "BTC" in result["response"]
+    assert "BTC Review Bot" in result["response"]
+
+
+def test_build_context_explain_response_uses_asset_specific_low_confidence_message_for_strategy():
+    service = _service()
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welke strategie bekijk ik nu?", {
+        "page": "/dashboard",
+        "page_type": "Dashboard",
+        "symbol": "BTC",
+    }))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "strategy"
+    assert "Ik zie wel BTC als je actieve asset-context" in result["response"]
+    assert "geen zekere strategie-entiteit" in result["response"]
 
 
 def test_build_product_refresh_help_response_stays_read_only_and_explains_stale_scores():
@@ -614,6 +663,30 @@ def test_build_behavioral_intelligence_response_uses_plan_adherence_variant(monk
     assert analysis["behavioral_intelligence"]["variant"] == "plan_adherence_coach"
     assert analysis["plan_anchor"]
     assert result["response"].startswith("Pauseer even en ga terug naar je plan.")
+
+
+def test_build_behavioral_intelligence_response_uses_direct_coach_for_emotional_decision(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    service._get_recent_finn_activity = AsyncMock(return_value=[])
+    service._mission_day_log = lambda activity_feed: {"handled_count": 0, "skipped_count": 0, "snoozed_count": 0}
+    service._build_behavioral_insight_from_activity = lambda activity_feed, day_log: {
+        "status": "attention",
+        "trend": {"summary": "Ik zie emotionele druk en twijfel rond een tradebeslissing."},
+        "coaching": {
+            "primary_reflection": "Je wilt nu beslissen terwijl je geen helder plananker voelt.",
+            "safe_next_step": "Check eerst je setupcriteria en wacht tot je plan weer leidend is.",
+            "do_not_do": "Klik nu niet uit spanning of onzekerheid.",
+        },
+        "risk_flags": [{"id": "acute_emotion", "summary": "Emotionele twijfel maakt overrides waarschijnlijker."}],
+    }
+
+    result = asyncio.run(service.build_behavioral_intelligence_response(30, "Dit voelt als een emotionele beslissing, wat moet ik doen?"))
+
+    analysis = result["state"]["analysis"]
+    assert analysis["variant"] == "direct_coach"
+    assert analysis["behavioral_intelligence"]["variant"] == "direct_coach"
+    assert "Doe nu niets nieuws" in result["response"]
+    assert "emotionele" in result["response"].lower()
 
 
 def test_execute_issued_action_accepts_valid_refresh_fallback_action_without_pending_row():
@@ -3718,6 +3791,43 @@ def test_build_mission_control_explain_response_uses_daily_preview_fast_path(mon
     assert all(item["title"] != "None" for item in summary["avoid_today"])
 
 
+def test_build_mission_control_explain_response_prefers_operator_priority_over_refresh(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "workqueue": [
+            {
+                "title": "Daily scores verversen",
+                "type": "score_refresh",
+                "priority": "high",
+                "priority_rank": 10,
+                "reason": "Data loopt achter",
+            },
+            {
+                "title": "BTC live bots vragen review",
+                "type": "portfolio_live_hotspot",
+                "priority": "high",
+                "priority_rank": 6,
+                "reason": "Er staat live reviewdruk op BTC bots",
+            },
+            {
+                "title": "ETH risico stapelt",
+                "type": "portfolio_risk_stack",
+                "priority": "high",
+                "priority_rank": 7,
+                "reason": "ETH setups en bots stapelen risico",
+            },
+        ],
+        "summary": {"workqueue_count": 3, "open_action_count": 2},
+    })
+
+    result = asyncio.run(service.build_mission_control_explain_response(1, "Vat Mission Control samen in drie bullets", {"page": "dashboard"}))
+
+    summary = result["analysis"]["mission_control_summary"]
+    assert summary["top_3"][0]["title"] == "BTC live bots vragen review"
+    assert not summary["headline"].startswith("Belangrijkste focus nu: Daily scores verversen")
+
+
 def test_build_portfolio_daily_coach_response_preview_only_skips_strategy_bot_and_indicator_reads(monkeypatch):
     service = FinnPlanService(db_session=object())
     calls = {"strategy": 0, "bot_today": 0, "indicator_fast": 0}
@@ -4314,6 +4424,8 @@ def test_behavioral_intelligence_request_detection_is_read_only():
     assert service.looks_like_behavioral_intelligence_request("Hoe is mijn trading discipline vandaag?") is True
     assert service.looks_like_behavioral_intelligence_request("Zie je FOMO of impulsief gedrag?") is True
     assert service.looks_like_behavioral_intelligence_request("Wijk ik af van mijn plan?") is True
+    assert service.looks_like_behavioral_intelligence_request("Dit voelt als een emotionele beslissing, wat moet ik doen?") is True
+    assert service.looks_like_behavioral_intelligence_request("Ik heb er geen goed gevoel bij, wat nu?") is True
     assert service.looks_like_behavioral_intelligence_request("Geef mijn daily brief") is False
     assert service.looks_like_behavioral_intelligence_request("Maak een wekelijkse BTC DCA") is False
 

@@ -27,8 +27,10 @@ def test_promptset_exists_and_covers_required_cases():
     assert "education-rsi-simple" in case_ids
     assert "context-setup-open" in case_ids
     assert "context-current-asset" in case_ids
+    assert "context-asset-bot" in case_ids
     assert "coach-fomo" in case_ids
     assert "coach-plan-deviation" in case_ids
+    assert "coach-emotional-decision" in case_ids
     assert "mission-control-summary" in case_ids
     assert "mixed-06-mission-control" in case_ids
 
