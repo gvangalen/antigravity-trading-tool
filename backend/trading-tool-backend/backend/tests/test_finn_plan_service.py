@@ -806,6 +806,57 @@ def test_context_explain_stays_low_when_recent_strategy_has_no_entity_id():
     assert "geen zekere strategie-entiteit" in result["response"]
 
 
+def test_context_explain_reuses_recent_strategy_context_on_market_follow_up(monkeypatch):
+    _MemoryStateRepo.store = {}
+    monkeypatch.setattr("backend.services.finn_plan_service.ConversationStateRepository", _MemoryStateRepo)
+
+    class _Repo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_raw_strategy_with_setup(self, strategy_id, user_id):
+            return {
+                "id": strategy_id,
+                "symbol": "ETH",
+                "setup_id": 233,
+                "name": "ETH Live QA Strategy 542357",
+                "status": "active",
+                "timeframe": "1W",
+                "setup_name": "ETH Weekly Breakout",
+            }
+
+    class _StrategySvc:
+        def __init__(self, session):
+            self.session = session
+
+        def _format_strategy_row(self, row):
+            return row
+
+    monkeypatch.setattr("backend.services.finn_plan_service.StrategyRepository", _Repo)
+    monkeypatch.setattr("backend.services.finn_plan_service.StrategyService", _StrategySvc)
+    service = FinnPlanService(db_session=object())
+
+    first_response = asyncio.run(service.build_context_explain_response(30, "Welke strategie bekijk ik nu?", {
+        "page": "/strategy/257",
+        "page_type": "Strategy",
+        "symbol": "ETH",
+        "strategy_id": 257,
+    }))
+    asyncio.run(service.persist_response_state(30, first_response))
+
+    hydrated = asyncio.run(service.hydrate_context(30, {
+        "page": "/market/BTC",
+        "page_type": "Market",
+        "symbol": "BTC",
+    }))
+    result = asyncio.run(service.build_context_explain_response(30, "Welke strategie bekijk ik nu?", hydrated))
+
+    assert result["analysis"]["entity"]["id"] == 257
+    assert result["analysis"]["context_confidence"]["level"] == "medium"
+    assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "recent_read_only_state"
+    assert "geen zekere strategie-entiteit" not in result["response"]
+
+
 def test_build_product_refresh_help_response_stays_read_only_and_explains_stale_scores():
     service = _service()
 
@@ -962,6 +1013,7 @@ def test_behavioral_detection_catches_overtrading_language():
 
     assert service.looks_like_behavioral_intelligence_request("Ik merk dat ik aan het overtraden ben, wat moet ik doen?") is True
     assert service.looks_like_behavioral_intelligence_request("Ik wil weer handelen terwijl ik al te veel trades heb gedaan.") is True
+    assert service.looks_like_behavioral_intelligence_request("Ik wil alweer instappen na te veel trades, wat moet ik doen?") is True
 
 
 def test_behavioral_variant_uses_direct_coach_for_overtrading_language():
@@ -969,6 +1021,7 @@ def test_behavioral_variant_uses_direct_coach_for_overtrading_language():
 
     assert service._behavioral_variant_for_query("Ik merk dat ik aan het overtraden ben, wat moet ik doen?") == "direct_coach"
     assert service._behavioral_variant_for_query("Ik wil weer handelen terwijl ik al te veel trades heb gedaan.") == "direct_coach"
+    assert service._behavioral_variant_for_query("Ik wil alweer instappen na te veel trades, wat moet ik doen?") == "direct_coach"
 
 
 def test_build_behavioral_intelligence_response_uses_direct_coach_for_overtrading(monkeypatch):

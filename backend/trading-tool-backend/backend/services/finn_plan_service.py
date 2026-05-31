@@ -103,11 +103,16 @@ OVERTRADING_DIRECT_COACH_TERMS = (
     "te vaak handelen",
     "te veel trades",
     "te veel gehandeld",
+    "al te veel trades",
+    "te veel entries",
     "nog een trade",
     "weer een trade",
     "ik wil weer handelen",
     "ik wil opnieuw handelen",
+    "ik wil alweer handelen",
+    "ik wil alweer instappen",
     "ik moet weer iets doen",
+    "ik moet alweer iets doen",
     "nog even traden",
 )
 
@@ -723,6 +728,17 @@ class FinnPlanService:
         context_asset = asset or prompt_asset or context.get("symbol") or context.get("asset")
         current_page_family = self._page_family(context)
         dashboard_follow_up = current_page_family == "dashboard" and entity_type in {"strategy", "setup"}
+        explicit_current_entity_follow_up = (
+            entity_type in {"strategy", "setup"}
+            and any(
+                phrase in q for phrase in [
+                    "welke strategie bekijk ik nu",
+                    "welke setup heb ik nu open",
+                    "welke strategie heb ik nu open",
+                    "welke setup bekijk ik nu",
+                ]
+            )
+        )
         explicit_strategy_id = self._extract_numeric_reference(query, ["strategie", "strategy"])
         explicit_setup_id = self._extract_numeric_reference(query, ["setup", "plan"])
         explicit_bot_id = self._extract_numeric_reference(query, ["bot"])
@@ -772,12 +788,14 @@ class FinnPlanService:
                 and item_asset
                 and str(context_asset).upper() != str(item_asset).upper()
                 and not dashboard_follow_up
+                and not explicit_current_entity_follow_up
             ):
                 continue
             if (
                 item.get("page_family")
-                and current_page_family not in {"dashboard", item.get("page_family")}
+                and current_page_family not in {"dashboard", "market", "report", item.get("page_family")}
                 and item.get("page_family") != current_page_family
+                and not explicit_current_entity_follow_up
             ):
                 continue
             if not item.get("entity_id"):
@@ -813,6 +831,9 @@ class FinnPlanService:
             entity_type in {"strategy", "setup", "bot", "report"}
             and "dashboard" in self._current_page_type(context)
             and bool(recent_entity and recent_entity.get("entity_id"))
+        ) or (
+            explicit_current_entity_follow_up
+            and bool(recent_entity and recent_entity.get("entity_id"))
         )
         if recent_entity and recent_entity_reusable:
             recent_asset = recent_entity.get("asset")
@@ -832,11 +853,13 @@ class FinnPlanService:
                 or not context_asset
                 or str(last_context_entity.get("asset")).upper() == str(context_asset).upper()
                 or dashboard_follow_up
+                or explicit_current_entity_follow_up
             )
             and (
                 not last_context_entity.get("page_family")
-                or current_page_family in {"dashboard", last_context_entity.get("page_family")}
+                or current_page_family in {"dashboard", "market", "report", last_context_entity.get("page_family")}
                 or last_context_entity.get("page_family") == current_page_family
+                or explicit_current_entity_follow_up
             )
         )
         if last_context_entity_reusable:
