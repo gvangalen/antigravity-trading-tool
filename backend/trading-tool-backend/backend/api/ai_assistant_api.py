@@ -1099,7 +1099,8 @@ async def execute_pending_action(
     if str(action_id).startswith("finn-"):
         try:
             finn = FinnPlanService(db, trace_id=trace_id)
-            result = await finn.execute_issued_action(user_id, str(action_id))
+            fallback_action = payload.get("action") if isinstance(payload.get("action"), dict) else None
+            result = await finn.execute_issued_action(user_id, str(action_id), fallback_action=fallback_action)
             _invalidate_mission_control_cache(user_id)
             return result
         except HTTPException:

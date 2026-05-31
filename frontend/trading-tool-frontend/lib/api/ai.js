@@ -56,7 +56,7 @@ export const executeAssistantAction = (action) => {
   }
   return fetchAuth(`/api/assistant/actions/execute`, {
     method: 'POST',
-    body: JSON.stringify({ action_id: actionId }),
+    body: JSON.stringify({ action_id: actionId, action }),
   });
 };
 
@@ -129,10 +129,14 @@ export const fetchAssistantInsight = (context) => {
 // ========================================
 // ⚡ 7. Execute Pending AI Action
 // ========================================
-export const executePendingAction = (actionId) => {
+export const executePendingAction = (actionIdOrAction) => {
+  const actionId = typeof actionIdOrAction === 'string'
+    ? actionIdOrAction
+    : actionIdOrAction?.action_id || actionIdOrAction?.id;
+  const action = typeof actionIdOrAction === 'string' ? undefined : actionIdOrAction;
   return fetchAuth(`/api/assistant/actions/execute`, {
     method: 'POST',
-    body: JSON.stringify({ action_id: actionId }),
+    body: JSON.stringify({ action_id: actionId, action }),
   });
 };
 

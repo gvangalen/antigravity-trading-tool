@@ -11681,12 +11681,19 @@ class FinnPlanService:
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         return result
 
-    async def execute_issued_action(self, user_id: int, action_id: str) -> Dict[str, Any]:
+    async def execute_issued_action(
+        self,
+        user_id: int,
+        action_id: str,
+        fallback_action: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         if not self.session:
             raise HTTPException(503, "Finn action store is niet beschikbaar.")
         existing = await self._get_pending_action_row(user_id, action_id)
         if not existing and str(action_id).startswith("finn-") and not str(action_id).endswith(f"-u{user_id}"):
             existing = await self._get_pending_action_row(user_id, f"{action_id}-u{user_id}")
+        if not existing and self._can_execute_fallback_action_from_request(user_id, action_id, fallback_action):
+            return await self.execute_action(user_id, dict(fallback_action))
         if not existing:
             raise HTTPException(404, "Finn action token niet gevonden of niet geautoriseerd.")
         payload = existing["payload"] or {}
@@ -11704,6 +11711,26 @@ class FinnPlanService:
         if not isinstance(action, dict):
             raise HTTPException(409, "Finn action token mist server-side action payload.")
         return await self.execute_action(user_id, action)
+
+    def _can_execute_fallback_action_from_request(
+        self,
+        user_id: int,
+        action_id: str,
+        action: Optional[Dict[str, Any]],
+    ) -> bool:
+        if not isinstance(action, dict):
+            return False
+        action_type = str(action.get("type") or "")
+        if action_type != "refresh_daily_scores":
+            return False
+        payload = action.get("payload") if isinstance(action.get("payload"), dict) else {}
+        assets = payload.get("assets") if isinstance(payload.get("assets"), list) else []
+        assets = sorted({str(asset).upper() for asset in assets if str(asset).upper() in SUPPORTED_ASSETS})
+        if not assets:
+            return False
+        expected_base_id = str(action.get("id") or self._maintenance_action_id("refresh_daily_scores", assets))
+        expected_action_id = f"{expected_base_id}-u{user_id}"
+        return str(action_id) in {expected_base_id, expected_action_id}
 
     async def _get_pending_action_row(self, user_id: int, action_id: str):
         row = await self.session.execute(text("""
@@ -12551,7 +12578,8 @@ class FinnPlanService:
 
         if self._is_server_issued_action(node):
             action_id = node.get("action_id") or f"{node.get('id') or self._maintenance_action_id(node.get('type'), [json.dumps(node, sort_keys=True, default=str)])}-u{user_id}"
-            await self._issue_pending_action(user_id, action_id, node)
+            if not self._should_skip_pending_action_issue(node):
+                await self._issue_pending_action(user_id, action_id, node)
             node["action_id"] = action_id
 
         for value in node.values():
@@ -12578,6 +12606,11 @@ class FinnPlanService:
             "create_bot",
             "create_strategy",
         }
+
+    def _should_skip_pending_action_issue(self, action: Dict[str, Any]) -> bool:
+        if not isinstance(action, dict):
+            return False
+        return str(action.get("type") or "") == "refresh_daily_scores"
 
     async def _issue_pending_action(self, user_id: int, action_id: str, action: Dict[str, Any]) -> None:
         if not self.session:

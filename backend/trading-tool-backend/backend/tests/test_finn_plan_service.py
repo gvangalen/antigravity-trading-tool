@@ -554,6 +554,30 @@ def test_build_daily_score_refresh_response_exposes_tool_intent_reason():
     assert result["state"]["analysis"]["tool_intent_reason"] == "explicit_refresh_request"
 
 
+def test_execute_issued_action_accepts_valid_refresh_fallback_action_without_pending_row():
+    service = _service()
+    service.session = object()
+    action = {
+        "id": "finn-maint-333adbe0336899de096f330a",
+        "type": "refresh_daily_scores",
+        "payload": {"assets": ["BTC"], "scope": "asset"},
+    }
+    service._maintenance_action_id = lambda action_type, parts: "finn-maint-333adbe0336899de096f330a"
+    service._get_pending_action_row = AsyncMock(return_value=None)
+    service.execute_action = AsyncMock(return_value={"ok": True, "message": "Daily scores ververst"})
+
+    result = asyncio.run(
+        service.execute_issued_action(
+            30,
+            "finn-maint-333adbe0336899de096f330a-u30",
+            fallback_action=action,
+        )
+    )
+
+    service.execute_action.assert_awaited_once_with(30, action)
+    assert result["ok"] is True
+
+
 def test_build_response_analysis_metadata_sets_route_family():
     service = _service()
 
@@ -2455,6 +2479,27 @@ def test_issue_response_actions_issues_nested_mission_control_actions():
     assert alternatives[1]["action_id"] == "finn-maint-snooze-blocked-plan-u30"
     assert "action_id" not in issued["workqueue"][0]["next_best_action"]
     assert service._issue_pending_action.await_count == 3
+
+
+def test_issue_response_actions_skips_pending_write_for_refresh_daily_scores():
+    service = FinnPlanService(db_session=object(), trace_id="trdm-test")
+    service._issue_pending_action = AsyncMock()
+
+    response = {
+        "actions": [
+            {
+                "id": "finn-maint-refresh-daily-scores-btc",
+                "type": "refresh_daily_scores",
+                "label": "Daily scores verversen",
+                "payload": {"assets": ["BTC"], "scope": "asset"},
+            }
+        ]
+    }
+
+    issued = asyncio.run(service.issue_response_actions(30, response))
+
+    assert issued["actions"][0]["action_id"] == "finn-maint-refresh-daily-scores-btc-u30"
+    service._issue_pending_action.assert_not_awaited()
 
 
 def test_indicator_insight_request_is_detected_but_config_stays_separate():
