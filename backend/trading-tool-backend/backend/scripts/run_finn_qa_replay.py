@@ -174,6 +174,7 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any], latency_ms: fl
     mode = analysis.get("mode")
     context_confidence = analysis.get("context_confidence") if isinstance(analysis.get("context_confidence"), dict) else None
     route_source = analysis.get("route_source")
+    route_family = analysis.get("route_family")
     response_text = response.get("response")
     expected_intents = set(case.get("expected_intents") or [])
     forbidden_flows = set(case.get("forbidden_flows") or [])
@@ -204,6 +205,7 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any], latency_ms: fl
         "flow": flow,
         "mode": mode,
         "route_source": route_source,
+        "route_family": route_family,
         "latency_ms": round(latency_ms, 2),
         "context_confidence": context_confidence,
         "response_preview": str(response_text or "")[:220],
@@ -213,6 +215,28 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any], latency_ms: fl
         "forbidden_flows": list(forbidden_flows),
         "response": response,
     }
+
+
+def _latency_bucket(latency_ms: float) -> str:
+    if latency_ms <= 1000:
+        return "le_1s"
+    if latency_ms <= 3000:
+        return "le_3s"
+    if latency_ms <= 8000:
+        return "le_8s"
+    return "gt_8s"
+
+
+def _failure_bucket(result: Dict[str, Any]) -> Optional[str]:
+    if result.get("passed"):
+        return None
+    http_status = int(result.get("http_status") or 0)
+    failures = result.get("failures") or []
+    if http_status in {401, 408, 409, 429} or http_status >= 500:
+        return "operational_qa_path"
+    if any(flag.startswith("http_status:") for flag in failures):
+        return "operational_qa_path"
+    return "product_quality"
 
 
 def summarize_results(
@@ -227,6 +251,14 @@ def summarize_results(
     mission_latencies = [float(result.get("latency_ms") or 0.0) for result in mission_results]
     slowest_result = max(results, key=lambda result: float(result.get("latency_ms") or 0.0)) if results else None
     failures = [result for result in results if not result.get("passed")]
+    failure_buckets = {"product_quality": 0, "operational_qa_path": 0}
+    latency_buckets = {"le_1s": 0, "le_3s": 0, "le_8s": 0, "gt_8s": 0}
+    for result in results:
+        latency_buckets[_latency_bucket(float(result.get("latency_ms") or 0.0))] += 1
+    for result in failures:
+        bucket = _failure_bucket(result)
+        if bucket:
+            failure_buckets[bucket] += 1
     generic_failures = [result for result in results if "generic_failure" in (result.get("failures") or [])]
     transactional_misroutes = [
         result
@@ -260,6 +292,8 @@ def summarize_results(
         "max_latency_ms": round(max(latencies), 2) if latencies else 0.0,
         "slowest_prompt_id": slowest_result.get("id") if slowest_result else None,
         "mission_control_max_latency_ms": round(max(mission_latencies), 2) if mission_latencies else 0.0,
+        "latency_buckets": latency_buckets,
+        "failure_buckets": failure_buckets,
         "release_gate": release_gate,
         "failures": failures,
     }
@@ -278,6 +312,11 @@ def render_markdown_report(summary: Dict[str, Any], results: List[Dict[str, Any]
         f"- P95 latency: **{summary['p95_latency_ms']} ms**",
         f"- Max latency: **{summary['max_latency_ms']} ms**",
         f"- Slowest prompt: **{summary.get('slowest_prompt_id') or 'n/a'}**",
+        "",
+        "## Failure Buckets",
+        "",
+        f"- `product_quality`: **{summary.get('failure_buckets', {}).get('product_quality', 0)}**",
+        f"- `operational_qa_path`: **{summary.get('failure_buckets', {}).get('operational_qa_path', 0)}**",
         "",
         "## Release Gate",
         "",
@@ -347,6 +386,7 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument("--password-env", default="FINN_QA_PASSWORD", help="Env var containing the login password")
     parser.add_argument("--timeout-seconds", type=float, default=45.0, help="Per-request timeout")
     parser.add_argument("--delay-seconds", type=float, default=0.0, help="Sleep between prompts to avoid noisy rate-limit false negatives")
+    parser.add_argument("--no-delay", action="store_true", help="Override any configured pacing and run without delay between prompts")
     parser.add_argument("--insecure", action="store_true", help="Disable TLS certificate verification for environments with broken local CA trust")
     parser.add_argument("--strict", action="store_true", help="Exit non-zero when the release gate fails")
     return parser.parse_args(list(argv) if argv is not None else None)
@@ -376,13 +416,19 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         base_url=args.base_url,
         promptset=promptset,
         timeout_seconds=args.timeout_seconds,
-        delay_seconds=args.delay_seconds,
+        delay_seconds=0.0 if args.no_delay else args.delay_seconds,
     )
 
     report_payload = {
         "promptset": promptset.get("name"),
         "summary": summary,
         "results": results,
+        "certification": {
+            "pass_decision": bool(summary["release_gate"]["overall_pass"]),
+            "failure_buckets": summary.get("failure_buckets") or {},
+            "slowest_prompt_id": summary.get("slowest_prompt_id"),
+            "latency_buckets": summary.get("latency_buckets") or {},
+        },
     }
 
     if args.output_json:

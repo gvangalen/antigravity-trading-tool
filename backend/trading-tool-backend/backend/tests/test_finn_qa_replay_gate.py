@@ -37,6 +37,7 @@ def test_release_gate_doc_references_script_and_promptset():
     assert "finn-qa-promptset-full.json" in source
     assert "no_generic_failures" in source
     assert "no_transactional_misroutes" in source
+    assert "operational_qa_path" in source
 
 
 def test_summarize_results_flags_generic_failures_and_misroutes():
@@ -71,3 +72,31 @@ def test_summarize_results_flags_generic_failures_and_misroutes():
     assert summary["release_gate"]["no_transactional_misroutes"] is False
     assert summary["release_gate"]["stable_mixed_session"] is False
     assert summary["release_gate"]["overall_pass"] is False
+    assert summary["failure_buckets"]["product_quality"] == 1
+    assert summary["failure_buckets"]["operational_qa_path"] == 0
+    assert summary["latency_buckets"]["le_1s"] == 2
+    assert summary["slowest_prompt_id"] == "bad"
+
+
+def test_summarize_results_buckets_operational_failures():
+    module = _load_script_module()
+
+    summary = module.summarize_results(
+        suite_name="ops",
+        results=[
+            {
+                "id": "timeoutish",
+                "latency_ms": 9000.0,
+                "intent": None,
+                "conversation": None,
+                "http_status": 429,
+                "passed": False,
+                "failures": ["http_status:429"],
+            }
+        ],
+        chat_latency_budget_ms=5000,
+        mission_control_latency_budget_ms=20000,
+    )
+
+    assert summary["failure_buckets"]["operational_qa_path"] == 1
+    assert summary["latency_buckets"]["gt_8s"] == 1

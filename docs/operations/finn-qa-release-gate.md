@@ -34,8 +34,10 @@ For each prompt it records:
 - `analysis.route_source`
 - `analysis.context_confidence`
 - latency
+- latency bucket
 - whether the answer looks like a generic failure
 - whether the answer drifted into a forbidden transactional flow
+- whether a failure looks like `product_quality` or `operational_qa_path`
 
 ## Pass Criteria
 
@@ -69,6 +71,7 @@ python3 /Users/gvangalen/Documents/antigravity-trading-tool/backend/trading-tool
 ```
 
 `--strict` exits non-zero when the release gate fails.
+Use `--no-delay` only for explicit stress-only runs where you want to measure burst behavior instead of stable QA pacing.
 
 For a normal web-login flow, you can also replay with cookies instead of a bearer token:
 
@@ -93,3 +96,6 @@ If the local machine has a broken CA bundle for this environment, append `--inse
 - The gate is deliberately focused on front-door quality, not deep exchange-side execution.
 - It is acceptable for explain prompts to return low-confidence answers when context is weak.
 - It is not acceptable for explain/help/coaching prompts to route into `bot_creation`, `strategy_creation`, `setup_creation`, or `indicator_config`.
+- Failures should be read in two buckets:
+  - `product_quality`: FINN chose the wrong lane, generic-failed, or answered the wrong thing.
+  - `operational_qa_path`: auth, timeout, rate-limit, or other runtime-path instability interfered with clean measurement.

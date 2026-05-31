@@ -182,6 +182,18 @@
       "expected_mode": "read_only"
     },
     {
+      "id": "refresh-daily-scores",
+      "query": "Ververs mijn daily scores voor BTC",
+      "context": {
+        "page": "dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC"
+      },
+      "expected_intents": ["daily_score_refresh"],
+      "forbidden_flows": ["daily_coach", "setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
       "id": "create-setup-transactional",
       "query": "Maak een wekelijkse BTC setup voor een breakout long",
       "context": {
