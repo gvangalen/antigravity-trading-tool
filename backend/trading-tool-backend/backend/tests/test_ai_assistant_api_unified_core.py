@@ -1,4 +1,5 @@
 import asyncio
+from datetime import date
 from unittest.mock import AsyncMock
 
 from backend.api.ai_assistant_api import (
@@ -8,6 +9,7 @@ from backend.api.ai_assistant_api import (
     _legacy_response_is_generic_failure,
     _legacy_response_needs_finn_rescue,
 )
+from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.services.finn_plan_service import FinnPlanService
 
 
@@ -195,3 +197,26 @@ def test_prepare_finn_envelope_persists_read_only_state_by_default():
 
     finn.persist_response_state.assert_awaited_once()
     assert envelope["intent"] == "behavioral_intelligence"
+
+
+def test_conversation_state_repository_serializes_date_values():
+    class _Session:
+        def __init__(self):
+            self.execute = AsyncMock()
+            self.commit = AsyncMock()
+
+    session = _Session()
+    repo = ConversationStateRepository(session)
+
+    asyncio.run(
+        repo.save_state(
+            30,
+            "context_explain",
+            "BTC",
+            {"analysis": {"report_date": date(2026, 5, 31)}},
+        )
+    )
+
+    assert session.execute.await_count == 1
+    payload = session.execute.await_args.args[1]
+    assert '"report_date": "2026-05-31"' in payload["slots"]

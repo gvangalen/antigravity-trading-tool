@@ -2,7 +2,13 @@ from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 import json
-from datetime import datetime
+from datetime import date, datetime
+
+
+def _json_default(value):
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
 
 class ConversationStateRepository:
     def __init__(self, session: AsyncSession):
@@ -30,7 +36,7 @@ class ConversationStateRepository:
         return None
 
     async def save_state(self, user_id: int, current_flow: Optional[str], asset: Optional[str], slots: Dict[str, Any]):
-        slots_json = json.dumps(slots) if isinstance(slots, dict) else "{}"
+        slots_json = json.dumps(slots, default=_json_default) if isinstance(slots, dict) else "{}"
 
         upsert_query = text("""
             INSERT INTO conversation_state (user_id, current_flow, asset, slots, updated_at)
