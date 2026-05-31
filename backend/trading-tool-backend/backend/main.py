@@ -4,6 +4,7 @@ import logging
 import importlib
 import traceback
 import uuid
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -210,25 +211,26 @@ async def startup_event():
     logger.info("🚀 System Startup: Initializing Vector Intelligence...")
     from backend.infrastructure.vector_store import get_vector_store
     from backend.infrastructure.database import async_session_factory
-    
-    # Zorg dat de static folder bestaat
+
     os.makedirs("backend/static/ai", exist_ok=True)
-    
-    # Initialiseer Vector Store
-    try:
-        vs = get_vector_store()
-        
-        # Als de index leeg is, probeer te rebuilden vanuit DB
-        if vs.index and vs.index.ntotal == 0:
-            logger.info("🔍 Vector index is leeg of ontbreekt. Rebuilding vanuit DB...")
-            async with async_session_factory() as session:
-                await vs.rebuild_from_db(session)
-        elif vs.index:
-            logger.info(f"✅ Vector index geladen met {vs.index.ntotal} items.")
-        else:
-            logger.warning("⚠️ Vector store index is None (FAISS missing).")
-    except Exception as e:
-        logger.error(f"❌ Fout bij initialiseren Vector Store: {e}")
+
+    async def _warm_vector_store():
+        try:
+            vs = get_vector_store()
+            if vs.index and vs.index.ntotal == 0:
+                logger.info("🔍 Vector index is leeg of ontbreekt. Rebuilding vanuit DB in background...")
+                async with async_session_factory() as session:
+                    await vs.rebuild_from_db(session)
+                logger.info("✅ Vector index background rebuild voltooid.")
+            elif vs.index:
+                logger.info(f"✅ Vector index geladen met {vs.index.ntotal} items.")
+            else:
+                logger.warning("⚠️ Vector store index is None (FAISS missing).")
+        except Exception as e:
+            logger.error(f"❌ Fout bij initialiseren Vector Store: {e}")
+
+    asyncio.create_task(_warm_vector_store())
+    logger.info("✅ Vector Intelligence warmup scheduled in background.")
 
 # ==================================================================
 # 👨‍⚕️ Health check
