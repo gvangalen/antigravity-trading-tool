@@ -3616,6 +3616,49 @@ def test_build_mission_control_response_uses_fast_context_and_single_activity_fe
     assert seen_limits == [180]
 
 
+def test_build_mission_control_explain_response_uses_daily_preview_fast_path(monkeypatch):
+    service = _service()
+    seen_contexts = []
+
+    async def daily_response(user_id, query, context=None):
+        seen_contexts.append(context or {})
+        return {
+            "state": {
+                "analysis": {
+                    "asset_count": 1,
+                    "date": _utc_now().date().isoformat(),
+                    "assets": [
+                        {
+                            "asset": "BTC",
+                            "stance": "wait_for_plan",
+                            "blockers": [{"category": "market"}],
+                            "bot_today": {"decision_count": 2},
+                            "follow_up_actions": [],
+                            "indicator_summary": {"warnings": ["market weak"]},
+                            "portfolio_risk": {
+                                "ignore_today_assets": [{"asset": "ETH", "reason": "setup blokkeert"}],
+                            },
+                        }
+                    ],
+                    "follow_up_actions": [],
+                    "portfolio_risk": {
+                        "ignore_today_assets": [{"asset": "ETH", "reason": "setup blokkeert"}],
+                    },
+                }
+            }
+        }
+
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", daily_response)
+
+    result = asyncio.run(service.build_mission_control_explain_response(1, "Wat zegt Mission Control?", {"page": "dashboard"}))
+
+    assert result["intent"] == "mission_control_explain"
+    assert seen_contexts
+    assert seen_contexts[0]["mission_control_fast"] is True
+    assert result["analysis"]["mission_control_source"] == "daily_coach_preview"
+    assert "Mission Control zegt nu in het kort" in result["response"]
+
+
 def test_agent_controller_handoff_activity_counts_in_finn_report():
     service = _service()
     now = _utc_now().isoformat()

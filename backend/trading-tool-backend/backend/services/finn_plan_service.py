@@ -1596,13 +1596,24 @@ class FinnPlanService:
         query: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        mission = await self.build_mission_control_response(
+        daily = await self.build_portfolio_daily_coach_response(
             user_id,
-            {**(context or {}), "scope": "mission_control"},
+            "Geef mijn daily brief",
+            {
+                **(context or {"page": "mission_control"}),
+                "scope": "mission_control",
+                "mission_control_fast": True,
+            },
         )
+        analysis = (daily.get("state") or {}).get("analysis") or {}
+        mission = self._build_mission_control_from_daily_analysis(analysis)
+        mission["summary"] = {
+            **(mission.get("summary") or {}),
+            "coaching_loop_status": "preview",
+        }
+        priorities = mission.get("workqueue") or []
+        suppressed = ((analysis.get("portfolio_risk") or {}).get("ignore_today_assets")) or []
         coaching_loop = mission.get("coaching_loop") or {}
-        priorities = coaching_loop.get("daily_priority_stack") or []
-        suppressed = coaching_loop.get("suppressed_items") or []
         response_lines = ["Mission Control zegt nu in het kort:"]
         if priorities:
             response_lines.append("Vandaag eerst:")
@@ -1625,11 +1636,13 @@ class FinnPlanService:
                 "current_flow": "mission_control_explain",
                 "analysis": {
                     "mission_control": mission,
+                    "mission_control_source": "daily_coach_preview",
                     "context_confidence": {"level": "high", "entity_type": "mission_control", "entity_id": "mission_control", "reason": "mission control summary requested", "why": "mission control summary requested"},
                 },
             },
             "analysis": {
                 "mission_control": mission,
+                "mission_control_source": "daily_coach_preview",
                 "context_confidence": {"level": "high", "entity_type": "mission_control", "entity_id": "mission_control", "reason": "mission control summary requested", "why": "mission control summary requested"},
             },
             "actions": [],
