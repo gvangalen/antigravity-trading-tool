@@ -88,6 +88,29 @@ PRODUCT_REFRESH_HELP_PHRASES = (
     "waarom zie ik nog oude scores",
 )
 
+GENERAL_CAPABILITY_FOLLOW_UP_PHRASES = (
+    "leg dat in een simpele zin uit",
+    "leg dat in één simpele zin uit",
+    "in een simpele zin",
+    "kort samengevat",
+    "kort uitgelegd",
+)
+
+OVERTRADING_DIRECT_COACH_TERMS = (
+    "overtrade",
+    "overtrading",
+    "overtraden",
+    "te vaak handelen",
+    "te veel trades",
+    "te veel gehandeld",
+    "nog een trade",
+    "weer een trade",
+    "ik wil weer handelen",
+    "ik wil opnieuw handelen",
+    "ik moet weer iets doen",
+    "nog even traden",
+)
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -544,7 +567,9 @@ class FinnPlanService:
             "wat kun je", "waar kun je mee helpen", "hoe kun je helpen",
             "wat doe je", "hoe ondersteun", "hoe help", "waar help je mee",
         ]
-        return any(phrase in q for phrase in capability_phrases)
+        return any(phrase in q for phrase in capability_phrases) or any(
+            phrase in q for phrase in GENERAL_CAPABILITY_FOLLOW_UP_PHRASES
+        )
 
     def looks_like_product_refresh_help_request(self, query: str) -> bool:
         q = self._normalized_query(query)
@@ -645,6 +670,7 @@ class FinnPlanService:
         prompt_asset = next(iter(_asset_mentions(query)), None)
         context_asset = asset or prompt_asset or context.get("symbol") or context.get("asset")
         current_page_family = self._page_family(context)
+        dashboard_follow_up = current_page_family == "dashboard" and entity_type in {"strategy", "setup"}
         explicit_strategy_id = self._extract_numeric_reference(query, ["strategie", "strategy"])
         explicit_setup_id = self._extract_numeric_reference(query, ["setup", "plan"])
         explicit_bot_id = self._extract_numeric_reference(query, ["bot"])
@@ -680,14 +706,21 @@ class FinnPlanService:
             if item.get("entity_type") != entity_type:
                 continue
             item_asset = item.get("asset")
-            if context_asset and item_asset and str(context_asset).upper() != str(item_asset).upper():
-                break
+            if (
+                context_asset
+                and item_asset
+                and str(context_asset).upper() != str(item_asset).upper()
+                and not dashboard_follow_up
+            ):
+                continue
             if (
                 item.get("page_family")
                 and current_page_family not in {"dashboard", item.get("page_family")}
                 and item.get("page_family") != current_page_family
             ):
-                break
+                continue
+            if not item.get("entity_id"):
+                continue
             recent_entity = item
             break
 
@@ -715,17 +748,6 @@ class FinnPlanService:
                 "reason": "explicit_context_match",
                 "why": f"context payload included {entity_type} without strong page confirmation",
             }
-        if state_entity_id and (
-            not recent_entity
-            or recent_entity.get("entity_id") in (None, state_entity_id)
-        ):
-            return {
-                "level": "medium",
-                "entity_type": entity_type,
-                "entity_id": state_entity_id,
-                "reason": "state_reuse_match",
-                "why": f"reused recent read-only {entity_type} context",
-            }
         recent_entity_reusable = self._page_supports_entity(context, entity_type) or (
             entity_type in {"strategy", "setup", "bot", "report"}
             and "dashboard" in self._current_page_type(context)
@@ -740,6 +762,17 @@ class FinnPlanService:
                 "reason": "state_reuse_match",
                 "why": f"reused recent compatible {entity_type} context"
                 + (f" for {recent_asset}" if recent_asset else ""),
+            }
+        if state_entity_id and (
+            not recent_entity
+            or recent_entity.get("entity_id") in (None, state_entity_id)
+        ):
+            return {
+                "level": "medium",
+                "entity_type": entity_type,
+                "entity_id": state_entity_id,
+                "reason": "state_reuse_match",
+                "why": f"reused recent read-only {entity_type} context",
             }
         if entity_type in {"asset", "score"} and context_asset and self._page_supports_entity(context, entity_type):
             return {
@@ -1289,6 +1322,7 @@ class FinnPlanService:
             "afwijken", "afwijking", "ik durf niet", "emotionele druk",
             "gefrustreerd", "gemiste move", "ik baal", "ik wil het terugpakken",
             "ik moet nu iets doen", "ik wil nu handelen omdat",
+            *OVERTRADING_DIRECT_COACH_TERMS,
         ]
         coaching_terms = [
             "hoe", "zie", "check", "controleer", "analyseer", "waar", "wat zegt",
@@ -1300,6 +1334,7 @@ class FinnPlanService:
             "ik wil toch", "ik wil mijn regels", "ik wil buiten mijn plan",
             "ik wil afwijken", "ik heb er geen goed gevoel bij", "dit voelt niet goed",
             "ik wil nu handelen omdat", "ik wil het terugpakken", "ik moet nu iets doen",
+            "ik wil weer handelen", "ik wil opnieuw handelen", "nog een trade", "weer een trade",
         ]
         return any(term in q for term in behavioral_terms) and (
             any(term in q for term in coaching_terms) or any(term in q for term in hard_override_terms)
@@ -1336,6 +1371,7 @@ class FinnPlanService:
             "geen helder plananker", "twijfel om dit te doen",
             "gefrustreerd", "gemiste move", "ik baal", "ik wil het terugpakken",
             "ik moet nu iets doen", "ik wil nu handelen omdat",
+            *OVERTRADING_DIRECT_COACH_TERMS,
         ]
         if any(term in q for term in plan_adherence_terms):
             return "plan_adherence_coach"
@@ -7863,6 +7899,7 @@ class FinnPlanService:
         primary_flag = risk_flags[0] if risk_flags else {}
         q = self._normalized_query(query)
         variant = self._behavioral_variant_for_query(query)
+        overtrading_terms = tuple(OVERTRADING_DIRECT_COACH_TERMS)
         insight["variant"] = variant
         insight["risk_signal"] = primary_flag.get("id") or ("plan_deviation" if variant == "plan_adherence_coach" else "acute_emotion" if variant == "direct_coach" else insight.get("status"))
         insight["what_i_notice"] = coaching.get("primary_reflection") or insight.get("trend", {}).get("summary")
@@ -7874,6 +7911,16 @@ class FinnPlanService:
             insight["why_this_is_risky"] = primary_flag.get("summary") or "Zodra je buiten je plan beweegt, laat je regels hun remmende werk los en neemt emotie sneller over."
             insight["what_to_do_now"] = coaching.get("safe_next_step") or "Leg je plan er letterlijk naast en check eerst of je setup, risico en trigger nog echt geldig zijn."
             insight["what_not_to_do"] = coaching.get("do_not_do") or "Ga nu niet improviseren, opschalen of toch instappen voordat je plan opnieuw hard klopt."
+        elif variant == "direct_coach" and any(term in q for term in overtrading_terms):
+            insight["what_i_notice"] = "Ik zie actie-drang en herhalingsdruk die je richting overtrading trekt."
+            risk_summary = primary_flag.get("summary")
+            insight["why_this_is_risky"] = (
+                f"Overtrading-signaal: {risk_summary}"
+                if risk_summary
+                else "Overtrading verschuift je focus van kwaliteit naar activiteit, waardoor je sneller buiten je plan en risicokaders beweegt."
+            )
+            insight["what_to_do_now"] = coaching.get("safe_next_step") or "Doe nu geen nieuwe trade. Neem eerst een korte cooldown, werk open beslissingen af en wacht alleen op een verse valide trigger."
+            insight["what_not_to_do"] = coaching.get("do_not_do") or "Open nu niet nog een trade uit onrust, verveling of de drang om iets terug te verdienen."
         elif variant == "direct_coach" and any(term in q for term in [
             "emotionele beslissing", "geen goed gevoel", "dit voelt niet goed", "ik twijfel", "ik durf niet", "ik ben bang",
             "gefrustreerd", "gemiste move", "ik baal", "ik wil het terugpakken", "ik moet nu iets doen", "ik wil nu handelen omdat",

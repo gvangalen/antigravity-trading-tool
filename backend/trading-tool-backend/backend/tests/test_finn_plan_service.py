@@ -678,7 +678,30 @@ def test_context_explain_prefers_latest_compatible_recent_entity_and_ignores_con
     assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "recent_read_only_state"
 
 
-def test_context_explain_does_not_reuse_conflicting_recent_entity():
+def test_context_explain_reuses_recent_strategy_entity_even_when_dashboard_symbol_changed():
+    service = _service()
+    context = {
+        "page": "/dashboard",
+        "page_type": "Dashboard",
+        "symbol": "BTC",
+        "finn_state": {
+            "current_flow": "general_help",
+            "recent_context_entities": [
+                {"entity_type": "strategy", "entity_id": 257, "asset": "ETH", "page_family": "strategy", "resolved_from": "page_context"},
+            ],
+            "analysis": {},
+        },
+    }
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welke strategie bekijk ik nu?", context))
+
+    assert result["analysis"]["entity"]["id"] == 257
+    assert result["analysis"]["context_confidence"]["level"] == "medium"
+    assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "recent_read_only_state"
+    assert "geen zekere strategie-entiteit" not in result["response"]
+
+
+def test_context_explain_stays_low_when_recent_strategy_has_no_entity_id():
     service = _service()
     context = {
         "page": "/dashboard",
@@ -687,7 +710,7 @@ def test_context_explain_does_not_reuse_conflicting_recent_entity():
         "finn_state": {
             "current_flow": "general_help",
             "recent_context_entities": [
-                {"entity_type": "strategy", "entity_id": 101, "asset": "BTC", "page_family": "strategy", "resolved_from": "page_context"},
+                {"entity_type": "strategy", "entity_id": None, "asset": "ETH", "page_family": "strategy", "resolved_from": "page_context"},
             ],
             "analysis": {},
         },
@@ -848,6 +871,45 @@ def test_build_behavioral_intelligence_response_uses_direct_coach_for_frustratio
     assert analysis["behavioral_intelligence"]["variant"] == "direct_coach"
     assert "frustratie" in analysis["what_i_notice"].lower()
     assert result["response"].startswith("Stop even en vertraag direct.")
+
+
+def test_behavioral_detection_catches_overtrading_language():
+    service = _service()
+
+    assert service.looks_like_behavioral_intelligence_request("Ik merk dat ik aan het overtraden ben, wat moet ik doen?") is True
+    assert service.looks_like_behavioral_intelligence_request("Ik wil weer handelen terwijl ik al te veel trades heb gedaan.") is True
+
+
+def test_behavioral_variant_uses_direct_coach_for_overtrading_language():
+    service = _service()
+
+    assert service._behavioral_variant_for_query("Ik merk dat ik aan het overtraden ben, wat moet ik doen?") == "direct_coach"
+    assert service._behavioral_variant_for_query("Ik wil weer handelen terwijl ik al te veel trades heb gedaan.") == "direct_coach"
+
+
+def test_build_behavioral_intelligence_response_uses_direct_coach_for_overtrading(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    service._get_recent_finn_activity = AsyncMock(return_value=[])
+    service._mission_day_log = lambda activity_feed: {"handled_count": 0, "skipped_count": 0, "snoozed_count": 0}
+    service._build_behavioral_insight_from_activity = lambda activity_feed, day_log: {
+        "status": "attention",
+        "trend": {"summary": "Ik zie actie-drang en veel open beslissingen."},
+        "coaching": {
+            "primary_reflection": "Je wilt weer handelen terwijl je dag nog niet rustig is afgerond.",
+            "safe_next_step": "Neem tien minuten afstand en werk eerst je open beslissingen af.",
+            "do_not_do": "Open nu geen extra trade uit onrust.",
+        },
+        "risk_flags": [{"id": "overtrading_pressure", "summary": "Te veel activiteit verhoogt de kans op planverlies."}],
+    }
+
+    result = asyncio.run(service.build_behavioral_intelligence_response(30, "Ik merk dat ik aan het overtraden ben, wat moet ik doen?"))
+
+    analysis = result["state"]["analysis"]
+    assert analysis["variant"] == "direct_coach"
+    assert analysis["behavioral_intelligence"]["variant"] == "direct_coach"
+    assert "overtrading" in analysis["why_this_is_risky"].lower()
+    assert result["response"].startswith("Stop even en vertraag direct.")
+    assert "werk eerst je open beslissingen af" in analysis["what_to_do_now"].lower()
 
 
 def test_execute_issued_action_accepts_valid_refresh_fallback_action_without_pending_row():
