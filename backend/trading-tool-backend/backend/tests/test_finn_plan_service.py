@@ -554,6 +554,14 @@ def test_build_daily_score_refresh_response_exposes_tool_intent_reason():
     assert result["state"]["analysis"]["tool_intent_reason"] == "explicit_refresh_request"
 
 
+def test_looks_like_daily_score_refresh_request_allows_natural_wording():
+    service = _service()
+
+    assert service.looks_like_daily_score_refresh_request("Ververs mijn daily scores voor BTC") is True
+    assert service.looks_like_daily_score_refresh_request("Refresh even de daily scores van BTC") is True
+    assert service.looks_like_daily_score_refresh_request("Waarom zijn mijn daily scores oud?") is False
+
+
 def test_execute_issued_action_accepts_valid_refresh_fallback_action_without_pending_row():
     service = _service()
     service.session = object()

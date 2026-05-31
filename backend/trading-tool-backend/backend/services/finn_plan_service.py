@@ -1189,12 +1189,20 @@ class FinnPlanService:
 
     def looks_like_daily_score_refresh_request(self, query: str) -> bool:
         q = (query or "").lower()
-        return any(phrase in q for phrase in [
+        if any(phrase in q for phrase in [
             "ververs daily score", "ververs daily scores", "refresh daily score",
             "refresh daily scores", "genereer daily score", "genereer daily scores",
             "daily score opnieuw", "daily scores opnieuw", "scores opnieuw genereren",
             "scores verversen",
-        ])
+        ]):
+            return True
+        has_refresh_verb = any(term in q for term in ["ververs", "refresh", "genereer opnieuw", "opnieuw genereer"])
+        has_score_target = (
+            "daily score" in q
+            or "daily scores" in q
+            or ("scores" in q and "daily" in q)
+        )
+        return has_refresh_verb and has_score_target
 
     def looks_like_bot_decision_request(self, query: str) -> bool:
         q = (query or "").lower()
