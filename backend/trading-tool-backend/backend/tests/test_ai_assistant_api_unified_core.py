@@ -1,5 +1,6 @@
 import asyncio
 from datetime import date
+from decimal import Decimal
 from unittest.mock import AsyncMock
 
 from backend.api.ai_assistant_api import (
@@ -220,3 +221,25 @@ def test_conversation_state_repository_serializes_date_values():
     assert session.execute.await_count == 1
     payload = session.execute.await_args.args[1]
     assert '"report_date": "2026-05-31"' in payload["slots"]
+
+
+def test_conversation_state_repository_serializes_decimal_values():
+    class _Session:
+        def __init__(self):
+            self.execute = AsyncMock()
+            self.commit = AsyncMock()
+
+    session = _Session()
+    repo = ConversationStateRepository(session)
+
+    asyncio.run(
+        repo.save_state(
+            30,
+            "context_explain",
+            "BTC",
+            {"analysis": {"score": Decimal("42.5")}},
+        )
+    )
+
+    payload = session.execute.await_args.args[1]
+    assert '"score": 42.5' in payload["slots"]

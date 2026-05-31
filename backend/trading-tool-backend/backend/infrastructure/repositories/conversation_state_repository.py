@@ -3,11 +3,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 import json
 from datetime import date, datetime
+from decimal import Decimal
 
 
 def _json_default(value):
     if isinstance(value, (datetime, date)):
         return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
     raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
 
 class ConversationStateRepository:
