@@ -26,7 +26,9 @@ def test_promptset_exists_and_covers_required_cases():
     assert "general-help" in case_ids
     assert "education-rsi-simple" in case_ids
     assert "context-setup-open" in case_ids
+    assert "context-current-asset" in case_ids
     assert "coach-fomo" in case_ids
+    assert "coach-plan-deviation" in case_ids
     assert "mission-control-summary" in case_ids
     assert "mixed-06-mission-control" in case_ids
 
@@ -120,3 +122,41 @@ def test_operational_errors_are_bucketed_without_crashing():
 
     assert result["passed"] is False
     assert "http_status:599" in result["failures"]
+
+
+def test_evaluate_case_checks_variant_context_resolution_and_summary_quality():
+    module = _load_script_module()
+
+    result = module.evaluate_case(
+        {
+            "id": "mission-control-summary",
+            "query": "Vat Mission Control samen in drie bullets",
+            "expected_intents": ["mission_control_explain"],
+            "expected_mode": "read_only",
+            "response_must_not_contain": ["- None"],
+            "forbid_duplicate_bullets": True,
+            "require_analysis_variant": "direct_coach",
+            "require_context_entity_type": "asset",
+            "require_context_resolution_target": "asset",
+        },
+        {
+            "intent": "mission_control_explain",
+            "flow": "mission_control_explain",
+            "response": "- Daily scores verversen\n- Daily scores verversen\n- None",
+            "analysis": {
+                "mode": "read_only",
+                "behavioral_intelligence": {"variant": "behavioral_reflection"},
+                "context_explain": {"entity_type": "score"},
+                "context_entity_resolution": {"target": "score"},
+            },
+        },
+        latency_ms=900.0,
+        http_status=200,
+    )
+
+    assert result["passed"] is False
+    assert "duplicate_bullets" in result["failures"]
+    assert "forbidden_response_snippet:- none" in result["failures"]
+    assert "unexpected_variant:behavioral_reflection" in result["failures"]
+    assert "unexpected_context_entity_type:score" in result["failures"]
+    assert "unexpected_context_resolution_target:score" in result["failures"]

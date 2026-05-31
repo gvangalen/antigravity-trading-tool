@@ -77,6 +77,16 @@ ROUTE_FAMILY_BY_FLOW = {
     "bot_execution_decision": "transactional",
 }
 
+PRODUCT_REFRESH_HELP_PHRASES = (
+    "waarom zijn mijn scores oud",
+    "waarom is mijn score oud",
+    "waarom zie ik oude data",
+    "waarom zie ik nog oude data",
+    "waarom zijn mijn daily scores oud",
+    "waarom is mijn daily score oud",
+    "waarom zie ik nog oude scores",
+)
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -505,6 +515,12 @@ class FinnPlanService:
         ]
         return any(phrase in q for phrase in capability_phrases)
 
+    def looks_like_product_refresh_help_request(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        if self.looks_like_daily_score_refresh_request(query):
+            return False
+        return any(phrase in q for phrase in PRODUCT_REFRESH_HELP_PHRASES)
+
     def looks_like_product_help_request(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
         q = self._normalized_query(query)
         context = context or {}
@@ -644,6 +660,38 @@ class FinnPlanService:
             "why": f"no confident {entity_type} context was available",
         }
 
+    def _context_resolution_payload(
+        self,
+        confidence: Dict[str, Any],
+        entity_type: str,
+        entity: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        entity = entity or {}
+        resolved_from = {
+            "explicit_context_match": "explicit_prompt_or_context",
+            "page_entity_match": "page_context",
+            "state_reuse_match": "read_only_state",
+            "generic_fallback": "fallback",
+        }.get(confidence.get("reason"), "fallback")
+        return {
+            "target": entity_type,
+            "resolved_from": resolved_from,
+            "resolved_asset": entity.get("asset") or entity.get("symbol"),
+            "resolved_ids": {
+                key: value
+                for key, value in {
+                    "entity_id": entity.get("id") or confidence.get("entity_id"),
+                    "setup_id": entity.get("setup_id"),
+                    "strategy_id": entity.get("strategy_id"),
+                    "bot_id": entity.get("bot_id"),
+                    "report_type": entity.get("table_name"),
+                    "page": entity.get("page"),
+                }.items()
+                if value not in (None, "", [], {})
+            },
+            "fallback_used": confidence.get("level") == "low" or confidence.get("reason") == "generic_fallback",
+        }
+
     def looks_like_education_request(self, query: str) -> bool:
         q = self._normalized_query(query)
         topics = [
@@ -679,9 +727,13 @@ class FinnPlanService:
             return True
         if context.get("bot_id") and "bot" in q:
             return True
-        if any(phrase in q for phrase in ["wat bekijk ik nu", "heb ik nu open", "wat zie ik nu"]):
+        if any(phrase in q for phrase in [
+            "wat bekijk ik nu", "heb ik nu open", "wat zie ik nu",
+            "met welke asset werk ik nu", "welke asset werk ik nu",
+            "met welke asset en bot werk ik nu",
+        ]):
             return True
-        return any(term in q for term in ["setup", "strategie", "strategy", "bot", "rapport", "report", "score", "scherm", "pagina"])
+        return any(term in q for term in ["setup", "strategie", "strategy", "bot", "rapport", "report", "score", "scherm", "pagina", "asset"])
 
     def looks_like_mission_control_explain_request(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
         q = self._normalized_query(query)
@@ -1138,6 +1190,30 @@ class FinnPlanService:
         ]
         return any(term in q for term in behavioral_terms) and any(term in q for term in coaching_terms)
 
+    def _behavioral_variant_for_query(self, query: str) -> str:
+        q = self._normalized_query(query)
+        plan_adherence_terms = [
+            "ik wijk af van mijn strategie",
+            "ik wijk af van mijn plan",
+            "ik wil buiten mijn plan handelen",
+            "ik wil buiten mijn strategie handelen",
+            "ik wil toch instappen",
+            "ik wil toch kopen",
+            "ik wil toch traden",
+            "ik wil nu toch instappen",
+        ]
+        direct_coach_terms = [
+            "fomo", "all-in", "all in", "paniek", "panic", "revenge",
+            "impuls", "nu toch instappen", "moet ik nu", "denk eraan",
+            "ik wil nu", "ik wil kopen", "ik wil verkopen", "ik wil sellen",
+            "ik wil instappen", "emotionele beslissing", "emotioneel",
+        ]
+        if any(term in q for term in plan_adherence_terms):
+            return "plan_adherence_coach"
+        if any(term in q for term in direct_coach_terms):
+            return "direct_coach"
+        return "behavioral_reflection"
+
     def looks_like_weekly_reflection_request(self, query: str) -> bool:
         q = (query or "").lower()
         weekly_terms = [
@@ -1345,6 +1421,36 @@ class FinnPlanService:
             "actions": [],
         }
 
+    async def build_product_refresh_help_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        asset = self._asset_from_query_or_context(query, context)
+        response = (
+            f"Je ziet waarschijnlijk oudere of ontbrekende daily scoredata voor {asset}. "
+            "Dat betekent niet automatisch dat je setup fout is; meestal loopt de datalaag of scoregeneratie gewoon achter. "
+            f"Als je echt wilt verversen, vraag dan: 'Ververs mijn daily scores voor {asset}'."
+        )
+        analysis = {
+            "mode": "read_only",
+            "tool_intent_reason": "safe_read_only_explain",
+            "product_help": {
+                "variant": "refresh_help",
+                "asset": asset,
+                "suggested_next_step": f"Ververs daily scores voor {asset}",
+            },
+        }
+        return {
+            "response": response,
+            "intent": "product_help",
+            "flow": "product_help",
+            "state": {
+                "current_flow": "product_help",
+                "asset": asset,
+                "analysis": analysis,
+            },
+            "analysis": analysis,
+            "actions": [],
+        }
+
     def _education_topic_catalog(self) -> Dict[str, Dict[str, Any]]:
         return {
             "rsi": {
@@ -1544,10 +1650,12 @@ class FinnPlanService:
         actions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         entity = entity or {}
+        context_resolution = self._context_resolution_payload(confidence, entity_type, entity)
         analysis = {
             "entity_type": entity_type,
             "entity": entity,
             "context_confidence": confidence,
+            "context_entity_resolution": context_resolution,
             "context_explain": {
                 "entity_type": entity_type,
                 "entity_id": entity.get("id") or confidence.get("entity_id"),
@@ -1590,6 +1698,109 @@ class FinnPlanService:
             return f"Je zit in een {page_type}-context rond {symbol}. Ik kan hier vooral scores, blockers en je actieve productcontext uitleggen."
         return f"Je zit op {page_type}. Ik kan hier het scherm uitleggen, de actieve entiteit duiden en helpen bepalen wat nu lezen is en wat echt een actie vraagt."
 
+    def _mission_summary_dedupe_key(self, item: Dict[str, Any]) -> str:
+        return str(item.get("title") or item.get("label") or item.get("asset") or item.get("id") or "").strip().lower()
+
+    def _mission_summary_priority_items(self, mission: Dict[str, Any]) -> List[Dict[str, Any]]:
+        workqueue = mission.get("workqueue") or []
+        picked: List[Dict[str, Any]] = []
+        seen = set()
+        refresh_used = False
+        blocker_used = False
+        for item in workqueue:
+            title = item.get("title") or item.get("label")
+            if not title:
+                continue
+            dedupe = self._mission_summary_dedupe_key(item)
+            if dedupe in seen:
+                continue
+            item_type = str(item.get("type") or "")
+            if item_type in {"score_refresh", "data_gap"}:
+                if refresh_used:
+                    continue
+                refresh_used = True
+            if item_type in {"blocked_plan", "blocker_explanation", "portfolio_risk_stack", "portfolio_live_hotspot"}:
+                if blocker_used and item_type != "portfolio_live_hotspot":
+                    continue
+                blocker_used = True
+            picked.append(item)
+            seen.add(dedupe)
+            if len(picked) >= 3:
+                break
+        return picked
+
+    def _mission_summary_suppressions(self, mission: Dict[str, Any], analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
+        coaching_loop = mission.get("coaching_loop") or {}
+        suppressed = coaching_loop.get("suppressed_items") or []
+        cleaned: List[Dict[str, Any]] = []
+        seen = set()
+        for item in suppressed:
+            title = item.get("title")
+            reason = item.get("reason")
+            if not title or title == "None":
+                continue
+            dedupe = f"{title}|{reason}"
+            if dedupe in seen:
+                continue
+            seen.add(dedupe)
+            cleaned.append(item)
+            if len(cleaned) >= 2:
+                break
+        if cleaned:
+            return cleaned
+        ignore_today = ((analysis.get("portfolio_risk") or {}).get("ignore_today_assets")) or []
+        for item in ignore_today:
+            asset = item.get("asset")
+            reason = item.get("reason")
+            if not asset or not reason:
+                continue
+            cleaned.append({
+                "title": f"{asset} vandaag laten liggen",
+                "reason": reason,
+            })
+            if len(cleaned) >= 2:
+                break
+        return cleaned
+
+    def _mission_summary_payload(self, mission: Dict[str, Any], analysis: Dict[str, Any]) -> Dict[str, Any]:
+        top_items = self._mission_summary_priority_items(mission)
+        suppressions = self._mission_summary_suppressions(mission, analysis)
+        counts = mission.get("summary") or {}
+        headline = (
+            f"Pak eerst {top_items[0].get('title')} op."
+            if top_items else
+            "Mission Control ziet nu geen harde act-now escalatie."
+        )
+        return {
+            "headline": headline,
+            "top_3": [
+                {
+                    "title": item.get("title") or item.get("label"),
+                    "type": item.get("type"),
+                    "priority": item.get("priority"),
+                    "reason": item.get("reason"),
+                    "asset": item.get("asset"),
+                }
+                for item in top_items
+            ],
+            "avoid_today": [
+                {
+                    "title": item.get("title"),
+                    "reason": item.get("reason"),
+                    "asset": item.get("asset"),
+                }
+                for item in suppressions
+            ],
+            "open_counts": {
+                "workqueue_count": counts.get("workqueue_count", 0),
+                "open_action_count": counts.get("open_action_count", 0),
+                "high_priority_count": len([
+                    item for item in (mission.get("workqueue") or [])
+                    if str(item.get("priority") or "").lower() == "high"
+                ]),
+            },
+        }
+
     async def build_mission_control_explain_response(
         self,
         user_id: int,
@@ -1612,23 +1823,23 @@ class FinnPlanService:
             **(mission.get("summary") or {}),
             "coaching_loop_status": "preview",
         }
-        priorities = mission.get("workqueue") or []
-        suppressed = ((analysis.get("portfolio_risk") or {}).get("ignore_today_assets")) or []
-        coaching_loop = mission.get("coaching_loop") or {}
+        summary = self._mission_summary_payload(mission, analysis)
         response_lines = ["Mission Control zegt nu in het kort:"]
-        if priorities:
+        if summary.get("headline"):
+            response_lines.append(summary["headline"])
+        if summary.get("top_3"):
             response_lines.append("Vandaag eerst:")
-            for item in priorities[:3]:
-                response_lines.append(f"- {item.get('title') or item.get('label')}")
-        if suppressed:
+            for item in summary["top_3"]:
+                response_lines.append(f"- {item.get('title')}")
+        if summary.get("avoid_today"):
             response_lines.append("Vandaag bewust niet doen:")
-            for item in suppressed[:2]:
-                response_lines.append(f"- {item.get('title') or item.get('label')}")
-        if mission.get("summary"):
-            response_lines.append(
-                f"Open nu: {mission['summary'].get('open_count', 0)} items, "
-                f"{mission['summary'].get('high_priority_count', 0)} met hoge prioriteit."
-            )
+            for item in summary["avoid_today"]:
+                response_lines.append(f"- {item.get('title')}: {item.get('reason')}")
+        counts = summary.get("open_counts") or {}
+        response_lines.append(
+            f"Open nu: {counts.get('workqueue_count', 0)} items, "
+            f"{counts.get('high_priority_count', 0)} met hoge prioriteit."
+        )
         return {
             "response": "\n".join(response_lines),
             "intent": "mission_control_explain",
@@ -1637,12 +1848,14 @@ class FinnPlanService:
                 "current_flow": "mission_control_explain",
                 "analysis": {
                     "mission_control": mission,
+                    "mission_control_summary": summary,
                     "mission_control_source": "daily_coach_preview",
                     "context_confidence": {"level": "high", "entity_type": "mission_control", "entity_id": "mission_control", "reason": "mission control summary requested", "why": "mission control summary requested"},
                 },
             },
             "analysis": {
                 "mission_control": mission,
+                "mission_control_summary": summary,
                 "mission_control_source": "daily_coach_preview",
                 "context_confidence": {"level": "high", "entity_type": "mission_control", "entity_id": "mission_control", "reason": "mission control summary requested", "why": "mission control summary requested"},
             },
@@ -1715,7 +1928,9 @@ class FinnPlanService:
                     response = (
                         f"Je kijkt nu naar de {asset} daily score. Macro is {score_map['macro']:.1f}, "
                         f"technical {score_map['technical']:.1f}, market {score_map['market']:.1f} en setup {score_map['setup']:.1f}. "
-                        f"De grootste rem zit nu in {weakest['category']} met {weakest['score']:.1f}."
+                        f"De grootste rem zit nu in {weakest['category']} met {weakest['score']:.1f}, "
+                        f"terwijl {strongest['category']} je meeste steun geeft met {strongest['score']:.1f}. "
+                        f"Operator-implicatie: focus eerst op {weakest['category']} voordat je zwaarder leunt op de sterkere scoreblokken."
                     )
                     return self._context_explain_payload(
                         response=response,
@@ -1770,6 +1985,13 @@ class FinnPlanService:
                         report.get("macro_summary"),
                         report.get("technical_summary"),
                     ] if item][:3]
+                    risk_or_behavior = report.get("risk_summary") or report.get("behavioral_summary")
+                    follow_up = report.get("recommended_action") or "Gebruik dit rapport als startpunt voor Mission Control of een score-uitleg."
+                    if key_takeaways:
+                        response += f" Belangrijkste punten: {' | '.join(key_takeaways[:2])}."
+                    if risk_or_behavior:
+                        response += f" Let extra op: {risk_or_behavior}."
+                    response += f" Volgende stap: {follow_up}"
                     return self._context_explain_payload(
                         response=response,
                         confidence=report_confidence,
@@ -1781,8 +2003,8 @@ class FinnPlanService:
                             "report_type": period_label,
                             "headline": summary,
                             "key_takeaways": key_takeaways,
-                            "risk_or_behavior_callout": report.get("risk_summary") or report.get("behavioral_summary"),
-                            "recommended_follow_up": report.get("recommended_action") or "Gebruik dit rapport als startpunt voor Mission Control of een score-uitleg.",
+                            "risk_or_behavior_callout": risk_or_behavior,
+                            "recommended_follow_up": follow_up,
                         },
                         state_overrides={"report_type": table_name},
                     )
@@ -1883,7 +2105,10 @@ class FinnPlanService:
                     f"Status: {status_text}. "
                     f"Deze bot volgt strategie #{bot.get('strategy_id')} '{bot.get('strategy_name')}'"
                     f"{setup_suffix}. "
-                    f"Op dit moment wacht hij vooral op {waiting_for}."
+                    f"Mode: {bot.get('mode') or 'manual'}. "
+                    f"Op dit moment wacht hij vooral op {waiting_for}. "
+                    f"Er staan nu {len(open_decisions)} open decision(s) klaar voor review. "
+                    "Volgende logische stap: review open decisions of toets eerst de onderliggende strategie- en scorecontext."
                 )
                 return self._context_explain_payload(
                     response=response,
@@ -1894,6 +2119,7 @@ class FinnPlanService:
                         "what_this_bot_is": f"Een {'live' if bot.get('is_live') else 'paper/manual'} bot voor {bot.get('symbol')}",
                         "linked_strategy": {"id": bot.get("strategy_id"), "name": bot.get("strategy_name")},
                         "linked_setup": {"id": bot.get("setup_id"), "name": bot.get("setup_name")},
+                        "operating_mode": bot.get("mode") or "manual",
                         "why_it_exists": f"Deze bot ondersteunt strategie #{bot.get('strategy_id')} voor {bot.get('symbol')}.",
                         "what_it_is_waiting_for": waiting_for,
                         "open_decisions": open_decisions[:5],
@@ -1922,7 +2148,7 @@ class FinnPlanService:
             related_bot_id = context.get("bot_id")
             if asset_confidence["level"] == "low":
                 return self._context_explain_payload(
-                    response="Ik zie nog geen zekere asset-context. Ik kan wel zien op welke pagina je zit, maar niet veilig welk asset nu centraal staat. Noem gerust het asset expliciet of open de asset-surface opnieuw.",
+                    response="Ik zie nog geen zekere asset-context. Wat ik nu wél zie is je pagina- of productcontext, maar niet veilig welk asset centraal staat. Noem gerust het asset expliciet of open de asset-surface opnieuw, dan word ik specifieker.",
                     confidence=asset_confidence,
                     entity_type="asset",
                     entity={"asset": None, "bot_id": related_bot_id},
@@ -1930,7 +2156,7 @@ class FinnPlanService:
             response = (
                 f"Ik zie nu vooral {asset} als actief asset"
                 f"{f' en bot #{related_bot_id} als je huidige bot-context' if related_bot_id else ''}. "
-                "Als je wilt kan ik hier direct de score-, setup- of bot-context verder uitsplitsen."
+                "Wat ik wél zeker zie is je actieve asset-context. Wat ik niet automatisch invul is of je nu score-, setup- of botuitleg wilt; dat kan ik wel meteen uitsplitsen als je dat vraagt."
             )
             return self._context_explain_payload(
                 response=response,
@@ -7372,18 +7598,19 @@ class FinnPlanService:
         risk_flags = insight.get("risk_flags") or []
         primary_flag = risk_flags[0] if risk_flags else {}
         q = self._normalized_query(query)
-        variant = "direct_coach" if any(term in q for term in [
-            "fomo", "all-in", "all in", "paniek", "panic", "revenge",
-            "ik wijk af", "impuls", "nu toch instappen", "moet ik nu",
-            "denk eraan", "ik wil nu",
-        ]) else "behavioral_reflection"
+        variant = self._behavioral_variant_for_query(query)
         insight["variant"] = variant
-        insight["risk_signal"] = primary_flag.get("id") or ("acute_emotion" if variant == "direct_coach" else insight.get("status"))
+        insight["risk_signal"] = primary_flag.get("id") or ("plan_deviation" if variant == "plan_adherence_coach" else "acute_emotion" if variant == "direct_coach" else insight.get("status"))
         insight["what_i_notice"] = coaching.get("primary_reflection") or insight.get("trend", {}).get("summary")
         insight["why_this_is_risky"] = primary_flag.get("summary") or "Emotionele of impulsieve druk maakt het makkelijker om je plan te verlaten."
         insight["what_to_do_now"] = coaching.get("safe_next_step") or "Neem even afstand, check je planstatus en handel pas weer als je setup echt klopt."
         insight["what_not_to_do"] = coaching.get("do_not_do") or "Ga nu niet forceren, opschalen of all-in."
-        insight["plan_anchor"] = "Volg eerst je planstatus en guardrails voordat je iets nieuws forceert." if variant == "direct_coach" else None
+        if variant == "plan_adherence_coach":
+            insight["what_i_notice"] = insight.get("what_i_notice") or "Ik zie dat je buiten je afgesproken plan dreigt te bewegen."
+            insight["why_this_is_risky"] = primary_flag.get("summary") or "Zodra je afwijkt van je plan, neemt emotie het makkelijker over van je regels."
+            insight["what_to_do_now"] = coaching.get("safe_next_step") or "Leg je plan er letterlijk naast en check eerst of je setup nog echt geldig is."
+            insight["what_not_to_do"] = coaching.get("do_not_do") or "Ga nu niet improviseren, opschalen of toch instappen zonder plancheck."
+        insight["plan_anchor"] = "Volg eerst je planstatus en guardrails voordat je iets nieuws forceert." if variant in {"direct_coach", "plan_adherence_coach"} else None
         insight["behavioral_intelligence"] = {
             "variant": variant,
             "risk_signal": insight["risk_signal"],
@@ -9265,6 +9492,17 @@ class FinnPlanService:
         coaching = insight.get("coaching") or {}
         metrics = insight.get("metrics") or {}
         signals = insight.get("signals") or []
+        if insight.get("variant") == "plan_adherence_coach":
+            lines = [
+                "Pauseer even en ga terug naar je plan.",
+                insight.get("what_i_notice") or "Ik zie dat je buiten je strategie wilt bewegen.",
+                f"Waarom dit risicovol is: {insight.get('why_this_is_risky')}",
+                f"Wat nu doen: {insight.get('what_to_do_now')}",
+                f"Niet doen: {insight.get('what_not_to_do')}",
+            ]
+            if insight.get("plan_anchor"):
+                lines.append(f"Plananker: {insight.get('plan_anchor')}")
+            return "\n".join([line for line in lines if line])
         if insight.get("variant") == "direct_coach":
             lines = [
                 "Stop even met versnellen.",

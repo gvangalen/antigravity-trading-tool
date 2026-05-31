@@ -543,6 +543,33 @@ def test_build_context_explain_response_can_answer_current_asset():
     assert result["analysis"]["entity_type"] == "asset"
     assert result["analysis"]["entity"]["asset"] == "BTC"
     assert result["analysis"]["context_confidence"]["reason"] == "explicit_context_match"
+    assert result["analysis"]["context_entity_resolution"]["target"] == "asset"
+    assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "explicit_prompt_or_context"
+    assert result["analysis"]["context_entity_resolution"]["resolved_asset"] == "BTC"
+
+
+def test_build_product_refresh_help_response_stays_read_only_and_explains_stale_scores():
+    service = _service()
+
+    result = asyncio.run(service.build_product_refresh_help_response(30, "Waarom zijn mijn scores oud?", {
+        "page": "/dashboard",
+        "page_type": "Dashboard",
+        "symbol": "BTC",
+    }))
+
+    assert result["intent"] == "product_help"
+    assert result["analysis"]["tool_intent_reason"] == "safe_read_only_explain"
+    assert result["analysis"]["product_help"]["variant"] == "refresh_help"
+    assert result["analysis"]["product_help"]["asset"] == "BTC"
+    assert "daily scoredata" in result["response"]
+
+
+def test_product_refresh_help_detection_catches_stale_score_question_without_triggering_refresh():
+    service = _service()
+
+    assert service.looks_like_product_refresh_help_request("Waarom zijn mijn scores oud?") is True
+    assert service.looks_like_product_refresh_help_request("Waarom zie ik nog oude data?") is True
+    assert service.looks_like_product_refresh_help_request("Ververs mijn daily scores voor BTC") is False
 
 
 def test_build_daily_score_refresh_response_exposes_tool_intent_reason():
@@ -561,6 +588,31 @@ def test_looks_like_daily_score_refresh_request_allows_natural_wording():
     assert service.looks_like_daily_score_refresh_request("Ververs mijn daily scores voor BTC") is True
     assert service.looks_like_daily_score_refresh_request("Refresh even de daily scores van BTC") is True
     assert service.looks_like_daily_score_refresh_request("Waarom zijn mijn daily scores oud?") is False
+
+
+def test_build_behavioral_intelligence_response_uses_plan_adherence_variant(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    service._get_recent_finn_activity = AsyncMock(return_value=[])
+    service._mission_day_log = lambda activity_feed: {"handled_count": 0, "skipped_count": 0, "snoozed_count": 0}
+    service._build_behavioral_insight_from_activity = lambda activity_feed, day_log: {
+        "status": "attention",
+        "trend": {"summary": "Je wilt buiten je strategie om versnellen."},
+        "coaching": {
+            "primary_reflection": "Ik zie dat je van je plan wilt afwijken.",
+            "safe_next_step": "Leg eerst je plan naast de huidige setup en check of je regels nog actief zijn.",
+            "do_not_do": "Neem nu geen shortcut omdat je ongeduldig bent.",
+        },
+        "risk_flags": [{"id": "plan_deviation", "summary": "Plan-afwijking maakt impulsieve trades waarschijnlijker."}],
+    }
+
+    result = asyncio.run(service.build_behavioral_intelligence_response(30, "Ik wijk af van mijn strategie, wat moet ik doen?"))
+
+    analysis = result["state"]["analysis"]
+    assert analysis["variant"] == "plan_adherence_coach"
+    assert analysis["risk_signal"] == "plan_deviation"
+    assert analysis["behavioral_intelligence"]["variant"] == "plan_adherence_coach"
+    assert analysis["plan_anchor"]
+    assert result["response"].startswith("Pauseer even en ga terug naar je plan.")
 
 
 def test_execute_issued_action_accepts_valid_refresh_fallback_action_without_pending_row():
@@ -3659,6 +3711,10 @@ def test_build_mission_control_explain_response_uses_daily_preview_fast_path(mon
     assert seen_contexts[0]["mission_control_preview_only"] is True
     assert result["analysis"]["mission_control_source"] == "daily_coach_preview"
     assert "Mission Control zegt nu in het kort" in result["response"]
+    summary = result["analysis"]["mission_control_summary"]
+    titles = [item["title"] for item in summary["top_3"]]
+    assert len(titles) == len(set(titles))
+    assert all(item["title"] != "None" for item in summary["avoid_today"])
 
 
 def test_build_portfolio_daily_coach_response_preview_only_skips_strategy_bot_and_indicator_reads(monkeypatch):

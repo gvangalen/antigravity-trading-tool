@@ -178,6 +178,13 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any], latency_ms: fl
     intent = response.get("intent")
     mode = analysis.get("mode")
     context_confidence = analysis.get("context_confidence") if isinstance(analysis.get("context_confidence"), dict) else None
+    context_explain = analysis.get("context_explain") if isinstance(analysis.get("context_explain"), dict) else None
+    context_entity_resolution = analysis.get("context_entity_resolution") if isinstance(analysis.get("context_entity_resolution"), dict) else None
+    behavioral = analysis.get("behavioral_intelligence") if isinstance(analysis.get("behavioral_intelligence"), dict) else None
+    behavioral_variant = (
+        behavioral.get("variant")
+        or analysis.get("variant")
+    ) if (behavioral or analysis.get("variant")) else None
     route_source = analysis.get("route_source")
     route_family = analysis.get("route_family")
     response_text = response.get("response")
@@ -185,6 +192,11 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any], latency_ms: fl
     forbidden_flows = set(case.get("forbidden_flows") or [])
     expected_mode = case.get("expected_mode")
     require_context_confidence = bool(case.get("require_context_confidence"))
+    require_analysis_variant = case.get("require_analysis_variant")
+    require_context_entity_type = case.get("require_context_entity_type")
+    require_context_resolution_target = case.get("require_context_resolution_target")
+    response_must_not_contain = [str(item).lower() for item in (case.get("response_must_not_contain") or [])]
+    forbid_duplicate_bullets = bool(case.get("forbid_duplicate_bullets"))
 
     failures: List[str] = []
 
@@ -200,6 +212,25 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any], latency_ms: fl
         failures.append(f"unexpected_mode:{mode}")
     if require_context_confidence and not context_confidence:
         failures.append("missing_context_confidence")
+    if require_analysis_variant and behavioral_variant != require_analysis_variant:
+        failures.append(f"unexpected_variant:{behavioral_variant}")
+    if require_context_entity_type and (context_explain or {}).get("entity_type") != require_context_entity_type:
+        failures.append(f"unexpected_context_entity_type:{(context_explain or {}).get('entity_type')}")
+    if require_context_resolution_target and (context_entity_resolution or {}).get("target") != require_context_resolution_target:
+        failures.append(f"unexpected_context_resolution_target:{(context_entity_resolution or {}).get('target')}")
+    response_text_normalized = str(response_text or "").lower()
+    for snippet in response_must_not_contain:
+        if snippet and snippet in response_text_normalized:
+            failures.append(f"forbidden_response_snippet:{snippet}")
+    if forbid_duplicate_bullets:
+        bullets = [
+            line.strip()[2:].strip().lower()
+            for line in str(response_text or "").splitlines()
+            if line.strip().startswith("- ")
+        ]
+        bullets = [bullet for bullet in bullets if bullet]
+        if len(set(bullets)) != len(bullets):
+            failures.append("duplicate_bullets")
 
     return {
         "id": case["id"],
@@ -211,8 +242,11 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any], latency_ms: fl
         "mode": mode,
         "route_source": route_source,
         "route_family": route_family,
+        "analysis_variant": behavioral_variant,
         "latency_ms": round(latency_ms, 2),
         "context_confidence": context_confidence,
+        "context_entity_type": (context_explain or {}).get("entity_type"),
+        "context_entity_resolution": context_entity_resolution,
         "response_preview": str(response_text or "")[:220],
         "passed": not failures,
         "failures": failures,
@@ -334,7 +368,9 @@ def render_markdown_report(summary: Dict[str, Any], results: List[Dict[str, Any]
         status = "PASS" if result["passed"] else "FAIL"
         lines.append(
             f"- `{result['id']}` [{status}] intent=`{result.get('intent')}` flow=`{result.get('flow')}` "
-            f"mode=`{result.get('mode')}` latency=`{result.get('latency_ms')}ms` failures=`{', '.join(result.get('failures') or []) or 'none'}`"
+            f"mode=`{result.get('mode')}` variant=`{result.get('analysis_variant')}` "
+            f"entity=`{result.get('context_entity_type')}` latency=`{result.get('latency_ms')}ms` "
+            f"failures=`{', '.join(result.get('failures') or []) or 'none'}`"
         )
     return "\n".join(lines) + "\n"
 

@@ -146,6 +146,7 @@ def _query_prefers_non_transactional_finn_response(
     context_payload = context_payload or {}
     return any([
         finn.looks_like_general_capability_request(query),
+        finn.looks_like_product_refresh_help_request(query),
         finn.looks_like_product_help_request(query, context_payload),
         finn.looks_like_education_request(query),
         finn.looks_like_mission_control_explain_request(query, context_payload),
@@ -190,6 +191,8 @@ async def _build_finn_core_rescue_envelope(
     context_payload = context_payload or {}
     if finn.looks_like_general_capability_request(query):
         return await finn.build_general_capability_response(user_id, query, context_payload)
+    if finn.looks_like_product_refresh_help_request(query):
+        return await finn.build_product_refresh_help_response(user_id, query, context_payload)
     if finn.looks_like_product_help_request(query, context_payload):
         return await finn.build_product_help_response(user_id, query, context_payload)
     if finn.looks_like_education_request(query):
@@ -476,6 +479,11 @@ async def assistant_chat(
             finn_response = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+            )
+        if finn.looks_like_product_refresh_help_request(request.query):
+            finn_response = await finn.build_product_refresh_help_response(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
             )
         if finn.looks_like_general_capability_request(request.query):
             finn_response = await finn.build_general_capability_response(user_id, request.query, context_payload)
@@ -832,6 +840,12 @@ async def assistant_chat_stream(
             if finn.looks_like_daily_score_refresh_request(request.query):
                 envelope = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
                 envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_product_refresh_help_request(request.query):
+                envelope = await finn.build_product_refresh_help_response(user_id, request.query, context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
                 yield _sse_event("envelope", envelope)
                 return
 
