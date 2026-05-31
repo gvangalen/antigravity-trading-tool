@@ -2,7 +2,6 @@ import logging
 from typing import Dict, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.repositories.onboarding_repository import OnboardingRepository
-from backend.celery_task.onboarding_task import run_onboarding_pipeline
 from backend.schemas.onboarding_schema import OnboardingStatusResponse
 
 logger = logging.getLogger("onboarding")
@@ -88,7 +87,11 @@ class OnboardingService:
             return
 
         await self.repository.mark_pipeline_started(user_id, DEFAULT_FLOW, PIPELINE_STEP)
-        
+
+        # Import the Celery task lazily so simple API startup and status reads
+        # do not pull the full onboarding pipeline graph into app boot.
+        from backend.celery_task.onboarding_task import run_onboarding_pipeline
+
         run_onboarding_pipeline.delay(user_id)
         logger.info(f"[Onboarding] Pipeline gestart voor user_id={user_id}")
 
