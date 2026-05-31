@@ -406,7 +406,7 @@ def test_build_behavioral_intelligence_response_exposes_safe_coaching_contract(m
     assert analysis["what_to_do_now"] == "Wacht tot je plan weer helder actief is."
     assert analysis["what_not_to_do"] == "Ga nu niet forceren of all-in."
     assert analysis["behavioral_intelligence"]["variant"] == "direct_coach"
-    assert "Stop even met versnellen." in result["response"]
+    assert "Stop even en vertraag direct." in result["response"]
 
 
 def test_build_context_explain_response_prioritizes_score_explain_when_asset_context_is_present(monkeypatch):
@@ -598,6 +598,64 @@ def test_build_context_explain_response_uses_asset_specific_low_confidence_messa
     assert "geen zekere strategie-entiteit" in result["response"]
 
 
+def test_context_explain_reuses_recent_strategy_entity_in_mixed_session():
+    service = _service()
+    context = {
+        "page": "/dashboard",
+        "page_type": "Dashboard",
+        "symbol": "ETH",
+        "finn_state": {
+            "current_flow": "general_help",
+            "recent_context_entities": [
+                {
+                    "entity_type": "strategy",
+                    "entity_id": 257,
+                    "asset": "ETH",
+                    "resolved_from": "page_context",
+                }
+            ],
+            "analysis": {},
+        },
+    }
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welke strategie bekijk ik nu?", context))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "strategy"
+    assert result["analysis"]["context_confidence"]["level"] == "medium"
+    assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "recent_read_only_state"
+    assert "geen zekere strategie-entiteit" not in result["response"]
+
+
+def test_context_explain_reuses_recent_setup_entity_in_mixed_session():
+    service = _service()
+    context = {
+        "page": "/dashboard",
+        "page_type": "Dashboard",
+        "symbol": "BTC",
+        "finn_state": {
+            "current_flow": "education",
+            "recent_context_entities": [
+                {
+                    "entity_type": "setup",
+                    "entity_id": 62,
+                    "asset": "BTC",
+                    "resolved_from": "page_context",
+                }
+            ],
+            "analysis": {},
+        },
+    }
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welke setup heb ik nu open?", context))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "setup"
+    assert result["analysis"]["context_confidence"]["level"] == "medium"
+    assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "recent_read_only_state"
+    assert "geen zekere setup-entiteit" not in result["response"]
+
+
 def test_build_product_refresh_help_response_stays_read_only_and_explains_stale_scores():
     service = _service()
 
@@ -662,7 +720,7 @@ def test_build_behavioral_intelligence_response_uses_plan_adherence_variant(monk
     assert analysis["risk_signal"] == "plan_deviation"
     assert analysis["behavioral_intelligence"]["variant"] == "plan_adherence_coach"
     assert analysis["plan_anchor"]
-    assert result["response"].startswith("Pauseer even en ga terug naar je plan.")
+    assert result["response"].startswith("Stop hier even en laat je plan weer leiden.")
 
 
 def test_build_behavioral_intelligence_response_uses_direct_coach_for_emotional_decision(monkeypatch):
@@ -685,8 +743,30 @@ def test_build_behavioral_intelligence_response_uses_direct_coach_for_emotional_
     analysis = result["state"]["analysis"]
     assert analysis["variant"] == "direct_coach"
     assert analysis["behavioral_intelligence"]["variant"] == "direct_coach"
+    assert result["response"].startswith("Stop even en vertraag direct.")
     assert "Doe nu niets nieuws" in result["response"]
     assert "emotionele" in result["response"].lower()
+
+
+def test_behavioral_detection_catches_soft_emotional_risk_language():
+    service = _service()
+
+    assert service.looks_like_behavioral_intelligence_request("Ik heb er geen goed gevoel bij, wat nu?") is True
+    assert service.looks_like_behavioral_intelligence_request("Dit voelt niet goed, moet ik dit doen?") is True
+
+
+def test_behavioral_variant_uses_plan_adherence_for_deviation_language():
+    service = _service()
+
+    assert service._behavioral_variant_for_query("Ik wil buiten mijn plan handelen") == "plan_adherence_coach"
+    assert service._behavioral_variant_for_query("Ik wil mijn regels loslaten en toch instappen") == "plan_adherence_coach"
+
+
+def test_behavioral_variant_uses_direct_coach_for_soft_emotional_language():
+    service = _service()
+
+    assert service._behavioral_variant_for_query("Ik heb er geen goed gevoel bij, wat nu?") == "direct_coach"
+    assert service._behavioral_variant_for_query("Dit voelt niet goed, moet ik dit doen?") == "direct_coach"
 
 
 def test_execute_issued_action_accepts_valid_refresh_fallback_action_without_pending_row():
