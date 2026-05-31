@@ -2,6 +2,8 @@ import asyncio
 from unittest.mock import AsyncMock
 
 from backend.api.ai_assistant_api import (
+    _finalize_finn_response,
+    _prepare_finn_envelope,
     _build_finn_core_rescue_envelope,
     _legacy_response_is_generic_failure,
     _legacy_response_needs_finn_rescue,
@@ -153,3 +155,43 @@ def test_build_finn_core_rescue_envelope_prefers_behavioral_builder():
 
     finn.build_behavioral_intelligence_response.assert_awaited_once()
     assert response["intent"] == "behavioral_intelligence"
+
+
+def test_finalize_finn_response_persists_read_only_state_by_default():
+    finn = _finn()
+    finn.issue_response_actions = AsyncMock()
+    finn.persist_response_state = AsyncMock()
+
+    response = asyncio.run(
+        _finalize_finn_response(
+            finn,
+            30,
+            {"intent": "context_explain", "flow": "context_explain", "response": "ok", "state": {"current_flow": "context_explain"}},
+            "trace-1",
+            prompt="Welke strategie bekijk ik nu?",
+            context_payload={"page": "/dashboard", "page_type": "Dashboard", "symbol": "BTC"},
+        )
+    )
+
+    finn.persist_response_state.assert_awaited_once()
+    assert response.intent == "context_explain"
+
+
+def test_prepare_finn_envelope_persists_read_only_state_by_default():
+    finn = _finn()
+    finn.issue_response_actions = AsyncMock()
+    finn.persist_response_state = AsyncMock()
+
+    envelope = asyncio.run(
+        _prepare_finn_envelope(
+            finn,
+            30,
+            {"intent": "behavioral_intelligence", "flow": "behavioral_intelligence", "response": "ok", "state": {"current_flow": "behavioral_intelligence"}},
+            "trace-2",
+            prompt="Ik voel FOMO, wat moet ik doen?",
+            context_payload={},
+        )
+    )
+
+    finn.persist_response_state.assert_awaited_once()
+    assert envelope["intent"] == "behavioral_intelligence"
