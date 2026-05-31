@@ -14,6 +14,7 @@ import http.cookiejar
 import json
 import math
 import os
+import socket
 import ssl
 import statistics
 import sys
@@ -162,6 +163,10 @@ def perform_chat_request(
         latency_ms = (time.perf_counter() - started) * 1000
         payload = _safe_json(raw) if raw else {"detail": str(exc)}
         return payload, latency_ms, int(exc.code)
+    except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
+        latency_ms = (time.perf_counter() - started) * 1000
+        detail = getattr(exc, "reason", None) or str(exc)
+        return {"detail": str(detail), "error": "operational_qa_path"}, latency_ms, 599
 
 
 def evaluate_case(case: Dict[str, Any], response: Dict[str, Any], latency_ms: float, http_status: int) -> Dict[str, Any]:

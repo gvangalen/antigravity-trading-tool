@@ -100,3 +100,23 @@ def test_summarize_results_buckets_operational_failures():
 
     assert summary["failure_buckets"]["operational_qa_path"] == 1
     assert summary["latency_buckets"]["gt_8s"] == 1
+
+
+def test_operational_errors_are_bucketed_without_crashing():
+    module = _load_script_module()
+
+    result = module.evaluate_case(
+        {
+            "id": "ops-timeout",
+            "query": "Hoi",
+            "expected_intents": ["general_help"],
+            "forbidden_flows": ["bot_creation"],
+            "expected_mode": "read_only",
+        },
+        {"detail": "The read operation timed out", "error": "operational_qa_path"},
+        latency_ms=45000.0,
+        http_status=599,
+    )
+
+    assert result["passed"] is False
+    assert "http_status:599" in result["failures"]
