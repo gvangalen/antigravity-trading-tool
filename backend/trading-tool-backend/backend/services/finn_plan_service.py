@@ -537,6 +537,49 @@ class FinnPlanService:
         )
         return recent[-RECENT_CONTEXT_ENTITY_LIMIT:]
 
+    def _merge_last_context_entity(
+        self,
+        previous_state: Optional[Dict[str, Any]],
+        response: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        previous_slots = (previous_state or {}).get("slots") or {}
+        previous = previous_slots.get("last_context_entity")
+        if not isinstance(previous, dict):
+            previous = None
+
+        analysis = response.get("analysis") if isinstance(response.get("analysis"), dict) else {}
+        context_explain = analysis.get("context_explain") if isinstance(analysis.get("context_explain"), dict) else {}
+        entity = analysis.get("entity") if isinstance(analysis.get("entity"), dict) else {}
+        confidence = analysis.get("context_confidence") if isinstance(analysis.get("context_confidence"), dict) else {}
+        resolution = analysis.get("context_entity_resolution") if isinstance(analysis.get("context_entity_resolution"), dict) else {}
+        entity_type = context_explain.get("entity_type") or analysis.get("entity_type")
+
+        # Preserve the last concrete entity-specific context across broad read-only turns.
+        if response.get("flow") != "context_explain" or entity_type not in {"strategy", "setup", "bot", "report", "asset", "score"}:
+            return previous
+
+        entity_id = context_explain.get("entity_id") or entity.get("id") or confidence.get("entity_id")
+        asset = context_explain.get("asset") or entity.get("asset") or entity.get("symbol")
+        report_type = context_explain.get("report_type") or entity.get("table_name")
+
+        if entity_type in {"strategy", "setup", "bot"} and not entity_id:
+            return previous
+        if entity_type == "report" and not report_type:
+            return previous
+        if entity_type in {"asset", "score"} and not asset:
+            return previous
+
+        return {
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "asset": asset,
+            "report_type": report_type,
+            "page_family": entity.get("page_family"),
+            "resolved_from": resolution.get("resolved_from"),
+            "confidence_level": confidence.get("level"),
+            "at": _utc_now().isoformat(),
+        }
+
     def _build_response_analysis_metadata(
         self,
         response: Dict[str, Any],
@@ -617,6 +660,14 @@ class FinnPlanService:
             "report_type": context_explain.get("report_type") or entity.get("table_name"),
         }
 
+    def _last_context_entity(self, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        finn_state = context.get("finn_state") if isinstance(context.get("finn_state"), dict) else {}
+        last = finn_state.get("last_context_entity")
+        if isinstance(last, dict):
+            return last
+        return {}
+
     def _recent_read_only_entities(self, context: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         context = context or {}
         finn_state = context.get("finn_state") if isinstance(context.get("finn_state"), dict) else {}
@@ -666,6 +717,7 @@ class FinnPlanService:
         context = context or {}
         q = self._normalized_query(query)
         state_entity = self._read_only_state_entity(context)
+        last_context_entity = self._last_context_entity(context)
         recent_entities = self._recent_read_only_entities(context)
         prompt_asset = next(iter(_asset_mentions(query)), None)
         context_asset = asset or prompt_asset or context.get("symbol") or context.get("asset")
@@ -699,6 +751,15 @@ class FinnPlanService:
             "report": state_entity.get("report_type") if state_entity.get("entity_type") == "report" else None,
             "score": state_entity.get("asset"),
             "asset": state_entity.get("asset"),
+            "page": context.get("page") or context.get("page_type"),
+        }.get(entity_type)
+        last_context_entity_id = {
+            "strategy": last_context_entity.get("entity_id") if last_context_entity.get("entity_type") == "strategy" else None,
+            "setup": last_context_entity.get("entity_id") if last_context_entity.get("entity_type") == "setup" else None,
+            "bot": last_context_entity.get("entity_id") if last_context_entity.get("entity_type") == "bot" else None,
+            "report": last_context_entity.get("report_type") if last_context_entity.get("entity_type") == "report" else None,
+            "score": last_context_entity.get("asset"),
+            "asset": last_context_entity.get("asset"),
             "page": context.get("page") or context.get("page_type"),
         }.get(entity_type)
         recent_entity = None
@@ -762,6 +823,31 @@ class FinnPlanService:
                 "reason": "state_reuse_match",
                 "why": f"reused recent compatible {entity_type} context"
                 + (f" for {recent_asset}" if recent_asset else ""),
+            }
+        last_context_entity_reusable = (
+            last_context_entity.get("entity_type") == entity_type
+            and bool(last_context_entity_id)
+            and (
+                not last_context_entity.get("asset")
+                or not context_asset
+                or str(last_context_entity.get("asset")).upper() == str(context_asset).upper()
+                or dashboard_follow_up
+            )
+            and (
+                not last_context_entity.get("page_family")
+                or current_page_family in {"dashboard", last_context_entity.get("page_family")}
+                or last_context_entity.get("page_family") == current_page_family
+            )
+        )
+        if last_context_entity_reusable:
+            last_asset = last_context_entity.get("asset")
+            return {
+                "level": "medium",
+                "entity_type": entity_type,
+                "entity_id": last_context_entity_id,
+                "reason": "state_reuse_match",
+                "why": f"reused last concrete {entity_type} context"
+                + (f" for {last_asset}" if last_asset else ""),
             }
         if state_entity_id and (
             not recent_entity
@@ -1014,6 +1100,7 @@ class FinnPlanService:
                 "state_bucket": slots.get("state_bucket"),
                 "intent_history": slots.get("intent_history") or [],
                 "recent_context_entities": slots.get("recent_context_entities") or [],
+                "last_context_entity": slots.get("last_context_entity") if isinstance(slots.get("last_context_entity"), dict) else {},
                 "analysis": slots.get("analysis") if isinstance(slots.get("analysis"), dict) else {},
             }
         return hydrated
@@ -1058,11 +1145,13 @@ class FinnPlanService:
             return
         if response.get("flow") not in TRANSACTIONAL_FLOWS or not isinstance(response.get("draft"), dict):
             recent_context_entities = self._append_recent_context_entities(stored, response)
+            last_context_entity = self._merge_last_context_entity(stored, response)
             lightweight_state = {
                 "version": FINN_STATE_VERSION,
                 "state_bucket": self._state_bucket_for_flow(flow),
                 "intent_history": intent_history,
                 "recent_context_entities": recent_context_entities,
+                "last_context_entity": last_context_entity or {},
                 "analysis": response.get("analysis") if isinstance(response.get("analysis"), dict) else {},
                 "updated_at": _utc_now().isoformat(),
             }

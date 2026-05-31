@@ -701,6 +701,90 @@ def test_context_explain_reuses_recent_strategy_entity_even_when_dashboard_symbo
     assert "geen zekere strategie-entiteit" not in result["response"]
 
 
+def test_context_explain_reuses_last_strategy_entity_after_broad_read_only_turn(monkeypatch):
+    _MemoryStateRepo.store = {}
+    monkeypatch.setattr("backend.services.finn_plan_service.ConversationStateRepository", _MemoryStateRepo)
+
+    class _StrategyRepo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_raw_strategy_with_setup(self, strategy_id, user_id):
+            return {
+                "id": strategy_id,
+                "name": "ETH Live QA Strategy 542357",
+                "symbol": "ETH",
+                "timeframe": "1W",
+                "setup_id": 233,
+                "setup_name": "ETH Weekly Breakout",
+            }
+
+    class _StrategySvc:
+        def __init__(self, session):
+            self.session = session
+
+        def _format_strategy_row(self, row):
+            return row
+
+    monkeypatch.setattr("backend.services.finn_plan_service.StrategyRepository", _StrategyRepo)
+    monkeypatch.setattr("backend.services.finn_plan_service.StrategyService", _StrategySvc)
+    service = FinnPlanService(db_session=object())
+
+    first_response = asyncio.run(service.build_context_explain_response(30, "Welke strategie bekijk ik nu?", {
+        "page": "/strategy/257",
+        "page_type": "Strategy",
+        "symbol": "ETH",
+        "strategy_id": 257,
+    }))
+    asyncio.run(service.persist_response_state(30, first_response))
+
+    second_response = {
+        "intent": "mission_control_explain",
+        "flow": "mission_control_explain",
+        "response": "Mission Control zegt nu in het kort:",
+        "state": {
+            "current_flow": "mission_control_explain",
+            "analysis": {
+                "mission_control_summary": {
+                    "headline": "BTC live bots vragen review",
+                },
+                "context_confidence": {
+                    "level": "high",
+                    "entity_type": "mission_control",
+                    "entity_id": "mission_control",
+                    "reason": "mission control summary requested",
+                    "why": "mission control summary requested",
+                },
+            },
+        },
+        "analysis": {
+            "mission_control_summary": {
+                "headline": "BTC live bots vragen review",
+            },
+            "context_confidence": {
+                "level": "high",
+                "entity_type": "mission_control",
+                "entity_id": "mission_control",
+                "reason": "mission control summary requested",
+                "why": "mission control summary requested",
+            },
+        },
+    }
+    asyncio.run(service.persist_response_state(30, second_response))
+
+    hydrated = asyncio.run(service.hydrate_context(30, {
+        "page": "/dashboard",
+        "page_type": "Dashboard",
+        "symbol": "BTC",
+    }))
+    result = asyncio.run(service.build_context_explain_response(30, "Welke strategie bekijk ik nu?", hydrated))
+
+    assert result["analysis"]["entity"]["id"] == 257
+    assert result["analysis"]["context_confidence"]["level"] == "medium"
+    assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "recent_read_only_state"
+    assert "geen zekere strategie-entiteit" not in result["response"]
+
+
 def test_context_explain_stays_low_when_recent_strategy_has_no_entity_id():
     service = _service()
     context = {
