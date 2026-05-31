@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 from fastapi import HTTPException
 
+import backend.services.finn_plan_service as finn_plan_module
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.finn_plan_service import _utc_now
 from backend.services.finn_plan_service import empty_indicator_config_draft
@@ -3655,8 +3656,120 @@ def test_build_mission_control_explain_response_uses_daily_preview_fast_path(mon
     assert result["intent"] == "mission_control_explain"
     assert seen_contexts
     assert seen_contexts[0]["mission_control_fast"] is True
+    assert seen_contexts[0]["mission_control_preview_only"] is True
     assert result["analysis"]["mission_control_source"] == "daily_coach_preview"
     assert "Mission Control zegt nu in het kort" in result["response"]
+
+
+def test_build_portfolio_daily_coach_response_preview_only_skips_strategy_bot_and_indicator_reads(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    calls = {"strategy": 0, "bot_today": 0, "indicator_fast": 0}
+
+    class _ScoreRepo:
+        def __init__(self, session):
+            self.session = session
+
+        async def fetch_active_setups(self, user_id):
+            return [{"id": 62, "symbol": "BTC", "name": "Breakout long test", "is_active": True}]
+
+    class _StrategyRepo:
+        async def get_strategy_by_setup(self, setup_id, user_id):
+            calls["strategy"] += 1
+            return {"id": 257, "name": "Should not be loaded"}
+
+    class _StrategySvc:
+        def __init__(self, session):
+            self.repository = _StrategyRepo()
+
+        def _format_strategy_row(self, row):
+            return row
+
+    class _BotSvc:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_bot_today(self, user_id, symbol=None, lean=False):
+            calls["bot_today"] += 1
+            return {"decisions": [{"id": 121110}]}
+
+    async def fake_scores(user_id, asset, allow_refresh=True):
+        return {"macro_score": 50, "technical_score": 42, "market_score": 18, "setup_score": 73}
+
+    async def fake_onboarding(user_id):
+        return {}
+
+    async def fake_indicator_fast(user_id, asset, daily_scores):
+        calls["indicator_fast"] += 1
+        return {"asset": asset, "warnings": ["should not run"]}
+
+    def fake_eval_setup(setup, daily_scores):
+        return {
+            "setup": {"id": setup["id"], "name": setup["name"]},
+            "is_active": True,
+            "match_percentage": 100,
+            "blockers": [],
+            "passed_checks": [],
+        }
+
+    def fake_setup_context(setups_by_asset):
+        return {"BTC": {"setup_count": 1}}
+
+    def fake_daily_analysis(**kwargs):
+        return {
+            "asset": kwargs["asset"],
+            "setup": kwargs["setup_analysis"]["setup"],
+            "stance": "plan_is_active",
+            "has_scores": True,
+            "setup_active": True,
+            "setup_match_percentage": 100,
+            "blockers": [],
+            "passed_checks": [],
+            "active_strategy": kwargs["active_strategy"],
+            "bot_today": kwargs["bot_today"],
+            "indicator_summary": kwargs["indicator_analysis"],
+            "indicator_analysis": kwargs["indicator_analysis"],
+            "data_readiness": {"status": "ready", "config_gaps": []},
+            "follow_up_actions": [],
+            "agent_verdicts": [],
+        }
+
+    def fake_portfolio_analysis(asset_analyses, portfolio_context, setup_context_by_asset):
+        return {
+            "asset_count": len(asset_analyses),
+            "assets": asset_analyses,
+            "follow_up_actions": [],
+            "portfolio_risk": {"status": "balanced", "ignore_today_assets": [], "live_bot_hotspots": [], "risk_stacks": []},
+            "suggested_actions": [],
+            "has_any_scores": True,
+            "reasons": [],
+        }
+
+    monkeypatch.setattr(finn_plan_module, "ScoreRepository", _ScoreRepo)
+    monkeypatch.setattr(finn_plan_module, "StrategyService", _StrategySvc)
+    monkeypatch.setattr(finn_plan_module, "BotService", _BotSvc)
+    monkeypatch.setattr(service, "_fetch_daily_scores_with_runtime_refresh", fake_scores)
+    monkeypatch.setattr(service, "_fetch_onboarding_status", fake_onboarding)
+    monkeypatch.setattr(service, "_build_indicator_analysis_fast", fake_indicator_fast)
+    monkeypatch.setattr(service, "_evaluate_setup_row", fake_eval_setup)
+    monkeypatch.setattr(service, "_portfolio_setup_context", fake_setup_context)
+    monkeypatch.setattr(service, "_build_daily_coach_analysis", fake_daily_analysis)
+    monkeypatch.setattr(service, "_build_portfolio_daily_coach_analysis", fake_portfolio_analysis)
+
+    result = asyncio.run(
+        service.build_portfolio_daily_coach_response(
+            1,
+            "Geef mijn daily brief",
+            {"scope": "mission_control", "mission_control_fast": True, "mission_control_preview_only": True},
+        )
+    )
+
+    analysis = result["state"]["analysis"]
+    asset = analysis["assets"][0]
+    assert result["intent"] == "daily_coach"
+    assert calls == {"strategy": 0, "bot_today": 0, "indicator_fast": 0}
+    assert asset["active_strategy"]["preview_only"] is True
+    assert asset["bot_today"]["preview_only"] is True
+    assert asset["indicator_summary"]["preview_only"] is True
 
 
 def test_agent_controller_handoff_activity_counts_in_finn_report():

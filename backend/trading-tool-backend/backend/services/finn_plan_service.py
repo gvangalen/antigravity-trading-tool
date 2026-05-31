@@ -1603,6 +1603,7 @@ class FinnPlanService:
                 **(context or {"page": "mission_control"}),
                 "scope": "mission_control",
                 "mission_control_fast": True,
+                "mission_control_preview_only": True,
             },
         )
         analysis = (daily.get("state") or {}).get("analysis") or {}
@@ -2840,6 +2841,7 @@ class FinnPlanService:
             context.get("scope") == "mission_control"
             or context.get("mission_control_fast")
         )
+        mission_control_preview_only = bool(context.get("mission_control_preview_only"))
 
         if self.session:
             score_repo = ScoreRepository(self.session)
@@ -2866,46 +2868,65 @@ class FinnPlanService:
                 )
                 setup_analysis = self._evaluate_setup_row(setup, daily_scores)
                 active_strategy = {"active": False, "portfolio_scope": True}
-                try:
-                    setup_strategy = await StrategyService(self.session).repository.get_strategy_by_setup(
-                        int(setup.get("id")),
-                        user_id,
-                    )
-                    if setup_strategy:
-                        active_strategy = {
-                            "active": False,
-                            "portfolio_scope": True,
-                            "strategy_exists": True,
-                            "strategy": StrategyService(self.session)._format_strategy_row(setup_strategy),
-                        }
-                except Exception as exc:
-                    active_strategy = {"active": False, "portfolio_scope": True, "error": str(exc)}
-                try:
-                    bot_today = await BotService(self.session).get_bot_today(
-                        user_id,
-                        symbol=asset,
-                        lean=mission_control_fast,
-                    )
-                except Exception as exc:
-                    bot_today = {"decisions": [], "scores": {}, "orders": [], "executions": [], "error": str(exc)}
-                if mission_control_fast:
-                    indicator_analysis = await self._build_indicator_analysis_fast(user_id, asset, daily_scores)
+                if mission_control_preview_only:
+                    active_strategy["preview_only"] = True
+                    bot_today = {
+                        "decisions": [],
+                        "scores": {},
+                        "orders": [],
+                        "executions": [],
+                        "preview_only": True,
+                    }
+                    indicator_analysis = {
+                        "asset": asset,
+                        "has_daily_scores": bool(daily_scores),
+                        "categories": {},
+                        "warnings": [],
+                        "suggestions": [],
+                        "suggested_actions": [],
+                        "preview_only": True,
+                    }
                 else:
                     try:
-                        insight = await self.build_indicator_insight_response(
+                        setup_strategy = await StrategyService(self.session).repository.get_strategy_by_setup(
+                            int(setup.get("id")),
                             user_id,
-                            f"Welke macro technical market data gebruikt Finn voor {asset} vandaag?",
-                            {**context, "symbol": asset},
                         )
-                        indicator_analysis = (insight.get("state") or {}).get("analysis") or {}
+                        if setup_strategy:
+                            active_strategy = {
+                                "active": False,
+                                "portfolio_scope": True,
+                                "strategy_exists": True,
+                                "strategy": StrategyService(self.session)._format_strategy_row(setup_strategy),
+                            }
                     except Exception as exc:
-                        indicator_analysis = {
-                            "asset": asset,
-                            "has_daily_scores": bool(daily_scores),
-                            "categories": {},
-                            "warnings": [f"Indicatoranalyse voor {asset} kon niet worden geladen: {exc}"],
-                            "suggestions": [],
-                        }
+                        active_strategy = {"active": False, "portfolio_scope": True, "error": str(exc)}
+                    try:
+                        bot_today = await BotService(self.session).get_bot_today(
+                            user_id,
+                            symbol=asset,
+                            lean=mission_control_fast,
+                        )
+                    except Exception as exc:
+                        bot_today = {"decisions": [], "scores": {}, "orders": [], "executions": [], "error": str(exc)}
+                    if mission_control_fast:
+                        indicator_analysis = await self._build_indicator_analysis_fast(user_id, asset, daily_scores)
+                    else:
+                        try:
+                            insight = await self.build_indicator_insight_response(
+                                user_id,
+                                f"Welke macro technical market data gebruikt Finn voor {asset} vandaag?",
+                                {**context, "symbol": asset},
+                            )
+                            indicator_analysis = (insight.get("state") or {}).get("analysis") or {}
+                        except Exception as exc:
+                            indicator_analysis = {
+                                "asset": asset,
+                                "has_daily_scores": bool(daily_scores),
+                                "categories": {},
+                                "warnings": [f"Indicatoranalyse voor {asset} kon niet worden geladen: {exc}"],
+                                "suggestions": [],
+                            }
 
                 asset_analyses.append(self._build_daily_coach_analysis(
                     asset=asset,
