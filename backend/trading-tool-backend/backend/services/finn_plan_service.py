@@ -506,6 +506,7 @@ class FinnPlanService:
                 "entity_id": context_explain.get("entity_id") or entity.get("id") or confidence.get("entity_id"),
                 "asset": context_explain.get("asset") or entity.get("asset") or entity.get("symbol"),
                 "report_type": context_explain.get("report_type") or entity.get("table_name"),
+                "page_family": entity.get("page_family"),
                 "resolved_from": resolution.get("resolved_from"),
                 "confidence_level": confidence.get("level"),
                 "at": _utc_now().isoformat(),
@@ -602,6 +603,20 @@ class FinnPlanService:
     def _current_page_type(self, context: Optional[Dict[str, Any]] = None) -> str:
         return str((context or {}).get("page_type") or (context or {}).get("page") or "").lower()
 
+    def _page_family(self, context: Optional[Dict[str, Any]] = None) -> str:
+        page_type = self._current_page_type(context)
+        if "strategy" in page_type:
+            return "strategy"
+        if "setup" in page_type:
+            return "setup"
+        if "bot" in page_type:
+            return "bot"
+        if "report" in page_type:
+            return "report"
+        if "dashboard" in page_type:
+            return "dashboard"
+        return page_type or "unknown"
+
     def _page_supports_entity(self, context: Optional[Dict[str, Any]], entity_type: str) -> bool:
         page_type = self._current_page_type(context)
         mapping = {
@@ -629,6 +644,7 @@ class FinnPlanService:
         recent_entities = self._recent_read_only_entities(context)
         prompt_asset = next(iter(_asset_mentions(query)), None)
         context_asset = asset or prompt_asset or context.get("symbol") or context.get("asset")
+        current_page_family = self._page_family(context)
         explicit_strategy_id = self._extract_numeric_reference(query, ["strategie", "strategy"])
         explicit_setup_id = self._extract_numeric_reference(query, ["setup", "plan"])
         explicit_bot_id = self._extract_numeric_reference(query, ["bot"])
@@ -666,6 +682,12 @@ class FinnPlanService:
             item_asset = item.get("asset")
             if context_asset and item_asset and str(context_asset).upper() != str(item_asset).upper():
                 break
+            if (
+                item.get("page_family")
+                and current_page_family not in {"dashboard", item.get("page_family")}
+                and item.get("page_family") != current_page_family
+            ):
+                break
             recent_entity = item
             break
 
@@ -693,7 +715,10 @@ class FinnPlanService:
                 "reason": "explicit_context_match",
                 "why": f"context payload included {entity_type} without strong page confirmation",
             }
-        if state_entity_id:
+        if state_entity_id and (
+            not recent_entity
+            or recent_entity.get("entity_id") in (None, state_entity_id)
+        ):
             return {
                 "level": "medium",
                 "entity_type": entity_type,
@@ -1262,6 +1287,8 @@ class FinnPlanService:
             "geen goed gevoel", "dit voelt niet goed", "geen helder plananker",
             "toch doen", "alsnog instappen", "override", "regels loslaten",
             "afwijken", "afwijking", "ik durf niet", "emotionele druk",
+            "gefrustreerd", "gemiste move", "ik baal", "ik wil het terugpakken",
+            "ik moet nu iets doen", "ik wil nu handelen omdat",
         ]
         coaching_terms = [
             "hoe", "zie", "check", "controleer", "analyseer", "waar", "wat zegt",
@@ -1272,6 +1299,7 @@ class FinnPlanService:
             "wat moet ik doen", "wat nu", "moet ik", "zal ik", "help me",
             "ik wil toch", "ik wil mijn regels", "ik wil buiten mijn plan",
             "ik wil afwijken", "ik heb er geen goed gevoel bij", "dit voelt niet goed",
+            "ik wil nu handelen omdat", "ik wil het terugpakken", "ik moet nu iets doen",
         ]
         return any(term in q for term in behavioral_terms) and (
             any(term in q for term in coaching_terms) or any(term in q for term in hard_override_terms)
@@ -1306,6 +1334,8 @@ class FinnPlanService:
             "geen goed gevoel", "ik twijfel", "ik durf niet", "ik ben bang",
             "toch doen", "alsnog instappen", "dit voelt niet goed",
             "geen helder plananker", "twijfel om dit te doen",
+            "gefrustreerd", "gemiste move", "ik baal", "ik wil het terugpakken",
+            "ik moet nu iets doen", "ik wil nu handelen omdat",
         ]
         if any(term in q for term in plan_adherence_terms):
             return "plan_adherence_coach"
@@ -7844,11 +7874,19 @@ class FinnPlanService:
             insight["why_this_is_risky"] = primary_flag.get("summary") or "Zodra je buiten je plan beweegt, laat je regels hun remmende werk los en neemt emotie sneller over."
             insight["what_to_do_now"] = coaching.get("safe_next_step") or "Leg je plan er letterlijk naast en check eerst of je setup, risico en trigger nog echt geldig zijn."
             insight["what_not_to_do"] = coaching.get("do_not_do") or "Ga nu niet improviseren, opschalen of toch instappen voordat je plan opnieuw hard klopt."
-        elif variant == "direct_coach" and any(term in q for term in ["emotionele beslissing", "geen goed gevoel", "dit voelt niet goed", "ik twijfel", "ik durf niet", "ik ben bang"]):
+        elif variant == "direct_coach" and any(term in q for term in [
+            "emotionele beslissing", "geen goed gevoel", "dit voelt niet goed", "ik twijfel", "ik durf niet", "ik ben bang",
+            "gefrustreerd", "gemiste move", "ik baal", "ik wil het terugpakken", "ik moet nu iets doen", "ik wil nu handelen omdat",
+        ]):
             insight["what_i_notice"] = "Ik zie twijfel of emotionele druk die je oordeel nu vertroebelt."
             insight["why_this_is_risky"] = primary_flag.get("summary") or "Twijfel of emotionele druk leidt vaak tot half-commit, overrides of een trade die je later niet kunt verdedigen."
             insight["what_to_do_now"] = coaching.get("safe_next_step") or "Doe nu geen nieuwe trade. Check eerst je setup-criteria en beslis pas opnieuw als je plan nog steeds hard klopt."
             insight["what_not_to_do"] = coaching.get("do_not_do") or "Ga nu niet uit ongemak toch klikken, middelen of je regels verbuigen."
+        if variant == "direct_coach" and any(term in q for term in ["gefrustreerd", "gemiste move", "ik baal", "ik wil het terugpakken", "ik moet nu iets doen", "ik wil nu handelen omdat"]):
+            insight["what_i_notice"] = "Ik zie frustratie en actie-drang na een gemiste move."
+            insight["why_this_is_risky"] = primary_flag.get("summary") or "Frustratie na een gemiste move trekt je snel in een hersteltrade die niet uit je plan komt."
+            insight["what_to_do_now"] = coaching.get("safe_next_step") or "Open nu geen nieuwe trade. Laat de move los, check je setup-criteria opnieuw en wacht op een verse valide trigger."
+            insight["what_not_to_do"] = coaching.get("do_not_do") or "Ga nu niets terugpakken, jaag de markt niet na en vergroot je risico niet uit frustratie."
         insight["plan_anchor"] = "Volg eerst je planstatus en guardrails voordat je iets nieuws forceert." if variant in {"direct_coach", "plan_adherence_coach"} else None
         insight["behavioral_intelligence"] = {
             "variant": variant,

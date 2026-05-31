@@ -201,6 +201,14 @@
       "response_must_not_contain": ["ik kijk hier alleen naar je recente finn-gedrag"]
     },
     {
+      "id": "coach-frustration-action",
+      "query": "Ik wil nu handelen omdat ik gefrustreerd ben na een gemiste move.",
+      "expected_intents": ["behavioral_intelligence"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config", "general_help"],
+      "expected_mode": "read_only",
+      "require_analysis_variant": "direct_coach"
+    },
+    {
       "id": "mission-control-summary",
       "query": "Vat Mission Control samen in drie bullets",
       "context": {

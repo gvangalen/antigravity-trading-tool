@@ -173,6 +173,8 @@ def _legacy_response_needs_finn_rescue(
 ) -> bool:
     if action or draft:
         return False
+    if _query_prefers_non_transactional_finn_response(finn, query, context_payload):
+        return True
     if _legacy_response_is_generic_failure(response_text):
         return True
     if not _query_prefers_non_transactional_finn_response(finn, query, context_payload):

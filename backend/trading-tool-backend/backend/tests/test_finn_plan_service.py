@@ -656,6 +656,49 @@ def test_context_explain_reuses_recent_setup_entity_in_mixed_session():
     assert "geen zekere setup-entiteit" not in result["response"]
 
 
+def test_context_explain_prefers_latest_compatible_recent_entity_and_ignores_conflict():
+    service = _service()
+    context = {
+        "page": "/dashboard",
+        "page_type": "Dashboard",
+        "symbol": "ETH",
+        "finn_state": {
+            "current_flow": "general_help",
+            "recent_context_entities": [
+                {"entity_type": "strategy", "entity_id": 101, "asset": "BTC", "page_family": "strategy", "resolved_from": "page_context"},
+                {"entity_type": "strategy", "entity_id": 257, "asset": "ETH", "page_family": "strategy", "resolved_from": "page_context"},
+            ],
+            "analysis": {},
+        },
+    }
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welke strategie bekijk ik nu?", context))
+
+    assert result["analysis"]["entity"]["id"] == 257
+    assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "recent_read_only_state"
+
+
+def test_context_explain_does_not_reuse_conflicting_recent_entity():
+    service = _service()
+    context = {
+        "page": "/dashboard",
+        "page_type": "Dashboard",
+        "symbol": "ETH",
+        "finn_state": {
+            "current_flow": "general_help",
+            "recent_context_entities": [
+                {"entity_type": "strategy", "entity_id": 101, "asset": "BTC", "page_family": "strategy", "resolved_from": "page_context"},
+            ],
+            "analysis": {},
+        },
+    }
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welke strategie bekijk ik nu?", context))
+
+    assert result["analysis"]["context_confidence"]["level"] == "low"
+    assert "geen zekere strategie-entiteit" in result["response"]
+
+
 def test_build_product_refresh_help_response_stays_read_only_and_explains_stale_scores():
     service = _service()
 
@@ -767,6 +810,44 @@ def test_behavioral_variant_uses_direct_coach_for_soft_emotional_language():
 
     assert service._behavioral_variant_for_query("Ik heb er geen goed gevoel bij, wat nu?") == "direct_coach"
     assert service._behavioral_variant_for_query("Dit voelt niet goed, moet ik dit doen?") == "direct_coach"
+
+
+def test_behavioral_detection_catches_frustration_and_loss_chasing_language():
+    service = _service()
+
+    assert service.looks_like_behavioral_intelligence_request("Ik wil nu handelen omdat ik gefrustreerd ben na een gemiste move.") is True
+    assert service.looks_like_behavioral_intelligence_request("Ik wil het terugpakken, wat moet ik doen?") is True
+
+
+def test_behavioral_variant_uses_direct_coach_for_frustration_language():
+    service = _service()
+
+    assert service._behavioral_variant_for_query("Ik wil nu handelen omdat ik gefrustreerd ben na een gemiste move.") == "direct_coach"
+    assert service._behavioral_variant_for_query("Ik wil het terugpakken, wat moet ik doen?") == "direct_coach"
+
+
+def test_build_behavioral_intelligence_response_uses_direct_coach_for_frustration(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    service._get_recent_finn_activity = AsyncMock(return_value=[])
+    service._mission_day_log = lambda activity_feed: {"handled_count": 0, "skipped_count": 0, "snoozed_count": 0}
+    service._build_behavioral_insight_from_activity = lambda activity_feed, day_log: {
+        "status": "attention",
+        "trend": {"summary": "Ik zie frustratie na een gemiste move."},
+        "coaching": {
+            "primary_reflection": "Je wilt nu iets terugpakken.",
+            "safe_next_step": "Laat de gemiste move los en wacht op een nieuwe valide trigger.",
+            "do_not_do": "Open nu geen hersteltrade uit frustratie.",
+        },
+        "risk_flags": [{"id": "acute_emotion", "summary": "Frustratie na een gemiste move maakt revenge-achtige trades waarschijnlijker."}],
+    }
+
+    result = asyncio.run(service.build_behavioral_intelligence_response(30, "Ik wil nu handelen omdat ik gefrustreerd ben na een gemiste move."))
+
+    analysis = result["state"]["analysis"]
+    assert analysis["variant"] == "direct_coach"
+    assert analysis["behavioral_intelligence"]["variant"] == "direct_coach"
+    assert "frustratie" in analysis["what_i_notice"].lower()
+    assert result["response"].startswith("Stop even en vertraag direct.")
 
 
 def test_execute_issued_action_accepts_valid_refresh_fallback_action_without_pending_row():
