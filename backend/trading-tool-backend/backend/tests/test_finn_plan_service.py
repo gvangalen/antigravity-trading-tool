@@ -312,7 +312,8 @@ def test_context_confidence_prefers_strong_page_entity():
     assert confidence["level"] == "high"
     assert confidence["entity_type"] == "strategy"
     assert confidence["entity_id"] == 257
-    assert confidence["why"] == "strategy page with strategy_id"
+    assert confidence["reason"] == "page_entity_match"
+    assert confidence["why"] == "page context matched active strategy"
 
 
 def test_context_confidence_stays_low_without_entity():
@@ -326,6 +327,7 @@ def test_context_confidence_stays_low_without_entity():
     assert confidence["level"] == "low"
     assert confidence["entity_type"] == "unknown"
     assert confidence["entity_id"] is None
+    assert confidence["reason"] == "generic_fallback"
 
 
 def test_build_context_explain_response_returns_low_confidence_fallback_without_entity():
@@ -340,7 +342,7 @@ def test_build_context_explain_response_returns_low_confidence_fallback_without_
     assert result["intent"] == "context_explain"
     assert result["analysis"]["entity_type"] == "unknown"
     assert result["analysis"]["context_confidence"]["level"] == "low"
-    assert "niet genoeg zekere pagina-entiteit" in result["response"]
+    assert "nog geen zekere entiteit" in result["response"]
 
 
 def test_build_context_explain_response_can_explain_current_page():
@@ -394,11 +396,14 @@ def test_build_behavioral_intelligence_response_exposes_safe_coaching_contract(m
 
     assert result["intent"] == "behavioral_intelligence"
     analysis = result["state"]["analysis"]
+    assert analysis["variant"] == "direct_coach"
     assert analysis["risk_signal"] == "fomo_pressure"
     assert analysis["what_i_notice"] == "Ik zie druk om sneller te handelen dan je plan vraagt."
     assert analysis["why_this_is_risky"] == "Je zoekt versnelling zonder extra duidelijkheid."
     assert analysis["what_to_do_now"] == "Wacht tot je plan weer helder actief is."
     assert analysis["what_not_to_do"] == "Ga nu niet forceren of all-in."
+    assert analysis["behavioral_intelligence"]["variant"] == "direct_coach"
+    assert "Stop even met versnellen." in result["response"]
 
 
 def test_build_context_explain_response_prioritizes_score_explain_when_asset_context_is_present(monkeypatch):
@@ -434,6 +439,7 @@ def test_build_context_explain_response_prioritizes_score_explain_when_asset_con
     assert result["analysis"]["entity_type"] == "score"
     assert result["analysis"]["entity"]["asset"] == "BTC"
     assert result["analysis"]["entity"]["weakest_component"]["category"] == "market"
+    assert result["analysis"]["entity"]["top_support"]["category"] == "setup"
     assert result["analysis"]["context_confidence"]["level"] == "high"
     assert "Macro is 50.0" in result["response"]
 
@@ -461,6 +467,8 @@ def test_build_context_explain_response_can_summarize_report_entity(monkeypatch)
     assert result["intent"] == "context_explain"
     assert result["analysis"]["entity_type"] == "report"
     assert result["analysis"]["entity"]["table_name"] == "weekly_reports"
+    assert result["analysis"]["entity"]["report_type"] == "weekrapport"
+    assert result["analysis"]["entity"]["headline"] == "BTC bleef onder druk en vroeg vooral om geduld."
     assert result["analysis"]["context_confidence"]["level"] == "high"
     assert "weekrapport" in result["response"].lower()
     assert "BTC bleef onder druk" in result["response"]
@@ -485,6 +493,13 @@ def test_build_context_explain_response_enriches_bot_entity_from_repository(monk
         def __init__(self, session):
             self.repository = Repo()
 
+        async def get_bot_today(self, user_id, symbol=None, lean=False):
+            return {
+                "decisions": [
+                    {"id": 121110, "bot_id": 17, "status": "needs_review"},
+                ]
+            }
+
     monkeypatch.setattr("backend.services.finn_plan_service.BotService", FakeBotService)
     service = FinnPlanService(db_session=object())
 
@@ -497,9 +512,58 @@ def test_build_context_explain_response_enriches_bot_entity_from_repository(monk
     assert result["intent"] == "context_explain"
     assert result["analysis"]["entity_type"] == "bot"
     assert result["analysis"]["entity"]["id"] == 17
+    assert result["analysis"]["entity"]["what_this_bot_is"] == "Een paper/manual bot voor BTC"
+    assert result["analysis"]["entity"]["open_decisions"][0]["id"] == 121110
     assert result["analysis"]["context_confidence"]["level"] == "high"
     assert "BTC Review Bot" in result["response"]
     assert "Breakout long test" in result["response"]
+    assert "open bot-decision review" in result["response"]
+
+
+def test_entity_explain_detects_asset_and_bot_context_without_drifting_to_daily_coach():
+    service = _service()
+
+    assert service.looks_like_entity_explain_request(
+        "Met welke asset en bot werk ik nu?",
+        {"page": "/bot/17", "page_type": "Bot", "symbol": "BTC", "bot_id": 17},
+    ) is True
+
+
+def test_build_context_explain_response_can_answer_current_asset():
+    service = _service()
+
+    result = asyncio.run(service.build_context_explain_response(30, "Met welke asset werk ik nu?", {
+        "page": "/dashboard",
+        "page_type": "Dashboard",
+        "symbol": "BTC",
+    }))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "asset"
+    assert result["analysis"]["entity"]["asset"] == "BTC"
+    assert result["analysis"]["context_confidence"]["reason"] == "explicit_context_match"
+
+
+def test_build_daily_score_refresh_response_exposes_tool_intent_reason():
+    service = _service()
+
+    result = asyncio.run(service.build_daily_score_refresh_response(30, "Ververs mijn daily scores voor BTC"))
+
+    assert result["intent"] == "daily_score_refresh"
+    assert result["analysis"]["tool_intent_reason"] == "explicit_refresh_request"
+    assert result["state"]["analysis"]["tool_intent_reason"] == "explicit_refresh_request"
+
+
+def test_build_response_analysis_metadata_sets_route_family():
+    service = _service()
+
+    response = service._build_response_analysis_metadata(
+        {"flow": "context_explain", "analysis": {}, "state": {"current_flow": "context_explain"}},
+        {"page_type": "Setup", "setup_id": 62},
+    )
+
+    assert response["analysis"]["route_family"] == "explain"
+    assert response["state"]["analysis"]["route_family"] == "explain"
 
 
 def test_multi_turn_regression_pack_keeps_non_transactional_turns_out_of_create_flows(monkeypatch):

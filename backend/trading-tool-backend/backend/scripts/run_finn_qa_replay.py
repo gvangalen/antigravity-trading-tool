@@ -225,6 +225,7 @@ def summarize_results(
     latencies = [float(result.get("latency_ms") or 0.0) for result in results]
     mission_results = [result for result in results if result.get("intent") == "mission_control_explain"]
     mission_latencies = [float(result.get("latency_ms") or 0.0) for result in mission_results]
+    slowest_result = max(results, key=lambda result: float(result.get("latency_ms") or 0.0)) if results else None
     failures = [result for result in results if not result.get("passed")]
     generic_failures = [result for result in results if "generic_failure" in (result.get("failures") or [])]
     transactional_misroutes = [
@@ -257,6 +258,7 @@ def summarize_results(
         "avg_latency_ms": round(statistics.mean(latencies), 2) if latencies else 0.0,
         "p95_latency_ms": _percentile(latencies, 0.95),
         "max_latency_ms": round(max(latencies), 2) if latencies else 0.0,
+        "slowest_prompt_id": slowest_result.get("id") if slowest_result else None,
         "mission_control_max_latency_ms": round(max(mission_latencies), 2) if mission_latencies else 0.0,
         "release_gate": release_gate,
         "failures": failures,
@@ -275,6 +277,7 @@ def render_markdown_report(summary: Dict[str, Any], results: List[Dict[str, Any]
         f"- Avg latency: **{summary['avg_latency_ms']} ms**",
         f"- P95 latency: **{summary['p95_latency_ms']} ms**",
         f"- Max latency: **{summary['max_latency_ms']} ms**",
+        f"- Slowest prompt: **{summary.get('slowest_prompt_id') or 'n/a'}**",
         "",
         "## Release Gate",
         "",
