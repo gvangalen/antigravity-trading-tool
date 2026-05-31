@@ -1178,7 +1178,8 @@ class FinnPlanService:
         behavioral_terms = [
             "discipline", "gedrag", "behavior", "behaviour", "fomo", "revenge",
             "impulsief", "impulsieve", "emotie", "emotioneel", "overtrade",
-            "overtrading", "afwijk", "wijk ik af", "plan gevolgd", "trading gedrag",
+            "overtrading", "afwijk", "wijk af", "wijk ik af", "buiten mijn plan",
+            "buiten mijn strategie", "toch instappen", "plan gevolgd", "trading gedrag",
             "heb ik mijn plan", "weekreflectie", "reflectie", "patroon", "patronen",
             "all-in", "all in", "bang", "twijfel", "twijfelachtig", "panic", "paniek",
             "jagen", "forceren", "te groot", "te veel risico",
