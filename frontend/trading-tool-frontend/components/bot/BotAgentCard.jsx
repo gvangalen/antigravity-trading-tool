@@ -777,6 +777,7 @@ export default function BotAgentCard({
                 <div className="flex-1 p-6 lg:p-8">
                   <BotDecisionCard
                     bot={bot}
+                    portfolio={portfolio}
                     decision={normalizedDecision}
                     order={safeOrder}
                     loading={loadingDecision}

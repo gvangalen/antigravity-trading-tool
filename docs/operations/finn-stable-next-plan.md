@@ -82,6 +82,10 @@ Priority direction:
 - better framing of risk, doubt, and trade-offs
 - features that help traders make better daily decisions
 
+Execution reference:
+
+- [FINN Roadmap V3](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-roadmap-v3.md)
+
 ## Product Strategy Reminder
 
 At this stage, another month of broad QA optimization is likely less valuable than building the next layer of practical trader help.

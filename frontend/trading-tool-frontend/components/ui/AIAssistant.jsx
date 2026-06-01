@@ -539,6 +539,66 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     );
   };
 
+  const getMessageDecisionReview = (message) => {
+    const state = message?.state || {};
+    const analysis = state.analysis || message?.analysis || {};
+    const intent = message?.intent || state?.intent || null;
+    if (intent === "decision_review" || state?.current_flow === "decision_review" || analysis?.decision_status) {
+      return analysis;
+    }
+    return null;
+  };
+
+  const getMessagePlanAdherenceReview = (message) => {
+    const state = message?.state || {};
+    const analysis = state.analysis || message?.analysis || {};
+    const intent = message?.intent || state?.intent || null;
+    if (intent === "plan_adherence_review" || state?.current_flow === "plan_adherence_review" || analysis?.adherence_status) {
+      return analysis;
+    }
+    return null;
+  };
+
+  const getMessageOutcomeTracking = (message) => {
+    const state = message?.state || {};
+    const analysis = state.analysis || message?.analysis || {};
+    const intent = message?.intent || state?.intent || null;
+    if (intent === "outcome_tracking" || state?.current_flow === "outcome_tracking" || analysis?.behavior_pattern || analysis?.sample_size !== undefined) {
+      return analysis;
+    }
+    return null;
+  };
+
+  const getMessagePriorityEngine = (message) => {
+    const state = message?.state || {};
+    const analysis = state.analysis || message?.analysis || {};
+    const intent = message?.intent || state?.intent || null;
+    if (intent === "priority_engine" || state?.current_flow === "priority_engine" || analysis?.top_priorities) {
+      return analysis;
+    }
+    return null;
+  };
+
+  const getMessageMemoryV2 = (message) => {
+    const state = message?.state || {};
+    const analysis = state.analysis || message?.analysis || {};
+    const intent = message?.intent || state?.intent || null;
+    if (intent === "behavioral_memory" || state?.current_flow === "behavioral_memory" || analysis?.memory_pattern) {
+      return analysis?.memory_v2 || analysis;
+    }
+    return null;
+  };
+
+  const getMessagePortfolioOperatingSystem = (message) => {
+    const state = message?.state || {};
+    const analysis = state.analysis || message?.analysis || {};
+    const intent = message?.intent || state?.intent || null;
+    if (intent === "portfolio_operating_system" || state?.current_flow === "portfolio_operating_system" || analysis?.operating_posture) {
+      return analysis;
+    }
+    return null;
+  };
+
   const renderAgentController = (controller, compact = false) => {
     if (!controller?.dominant_agent) return null;
     const score = Number(controller.dominant_score || 0);
@@ -857,6 +917,228 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     );
   };
 
+  const renderMissionControlV3Surface = () => {
+    const priorityEngine = missionControl?.priority_engine;
+    const memoryV2 = missionControl?.memory_v2;
+    const portfolioOS = missionControl?.portfolio_operating_system;
+    const governanceSummary = missionControl?.governance_events_summary;
+
+    if (!priorityEngine && !memoryV2 && !portfolioOS && !governanceSummary) {
+      return null;
+    }
+
+    const phaseCards = [
+      {
+        key: "p1",
+        label: "Decision Review",
+        value: governanceSummary?.decision_review_count || 0,
+        tone: "text-blue-600 dark:text-blue-300",
+        status: (governanceSummary?.decision_review_count || 0) > 0 ? "active" : "quiet",
+        icon: <FileText size={11} className="text-blue-500" />,
+      },
+      {
+        key: "p2",
+        label: "Plan Adherence",
+        value: governanceSummary?.plan_adherence_count || 0,
+        tone: "text-rose-600 dark:text-rose-300",
+        status: (governanceSummary?.plan_adherence_count || 0) > 0 ? "active" : "quiet",
+        icon: <Shield size={11} className="text-rose-500" />,
+      },
+      {
+        key: "p3",
+        label: "Outcome Tracking",
+        value: governanceSummary?.outcome_tracking_count || 0,
+        tone: "text-emerald-600 dark:text-emerald-300",
+        status: (governanceSummary?.outcome_tracking_count || 0) > 0 ? "active" : "early",
+        icon: <BarChart3 size={11} className="text-emerald-500" />,
+      },
+      {
+        key: "p4",
+        label: "Portfolio Intelligence",
+        value: governanceSummary?.portfolio_intelligence_count || 0,
+        tone: "text-amber-700 dark:text-amber-300",
+        status: missionControl?.portfolio_risk?.status || "quiet",
+        icon: <Activity size={11} className="text-amber-500" />,
+      },
+      {
+        key: "p5",
+        label: "Priority Engine",
+        value: Array.isArray(priorityEngine?.top_priorities) ? priorityEngine.top_priorities.length : 0,
+        tone: "text-violet-600 dark:text-violet-300",
+        status: priorityEngine?.headline ? "active" : "quiet",
+        icon: <Target size={11} className="text-violet-500" />,
+      },
+      {
+        key: "p6",
+        label: "Memory V2",
+        value: memoryV2?.supporting_evidence_count || 0,
+        tone: "text-fuchsia-600 dark:text-fuchsia-300",
+        status: memoryV2?.confidence_level || "early",
+        icon: <Brain size={11} className="text-fuchsia-500" />,
+      },
+      {
+        key: "p7",
+        label: "Portfolio OS",
+        value: Array.isArray(portfolioOS?.next_best_actions) ? portfolioOS.next_best_actions.length : 0,
+        tone: "text-cyan-600 dark:text-cyan-300",
+        status: portfolioOS?.operating_posture || "quiet",
+        icon: <Bot size={11} className="text-cyan-500" />,
+      },
+    ];
+
+    return (
+      <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-3 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+              <Terminal size={11} className="text-cyan-500" />
+              FINN 3.0 Control Plane
+            </div>
+            <p className="mt-1 text-[11px] font-black text-slate-900 dark:text-slate-100 leading-snug">
+              {portfolioOS?.control_plane?.headline || priorityEngine?.headline || "De 3.0-lagen zijn actief in Mission Control."}
+            </p>
+          </div>
+          {portfolioOS?.operating_posture && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">
+              {portfolioOS.operating_posture}
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {phaseCards.map((card) => (
+            <div key={card.key} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1 text-[7px] font-black uppercase tracking-widest text-slate-400">
+                  {card.icon}
+                  <span className="truncate">{card.label}</span>
+                </span>
+                <span className={`text-[10px] font-black tabular-nums ${card.tone}`}>{card.value}</span>
+              </div>
+              <div className="mt-1 text-[7px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                {card.status}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {priorityEngine && (
+          <div className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/15 px-3 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+                <Target size={11} />
+                Priority Engine
+              </span>
+              <span className="text-[7px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+                {priorityEngine.open_counts?.high_priority_count || 0} high
+              </span>
+            </div>
+            {priorityEngine.why_now && (
+              <p className="mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
+                {priorityEngine.why_now}
+              </p>
+            )}
+            {Array.isArray(priorityEngine.top_priorities) && priorityEngine.top_priorities.length > 0 && (
+              <div className="mt-2 space-y-1.5">
+                {priorityEngine.top_priorities.slice(0, 3).map((item, index) => (
+                  <div key={`${item.id || item.title}-${index}`} className="rounded-lg bg-white/80 dark:bg-slate-950/40 px-2.5 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-black text-slate-900 dark:text-slate-100 leading-tight">{item.title}</span>
+                      <span className="text-[7px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+                        {item.lane || item.priority}
+                      </span>
+                    </div>
+                    {(item.why_now || item.source_reason) && (
+                      <p className="mt-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
+                        {item.why_now || item.source_reason}
+                      </p>
+                    )}
+                    {buildPriorityDrillIn(item) && (
+                      <button
+                        type="button"
+                        onClick={() => buildPriorityDrillIn(item)?.run()}
+                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-violet-200 dark:border-violet-900/50 bg-white/80 dark:bg-slate-950/50 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300"
+                      >
+                        <Target size={10} />
+                        {buildPriorityDrillIn(item)?.label}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {(memoryV2 || portfolioOS) && (
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            {memoryV2 && (
+              <div className="rounded-xl border border-fuchsia-100 dark:border-fuchsia-900/50 bg-fuchsia-50/50 dark:bg-fuchsia-950/15 px-3 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-fuchsia-700 dark:text-fuchsia-300">
+                    <Brain size={11} />
+                    Memory V2
+                  </span>
+                  <span className="text-[7px] font-black uppercase tracking-widest text-fuchsia-700 dark:text-fuchsia-300">
+                    {memoryV2.confidence_level || "early"}
+                  </span>
+                </div>
+                {memoryV2.memory_pattern && (
+                  <p className="mt-1 text-[10px] font-black text-slate-900 dark:text-slate-100 leading-snug">
+                    {memoryV2.memory_pattern}
+                  </p>
+                )}
+                {memoryV2.behavioral_cost && (
+                  <p className="mt-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
+                    {memoryV2.behavioral_cost}
+                  </p>
+                )}
+                {memoryV2.recommended_rule && (
+                  <div className="mt-2 rounded-lg bg-white/80 dark:bg-slate-950/40 px-2.5 py-2">
+                    <div className="text-[7px] font-black uppercase tracking-widest text-fuchsia-700 dark:text-fuchsia-300">
+                      Aanbevolen regel
+                    </div>
+                    <p className="mt-1 text-[9px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
+                      {memoryV2.recommended_rule}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {portfolioOS && (
+              <div className="rounded-xl border border-cyan-100 dark:border-cyan-900/50 bg-cyan-50/50 dark:bg-cyan-950/15 px-3 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">
+                    <Bot size={11} />
+                    Portfolio Operating System
+                  </span>
+                  <span className="text-[7px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">
+                    {portfolioOS.operating_posture}
+                  </span>
+                </div>
+                {portfolioOS.control_plane?.why_now && (
+                  <p className="mt-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
+                    {portfolioOS.control_plane.why_now}
+                  </p>
+                )}
+                {Array.isArray(portfolioOS.next_best_actions) && portfolioOS.next_best_actions.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {portfolioOS.next_best_actions.slice(0, 3).map((item, index) => (
+                      <div key={`${item}-${index}`} className="rounded-lg bg-white/80 dark:bg-slate-950/40 px-2.5 py-2 text-[9px] font-semibold text-slate-700 dark:text-slate-200">
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderExecutionReviewCard = (review, compact = false) => {
     if (!review?.title || !review?.summary) return null;
 
@@ -1017,6 +1299,280 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     );
   };
 
+  const renderDecisionReviewV3Card = (analysis) => {
+    if (!analysis?.decision_status) return null;
+    const tone = analysis.decision_status === "block"
+      ? "border-rose-100 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300"
+      : analysis.decision_status === "modify" || analysis.decision_status === "insufficient_context"
+        ? "border-amber-100 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300"
+        : "border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300";
+    const checks = Array.isArray(analysis.checks) ? analysis.checks.slice(0, 4) : [];
+    const blockers = Array.isArray(analysis.top_blockers) ? analysis.top_blockers.slice(0, 3) : [];
+    const changes = Array.isArray(analysis.recommended_changes) ? analysis.recommended_changes.slice(0, 3) : [];
+    return (
+      <div className={`mt-3 rounded-xl border px-3 py-3 ${tone}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+              <FileText size={11} />
+              Decision Review
+            </div>
+            <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
+              {analysis.headline || "Finn reviewt deze beslissing."}
+            </p>
+          </div>
+          <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
+            {analysis.decision_status}
+          </span>
+        </div>
+        {analysis.risk_summary && (
+          <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">
+            {analysis.risk_summary}
+          </p>
+        )}
+        {checks.length > 0 && (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {checks.map((check) => (
+              <div key={check.id || check.label} className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[8px] font-black uppercase tracking-widest">{check.label}</span>
+                  <span className="text-[7px] font-black uppercase tracking-widest opacity-70">{check.status}</span>
+                </div>
+                <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{check.detail}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        {blockers.length > 0 && (
+          <div className="mt-3">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Belangrijkste blockers</div>
+            <div className="mt-1 space-y-1">
+              {blockers.map((item, index) => (
+                <p key={`decision-blocker-${index}`} className="text-[10px] font-semibold leading-snug opacity-90">{item}</p>
+              ))}
+            </div>
+          </div>
+        )}
+        {changes.length > 0 && (
+          <div className="mt-3 rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Aanbevolen aanpassing</div>
+            <div className="mt-1 space-y-1">
+              {changes.map((item, index) => (
+                <p key={`decision-change-${index}`} className="text-[10px] font-semibold leading-snug opacity-90">{item}</p>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderPlanAdherenceCard = (analysis) => {
+    if (!analysis?.adherence_status) return null;
+    const tone = analysis.adherence_status === "in_plan"
+      ? "border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300"
+      : analysis.adherence_status === "insufficiently_justified"
+        ? "border-amber-100 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300"
+        : "border-rose-100 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300";
+    return (
+      <div className={`mt-3 rounded-xl border px-3 py-3 ${tone}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+              <Shield size={11} />
+              Plan Adherence
+            </div>
+            <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
+              {analysis.headline || "Finn checkt of dit binnen je plan valt."}
+            </p>
+          </div>
+          <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
+            {analysis.adherence_status}
+          </span>
+        </div>
+        {analysis.adherence_reason && (
+          <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">{analysis.adherence_reason}</p>
+        )}
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {analysis.threatened_rule && (
+            <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+              <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Bedreigde regel</div>
+              <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.threatened_rule}</p>
+            </div>
+          )}
+          {analysis.discipline_score !== undefined && analysis.discipline_score !== null && (
+            <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+              <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Discipline-score</div>
+              <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.discipline_score}/100</p>
+            </div>
+          )}
+          {analysis.week_delta && (
+            <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+              <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Week-op-week</div>
+              <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.week_delta}</p>
+            </div>
+          )}
+        </div>
+        {analysis.suggested_recovery_step && (
+          <div className="mt-3 rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Herstelstap</div>
+            <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.suggested_recovery_step}</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderOutcomeTrackingCard = (analysis) => {
+    if (!analysis?.historical_result_summary && analysis?.sample_size === undefined) return null;
+    return (
+      <div className="mt-3 rounded-xl border border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/60 dark:bg-emerald-950/20 px-3 py-3 text-emerald-700 dark:text-emerald-300">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+              <BarChart3 size={11} />
+              Outcome Tracking
+            </div>
+            <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
+              {analysis.headline || "Finn koppelt gedrag aan follow-through."}
+            </p>
+          </div>
+          {analysis.sample_size !== undefined && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
+              n={analysis.sample_size}
+            </span>
+          )}
+        </div>
+        {analysis.historical_result_summary && (
+          <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">{analysis.historical_result_summary}</p>
+        )}
+        {analysis.net_effect && (
+          <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">{analysis.net_effect}</p>
+        )}
+        {analysis.confidence_note && (
+          <p className="mt-2 text-[9px] font-black uppercase tracking-widest opacity-70">{analysis.confidence_note}</p>
+        )}
+        {analysis.operator_next_step && (
+          <div className="mt-3 rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Volgende stap</div>
+            <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.operator_next_step}</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderPriorityEngineCard = (analysis) => {
+    const priorities = Array.isArray(analysis?.top_priorities) ? analysis.top_priorities.slice(0, 3) : [];
+    if (!analysis?.headline && priorities.length === 0) return null;
+    return (
+      <div className="mt-3 rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-950/20 px-3 py-3 text-violet-700 dark:text-violet-300">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+              <Target size={11} />
+              Priority Engine
+            </div>
+            <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
+              {analysis.headline || "Finn rangschikt je volgende beste acties."}
+            </p>
+          </div>
+          {analysis.open_counts?.high_priority_count !== undefined && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
+              {analysis.open_counts.high_priority_count} high
+            </span>
+          )}
+        </div>
+        {analysis.why_now && (
+          <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">{analysis.why_now}</p>
+        )}
+        {priorities.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            {priorities.map((item, index) => (
+              <div key={`${item.id || item.title}-${index}`} className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-black leading-tight text-slate-900 dark:text-slate-100">{item.title}</span>
+                  <span className="text-[7px] font-black uppercase tracking-widest opacity-70">{item.lane || item.priority}</span>
+                </div>
+                {(item.why_now || item.source_reason) && (
+                  <p className="mt-1 text-[9px] font-semibold leading-snug opacity-90">{item.why_now || item.source_reason}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderMemoryV2Card = (analysis) => {
+    if (!analysis?.memory_pattern) return null;
+    return (
+      <div className="mt-3 rounded-xl border border-fuchsia-100 dark:border-fuchsia-900/50 bg-fuchsia-50/60 dark:bg-fuchsia-950/20 px-3 py-3 text-fuchsia-700 dark:text-fuchsia-300">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+              <Brain size={11} />
+              Memory V2
+            </div>
+            <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
+              {analysis.memory_pattern}
+            </p>
+          </div>
+          <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
+            {analysis.confidence_level || "early"}
+          </span>
+        </div>
+        {analysis.behavioral_cost && (
+          <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">{analysis.behavioral_cost}</p>
+        )}
+        {analysis.recommended_rule && (
+          <div className="mt-3 rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Aanbevolen regel</div>
+            <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.recommended_rule}</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderPortfolioOperatingSystemCard = (analysis) => {
+    const nextActions = Array.isArray(analysis?.next_best_actions) ? analysis.next_best_actions.slice(0, 3) : [];
+    if (!analysis?.operating_posture && nextActions.length === 0) return null;
+    return (
+      <div className="mt-3 rounded-xl border border-cyan-100 dark:border-cyan-900/50 bg-cyan-50/60 dark:bg-cyan-950/20 px-3 py-3 text-cyan-700 dark:text-cyan-300">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+              <Bot size={11} />
+              Portfolio Operating System
+            </div>
+            <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
+              {analysis.control_plane?.headline || "Finn combineert portfolio, governance en prioriteit."}
+            </p>
+          </div>
+          {analysis.operating_posture && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
+              {analysis.operating_posture}
+            </span>
+          )}
+        </div>
+        {analysis.control_plane?.why_now && (
+          <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">{analysis.control_plane.why_now}</p>
+        )}
+        {nextActions.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            {nextActions.map((item, index) => (
+              <div key={`${item}-${index}`} className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2 text-[10px] font-semibold leading-snug opacity-90">
+                {item}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const missionWorkqueueSections = () => {
     if (Array.isArray(missionControl?.workqueue_groups) && missionControl.workqueue_groups.length > 0) {
       return missionControl.workqueue_groups.map((group) => ({
@@ -1075,6 +1631,55 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
     if (action.type) {
       await handleExecuteAction(action);
     }
+  };
+
+  const buildPriorityDrillIn = (item) => {
+    if (!item) return null;
+    const asset = item.asset || null;
+    const type = String(item.type || "").toLowerCase();
+    const title = String(item.title || "").toLowerCase();
+    const action = item.action || null;
+
+    if (action?.handoff === "bot_execution_console" || type.includes("bot") || title.includes("bot")) {
+      return {
+        label: asset ? `Open ${asset} bot flow` : "Open bot flow",
+        run: () => openExecutionConsole({ ...action, asset }),
+      };
+    }
+    if (type.includes("setup") || title.includes("setup")) {
+      return {
+        label: asset ? `Open ${asset} setup` : "Open setup",
+        run: () => {
+          router.push(asset ? `/setup?symbol=${asset}` : "/setup");
+          setIsOpen(false);
+        },
+      };
+    }
+    if (type.includes("strategy") || title.includes("strategie") || title.includes("strategy") || type.includes("blocked_plan")) {
+      return {
+        label: asset ? `Open ${asset} strategy` : "Open strategy",
+        run: () => {
+          router.push(asset ? `/strategy?symbol=${asset}` : "/strategy");
+          setIsOpen(false);
+        },
+      };
+    }
+    if (type.includes("portfolio") || title.includes("portfolio") || title.includes("risico")) {
+      return {
+        label: asset ? `Open ${asset} bot desk` : "Open portfolio desk",
+        run: () => {
+          router.push(asset ? `/bot?symbol=${asset}` : "/bot");
+          setIsOpen(false);
+        },
+      };
+    }
+    if (action?.prompt) {
+      return {
+        label: action.label || "Open in chat",
+        run: () => handleFollowUpAction(action),
+      };
+    }
+    return null;
   };
 
   const renderCoachingLoopEntry = (item, tone = "slate") => {
@@ -1351,6 +1956,26 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 res.habit_cards ||
                 res.analysis?.habit_cards ||
                 res.state?.analysis?.habit_cards ||
+                null,
+              priority_engine:
+                res.priority_engine ||
+                res.analysis?.priority_engine ||
+                res.state?.analysis?.priority_engine ||
+                null,
+              memory_v2:
+                res.memory_v2 ||
+                res.analysis?.memory_v2 ||
+                res.state?.analysis?.memory_v2 ||
+                null,
+              portfolio_operating_system:
+                res.portfolio_operating_system ||
+                res.analysis?.portfolio_operating_system ||
+                res.state?.analysis?.portfolio_operating_system ||
+                null,
+              governance_events_summary:
+                res.governance_events_summary ||
+                res.analysis?.governance_events_summary ||
+                res.state?.analysis?.governance_events_summary ||
                 null,
             }
           : null;
@@ -2620,6 +3245,8 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
               </div>
             )}
 
+            {renderMissionControlV3Surface()}
+
             {Array.isArray(missionControl.agent_verdicts) && missionControl.agent_verdicts.length > 0 && (
               <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/65 dark:bg-slate-900/40 p-3">
                 <div className="flex items-center justify-between gap-2 mb-2">
@@ -2982,6 +3609,12 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
                 }`}>
                 <p className="text-sm leading-relaxed">{m.text}</p>
                 {m.role === "assistant" && m.isComplete !== false && renderAgentController(getMessageAgentController(m))}
+                {m.role === "assistant" && m.isComplete !== false && renderDecisionReviewV3Card(getMessageDecisionReview(m))}
+                {m.role === "assistant" && m.isComplete !== false && renderPlanAdherenceCard(getMessagePlanAdherenceReview(m))}
+                {m.role === "assistant" && m.isComplete !== false && renderOutcomeTrackingCard(getMessageOutcomeTracking(m))}
+                {m.role === "assistant" && m.isComplete !== false && renderPriorityEngineCard(getMessagePriorityEngine(m))}
+                {m.role === "assistant" && m.isComplete !== false && renderMemoryV2Card(getMessageMemoryV2(m))}
+                {m.role === "assistant" && m.isComplete !== false && renderPortfolioOperatingSystemCard(getMessagePortfolioOperatingSystem(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderBehavioralIntelligenceCard(getMessageBehavioralAnalysis(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderPortfolioRisk(getMessagePortfolioRisk(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderExecutionReviewCard(getMessageExecutionReview(m))}

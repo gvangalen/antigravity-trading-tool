@@ -59,6 +59,20 @@ async def _route_turn(service, user_id, query, context=None):
             "response": "education",
             "state": {"current_flow": "education"},
         }
+    elif service.looks_like_plan_adherence_review_request(query):
+        response = {
+            "intent": "plan_adherence_review",
+            "flow": "plan_adherence_review",
+            "response": "adherence",
+            "state": {"current_flow": "plan_adherence_review"},
+        }
+    elif service.looks_like_decision_review_request(query, sanitized):
+        response = {
+            "intent": "decision_review",
+            "flow": "decision_review",
+            "response": "review",
+            "state": {"current_flow": "decision_review"},
+        }
     elif service.looks_like_entity_explain_request(query, sanitized):
         response = {
             "intent": "context_explain",
@@ -1596,8 +1610,12 @@ def test_finn_report_response_exposes_top_level_state_contract(monkeypatch):
     async def activity(user_id, limit=200):
         return []
 
+    async def governance_events(user_id, event_types=None, limit=80):
+        return []
+
     service = _service()
     monkeypatch.setattr(service, "_get_recent_finn_activity", activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", governance_events)
 
     result = asyncio.run(service.build_finn_report_response(1, "Geef mijn Finn rapport van vandaag"))
 
@@ -1607,6 +1625,10 @@ def test_finn_report_response_exposes_top_level_state_contract(monkeypatch):
     assert result["state"]["separate_from"] == "daily_trading_report"
     assert result["state"]["source"]["primary"] == "ai_pending_actions"
     assert result["state"]["source"] == result["state"]["analysis"]["source"]
+    assert "priority_engine" in result["state"]
+    assert "memory_v2" in result["state"]
+    assert "portfolio_operating_system" in result["state"]
+    assert result["analysis"]["governance_events_summary"]["decision_review_count"] == 0
 
 
 def test_mission_control_exposes_richer_behavioral_surface(monkeypatch):
@@ -4154,6 +4176,7 @@ def test_build_mission_control_explain_response_uses_daily_preview_fast_path(mon
 def test_build_mission_control_explain_response_prefers_operator_priority_over_refresh(monkeypatch):
     service = FinnPlanService(db_session=object())
     monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[]))
     monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
         "workqueue": [
             {
@@ -4186,6 +4209,70 @@ def test_build_mission_control_explain_response_prefers_operator_priority_over_r
     summary = result["analysis"]["mission_control_summary"]
     assert summary["top_3"][0]["title"] == "BTC live bots vragen review"
     assert not summary["headline"].startswith("Belangrijkste focus nu: Daily scores verversen")
+
+
+def test_build_mission_control_response_exposes_v3_surfaces(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={
+        "state": {
+            "analysis": {
+                "portfolio_risk": {
+                    "status": "high_attention",
+                    "message": "BTC exposure en live bots vragen aandacht.",
+                    "top_asset": "BTC",
+                    "top_reason": "BTC exposure is te dominant.",
+                    "ignore_today_assets": [{"asset": "ETH", "reason": "setup blokkeert"}],
+                    "live_bot_hotspots": [{"asset": "BTC"}],
+                },
+                "agent_verdicts": [],
+                "data_readiness": {},
+            }
+        }
+    }))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "summary": {"open_action_count": 3, "blocked_count": 1, "workqueue_count": 1},
+        "plan_health": [{"asset": "BTC", "status": "blocked"}],
+        "portfolio_risk": analysis.get("portfolio_risk") or {},
+        "open_actions": [],
+        "bot_review_queue": [],
+        "workqueue": [
+            {
+                "id": "review",
+                "title": "BTC live bots vragen review",
+                "type": "portfolio_live_hotspot",
+                "priority": "high",
+                "priority_rank": 6,
+                "reason": "Er staat live reviewdruk op BTC bots",
+                "asset": "BTC",
+            }
+        ],
+        "workqueue_groups": [],
+        "workqueue_labels": {},
+        "agent_verdicts": [],
+    })
+    monkeypatch.setattr(service, "_get_recent_finn_activity", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_get_today_resolved_mission_item_ids", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[
+        {
+            "type": "finn_decision_review",
+            "symbol": "BTC",
+            "description": "Mijn review blokkeert dit nu.",
+            "payload": {"asset": "BTC", "decision_status": "block", "top_blockers": ["BTC exposure te hoog."]},
+        },
+        {
+            "type": "finn_plan_adherence_review",
+            "symbol": "BTC",
+            "description": "Je probeert een plan- of strategiegrens te overrulen.",
+            "payload": {"asset": "BTC", "adherence_status": "forced_override", "threatened_rule": "Planoverride"},
+        },
+    ]))
+
+    result = asyncio.run(service.build_mission_control_response(1, {"page": "assistant", "scope": "mission_control"}))
+
+    assert result["priority_engine"]["headline"]
+    assert result["memory_v2"]["memory_pattern"]
+    assert result["portfolio_operating_system"]["control_plane"]["headline"]
+    assert result["governance_events_summary"]["decision_review_count"] == 1
 
 
 def test_build_portfolio_daily_coach_response_preview_only_skips_strategy_bot_and_indicator_reads(monkeypatch):
@@ -4810,6 +4897,403 @@ def test_behavioral_memory_request_detection_is_separate_from_weekly_reflection(
     assert service.looks_like_behavioral_memory_request("Geef mijn daily brief") is False
 
 
+def test_decision_review_request_detection_is_read_only():
+    service = _service()
+
+    assert service.looks_like_decision_review_request("Beoordeel deze trade", {"symbol": "BTC"}) is True
+    assert service.looks_like_decision_review_request("Past dit bij mijn strategie?", {"strategy_id": 257, "symbol": "ETH"}) is True
+    assert service.looks_like_decision_review_request("Maak een bot voor BTC", {"symbol": "BTC"}) is False
+
+
+def test_plan_adherence_review_request_detection_is_separate():
+    service = _service()
+
+    assert service.looks_like_plan_adherence_review_request("Wijk ik af van mijn plan?") is True
+    assert service.looks_like_plan_adherence_review_request("Handel ik buiten mijn strategie?") is True
+    assert service.looks_like_plan_adherence_review_request("Beoordeel deze trade") is False
+
+
+def test_outcome_tracking_request_detection_is_read_only():
+    service = _service()
+
+    assert service.looks_like_outcome_tracking_request("Hoe pakte dat uit?") is True
+    assert service.looks_like_outcome_tracking_request("Wat leert Finn van mijn uitkomsten?") is True
+    assert service.looks_like_outcome_tracking_request("Maak een nieuwe strategie") is False
+
+
+def test_portfolio_intelligence_request_detection_is_read_only():
+    service = _service()
+
+    assert service.looks_like_portfolio_intelligence_request("Heb ik te veel exposure?", {"symbol": "BTC"}) is True
+    assert service.looks_like_portfolio_intelligence_request("Wat is mijn grootste portfolio risico?", {"page": "/dashboard"}) is True
+    assert service.looks_like_portfolio_intelligence_request("Maak een BTC setup", {"symbol": "BTC"}) is False
+
+
+def test_priority_engine_request_detection_is_read_only():
+    service = _service()
+
+    assert service.looks_like_priority_engine_request("Wat is vandaag mijn hoogste prioriteit?", {"scope": "mission_control"}) is True
+    assert service.looks_like_priority_engine_request("Wat moet ik nu eerst doen in Mission Control?", {"page": "mission_control"}) is True
+    assert service.looks_like_priority_engine_request("Maak een BTC setup", {"page": "/dashboard"}) is False
+
+
+def test_portfolio_operating_system_request_detection_is_read_only():
+    service = _service()
+
+    assert service.looks_like_portfolio_operating_system_request("Geef mijn portfolio operating system") is True
+    assert service.looks_like_portfolio_operating_system_request("Hoe staat mijn portfolio control plane ervoor?") is True
+    assert service.looks_like_portfolio_operating_system_request("Maak een nieuwe strategie") is False
+
+
+def test_build_decision_review_response_can_approve_contextual_trade():
+    service = _service()
+
+    result = asyncio.run(service.build_decision_review_response(30, "Beoordeel deze trade", {
+        "page": "/setup",
+        "page_type": "setup",
+        "symbol": "BTC",
+        "setup_id": 62,
+        "strategy_id": 257,
+        "portfolio_intelligence": {
+            "global": {
+                "allocations_pct": {"BTC": 24.0, "Cash": 76.0},
+            }
+        },
+    }))
+
+    assert result["intent"] == "decision_review"
+    assert result["flow"] == "decision_review"
+    assert result["analysis"]["decision_status"] == "approve"
+    assert result["analysis"]["review_type"] == "trade_intent_review"
+    assert result["analysis"]["snapshot"]["asset"] == "BTC"
+
+
+def test_build_decision_review_response_blocks_extreme_risk_and_exposure():
+    service = _service()
+
+    result = asyncio.run(service.build_decision_review_response(30, "Kan ik deze trade openen met 8% risico?", {
+        "page": "/dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC",
+        "strategy_id": 257,
+        "portfolio_intelligence": {
+            "global": {
+                "allocations_pct": {"BTC": 72.0, "Cash": 28.0},
+            }
+        },
+    }))
+
+    assert result["analysis"]["decision_status"] == "block"
+    assert any("72.0%" in item or "8.0%" in item for item in result["analysis"]["top_blockers"])
+
+
+def test_build_decision_review_response_returns_insufficient_context_when_too_thin():
+    service = _service()
+
+    result = asyncio.run(service.build_decision_review_response(30, "Beoordeel deze trade", {}))
+
+    assert result["analysis"]["decision_status"] == "insufficient_context"
+    assert result["missing_fields"] == ["context"]
+
+
+def test_build_plan_adherence_review_response_marks_forced_override():
+    service = _service()
+
+    result = asyncio.run(service.build_plan_adherence_review_response(30, "Ik wil toch buiten mijn plan handelen", {
+        "page": "/strategy",
+        "page_type": "strategy",
+        "symbol": "ETH",
+        "strategy_id": 257,
+    }))
+
+    assert result["intent"] == "plan_adherence_review"
+    assert result["analysis"]["adherence_status"] == "forced_override"
+    assert result["analysis"]["override_detected"] is True
+    assert "overrulen" in (result["analysis"]["threatened_rule"] or "").lower()
+
+
+def test_build_plan_adherence_review_response_can_stay_in_plan():
+    service = _service()
+
+    result = asyncio.run(service.build_plan_adherence_review_response(30, "Past dit nog bij mijn plan?", {
+        "page": "/setup",
+        "page_type": "setup",
+        "symbol": "BTC",
+        "setup_id": 62,
+        "strategy_id": 257,
+        "portfolio_intelligence": {
+            "global": {
+                "allocations_pct": {"BTC": 18.0, "Cash": 82.0},
+            }
+        },
+    }))
+
+    assert result["analysis"]["adherence_status"] == "in_plan"
+
+
+def test_outcome_tracking_message_stays_low_confidence_without_samples():
+    service = _service()
+
+    result = asyncio.run(service.build_outcome_tracking_response(30, "Wat leert Finn van mijn uitkomsten?", {}))
+
+    assert result["intent"] == "outcome_tracking"
+    assert result["analysis"]["sample_size"] == 0
+    assert "te weinig" in result["analysis"]["historical_result_summary"].lower()
+
+
+def test_outcome_tracking_response_summarizes_follow_through(monkeypatch):
+    service = _service()
+
+    async def _fake_events(user_id, *, event_types, limit=40):
+        return [
+            {
+                "type": "finn_plan_adherence_review",
+                "symbol": "BTC",
+                "created_at": (_utc_now() - timedelta(days=2)).isoformat(),
+                "payload": {
+                    "adherence_status": "forced_override",
+                    "subject": {"type": "strategy", "id": 257},
+                    "asset": "BTC",
+                },
+            },
+            {
+                "type": "finn_plan_adherence_review",
+                "symbol": "BTC",
+                "created_at": (_utc_now() - timedelta(days=1)).isoformat(),
+                "payload": {
+                    "adherence_status": "outside_plan",
+                    "subject": {"type": "strategy", "id": 257},
+                    "asset": "BTC",
+                },
+            },
+        ]
+
+    async def _fake_activity(user_id, limit=200):
+        return [
+            {
+                "type": "skip_bot_decision",
+                "asset": "BTC",
+                "created_at": (_utc_now() - timedelta(days=1, hours=12)).isoformat(),
+                "resolve_state": "skipped",
+                "entity_ids": {"strategy_id": 257},
+            },
+            {
+                "type": "paper_execute_bot_decision",
+                "asset": "BTC",
+                "created_at": (_utc_now() - timedelta(hours=18)).isoformat(),
+                "resolve_state": "executed",
+                "entity_ids": {"strategy_id": 257},
+            },
+        ]
+
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", _fake_events)
+    monkeypatch.setattr(service, "_get_recent_finn_activity", _fake_activity)
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_outcome_tracking_response(30, "Hoe eindigen mijn planafwijkingen?", {"symbol": "BTC"}))
+
+    assert result["analysis"]["sample_size"] == 2
+    assert "2 relevante momenten" in result["analysis"]["historical_result_summary"]
+    assert result["analysis"]["behavior_pattern"] == "plan_adherence_outcomes"
+
+
+def test_build_portfolio_intelligence_response_exposes_contract(monkeypatch):
+    service = _service()
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={
+        "state": {
+            "analysis": {
+                "portfolio_risk": {
+                    "status": "high_attention",
+                    "message": "Er zijn portfolio-risico's die vandaag aandacht vragen.",
+                    "asset_risk": [
+                        {
+                            "asset": "BTC",
+                            "risk_level": "high",
+                            "risk_score": 84,
+                            "allocation_pct": 72.0,
+                            "next_best_action": "Voeg geen extra BTC exposure toe.",
+                        }
+                    ],
+                    "concentration_warnings": [
+                        {"reason": "BTC draagt 72.0% van de portfolio equity."}
+                    ],
+                    "risk_stacks": [
+                        {"asset": "BTC", "reason": "BTC stapelt risico: hoge exposure, meerdere bots."}
+                    ],
+                    "ranked_conflicts": [
+                        {"asset": "BTC", "reason": "BTC heeft meerdere live bots tegelijk."}
+                    ],
+                    "asset_priority": [
+                        {"asset": "BTC", "risk_score": 84, "reason": "high_exposure"}
+                    ],
+                }
+            }
+        }
+    }))
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_portfolio_intelligence_response(30, "Heb ik te veel exposure?", {"symbol": "BTC"}))
+
+    assert result["intent"] == "portfolio_intelligence"
+    assert result["analysis"]["portfolio_impact"]["focus_asset"] == "BTC"
+    assert "72.0%" in (result["analysis"]["exposure_delta"] or "")
+    assert result["analysis"]["portfolio_blockers"][0] == "BTC heeft meerdere live bots tegelijk."
+
+
+def test_decision_review_includes_portfolio_intelligence_contract():
+    service = _service()
+
+    result = asyncio.run(service.build_decision_review_response(30, "Kan ik deze trade openen met 3% risico?", {
+        "page": "/dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC",
+        "strategy_id": 257,
+        "portfolio_intelligence": {
+            "global": {
+                "allocations_pct": {"BTC": 55.0, "Cash": 45.0},
+            }
+        },
+    }))
+
+    assert result["analysis"]["portfolio_impact"]["focus_asset"] == "BTC"
+    assert result["analysis"]["portfolio_safe_alternative"]
+
+
+def test_build_priority_engine_response_prefers_governance_weighted_risk_over_refresh(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "workqueue": [
+            {
+                "id": "refresh",
+                "title": "Daily scores verversen",
+                "type": "score_refresh",
+                "priority": "high",
+                "priority_rank": 10,
+                "reason": "Data loopt achter",
+            },
+            {
+                "id": "btc-risk",
+                "title": "BTC exposure terugbrengen",
+                "type": "portfolio_risk_stack",
+                "priority": "medium",
+                "priority_rank": 18,
+                "reason": "BTC risico stapelt",
+                "asset": "BTC",
+            },
+        ],
+        "summary": {"workqueue_count": 2, "open_action_count": 1},
+    })
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[
+        {
+            "type": "finn_plan_adherence_review",
+            "symbol": "BTC",
+            "description": "Je probeert een plan- of strategiegrens te overrulen.",
+            "payload": {
+                "asset": "BTC",
+                "adherence_status": "forced_override",
+                "threatened_rule": "Je probeert een plan- of strategiegrens te overrulen.",
+            },
+        }
+    ]))
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_priority_engine_response(1, "Wat is vandaag mijn hoogste prioriteit?", {"page": "mission_control"}))
+
+    assert result["intent"] == "priority_engine"
+    assert result["analysis"]["top_priorities"][0]["title"] == "BTC exposure terugbrengen"
+    assert "overrulen" in str(result["analysis"]["why_now"]).lower()
+
+
+def test_build_mission_control_explain_response_exposes_priority_engine_contract(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "workqueue": [
+            {
+                "id": "review",
+                "title": "BTC live bots vragen review",
+                "type": "portfolio_live_hotspot",
+                "priority": "high",
+                "priority_rank": 6,
+                "reason": "Er staat live reviewdruk op BTC bots",
+                "asset": "BTC",
+            },
+            {
+                "id": "refresh",
+                "title": "Daily scores verversen",
+                "type": "score_refresh",
+                "priority": "high",
+                "priority_rank": 10,
+                "reason": "Data loopt achter",
+            },
+        ],
+        "summary": {"workqueue_count": 2, "open_action_count": 1},
+    })
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[]))
+
+    result = asyncio.run(service.build_mission_control_explain_response(1, "Wat zegt Mission Control?", {"page": "dashboard"}))
+
+    assert result["analysis"]["priority_engine"]["top_priorities"][0]["title"] == "BTC live bots vragen review"
+    assert result["analysis"]["mission_control_summary"]["top_3"][0]["title"] == "BTC live bots vragen review"
+
+
+def test_build_portfolio_operating_system_response_exposes_control_plane(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={
+        "state": {
+            "analysis": {
+                "portfolio_risk": {
+                    "status": "high_attention",
+                    "message": "BTC exposure en live bots vragen aandacht.",
+                    "top_asset": "BTC",
+                    "top_reason": "BTC exposure is te dominant.",
+                    "ignore_today_assets": [{"asset": "ETH", "reason": "setup blokkeert"}],
+                    "live_bot_hotspots": [{"asset": "BTC"}],
+                }
+            }
+        }
+    }))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "summary": {"open_action_count": 3, "blocked_count": 1},
+        "plan_health": [{"asset": "BTC", "status": "blocked"}],
+        "portfolio_risk": analysis.get("portfolio_risk") or {},
+        "workqueue": [
+            {
+                "id": "review",
+                "title": "BTC live bots vragen review",
+                "type": "portfolio_live_hotspot",
+                "priority": "high",
+                "priority_rank": 6,
+                "reason": "Er staat live reviewdruk op BTC bots",
+                "asset": "BTC",
+            }
+        ],
+    })
+    monkeypatch.setattr(service, "_get_recent_finn_activity", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[
+        {
+            "type": "finn_plan_adherence_review",
+            "symbol": "BTC",
+            "description": "Je probeert een plan- of strategiegrens te overrulen.",
+            "payload": {
+                "asset": "BTC",
+                "adherence_status": "forced_override",
+                "threatened_rule": "Je probeert een plan- of strategiegrens te overrulen.",
+            },
+        }
+    ]))
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_portfolio_operating_system_response(1, "Geef mijn portfolio operating system", {"page": "mission_control"}))
+
+    assert result["intent"] == "portfolio_operating_system"
+    assert result["analysis"]["operating_posture"] in {"risk_first", "review_first"}
+    assert result["analysis"]["control_plane"]["headline"]
+    assert result["analysis"]["subsystems"]["priority_engine"]["status"] == "active"
+    assert result["analysis"]["portfolio_layer"]["top_asset"] == "BTC"
+
+
 def test_behavioral_insight_waits_for_evidence_when_empty():
     service = _service()
 
@@ -5022,6 +5506,118 @@ def test_behavioral_memory_report_uses_30_day_evidence_without_new_writes():
     assert isinstance(memory["habit_cards"], list)
     assert "Wat Finn voorzichtig mag onthouden" in message
     assert "Wat Finn nog niet mag concluderen" in message
+
+
+def test_build_memory_v2_summary_extracts_plan_break_pattern():
+    service = _service()
+    activity = [
+        {
+            "type": "skip_bot_decision",
+            "resolve_state": "skipped",
+            "created_at": (_utc_now() - timedelta(days=5)).isoformat(),
+        }
+    ]
+    governance_events = [
+        {
+            "type": "finn_plan_adherence_review",
+            "symbol": "BTC",
+            "description": "Je probeert een plan- of strategiegrens te overrulen.",
+            "payload": {
+                "asset": "BTC",
+                "adherence_status": "forced_override",
+                "threatened_rule": "Je probeert een plan- of strategiegrens te overrulen.",
+            },
+        },
+        {
+            "type": "finn_plan_adherence_review",
+            "symbol": "ETH",
+            "description": "Deze beslissing botst nu met je plan, risico of portfolio-kaders.",
+            "payload": {
+                "asset": "ETH",
+                "adherence_status": "outside_plan",
+                "threatened_rule": "Risico en sizing",
+            },
+        },
+    ]
+
+    memory_v2 = service._build_memory_v2_summary(activity, governance_events)
+
+    assert memory_v2["memory_pattern"] == "plan_break_pattern"
+    assert memory_v2["confidence_level"] in {"medium", "high"}
+    assert memory_v2["supporting_evidence_count"] >= 2
+    assert "override" in memory_v2["recommended_rule"].lower() or "override" in memory_v2["behavioral_cost"].lower()
+
+
+def test_build_behavioral_memory_response_includes_memory_v2_contract(monkeypatch):
+    service = _service()
+    now = _utc_now()
+    activity = [
+        service._mission_activity_item({
+            "id": "finn-memory-bot-update",
+            "status": "executed",
+            "created_at": now - timedelta(days=3),
+            "payload": {
+                "action": {"type": "bot_config_update"},
+                "result": {
+                    "ok": True,
+                    "behavioral_event": {
+                        "type": "plan_deviation_attempt",
+                        "severity": "medium",
+                        "reasons": ["budget verhoogd"],
+                    },
+                },
+            },
+        }),
+        service._mission_activity_item({
+            "id": "finn-memory-skip",
+            "status": "executed",
+            "created_at": now - timedelta(days=2),
+            "payload": {
+                "action": {"type": "skip_bot_decision"},
+                "result": {"ok": True, "status": "skipped"},
+            },
+        }),
+    ]
+
+    async def _fake_activity(user_id, limit=180):
+        return activity
+
+    async def _fake_events(user_id, *, event_types, limit=80):
+        return [
+            {
+                "type": "finn_plan_adherence_review",
+                "symbol": "BTC",
+                "description": "Je probeert een plan- of strategiegrens te overrulen.",
+                "payload": {
+                    "asset": "BTC",
+                    "query": "Ik wil toch buiten mijn plan handelen",
+                    "adherence_status": "forced_override",
+                    "threatened_rule": "Je probeert een plan- of strategiegrens te overrulen.",
+                },
+            },
+            {
+                "type": "finn_outcome_tracking_summary",
+                "symbol": "BTC",
+                "description": "Het patroon eindigt vaker in remmen of niet-doen dan in overtuigende uitvoering.",
+                "payload": {
+                    "sample_size": 4,
+                    "net_effect": "Het patroon eindigt vaker in remmen of niet-doen dan in overtuigende uitvoering.",
+                },
+            },
+        ]
+
+    monkeypatch.setattr(service, "_get_recent_finn_activity", _fake_activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", _fake_events)
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_behavioral_memory_response(30, "Wat onthoudt Finn van mijn trading discipline?", {}))
+
+    assert result["intent"] == "behavioral_memory"
+    assert result["analysis"]["memory_pattern"] in {"plan_break_pattern", "recovery_pattern"}
+    assert result["analysis"]["time_window"] == "last_90_days"
+    assert result["analysis"]["recommended_rule"]
+    assert result["analysis"]["confidence_level"] in {"medium", "high"}
+    assert "Memory V2 patroon" in result["response"]
 
 
 def test_behavioral_memory_friction_slows_repeated_bot_decisions():

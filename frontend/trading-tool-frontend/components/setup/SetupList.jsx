@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useModal } from "@/components/modal/ModalProvider";
+import { assistantChat } from "@/lib/api/ai";
 
 import { generateExplanation } from "@/lib/api/setups";
 import AILoader from "@/components/ui/AILoader";
@@ -57,6 +58,8 @@ export default function SetupList({
   const [localSetups, setLocalSetups] = useState(setups);
   const [aiLoading, setAiLoading] = useState({});
   const [justUpdated, setJustUpdated] = useState({});
+  const [finnPanels, setFinnPanels] = useState({});
+  const [finnLoading, setFinnLoading] = useState({});
   
   const { macro, technical, market, loading: scoresLoading } = useScoresData();
   const [strategies, setStrategies] = useState([]);
@@ -120,6 +123,36 @@ export default function SetupList({
       showSnackbar("AI generatie mislukt", "danger");
     } finally {
       setAiLoading((p) => ({ ...p, [id]: false }));
+    }
+  }
+
+  async function handleFinnReview(setup) {
+    try {
+      setFinnLoading((p) => ({ ...p, [setup.id]: true }));
+      const lineage = getLineage(setup.id);
+      const context = {
+        page: "/setup",
+        page_type: "Setups",
+        symbol: setup.symbol,
+        setup_id: setup.id,
+        strategy_id: lineage.strategy?.id || null,
+      };
+      const [review, adherence] = await Promise.all([
+        assistantChat(`Beoordeel deze setup voor ${setup.symbol}.`, context, []),
+        assistantChat(`Past deze setup nog bij mijn plan voor ${setup.symbol}?`, context, []),
+      ]);
+      setFinnPanels((p) => ({
+        ...p,
+        [setup.id]: {
+          review: review?.analysis || review?.state?.analysis || null,
+          adherence: adherence?.analysis || adherence?.state?.analysis || null,
+        },
+      }));
+    } catch (e) {
+      console.error(e);
+      showSnackbar("FINN 3.0 review mislukt", "danger");
+    } finally {
+      setFinnLoading((p) => ({ ...p, [setup.id]: false }));
     }
   }
 
@@ -225,6 +258,12 @@ export default function SetupList({
                 ${justUpdated[setup.id] ? "ring-4 ring-green-600/10" : ""}
               `}
             >
+              {(() => {
+                const finnPanel = finnPanels[setup.id] || {};
+                const finnBusy = !!finnLoading[setup.id];
+                const lineage = getLineage(setup.id);
+                return (
+                  <>
               {/* AI overlay */}
               {aiLoading[setup.id] && (
                 <div className="absolute inset-0 z-20 rounded-2xl bg-white/60 backdrop-blur-sm flex items-center justify-center">
@@ -347,19 +386,79 @@ export default function SetupList({
                 {setup.explanation || "Geen uitleg beschikbaar."}
               </div>
 
+              {(finnPanel.review || finnPanel.adherence) && (
+                <div className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <Brain size={15} className="text-violet-500" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">FINN 3.0 Review</span>
+                    </div>
+                    {finnBusy && <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Laden…</span>}
+                  </div>
+
+                  {finnPanel.review && (
+                    <div className={`rounded-xl border p-3 ${
+                      finnPanel.review.decision_status === "block"
+                        ? "border-rose-200 bg-rose-50 text-rose-700"
+                        : finnPanel.review.decision_status === "modify" || finnPanel.review.decision_status === "insufficient_context"
+                          ? "border-amber-200 bg-amber-50 text-amber-700"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    }`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[9px] font-black uppercase tracking-widest">Setup Review</span>
+                        <span className="text-[8px] font-black uppercase tracking-widest">{finnPanel.review.decision_status}</span>
+                      </div>
+                      <p className="mt-2 text-xs font-semibold leading-relaxed">{finnPanel.review.risk_summary}</p>
+                      {finnPanel.review.portfolio_impact?.message && (
+                        <p className="mt-2 text-[11px] font-semibold leading-relaxed opacity-80">{finnPanel.review.portfolio_impact.message}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {finnPanel.adherence && (
+                    <div className={`rounded-xl border p-3 ${
+                      finnPanel.adherence.adherence_status === "in_plan"
+                        ? "border-blue-200 bg-blue-50 text-blue-700"
+                        : finnPanel.adherence.adherence_status === "insufficiently_justified"
+                          ? "border-amber-200 bg-amber-50 text-amber-700"
+                          : "border-rose-200 bg-rose-50 text-rose-700"
+                    }`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[9px] font-black uppercase tracking-widest">Plan Adherence</span>
+                        <span className="text-[8px] font-black uppercase tracking-widest">{finnPanel.adherence.adherence_status}</span>
+                      </div>
+                      <p className="mt-2 text-xs font-semibold leading-relaxed">{finnPanel.adherence.adherence_reason}</p>
+                      {finnPanel.adherence.suggested_recovery_step && (
+                        <p className="mt-2 text-[11px] font-semibold leading-relaxed opacity-80">{finnPanel.adherence.suggested_recovery_step}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* AI knop */}
-              <button
-                onClick={() => handleGenerateExplanation(setup.id)}
-                disabled={aiLoading[setup.id]}
-                className="mt-4 w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 hover:bg-blue-100 transition-all border-2 border-blue-100/50"
-              >
-                <BotIcon size={16} />
-                {aiLoading[setup.id]
-                  ? "ANALYZING…"
-                  : setup.explanation
-                  ? "Re-Analyze Blueprint"
-                  : "Analyze Strategy DNA"}
-              </button>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  onClick={() => handleGenerateExplanation(setup.id)}
+                  disabled={aiLoading[setup.id]}
+                  className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 hover:bg-blue-100 transition-all border-2 border-blue-100/50"
+                >
+                  <BotIcon size={16} />
+                  {aiLoading[setup.id]
+                    ? "ANALYZING…"
+                    : setup.explanation
+                    ? "Re-Analyze Blueprint"
+                    : "Analyze Strategy DNA"}
+                </button>
+                <button
+                  onClick={() => handleFinnReview(setup)}
+                  disabled={finnBusy}
+                  className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-violet-600 bg-violet-50 hover:bg-violet-100 transition-all border-2 border-violet-100/50"
+                >
+                  <Brain size={16} />
+                  {finnBusy ? "FINN REVIEW…" : "FINN 3.0 REVIEW"}
+                </button>
+              </div>
 
               {/* ⛓️ LINEAGE VIEW */}
               <div className="mt-6 pt-4 border-t border-slate-100 italic">
@@ -371,15 +470,15 @@ export default function SetupList({
                     <ChevronRight size={12} className="opacity-30 mt-3" />
                     <div className="flex flex-col items-center gap-1 flex-1">
                        <span>Strategy</span>
-                       <span className={getLineage(setup.id).strategy ? "text-green-600 truncate max-w-[60px]" : "opacity-40"}>
-                          {getLineage(setup.id).strategy?.name || "None"}
+                       <span className={lineage.strategy ? "text-green-600 truncate max-w-[60px]" : "opacity-40"}>
+                          {lineage.strategy?.name || "None"}
                        </span>
                     </div>
                     <ChevronRight size={12} className="opacity-30 mt-3" />
                     <div className="flex flex-col items-center gap-1 flex-1">
                        <span>Bot</span>
-                       <span className={getLineage(setup.id).bot?.is_active ? "text-purple-600" : "opacity-40 text-red-400"}>
-                          {getLineage(setup.id).bot ? (getLineage(setup.id).bot.is_active ? "Running" : "Paused") : "None"}
+                       <span className={lineage.bot?.is_active ? "text-purple-600" : "opacity-40 text-red-400"}>
+                          {lineage.bot ? (lineage.bot.is_active ? "Running" : "Paused") : "None"}
                        </span>
                     </div>
                  </div>
@@ -401,6 +500,9 @@ export default function SetupList({
                   <Pencil size={12} /> Bewerken
                 </button>
               </div>
+                  </>
+                );
+              })()}
             </div>
           ))
         ) : (

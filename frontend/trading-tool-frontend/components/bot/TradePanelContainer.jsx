@@ -248,6 +248,9 @@ export default function TradePanelContainer({
         price: payload.price,
         notional_eur: Number(payload.quantity || 0) * Number(payload.price || 0),
         is_live: Boolean(bot?.is_live),
+        bot_id: botId,
+        strategy_id: bot?.strategy?.id || bot?.strategy_id || decision?.strategy_id || null,
+        setup_id: bot?.strategy?.setup?.id || bot?.setup_id || decision?.setup_id || null,
         ...data,
       });
     } catch (err) {
@@ -379,6 +382,7 @@ export default function TradePanelContainer({
         <OrderPreviewModal
           preview={previewData}
           loading={loading}
+          botName={bot?.name || `Bot #${botId}`}
           currencySymbol={bot?.base_currency === "USD" ? "$" : "€"}
           onConfirm={handleConfirmOrder}
           onAcknowledgeSetupBlock={handleAcknowledgeSetupBlock}

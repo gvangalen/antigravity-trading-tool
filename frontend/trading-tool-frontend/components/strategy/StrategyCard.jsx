@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useModal } from "@/components/modal/ModalProvider";
+import { assistantChat } from "@/lib/api/ai";
 import {
   analyzeStrategy,
   deleteStrategy,
@@ -34,6 +35,10 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
 
   const [loading, setLoading] = useState(false);
   const [justUpdated, setJustUpdated] = useState(false);
+  const [finnLoading, setFinnLoading] = useState(false);
+  const [finnReview, setFinnReview] = useState(null);
+  const [finnAdherence, setFinnAdherence] = useState(null);
+  const [finnOpen, setFinnOpen] = useState(false);
 
   /* ==========================================================
      DATA & LINEAGE
@@ -93,6 +98,31 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
       showSnackbar("AI analyse mislukt", "danger");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleFinnReview() {
+    try {
+      setFinnLoading(true);
+      setFinnOpen(true);
+      const context = {
+        page: "/strategy",
+        page_type: "Strategies",
+        symbol,
+        strategy_id: id,
+        setup_id: strategy.setup_id || null,
+      };
+      const [review, adherence] = await Promise.all([
+        assistantChat(`Beoordeel deze strategie voor ${symbol}.`, context, []),
+        assistantChat(`Past dit nog bij mijn plan voor strategie ${id}?`, context, []),
+      ]);
+      setFinnReview(review?.analysis || review?.state?.analysis || null);
+      setFinnAdherence(adherence?.analysis || adherence?.state?.analysis || null);
+    } catch (err) {
+      console.error("FINN strategy review failed:", err);
+      showSnackbar("FINN 3.0 review mislukt", "danger");
+    } finally {
+      setFinnLoading(false);
     }
   }
 
@@ -234,6 +264,58 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
                <p className="text-xs text-dim leading-relaxed truncate-3-lines">{ai_explanation}</p>
             </div>
           )}
+
+          {(finnOpen || finnReview || finnAdherence) && (
+            <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-slate-600">
+                  <Brain size={15} className="text-violet-500" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">FINN 3.0 Review</span>
+                </div>
+                {finnLoading && (
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Laden…</span>
+                )}
+              </div>
+
+              {finnReview && (
+                <div className={`rounded-xl border p-3 ${
+                  finnReview.decision_status === "block"
+                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                    : finnReview.decision_status === "modify" || finnReview.decision_status === "insufficient_context"
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                }`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest">Decision Review</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest">{finnReview.decision_status}</span>
+                  </div>
+                  <p className="mt-2 text-xs font-semibold leading-relaxed">{finnReview.risk_summary}</p>
+                  {finnReview.portfolio_impact?.message && (
+                    <p className="mt-2 text-[11px] font-semibold leading-relaxed opacity-80">{finnReview.portfolio_impact.message}</p>
+                  )}
+                </div>
+              )}
+
+              {finnAdherence && (
+                <div className={`rounded-xl border p-3 ${
+                  finnAdherence.adherence_status === "in_plan"
+                    ? "border-blue-200 bg-blue-50 text-blue-700"
+                    : finnAdherence.adherence_status === "insufficiently_justified"
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-rose-200 bg-rose-50 text-rose-700"
+                }`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest">Plan Adherence</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest">{finnAdherence.adherence_status}</span>
+                  </div>
+                  <p className="mt-2 text-xs font-semibold leading-relaxed">{finnAdherence.adherence_reason}</p>
+                  {finnAdherence.suggested_recovery_step && (
+                    <p className="mt-2 text-[11px] font-semibold leading-relaxed opacity-80">{finnAdherence.suggested_recovery_step}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* RIGHT: PRICE LADDER */}
@@ -279,10 +361,16 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
 
       {/* FOOTER ACTIONS */}
       <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/30 flex justify-between items-center">
-         <button onClick={handleAnalyze} disabled={loading} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary hover:text-purple-600 transition-colors disabled:opacity-50">
-            <Wand2 size={12} />
-            {loading ? "Analyseren..." : "Nieuwe Analyse"}
-         </button>
+         <div className="flex items-center gap-3">
+            <button onClick={handleAnalyze} disabled={loading} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary hover:text-purple-600 transition-colors disabled:opacity-50">
+               <Wand2 size={12} />
+               {loading ? "Analyseren..." : "Nieuwe Analyse"}
+            </button>
+            <button onClick={handleFinnReview} disabled={finnLoading} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary hover:text-blue-600 transition-colors disabled:opacity-50">
+               <Brain size={12} />
+               {finnLoading ? "Finn review…" : "FINN 3.0"}
+            </button>
+         </div>
          
          <div className="flex items-center gap-3">
             <button onClick={openDel} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
@@ -296,4 +384,3 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
     </div>
   );
 }
-

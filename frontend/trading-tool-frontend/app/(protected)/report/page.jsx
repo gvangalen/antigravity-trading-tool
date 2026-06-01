@@ -46,11 +46,16 @@ import {
   FileText,
   Brain,
   ShieldCheck,
+  Shield,
   ClipboardList,
   ChevronDown,
   Activity,
   ShieldAlert,
   CheckCircle2,
+  Target,
+  Bot,
+  Terminal,
+  BarChart3,
 } from 'lucide-react';
 
 /* =====================================================
@@ -701,6 +706,201 @@ function FinnBehavioralIntelligenceBlocks({ analysis, forceVisible = false }) {
   );
 }
 
+function FinnGovernanceSurface({ analysis }) {
+  const priorityEngine = analysis?.priority_engine || null;
+  const memoryV2 = analysis?.memory_v2 || null;
+  const portfolioOS = analysis?.portfolio_operating_system || null;
+  const governanceSummary = analysis?.governance_events_summary || null;
+
+  if (!priorityEngine && !memoryV2 && !portfolioOS && !governanceSummary) {
+    return null;
+  }
+
+  const phaseCards = [
+    ['Decision Review', governanceSummary?.decision_review_count || 0, 'text-blue-600 dark:text-blue-300', <FileText size={11} className="text-blue-500" />],
+    ['Plan Adherence', governanceSummary?.plan_adherence_count || 0, 'text-rose-600 dark:text-rose-300', <Shield size={11} className="text-rose-500" />],
+    ['Outcome Tracking', governanceSummary?.outcome_tracking_count || 0, 'text-emerald-600 dark:text-emerald-300', <BarChart3 size={11} className="text-emerald-500" />],
+    ['Portfolio Intelligence', governanceSummary?.portfolio_intelligence_count || 0, 'text-amber-700 dark:text-amber-300', <Activity size={11} className="text-amber-500" />],
+    ['Priority Engine', governanceSummary?.priority_engine_count || 0, 'text-violet-600 dark:text-violet-300', <Target size={11} className="text-violet-500" />],
+    ['Memory V2', governanceSummary?.memory_v2_count || 0, 'text-fuchsia-600 dark:text-fuchsia-300', <Brain size={11} className="text-fuchsia-500" />],
+    ['Portfolio OS', governanceSummary?.portfolio_operating_system_count || 0, 'text-cyan-600 dark:text-cyan-300', <Bot size={11} className="text-cyan-500" />],
+  ];
+
+  const topPriorities = Array.isArray(priorityEngine?.top_priorities) ? priorityEngine.top_priorities.slice(0, 3) : [];
+  const nextActions = Array.isArray(portfolioOS?.next_best_actions) ? portfolioOS.next_best_actions.slice(0, 3) : [];
+  const reviewSummary = [
+    {
+      label: 'Decision Review',
+      tone: 'border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300',
+      summary:
+        governanceSummary?.decision_review_count > 0
+          ? `${governanceSummary.decision_review_count} beslismomenten zijn vooraf door FINN beoordeeld voordat er actie volgde.`
+          : 'Nog geen decision-review spoor in deze periode; FINN heeft hier nog weinig tegenspraak hoeven geven.',
+    },
+    {
+      label: 'Plan Adherence',
+      tone: 'border-rose-200 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300',
+      summary:
+        governanceSummary?.plan_adherence_count > 0
+          ? `${governanceSummary.plan_adherence_count} momenten zijn langs je planlat gelegd. ${memoryV2?.recommended_rule || 'Gebruik dit om afwijking sneller te herkennen.'}`
+          : 'Nog weinig expliciete adherence-signalen; dit venster wordt sterker zodra meer keuzes tegen je plan worden gehouden.',
+    },
+    {
+      label: 'Outcome Tracking',
+      tone: 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300',
+      summary:
+        governanceSummary?.outcome_tracking_count > 0
+          ? `${governanceSummary.outcome_tracking_count} follow-through momenten zijn teruggekoppeld aan gedrag. ${memoryV2?.behavioral_cost || 'Finn gebruikt dit om patronen te onderbouwen.'}`
+          : 'Outcome tracking staat klaar, maar heeft nog weinig bewezen voorbeelden om harder te kunnen spreken.',
+    },
+  ];
+
+  return (
+    <div className="mt-5 space-y-4">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+              <Terminal size={14} className="text-cyan-500" />
+              FINN 3.0 Governance Layer
+            </div>
+            <p className="mt-2 text-sm font-black leading-relaxed text-slate-900 dark:text-slate-100">
+              {portfolioOS?.control_plane?.headline || priorityEngine?.headline || 'Finn laat hier zien hoe decision review, discipline, prioriteit en portfolio-control samen werken.'}
+            </p>
+          </div>
+          {portfolioOS?.operating_posture && (
+            <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">
+              {portfolioOS.operating_posture}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          {phaseCards.map(([label, value, tone, icon]) => (
+            <div
+              key={label}
+              className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+                  {icon}
+                  <span className="truncate">{label}</span>
+                </span>
+                <span className={`text-sm font-black ${tone}`}>{value}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        {reviewSummary.map((item) => (
+          <div key={item.label} className={`rounded-2xl border p-4 ${item.tone}`}>
+            <div className="text-[10px] font-black uppercase tracking-[0.16em]">
+              {item.label}
+            </div>
+            <p className="mt-3 text-sm font-semibold leading-relaxed">{item.summary}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        {priorityEngine && (
+          <div className="rounded-2xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/70 dark:bg-violet-950/20 p-4 text-violet-700 dark:text-violet-300">
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
+                <Target size={13} />
+                Priority Engine
+              </span>
+              <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
+                {(priorityEngine.open_counts?.high_priority_count || 0)} high
+              </span>
+            </div>
+            {priorityEngine.why_now && (
+              <p className="mt-3 text-sm font-semibold leading-relaxed">{priorityEngine.why_now}</p>
+            )}
+            {topPriorities.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {topPriorities.map((item, index) => (
+                  <div key={`${item.id || item.title}-${index}`} className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] font-black uppercase tracking-[0.14em] text-violet-900 dark:text-violet-100">
+                        {item.title}
+                      </span>
+                      <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                        {item.lane || item.priority}
+                      </span>
+                    </div>
+                    {(item.why_now || item.source_reason) && (
+                      <p className="mt-2 text-xs font-semibold leading-relaxed">{item.why_now || item.source_reason}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {memoryV2 && (
+          <div className="rounded-2xl border border-fuchsia-200 dark:border-fuchsia-900/50 bg-fuchsia-50/70 dark:bg-fuchsia-950/20 p-4 text-fuchsia-700 dark:text-fuchsia-300">
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
+                <Brain size={13} />
+                Memory V2
+              </span>
+              <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
+                {memoryV2.confidence_level || 'early'}
+              </span>
+            </div>
+            {memoryV2.memory_pattern && (
+              <div className="mt-3 text-sm font-black text-fuchsia-900 dark:text-fuchsia-100">
+                {memoryV2.memory_pattern}
+              </div>
+            )}
+            {memoryV2.behavioral_cost && (
+              <p className="mt-2 text-sm font-semibold leading-relaxed">{memoryV2.behavioral_cost}</p>
+            )}
+            {memoryV2.recommended_rule && (
+              <div className="mt-3 rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
+                <div className="text-[9px] font-black uppercase tracking-[0.14em] opacity-80">
+                  Aanbevolen regel
+                </div>
+                <p className="mt-2 text-xs font-semibold leading-relaxed">{memoryV2.recommended_rule}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {portfolioOS && (
+          <div className="rounded-2xl border border-cyan-200 dark:border-cyan-900/50 bg-cyan-50/70 dark:bg-cyan-950/20 p-4 text-cyan-700 dark:text-cyan-300">
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
+                <Bot size={13} />
+                Portfolio Operating System
+              </span>
+              <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
+                {portfolioOS.operating_posture || 'steady'}
+              </span>
+            </div>
+            {portfolioOS.control_plane?.why_now && (
+              <p className="mt-3 text-sm font-semibold leading-relaxed">{portfolioOS.control_plane.why_now}</p>
+            )}
+            {nextActions.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {nextActions.map((item, index) => (
+                  <div key={`${item}-${index}`} className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3 text-xs font-semibold leading-relaxed">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FinnReportsPanel() {
   const [activeFinnReport, setActiveFinnReport] = useState(FINN_REPORT_OPTIONS[0].key);
   const [finnReportCache, setFinnReportCache] = useState({});
@@ -920,6 +1120,7 @@ function FinnReportsPanel() {
                     analysis={behavioralAnalysis}
                     forceVisible={activeOption.key === 'week' || activeOption.key === 'behavior'}
                   />
+                  <FinnGovernanceSurface analysis={analysis} />
                   {analysis?.agent_accountability?.performance_light?.summary && (
                     <div className="mt-5 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 p-4 text-blue-700 dark:text-blue-300">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] mb-2">

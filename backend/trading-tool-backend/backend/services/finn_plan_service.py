@@ -40,6 +40,12 @@ READ_ONLY_FLOWS = {
     "general_help",
     "education",
     "product_help",
+    "decision_review",
+    "plan_adherence_review",
+    "outcome_tracking",
+    "portfolio_intelligence",
+    "priority_engine",
+    "portfolio_operating_system",
     "context_explain",
     "mission_control_explain",
     "behavioral_intelligence",
@@ -59,6 +65,12 @@ ROUTE_FAMILY_BY_FLOW = {
     "general_help": "help",
     "product_help": "help",
     "education": "education",
+    "decision_review": "review",
+    "plan_adherence_review": "coaching",
+    "outcome_tracking": "coaching",
+    "portfolio_intelligence": "review",
+    "priority_engine": "explain",
+    "portfolio_operating_system": "explain",
     "context_explain": "explain",
     "mission_control_explain": "explain",
     "behavioral_intelligence": "coaching",
@@ -1592,6 +1604,159 @@ class FinnPlanService:
         ])
         return has_status and has_market_or_plan
 
+    def looks_like_plan_adherence_review_request(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        rule_terms = [
+            "wijk ik af van mijn plan",
+            "wijk ik af van mijn strategie",
+            "handel ik buiten mijn plan",
+            "handel ik buiten mijn strategie",
+            "breek ik mijn regels",
+            "breek ik hier mijn plan",
+            "past dit nog bij mijn plan",
+            "past dit nog bij mijn strategie",
+            "volg ik mijn plan",
+            "ga ik nu buiten mijn plan",
+            "ga ik nu buiten mijn strategie",
+            "override ik mijn plan",
+        ]
+        return any(term in q for term in rule_terms)
+
+    def looks_like_outcome_tracking_request(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        outcome_terms = [
+            "hoe pakte dat uit",
+            "hoe pakten die beslissingen uit",
+            "wat leert finn van mijn uitkomsten",
+            "wat leverden mijn planafwijkingen op",
+            "welke patronen kosten me geld",
+            "wat kost dit gedrag me",
+            "historisch resultaat",
+            "uitkomst van mijn gedrag",
+            "uitkomst van mijn beslissingen",
+            "hoe eindigen mijn overrides",
+            "hoe eindigen mijn planafwijkingen",
+            "laatste keren dat ik afweek",
+        ]
+        return any(term in q for term in outcome_terms)
+
+    def looks_like_portfolio_intelligence_request(
+        self,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        q = self._normalized_query(query)
+        phrases = [
+            "heb ik te veel exposure",
+            "wat is mijn portfolio risico",
+            "wat is mijn portefeuille risico",
+            "hoe geconcentreerd is mijn portfolio",
+            "hoe geconcentreerd is mijn portefeuille",
+            "mag ik extra btc risico toevoegen",
+            "mag ik extra exposure toevoegen",
+            "welke asset stapelt risico",
+            "welke assets stapelen risico",
+            "welke trade is lokaal goed maar globaal slecht",
+            "wat blokkeert mij op portefeuilleniveau",
+            "wat is mijn grootste portfolio risico",
+            "waar zit mijn concentratierisico",
+        ]
+        if any(phrase in q for phrase in phrases):
+            return True
+        has_portfolio = any(term in q for term in ["portfolio", "portefeuille", "allocatie", "allocation", "exposure"])
+        has_judgment = any(term in q for term in ["risico", "blokkeert", "veilig", "toevoegen", "concentratie", "stapelt"])
+        context = context or {}
+        return has_portfolio and has_judgment and bool(context.get("symbol") or context.get("asset") or context.get("page"))
+
+    def looks_like_priority_engine_request(
+        self,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        q = self._normalized_query(query)
+        phrases = [
+            "wat is vandaag mijn hoogste prioriteit",
+            "wat moet ik vandaag eerst doen",
+            "wat moet ik nu eerst doen",
+            "waar moet ik nu op focussen",
+            "wat is nu het belangrijkste",
+            "geef mijn prioriteiten",
+            "geef mijn top prioriteiten",
+            "wat moet ik eerst reviewen",
+            "wat is mijn review queue",
+            "welke acties moet ik vandaag doen",
+            "wat kan ik vandaag negeren",
+            "wat moet ik vandaag laten liggen",
+        ]
+        if any(phrase in q for phrase in phrases):
+            return True
+        context = context or {}
+        has_priority = any(term in q for term in ["prioriteit", "focus", "review queue", "reviewqueue", "do now", "ignore today"])
+        has_mc = "mission control" in q or context.get("scope") == "mission_control" or context.get("page") == "mission_control"
+        return has_priority and has_mc
+
+    def looks_like_portfolio_operating_system_request(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        phrases = [
+            "geef mijn portfolio operating system",
+            "geef mijn trading operating system",
+            "hoe staat mijn portfolio operating system ervoor",
+            "hoe ziet mijn trading operating system eruit",
+            "geef mijn finn governance laag",
+            "hoe staat mijn portfolio control plane ervoor",
+            "geef mijn portfolio os status",
+            "geef mijn operating layer",
+            "geef mijn operating system status",
+        ]
+        return any(phrase in q for phrase in phrases)
+
+    def looks_like_decision_review_request(
+        self,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        q = self._normalized_query(query)
+        context = context or {}
+        if self.looks_like_plan_adherence_review_request(query):
+            return False
+        if self.looks_like_bot_decision_review_request(query):
+            return False
+        review_terms = [
+            "beoordeel deze trade",
+            "review deze trade",
+            "kan ik deze trade openen",
+            "mag ik deze trade openen",
+            "kan ik deze trade nemen",
+            "mag ik deze trade nemen",
+            "is dit een goede trade",
+            "past dit bij mijn strategie",
+            "past deze trade bij mijn strategie",
+            "past deze setup bij mijn strategie",
+            "beoordeel deze setup",
+            "beoordeel deze strategie",
+            "review deze setup",
+            "review deze strategie",
+            "waarom blokkeer je deze trade",
+            "trade review",
+            "decision review",
+        ]
+        if any(term in q for term in review_terms):
+            return True
+        has_review_verb = any(term in q for term in ["beoordeel", "review", "controleer", "check", "valideer"])
+        has_target = any(term in q for term in ["trade", "setup", "strategie", "strategy", "bot", "instap", "entry"])
+        if has_review_verb and has_target:
+            return True
+        return bool(
+            has_target
+            and any(term in q for term in ["mag ik", "kan ik", "moet ik", "past dit", "goede trade"])
+            and (
+                context.get("setup_id")
+                or context.get("strategy_id")
+                or context.get("bot_id")
+                or context.get("symbol")
+            )
+        )
+
     async def build_general_capability_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
         page = context.get("page_type") or context.get("page") or "Tradamind"
@@ -2118,6 +2283,480 @@ class FinnPlanService:
             },
         }
 
+    def _priority_engine_governance_signals(
+        self,
+        events: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        asset_signals: Dict[str, Dict[str, Any]] = {}
+        global_signals: List[Dict[str, Any]] = []
+        for event in events or []:
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            event_type = str(event.get("type") or "")
+            asset = str(payload.get("asset") or event.get("symbol") or "").upper()
+            weight = 0
+            reason = None
+            if event_type == "finn_plan_adherence_review":
+                adherence = str(payload.get("adherence_status") or "")
+                if adherence in {"forced_override", "outside_plan"}:
+                    weight = 34
+                    reason = payload.get("threatened_rule") or event.get("description")
+                elif adherence == "insufficiently_justified":
+                    weight = 22
+                    reason = event.get("description")
+            elif event_type == "finn_decision_review":
+                status = str(payload.get("decision_status") or "")
+                if status == "block":
+                    weight = 30
+                    reason = (payload.get("top_blockers") or [None])[0] or event.get("description")
+                elif status in {"modify", "insufficient_context"}:
+                    weight = 18
+                    reason = (payload.get("recommended_changes") or [None])[0] or event.get("description")
+            elif event_type == "finn_portfolio_intelligence":
+                portfolio_status = str(payload.get("portfolio_status") or "")
+                if portfolio_status in {"high_attention", "concentrated"}:
+                    weight = 28
+                    reason = payload.get("concentration_warning") or payload.get("stacked_risk_warning") or event.get("description")
+                elif portfolio_status in {"watch", "needs_data"}:
+                    weight = 14
+                    reason = event.get("description")
+            elif event_type == "finn_outcome_tracking_summary":
+                sample_size = int(payload.get("sample_size") or 0)
+                if sample_size >= 3:
+                    weight = 12
+                    reason = payload.get("net_effect") or event.get("description")
+            if weight <= 0:
+                continue
+            signal = {
+                "type": event_type,
+                "weight": weight,
+                "reason": reason,
+                "asset": asset or None,
+            }
+            if asset:
+                current = asset_signals.get(asset)
+                if not current or weight > int(current.get("weight") or 0):
+                    asset_signals[asset] = signal
+            else:
+                global_signals.append(signal)
+        return {"asset_signals": asset_signals, "global_signals": global_signals[:3]}
+
+    def _priority_engine_payload(
+        self,
+        mission: Dict[str, Any],
+        analysis: Dict[str, Any],
+        governance_signals: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        workqueue = mission.get("workqueue") or []
+        counts = mission.get("summary") or {}
+        asset_signals = governance_signals.get("asset_signals") if isinstance(governance_signals, dict) else {}
+        global_signals = governance_signals.get("global_signals") if isinstance(governance_signals, dict) else []
+        suppressions = self._mission_summary_suppressions(mission, analysis)
+        ranked_items: List[Dict[str, Any]] = []
+        seen = set()
+        for item in workqueue:
+            title = item.get("title") or item.get("label")
+            if not title:
+                continue
+            dedupe = self._mission_summary_dedupe_key(item)
+            if dedupe in seen:
+                continue
+            seen.add(dedupe)
+            asset = str(item.get("asset") or "").upper()
+            item_type = str(item.get("type") or "")
+            priority = str(item.get("priority") or "").lower()
+            base = max(0, 120 - int(item.get("priority_rank") or 99))
+            if priority == "high":
+                base += 18
+            elif priority == "medium":
+                base += 8
+            if item_type in {"portfolio_live_hotspot", "portfolio_risk_stack", "blocked_plan"}:
+                base += 18
+            elif item_type in {"bot_decision", "bot_decision_request", "execution_review"}:
+                base += 12
+            elif item_type in {"score_refresh", "data_gap"}:
+                base -= 10
+            signal = asset_signals.get(asset) if asset else None
+            signal_reason = None
+            if signal:
+                base += int(signal.get("weight") or 0)
+                signal_reason = signal.get("reason")
+            elif global_signals and item_type in {"portfolio_live_hotspot", "portfolio_risk_stack", "blocked_plan"}:
+                base += int(global_signals[0].get("weight") or 0) // 2
+                signal_reason = global_signals[0].get("reason")
+            ranked_items.append({
+                "id": item.get("id"),
+                "title": title,
+                "asset": item.get("asset"),
+                "priority": item.get("priority"),
+                "type": item_type,
+                "lane": self._mission_coaching_lane(item),
+                "score": base,
+                "why_now": signal_reason or item.get("reason"),
+                "source_reason": item.get("reason"),
+                "next_action": item.get("next_best_action") or item.get("resolve_action"),
+            })
+
+        ranked_items = sorted(
+            ranked_items,
+            key=lambda item: (-int(item.get("score") or 0), str(item.get("title") or "")),
+        )
+        top_priorities = ranked_items[:3]
+        review_queue = [
+            item for item in ranked_items
+            if item.get("lane") in {"act_now", "review_then_act"} or item.get("type") in {"bot_decision", "portfolio_live_hotspot", "portfolio_risk_stack", "blocked_plan"}
+        ][:5]
+        ignore_today = [
+            {
+                "title": item.get("title"),
+                "reason": item.get("reason"),
+                "asset": item.get("asset"),
+            }
+            for item in suppressions[:3]
+        ]
+        suppression_reasons = [item.get("reason") for item in ignore_today if item.get("reason")]
+        top = top_priorities[0] if top_priorities else {}
+        headline = (
+            f"Vandaag eerst: {top.get('title')}."
+            if top.get("title") else
+            "Vandaag zie ik geen harde act-now prioriteit boven je huidige flow."
+        )
+        why_now = (
+            top.get("why_now")
+            or (global_signals[0].get("reason") if global_signals else None)
+            or "Dit geeft nu de meeste combinatie van risico, urgentie en besliswaarde."
+        )
+        return {
+            "headline": headline,
+            "top_priorities": top_priorities,
+            "review_queue": review_queue,
+            "ignore_today": ignore_today,
+            "why_now": why_now,
+            "suppression_reasons": suppression_reasons,
+            "open_counts": {
+                "workqueue_count": counts.get("workqueue_count", 0),
+                "open_action_count": counts.get("open_action_count", 0),
+                "high_priority_count": len([
+                    item for item in workqueue
+                    if str(item.get("priority") or "").lower() == "high"
+                ]),
+            },
+            "governance_signals": governance_signals,
+        }
+
+    def _priority_engine_message(self, analysis: Dict[str, Any]) -> str:
+        lines = [
+            analysis.get("headline") or "Hier is je prioriteitenmotor voor vandaag.",
+            analysis.get("why_now") or "",
+        ]
+        top_priorities = analysis.get("top_priorities") or []
+        if top_priorities:
+            lines.append("Doe of review nu het volgende:")
+            for item in top_priorities[:3]:
+                lines.append(f"- {item.get('title')}: {item.get('why_now') or item.get('source_reason')}")
+        ignore_today = analysis.get("ignore_today") or []
+        if ignore_today:
+            lines.append("Vandaag bewust laten liggen:")
+            for item in ignore_today[:3]:
+                lines.append(f"- {item.get('title')}: {item.get('reason')}")
+        return "\n".join([line for line in lines if line])
+
+    async def build_priority_engine_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        daily = await self.build_portfolio_daily_coach_response(
+            user_id,
+            "Geef mijn daily brief",
+            {
+                **(context or {"page": "mission_control"}),
+                "scope": "mission_control",
+                "mission_control_fast": True,
+                "mission_control_preview_only": True,
+            },
+        )
+        analysis = (daily.get("state") or {}).get("analysis") or {}
+        mission = self._build_mission_control_from_daily_analysis(analysis)
+        governance_events = await self._fetch_recent_governance_events(
+            user_id,
+            event_types=[
+                "finn_decision_review",
+                "finn_plan_adherence_review",
+                "finn_outcome_tracking_summary",
+                "finn_portfolio_intelligence",
+            ],
+            limit=30,
+        )
+        priority_engine = self._priority_engine_payload(
+            mission,
+            analysis,
+            self._priority_engine_governance_signals(governance_events),
+        )
+        await self._record_governance_event(
+            user_id,
+            event_type="finn_priority_engine_summary",
+            symbol=context.get("symbol") if isinstance(context, dict) else None,
+            title="Finn rankte vandaag de operator-prioriteiten",
+            description=priority_engine.get("why_now") or priority_engine.get("headline"),
+            severity="info",
+            payload={
+                "phase": "priority_ranking_engine",
+                "query": query,
+                "headline": priority_engine.get("headline"),
+                "top_priorities": priority_engine.get("top_priorities"),
+                "review_queue": priority_engine.get("review_queue"),
+                "ignore_today": priority_engine.get("ignore_today"),
+                "suppression_reasons": priority_engine.get("suppression_reasons"),
+            },
+            cooldown_hours=2,
+        )
+        return {
+            "response": self._priority_engine_message(priority_engine),
+            "intent": "priority_engine",
+            "flow": "priority_engine",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "status": "answered",
+                "current_flow": "priority_engine",
+                "analysis": priority_engine,
+                "autonomy_level": "advice_only",
+            },
+            "analysis": priority_engine,
+            "reasoning": {
+                "confidence_score": 0.84 if priority_engine.get("top_priorities") else 0.66,
+                "risk_detected": bool(priority_engine.get("suppression_reasons")),
+                "reasons": [priority_engine.get("why_now") or priority_engine.get("headline")],
+                "coaching_level": "priority_engine",
+            },
+        }
+
+    def _portfolio_operating_system_contract(
+        self,
+        *,
+        daily_analysis: Dict[str, Any],
+        mission: Dict[str, Any],
+        priority_engine: Dict[str, Any],
+        memory: Dict[str, Any],
+        governance_events: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        portfolio_risk = mission.get("portfolio_risk") or daily_analysis.get("portfolio_risk") or {}
+        plan_health = mission.get("plan_health") or []
+        summary = mission.get("summary") or {}
+        action_count = int(summary.get("open_action_count") or 0)
+        blocked_count = int(summary.get("blocked_count") or 0)
+        high_priority_count = int((priority_engine.get("open_counts") or {}).get("high_priority_count") or 0)
+        memory_pattern = memory.get("memory_pattern")
+        memory_confidence = memory.get("confidence_level")
+        governance_types = [str(event.get("type") or "") for event in governance_events or []]
+        recent_override_signals = len([t for t in governance_types if t == "finn_plan_adherence_review"])
+        recent_review_signals = len([t for t in governance_types if t == "finn_decision_review"])
+
+        if portfolio_risk.get("status") in {"high_attention", "concentrated"} or blocked_count > 0:
+            posture = "risk_first"
+        elif high_priority_count > 0 or action_count >= 3:
+            posture = "review_first"
+        elif memory_pattern not in {None, "insufficient_memory_signal"} and memory_confidence in {"medium", "high"}:
+            posture = "discipline_first"
+        else:
+            posture = "steady_control"
+
+        portfolio_layer = {
+            "status": portfolio_risk.get("status") or "unknown",
+            "top_asset": portfolio_risk.get("top_asset"),
+            "top_reason": portfolio_risk.get("top_reason") or portfolio_risk.get("message"),
+            "ignore_today_count": len(portfolio_risk.get("ignore_today_assets") or []),
+            "live_hotspot_count": len(portfolio_risk.get("live_bot_hotspots") or []),
+        }
+        governance_layer = {
+            "posture": posture,
+            "decision_review_signal_count": recent_review_signals,
+            "plan_adherence_signal_count": recent_override_signals,
+            "memory_pattern": memory_pattern,
+            "memory_confidence": memory_confidence,
+            "priority_headline": priority_engine.get("headline"),
+        }
+        subsystems = {
+            "portfolio": portfolio_layer,
+            "decision_review": {
+                "status": "ready" if recent_review_signals else "quiet",
+                "latest_signal_count": recent_review_signals,
+            },
+            "plan_adherence": {
+                "status": "attention" if recent_override_signals else "steady",
+                "latest_signal_count": recent_override_signals,
+            },
+            "outcome_tracking": {
+                "status": "ready" if "finn_outcome_tracking_summary" in governance_types else "early",
+                "latest_signal_count": len([t for t in governance_types if t == "finn_outcome_tracking_summary"]),
+            },
+            "priority_engine": {
+                "status": "active" if priority_engine.get("top_priorities") else "quiet",
+                "queue_count": len(priority_engine.get("review_queue") or []),
+            },
+            "memory_v2": {
+                "status": "active" if memory_confidence in {"medium", "high"} else "early",
+                "pattern": memory_pattern,
+            },
+        }
+        control_plane = {
+            "headline": (
+                "Portfolio Operating System staat nu op risk-first."
+                if posture == "risk_first" else
+                "Portfolio Operating System staat nu op review-first."
+                if posture == "review_first" else
+                "Portfolio Operating System staat nu op discipline-first."
+                if posture == "discipline_first" else
+                "Portfolio Operating System draait nu stabiel zonder harde escalatie."
+            ),
+            "why_now": (
+                priority_engine.get("why_now")
+                or portfolio_risk.get("message")
+                or memory.get("behavioral_cost")
+                or "Er is nu geen enkele subsystem-laag die alle andere overstemt."
+            ),
+            "next_best_actions": [
+                item.get("title")
+                for item in (priority_engine.get("top_priorities") or [])
+                if item.get("title")
+            ][:3],
+        }
+        return {
+            "operating_posture": posture,
+            "portfolio_layer": portfolio_layer,
+            "governance_layer": governance_layer,
+            "subsystems": subsystems,
+            "control_plane": control_plane,
+            "next_best_actions": control_plane.get("next_best_actions") or [],
+            "open_counts": {
+                "asset_count": len(plan_health),
+                "open_action_count": action_count,
+                "blocked_count": blocked_count,
+                "high_priority_count": high_priority_count,
+            },
+        }
+
+    def _portfolio_operating_system_message(self, analysis: Dict[str, Any]) -> str:
+        control_plane = analysis.get("control_plane") or {}
+        governance = analysis.get("governance_layer") or {}
+        lines = [
+            control_plane.get("headline") or "Hier is je Portfolio Operating System status.",
+            control_plane.get("why_now") or "",
+        ]
+        if governance.get("memory_pattern") and governance.get("memory_pattern") != "insufficient_memory_signal":
+            lines.append(
+                f"Governance-focus: {governance.get('memory_pattern')} "
+                f"({governance.get('memory_confidence')} confidence)."
+            )
+        portfolio_layer = analysis.get("portfolio_layer") or {}
+        if portfolio_layer.get("top_reason"):
+            lines.append(f"Portfolio-laag: {portfolio_layer.get('top_reason')}")
+        next_actions = analysis.get("next_best_actions") or []
+        if next_actions:
+            lines.append("Volgende beste acties:")
+            for item in next_actions[:3]:
+                lines.append(f"- {item}")
+        return "\n".join([line for line in lines if line])
+
+    async def build_portfolio_operating_system_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        daily = await self.build_portfolio_daily_coach_response(
+            user_id,
+            "Geef mijn daily brief",
+            {
+                **(context or {"page": "mission_control"}),
+                "scope": "mission_control",
+                "mission_control_fast": True,
+                "mission_control_preview_only": True,
+            },
+        )
+        daily_analysis = (daily.get("state") or {}).get("analysis") or {}
+        mission = self._build_mission_control_from_daily_analysis(daily_analysis)
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
+        day_log = self._mission_day_log(activity_feed)
+        behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        governance_events = await self._fetch_recent_governance_events(
+            user_id,
+            event_types=[
+                "finn_decision_review",
+                "finn_plan_adherence_review",
+                "finn_outcome_tracking_summary",
+                "finn_portfolio_intelligence",
+                "finn_priority_engine_summary",
+                "finn_memory_v2_summary",
+            ],
+            limit=80,
+        )
+        priority_engine = self._priority_engine_payload(
+            mission,
+            daily_analysis,
+            self._priority_engine_governance_signals(governance_events),
+        )
+        memory_v2 = self._build_memory_v2_summary(activity_feed, governance_events)
+        memory = {
+            **self._build_behavioral_memory_report(activity_feed, behavioral),
+            **memory_v2,
+        }
+        analysis = self._portfolio_operating_system_contract(
+            daily_analysis=daily_analysis,
+            mission=mission,
+            priority_engine=priority_engine,
+            memory=memory,
+            governance_events=governance_events,
+        )
+        await self._record_governance_event(
+            user_id,
+            event_type="finn_portfolio_operating_system_summary",
+            symbol=context.get("symbol") if isinstance(context, dict) else None,
+            title="Finn bouwde een portfolio operating system status",
+            description=(analysis.get("control_plane") or {}).get("why_now") or (analysis.get("control_plane") or {}).get("headline"),
+            severity="info",
+            payload={
+                "phase": "portfolio_operating_system",
+                "query": query,
+                "operating_posture": analysis.get("operating_posture"),
+                "control_plane": analysis.get("control_plane"),
+                "portfolio_layer": analysis.get("portfolio_layer"),
+                "governance_layer": analysis.get("governance_layer"),
+                "subsystems": analysis.get("subsystems"),
+                "next_best_actions": analysis.get("next_best_actions"),
+            },
+            cooldown_hours=2,
+        )
+        return {
+            "response": self._portfolio_operating_system_message(analysis),
+            "intent": "portfolio_operating_system",
+            "flow": "portfolio_operating_system",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "status": "answered",
+                "current_flow": "portfolio_operating_system",
+                "analysis": analysis,
+                "autonomy_level": "advice_only",
+            },
+            "analysis": analysis,
+            "reasoning": {
+                "confidence_score": 0.86 if analysis.get("next_best_actions") else 0.72,
+                "risk_detected": analysis.get("operating_posture") in {"risk_first", "review_first"},
+                "reasons": [(analysis.get("control_plane") or {}).get("why_now") or (analysis.get("control_plane") or {}).get("headline")],
+                "coaching_level": "portfolio_operating_system",
+            },
+        }
+
     async def build_mission_control_explain_response(
         self,
         user_id: int,
@@ -2140,7 +2779,36 @@ class FinnPlanService:
             **(mission.get("summary") or {}),
             "coaching_loop_status": "preview",
         }
-        summary = self._mission_summary_payload(mission, analysis)
+        governance_events = await self._fetch_recent_governance_events(
+            user_id,
+            event_types=[
+                "finn_decision_review",
+                "finn_plan_adherence_review",
+                "finn_outcome_tracking_summary",
+                "finn_portfolio_intelligence",
+            ],
+            limit=30,
+        )
+        priority_engine = self._priority_engine_payload(
+            mission,
+            analysis,
+            self._priority_engine_governance_signals(governance_events),
+        )
+        summary = {
+            "headline": priority_engine.get("headline"),
+            "top_3": [
+                {
+                    "title": item.get("title"),
+                    "type": item.get("type"),
+                    "priority": item.get("priority"),
+                    "reason": item.get("why_now") or item.get("source_reason"),
+                    "asset": item.get("asset"),
+                }
+                for item in (priority_engine.get("top_priorities") or [])[:3]
+            ],
+            "avoid_today": priority_engine.get("ignore_today") or [],
+            "open_counts": priority_engine.get("open_counts") or {},
+        }
         response_lines = ["Mission Control zegt nu in het kort:"]
         if summary.get("headline"):
             response_lines.append(summary["headline"])
@@ -2168,6 +2836,7 @@ class FinnPlanService:
                 "analysis": {
                     "mission_control": mission,
                     "mission_control_summary": summary,
+                    "priority_engine": priority_engine,
                     "mission_control_source": "daily_coach_preview",
                     "context_confidence": {"level": "high", "entity_type": "mission_control", "entity_id": "mission_control", "reason": "mission control summary requested", "why": "mission control summary requested"},
                 },
@@ -2175,6 +2844,7 @@ class FinnPlanService:
             "analysis": {
                 "mission_control": mission,
                 "mission_control_summary": summary,
+                "priority_engine": priority_engine,
                 "mission_control_source": "daily_coach_preview",
                 "context_confidence": {"level": "high", "entity_type": "mission_control", "entity_id": "mission_control", "reason": "mission control summary requested", "why": "mission control summary requested"},
             },
@@ -3259,6 +3929,931 @@ class FinnPlanService:
                 "risk_detected": not bool(analysis.get("is_active")),
                 "reasons": self._analysis_reasons(analysis),
                 "coaching_level": "plan_check",
+            },
+        }
+
+    def _decision_review_subject(
+        self,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        q = self._normalized_query(query)
+        if any(term in q for term in ["trade", "instap", "entry", "kopen", "verkopen"]):
+            entity_type = "trade"
+        else:
+            entity_type = None
+        state_entity = self._read_only_state_entity(context)
+        entity_type = entity_type or (
+            state_entity.get("entity_type")
+            or ("bot" if context.get("bot_id") else None)
+            or ("strategy" if context.get("strategy_id") else None)
+            or ("setup" if context.get("setup_id") else None)
+        )
+        if "bot" in q and "decision" in q:
+            entity_type = "bot"
+        elif "setup" in q:
+            entity_type = "setup"
+        elif "strategie" in q or "strategy" in q:
+            entity_type = "strategy"
+        entity_type = entity_type or "trade"
+        review_type_map = {
+            "trade": "trade_intent_review",
+            "setup": "setup_readiness_review",
+            "strategy": "strategy_fit_review",
+            "bot": "bot_decision_review",
+        }
+        return {
+            "entity_type": entity_type,
+            "entity_id": (
+                context.get("bot_id") if entity_type == "bot" else
+                context.get("strategy_id") if entity_type == "strategy" else
+                context.get("setup_id") if entity_type == "setup" else
+                None
+            ),
+            "review_type": review_type_map.get(entity_type, "trade_intent_review"),
+        }
+
+    def _risk_pct_from_query(self, query: str) -> Optional[float]:
+        q = self._normalized_query(query)
+        if "all-in" in q or "all in" in q:
+            return 100.0
+        match = re.search(r"(\d+(?:[.,]\d+)?)\s*%", q)
+        if not match:
+            return None
+        try:
+            return float(match.group(1).replace(",", "."))
+        except ValueError:
+            return None
+
+    def _decision_review_snapshot(
+        self,
+        *,
+        subject: Dict[str, Any],
+        asset: str,
+        checks: List[Dict[str, Any]],
+        decision_status: str,
+        top_blockers: List[str],
+        recommended_changes: List[str],
+    ) -> Dict[str, Any]:
+        return {
+            "subject_type": subject.get("entity_type"),
+            "subject_id": subject.get("entity_id"),
+            "asset": asset,
+            "triggered_checks": [check.get("id") for check in checks],
+            "outcome": decision_status,
+            "top_blocker": top_blockers[0] if top_blockers else None,
+            "recommendation_summary": recommended_changes[0] if recommended_changes else None,
+            "timestamp": _utc_now().isoformat(),
+        }
+
+    def _decision_review_message(self, analysis: Dict[str, Any]) -> str:
+        checks = analysis.get("checks") or []
+        top_blockers = analysis.get("top_blockers") or []
+        recommended_changes = analysis.get("recommended_changes") or []
+        lines = [
+            analysis.get("headline") or "Hier is mijn review van je volgende trading-beslissing.",
+            f"Status: {analysis.get('decision_status')}.",
+            analysis.get("risk_summary") or "",
+        ]
+        if checks:
+            lines.append("Checks:")
+            for check in checks[:4]:
+                lines.append(f"- {check.get('label')}: {check.get('detail')}")
+        if top_blockers:
+            lines.append("Top blockers:")
+            lines.extend(f"- {item}" for item in top_blockers[:3])
+        if recommended_changes:
+            lines.append("Aanpassingen:")
+            lines.extend(f"- {item}" for item in recommended_changes[:3])
+        if analysis.get("operator_next_step"):
+            lines.append(f"Volgende stap: {analysis.get('operator_next_step')}")
+        return "\n".join([line for line in lines if line])
+
+    def _governance_event_signature(self, event_type: str, payload: Dict[str, Any]) -> str:
+        stable_payload = {
+            "type": event_type,
+            "asset": payload.get("asset"),
+            "subject": payload.get("subject"),
+            "decision_status": payload.get("decision_status"),
+            "adherence_status": payload.get("adherence_status"),
+            "behavior_pattern": payload.get("behavior_pattern"),
+            "query": self._normalized_query(str(payload.get("query") or "")),
+        }
+        digest = hashlib.sha256(json.dumps(stable_payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+        return digest[:24]
+
+    async def _record_governance_event(
+        self,
+        user_id: int,
+        *,
+        event_type: str,
+        symbol: Optional[str],
+        title: str,
+        description: str,
+        severity: str,
+        payload: Dict[str, Any],
+        cooldown_hours: int = 6,
+    ) -> None:
+        if not self.session:
+            return
+        signature = self._governance_event_signature(event_type, payload)
+        cooldown_threshold = _utc_db_timestamp() - timedelta(hours=max(1, cooldown_hours))
+        existing = await self.session.execute(text("""
+            SELECT 1
+            FROM ai_intelligence_events
+            WHERE user_id = :user_id
+              AND type = :event_type
+              AND COALESCE(symbol, '') = COALESCE(:symbol, '')
+              AND created_at >= :cooldown_threshold
+              AND COALESCE(payload->>'signature', '') = :signature
+            LIMIT 1
+        """), {
+            "user_id": user_id,
+            "event_type": event_type,
+            "symbol": symbol,
+            "cooldown_threshold": cooldown_threshold,
+            "signature": signature,
+        })
+        if existing.fetchone():
+            return
+
+        stored_payload = {**payload, "signature": signature, "trace_id": self.trace_id}
+        await self.session.execute(text("""
+            INSERT INTO ai_intelligence_events (user_id, type, symbol, title, description, severity, payload, status)
+            VALUES (:user_id, :event_type, :symbol, :title, :description, :severity, CAST(:payload AS JSONB), 'active')
+        """), {
+            "user_id": user_id,
+            "event_type": event_type,
+            "symbol": symbol,
+            "title": title,
+            "description": description,
+            "severity": severity,
+            "payload": json.dumps(stored_payload, default=str),
+        })
+        await self.session.commit()
+
+    async def _fetch_recent_governance_events(
+        self,
+        user_id: int,
+        *,
+        event_types: List[str],
+        limit: int = 40,
+    ) -> List[Dict[str, Any]]:
+        if not self.session or not event_types or not hasattr(self.session, "execute"):
+            return []
+        rows = await self.session.execute(text("""
+            SELECT id, type, symbol, title, description, severity, payload, status, created_at
+            FROM ai_intelligence_events
+            WHERE user_id = :user_id
+              AND type = ANY(:event_types)
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """), {
+            "user_id": user_id,
+            "event_types": event_types,
+            "limit": max(1, min(limit, 200)),
+        })
+        events: List[Dict[str, Any]] = []
+        for row in rows.fetchall():
+            mapping = dict(row._mapping)
+            payload = mapping.get("payload")
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except json.JSONDecodeError:
+                    payload = {}
+            mapping["payload"] = payload if isinstance(payload, dict) else {}
+            events.append(mapping)
+        return events
+
+    def _governance_event_follow_through(
+        self,
+        event: Dict[str, Any],
+        activity_feed: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        created_at = self._parse_mission_timestamp(event.get("created_at"))
+        subject = payload.get("subject") if isinstance(payload.get("subject"), dict) else {}
+        subject_type = subject.get("type")
+        subject_id = subject.get("id")
+        asset = payload.get("asset") or event.get("symbol")
+        matches: List[Dict[str, Any]] = []
+        for item in activity_feed or []:
+            item_at = self._parse_mission_timestamp(item.get("created_at"))
+            if not item_at or not created_at or item_at < created_at:
+                continue
+            if item_at > created_at + timedelta(days=14):
+                continue
+            item_ids = item.get("entity_ids") if isinstance(item.get("entity_ids"), dict) else {}
+            if subject_type == "bot" and subject_id and item_ids.get("bot_id") == subject_id:
+                matches.append(item)
+                continue
+            if subject_type == "strategy" and subject_id and item_ids.get("strategy_id") == subject_id:
+                matches.append(item)
+                continue
+            if subject_type == "setup" and subject_id and item_ids.get("setup_id") == subject_id:
+                matches.append(item)
+                continue
+            if asset and str(item.get("asset") or "").upper() == str(asset).upper():
+                matches.append(item)
+
+        counters = {
+            "executed": 0,
+            "blocked": 0,
+            "skipped": 0,
+            "reviewed": 0,
+        }
+        for item in matches:
+            item_type = str(item.get("type") or "")
+            resolve_state = str(item.get("resolve_state") or "")
+            if item_type in {"paper_execute_bot_decision", "live_manual_order_confirmed", "manual_order"}:
+                counters["executed"] += 1
+            elif item_type in {"live_manual_order_blocked"}:
+                counters["blocked"] += 1
+            elif item_type in {"live_preflight_bot_decision", "live_manual_order_preflight"}:
+                counters["reviewed"] += 1
+            elif resolve_state == "skipped" or item_type == "skip_bot_decision":
+                counters["skipped"] += 1
+
+        if counters["executed"] > max(counters["blocked"], counters["skipped"]):
+            resolution = "executed"
+        elif counters["blocked"] > 0 and counters["blocked"] >= counters["executed"]:
+            resolution = "blocked"
+        elif counters["skipped"] > 0 and counters["skipped"] >= counters["executed"]:
+            resolution = "skipped"
+        elif counters["reviewed"] > 0:
+            resolution = "reviewed_only"
+        else:
+            resolution = "no_follow_through_yet"
+
+        return {
+            "resolution": resolution,
+            "counters": counters,
+            "sample": matches[:5],
+        }
+
+    def _outcome_tracking_message(self, analysis: Dict[str, Any]) -> str:
+        lines = [
+            analysis.get("headline") or "Hier is wat Finn voorzichtig uit je uitkomsten kan halen.",
+            analysis.get("historical_result_summary") or "",
+            analysis.get("net_effect") or "",
+            analysis.get("confidence_note") or "",
+        ]
+        if analysis.get("operator_next_step"):
+            lines.append(f"Volgende stap: {analysis.get('operator_next_step')}")
+        return "\n".join([line for line in lines if line])
+
+    def _portfolio_intelligence_contract(
+        self,
+        *,
+        risk: Dict[str, Any],
+        asset: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        asset_risk = risk.get("asset_risk") or []
+        focus = None
+        if asset:
+            focus = next((item for item in asset_risk if str(item.get("asset") or "").upper() == str(asset).upper()), None)
+        focus = focus or (asset_risk[0] if asset_risk else {})
+        concentration = (risk.get("concentration_warnings") or [None])[0] or {}
+        stack = next(
+            (item for item in (risk.get("risk_stacks") or []) if not asset or str(item.get("asset") or "").upper() == str(asset).upper()),
+            None,
+        ) or ((risk.get("risk_stacks") or [None])[0] or {})
+        blockers = []
+        for item in (risk.get("ranked_conflicts") or risk.get("conflicts") or [])[:4]:
+            if asset and str(item.get("asset") or "").upper() != str(asset).upper():
+                continue
+            blockers.append(item.get("reason"))
+        portfolio_impact = {
+            "status": risk.get("status"),
+            "message": risk.get("message"),
+            "focus_asset": focus.get("asset") or asset,
+            "focus_risk_level": focus.get("risk_level"),
+            "focus_risk_score": focus.get("risk_score"),
+        }
+        exposure_delta = None
+        if focus.get("allocation_pct") is not None:
+            exposure_delta = f"{focus.get('asset')} zit nu rond {focus.get('allocation_pct')}% allocatie."
+        concentration_warning = concentration.get("reason")
+        stacked_risk_warning = stack.get("reason")
+        portfolio_safe_alternative = (
+            focus.get("next_best_action")
+            or (risk.get("ignore_today_assets") or [{}])[0].get("unblock_condition")
+            or "Kies eerst de asset met de laagste risk stack voordat je exposure toevoegt."
+        )
+        return {
+            "portfolio_impact": portfolio_impact,
+            "exposure_delta": exposure_delta,
+            "concentration_warning": concentration_warning,
+            "stacked_risk_warning": stacked_risk_warning,
+            "portfolio_blockers": [item for item in blockers if item][:3],
+            "portfolio_safe_alternative": portfolio_safe_alternative,
+        }
+
+    def _portfolio_intelligence_message(self, analysis: Dict[str, Any]) -> str:
+        lines = [
+            analysis.get("headline") or "Hier is mijn portfolio-intelligence review.",
+            (analysis.get("portfolio_impact") or {}).get("message") or "",
+        ]
+        if analysis.get("exposure_delta"):
+            lines.append(f"Exposure: {analysis.get('exposure_delta')}")
+        if analysis.get("concentration_warning"):
+            lines.append(f"Concentratie: {analysis.get('concentration_warning')}")
+        if analysis.get("stacked_risk_warning"):
+            lines.append(f"Stacked risk: {analysis.get('stacked_risk_warning')}")
+        blockers = analysis.get("portfolio_blockers") or []
+        if blockers:
+            lines.append("Portfolio blockers:")
+            lines.extend(f"- {item}" for item in blockers[:3])
+        if analysis.get("portfolio_safe_alternative"):
+            lines.append(f"Veiliger alternatief: {analysis.get('portfolio_safe_alternative')}")
+        return "\n".join([line for line in lines if line])
+
+    async def build_decision_review_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        explicit_asset = next(iter(_asset_mentions(query)), None) or context.get("symbol") or context.get("asset")
+        asset = self._asset_from_query_or_context(query, context)
+        subject = self._decision_review_subject(query, context)
+        review_type = subject["review_type"]
+        state_entity = self._read_only_state_entity(context)
+        last_context = self._last_context_entity(context)
+        setup_id = context.get("setup_id") or (state_entity.get("entity_id") if state_entity.get("entity_type") == "setup" else None)
+        strategy_id = context.get("strategy_id") or (state_entity.get("entity_id") if state_entity.get("entity_type") == "strategy" else None)
+        bot_id = context.get("bot_id") or (state_entity.get("entity_id") if state_entity.get("entity_type") == "bot" else None)
+        explicit_risk_pct = self._risk_pct_from_query(query)
+
+        portfolio_context = context.get("portfolio_intelligence") if isinstance(context.get("portfolio_intelligence"), dict) else {}
+        setup_analysis: Dict[str, Any] = {"is_active": False, "confidence": "low", "reason": "Nog geen setup-data."}
+        daily_scores = None
+        if self.session:
+            score_repo = ScoreRepository(self.session)
+            daily_scores = await self._fetch_daily_scores_with_runtime_refresh(user_id, asset)
+            active_setups = await score_repo.fetch_active_setups(user_id)
+            matching_setups = [s for s in active_setups if str(s.get("symbol", "")).upper() == asset]
+            best_setup = next((s for s in matching_setups if s.get("is_active")), None) or (matching_setups[0] if matching_setups else None)
+            if best_setup and not setup_id:
+                setup_id = best_setup.get("id")
+            setup_analysis = self._evaluate_setup_row(best_setup, daily_scores)
+            if not portfolio_context:
+                try:
+                    from backend.infrastructure.repositories.bot_repository import BotRepository
+                    portfolio_context = await BotRepository(self.session).get_portfolio_intelligence_context(user_id)
+                except Exception:
+                    portfolio_context = {}
+
+        checks: List[Dict[str, Any]] = []
+        context_ready = bool(explicit_asset and (setup_id or strategy_id or bot_id or review_type == "trade_intent_review"))
+        checks.append({
+            "id": "context_ready",
+            "label": "Context",
+            "status": "pass" if context_ready else "needs_context",
+            "severity": "high" if not context_ready else "low",
+            "detail": (
+                f"Ik review dit nu voor {asset} met de huidige pagina- en sessiecontext."
+                if context_ready else
+                "Ik mis nog te veel concrete context om deze beslissing veilig te reviewen."
+            ),
+        })
+
+        has_setup_context = bool(setup_id or subject.get("entity_type") == "setup" or last_context.get("entity_type") == "setup")
+        setup_status = "pass" if setup_analysis.get("is_active") or has_setup_context else "warn"
+        checks.append({
+            "id": "setup_validity",
+            "label": "Setup-validiteit",
+            "status": setup_status,
+            "severity": "medium" if setup_status == "warn" else "low",
+            "detail": (
+                "Je setup-context is aanwezig en oogt bruikbaar voor review."
+                if setup_status == "pass" else
+                "Ik zie wel asset-context, maar nog geen duidelijk actieve setup om deze trade hard op te toetsen."
+            ),
+        })
+
+        has_strategy_context = bool(strategy_id or subject.get("entity_type") == "strategy" or last_context.get("entity_type") == "strategy")
+        strategy_status = "pass" if has_strategy_context else "warn"
+        checks.append({
+            "id": "strategy_fit",
+            "label": "Strategie-fit",
+            "status": strategy_status,
+            "severity": "medium" if strategy_status == "warn" else "low",
+            "detail": (
+                "Ik kan deze beslissing aan een concrete strategie koppelen."
+                if strategy_status == "pass" else
+                "Ik zie nog geen harde strategie-koppeling; dit maakt de review minder planvast."
+            ),
+        })
+
+        risk_status = "pass"
+        risk_detail = "Ik zie geen direct sizing-signaal dat je risico nu uit proportie trekt."
+        if explicit_risk_pct is not None and explicit_risk_pct > 5:
+            risk_status = "block"
+            risk_detail = f"Je noemt ongeveer {explicit_risk_pct}% risico. Dat is te groot voor een rustige planmatige entry."
+        elif explicit_risk_pct is not None and explicit_risk_pct > 2:
+            risk_status = "modify"
+            risk_detail = f"Je noemt ongeveer {explicit_risk_pct}% risico. Dat is aan de hoge kant; ik zou dit eerst terugbrengen."
+        elif "all-in" in self._normalized_query(query) or "all in" in self._normalized_query(query):
+            risk_status = "block"
+            risk_detail = "All-in taal is een harde guardrail-breuk voor een planmatige review."
+        checks.append({
+            "id": "risk_sizing",
+            "label": "Risico en sizing",
+            "status": risk_status,
+            "severity": "high" if risk_status == "block" else "medium" if risk_status == "modify" else "low",
+            "detail": risk_detail,
+        })
+
+        allocations = ((portfolio_context.get("global") or {}).get("allocations_pct") if isinstance(portfolio_context.get("global"), dict) else {}) or {}
+        allocation_pct = allocations.get(asset)
+        portfolio_status = "pass"
+        portfolio_detail = "Ik zie geen directe portfolio-concentratie die deze beslissing nu blokkeert."
+        if isinstance(allocation_pct, (int, float)) and allocation_pct >= 70:
+            portfolio_status = "block"
+            portfolio_detail = f"{asset} neemt al ongeveer {allocation_pct}% van je portfolio in. Extra exposure toevoegen is nu niet logisch."
+        elif isinstance(allocation_pct, (int, float)) and allocation_pct >= 45:
+            portfolio_status = "modify"
+            portfolio_detail = f"{asset} zit al rond {allocation_pct}% allocatie. Ik zou alleen kleiner of selectiever toevoegen."
+        checks.append({
+            "id": "portfolio_exposure",
+            "label": "Portfolio-impact",
+            "status": portfolio_status,
+            "severity": "high" if portfolio_status == "block" else "medium" if portfolio_status == "modify" else "low",
+            "detail": portfolio_detail,
+        })
+
+        daily_status = "pass"
+        daily_detail = "Ik zie geen score-signaal dat deze context direct onderuit haalt."
+        if isinstance(daily_scores, dict):
+            setup_score = daily_scores.get("setup_score")
+            if isinstance(setup_score, (int, float)) and setup_score < 40:
+                daily_status = "block"
+                daily_detail = f"De actuele setup-score voor {asset} ligt rond {setup_score}. Dat is te zwak om dit nu goed te keuren."
+            elif isinstance(setup_score, (int, float)) and setup_score < 60:
+                daily_status = "modify"
+                daily_detail = f"De actuele setup-score voor {asset} ligt rond {setup_score}. Ik zou extra bevestiging willen voordat je opschaalt."
+        checks.append({
+            "id": "market_readiness",
+            "label": "Markt- en setupsignaal",
+            "status": daily_status,
+            "severity": "high" if daily_status == "block" else "medium" if daily_status == "modify" else "low",
+            "detail": daily_detail,
+        })
+
+        status_rank = {"needs_context": 4, "block": 3, "warn": 2, "modify": 2, "pass": 1}
+        highest = max(checks, key=lambda item: status_rank.get(str(item.get("status")), 0))
+        if highest["status"] == "needs_context":
+            decision_status = "insufficient_context"
+        elif any(check["status"] == "block" for check in checks):
+            decision_status = "block"
+        elif any(check["status"] in {"modify", "warn"} for check in checks):
+            decision_status = "modify"
+        else:
+            decision_status = "approve"
+
+        top_blockers = [
+            check["detail"]
+            for check in checks
+            if check["status"] in {"block", "needs_context", "warn", "modify"}
+        ][:3]
+        recommended_changes: List[str] = []
+        if risk_status in {"block", "modify"}:
+            recommended_changes.append("Breng je risico of positiegrootte terug voordat je verdergaat.")
+        if portfolio_status in {"block", "modify"}:
+            recommended_changes.append(f"Voeg geen extra {asset}-exposure toe zonder eerst je huidige allocatie te reviewen.")
+        if strategy_status != "pass":
+            recommended_changes.append("Koppel deze beslissing eerst expliciet aan je strategie of setup.")
+        if not recommended_changes:
+            recommended_changes.append("Houd je entry compact en voer pas uit als deze context ook over een uur nog verdedigbaar is.")
+
+        risk_summary = {
+            "approve": "Mijn review is overwegend groen: de beslissing oogt verdedigbaar binnen je huidige context.",
+            "modify": "Mijn review is deels groen, maar ik zou deze beslissing eerst aanscherpen voordat je iets doet.",
+            "block": "Mijn review blokkeert dit nu: de context of het risico klopt nog niet hard genoeg.",
+            "insufficient_context": "Ik kan dit nog niet eerlijk goedkeuren omdat de kerncontext te dun is.",
+        }[decision_status]
+        operator_next_step = (
+            "Voer niets uit; verzamel eerst de ontbrekende setup- of strategiecontext."
+            if decision_status == "insufficient_context" else
+            "Pas de sizing of exposure aan en review daarna opnieuw."
+            if decision_status == "modify" else
+            "Niet doen in deze vorm. Los eerst de blocker op en check daarna opnieuw."
+            if decision_status == "block" else
+            "Je kunt dit verder beoordelen tegen entry, invalidatie en execution timing."
+        )
+
+        portfolio_contract = self._portfolio_intelligence_contract(
+            risk={
+                "status": "balanced" if portfolio_status == "pass" else "watch" if portfolio_status == "modify" else "high_attention",
+                "message": portfolio_detail,
+                "asset_risk": [{
+                    "asset": asset,
+                    "risk_level": "low" if portfolio_status == "pass" else "medium" if portfolio_status == "modify" else "high",
+                    "risk_score": 20 if portfolio_status == "pass" else 58 if portfolio_status == "modify" else 85,
+                    "allocation_pct": allocation_pct,
+                    "next_best_action": recommended_changes[0] if recommended_changes else None,
+                }],
+                "concentration_warnings": [{"reason": portfolio_detail}] if portfolio_status in {"modify", "block"} else [],
+                "risk_stacks": [{"reason": portfolio_detail}] if portfolio_status == "block" else [],
+                "ranked_conflicts": [{"reason": portfolio_detail}] if portfolio_status in {"modify", "block"} else [],
+            },
+            asset=asset,
+        )
+        analysis = {
+            "review_type": review_type,
+            "decision_status": decision_status,
+            "checks": checks,
+            "top_blockers": top_blockers,
+            "recommended_changes": recommended_changes,
+            "risk_summary": risk_summary,
+            "operator_next_step": operator_next_step,
+            "subject": {
+                "type": subject.get("entity_type"),
+                "id": subject.get("entity_id"),
+                "asset": asset,
+            },
+            "headline": (
+                f"Ik review nu je {review_type.replace('_', ' ')} voor {asset}."
+                if asset else
+                "Ik review nu je volgende trading-beslissing."
+            ),
+            **portfolio_contract,
+            "snapshot": self._decision_review_snapshot(
+                subject=subject,
+                asset=asset,
+                checks=checks,
+                decision_status=decision_status,
+                top_blockers=top_blockers,
+                recommended_changes=recommended_changes,
+            ),
+        }
+        await self._record_governance_event(
+            user_id,
+            event_type="finn_decision_review",
+            symbol=asset,
+            title=f"Finn reviewde een {review_type.replace('_', ' ')} voor {asset}",
+            description=risk_summary,
+            severity="warning" if decision_status in {"block", "modify", "insufficient_context"} else "info",
+            payload={
+                "phase": "decision_review_engine",
+                "query": query,
+                "asset": asset,
+                "subject": analysis["subject"],
+                "review_type": review_type,
+                "decision_status": decision_status,
+                "checks": checks,
+                "top_blockers": top_blockers,
+                "recommended_changes": recommended_changes,
+                "snapshot": analysis["snapshot"],
+            },
+        )
+
+        return {
+            "response": self._decision_review_message(analysis),
+            "intent": "decision_review",
+            "flow": "decision_review",
+            "draft": None,
+            "missing_fields": [] if decision_status != "insufficient_context" else ["context"],
+            "invalid_fields": [],
+            "next_question": None if decision_status != "insufficient_context" else "context",
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "status": "answered",
+                "current_flow": "decision_review",
+                "asset": asset,
+                "review_snapshot": analysis["snapshot"],
+                "analysis": analysis,
+                "autonomy_level": "advice_only",
+            },
+            "analysis": analysis,
+            "reasoning": {
+                "confidence_score": 0.8 if decision_status == "approve" else 0.68 if decision_status == "modify" else 0.54,
+                "risk_detected": decision_status in {"block", "modify"},
+                "reasons": top_blockers or [risk_summary],
+                "coaching_level": "decision_review",
+            },
+        }
+
+    def _plan_adherence_message(self, analysis: Dict[str, Any]) -> str:
+        lines = [
+            analysis.get("headline") or "Hier is mijn plan-adherence check.",
+            f"Status: {analysis.get('adherence_status')}.",
+            analysis.get("adherence_reason") or "",
+        ]
+        threatened_rule = analysis.get("threatened_rule")
+        if threatened_rule:
+            lines.append(f"Bedreigde regel: {threatened_rule}.")
+        if analysis.get("discipline_score") is not None:
+            lines.append(f"Discipline-score: {analysis.get('discipline_score')}/100.")
+        if analysis.get("week_delta"):
+            lines.append(f"Week-op-week: {analysis.get('week_delta')}.")
+        if analysis.get("suggested_recovery_step"):
+            lines.append(f"Herstelstap: {analysis.get('suggested_recovery_step')}")
+        return "\n".join([line for line in lines if line])
+
+    async def build_plan_adherence_review_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        decision_review = await self.build_decision_review_response(user_id, query, context)
+        review_analysis = decision_review.get("analysis") if isinstance(decision_review.get("analysis"), dict) else {}
+        q = self._normalized_query(query)
+        override_detected = any(term in q for term in [
+            "ik wijk af", "buiten mijn plan", "buiten mijn strategie", "ik wil toch", "regels loslaten", "override",
+        ])
+
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
+        day_log = self._mission_day_log(activity_feed)
+        behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        reflection = self._build_weekly_reflection_from_behavioral(behavioral, activity_feed)
+        review_status = review_analysis.get("decision_status")
+
+        threatened_rule = None
+        if override_detected:
+            threatened_rule = "Je probeert een plan- of strategiegrens te overrulen."
+        elif review_analysis.get("checks"):
+            first_flagged = next(
+                (check for check in review_analysis["checks"] if check.get("status") in {"block", "modify", "warn"}),
+                None,
+            )
+            threatened_rule = first_flagged.get("label") if isinstance(first_flagged, dict) else None
+
+        adherence_status = "in_plan"
+        if override_detected:
+            adherence_status = "forced_override"
+        elif review_status == "block":
+            adherence_status = "outside_plan"
+        elif review_status in {"modify", "insufficient_context"}:
+            adherence_status = "insufficiently_justified"
+
+        adherence_reason = {
+            "in_plan": "Op basis van je huidige context oogt deze beslissing nog planmatig verdedigbaar.",
+            "outside_plan": "Deze beslissing botst nu met je plan, risico of portfolio-kaders.",
+            "forced_override": "Je taal en context wijzen op een bewuste override van je bestaande planregels.",
+            "insufficiently_justified": "Ik zie nog niet genoeg bevestiging om te zeggen dat dit echt binnen je plan valt.",
+        }[adherence_status]
+
+        week_over_week = reflection.get("week_over_week") or {}
+        analysis = {
+            "adherence_status": adherence_status,
+            "adherence_reason": adherence_reason,
+            "threatened_rule": threatened_rule,
+            "override_detected": override_detected,
+            "discipline_score": reflection.get("discipline_score"),
+            "week_delta": week_over_week.get("summary"),
+            "suggested_recovery_step": (
+                "Leg je plan naast deze beslissing en herbevestig eerst trigger, sizing en exposure."
+                if adherence_status != "in_plan" else
+                "Houd dit klein en voer alleen uit als dezelfde argumenten over een uur nog steeds kloppen."
+            ),
+            "review_reference": review_analysis.get("snapshot"),
+            "headline": "Ik check nu of deze beslissing nog binnen je plan valt.",
+        }
+        await self._record_governance_event(
+            user_id,
+            event_type="finn_plan_adherence_review",
+            symbol=(decision_review.get("state") or {}).get("asset"),
+            title="Finn checkte plan-adherence op je huidige beslissing",
+            description=adherence_reason,
+            severity="warning" if adherence_status in {"outside_plan", "forced_override", "insufficiently_justified"} else "info",
+            payload={
+                "phase": "plan_adherence_engine",
+                "query": query,
+                "asset": (decision_review.get("state") or {}).get("asset"),
+                "subject": (review_analysis.get("subject") or {}),
+                "adherence_status": adherence_status,
+                "threatened_rule": threatened_rule,
+                "override_detected": override_detected,
+                "discipline_score": reflection.get("discipline_score"),
+                "week_delta": week_over_week.get("summary"),
+                "review_reference": review_analysis.get("snapshot"),
+            },
+        )
+        return {
+            "response": self._plan_adherence_message(analysis),
+            "intent": "plan_adherence_review",
+            "flow": "plan_adherence_review",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "status": "answered",
+                "current_flow": "plan_adherence_review",
+                "asset": (decision_review.get("state") or {}).get("asset"),
+                "analysis": analysis,
+                "autonomy_level": "advice_only",
+            },
+            "analysis": analysis,
+            "reasoning": {
+                "confidence_score": 0.82 if adherence_status == "in_plan" else 0.72 if adherence_status == "insufficiently_justified" else 0.78,
+                "risk_detected": adherence_status != "in_plan",
+                "reasons": [adherence_reason],
+                "coaching_level": "plan_adherence_review",
+            },
+        }
+
+    async def build_outcome_tracking_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        q = self._normalized_query(query)
+        if any(term in q for term in ["plan", "afwijk", "override", "regels"]):
+            event_types = ["finn_plan_adherence_review"]
+            behavior_pattern = "plan_adherence_outcomes"
+        else:
+            event_types = ["finn_decision_review", "finn_plan_adherence_review"]
+            behavior_pattern = "decision_follow_through_outcomes"
+
+        governance_events = await self._fetch_recent_governance_events(user_id, event_types=event_types, limit=60)
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=200)
+        linked = [
+            {
+                "event": event,
+                "follow_through": self._governance_event_follow_through(event, activity_feed),
+            }
+            for event in governance_events
+        ]
+        matched = []
+        for item in linked:
+            payload = item["event"].get("payload") if isinstance(item["event"].get("payload"), dict) else {}
+            if behavior_pattern == "plan_adherence_outcomes":
+                if payload.get("adherence_status") in {"outside_plan", "forced_override", "insufficiently_justified"}:
+                    matched.append(item)
+            else:
+                matched.append(item)
+
+        sample_size = len(matched)
+        executed = sum(item["follow_through"]["counters"]["executed"] for item in matched)
+        blocked = sum(item["follow_through"]["counters"]["blocked"] for item in matched)
+        skipped = sum(item["follow_through"]["counters"]["skipped"] for item in matched)
+        reviewed_only = sum(item["follow_through"]["counters"]["reviewed"] for item in matched)
+
+        if sample_size == 0:
+            historical_result_summary = "Ik heb nog te weinig gekoppelde review/adherence-events om hier een harde uitkomstlijn van te maken."
+            net_effect = "Nog geen netto patroon: ik wacht liever op meer echte review- en follow-through data."
+            confidence_note = "Confidence laag: zonder genoeg gekoppelde events doe ik hier geen causale uitspraken."
+            operator_next_step = "Blijf review, adherence-checks en uitvoering via Finn laten lopen; dan wordt deze laag snel rijker."
+        else:
+            historical_result_summary = (
+                f"In {sample_size} relevante momenten zag ik {executed} execution-follow-through, "
+                f"{skipped} bewuste skips, {blocked} blocks en {reviewed_only} review-only vervolgacties."
+            )
+            if blocked + skipped > executed:
+                net_effect = "Het patroon eindigt vaker in remmen of niet-doen dan in overtuigende uitvoering. Dat wijst op frictie die je plan vermoedelijk juist beschermt."
+            elif executed > blocked + skipped:
+                net_effect = "Dit patroon eindigt vaker in echte follow-through. Dat kan gezond zijn, maar ik wil dan vooral zien of die uitvoering ook planmatig en klein bleef."
+            else:
+                net_effect = "Het netto-effect is gemengd: ik zie zowel doorzetten als remmen, zonder duidelijke dominante uitkomst."
+            confidence_note = (
+                "Confidence medium: dit is gekoppelde follow-through uit audit-events. "
+                "Ik trek pas PnL-conclusies zodra resultaten expliciet aan deze beslissingen hangen."
+            )
+            operator_next_step = (
+                "Gebruik dit als governance-signaal: als een patroon vaak eindigt in blocks of skips, probeer het eerder in je beslisproces al af te remmen."
+            )
+
+        analysis = {
+            "outcome_window": "last_90_days",
+            "sample_size": sample_size,
+            "behavior_pattern": behavior_pattern,
+            "historical_result_summary": historical_result_summary,
+            "net_effect": net_effect,
+            "confidence_note": confidence_note,
+            "operator_next_step": operator_next_step,
+            "headline": "Ik koppel nu review- en adherence-momenten aan wat er daarna echt gebeurde.",
+            "linked_outcomes": [
+                {
+                    "created_at": item["event"].get("created_at"),
+                    "type": item["event"].get("type"),
+                    "asset": item["event"].get("symbol"),
+                    "resolution": item["follow_through"]["resolution"],
+                    "counters": item["follow_through"]["counters"],
+                }
+                for item in matched[:8]
+            ],
+        }
+        await self._record_governance_event(
+            user_id,
+            event_type="finn_outcome_tracking_summary",
+            symbol=context.get("symbol") or context.get("asset"),
+            title="Finn bouwde een outcome-tracking samenvatting",
+            description=net_effect,
+            severity="info",
+            payload={
+                "phase": "outcome_linking_engine",
+                "query": query,
+                "behavior_pattern": behavior_pattern,
+                "sample_size": sample_size,
+                "historical_result_summary": historical_result_summary,
+                "net_effect": net_effect,
+                "confidence_note": confidence_note,
+            },
+            cooldown_hours=3,
+        )
+        return {
+            "response": self._outcome_tracking_message(analysis),
+            "intent": "outcome_tracking",
+            "flow": "outcome_tracking",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "status": "answered",
+                "current_flow": "outcome_tracking",
+                "analysis": analysis,
+                "autonomy_level": "advice_only",
+            },
+            "analysis": analysis,
+            "reasoning": {
+                "confidence_score": 0.74 if sample_size >= 3 else 0.48,
+                "risk_detected": blocked + skipped > executed,
+                "reasons": [net_effect],
+                "coaching_level": "outcome_tracking",
+            },
+        }
+
+    async def build_portfolio_intelligence_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        asset = self._asset_from_query_or_context(query, context)
+        daily = await self.build_portfolio_daily_coach_response(user_id, query, context)
+        daily_analysis = (daily.get("state") or {}).get("analysis") if isinstance((daily.get("state") or {}).get("analysis"), dict) else {}
+        risk = daily_analysis.get("portfolio_risk") or {}
+        contract = self._portfolio_intelligence_contract(risk=risk, asset=asset)
+        analysis = {
+            **contract,
+            "headline": (
+                f"Ik beoordeel nu je portfolio-impact rond {asset}."
+                if asset else
+                "Ik beoordeel nu je portfolio-impact over je actieve assets."
+            ),
+            "portfolio_status": risk.get("status"),
+            "why_now": risk.get("message"),
+            "review_queue": (risk.get("asset_priority") or [])[:3],
+        }
+        await self._record_governance_event(
+            user_id,
+            event_type="finn_portfolio_intelligence",
+            symbol=asset,
+            title="Finn maakte een portfolio-intelligence review",
+            description=(analysis.get("portfolio_impact") or {}).get("message") or "Portfolio review uitgevoerd.",
+            severity="warning" if risk.get("status") in {"high_attention", "concentrated"} else "info",
+            payload={
+                "phase": "portfolio_intelligence_summary",
+                "query": query,
+                "asset": asset,
+                "portfolio_status": risk.get("status"),
+                "portfolio_impact": analysis.get("portfolio_impact"),
+                "portfolio_blockers": analysis.get("portfolio_blockers"),
+                "concentration_warning": analysis.get("concentration_warning"),
+                "stacked_risk_warning": analysis.get("stacked_risk_warning"),
+            },
+            cooldown_hours=3,
+        )
+        return {
+            "response": self._portfolio_intelligence_message(analysis),
+            "intent": "portfolio_intelligence",
+            "flow": "portfolio_intelligence",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "status": "answered",
+                "current_flow": "portfolio_intelligence",
+                "asset": asset,
+                "analysis": analysis,
+                "autonomy_level": "advice_only",
+            },
+            "analysis": analysis,
+            "reasoning": {
+                "confidence_score": 0.79 if risk else 0.52,
+                "risk_detected": risk.get("status") not in {None, "balanced"},
+                "reasons": [risk.get("message") or "Portfolio-impact beoordeeld."],
+                "coaching_level": "portfolio_intelligence",
             },
         }
 
@@ -7410,6 +9005,7 @@ class FinnPlanService:
             "snoozed_today_count": day_log["snoozed_count"],
         }
         behavioral_insight = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        memory: Dict[str, Any] = {}
         if behavioral_insight.get("behavioral_balance_score") is None:
             extended_behavioral = self._build_behavioral_insight_from_activity(activity_window, day_log)
             memory = self._build_behavioral_memory_report(activity_window, extended_behavioral)
@@ -7422,6 +9018,18 @@ class FinnPlanService:
                 behavioral_insight["trend"] = memory.get("trend") or {}
             if not (behavioral_insight.get("behavioral_profile") or {}).get("type"):
                 behavioral_insight["behavioral_profile"] = memory.get("behavioral_profile") or {}
+        governance_events = await self._fetch_recent_governance_events(
+            user_id,
+            event_types=[
+                "finn_decision_review",
+                "finn_plan_adherence_review",
+                "finn_outcome_tracking_summary",
+                "finn_portfolio_intelligence",
+                "finn_priority_engine_summary",
+                "finn_memory_v2_summary",
+            ],
+            limit=80,
+        )
         agent_verdicts = self._merge_mission_agent_verdicts(
             analysis.get("agent_verdicts") or mission.get("agent_verdicts") or [],
             behavioral_insight,
@@ -7430,6 +9038,27 @@ class FinnPlanService:
         mission = self._apply_agent_controller_to_mission(mission, agent_controller, activity_feed=activity_feed)
         coaching_loop = self._build_mission_coaching_loop(mission, analysis, behavioral_insight)
         mission["coaching_loop"] = coaching_loop
+        priority_engine = self._priority_engine_payload(
+            mission,
+            analysis,
+            self._priority_engine_governance_signals(governance_events),
+        )
+        memory_v2 = self._build_memory_v2_summary(activity_window, governance_events)
+        portfolio_operating_system = self._portfolio_operating_system_contract(
+            daily_analysis=analysis,
+            mission=mission,
+            priority_engine=priority_engine,
+            memory={**(memory or {}), **memory_v2},
+            governance_events=governance_events,
+        )
+        governance_events_summary = {
+            "decision_review_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_decision_review"]),
+            "plan_adherence_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_plan_adherence_review"]),
+            "outcome_tracking_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_outcome_tracking_summary"]),
+            "portfolio_intelligence_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_portfolio_intelligence"]),
+            "priority_engine_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_priority_engine_summary"]),
+            "memory_v2_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_memory_v2_summary"]),
+        }
         mission["summary"] = {
             **(mission.get("summary") or {}),
             "daily_priority_count": len(coaching_loop.get("daily_priority_stack") or []),
@@ -7465,11 +9094,19 @@ class FinnPlanService:
             "agent_rhythm": mission.get("agent_rhythm") or {},
             "operating_rules": mission.get("operating_rules") or {},
             "coaching_loop": coaching_loop,
+            "priority_engine": priority_engine,
+            "memory_v2": memory_v2,
+            "portfolio_operating_system": portfolio_operating_system,
+            "governance_events_summary": governance_events_summary,
             "data_readiness": analysis.get("data_readiness") or {},
             "portfolio_risk": mission.get("portfolio_risk") or analysis.get("portfolio_risk") or {},
             "analysis": {
                 "mode": "read_only",
                 "route_source": "finn",
+                "priority_engine": priority_engine,
+                "memory_v2": memory_v2,
+                "portfolio_operating_system": portfolio_operating_system,
+                "governance_events_summary": governance_events_summary,
                 "context_confidence": {
                     "level": "high",
                     "entity_type": "mission_control",
@@ -8121,6 +9758,41 @@ class FinnPlanService:
         day_log = self._mission_day_log(activity_feed)
         behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
         memory = self._build_behavioral_memory_report(activity_feed, behavioral)
+        governance_events = await self._fetch_recent_governance_events(
+            user_id,
+            event_types=[
+                "finn_decision_review",
+                "finn_plan_adherence_review",
+                "finn_outcome_tracking_summary",
+                "finn_portfolio_intelligence",
+            ],
+            limit=80,
+        )
+        memory_v2 = self._build_memory_v2_summary(activity_feed, governance_events)
+        memory = {
+            **memory,
+            **memory_v2,
+            "memory_v2": memory_v2,
+        }
+        await self._record_governance_event(
+            user_id,
+            event_type="finn_memory_v2_summary",
+            symbol=context.get("symbol") if isinstance(context, dict) else None,
+            title="Finn bouwde een Memory V2 samenvatting",
+            description=memory_v2.get("behavioral_cost") or memory_v2.get("recommended_rule"),
+            severity="info",
+            payload={
+                "phase": "memory_summary_engine",
+                "query": query,
+                "memory_pattern": memory_v2.get("memory_pattern"),
+                "supporting_evidence_count": memory_v2.get("supporting_evidence_count"),
+                "time_window": memory_v2.get("time_window"),
+                "behavioral_cost": memory_v2.get("behavioral_cost"),
+                "recommended_rule": memory_v2.get("recommended_rule"),
+                "confidence_level": memory_v2.get("confidence_level"),
+            },
+            cooldown_hours=6,
+        )
         response = self._behavioral_memory_message(memory)
         return {
             "response": response,
@@ -8138,11 +9810,105 @@ class FinnPlanService:
                 "behavioral_insight": behavioral,
                 "advice_only": True,
             },
+            "analysis": memory,
             "suggested_actions": [
                 "Vraag: geef mijn weekreflectie",
                 "Vraag: open Mission Control",
                 "Vraag: waar wijk ik vaak af van mijn plan?",
             ],
+        }
+
+    def _build_memory_v2_summary(
+        self,
+        activity_feed: List[Dict[str, Any]],
+        governance_events: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        pattern_scores = {
+            "plan_break_pattern": {"score": 0, "evidence": [], "cost": "Planbreuken kosten je discipline en maken goede reviews minder bruikbaar.", "rule": "Geen override zonder expliciete hercheck van trigger, sizing en exposure."},
+            "emotional_pattern": {"score": 0, "evidence": [], "cost": "Emotionele druk duwt je sneller naar actie dan je plan kan dragen.", "rule": "Geen nieuwe trade zolang frustratie, FOMO of haast nog de hoofdreden is."},
+            "exposure_pattern": {"score": 0, "evidence": [], "cost": "Goede losse beslissingen kunnen samen alsnog te veel concentratierisico geven.", "rule": "Voeg geen exposure toe als dezelfde asset al dominant is in je portfolio."},
+            "recovery_pattern": {"score": 0, "evidence": [], "cost": "Je sterkste herstel komt juist uit vertragen, skippen en opnieuw prioriteren.", "rule": "Gebruik review, skip of snooze als eerste herstelactie zodra druk oploopt."},
+            "hesitation_pattern": {"score": 0, "evidence": [], "cost": "Te veel review zonder besluit kan je focus en uitvoerkwaliteit uithollen.", "rule": "Na herhaalde review kies je bewust: uitvoeren, blokkeren of parkeren."},
+        }
+
+        for event in governance_events or []:
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            event_type = str(event.get("type") or "")
+            query = self._normalized_query(str(payload.get("query") or ""))
+            if event_type == "finn_plan_adherence_review":
+                adherence = str(payload.get("adherence_status") or "")
+                if adherence in {"forced_override", "outside_plan"}:
+                    pattern_scores["plan_break_pattern"]["score"] += 3
+                    pattern_scores["plan_break_pattern"]["evidence"].append(payload.get("threatened_rule") or event.get("description"))
+                elif adherence == "insufficiently_justified":
+                    pattern_scores["hesitation_pattern"]["score"] += 1
+                    pattern_scores["hesitation_pattern"]["evidence"].append(event.get("description"))
+            elif event_type == "finn_decision_review":
+                status = str(payload.get("decision_status") or "")
+                if any(term in query for term in ["fomo", "gefrustreerd", "emotionele", "terugpakken", "haast", "nu handelen"]):
+                    pattern_scores["emotional_pattern"]["score"] += 3 if status in {"block", "modify"} else 2
+                    pattern_scores["emotional_pattern"]["evidence"].append((payload.get("top_blockers") or [None])[0] or event.get("description"))
+                if status in {"modify", "block"} and any("allocatie" in str(item).lower() or "exposure" in str(item).lower() for item in (payload.get("top_blockers") or [])):
+                    pattern_scores["exposure_pattern"]["score"] += 2
+                    pattern_scores["exposure_pattern"]["evidence"].append((payload.get("top_blockers") or [None])[0] or event.get("description"))
+            elif event_type == "finn_portfolio_intelligence":
+                portfolio_status = str(payload.get("portfolio_status") or "")
+                if portfolio_status in {"high_attention", "concentrated"}:
+                    pattern_scores["exposure_pattern"]["score"] += 3
+                    pattern_scores["exposure_pattern"]["evidence"].append(
+                        payload.get("concentration_warning") or payload.get("stacked_risk_warning") or event.get("description")
+                    )
+            elif event_type == "finn_outcome_tracking_summary":
+                sample_size = int(payload.get("sample_size") or 0)
+                net_effect = str(payload.get("net_effect") or "")
+                if sample_size >= 3 and any(term in net_effect.lower() for term in ["remmen", "niet-doen", "blocks", "skips"]):
+                    pattern_scores["recovery_pattern"]["score"] += 2
+                    pattern_scores["recovery_pattern"]["evidence"].append(net_effect)
+
+        skipped = len([item for item in activity_feed or [] if str(item.get("resolve_state") or "") == "skipped"])
+        snoozed = len([item for item in activity_feed or [] if str(item.get("resolve_state") or "") == "snoozed"])
+        monitored = len([item for item in activity_feed or [] if str(item.get("resolve_state") or "") == "monitor_today"])
+        reviewed = len([item for item in activity_feed or [] if str(item.get("type") or "") in {"live_preflight_bot_decision", "live_manual_order_preflight"}])
+        executed = len([item for item in activity_feed or [] if str(item.get("type") or "") in {"paper_execute_bot_decision", "live_manual_order_confirmed", "manual_order"}])
+        if skipped + snoozed + monitored >= 3:
+            pattern_scores["recovery_pattern"]["score"] += 2
+            pattern_scores["recovery_pattern"]["evidence"].append(
+                f"{skipped} skips, {snoozed} snoozes en {monitored} monitor-acties laten herstelgedrag zien."
+            )
+        if reviewed >= max(3, executed + 2):
+            pattern_scores["hesitation_pattern"]["score"] += 2
+            pattern_scores["hesitation_pattern"]["evidence"].append(
+                f"{reviewed} review/preflight-momenten tegenover {executed} execution-acties."
+            )
+
+        primary_pattern, primary_data = max(
+            pattern_scores.items(),
+            key=lambda item: (item[1]["score"], len(item[1]["evidence"])),
+        )
+        evidence = [item for item in primary_data.get("evidence") or [] if item]
+        evidence = list(dict.fromkeys(str(item) for item in evidence))[:4]
+        evidence_count = len(evidence)
+        if primary_data.get("score", 0) >= 6 and evidence_count >= 2:
+            confidence = "high"
+        elif primary_data.get("score", 0) >= 3 and evidence_count >= 1:
+            confidence = "medium"
+        else:
+            confidence = "low"
+        if confidence == "low":
+            primary_pattern = "insufficient_memory_signal"
+            cost = "Ik zie nog losse signalen, maar nog geen sterk genoeg patroon om als vaste gedragsregel te onthouden."
+            rule = "Blijf reviews, overrides, skips en execution-keuzes via Finn laten lopen zodat dit patroon scherper wordt."
+        else:
+            cost = primary_data.get("cost")
+            rule = primary_data.get("rule")
+        return {
+            "memory_pattern": primary_pattern,
+            "supporting_evidence_count": evidence_count,
+            "time_window": "last_90_days",
+            "behavioral_cost": cost,
+            "recommended_rule": rule,
+            "confidence_level": confidence,
+            "supporting_evidence": evidence,
         }
 
     async def build_finn_report_response(
@@ -8155,6 +9921,50 @@ class FinnPlanService:
         day_log = self._mission_day_log(activity_feed)
         behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
         report = self._build_finn_reflection_report(activity_feed, behavioral, query)
+        governance_events = await self._fetch_recent_governance_events(
+            user_id,
+            event_types=[
+                "finn_decision_review",
+                "finn_plan_adherence_review",
+                "finn_outcome_tracking_summary",
+                "finn_portfolio_intelligence",
+                "finn_priority_engine_summary",
+                "finn_memory_v2_summary",
+                "finn_portfolio_operating_system_summary",
+            ],
+            limit=80,
+        )
+        mission_analysis = report.get("mission_control_analysis") or {}
+        mission = self._build_mission_control_from_daily_analysis(mission_analysis)
+        priority_engine = self._priority_engine_payload(
+            mission,
+            mission_analysis,
+            self._priority_engine_governance_signals(governance_events),
+        )
+        memory_v2 = self._build_memory_v2_summary(activity_feed, governance_events)
+        portfolio_operating_system = self._portfolio_operating_system_contract(
+            daily_analysis=mission_analysis,
+            mission=mission,
+            priority_engine=priority_engine,
+            memory={**behavioral, **memory_v2},
+            governance_events=governance_events,
+        )
+        governance_events_summary = {
+            "decision_review_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_decision_review"]),
+            "plan_adherence_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_plan_adherence_review"]),
+            "outcome_tracking_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_outcome_tracking_summary"]),
+            "portfolio_intelligence_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_portfolio_intelligence"]),
+            "priority_engine_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_priority_engine_summary"]),
+            "memory_v2_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_memory_v2_summary"]),
+            "portfolio_operating_system_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_portfolio_operating_system_summary"]),
+        }
+        report = {
+            **report,
+            "priority_engine": priority_engine,
+            "memory_v2": memory_v2,
+            "portfolio_operating_system": portfolio_operating_system,
+            "governance_events_summary": governance_events_summary,
+        }
         response = self._finn_reflection_report_message(report)
         return {
             "response": response,
@@ -8177,9 +9987,14 @@ class FinnPlanService:
                 "agent_learning": report.get("agent_learning"),
                 "agent_rhythm": report.get("agent_rhythm"),
                 "operating_rules": report.get("operating_rules"),
+                "priority_engine": priority_engine,
+                "memory_v2": memory_v2,
+                "portfolio_operating_system": portfolio_operating_system,
+                "governance_events_summary": governance_events_summary,
                 "advice_only": True,
                 "separate_from": report.get("separate_from"),
             },
+            "analysis": report,
             "suggested_actions": [
                 "Vraag: geef mijn weekreflectie",
                 "Vraag: geef mijn gedragsrapport van de laatste 30 dagen",
@@ -8542,6 +10357,21 @@ class FinnPlanService:
             lines.append("Wat Finn al als werkstijl ziet:")
             for card in habit_cards[:3]:
                 lines.append(f"- {card.get('label')}: {card.get('summary')}")
+        if memory.get("memory_pattern"):
+            lines.append(
+                "Memory V2 patroon: "
+                f"{memory.get('memory_pattern')} "
+                f"({memory.get('confidence_level')} confidence, {memory.get('supporting_evidence_count', 0)} signalen, {memory.get('time_window')})."
+            )
+        if memory.get("behavioral_cost"):
+            lines.append(f"Geschatte gedragskost: {memory.get('behavioral_cost')}")
+        if memory.get("recommended_rule"):
+            lines.append(f"Aanbevolen regel: {memory.get('recommended_rule')}")
+        evidence = memory.get("supporting_evidence") or []
+        if evidence:
+            lines.append("Waarom Finn dit onthoudt:")
+            for item in evidence[:3]:
+                lines.append(f"- {item}")
         policy = memory.get("memory_policy") or {}
         not_enough = policy.get("not_enough_for") or []
         if not_enough:

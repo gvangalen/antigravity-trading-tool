@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 
 export default function BotTodayProposal({
+  bot = null,
+  portfolio = null,
   decision = null,
   order = null,
   loading = false,
@@ -141,6 +143,10 @@ export default function BotTodayProposal({
     setupMatch?.detail ??
     "De bot wacht op betere marktomstandigheden.";
 
+  const budgetTotal = Number(portfolio?.budget?.total_eur ?? 0);
+  const positionValue = Number(portfolio?.stats?.position_value_eur ?? 0);
+  const guardrails = decision?.guardrails_result || decision?.guardrails || {};
+
   /* =====================================================
      TRADE DETECTIE (🔥 BELANGRIJK FIX)
   ===================================================== */
@@ -158,6 +164,51 @@ export default function BotTodayProposal({
     hasTrade &&
     !!onExecute &&
     !!decisionId;
+
+  const governanceStatus = (() => {
+    if (!hasTrade) return "watch";
+    if (guardrails?.blocked || guardrails?.allow === false || status === "skipped") return "block";
+    if (deviation > 0.2 || score < 55) return "modify";
+    return "approve";
+  })();
+
+  const governanceTone =
+    governanceStatus === "block"
+      ? "border-rose-200 bg-rose-50 text-rose-700"
+      : governanceStatus === "modify" || governanceStatus === "watch"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-emerald-200 bg-emerald-50 text-emerald-700";
+
+  const governanceHeadline =
+    governanceStatus === "block"
+      ? "Finn wil deze botactie nu blokkeren."
+      : governanceStatus === "modify"
+        ? "Finn wil deze botactie eerst bijschaven."
+        : governanceStatus === "watch"
+          ? "Finn ziet nog geen harde entry, alleen review-context."
+          : "Finn ziet deze botactie als uitvoerbaar binnen de huidige context.";
+
+  const setupFitText =
+    score >= 75 ? "Sterke setup-fit" : score >= 55 ? "Redelijke setup-fit" : "Zwakke setup-fit";
+
+  const portfolioMessage = (() => {
+    if (budgetTotal > 0 && positionValue / budgetTotal >= 0.7) {
+      return `${decision?.symbol || bot?.symbol || "Dit asset"} gebruikt al veel van dit botbudget. Voeg pas exposure toe als je bewust ruimte vrijhoudt.`;
+    }
+    if (deviation > 0.2) {
+      return "De logic sizing ligt boven de markt sizing. Controleer eerst of je hier echt extra risico wilt stapelen.";
+    }
+    return "Portfolio-fit oogt werkbaar zolang je dit niet combineert met te veel andere live beslissingen op hetzelfde asset.";
+  })();
+
+  const nextStepMessage =
+    governanceStatus === "block"
+      ? "Open eerst de guardrails of verlaag het risico voordat je iets bevestigt."
+      : governanceStatus === "modify"
+        ? "Pas sizing of setup-condities aan en laat Finn daarna opnieuw meekijken."
+        : governanceStatus === "watch"
+          ? "Laat de bot wachten tot er een duidelijkere entry ontstaat of review de setup eerst."
+          : "Je kunt nu door naar execution, zolang je plan en exposure bewust blijven.";
 
   /* =====================================================
      HEADER
@@ -216,6 +267,44 @@ export default function BotTodayProposal({
           {isGenerating ? "RE-ANALYZING..." : "RE-SCAN MARKET"}
         </button>
       )}
+    </div>
+  );
+
+  const governancePanel = (
+    <div className={`mb-5 rounded-2xl border p-4 ${governanceTone}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] opacity-75">
+            FINN 3.0 Decision Layer
+          </div>
+          <p className="mt-2 text-sm font-black leading-snug text-slate-900">
+            {governanceHeadline}
+          </p>
+        </div>
+        <span className="rounded-full bg-white/80 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
+          {governanceStatus}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        <div className="rounded-xl border border-white/70 bg-white/75 p-3">
+          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Decision Review</div>
+          <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">{setupFitText}</p>
+        </div>
+        <div className="rounded-xl border border-white/70 bg-white/75 p-3">
+          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Plan Fit</div>
+          <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">
+            {score >= 60 ? "Deze actie volgt de huidige setup-logica redelijk goed." : "Deze actie vraagt eerst betere setupbevestiging."}
+          </p>
+        </div>
+        <div className="rounded-xl border border-white/70 bg-white/75 p-3">
+          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Portfolio Fit</div>
+          <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">{portfolioMessage}</p>
+        </div>
+      </div>
+      <div className="mt-3 rounded-xl border border-white/70 bg-white/75 p-3">
+        <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Next Safe Step</div>
+        <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">{nextStepMessage}</p>
+      </div>
     </div>
   );
 
@@ -292,6 +381,7 @@ export default function BotTodayProposal({
       <div className="py-4">
         {systemHeader}
         <div className="rounded-[1.5rem] border border-[var(--color-border)] bg-card p-6 shadow-sm transition-colors duration-300">
+           {governancePanel}
            <div className="flex items-center gap-2 text-muted mb-6">
               <div className="w-1.5 h-1.5 rounded-full bg-muted/30" />
               <div className="text-xs font-black uppercase tracking-widest">No Active Entry Conditions Found</div>
@@ -307,6 +397,7 @@ export default function BotTodayProposal({
     <div className="py-4">
       {systemHeader}
       <div className="rounded-[1.5rem] border border-blue-600/20 dark:border-blue-600/40 bg-card p-6 shadow-sm ring-1 ring-blue-600/10 dark:ring-blue-600/20 transition-colors duration-300">
+         {governancePanel}
          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]" />

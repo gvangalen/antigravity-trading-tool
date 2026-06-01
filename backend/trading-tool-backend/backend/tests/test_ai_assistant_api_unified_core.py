@@ -160,6 +160,118 @@ def test_build_finn_core_rescue_envelope_prefers_behavioral_builder():
     assert response["intent"] == "behavioral_intelligence"
 
 
+def test_build_finn_core_rescue_envelope_prefers_decision_review_builder():
+    finn = _finn()
+    finn.build_decision_review_response = AsyncMock(return_value={"intent": "decision_review", "flow": "decision_review"})
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Beoordeel deze trade",
+            context_payload={"page": "/setup", "setup_id": 62, "strategy_id": 257, "symbol": "BTC"},
+        )
+    )
+
+    finn.build_decision_review_response.assert_awaited_once()
+    assert response["intent"] == "decision_review"
+
+
+def test_build_finn_core_rescue_envelope_prefers_plan_adherence_review_builder():
+    finn = _finn()
+    finn.build_plan_adherence_review_response = AsyncMock(
+        return_value={"intent": "plan_adherence_review", "flow": "plan_adherence_review"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Wijk ik af van mijn plan?",
+            context_payload={"page": "/strategy", "strategy_id": 257, "symbol": "BTC"},
+        )
+    )
+
+    finn.build_plan_adherence_review_response.assert_awaited_once()
+    assert response["intent"] == "plan_adherence_review"
+
+
+def test_build_finn_core_rescue_envelope_prefers_outcome_tracking_builder():
+    finn = _finn()
+    finn.build_outcome_tracking_response = AsyncMock(
+        return_value={"intent": "outcome_tracking", "flow": "outcome_tracking"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Wat leert Finn van mijn uitkomsten?",
+            context_payload={"page": "/dashboard", "symbol": "BTC"},
+        )
+    )
+
+    finn.build_outcome_tracking_response.assert_awaited_once()
+    assert response["intent"] == "outcome_tracking"
+
+
+def test_build_finn_core_rescue_envelope_prefers_portfolio_intelligence_builder():
+    finn = _finn()
+    finn.build_portfolio_intelligence_response = AsyncMock(
+        return_value={"intent": "portfolio_intelligence", "flow": "portfolio_intelligence"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Heb ik te veel exposure?",
+            context_payload={"page": "/dashboard", "symbol": "BTC"},
+        )
+    )
+
+    finn.build_portfolio_intelligence_response.assert_awaited_once()
+    assert response["intent"] == "portfolio_intelligence"
+
+
+def test_build_finn_core_rescue_envelope_prefers_priority_engine_builder():
+    finn = _finn()
+    finn.build_priority_engine_response = AsyncMock(
+        return_value={"intent": "priority_engine", "flow": "priority_engine"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Wat is vandaag mijn hoogste prioriteit?",
+            context_payload={"page": "mission_control", "scope": "mission_control"},
+        )
+    )
+
+    finn.build_priority_engine_response.assert_awaited_once()
+    assert response["intent"] == "priority_engine"
+
+
+def test_build_finn_core_rescue_envelope_prefers_portfolio_operating_system_builder():
+    finn = _finn()
+    finn.build_portfolio_operating_system_response = AsyncMock(
+        return_value={"intent": "portfolio_operating_system", "flow": "portfolio_operating_system"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Geef mijn portfolio operating system",
+            context_payload={"page": "mission_control"},
+        )
+    )
+
+    finn.build_portfolio_operating_system_response.assert_awaited_once()
+    assert response["intent"] == "portfolio_operating_system"
+
+
 def test_finalize_finn_response_persists_read_only_state_by_default():
     finn = _finn()
     finn.issue_response_actions = AsyncMock()
