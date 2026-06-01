@@ -33,6 +33,10 @@ def test_promptset_exists_and_covers_required_cases():
     assert "coach-emotional-decision" in case_ids
     assert "mission-control-summary" in case_ids
     assert "mixed-06-mission-control" in case_ids
+    assert "operator-priority-what-now" in case_ids
+    assert "operator-plan-stop-loss-removal" in case_ids
+    assert "operator-outcome-fomo-history" in case_ids
+    assert "operator-portfolio-btc-concentration" in case_ids
 
 
 def test_release_gate_doc_references_script_and_promptset():

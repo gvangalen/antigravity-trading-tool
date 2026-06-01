@@ -196,6 +196,25 @@ def test_build_finn_core_rescue_envelope_prefers_plan_adherence_review_builder()
     assert response["intent"] == "plan_adherence_review"
 
 
+def test_build_finn_core_rescue_envelope_prefers_plan_adherence_for_stop_loss_removal():
+    finn = _finn()
+    finn.build_plan_adherence_review_response = AsyncMock(
+        return_value={"intent": "plan_adherence_review", "flow": "plan_adherence_review"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Ik wil mijn stop-loss verwijderen",
+            context_payload={"page": "/strategy", "strategy_id": 257, "symbol": "BTC"},
+        )
+    )
+
+    finn.build_plan_adherence_review_response.assert_awaited_once()
+    assert response["intent"] == "plan_adherence_review"
+
+
 def test_build_finn_core_rescue_envelope_prefers_outcome_tracking_builder():
     finn = _finn()
     finn.build_outcome_tracking_response = AsyncMock(
@@ -207,6 +226,25 @@ def test_build_finn_core_rescue_envelope_prefers_outcome_tracking_builder():
             finn=finn,
             user_id=30,
             query="Wat leert Finn van mijn uitkomsten?",
+            context_payload={"page": "/dashboard", "symbol": "BTC"},
+        )
+    )
+
+    finn.build_outcome_tracking_response.assert_awaited_once()
+    assert response["intent"] == "outcome_tracking"
+
+
+def test_build_finn_core_rescue_envelope_prefers_outcome_tracking_for_explicit_fomo_history():
+    finn = _finn()
+    finn.build_outcome_tracking_response = AsyncMock(
+        return_value={"intent": "outcome_tracking", "flow": "outcome_tracking"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="De laatste 8 FOMO trades: 6 verlies, 2 winst. Wat zegt dat?",
             context_payload={"page": "/dashboard", "symbol": "BTC"},
         )
     )
@@ -234,6 +272,25 @@ def test_build_finn_core_rescue_envelope_prefers_portfolio_intelligence_builder(
     assert response["intent"] == "portfolio_intelligence"
 
 
+def test_build_finn_core_rescue_envelope_prefers_portfolio_intelligence_for_explicit_mix():
+    finn = _finn()
+    finn.build_portfolio_intelligence_response = AsyncMock(
+        return_value={"intent": "portfolio_intelligence", "flow": "portfolio_intelligence"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Ik heb 70% BTC / 20% ETH / 10% cash, kan ik nog een BTC long openen?",
+            context_payload={"page": "/dashboard", "symbol": "BTC"},
+        )
+    )
+
+    finn.build_portfolio_intelligence_response.assert_awaited_once()
+    assert response["intent"] == "portfolio_intelligence"
+
+
 def test_build_finn_core_rescue_envelope_prefers_priority_engine_builder():
     finn = _finn()
     finn.build_priority_engine_response = AsyncMock(
@@ -246,6 +303,25 @@ def test_build_finn_core_rescue_envelope_prefers_priority_engine_builder():
             user_id=30,
             query="Wat is vandaag mijn hoogste prioriteit?",
             context_payload={"page": "mission_control", "scope": "mission_control"},
+        )
+    )
+
+    finn.build_priority_engine_response.assert_awaited_once()
+    assert response["intent"] == "priority_engine"
+
+
+def test_build_finn_core_rescue_envelope_prefers_priority_engine_for_generic_what_now_prompt():
+    finn = _finn()
+    finn.build_priority_engine_response = AsyncMock(
+        return_value={"intent": "priority_engine", "flow": "priority_engine"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Wat moet ik nu eerst doen?",
+            context_payload={"page": "/dashboard", "symbol": "BTC"},
         )
     )
 

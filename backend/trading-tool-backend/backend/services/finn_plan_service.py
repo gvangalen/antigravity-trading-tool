@@ -128,6 +128,24 @@ OVERTRADING_DIRECT_COACH_TERMS = (
     "nog even traden",
 )
 
+PLAN_ADHERENCE_HARD_OVERRIDE_TERMS = (
+    "mijn plan zegt wachten maar ik wil kopen",
+    "mijn plan zegt wachten maar ik wil toch kopen",
+    "mijn plan zegt wachten maar ik wil instappen",
+    "mijn plan zegt wachten maar ik wil toch instappen",
+    "ik wil mijn stop-loss verwijderen",
+    "ik wil mijn stop loss verwijderen",
+    "ik wil stop-loss verwijderen",
+    "ik wil stop loss verwijderen",
+    "ik wil een grotere positie openen",
+    "ik wil groter gaan",
+    "ik wil meer risico nemen",
+    "ik wil mijn positie vergroten",
+    "ik wil buiten mijn plan handelen",
+    "ik wil buiten mijn strategie handelen",
+    "ik wil mijn regels loslaten",
+)
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -1619,8 +1637,31 @@ class FinnPlanService:
             "ga ik nu buiten mijn plan",
             "ga ik nu buiten mijn strategie",
             "override ik mijn plan",
+            *PLAN_ADHERENCE_HARD_OVERRIDE_TERMS,
         ]
-        return any(term in q for term in rule_terms)
+        if any(term in q for term in rule_terms):
+            return True
+        has_breach_action = any(term in q for term in [
+            "stop-loss verwijderen",
+            "stop loss verwijderen",
+            "grotere positie",
+            "positie vergroten",
+            "meer risico",
+            "wachten maar ik wil kopen",
+            "wachten maar ik wil instappen",
+            "toch kopen",
+            "toch instappen",
+        ])
+        has_plan_boundary = any(term in q for term in [
+            "plan",
+            "strategie",
+            "regels",
+            "stop-loss",
+            "stop loss",
+            "positie",
+            "risico",
+        ])
+        return has_breach_action and has_plan_boundary
 
     def looks_like_outcome_tracking_request(self, query: str) -> bool:
         q = self._normalized_query(query)
@@ -1638,7 +1679,24 @@ class FinnPlanService:
             "hoe eindigen mijn planafwijkingen",
             "laatste keren dat ik afweek",
         ]
-        return any(term in q for term in outcome_terms)
+        if any(term in q for term in outcome_terms):
+            return True
+        has_historical_counts = bool(re.search(r"\b\d+\s+(?:fomo\s+)?trades?\b", q)) and (
+            bool(re.search(r"\b\d+\s+winst(?:trades?)?\b", q))
+            or bool(re.search(r"\b\d+\s+verlies(?:trades?)?\b", q))
+            or "gemiddeld resultaat" in q
+        )
+        has_behavior_pattern = any(term in q for term in [
+            "fomo",
+            "override",
+            "planafwijk",
+            "afweek",
+            "afwijk",
+            "gedrag",
+            "uitkomst",
+            "historisch",
+        ])
+        return has_historical_counts and has_behavior_pattern
 
     def looks_like_portfolio_intelligence_request(
         self,
@@ -1662,6 +1720,18 @@ class FinnPlanService:
             "waar zit mijn concentratierisico",
         ]
         if any(phrase in q for phrase in phrases):
+            return True
+        explicit_mix = re.findall(r"(\d+(?:[.,]\d+)?)\s*%\s*(btc|eth|sol|doge|xrp|ada|bnb|avax|link|matic|pepe|cash)", q)
+        if explicit_mix and any(term in q for term in [
+            "kan ik",
+            "mag ik",
+            "nog een",
+            "extra",
+            "toevoegen",
+            "openen",
+            "long",
+            "risico",
+        ]):
             return True
         has_portfolio = any(term in q for term in ["portfolio", "portefeuille", "allocatie", "allocation", "exposure"])
         has_judgment = any(term in q for term in ["risico", "blokkeert", "veilig", "toevoegen", "concentratie", "stapelt"])
@@ -1691,9 +1761,28 @@ class FinnPlanService:
         if any(phrase in q for phrase in phrases):
             return True
         context = context or {}
-        has_priority = any(term in q for term in ["prioriteit", "focus", "review queue", "reviewqueue", "do now", "ignore today"])
+        has_priority = any(term in q for term in [
+            "prioriteit",
+            "prioriteiten",
+            "focus",
+            "review queue",
+            "reviewqueue",
+            "do now",
+            "ignore today",
+            "wat moet ik eerst",
+            "wat verdient eerst aandacht",
+            "wat kan wachten",
+            "kan vandaag wachten",
+            "waar begin ik",
+        ])
         has_mc = "mission control" in q or context.get("scope") == "mission_control" or context.get("page") == "mission_control"
-        return has_priority and has_mc
+        return has_priority and (
+            has_mc
+            or "vandaag" in q
+            or "nu" in q
+            or "eerst" in q
+            or "wachten" in q
+        )
 
     def looks_like_portfolio_operating_system_request(self, query: str) -> bool:
         q = self._normalized_query(query)
@@ -1724,8 +1813,11 @@ class FinnPlanService:
         review_terms = [
             "beoordeel deze trade",
             "review deze trade",
+            "ik wil deze trade openen",
+            "ik wil deze trade nemen",
             "kan ik deze trade openen",
             "mag ik deze trade openen",
+            "moet ik deze trade openen",
             "kan ik deze trade nemen",
             "mag ik deze trade nemen",
             "is dit een goede trade",
@@ -4556,6 +4648,91 @@ class FinnPlanService:
             lines.append(f"Herstelstap: {analysis.get('suggested_recovery_step')}")
         return "\n".join([line for line in lines if line])
 
+    def _plan_adherence_override_signal(self, query: str) -> Optional[Dict[str, Any]]:
+        q = self._normalized_query(query)
+        if "mijn plan zegt wachten" in q and any(term in q for term in ["ik wil kopen", "ik wil instappen", "ik wil toch kopen", "ik wil toch instappen"]):
+            return {
+                "threatened_rule": "Je plan zegt wachten, maar je probeert nu toch een entry te forceren.",
+                "adherence_status": "forced_override",
+                "suggested_recovery_step": "Doe nu niets nieuws. Herbevestig eerst je trigger, richting en waarom wachten niet meer geldt.",
+            }
+        if any(term in q for term in ["stop-loss verwijderen", "stop loss verwijderen"]):
+            return {
+                "threatened_rule": "Je verwijdert je vooraf afgesproken exit-grens en maakt het verlieskader open.",
+                "adherence_status": "forced_override",
+                "suggested_recovery_step": "Laat de stop-loss staan of herdefinieer eerst je ongeldigingspunt voordat je ook maar iets uitvoert.",
+            }
+        if any(term in q for term in ["grotere positie openen", "positie vergroten", "meer risico nemen", "groter gaan"]):
+            return {
+                "threatened_rule": "Je wilt sizing of risico verhogen zonder eerst opnieuw te valideren of dat binnen je plan valt.",
+                "adherence_status": "insufficiently_justified",
+                "suggested_recovery_step": "Check eerst je maximale risico per idee en bewijs waarom grotere sizing nu planmatig klopt.",
+            }
+        if any(term in q for term in PLAN_ADHERENCE_HARD_OVERRIDE_TERMS):
+            return {
+                "threatened_rule": "Je taal wijst op het overrulen van een bestaande plan- of risicogrens.",
+                "adherence_status": "forced_override",
+                "suggested_recovery_step": "Leg eerst vast welke regel je wilt breken en waarom die regel nu niet meer geldig zou zijn.",
+            }
+        return None
+
+    def _explicit_outcome_scenario_from_query(self, query: str) -> Optional[Dict[str, Any]]:
+        q = self._normalized_query(query)
+        trade_match = re.search(r"\b(\d+)\s+(?:fomo\s+)?trades?\b", q)
+        win_match = re.search(r"\b(\d+)\s+winst(?:trades?)?\b", q)
+        loss_match = re.search(r"\b(\d+)\s+verlies(?:trades?)?\b", q)
+        avg_match = re.search(r"gemiddeld(?:\s+resultaat)?\s*[:=]?\s*(-?\d+(?:[.,]\d+)?)\s*%", q)
+        if not any([trade_match, win_match, loss_match, avg_match]):
+            return None
+        sample_size = int(trade_match.group(1)) if trade_match else 0
+        wins = int(win_match.group(1)) if win_match else None
+        losses = int(loss_match.group(1)) if loss_match else None
+        avg_pct = None
+        if avg_match:
+            try:
+                avg_pct = float(avg_match.group(1).replace(",", "."))
+            except ValueError:
+                avg_pct = None
+        if sample_size == 0 and wins is not None and losses is not None:
+            sample_size = wins + losses
+        if sample_size == 0 and avg_pct is None:
+            return None
+        if "fomo" in q:
+            behavior_pattern = "fomo_outcomes"
+        elif any(term in q for term in ["override", "planafwijk", "afwijk"]):
+            behavior_pattern = "plan_override_outcomes"
+        elif any(term in q for term in OVERTRADING_DIRECT_COACH_TERMS):
+            behavior_pattern = "overtrading_outcomes"
+        else:
+            behavior_pattern = "decision_outcomes"
+        return {
+            "sample_size": sample_size,
+            "wins": wins,
+            "losses": losses,
+            "average_pct": avg_pct,
+            "behavior_pattern": behavior_pattern,
+        }
+
+    def _explicit_portfolio_mix_from_query(self, query: str) -> Optional[Dict[str, Any]]:
+        q = self._normalized_query(query)
+        matches = re.findall(r"(\d+(?:[.,]\d+)?)\s*%\s*(btc|eth|sol|doge|xrp|ada|bnb|avax|link|matic|pepe|cash)", q)
+        if not matches:
+            return None
+        allocations: Dict[str, float] = {}
+        for pct_raw, asset_raw in matches:
+            try:
+                allocations[str(asset_raw).upper()] = float(str(pct_raw).replace(",", "."))
+            except ValueError:
+                continue
+        if not allocations:
+            return None
+        dominant_asset = max(allocations.items(), key=lambda item: item[1])[0]
+        return {
+            "allocations": allocations,
+            "dominant_asset": dominant_asset,
+            "dominant_pct": allocations[dominant_asset],
+        }
+
     async def build_plan_adherence_review_response(
         self,
         user_id: int,
@@ -4575,9 +4752,12 @@ class FinnPlanService:
         behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
         reflection = self._build_weekly_reflection_from_behavioral(behavioral, activity_feed)
         review_status = review_analysis.get("decision_status")
+        explicit_override = self._plan_adherence_override_signal(query)
 
         threatened_rule = None
-        if override_detected:
+        if explicit_override:
+            threatened_rule = explicit_override.get("threatened_rule")
+        elif override_detected:
             threatened_rule = "Je probeert een plan- of strategiegrens te overrulen."
         elif review_analysis.get("checks"):
             first_flagged = next(
@@ -4587,7 +4767,10 @@ class FinnPlanService:
             threatened_rule = first_flagged.get("label") if isinstance(first_flagged, dict) else None
 
         adherence_status = "in_plan"
-        if override_detected:
+        if explicit_override:
+            adherence_status = str(explicit_override.get("adherence_status") or "forced_override")
+            override_detected = True
+        elif override_detected:
             adherence_status = "forced_override"
         elif review_status == "block":
             adherence_status = "outside_plan"
@@ -4600,6 +4783,10 @@ class FinnPlanService:
             "forced_override": "Je taal en context wijzen op een bewuste override van je bestaande planregels.",
             "insufficiently_justified": "Ik zie nog niet genoeg bevestiging om te zeggen dat dit echt binnen je plan valt.",
         }[adherence_status]
+        if explicit_override and explicit_override.get("adherence_status") == "forced_override":
+            adherence_reason = "Dit is geen kleine nuance maar een directe override van een expliciete plan- of risicoregel."
+        elif explicit_override and explicit_override.get("adherence_status") == "insufficiently_justified":
+            adherence_reason = "Je wilt nu wel versnellen, maar zonder genoeg onderbouwing dat grotere sizing of extra risico nog binnen je plan valt."
 
         week_over_week = reflection.get("week_over_week") or {}
         analysis = {
@@ -4610,6 +4797,8 @@ class FinnPlanService:
             "discipline_score": reflection.get("discipline_score"),
             "week_delta": week_over_week.get("summary"),
             "suggested_recovery_step": (
+                explicit_override.get("suggested_recovery_step")
+                if explicit_override else
                 "Leg je plan naast deze beslissing en herbevestig eerst trigger, sizing en exposure."
                 if adherence_status != "in_plan" else
                 "Houd dit klein en voer alleen uit als dezelfde argumenten over een uur nog steeds kloppen."
@@ -4701,8 +4890,35 @@ class FinnPlanService:
         blocked = sum(item["follow_through"]["counters"]["blocked"] for item in matched)
         skipped = sum(item["follow_through"]["counters"]["skipped"] for item in matched)
         reviewed_only = sum(item["follow_through"]["counters"]["reviewed"] for item in matched)
+        explicit_scenario = self._explicit_outcome_scenario_from_query(query)
 
-        if sample_size == 0:
+        if explicit_scenario:
+            sample_size = int(explicit_scenario.get("sample_size") or sample_size)
+            wins = explicit_scenario.get("wins")
+            losses = explicit_scenario.get("losses")
+            avg_pct = explicit_scenario.get("average_pct")
+            behavior_pattern = explicit_scenario.get("behavior_pattern") or behavior_pattern
+            historical_parts = [f"Je beschrijft hier {sample_size} relevante momenten"]
+            if wins is not None or losses is not None:
+                historical_parts.append(
+                    f"met {losses or 0} verliestrades en {wins or 0} winsttrades"
+                )
+            if avg_pct is not None:
+                historical_parts.append(f"en een gemiddeld resultaat van {avg_pct:.1f}%")
+            historical_result_summary = " ".join(historical_parts) + "."
+            if avg_pct is not None and avg_pct < 0:
+                net_effect = "Het netto-effect van dit gedrag is negatief. Dat betekent dat herhaling eerder kapitaal lekt dan helpt."
+            elif losses is not None and wins is not None and losses > wins:
+                net_effect = "Dit patroon eindigt vaker slecht dan goed. Dat is een operator-waarschuwing, niet alleen een gedragsobservatie."
+            elif wins is not None and losses is not None and wins > losses:
+                net_effect = "Dit patroon eindigt niet automatisch slecht, maar je moet nog steeds toetsen of de winst uit planmatige uitvoering kwam en niet uit toeval."
+            else:
+                net_effect = "Het scenario is gemengd, maar sterk genoeg om het als echt besluitpatroon te reviewen in plaats van als losse emotie."
+            confidence_note = (
+                "Confidence medium: dit gebruikt het expliciete scenario dat jij geeft, aangevuld met Finn follow-through waar aanwezig."
+            )
+            operator_next_step = "Gebruik deze uitkomstlijn als rem: als hetzelfde patroon vaker slecht eindigt, moet je de trigger eerder blokkeren dan de trade achteraf verklaren."
+        elif sample_size == 0:
             historical_result_summary = "Ik heb nog te weinig gekoppelde review/adherence-events om hier een harde uitkomstlijn van te maken."
             net_effect = "Nog geen netto patroon: ik wacht liever op meer echte review- en follow-through data."
             confidence_note = "Confidence laag: zonder genoeg gekoppelde events doe ik hier geen causale uitspraken."
@@ -4801,6 +5017,39 @@ class FinnPlanService:
         daily_analysis = (daily.get("state") or {}).get("analysis") if isinstance((daily.get("state") or {}).get("analysis"), dict) else {}
         risk = daily_analysis.get("portfolio_risk") or {}
         contract = self._portfolio_intelligence_contract(risk=risk, asset=asset)
+        explicit_mix = self._explicit_portfolio_mix_from_query(query)
+        if explicit_mix:
+            dominant_asset = explicit_mix.get("dominant_asset")
+            dominant_pct = explicit_mix.get("dominant_pct")
+            allocations = explicit_mix.get("allocations") or {}
+            ask_asset = str((context or {}).get("symbol") or asset or dominant_asset or "").upper() or None
+            add_more_same_asset = bool(ask_asset and str(ask_asset).upper() == str(dominant_asset).upper())
+            contract["portfolio_impact"] = {
+                "status": "concentrated" if (dominant_pct or 0) >= 60 else "watch",
+                "message": (
+                    f"Je portfolio is nu al zwaar geconcentreerd in {dominant_asset}."
+                    if (dominant_pct or 0) >= 60 else
+                    f"Je portfolio-mix vraagt eerst een exposure-check voordat je nieuw risico toevoegt."
+                ),
+                "focus_asset": dominant_asset,
+                "focus_risk_level": "high" if (dominant_pct or 0) >= 60 else "medium",
+                "focus_risk_score": dominant_pct,
+            }
+            contract["exposure_delta"] = ", ".join(
+                f"{asset_name} {pct:.0f}%"
+                for asset_name, pct in allocations.items()
+            )
+            if add_more_same_asset and (dominant_pct or 0) >= 60:
+                contract["concentration_warning"] = (
+                    f"{dominant_asset} zit al rond {dominant_pct:.0f}% allocatie. Extra {dominant_asset}-risico stapelt concentratie in plaats van spreiding."
+                )
+                contract["portfolio_blockers"] = [
+                    *([contract["concentration_warning"]] if contract.get("concentration_warning") else []),
+                    *list(contract.get("portfolio_blockers") or []),
+                ][:3]
+                contract["portfolio_safe_alternative"] = (
+                    "Voeg nu geen extra risico toe in dezelfde asset; verlaag eerst concentratie of kies een niet-gestapelde exposure."
+                )
         analysis = {
             **contract,
             "headline": (

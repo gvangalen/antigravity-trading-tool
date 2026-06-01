@@ -6,43 +6,86 @@
     {
       "id": "general-help",
       "query": "Hoi FINN, wat kun je voor mij doen?",
-      "expected_intents": ["general_help", "product_help"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "general_help",
+        "product_help"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only"
     },
     {
       "id": "education-rsi-simple",
       "query": "Wat is RSI in simpele taal?",
-      "expected_intents": ["education"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "education"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only"
     },
     {
       "id": "education-ma200",
       "query": "Wat is MA200?",
-      "expected_intents": ["education"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "education"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only"
     },
     {
       "id": "education-wyckoff",
       "query": "Wat is Wyckoff?",
-      "expected_intents": ["education"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "education"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only"
     },
     {
       "id": "education-dca",
       "query": "Wat is DCA?",
-      "expected_intents": ["education"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "education"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only"
     },
     {
       "id": "education-do-nothing",
       "query": "Wanneer zou jij zeggen dat ik beter even niets doe?",
-      "expected_intents": ["education"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "education"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only"
     },
     {
@@ -57,13 +100,22 @@
         "setup_timeframe": "1W",
         "symbol": "BTC"
       },
-      "expected_intents": ["context_explain"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "context_explain"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "require_context_confidence": true,
       "require_context_entity_type": "setup",
       "require_context_resolution_target": "setup",
-      "response_must_not_contain": ["geen zekere setup-entiteit"]
+      "response_must_not_contain": [
+        "geen zekere setup-entiteit"
+      ]
     },
     {
       "id": "context-strategy-open",
@@ -74,13 +126,22 @@
         "strategy_id": 257,
         "symbol": "ETH"
       },
-      "expected_intents": ["context_explain"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "context_explain"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "require_context_confidence": true,
       "require_context_entity_type": "strategy",
       "require_context_resolution_target": "strategy",
-      "response_must_not_contain": ["geen zekere strategie-entiteit"]
+      "response_must_not_contain": [
+        "geen zekere strategie-entiteit"
+      ]
     },
     {
       "id": "context-current-asset",
@@ -90,8 +151,17 @@
         "page_type": "dashboard",
         "symbol": "BTC"
       },
-      "expected_intents": ["context_explain"],
-      "forbidden_flows": ["daily_coach", "product_help", "setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "context_explain"
+      ],
+      "forbidden_flows": [
+        "daily_coach",
+        "product_help",
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "require_context_confidence": true,
       "require_context_entity_type": "asset",
@@ -106,8 +176,15 @@
         "bot_id": 121110,
         "symbol": "BTC"
       },
-      "expected_intents": ["context_explain"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "context_explain"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "require_context_entity_type": "asset",
       "require_context_resolution_target": "asset"
@@ -124,8 +201,15 @@
         "setup_timeframe": "1W",
         "symbol": "BTC"
       },
-      "expected_intents": ["context_explain"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "context_explain"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only"
     },
     {
@@ -137,8 +221,15 @@
         "strategy_id": 257,
         "symbol": "ETH"
       },
-      "expected_intents": ["context_explain"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "context_explain"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only"
     },
     {
@@ -150,8 +241,15 @@
         "bot_id": 121110,
         "symbol": "BTC"
       },
-      "expected_intents": ["context_explain"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "context_explain"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only"
     },
     {
@@ -162,57 +260,113 @@
         "page_type": "report",
         "symbol": "BTC"
       },
-      "expected_intents": ["context_explain"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "context_explain"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only"
     },
     {
       "id": "coach-fomo",
       "query": "Ik voel FOMO, wat moet ik doen?",
-      "expected_intents": ["behavioral_intelligence"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "behavioral_intelligence"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "require_analysis_variant": "direct_coach"
     },
     {
       "id": "coach-all-in",
       "query": "Ik denk eraan om all-in te gaan",
-      "expected_intents": ["behavioral_intelligence"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "behavioral_intelligence"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "require_analysis_variant": "direct_coach"
     },
     {
       "id": "coach-plan-deviation",
       "query": "Ik wijk af van mijn strategie, wat moet ik doen?",
-      "expected_intents": ["behavioral_intelligence"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "behavioral_intelligence"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "require_analysis_variant": "plan_adherence_coach",
-      "response_must_not_contain": ["ik kijk hier alleen naar je recente finn-gedrag"]
+      "response_must_not_contain": [
+        "ik kijk hier alleen naar je recente finn-gedrag"
+      ]
     },
     {
       "id": "coach-emotional-decision",
       "query": "Dit voelt als een emotionele beslissing, wat moet ik doen?",
-      "expected_intents": ["behavioral_intelligence"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "behavioral_intelligence"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "require_analysis_variant": "direct_coach",
-      "response_must_not_contain": ["ik kijk hier alleen naar je recente finn-gedrag"]
+      "response_must_not_contain": [
+        "ik kijk hier alleen naar je recente finn-gedrag"
+      ]
     },
     {
       "id": "coach-frustration-action",
       "query": "Ik wil nu handelen omdat ik gefrustreerd ben na een gemiste move.",
-      "expected_intents": ["behavioral_intelligence"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config", "general_help"],
+      "expected_intents": [
+        "behavioral_intelligence"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config",
+        "general_help"
+      ],
       "expected_mode": "read_only",
       "require_analysis_variant": "direct_coach"
     },
     {
       "id": "coach-overtrading",
       "query": "Ik merk dat ik aan het overtraden ben en weer wil handelen, wat moet ik doen?",
-      "expected_intents": ["behavioral_intelligence"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config", "daily_coach", "general_help"],
+      "expected_intents": [
+        "behavioral_intelligence"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config",
+        "daily_coach",
+        "general_help"
+      ],
       "expected_mode": "read_only",
       "require_analysis_variant": "direct_coach"
     },
@@ -224,10 +378,20 @@
         "page_type": "dashboard",
         "symbol": "BTC"
       },
-      "expected_intents": ["mission_control_explain", "context_explain"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "mission_control_explain",
+        "context_explain"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
-      "response_must_not_contain": ["- None"],
+      "response_must_not_contain": [
+        "- None"
+      ],
       "forbid_duplicate_bullets": true
     },
     {
@@ -238,8 +402,16 @@
         "page_type": "dashboard",
         "symbol": "BTC"
       },
-      "expected_intents": ["product_help", "general_help"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "product_help",
+        "general_help"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only"
     },
     {
@@ -250,8 +422,16 @@
         "page_type": "dashboard",
         "symbol": "BTC"
       },
-      "expected_intents": ["daily_score_refresh"],
-      "forbidden_flows": ["daily_coach", "setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "daily_score_refresh"
+      ],
+      "forbidden_flows": [
+        "daily_coach",
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only"
     },
     {
@@ -262,38 +442,64 @@
         "page_type": "dashboard",
         "symbol": "BTC"
       },
-      "expected_intents": ["plan_creation"],
+      "expected_intents": [
+        "plan_creation"
+      ],
       "expected_mode": "transactional",
       "conversation": "mixed-20-turn"
     },
     {
       "id": "mixed-01-help",
       "query": "Hoi FINN, wat kun je voor mij doen?",
-      "expected_intents": ["general_help", "product_help"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "general_help",
+        "product_help"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "conversation": "mixed-20-turn"
     },
     {
       "id": "mixed-02-rsi",
       "query": "Wat is RSI in simpele taal?",
-      "expected_intents": ["education"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "education"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "conversation": "mixed-20-turn"
     },
     {
       "id": "mixed-03-create",
       "query": "Maak een wekelijkse BTC setup voor een breakout long",
-      "expected_intents": ["plan_creation"],
+      "expected_intents": [
+        "plan_creation"
+      ],
       "expected_mode": "transactional",
       "conversation": "mixed-20-turn"
     },
     {
       "id": "mixed-04-fomo",
       "query": "Ik voel FOMO, wat moet ik doen?",
-      "expected_intents": ["behavioral_intelligence"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "behavioral_intelligence"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "require_analysis_variant": "direct_coach",
       "conversation": "mixed-20-turn"
@@ -307,8 +513,15 @@
         "strategy_id": 257,
         "symbol": "ETH"
       },
-      "expected_intents": ["context_explain"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "context_explain"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "conversation": "mixed-20-turn"
     },
@@ -320,10 +533,20 @@
         "page_type": "dashboard",
         "symbol": "BTC"
       },
-      "expected_intents": ["mission_control_explain", "context_explain"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "mission_control_explain",
+        "context_explain"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
-      "response_must_not_contain": ["- None"],
+      "response_must_not_contain": [
+        "- None"
+      ],
       "forbid_duplicate_bullets": true,
       "conversation": "mixed-20-turn"
     },
@@ -335,23 +558,126 @@
         "page_type": "dashboard",
         "symbol": "BTC"
       },
-      "expected_intents": ["context_explain"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_intents": [
+        "context_explain"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
       "expected_mode": "read_only",
       "require_context_confidence": true,
       "require_context_entity_type": "strategy",
       "require_context_resolution_target": "strategy",
-      "response_must_not_contain": ["geen zekere strategie-entiteit"],
+      "response_must_not_contain": [
+        "geen zekere strategie-entiteit"
+      ],
       "conversation": "mixed-20-turn"
     },
     {
       "id": "mixed-08-overtrading",
       "query": "Ik merk dat ik aan het overtraden ben en weer wil handelen, wat moet ik doen?",
-      "expected_intents": ["behavioral_intelligence"],
-      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config", "daily_coach", "general_help"],
+      "expected_intents": [
+        "behavioral_intelligence"
+      ],
+      "forbidden_flows": [
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config",
+        "daily_coach",
+        "general_help"
+      ],
       "expected_mode": "read_only",
       "require_analysis_variant": "direct_coach",
       "conversation": "mixed-20-turn"
+    },
+    {
+      "id": "operator-priority-what-now",
+      "query": "Wat moet ik nu eerst doen?",
+      "context": {
+        "page": "/dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC"
+      },
+      "expected_intents": [
+        "priority_engine"
+      ],
+      "forbidden_flows": [
+        "general_help",
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "operator-plan-stop-loss-removal",
+      "query": "Ik wil mijn stop-loss verwijderen",
+      "context": {
+        "page": "/strategy",
+        "page_type": "strategy",
+        "strategy_id": 257,
+        "symbol": "BTC"
+      },
+      "expected_intents": [
+        "plan_adherence_review",
+        "behavioral_intelligence"
+      ],
+      "forbidden_flows": [
+        "general_help",
+        "plan_creation",
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "operator-outcome-fomo-history",
+      "query": "De laatste 8 FOMO trades: 6 verlies, 2 winst. Gemiddeld resultaat: -4,2%. Wat zegt dat?",
+      "context": {
+        "page": "/report",
+        "page_type": "report",
+        "symbol": "BTC"
+      },
+      "expected_intents": [
+        "outcome_tracking"
+      ],
+      "forbidden_flows": [
+        "general_help",
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "operator-portfolio-btc-concentration",
+      "query": "Ik heb 70% BTC / 20% ETH / 10% cash, kan ik nog een BTC long openen?",
+      "context": {
+        "page": "/dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC"
+      },
+      "expected_intents": [
+        "portfolio_intelligence",
+        "decision_review"
+      ],
+      "forbidden_flows": [
+        "general_help",
+        "plan_creation",
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
+      "expected_mode": "read_only"
     }
   ]
 }

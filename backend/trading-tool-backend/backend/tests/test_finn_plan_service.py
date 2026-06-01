@@ -4910,6 +4910,8 @@ def test_plan_adherence_review_request_detection_is_separate():
 
     assert service.looks_like_plan_adherence_review_request("Wijk ik af van mijn plan?") is True
     assert service.looks_like_plan_adherence_review_request("Handel ik buiten mijn strategie?") is True
+    assert service.looks_like_plan_adherence_review_request("Mijn plan zegt wachten maar ik wil kopen") is True
+    assert service.looks_like_plan_adherence_review_request("Ik wil mijn stop-loss verwijderen") is True
     assert service.looks_like_plan_adherence_review_request("Beoordeel deze trade") is False
 
 
@@ -4918,6 +4920,7 @@ def test_outcome_tracking_request_detection_is_read_only():
 
     assert service.looks_like_outcome_tracking_request("Hoe pakte dat uit?") is True
     assert service.looks_like_outcome_tracking_request("Wat leert Finn van mijn uitkomsten?") is True
+    assert service.looks_like_outcome_tracking_request("De laatste 8 FOMO trades: 6 verlies, 2 winst. Wat zegt dat?") is True
     assert service.looks_like_outcome_tracking_request("Maak een nieuwe strategie") is False
 
 
@@ -4926,6 +4929,10 @@ def test_portfolio_intelligence_request_detection_is_read_only():
 
     assert service.looks_like_portfolio_intelligence_request("Heb ik te veel exposure?", {"symbol": "BTC"}) is True
     assert service.looks_like_portfolio_intelligence_request("Wat is mijn grootste portfolio risico?", {"page": "/dashboard"}) is True
+    assert service.looks_like_portfolio_intelligence_request(
+        "Ik heb 70% BTC / 20% ETH / 10% cash, kan ik nog een BTC long openen?",
+        {"page": "/dashboard", "symbol": "BTC"},
+    ) is True
     assert service.looks_like_portfolio_intelligence_request("Maak een BTC setup", {"symbol": "BTC"}) is False
 
 
@@ -4934,6 +4941,8 @@ def test_priority_engine_request_detection_is_read_only():
 
     assert service.looks_like_priority_engine_request("Wat is vandaag mijn hoogste prioriteit?", {"scope": "mission_control"}) is True
     assert service.looks_like_priority_engine_request("Wat moet ik nu eerst doen in Mission Control?", {"page": "mission_control"}) is True
+    assert service.looks_like_priority_engine_request("Wat moet ik nu eerst doen?", {"page": "/dashboard"}) is True
+    assert service.looks_like_priority_engine_request("Wat kan vandaag wachten?", {"page": "/dashboard"}) is True
     assert service.looks_like_priority_engine_request("Maak een BTC setup", {"page": "/dashboard"}) is False
 
 
@@ -5010,6 +5019,21 @@ def test_build_plan_adherence_review_response_marks_forced_override():
     assert result["analysis"]["adherence_status"] == "forced_override"
     assert result["analysis"]["override_detected"] is True
     assert "overrulen" in (result["analysis"]["threatened_rule"] or "").lower()
+
+
+def test_build_plan_adherence_review_response_flags_stop_loss_removal_as_rule_break():
+    service = _service()
+
+    result = asyncio.run(service.build_plan_adherence_review_response(30, "Ik wil mijn stop-loss verwijderen", {
+        "page": "/strategy",
+        "page_type": "strategy",
+        "symbol": "BTC",
+        "strategy_id": 257,
+    }))
+
+    assert result["analysis"]["adherence_status"] == "forced_override"
+    assert "exit-grens" in (result["analysis"]["threatened_rule"] or "").lower()
+    assert "stop-loss" in (result["analysis"]["suggested_recovery_step"] or "").lower()
 
 
 def test_build_plan_adherence_review_response_can_stay_in_plan():
@@ -5097,6 +5121,25 @@ def test_outcome_tracking_response_summarizes_follow_through(monkeypatch):
     assert result["analysis"]["behavior_pattern"] == "plan_adherence_outcomes"
 
 
+def test_outcome_tracking_response_uses_explicit_history_from_query():
+    service = _service()
+    service._fetch_recent_governance_events = AsyncMock(return_value=[])
+    service._get_recent_finn_activity = AsyncMock(return_value=[])
+    service._record_governance_event = AsyncMock()
+
+    result = asyncio.run(service.build_outcome_tracking_response(
+        30,
+        "De laatste 8 FOMO trades: 6 verlies, 2 winst. Gemiddeld resultaat: -4,2%. Wat zegt dat?",
+        {"symbol": "BTC"},
+    ))
+
+    assert result["analysis"]["sample_size"] == 8
+    assert result["analysis"]["behavior_pattern"] == "fomo_outcomes"
+    assert "6 verliestrades" in result["analysis"]["historical_result_summary"]
+    assert "-4.2%" in result["analysis"]["historical_result_summary"]
+    assert "negatief" in result["analysis"]["net_effect"].lower()
+
+
 def test_build_portfolio_intelligence_response_exposes_contract(monkeypatch):
     service = _service()
     monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={
@@ -5138,6 +5181,25 @@ def test_build_portfolio_intelligence_response_exposes_contract(monkeypatch):
     assert result["analysis"]["portfolio_impact"]["focus_asset"] == "BTC"
     assert "72.0%" in (result["analysis"]["exposure_delta"] or "")
     assert result["analysis"]["portfolio_blockers"][0] == "BTC heeft meerdere live bots tegelijk."
+
+
+def test_build_portfolio_intelligence_response_uses_explicit_query_mix(monkeypatch):
+    service = _service()
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={
+        "state": {"analysis": {"portfolio_risk": {}}}
+    }))
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_portfolio_intelligence_response(
+        30,
+        "Ik heb 70% BTC / 20% ETH / 10% cash, kan ik nog een BTC long openen?",
+        {"page": "/dashboard", "symbol": "BTC"},
+    ))
+
+    assert result["analysis"]["portfolio_impact"]["status"] == "concentrated"
+    assert "70%" in (result["analysis"]["concentration_warning"] or "")
+    assert "BTC 70%" in (result["analysis"]["exposure_delta"] or "")
+    assert "geen extra risico" in (result["analysis"]["portfolio_safe_alternative"] or "").lower()
 
 
 def test_decision_review_includes_portfolio_intelligence_contract():
@@ -5203,6 +5265,33 @@ def test_build_priority_engine_response_prefers_governance_weighted_risk_over_re
     assert result["intent"] == "priority_engine"
     assert result["analysis"]["top_priorities"][0]["title"] == "BTC exposure terugbrengen"
     assert "overrulen" in str(result["analysis"]["why_now"]).lower()
+
+
+def test_build_priority_engine_response_handles_generic_what_now_prompt(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "workqueue": [
+            {
+                "id": "review-btc",
+                "title": "BTC bot review eerst doen",
+                "type": "bot_decision",
+                "priority": "high",
+                "priority_rank": 9,
+                "reason": "Open review beïnvloedt je live uitvoering.",
+                "asset": "BTC",
+            }
+        ],
+        "summary": {"workqueue_count": 1, "open_action_count": 1},
+    })
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_priority_engine_response(1, "Wat moet ik nu eerst doen?", {"page": "/dashboard"}))
+
+    assert result["intent"] == "priority_engine"
+    assert result["analysis"]["top_priorities"][0]["title"] == "BTC bot review eerst doen"
+    assert "eerst" in result["response"].lower()
 
 
 def test_build_mission_control_explain_response_exposes_priority_engine_contract(monkeypatch):
