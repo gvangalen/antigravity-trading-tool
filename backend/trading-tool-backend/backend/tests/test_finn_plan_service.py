@@ -5407,6 +5407,23 @@ def test_build_portfolio_intelligence_response_parses_asset_before_percent_mix(m
     assert result["analysis"]["portfolio_status"] == "concentrated"
 
 
+def test_build_portfolio_intelligence_response_uses_fast_path_for_explicit_mix(monkeypatch):
+    service = _service()
+    coach_mock = AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}})
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", coach_mock)
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_portfolio_intelligence_response(
+        30,
+        "Portfolio: BTC 70% ETH 20% Cash 10%. Nieuwe trade: BTC Long. Mag dat?",
+        {"page": "/dashboard", "page_type": "dashboard", "symbol": "BTC"},
+    ))
+
+    coach_mock.assert_not_awaited()
+    assert result["analysis"]["portfolio_impact"]["focus_asset"] == "BTC"
+    assert result["analysis"]["portfolio_status"] == "concentrated"
+
+
 def test_decision_review_includes_portfolio_intelligence_contract():
     service = _service()
 
@@ -5424,6 +5441,27 @@ def test_decision_review_includes_portfolio_intelligence_contract():
 
     assert result["analysis"]["portfolio_impact"]["focus_asset"] == "BTC"
     assert result["analysis"]["portfolio_safe_alternative"]
+
+
+def test_decision_review_uses_explicit_prompt_metrics_without_runtime_fetch(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    fetch_mock = AsyncMock(side_effect=AssertionError("runtime refresh should not be used"))
+    monkeypatch.setattr(service, "_fetch_daily_scores_with_runtime_refresh", fetch_mock)
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_decision_review_response(
+        30,
+        "Zou jij dit doen? BTC Long Setup Score: 55 Risico: Hoog Portfolio Exposure: Hoog",
+        {"page": "/dashboard", "page_type": "dashboard", "symbol": "BTC"},
+    ))
+
+    fetch_mock.assert_not_awaited()
+    assert result["intent"] == "decision_review"
+    assert result["analysis"]["portfolio_impact"]["focus_asset"] == "BTC"
+    checks = {item["id"]: item for item in result["analysis"]["checks"]}
+    assert checks["market_readiness"]["status"] == "modify"
+    assert checks["risk_sizing"]["status"] == "modify"
+    assert checks["portfolio_exposure"]["status"] == "modify"
 
 
 def test_build_priority_engine_response_prefers_governance_weighted_risk_over_refresh(monkeypatch):

@@ -4242,6 +4242,83 @@ class FinnPlanService:
         except ValueError:
             return None
 
+    def _explicit_setup_score_from_query(self, query: str) -> Optional[float]:
+        q = self._normalized_query(query)
+        match = re.search(r"(?:setup\s*score|score)\s*[:=]?\s*(\d+(?:[.,]\d+)?)", q)
+        if not match:
+            return None
+        try:
+            return float(match.group(1).replace(",", "."))
+        except ValueError:
+            return None
+
+    def _qualitative_level_from_query(self, query: str, field: str) -> Optional[str]:
+        q = self._normalized_query(query)
+        match = re.search(
+            rf"{re.escape(field)}\s*[:=]?\s*(hoog|high|medium|gemiddeld|laag|low)",
+            q,
+        )
+        if not match:
+            return None
+        value = str(match.group(1)).lower()
+        if value in {"hoog", "high"}:
+            return "high"
+        if value in {"laag", "low"}:
+            return "low"
+        return "medium"
+
+    def _portfolio_context_from_explicit_mix(self, explicit_mix: Dict[str, Any]) -> Dict[str, Any]:
+        allocations = explicit_mix.get("allocations") or {}
+        asset_risk: List[Dict[str, Any]] = []
+        concentration_warnings: List[Dict[str, Any]] = []
+        risk_stacks: List[Dict[str, Any]] = []
+        ranked_conflicts: List[Dict[str, Any]] = []
+        asset_priority: List[Dict[str, Any]] = []
+        for asset_name, pct in allocations.items():
+            risk_level = "high" if pct >= 60 else "medium" if pct >= 40 else "low"
+            risk_score = min(95, max(10, int(round(float(pct)))))
+            warning = None
+            if pct >= 60:
+                warning = f"{asset_name} draagt al ongeveer {pct:.0f}% van je allocatie."
+                concentration_warnings.append({"asset": asset_name, "reason": warning})
+                risk_stacks.append({"asset": asset_name, "reason": f"{asset_name} stapelt concentratierisico."})
+                ranked_conflicts.append({"asset": asset_name, "reason": warning})
+            asset_risk.append({
+                "asset": asset_name,
+                "risk_level": risk_level,
+                "risk_score": risk_score,
+                "allocation_pct": pct,
+                "next_best_action": (
+                    f"Voeg niet meer toe aan {asset_name} voordat je concentratie verlaagt."
+                    if pct >= 60 else None
+                ),
+            })
+            asset_priority.append({
+                "asset": asset_name,
+                "risk_score": risk_score,
+                "reason": "high_exposure" if pct >= 60 else "watch_exposure",
+            })
+        dominant_asset = str(explicit_mix.get("dominant_asset") or "").upper() or None
+        dominant_pct = float(explicit_mix.get("dominant_pct") or 0)
+        status = "concentrated" if dominant_pct >= 60 else "watch" if dominant_pct >= 40 else "balanced"
+        message = (
+            f"{dominant_asset} domineert deze expliciete portfolio-mix met ongeveer {dominant_pct:.0f}% allocatie."
+            if dominant_asset and dominant_pct >= 60 else
+            f"{dominant_asset} draagt nu relatief veel gewicht in je expliciete mix."
+            if dominant_asset and dominant_pct >= 40 else
+            "Je expliciete portfolio-mix oogt niet extreem geconcentreerd."
+        )
+        return {
+            "global": {"allocations_pct": allocations},
+            "status": status,
+            "message": message,
+            "asset_risk": sorted(asset_risk, key=lambda item: item.get("risk_score") or 0, reverse=True),
+            "concentration_warnings": concentration_warnings,
+            "risk_stacks": risk_stacks,
+            "ranked_conflicts": ranked_conflicts,
+            "asset_priority": sorted(asset_priority, key=lambda item: item.get("risk_score") or 0, reverse=True),
+        }
+
     def _decision_review_snapshot(
         self,
         *,
@@ -4543,19 +4620,34 @@ class FinnPlanService:
         strategy_id = context.get("strategy_id") or (state_entity.get("entity_id") if state_entity.get("entity_type") == "strategy" else None)
         bot_id = context.get("bot_id") or (state_entity.get("entity_id") if state_entity.get("entity_type") == "bot" else None)
         explicit_risk_pct = self._risk_pct_from_query(query)
+        explicit_setup_score = self._explicit_setup_score_from_query(query)
+        explicit_portfolio_level = self._qualitative_level_from_query(query, "portfolio exposure")
+        explicit_risk_level = self._qualitative_level_from_query(query, "risico") or self._qualitative_level_from_query(query, "risk")
+        explicit_mix = self._explicit_portfolio_mix_from_query(query)
 
         portfolio_context = context.get("portfolio_intelligence") if isinstance(context.get("portfolio_intelligence"), dict) else {}
         setup_analysis: Dict[str, Any] = {"is_active": False, "confidence": "low", "reason": "Nog geen setup-data."}
         daily_scores = None
-        if self.session:
+        if explicit_setup_score is not None:
+            daily_scores = {"setup_score": explicit_setup_score}
+            setup_analysis = {
+                "is_active": explicit_setup_score >= 40,
+                "confidence": "medium" if explicit_setup_score >= 40 else "low",
+                "reason": f"Expliete query noemt een setup-score rond {explicit_setup_score:.0f}.",
+                "has_scores": True,
+            }
+        if explicit_mix and not portfolio_context:
+            portfolio_context = self._portfolio_context_from_explicit_mix(explicit_mix)
+        if self.session and (daily_scores is None or not portfolio_context):
             score_repo = ScoreRepository(self.session)
-            daily_scores = await self._fetch_daily_scores_with_runtime_refresh(user_id, asset)
-            active_setups = await score_repo.fetch_active_setups(user_id)
-            matching_setups = [s for s in active_setups if str(s.get("symbol", "")).upper() == asset]
-            best_setup = next((s for s in matching_setups if s.get("is_active")), None) or (matching_setups[0] if matching_setups else None)
-            if best_setup and not setup_id:
-                setup_id = best_setup.get("id")
-            setup_analysis = self._evaluate_setup_row(best_setup, daily_scores)
+            if daily_scores is None:
+                daily_scores = await self._fetch_daily_scores_with_runtime_refresh(user_id, asset)
+                active_setups = await score_repo.fetch_active_setups(user_id)
+                matching_setups = [s for s in active_setups if str(s.get("symbol", "")).upper() == asset]
+                best_setup = next((s for s in matching_setups if s.get("is_active")), None) or (matching_setups[0] if matching_setups else None)
+                if best_setup and not setup_id:
+                    setup_id = best_setup.get("id")
+                setup_analysis = self._evaluate_setup_row(best_setup, daily_scores)
             if not portfolio_context:
                 try:
                     from backend.infrastructure.repositories.bot_repository import BotRepository
@@ -4613,6 +4705,9 @@ class FinnPlanService:
         elif explicit_risk_pct is not None and explicit_risk_pct > 2:
             risk_status = "modify"
             risk_detail = f"Je noemt ongeveer {explicit_risk_pct}% risico. Dat is aan de hoge kant; ik zou dit eerst terugbrengen."
+        elif explicit_risk_level == "high":
+            risk_status = "modify"
+            risk_detail = "Je noemt het risicobeeld zelf al hoog. Ik zou dit eerst kleiner en strakker maken voordat je verdergaat."
         elif "all-in" in self._normalized_query(query) or "all in" in self._normalized_query(query):
             risk_status = "block"
             risk_detail = "All-in taal is een harde guardrail-breuk voor een planmatige review."
@@ -4634,6 +4729,9 @@ class FinnPlanService:
         elif isinstance(allocation_pct, (int, float)) and allocation_pct >= 45:
             portfolio_status = "modify"
             portfolio_detail = f"{asset} zit al rond {allocation_pct}% allocatie. Ik zou alleen kleiner of selectiever toevoegen."
+        elif explicit_portfolio_level == "high":
+            portfolio_status = "modify"
+            portfolio_detail = f"Je noemt de portfolio exposure rond {asset} zelf al als hoog. Ik zou nu eerst exposure verlagen of niet verder stapelen."
         checks.append({
             "id": "portfolio_exposure",
             "label": "Portfolio-impact",
@@ -5194,11 +5292,15 @@ class FinnPlanService:
     ) -> Dict[str, Any]:
         context = context or {}
         asset = self._asset_from_query_or_context(query, context)
-        daily = await self.build_portfolio_daily_coach_response(user_id, query, context)
-        daily_analysis = (daily.get("state") or {}).get("analysis") if isinstance((daily.get("state") or {}).get("analysis"), dict) else {}
-        risk = daily_analysis.get("portfolio_risk") or {}
-        contract = self._portfolio_intelligence_contract(risk=risk, asset=asset)
         explicit_mix = self._explicit_portfolio_mix_from_query(query)
+        if explicit_mix:
+            risk = self._portfolio_context_from_explicit_mix(explicit_mix)
+            contract = self._portfolio_intelligence_contract(risk=risk, asset=asset)
+        else:
+            daily = await self.build_portfolio_daily_coach_response(user_id, query, context)
+            daily_analysis = (daily.get("state") or {}).get("analysis") if isinstance((daily.get("state") or {}).get("analysis"), dict) else {}
+            risk = daily_analysis.get("portfolio_risk") or {}
+            contract = self._portfolio_intelligence_contract(risk=risk, asset=asset)
         if explicit_mix:
             dominant_asset = explicit_mix.get("dominant_asset")
             dominant_pct = explicit_mix.get("dominant_pct")
