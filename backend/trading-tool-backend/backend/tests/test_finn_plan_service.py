@@ -871,6 +871,29 @@ def test_context_explain_reuses_recent_strategy_context_on_market_follow_up(monk
     assert "geen zekere strategie-entiteit" not in result["response"]
 
 
+def test_context_explain_reuses_recent_setup_context_on_market_follow_up():
+    service = _service()
+    context = {
+        "page": "/market/BTC",
+        "page_type": "Market",
+        "symbol": "BTC",
+        "finn_state": {
+            "current_flow": "general_help",
+            "recent_context_entities": [
+                {"entity_type": "setup", "entity_id": 62, "asset": "BTC", "page_family": "setup", "resolved_from": "page_context"},
+            ],
+            "analysis": {},
+        },
+    }
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welke setup heb ik nu open?", context))
+
+    assert result["analysis"]["entity"]["id"] == 62
+    assert result["analysis"]["context_confidence"]["level"] == "medium"
+    assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "recent_read_only_state"
+    assert "geen zekere setup-entiteit" not in result["response"]
+
+
 def test_build_product_refresh_help_response_stays_read_only_and_explains_stale_scores():
     service = _service()
 
@@ -4952,6 +4975,9 @@ def test_priority_engine_request_detection_is_read_only():
     assert service.looks_like_priority_engine_request("Wat moet ik nu eerst doen?", {"page": "/dashboard"}) is True
     assert service.looks_like_priority_engine_request("Wat kan vandaag wachten?", {"page": "/dashboard"}) is True
     assert service.looks_like_priority_engine_request("Waar moet ik vandaag op focussen?", {"page": "/dashboard"}) is True
+    assert service.looks_like_priority_engine_request("Wat zijn vandaag mijn 3 belangrijkste acties?", {"page": "/dashboard"}) is True
+    assert service.looks_like_priority_engine_request("Waar moet ik mee beginnen?", {"page": "/dashboard"}) is True
+    assert service.looks_like_priority_engine_request("Wat moet ik juist niet doen?", {"page": "/dashboard"}) is True
     assert service.looks_like_priority_engine_request("Maak een BTC setup", {"page": "/dashboard"}) is False
 
 
@@ -5209,6 +5235,40 @@ def test_build_portfolio_intelligence_response_uses_explicit_query_mix(monkeypat
     assert "70%" in (result["analysis"]["concentration_warning"] or "")
     assert "BTC 70%" in (result["analysis"]["exposure_delta"] or "")
     assert "geen extra risico" in (result["analysis"]["portfolio_safe_alternative"] or "").lower()
+    assert result["analysis"]["portfolio_impact"]["focus_asset"] == "BTC"
+    assert "BTC" in (result["analysis"]["stacked_risk_warning"] or "")
+
+
+def test_build_portfolio_intelligence_response_explicit_mix_overrides_live_asset_bias(monkeypatch):
+    service = _service()
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={
+        "state": {
+            "analysis": {
+                "portfolio_risk": {
+                    "status": "watch",
+                    "message": "ETH exposure vraagt aandacht.",
+                    "asset_risk": [
+                        {"asset": "ETH", "risk_level": "high", "risk_score": 74, "allocation_pct": 62.0},
+                    ],
+                    "concentration_warnings": [{"reason": "ETH zit zwaar in je portfolio."}],
+                    "risk_stacks": [{"asset": "ETH", "reason": "ETH stapelt risico."}],
+                    "ranked_conflicts": [{"asset": "ETH", "reason": "ETH heeft meerdere live conflicts."}],
+                }
+            }
+        }
+    }))
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_portfolio_intelligence_response(
+        30,
+        "Ik heb 70% BTC / 20% ETH / 10% cash en wil een nieuwe BTC long openen. Mag dat?",
+        {"page": "/dashboard", "page_type": "dashboard", "symbol": "ETH"},
+    ))
+
+    assert result["analysis"]["portfolio_impact"]["focus_asset"] == "BTC"
+    assert "BTC 70%" in (result["analysis"]["exposure_delta"] or "")
+    assert "BTC" in (result["analysis"]["concentration_warning"] or "")
+    assert result["analysis"]["portfolio_status"] == "concentrated"
 
 
 def test_portfolio_intelligence_detection_stays_secondary_to_explicit_trade_review():
@@ -5350,6 +5410,43 @@ def test_build_priority_engine_response_handles_focus_prompt(monkeypatch):
     assert result["intent"] == "priority_engine"
     assert result["analysis"]["top_priorities"][0]["title"] == "BTC exposure reviewen"
     assert "hierna reviewen" in result["response"].lower()
+
+
+def test_build_priority_engine_response_handles_top3_and_do_not_do_prompts(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "workqueue": [
+            {
+                "id": "review-btc",
+                "title": "BTC bot review eerst doen",
+                "type": "bot_decision",
+                "priority": "high",
+                "priority_rank": 4,
+                "reason": "Open review beïnvloedt je live uitvoering.",
+                "asset": "BTC",
+            },
+            {
+                "id": "skip-eth",
+                "title": "ETH vandaag laten liggen",
+                "type": "data_gap",
+                "priority": "low",
+                "priority_rank": 75,
+                "reason": "Nog geen harde actienoodzaak.",
+                "asset": "ETH",
+            },
+        ],
+        "summary": {"workqueue_count": 2, "open_action_count": 1},
+    })
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    top3 = asyncio.run(service.build_priority_engine_response(1, "Wat zijn vandaag mijn 3 belangrijkste acties?", {"page": "/dashboard"}))
+    avoid = asyncio.run(service.build_priority_engine_response(1, "Wat moet ik juist niet doen?", {"page": "/dashboard"}))
+
+    assert top3["intent"] == "priority_engine"
+    assert avoid["intent"] == "priority_engine"
+    assert "vandaag bewust laten liggen" in avoid["response"].lower()
 
 
 def test_build_mission_control_explain_response_exposes_priority_engine_contract(monkeypatch):

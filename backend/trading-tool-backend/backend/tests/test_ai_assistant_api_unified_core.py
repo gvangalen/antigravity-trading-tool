@@ -384,6 +384,44 @@ def test_build_finn_core_rescue_envelope_prefers_priority_engine_for_focus_promp
     assert response["intent"] == "priority_engine"
 
 
+def test_build_finn_core_rescue_envelope_prefers_priority_engine_for_top3_prompt():
+    finn = _finn()
+    finn.build_priority_engine_response = AsyncMock(
+        return_value={"intent": "priority_engine", "flow": "priority_engine"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Wat zijn vandaag mijn 3 belangrijkste acties?",
+            context_payload={"page": "/dashboard", "symbol": "BTC"},
+        )
+    )
+
+    finn.build_priority_engine_response.assert_awaited_once()
+    assert response["intent"] == "priority_engine"
+
+
+def test_build_finn_core_rescue_envelope_prefers_priority_engine_for_what_not_to_do_prompt():
+    finn = _finn()
+    finn.build_priority_engine_response = AsyncMock(
+        return_value={"intent": "priority_engine", "flow": "priority_engine"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Wat moet ik juist niet doen?",
+            context_payload={"page": "/dashboard", "symbol": "BTC"},
+        )
+    )
+
+    finn.build_priority_engine_response.assert_awaited_once()
+    assert response["intent"] == "priority_engine"
+
+
 def test_build_finn_core_rescue_envelope_prefers_portfolio_operating_system_builder():
     finn = _finn()
     finn.build_portfolio_operating_system_response = AsyncMock(

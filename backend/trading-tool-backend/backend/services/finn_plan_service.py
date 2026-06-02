@@ -757,7 +757,7 @@ class FinnPlanService:
         prompt_asset = next(iter(_asset_mentions(query)), None)
         context_asset = asset or prompt_asset or context.get("symbol") or context.get("asset")
         current_page_family = self._page_family(context)
-        dashboard_follow_up = current_page_family == "dashboard" and entity_type in {"strategy", "setup"}
+        dashboard_follow_up = current_page_family in {"dashboard", "market"} and entity_type in {"strategy", "setup"}
         explicit_current_entity_follow_up = (
             entity_type in {"strategy", "setup"}
             and any(
@@ -859,7 +859,7 @@ class FinnPlanService:
             }
         recent_entity_reusable = self._page_supports_entity(context, entity_type) or (
             entity_type in {"strategy", "setup", "bot", "report"}
-            and "dashboard" in self._current_page_type(context)
+            and current_page_family in {"dashboard", "market"}
             and bool(recent_entity and recent_entity.get("entity_id"))
         ) or (
             explicit_current_entity_follow_up
@@ -905,6 +905,7 @@ class FinnPlanService:
         if state_entity_id and (
             not recent_entity
             or recent_entity.get("entity_id") in (None, state_entity_id)
+            or explicit_current_entity_follow_up
         ):
             return {
                 "level": "medium",
@@ -1787,6 +1788,9 @@ class FinnPlanService:
             "waar begin ik vandaag",
             "wat verdient nu mijn aandacht",
             "wat is vandaag het belangrijkst",
+            "wat zijn vandaag mijn 3 belangrijkste acties",
+            "waar moet ik mee beginnen",
+            "wat moet ik juist niet doen",
         ]
         if any(phrase in q for phrase in phrases):
             return True
@@ -1810,6 +1814,10 @@ class FinnPlanService:
             "wat laat ik liggen",
             "wat laat ik vandaag liggen",
             "hoogste prioriteit",
+            "belangrijkste acties",
+            "mee beginnen",
+            "juist niet doen",
+            "niet doen",
         ])
         has_mc = "mission control" in q or context.get("scope") == "mission_control" or context.get("page") == "mission_control"
         return has_priority and (
@@ -2567,6 +2575,17 @@ class FinnPlanService:
             }
             for item in suppressions[:3]
         ]
+        if not ignore_today:
+            for item in reversed(ranked_items):
+                if len(ignore_today) >= 3:
+                    break
+                if item.get("priority") not in {"low", "medium"} and item.get("type") not in {"score_refresh", "data_gap"}:
+                    continue
+                ignore_today.append({
+                    "title": item.get("title"),
+                    "reason": item.get("source_reason") or item.get("why_now"),
+                    "asset": item.get("asset"),
+                })
         suppression_reasons = [item.get("reason") for item in ignore_today if item.get("reason")]
         top = top_priorities[0] if top_priorities else {}
         headline = (
@@ -4794,10 +4813,16 @@ class FinnPlanService:
         if not allocations:
             return None
         dominant_asset = max(allocations.items(), key=lambda item: item[1])[0]
+        requested_asset = None
+        if any(term in q for term in ["long", "short", "openen", "toevoegen", "extra", "risico"]):
+            positional_mentions = list(re.finditer(r"\b(BTC|ETH|SOL|DOGE|XRP|ADA|BNB|AVAX|LINK|MATIC|PEPE|CASH)\b", (query or "").upper()))
+            if positional_mentions:
+                requested_asset = str(positional_mentions[-1].group(1)).upper()
         return {
             "allocations": allocations,
             "dominant_asset": dominant_asset,
             "dominant_pct": allocations[dominant_asset],
+            "requested_asset": requested_asset,
         }
 
     async def build_plan_adherence_review_response(
@@ -5089,26 +5114,32 @@ class FinnPlanService:
             dominant_asset = explicit_mix.get("dominant_asset")
             dominant_pct = explicit_mix.get("dominant_pct")
             allocations = explicit_mix.get("allocations") or {}
-            ask_asset = str((context or {}).get("symbol") or asset or dominant_asset or "").upper() or None
-            add_more_same_asset = bool(ask_asset and str(ask_asset).upper() == str(dominant_asset).upper())
+            requested_asset = str(explicit_mix.get("requested_asset") or "").upper() or None
+            ask_asset = requested_asset or str((context or {}).get("symbol") or asset or dominant_asset or "").upper() or None
+            focus_asset = ask_asset or dominant_asset
+            focus_pct = allocations.get(focus_asset) if focus_asset else None
+            if focus_pct is None:
+                focus_asset = dominant_asset
+                focus_pct = dominant_pct
+            add_more_same_asset = bool(ask_asset and focus_asset and str(ask_asset).upper() == str(focus_asset).upper())
             contract["portfolio_impact"] = {
-                "status": "concentrated" if (dominant_pct or 0) >= 60 else "watch",
+                "status": "concentrated" if (focus_pct or 0) >= 60 else "watch",
                 "message": (
-                    f"Je portfolio is nu al zwaar geconcentreerd in {dominant_asset}."
-                    if (dominant_pct or 0) >= 60 else
-                    f"Je portfolio-mix vraagt eerst een exposure-check voordat je nieuw risico toevoegt."
+                    f"Je portfolio is nu al zwaar geconcentreerd in {focus_asset}."
+                    if (focus_pct or 0) >= 60 else
+                    f"Je portfolio-mix rond {focus_asset} vraagt eerst een exposure-check voordat je nieuw risico toevoegt."
                 ),
-                "focus_asset": dominant_asset,
-                "focus_risk_level": "high" if (dominant_pct or 0) >= 60 else "medium",
-                "focus_risk_score": dominant_pct,
+                "focus_asset": focus_asset,
+                "focus_risk_level": "high" if (focus_pct or 0) >= 60 else "medium",
+                "focus_risk_score": focus_pct,
             }
             contract["exposure_delta"] = ", ".join(
                 f"{asset_name} {pct:.0f}%"
                 for asset_name, pct in allocations.items()
             )
-            if add_more_same_asset and (dominant_pct or 0) >= 60:
+            if add_more_same_asset and (focus_pct or 0) >= 60:
                 contract["concentration_warning"] = (
-                    f"{dominant_asset} zit al rond {dominant_pct:.0f}% allocatie. Extra {dominant_asset}-risico stapelt concentratie in plaats van spreiding."
+                    f"{focus_asset} zit al rond {focus_pct:.0f}% allocatie. Extra {focus_asset}-risico stapelt concentratie in plaats van spreiding."
                 )
                 contract["portfolio_blockers"] = [
                     *([contract["concentration_warning"]] if contract.get("concentration_warning") else []),
@@ -5117,6 +5148,11 @@ class FinnPlanService:
                 contract["portfolio_safe_alternative"] = (
                     "Voeg nu geen extra risico toe in dezelfde asset; verlaag eerst concentratie of kies een niet-gestapelde exposure."
                 )
+            contract["stacked_risk_warning"] = (
+                f"{focus_asset} domineert deze scenario-mix en verdient nu de strengste portfolio-check."
+                if (focus_pct or 0) >= 60 else contract.get("stacked_risk_warning")
+            )
+            asset = focus_asset or asset
         analysis = {
             **contract,
             "headline": (
@@ -5124,8 +5160,8 @@ class FinnPlanService:
                 if asset else
                 "Ik beoordeel nu je portfolio-impact over je actieve assets."
             ),
-            "portfolio_status": risk.get("status"),
-            "why_now": risk.get("message"),
+            "portfolio_status": (contract.get("portfolio_impact") or {}).get("status") or risk.get("status"),
+            "why_now": (contract.get("portfolio_impact") or {}).get("message") or risk.get("message"),
             "review_queue": (risk.get("asset_priority") or [])[:3],
         }
         await self._record_governance_event(
@@ -5134,12 +5170,12 @@ class FinnPlanService:
             symbol=asset,
             title="Finn maakte een portfolio-intelligence review",
             description=(analysis.get("portfolio_impact") or {}).get("message") or "Portfolio review uitgevoerd.",
-            severity="warning" if risk.get("status") in {"high_attention", "concentrated"} else "info",
+            severity="warning" if analysis.get("portfolio_status") in {"high_attention", "concentrated"} else "info",
             payload={
                 "phase": "portfolio_intelligence_summary",
                 "query": query,
                 "asset": asset,
-                "portfolio_status": risk.get("status"),
+                "portfolio_status": analysis.get("portfolio_status"),
                 "portfolio_impact": analysis.get("portfolio_impact"),
                 "portfolio_blockers": analysis.get("portfolio_blockers"),
                 "concentration_warning": analysis.get("concentration_warning"),
@@ -5166,9 +5202,9 @@ class FinnPlanService:
             },
             "analysis": analysis,
             "reasoning": {
-                "confidence_score": 0.79 if risk else 0.52,
-                "risk_detected": risk.get("status") not in {None, "balanced"},
-                "reasons": [risk.get("message") or "Portfolio-impact beoordeeld."],
+                "confidence_score": 0.88 if explicit_mix else 0.79 if risk else 0.52,
+                "risk_detected": analysis.get("portfolio_status") not in {None, "balanced"},
+                "reasons": [(contract.get("portfolio_impact") or {}).get("message") or risk.get("message") or "Portfolio-impact beoordeeld."],
                 "coaching_level": "portfolio_intelligence",
             },
         }

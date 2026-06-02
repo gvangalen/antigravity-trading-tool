@@ -700,6 +700,46 @@
       "expected_mode": "read_only"
     },
     {
+      "id": "operator-priority-top3-actions",
+      "query": "Wat zijn vandaag mijn 3 belangrijkste acties?",
+      "context": {
+        "page": "/dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC"
+      },
+      "expected_intents": [
+        "priority_engine"
+      ],
+      "forbidden_flows": [
+        "general_help",
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "operator-priority-what-not-to-do",
+      "query": "Wat moet ik juist niet doen?",
+      "context": {
+        "page": "/dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC"
+      },
+      "expected_intents": [
+        "priority_engine"
+      ],
+      "forbidden_flows": [
+        "general_help",
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
+      "expected_mode": "read_only"
+    },
+    {
       "id": "operator-portfolio-extra-btc-risk",
       "query": "Mag ik extra BTC risico toevoegen?",
       "context": {

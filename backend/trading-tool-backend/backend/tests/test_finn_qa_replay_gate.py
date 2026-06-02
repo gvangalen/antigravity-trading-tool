@@ -35,6 +35,8 @@ def test_promptset_exists_and_covers_required_cases():
     assert "mixed-06-mission-control" in case_ids
     assert "operator-priority-what-now" in case_ids
     assert "operator-priority-focus-today" in case_ids
+    assert "operator-priority-top3-actions" in case_ids
+    assert "operator-priority-what-not-to-do" in case_ids
     assert "operator-plan-stop-loss-removal" in case_ids
     assert "operator-outcome-fomo-history" in case_ids
     assert "operator-portfolio-btc-concentration" in case_ids
