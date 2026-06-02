@@ -4926,6 +4926,10 @@ def test_decision_review_request_detection_is_read_only():
     assert service.looks_like_decision_review_request("Beoordeel deze trade", {"symbol": "BTC"}) is True
     assert service.looks_like_decision_review_request("Past dit bij mijn strategie?", {"strategy_id": 257, "symbol": "ETH"}) is True
     assert service.looks_like_decision_review_request(
+        "Wat vind je van deze trade?",
+        {"page": "/dashboard", "page_type": "dashboard", "symbol": "BTC"},
+    ) is True
+    assert service.looks_like_decision_review_request(
         "Zou jij dit doen?",
         {"page": "/setup", "page_type": "setup", "setup_id": 62, "strategy_id": 257, "symbol": "BTC"},
     ) is True
@@ -5278,10 +5282,50 @@ def test_portfolio_intelligence_detection_stays_secondary_to_explicit_trade_revi
         "Zou jij dit doen?",
         {"page": "/setup", "page_type": "setup", "setup_id": 62, "strategy_id": 257, "symbol": "BTC"},
     ) is False
+    assert service.looks_like_portfolio_intelligence_request(
+        "Wat vind je van deze trade?",
+        {"page": "/dashboard", "page_type": "dashboard", "symbol": "BTC"},
+    ) is False
     assert service.looks_like_decision_review_request(
         "Zou jij dit doen?",
         {"page": "/setup", "page_type": "setup", "setup_id": 62, "strategy_id": 257, "symbol": "BTC"},
     ) is True
+    assert service.looks_like_decision_review_request(
+        "Wat vind je van deze trade?",
+        {"page": "/dashboard", "page_type": "dashboard", "symbol": "BTC"},
+    ) is True
+
+
+def test_build_portfolio_intelligence_response_parses_asset_before_percent_mix(monkeypatch):
+    service = _service()
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={
+        "state": {
+            "analysis": {
+                "portfolio_risk": {
+                    "status": "watch",
+                    "message": "ETH exposure vraagt aandacht.",
+                    "asset_risk": [
+                        {"asset": "ETH", "risk_level": "high", "risk_score": 74, "allocation_pct": 62.0},
+                    ],
+                    "concentration_warnings": [{"reason": "ETH zit zwaar in je portfolio."}],
+                    "risk_stacks": [{"asset": "ETH", "reason": "ETH stapelt risico."}],
+                    "ranked_conflicts": [{"asset": "ETH", "reason": "ETH heeft meerdere live conflicts."}],
+                }
+            }
+        }
+    }))
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_portfolio_intelligence_response(
+        30,
+        "Portfolio: BTC 70% ETH 20% Cash 10%. Nieuwe trade: BTC Long. Mag dat?",
+        {"page": "/dashboard", "page_type": "dashboard", "symbol": "ETH"},
+    ))
+
+    assert result["analysis"]["portfolio_impact"]["focus_asset"] == "BTC"
+    assert "BTC 70%" in (result["analysis"]["exposure_delta"] or "")
+    assert "BTC" in (result["analysis"]["concentration_warning"] or "")
+    assert result["analysis"]["portfolio_status"] == "concentrated"
 
 
 def test_decision_review_includes_portfolio_intelligence_contract():

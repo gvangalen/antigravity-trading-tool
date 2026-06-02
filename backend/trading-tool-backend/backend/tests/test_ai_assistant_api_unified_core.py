@@ -194,6 +194,23 @@ def test_build_finn_core_rescue_envelope_prefers_decision_review_for_natural_tra
     assert response["intent"] == "decision_review"
 
 
+def test_build_finn_core_rescue_envelope_prefers_decision_review_for_trade_opinion_prompt():
+    finn = _finn()
+    finn.build_decision_review_response = AsyncMock(return_value={"intent": "decision_review", "flow": "decision_review"})
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Wat vind je van deze trade?",
+            context_payload={"page": "/dashboard", "page_type": "dashboard", "symbol": "BTC"},
+        )
+    )
+
+    finn.build_decision_review_response.assert_awaited_once()
+    assert response["intent"] == "decision_review"
+
+
 def test_build_finn_core_rescue_envelope_prefers_plan_adherence_review_builder():
     finn = _finn()
     finn.build_plan_adherence_review_response = AsyncMock(

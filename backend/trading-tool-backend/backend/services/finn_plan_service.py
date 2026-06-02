@@ -859,7 +859,7 @@ class FinnPlanService:
             }
         recent_entity_reusable = self._page_supports_entity(context, entity_type) or (
             entity_type in {"strategy", "setup", "bot", "report"}
-            and current_page_family in {"dashboard", "market"}
+            and current_page_family in {"dashboard", "market", "report", "score"}
             and bool(recent_entity and recent_entity.get("entity_id"))
         ) or (
             explicit_current_entity_follow_up
@@ -1717,6 +1717,8 @@ class FinnPlanService:
             "zou je dit doen",
             "zou jij dit openen",
             "zou je dit openen",
+            "wat vind je van deze trade",
+            "wat vind je van dit trade idee",
             "waarom blokkeer je deze trade",
         ]
         if any(phrase in q for phrase in direct_trade_review_cues):
@@ -1744,7 +1746,14 @@ class FinnPlanService:
         ]
         if any(phrase in q for phrase in phrases):
             return True
-        explicit_mix = re.findall(r"(\d+(?:[.,]\d+)?)\s*%\s*(btc|eth|sol|doge|xrp|ada|bnb|avax|link|matic|pepe|cash)", q)
+        explicit_mix = re.findall(
+            r"(?:"
+            r"(\d+(?:[.,]\d+)?)\s*%\s*(btc|eth|sol|doge|xrp|ada|bnb|avax|link|matic|pepe|cash)"
+            r"|"
+            r"(btc|eth|sol|doge|xrp|ada|bnb|avax|link|matic|pepe|cash)\s*(\d+(?:[.,]\d+)?)\s*%"
+            r")",
+            q,
+        )
         if explicit_mix and any(term in q for term in [
             "kan ik",
             "mag ik",
@@ -1860,6 +1869,8 @@ class FinnPlanService:
             "beoordeel deze trade",
             "review deze trade",
             "controleer deze trade",
+            "wat vind je van deze trade",
+            "wat vind je van dit trade idee",
             "ik wil deze trade openen",
             "ik wil deze trade nemen",
             "kan ik deze trade openen",
@@ -4800,22 +4811,32 @@ class FinnPlanService:
         }
 
     def _explicit_portfolio_mix_from_query(self, query: str) -> Optional[Dict[str, Any]]:
-        q = self._normalized_query(query)
-        matches = re.findall(r"(\d+(?:[.,]\d+)?)\s*%\s*(btc|eth|sol|doge|xrp|ada|bnb|avax|link|matic|pepe|cash)", q)
+        raw_query = (query or "").upper()
+        pattern = re.compile(
+            r"(?:(BTC|ETH|SOL|DOGE|XRP|ADA|BNB|AVAX|LINK|MATIC|PEPE|CASH)\s*(\d+(?:[.,]\d+)?)\s*%"
+            r"|(\d+(?:[.,]\d+)?)\s*%\s*(BTC|ETH|SOL|DOGE|XRP|ADA|BNB|AVAX|LINK|MATIC|PEPE|CASH))"
+        )
+        matches = list(pattern.finditer(raw_query))
         if not matches:
             return None
         allocations: Dict[str, float] = {}
-        for pct_raw, asset_raw in matches:
+        ordered_assets: List[str] = []
+        for match in matches:
+            asset_raw = match.group(1) or match.group(4)
+            pct_raw = match.group(2) or match.group(3)
+            if not asset_raw or not pct_raw:
+                continue
             try:
                 allocations[str(asset_raw).upper()] = float(str(pct_raw).replace(",", "."))
+                ordered_assets.append(str(asset_raw).upper())
             except ValueError:
                 continue
         if not allocations:
             return None
         dominant_asset = max(allocations.items(), key=lambda item: item[1])[0]
         requested_asset = None
-        if any(term in q for term in ["long", "short", "openen", "toevoegen", "extra", "risico"]):
-            positional_mentions = list(re.finditer(r"\b(BTC|ETH|SOL|DOGE|XRP|ADA|BNB|AVAX|LINK|MATIC|PEPE|CASH)\b", (query or "").upper()))
+        if any(term in self._normalized_query(query) for term in ["long", "short", "openen", "toevoegen", "extra", "risico"]):
+            positional_mentions = list(re.finditer(r"\b(BTC|ETH|SOL|DOGE|XRP|ADA|BNB|AVAX|LINK|MATIC|PEPE|CASH)\b", raw_query))
             if positional_mentions:
                 requested_asset = str(positional_mentions[-1].group(1)).upper()
         return {
@@ -4823,6 +4844,7 @@ class FinnPlanService:
             "dominant_asset": dominant_asset,
             "dominant_pct": allocations[dominant_asset],
             "requested_asset": requested_asset,
+            "ordered_assets": ordered_assets,
         }
 
     async def build_plan_adherence_review_response(
