@@ -496,7 +496,7 @@ class FinnPlanService:
         return (
             any(phrase in q for phrase in [
             "leg uit", "uitleg", "verklaar", "waarom", "wat is", "wat doet",
-            "welke", "met welke", "bekijk ik", "heb ik open", "simpele taal", "samenvat",
+            "welke", "welk", "met welke", "bekijk ik", "zie ik nu", "heb ik open", "simpele taal", "samenvat",
             "vat", "leg dit scherm uit", "wat bekijk ik nu", "wat betekent",
             ])
             or ("leg" in q and "uit" in q)
@@ -823,7 +823,7 @@ class FinnPlanService:
                 continue
             if (
                 item.get("page_family")
-                and current_page_family not in {"dashboard", "market", "report", item.get("page_family")}
+                and current_page_family not in {"dashboard", "market", "report", "assistant", item.get("page_family")}
                 and item.get("page_family") != current_page_family
                 and not explicit_current_entity_follow_up
             ):
@@ -986,7 +986,18 @@ class FinnPlanService:
     def looks_like_entity_explain_request(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
         q = self._normalized_query(query)
         context = context or {}
+        page_type = str(context.get("page_type") or context.get("page") or "").lower()
         has_explain = self._has_explain_intent(query)
+        if "report" in page_type and any(phrase in q for phrase in [
+            "welk rapport zie ik nu",
+            "welk report zie ik nu",
+            "welk rapport bekijk ik nu",
+            "welk report bekijk ik nu",
+            "mijn rapport",
+            "dit rapport",
+            "dat rapport",
+        ]):
+            return True
         if not has_explain:
             return False
         if any(phrase in q for phrase in ["mission control", "dit scherm", "deze pagina", "wat kan ik hier doen"]):
@@ -999,6 +1010,7 @@ class FinnPlanService:
             return True
         if any(phrase in q for phrase in [
             "wat bekijk ik nu", "heb ik nu open", "wat zie ik nu",
+            "welk rapport zie ik nu", "welk report zie ik nu",
             "met welke asset werk ik nu", "welke asset werk ik nu",
             "met welke asset en bot werk ik nu",
         ]):
@@ -2208,9 +2220,10 @@ class FinnPlanService:
         context: Optional[Dict[str, Any]],
         entity_type: str,
         *,
+        query: str = "",
         asset: Optional[str] = None,
     ) -> Dict[str, Any]:
-        return self._resolve_context_target("", context, entity_type, asset=asset)
+        return self._resolve_context_target(query, context, entity_type, asset=asset)
 
     def _context_explain_target(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
         q = self._normalized_query(query)
@@ -2221,6 +2234,8 @@ class FinnPlanService:
             return "mission_control"
         if "asset" in q:
             return "asset"
+        if any(phrase in q for phrase in ["welk rapport zie ik nu", "welk report zie ik nu", "welk rapport bekijk ik nu", "welk report bekijk ik nu"]):
+            return "report"
         if any(term in q for term in ["rapport", "report"]):
             return "report"
         if "score" in q:
@@ -3111,7 +3126,7 @@ class FinnPlanService:
     async def build_context_explain_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
         target = self._context_explain_target(query, context)
-        confidence = self._context_confidence_for_target(context, target)
+        confidence = self._context_confidence_for_target(context, target, query=query)
         strategy_id = context.get("strategy_id")
         setup_id = context.get("setup_id")
         bot_id = context.get("bot_id")
@@ -3143,7 +3158,7 @@ class FinnPlanService:
 
         if target == "score":
             asset = self._asset_from_query_or_context(query, context)
-            score_confidence = self._context_confidence_for_target(context, "score", asset=asset)
+            score_confidence = self._context_confidence_for_target(context, "score", query=query, asset=asset)
             if self.session:
                 daily_scores = await self._fetch_daily_scores_with_runtime_refresh(user_id, asset)
                 if daily_scores:
@@ -3197,7 +3212,7 @@ class FinnPlanService:
             )
 
         if target == "report":
-            report_confidence = self._context_confidence_for_target(context, "report")
+            report_confidence = self._context_confidence_for_target(context, "report", query=query)
             if self.session:
                 table_name = self._report_table_from_query_or_context(query, context)
                 report = await ReportRepository(self.session).get_latest_report(user_id, table_name)
@@ -3268,7 +3283,7 @@ class FinnPlanService:
                 )
                 return self._context_explain_payload(
                     response=response,
-                    confidence=self._context_confidence_for_target(context, "strategy"),
+                    confidence=self._context_confidence_for_target(context, "strategy", query=query),
                     entity_type="strategy",
                     entity={
                         **strategy,
@@ -3291,7 +3306,7 @@ class FinnPlanService:
             )
             return self._context_explain_payload(
                 response=response,
-                confidence=self._context_confidence_for_target(context, "strategy"),
+                confidence=self._context_confidence_for_target(context, "strategy", query=query),
                 entity_type="strategy",
                 entity={"id": strategy_id, "asset": asset},
                 state_overrides={"strategy_id": strategy_id, "asset": asset},
@@ -3307,7 +3322,7 @@ class FinnPlanService:
                 )
                 return self._context_explain_payload(
                     response=response,
-                    confidence=self._context_confidence_for_target(context, "setup"),
+                    confidence=self._context_confidence_for_target(context, "setup", query=query),
                     entity_type="setup",
                     entity=setup,
                     state_overrides={
@@ -3326,7 +3341,7 @@ class FinnPlanService:
             )
             return self._context_explain_payload(
                 response=response,
-                confidence=self._context_confidence_for_target(context, "setup"),
+                confidence=self._context_confidence_for_target(context, "setup", query=query),
                 entity_type="setup",
                 entity={"id": setup_id, "asset": asset},
                 state_overrides={"setup_id": setup_id, "asset": asset},
@@ -3395,7 +3410,7 @@ class FinnPlanService:
                 )
                 return self._context_explain_payload(
                     response=response,
-                    confidence=self._context_confidence_for_target(context, "bot"),
+                    confidence=self._context_confidence_for_target(context, "bot", query=query),
                     entity_type="bot",
                     entity={
                         **bot,
@@ -3420,7 +3435,7 @@ class FinnPlanService:
             response = f"Je werkt nu met bot #{bot_id}. Als je wilt kan ik uitleggen waarom deze bot actief is, welke strategie hij volgt of welke review-openingen er zijn."
             return self._context_explain_payload(
                 response=response,
-                confidence=self._context_confidence_for_target(context, "bot"),
+                confidence=self._context_confidence_for_target(context, "bot", query=query),
                 entity_type="bot",
                 entity={"id": bot_id},
                 state_overrides={"bot_id": bot_id},
@@ -3428,7 +3443,7 @@ class FinnPlanService:
 
         if target == "asset":
             asset = self._asset_from_query_or_context(query, context)
-            asset_confidence = self._context_confidence_for_target(context, "asset", asset=asset)
+            asset_confidence = self._context_confidence_for_target(context, "asset", query=query, asset=asset)
             related_bot_id = context.get("bot_id")
             if asset_confidence["level"] == "low":
                 return self._context_explain_payload(

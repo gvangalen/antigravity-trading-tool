@@ -282,6 +282,10 @@ def test_education_and_general_request_detection_are_explicit():
         "Leg mijn setup uit",
         {"setup_id": 62, "page": "/setup"},
     ) is True
+    assert service.looks_like_entity_explain_request(
+        "Welk rapport zie ik nu?",
+        {"page_type": "report", "page": "/report"},
+    ) is True
 
 
 def test_build_education_response_covers_core_topic_in_simple_mode():
@@ -892,6 +896,80 @@ def test_context_explain_reuses_recent_setup_context_on_market_follow_up():
     assert result["analysis"]["context_confidence"]["level"] == "medium"
     assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "recent_read_only_state"
     assert "geen zekere setup-entiteit" not in result["response"]
+
+
+def test_context_explain_reuses_recent_strategy_context_on_assistant_follow_up(monkeypatch):
+    class _Repo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_raw_strategy_with_setup(self, strategy_id, user_id):
+            return {
+                "id": strategy_id,
+                "symbol": "ETH",
+                "setup_id": 233,
+                "name": "ETH Live QA Strategy 542357",
+                "status": "active",
+                "timeframe": "1W",
+                "setup_name": "ETH Weekly Breakout",
+            }
+
+    class _StrategySvc:
+        def __init__(self, session):
+            self.session = session
+
+        def _format_strategy_row(self, row):
+            return row
+
+    monkeypatch.setattr("backend.services.finn_plan_service.StrategyRepository", _Repo)
+    monkeypatch.setattr("backend.services.finn_plan_service.StrategyService", _StrategySvc)
+    service = FinnPlanService(db_session=object())
+    context = {
+        "page": "/assistant",
+        "page_type": "assistant",
+        "symbol": "BTC",
+        "finn_state": {
+            "current_flow": "general_help",
+            "recent_context_entities": [
+                {"entity_type": "strategy", "entity_id": 257, "asset": "ETH", "page_family": "strategy", "resolved_from": "page_context"},
+            ],
+            "analysis": {},
+        },
+    }
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welke strategie bekijk ik nu?", context))
+
+    assert result["analysis"]["entity"]["id"] == 257
+    assert result["analysis"]["context_confidence"]["level"] == "medium"
+    assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "recent_read_only_state"
+    assert "geen zekere strategie-entiteit" not in result["response"]
+
+
+def test_build_context_explain_response_handles_report_which_report_question(monkeypatch):
+    class _ReportRepo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_latest_report(self, user_id, table_name, symbol=None):
+            return {
+                "report_date": "2026-06-02",
+                "summary": "BTC bleef zwak, setups bleven selectief.",
+                "recommended_action": "Gebruik dit rapport als startpunt voor Mission Control.",
+            }
+
+    monkeypatch.setattr("backend.services.finn_plan_service.ReportRepository", _ReportRepo)
+    service = FinnPlanService(db_session=object())
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welk rapport zie ik nu?", {
+        "page": "/report",
+        "page_type": "report",
+        "symbol": "BTC",
+    }))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "report"
+    assert result["analysis"]["context_confidence"]["level"] in {"medium", "high"}
+    assert "dagrapport" in result["response"].lower() or "rapport" in result["response"].lower()
 
 
 def test_build_product_refresh_help_response_stays_read_only_and_explains_stale_scores():
