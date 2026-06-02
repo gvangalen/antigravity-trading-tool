@@ -177,6 +177,23 @@ def test_build_finn_core_rescue_envelope_prefers_decision_review_builder():
     assert response["intent"] == "decision_review"
 
 
+def test_build_finn_core_rescue_envelope_prefers_decision_review_for_natural_trade_prompt():
+    finn = _finn()
+    finn.build_decision_review_response = AsyncMock(return_value={"intent": "decision_review", "flow": "decision_review"})
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Zou jij dit doen?",
+            context_payload={"page": "/setup", "page_type": "setup", "setup_id": 62, "strategy_id": 257, "symbol": "BTC"},
+        )
+    )
+
+    finn.build_decision_review_response.assert_awaited_once()
+    assert response["intent"] == "decision_review"
+
+
 def test_build_finn_core_rescue_envelope_prefers_plan_adherence_review_builder():
     finn = _finn()
     finn.build_plan_adherence_review_response = AsyncMock(
@@ -291,6 +308,25 @@ def test_build_finn_core_rescue_envelope_prefers_portfolio_intelligence_for_expl
     assert response["intent"] == "portfolio_intelligence"
 
 
+def test_build_finn_core_rescue_envelope_prefers_portfolio_intelligence_for_extra_btc_risk_prompt():
+    finn = _finn()
+    finn.build_portfolio_intelligence_response = AsyncMock(
+        return_value={"intent": "portfolio_intelligence", "flow": "portfolio_intelligence"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Mag ik extra BTC risico toevoegen?",
+            context_payload={"page": "/dashboard", "symbol": "BTC"},
+        )
+    )
+
+    finn.build_portfolio_intelligence_response.assert_awaited_once()
+    assert response["intent"] == "portfolio_intelligence"
+
+
 def test_build_finn_core_rescue_envelope_prefers_priority_engine_builder():
     finn = _finn()
     finn.build_priority_engine_response = AsyncMock(
@@ -321,6 +357,25 @@ def test_build_finn_core_rescue_envelope_prefers_priority_engine_for_generic_wha
             finn=finn,
             user_id=30,
             query="Wat moet ik nu eerst doen?",
+            context_payload={"page": "/dashboard", "symbol": "BTC"},
+        )
+    )
+
+    finn.build_priority_engine_response.assert_awaited_once()
+    assert response["intent"] == "priority_engine"
+
+
+def test_build_finn_core_rescue_envelope_prefers_priority_engine_for_focus_prompt():
+    finn = _finn()
+    finn.build_priority_engine_response = AsyncMock(
+        return_value={"intent": "priority_engine", "flow": "priority_engine"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Waar moet ik vandaag op focussen?",
             context_payload={"page": "/dashboard", "symbol": "BTC"},
         )
     )

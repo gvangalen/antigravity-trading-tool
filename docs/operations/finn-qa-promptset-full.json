@@ -678,6 +678,71 @@
         "indicator_config"
       ],
       "expected_mode": "read_only"
+    },
+    {
+      "id": "operator-priority-focus-today",
+      "query": "Waar moet ik vandaag op focussen?",
+      "context": {
+        "page": "/dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC"
+      },
+      "expected_intents": [
+        "priority_engine"
+      ],
+      "forbidden_flows": [
+        "general_help",
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "operator-portfolio-extra-btc-risk",
+      "query": "Mag ik extra BTC risico toevoegen?",
+      "context": {
+        "page": "/dashboard",
+        "page_type": "dashboard",
+        "symbol": "BTC"
+      },
+      "expected_intents": [
+        "portfolio_intelligence",
+        "decision_review"
+      ],
+      "forbidden_flows": [
+        "general_help",
+        "plan_creation",
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "operator-decision-natural-trade-review",
+      "query": "Zou jij dit doen?",
+      "context": {
+        "page": "/setup",
+        "page_type": "setup",
+        "setup_id": 62,
+        "strategy_id": 257,
+        "symbol": "BTC"
+      },
+      "expected_intents": [
+        "decision_review"
+      ],
+      "forbidden_flows": [
+        "general_help",
+        "plan_creation",
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config"
+      ],
+      "expected_mode": "read_only"
     }
   ]
 }

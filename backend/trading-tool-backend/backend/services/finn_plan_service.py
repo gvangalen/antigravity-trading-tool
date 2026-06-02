@@ -1704,6 +1704,22 @@ class FinnPlanService:
         context: Optional[Dict[str, Any]] = None,
     ) -> bool:
         q = self._normalized_query(query)
+        context = context or {}
+        direct_trade_review_cues = [
+            "beoordeel deze trade",
+            "review deze trade",
+            "controleer deze trade",
+            "moet ik deze trade openen",
+            "kan ik deze trade openen",
+            "mag ik deze trade openen",
+            "zou jij dit doen",
+            "zou je dit doen",
+            "zou jij dit openen",
+            "zou je dit openen",
+            "waarom blokkeer je deze trade",
+        ]
+        if any(phrase in q for phrase in direct_trade_review_cues):
+            return False
         phrases = [
             "heb ik te veel exposure",
             "wat is mijn portfolio risico",
@@ -1718,6 +1734,12 @@ class FinnPlanService:
             "wat blokkeert mij op portefeuilleniveau",
             "wat is mijn grootste portfolio risico",
             "waar zit mijn concentratierisico",
+            "voeg ik nu te veel geconcentreerd risico toe",
+            "kan ik nog een btc long openen",
+            "kan ik nog meer btc risico nemen",
+            "mag ik nog meer btc risico nemen",
+            "waar zit mijn grootste exposure",
+            "waar stapelt mijn risico",
         ]
         if any(phrase in q for phrase in phrases):
             return True
@@ -1733,9 +1755,13 @@ class FinnPlanService:
             "risico",
         ]):
             return True
-        has_portfolio = any(term in q for term in ["portfolio", "portefeuille", "allocatie", "allocation", "exposure"])
-        has_judgment = any(term in q for term in ["risico", "blokkeert", "veilig", "toevoegen", "concentratie", "stapelt"])
-        context = context or {}
+        has_portfolio = any(term in q for term in [
+            "portfolio", "portefeuille", "allocatie", "allocation", "exposure", "concentratie", "overgewicht",
+        ])
+        has_judgment = any(term in q for term in [
+            "risico", "blokkeert", "veilig", "toevoegen", "concentratie", "stapelt", "te veel", "extra btc",
+            "extra exposure", "long openen", "grootste",
+        ])
         return has_portfolio and has_judgment and bool(context.get("symbol") or context.get("asset") or context.get("page"))
 
     def looks_like_priority_engine_request(
@@ -1749,6 +1775,7 @@ class FinnPlanService:
             "wat moet ik vandaag eerst doen",
             "wat moet ik nu eerst doen",
             "waar moet ik nu op focussen",
+            "waar moet ik vandaag op focussen",
             "wat is nu het belangrijkste",
             "geef mijn prioriteiten",
             "geef mijn top prioriteiten",
@@ -1757,6 +1784,9 @@ class FinnPlanService:
             "welke acties moet ik vandaag doen",
             "wat kan ik vandaag negeren",
             "wat moet ik vandaag laten liggen",
+            "waar begin ik vandaag",
+            "wat verdient nu mijn aandacht",
+            "wat is vandaag het belangrijkst",
         ]
         if any(phrase in q for phrase in phrases):
             return True
@@ -1765,6 +1795,7 @@ class FinnPlanService:
             "prioriteit",
             "prioriteiten",
             "focus",
+            "focuspunten",
             "review queue",
             "reviewqueue",
             "do now",
@@ -1774,6 +1805,11 @@ class FinnPlanService:
             "wat kan wachten",
             "kan vandaag wachten",
             "waar begin ik",
+            "waar focus ik op",
+            "wat eerst doen",
+            "wat laat ik liggen",
+            "wat laat ik vandaag liggen",
+            "hoogste prioriteit",
         ])
         has_mc = "mission control" in q or context.get("scope") == "mission_control" or context.get("page") == "mission_control"
         return has_priority and (
@@ -1782,6 +1818,8 @@ class FinnPlanService:
             or "nu" in q
             or "eerst" in q
             or "wachten" in q
+            or "liggen" in q
+            or "aandacht" in q
         )
 
     def looks_like_portfolio_operating_system_request(self, query: str) -> bool:
@@ -1813,6 +1851,7 @@ class FinnPlanService:
         review_terms = [
             "beoordeel deze trade",
             "review deze trade",
+            "controleer deze trade",
             "ik wil deze trade openen",
             "ik wil deze trade nemen",
             "kan ik deze trade openen",
@@ -1831,12 +1870,35 @@ class FinnPlanService:
             "waarom blokkeer je deze trade",
             "trade review",
             "decision review",
+            "zou jij dit doen",
+            "zou je dit doen",
+            "zou jij dit openen",
+            "zou je dit openen",
         ]
         if any(term in q for term in review_terms):
             return True
         has_review_verb = any(term in q for term in ["beoordeel", "review", "controleer", "check", "valideer"])
         has_target = any(term in q for term in ["trade", "setup", "strategie", "strategy", "bot", "instap", "entry"])
         if has_review_verb and has_target:
+            return True
+        natural_trade_review = any(term in q for term in [
+            "zou jij dit doen",
+            "zou je dit doen",
+            "zou jij dit openen",
+            "zou je dit openen",
+            "zou jij dit nemen",
+            "zou je dit nemen",
+            "is dit slim",
+            "zou dit slim zijn",
+        ])
+        trade_context = bool(
+            context.get("setup_id")
+            or context.get("strategy_id")
+            or context.get("bot_id")
+            or context.get("symbol")
+            or self._page_family(context) in {"setup", "strategy", "bot", "dashboard", "market"}
+        )
+        if natural_trade_review and trade_context:
             return True
         return bool(
             has_target
@@ -2550,6 +2612,11 @@ class FinnPlanService:
             lines.append("Vandaag bewust laten liggen:")
             for item in ignore_today[:3]:
                 lines.append(f"- {item.get('title')}: {item.get('reason')}")
+        review_queue = analysis.get("review_queue") or []
+        if review_queue:
+            lines.append("Hierna reviewen:")
+            for item in review_queue[:2]:
+                lines.append(f"- {item.get('title')}: {item.get('why_now') or item.get('source_reason')}")
         return "\n".join([line for line in lines if line])
 
     async def build_priority_engine_response(

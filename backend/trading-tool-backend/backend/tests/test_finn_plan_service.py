@@ -4902,6 +4902,10 @@ def test_decision_review_request_detection_is_read_only():
 
     assert service.looks_like_decision_review_request("Beoordeel deze trade", {"symbol": "BTC"}) is True
     assert service.looks_like_decision_review_request("Past dit bij mijn strategie?", {"strategy_id": 257, "symbol": "ETH"}) is True
+    assert service.looks_like_decision_review_request(
+        "Zou jij dit doen?",
+        {"page": "/setup", "page_type": "setup", "setup_id": 62, "strategy_id": 257, "symbol": "BTC"},
+    ) is True
     assert service.looks_like_decision_review_request("Maak een bot voor BTC", {"symbol": "BTC"}) is False
 
 
@@ -4930,6 +4934,10 @@ def test_portfolio_intelligence_request_detection_is_read_only():
     assert service.looks_like_portfolio_intelligence_request("Heb ik te veel exposure?", {"symbol": "BTC"}) is True
     assert service.looks_like_portfolio_intelligence_request("Wat is mijn grootste portfolio risico?", {"page": "/dashboard"}) is True
     assert service.looks_like_portfolio_intelligence_request(
+        "Mag ik extra BTC risico toevoegen?",
+        {"page": "/dashboard", "symbol": "BTC"},
+    ) is True
+    assert service.looks_like_portfolio_intelligence_request(
         "Ik heb 70% BTC / 20% ETH / 10% cash, kan ik nog een BTC long openen?",
         {"page": "/dashboard", "symbol": "BTC"},
     ) is True
@@ -4943,6 +4951,7 @@ def test_priority_engine_request_detection_is_read_only():
     assert service.looks_like_priority_engine_request("Wat moet ik nu eerst doen in Mission Control?", {"page": "mission_control"}) is True
     assert service.looks_like_priority_engine_request("Wat moet ik nu eerst doen?", {"page": "/dashboard"}) is True
     assert service.looks_like_priority_engine_request("Wat kan vandaag wachten?", {"page": "/dashboard"}) is True
+    assert service.looks_like_priority_engine_request("Waar moet ik vandaag op focussen?", {"page": "/dashboard"}) is True
     assert service.looks_like_priority_engine_request("Maak een BTC setup", {"page": "/dashboard"}) is False
 
 
@@ -5202,6 +5211,19 @@ def test_build_portfolio_intelligence_response_uses_explicit_query_mix(monkeypat
     assert "geen extra risico" in (result["analysis"]["portfolio_safe_alternative"] or "").lower()
 
 
+def test_portfolio_intelligence_detection_stays_secondary_to_explicit_trade_review():
+    service = _service()
+
+    assert service.looks_like_portfolio_intelligence_request(
+        "Zou jij dit doen?",
+        {"page": "/setup", "page_type": "setup", "setup_id": 62, "strategy_id": 257, "symbol": "BTC"},
+    ) is False
+    assert service.looks_like_decision_review_request(
+        "Zou jij dit doen?",
+        {"page": "/setup", "page_type": "setup", "setup_id": 62, "strategy_id": 257, "symbol": "BTC"},
+    ) is True
+
+
 def test_decision_review_includes_portfolio_intelligence_contract():
     service = _service()
 
@@ -5292,6 +5314,42 @@ def test_build_priority_engine_response_handles_generic_what_now_prompt(monkeypa
     assert result["intent"] == "priority_engine"
     assert result["analysis"]["top_priorities"][0]["title"] == "BTC bot review eerst doen"
     assert "eerst" in result["response"].lower()
+
+
+def test_build_priority_engine_response_handles_focus_prompt(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "workqueue": [
+            {
+                "id": "focus-btc",
+                "title": "BTC exposure reviewen",
+                "type": "portfolio_risk_stack",
+                "priority": "high",
+                "priority_rank": 5,
+                "reason": "Concentratierisico vraagt nu aandacht.",
+                "asset": "BTC",
+            },
+            {
+                "id": "wait-eth",
+                "title": "ETH setup laten rusten",
+                "type": "score_refresh",
+                "priority": "low",
+                "priority_rank": 60,
+                "reason": "Nog geen harde actienoodzaak.",
+                "asset": "ETH",
+            },
+        ],
+        "summary": {"workqueue_count": 2, "open_action_count": 1},
+    })
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_priority_engine_response(1, "Waar moet ik vandaag op focussen?", {"page": "/dashboard"}))
+
+    assert result["intent"] == "priority_engine"
+    assert result["analysis"]["top_priorities"][0]["title"] == "BTC exposure reviewen"
+    assert "hierna reviewen" in result["response"].lower()
 
 
 def test_build_mission_control_explain_response_exposes_priority_engine_contract(monkeypatch):
