@@ -859,7 +859,7 @@ class FinnPlanService:
             }
         recent_entity_reusable = self._page_supports_entity(context, entity_type) or (
             entity_type in {"strategy", "setup", "bot", "report"}
-            and current_page_family in {"dashboard", "market", "report", "score"}
+            and current_page_family in {"dashboard", "market", "report", "score", "assistant"}
             and bool(recent_entity and recent_entity.get("entity_id"))
         ) or (
             explicit_current_entity_follow_up
@@ -1800,6 +1800,8 @@ class FinnPlanService:
             "wat zijn vandaag mijn 3 belangrijkste acties",
             "waar moet ik mee beginnen",
             "wat moet ik juist niet doen",
+            "wat zijn vandaag mijn topprioriteiten",
+            "help me even kiezen wat ik nu moet doen",
         ]
         if any(phrase in q for phrase in phrases):
             return True
@@ -1827,6 +1829,8 @@ class FinnPlanService:
             "mee beginnen",
             "juist niet doen",
             "niet doen",
+            "topprioriteiten",
+            "kiezen wat ik nu moet doen",
         ])
         has_mc = "mission control" in q or context.get("scope") == "mission_control" or context.get("page") == "mission_control"
         return has_priority and (
@@ -2518,6 +2522,8 @@ class FinnPlanService:
         mission: Dict[str, Any],
         analysis: Dict[str, Any],
         governance_signals: Dict[str, Any],
+        *,
+        question_focus: str = "headline",
     ) -> Dict[str, Any]:
         workqueue = mission.get("workqueue") or []
         counts = mission.get("summary") or {}
@@ -2599,11 +2605,38 @@ class FinnPlanService:
                 })
         suppression_reasons = [item.get("reason") for item in ignore_today if item.get("reason")]
         top = top_priorities[0] if top_priorities else {}
-        headline = (
-            f"Vandaag eerst: {top.get('title')}."
-            if top.get("title") else
-            "Vandaag zie ik geen harde act-now prioriteit boven je huidige flow."
-        )
+        if question_focus == "start_now":
+            headline = (
+                f"Begin nu met: {top.get('title')}."
+                if top.get("title") else
+                "Ik zie nu geen harde startactie boven je huidige flow."
+            )
+        elif question_focus == "ignore_today":
+            first_ignore = (ignore_today or [{}])[0]
+            headline = (
+                f"Laat vandaag liggen: {first_ignore.get('title')}."
+                if first_ignore.get("title") else
+                "Vandaag hoeft er niets bewust genegeerd te worden boven je huidige flow."
+            )
+        elif question_focus == "wait":
+            first_ignore = (ignore_today or [{}])[0]
+            headline = (
+                f"Dit kan wachten: {first_ignore.get('title')}."
+                if first_ignore.get("title") else
+                "Ik zie nu geen duidelijk uitstelfocuspunt boven je huidige flow."
+            )
+        elif question_focus == "focus":
+            headline = (
+                f"Focus vandaag eerst op: {top.get('title')}."
+                if top.get("title") else
+                "Vandaag zie ik geen enkele focusverschuiving boven je huidige flow."
+            )
+        else:
+            headline = (
+                f"Vandaag eerst: {top.get('title')}."
+                if top.get("title") else
+                "Vandaag zie ik geen harde act-now prioriteit boven je huidige flow."
+            )
         why_now = (
             top.get("why_now")
             or (global_signals[0].get("reason") if global_signals else None)
@@ -2616,6 +2649,7 @@ class FinnPlanService:
             "ignore_today": ignore_today,
             "why_now": why_now,
             "suppression_reasons": suppression_reasons,
+            "question_focus": question_focus,
             "open_counts": {
                 "workqueue_count": counts.get("workqueue_count", 0),
                 "open_action_count": counts.get("open_action_count", 0),
@@ -2628,23 +2662,38 @@ class FinnPlanService:
         }
 
     def _priority_engine_message(self, analysis: Dict[str, Any]) -> str:
+        question_focus = str(analysis.get("question_focus") or "headline")
         lines = [
             analysis.get("headline") or "Hier is je prioriteitenmotor voor vandaag.",
             analysis.get("why_now") or "",
         ]
         top_priorities = analysis.get("top_priorities") or []
-        if top_priorities:
+        if top_priorities and question_focus != "ignore_today":
+            top_label = "Doe of review nu het volgende:"
+            if question_focus == "start_now":
+                top_label = "Begin hier nu mee:"
+            elif question_focus == "focus":
+                top_label = "Hier moet vandaag je focus liggen:"
             lines.append("Doe of review nu het volgende:")
+            lines[-1] = top_label
             for item in top_priorities[:3]:
                 lines.append(f"- {item.get('title')}: {item.get('why_now') or item.get('source_reason')}")
         ignore_today = analysis.get("ignore_today") or []
         if ignore_today:
-            lines.append("Vandaag bewust laten liggen:")
+            ignore_label = "Vandaag bewust laten liggen:"
+            if question_focus == "wait":
+                ignore_label = "Dit kan vandaag wachten:"
+            elif question_focus == "ignore_today":
+                ignore_label = "Dit moet je vandaag juist niet doen:"
+            lines.append(ignore_label)
             for item in ignore_today[:3]:
                 lines.append(f"- {item.get('title')}: {item.get('reason')}")
         review_queue = analysis.get("review_queue") or []
-        if review_queue:
-            lines.append("Hierna reviewen:")
+        if review_queue and question_focus not in {"ignore_today", "wait"}:
+            queue_label = "Hierna reviewen:"
+            if question_focus == "top3":
+                queue_label = "Daarna in deze volgorde reviewen:"
+            lines.append(queue_label)
             for item in review_queue[:2]:
                 lines.append(f"- {item.get('title')}: {item.get('why_now') or item.get('source_reason')}")
         return "\n".join([line for line in lines if line])
@@ -2655,6 +2704,7 @@ class FinnPlanService:
         query: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        question_focus = self._priority_question_focus(query)
         daily = await self.build_portfolio_daily_coach_response(
             user_id,
             "Geef mijn daily brief",
@@ -2681,6 +2731,7 @@ class FinnPlanService:
             mission,
             analysis,
             self._priority_engine_governance_signals(governance_events),
+            question_focus=question_focus,
         )
         await self._record_governance_event(
             user_id,
@@ -2692,6 +2743,7 @@ class FinnPlanService:
             payload={
                 "phase": "priority_ranking_engine",
                 "query": query,
+                "question_focus": question_focus,
                 "headline": priority_engine.get("headline"),
                 "top_priorities": priority_engine.get("top_priorities"),
                 "review_queue": priority_engine.get("review_queue"),
@@ -7878,6 +7930,42 @@ class FinnPlanService:
         if any(phrase in q for phrase in ["grootste portfolio risico", "grootste risico", "portfolio risico", "portefeuille risico", "risico per asset"]):
             return "risk"
         return "brief"
+
+    def _priority_question_focus(self, query: str) -> str:
+        q = (query or "").lower()
+        if any(phrase in q for phrase in [
+            "wat moet ik juist niet doen",
+            "wat moet ik niet doen",
+            "vandaag niet doen",
+        ]):
+            return "ignore_today"
+        if any(phrase in q for phrase in [
+            "wat kan wachten",
+            "kan vandaag wachten",
+            "wat kan vandaag wachten",
+            "wat laat ik vandaag liggen",
+        ]):
+            return "wait"
+        if any(phrase in q for phrase in [
+            "waar moet ik mee beginnen",
+            "waar begin ik",
+            "wat moet ik nu eerst doen",
+            "wat moet ik vandaag eerst doen",
+        ]):
+            return "start_now"
+        if any(phrase in q for phrase in [
+            "waar moet ik vandaag op focussen",
+            "waar moet ik nu op focussen",
+            "wat verdient nu mijn aandacht",
+        ]):
+            return "focus"
+        if any(phrase in q for phrase in [
+            "wat zijn vandaag mijn 3 belangrijkste acties",
+            "wat zijn vandaag mijn topprioriteiten",
+            "geef mijn top prioriteiten",
+        ]):
+            return "top3"
+        return "headline"
 
     async def _fetch_daily_scores_with_runtime_refresh(
         self,

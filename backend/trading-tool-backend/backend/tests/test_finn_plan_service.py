@@ -4982,6 +4982,7 @@ def test_priority_engine_request_detection_is_read_only():
     assert service.looks_like_priority_engine_request("Wat zijn vandaag mijn 3 belangrijkste acties?", {"page": "/dashboard"}) is True
     assert service.looks_like_priority_engine_request("Waar moet ik mee beginnen?", {"page": "/dashboard"}) is True
     assert service.looks_like_priority_engine_request("Wat moet ik juist niet doen?", {"page": "/dashboard"}) is True
+    assert service.looks_like_priority_engine_request("Help me even kiezen wat ik nu moet doen.", {"page": "/dashboard"}) is True
     assert service.looks_like_priority_engine_request("Maak een BTC setup", {"page": "/dashboard"}) is False
 
 
@@ -5490,7 +5491,48 @@ def test_build_priority_engine_response_handles_top3_and_do_not_do_prompts(monke
 
     assert top3["intent"] == "priority_engine"
     assert avoid["intent"] == "priority_engine"
-    assert "vandaag bewust laten liggen" in avoid["response"].lower()
+    assert "dit moet je vandaag juist niet doen" in avoid["response"].lower()
+
+
+def test_build_priority_engine_response_varies_copy_by_question_focus(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "workqueue": [
+            {
+                "id": "review-btc",
+                "title": "BTC bot review eerst doen",
+                "type": "bot_decision",
+                "priority": "high",
+                "priority_rank": 4,
+                "reason": "Open review beïnvloedt je live uitvoering.",
+                "asset": "BTC",
+            },
+            {
+                "id": "skip-eth",
+                "title": "ETH vandaag laten liggen",
+                "type": "data_gap",
+                "priority": "low",
+                "priority_rank": 75,
+                "reason": "Nog geen harde actienoodzaak.",
+                "asset": "ETH",
+            },
+        ],
+        "summary": {"workqueue_count": 2, "open_action_count": 1},
+    })
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    start = asyncio.run(service.build_priority_engine_response(1, "Waar moet ik mee beginnen?", {"page": "/dashboard"}))
+    wait = asyncio.run(service.build_priority_engine_response(1, "Wat kan wachten?", {"page": "/dashboard"}))
+    avoid = asyncio.run(service.build_priority_engine_response(1, "Wat moet ik juist niet doen?", {"page": "/dashboard"}))
+
+    assert start["analysis"]["question_focus"] == "start_now"
+    assert wait["analysis"]["question_focus"] == "wait"
+    assert avoid["analysis"]["question_focus"] == "ignore_today"
+    assert "begin hier nu mee" in start["response"].lower()
+    assert "dit kan vandaag wachten" in wait["response"].lower()
+    assert "dit moet je vandaag juist niet doen" in avoid["response"].lower()
 
 
 def test_build_mission_control_explain_response_exposes_priority_engine_contract(monkeypatch):
