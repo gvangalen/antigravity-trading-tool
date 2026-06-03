@@ -287,6 +287,74 @@ def test_build_finn_core_rescue_envelope_prefers_outcome_tracking_for_explicit_f
     assert response["intent"] == "outcome_tracking"
 
 
+def test_build_finn_core_rescue_envelope_prefers_outcome_memory_builder():
+    finn = FinnPlanService(db_session=object())
+    finn.build_outcome_memory_response = AsyncMock(
+        return_value={"intent": "outcome_memory", "flow": "outcome_memory"}
+    )
+
+    response = asyncio.run(_build_finn_core_rescue_envelope(
+        finn=finn,
+        user_id=30,
+        query="Wat onthoudt Finn van mijn uitkomsten?",
+        context_payload={},
+    ))
+
+    finn.build_outcome_memory_response.assert_awaited_once()
+    assert response["intent"] == "outcome_memory"
+
+
+def test_build_finn_core_rescue_envelope_prefers_personal_performance_builder():
+    finn = FinnPlanService(db_session=object())
+    finn.build_personal_performance_response = AsyncMock(
+        return_value={"intent": "personal_performance", "flow": "personal_performance"}
+    )
+
+    response = asyncio.run(_build_finn_core_rescue_envelope(
+        finn=finn,
+        user_id=30,
+        query="Geef mijn performance score",
+        context_payload={},
+    ))
+
+    finn.build_personal_performance_response.assert_awaited_once()
+    assert response["intent"] == "personal_performance"
+
+
+def test_build_finn_core_rescue_envelope_prefers_trade_journal_intelligence_builder():
+    finn = FinnPlanService(db_session=object())
+    finn.build_trade_journal_intelligence_response = AsyncMock(
+        return_value={"intent": "trade_journal_intelligence", "flow": "trade_journal_intelligence"}
+    )
+
+    response = asyncio.run(_build_finn_core_rescue_envelope(
+        finn=finn,
+        user_id=30,
+        query="Wat leert mijn trade journal?",
+        context_payload={},
+    ))
+
+    finn.build_trade_journal_intelligence_response.assert_awaited_once()
+    assert response["intent"] == "trade_journal_intelligence"
+
+
+def test_build_finn_core_rescue_envelope_prefers_personal_coach_builder():
+    finn = FinnPlanService(db_session=object())
+    finn.build_personal_coach_response = AsyncMock(
+        return_value={"intent": "personal_coach", "flow": "personal_coach"}
+    )
+
+    response = asyncio.run(_build_finn_core_rescue_envelope(
+        finn=finn,
+        user_id=30,
+        query="Coach me op basis van mijn laatste fouten",
+        context_payload={},
+    ))
+
+    finn.build_personal_coach_response.assert_awaited_once()
+    assert response["intent"] == "personal_coach"
+
+
 def test_build_finn_core_rescue_envelope_prefers_portfolio_intelligence_builder():
     finn = _finn()
     finn.build_portfolio_intelligence_response = AsyncMock(

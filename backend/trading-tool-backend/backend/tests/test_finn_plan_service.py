@@ -4998,6 +4998,46 @@ def test_behavioral_memory_request_detection_is_separate_from_weekly_reflection(
     assert service.looks_like_behavioral_memory_request("Geef mijn daily brief") is False
 
 
+def test_outcome_memory_request_detection_is_separate_from_outcome_tracking():
+    service = _service()
+
+    assert service.looks_like_outcome_memory_request("Wat onthoudt Finn van mijn uitkomsten?") is True
+    assert service.looks_like_outcome_memory_request("Welk gedrag kost me de laatste maand het meeste?") is True
+    assert service.looks_like_outcome_memory_request("Welke fouten blijven terugkomen in mijn resultaten?") is True
+    assert service.looks_like_outcome_memory_request("Hoe pakte dat uit?") is False
+    assert service.looks_like_outcome_memory_request("Maak een nieuwe strategie") is False
+
+
+def test_personal_performance_request_detection_is_separate_from_weekly_reflection():
+    service = _service()
+
+    assert service.looks_like_personal_performance_request("Geef mijn performance score") is True
+    assert service.looks_like_personal_performance_request("Hoe goed trade ik de laatste 30 dagen?") is True
+    assert service.looks_like_personal_performance_request("Wat zegt Finn over mijn trading kwaliteit?") is True
+    assert service.looks_like_personal_performance_request("Geef mijn weekreflectie") is False
+    assert service.looks_like_personal_performance_request("Maak een nieuwe strategie") is False
+
+
+def test_trade_journal_intelligence_request_detection_is_separate_from_reporting():
+    service = _service()
+
+    assert service.looks_like_trade_journal_intelligence_request("Wat leert mijn trade journal?") is True
+    assert service.looks_like_trade_journal_intelligence_request("Welke patronen zitten in mijn notities?") is True
+    assert service.looks_like_trade_journal_intelligence_request("Wat leren mijn post trade notities?") is True
+    assert service.looks_like_trade_journal_intelligence_request("Geef mijn Finn rapport") is False
+    assert service.looks_like_trade_journal_intelligence_request("Maak een bot voor BTC") is False
+
+
+def test_personal_coach_request_detection_is_separate_from_generic_coaching():
+    service = _service()
+
+    assert service.looks_like_personal_coach_request("Coach me op basis van mijn laatste fouten") is True
+    assert service.looks_like_personal_coach_request("Wat is mijn grootste persoonlijke performance lek?") is True
+    assert service.looks_like_personal_coach_request("Waar verlies ik het meest discipline?") is True
+    assert service.looks_like_personal_coach_request("Geef mijn daily brief") is False
+    assert service.looks_like_personal_coach_request("Maak een BTC setup") is False
+
+
 def test_decision_review_request_detection_is_read_only():
     service = _service()
 
@@ -5727,6 +5767,22 @@ def test_build_portfolio_operating_system_response_exposes_control_plane(monkeyp
                 "adherence_status": "forced_override",
                 "threatened_rule": "Je probeert een plan- of strategiegrens te overrulen.",
             },
+        },
+        {
+            "type": "finn_decision_review",
+            "description": "Context en risico zijn nog niet stevig genoeg.",
+            "payload": {
+                "query": "Ik voel FOMO maar wil toch kopen zonder duidelijke trigger.",
+                "decision_status": "insufficient_context",
+            },
+        },
+        {
+            "type": "finn_trade_journal_intelligence_summary",
+            "description": "Je reviewtaal mengt objectieve checks met emotionele druk.",
+            "payload": {
+                "journal_pattern": "emotion_led_entries",
+                "decision_gap": "Je reviewtaal mengt objectieve checks met emotionele druk.",
+            },
         }
     ]))
     monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
@@ -5737,6 +5793,12 @@ def test_build_portfolio_operating_system_response_exposes_control_plane(monkeyp
     assert result["analysis"]["operating_posture"] in {"risk_first", "review_first"}
     assert result["analysis"]["control_plane"]["headline"]
     assert result["analysis"]["subsystems"]["priority_engine"]["status"] == "active"
+    assert "portfolio_pressure" in result["analysis"]
+    assert "capital_focus" in result["analysis"]
+    assert "do_now" in result["analysis"]
+    assert "ignore_today" in result["analysis"]
+    assert result["analysis"]["subsystems"]["personal_performance"]["status"] in {"active", "early"}
+    assert result["analysis"]["subsystems"]["trade_journal_intelligence"]["status"] in {"active", "early"}
     assert result["analysis"]["portfolio_layer"]["top_asset"] == "BTC"
 
 
@@ -6064,6 +6126,315 @@ def test_build_behavioral_memory_response_includes_memory_v2_contract(monkeypatc
     assert result["analysis"]["recommended_rule"]
     assert result["analysis"]["confidence_level"] in {"medium", "high"}
     assert "Memory V2 patroon" in result["response"]
+
+
+def test_build_outcome_memory_response_extracts_repeating_negative_pattern(monkeypatch):
+    service = _service()
+
+    async def _fake_activity(user_id, limit=180):
+        return [
+            {
+                "type": "skip_bot_decision",
+                "resolve_state": "skipped",
+                "created_at": (_utc_now() - timedelta(days=3)).isoformat(),
+            },
+            {
+                "type": "snooze_mission_item",
+                "resolve_state": "snoozed",
+                "created_at": (_utc_now() - timedelta(days=2)).isoformat(),
+            },
+        ]
+
+    async def _fake_events(user_id, *, event_types, limit=80):
+        return [
+            {
+                "type": "finn_outcome_tracking_summary",
+                "symbol": "BTC",
+                "description": "Het netto-effect van dit gedrag is negatief.",
+                "payload": {
+                    "behavior_pattern": "fomo_outcomes",
+                    "sample_size": 8,
+                    "historical_result_summary": "Je beschrijft hier 8 relevante momenten met 6 verliestrades en 2 winsttrades.",
+                    "net_effect": "Het netto-effect van dit gedrag is negatief. Dat betekent dat herhaling eerder kapitaal lekt dan helpt.",
+                },
+            },
+            {
+                "type": "finn_outcome_tracking_summary",
+                "symbol": "BTC",
+                "description": "Dit patroon eindigt vaker slecht dan goed.",
+                "payload": {
+                    "behavior_pattern": "fomo_outcomes",
+                    "sample_size": 5,
+                    "historical_result_summary": "Nog een reeks FOMO-momenten eindigde vaker slecht dan goed.",
+                    "net_effect": "Dit patroon eindigt vaker slecht dan goed.",
+                },
+            },
+        ]
+
+    monkeypatch.setattr(service, "_get_recent_finn_activity", _fake_activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", _fake_events)
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_outcome_memory_response(30, "Wat onthoudt Finn van mijn uitkomsten?", {}))
+
+    assert result["intent"] == "outcome_memory"
+    assert result["analysis"]["memory_pattern"] == "fomo_outcomes"
+    assert result["analysis"]["confidence_level"] in {"medium", "high"}
+    assert result["analysis"]["supporting_evidence_count"] >= 2
+    assert "FOMO" in result["analysis"]["latest_outcome_summary"] or "verliestrades" in result["analysis"]["latest_outcome_summary"]
+    assert "Aanbevolen regel" in result["response"]
+
+
+def test_build_finn_report_response_includes_outcome_memory(monkeypatch):
+    service = _service()
+    now = _utc_now()
+
+    async def _fake_activity(user_id, limit=200):
+        return [
+            service._mission_activity_item({
+                "id": "finn-memory-skip",
+                "status": "executed",
+                "created_at": now - timedelta(days=2),
+                "payload": {
+                    "action": {"type": "skip_bot_decision"},
+                    "result": {"ok": True, "status": "skipped"},
+                },
+            }),
+        ]
+
+    async def _fake_governance(user_id, *, event_types, limit=80):
+        return [
+            {
+                "type": "finn_outcome_tracking_summary",
+                "symbol": "BTC",
+                "description": "Het netto-effect van dit gedrag is negatief.",
+                "payload": {
+                    "behavior_pattern": "plan_override_outcomes",
+                    "sample_size": 4,
+                    "historical_result_summary": "Planafwijkingen eindigden vaker slecht dan goed.",
+                    "net_effect": "Het netto-effect van dit gedrag is negatief.",
+                },
+            }
+        ]
+
+    monkeypatch.setattr(service, "_get_recent_finn_activity", _fake_activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", _fake_governance)
+
+    result = asyncio.run(service.build_finn_report_response(30, "Geef mijn Finn rapport", {}))
+
+    assert result["intent"] == "finn_report"
+    assert result["analysis"]["outcome_memory"]["memory_pattern"] in {"plan_override_outcomes", "recovery_outcomes"}
+    assert "outcome_memory_count" in result["analysis"]["governance_events_summary"]
+
+
+def test_build_personal_performance_response_scores_quality_layers(monkeypatch):
+    service = _service()
+
+    async def _fake_activity(user_id, limit=180):
+        now = _utc_now()
+        return [
+            service._mission_activity_item({
+                "id": "perf-skip",
+                "status": "executed",
+                "created_at": now - timedelta(days=3),
+                "payload": {"action": {"type": "skip_bot_decision"}, "result": {"ok": True, "status": "skipped"}},
+            }),
+            service._mission_activity_item({
+                "id": "perf-snooze",
+                "status": "executed",
+                "created_at": now - timedelta(days=2),
+                "payload": {"action": {"type": "snooze_mission_item"}, "result": {"ok": True, "status": "snoozed"}},
+            }),
+            service._mission_activity_item({
+                "id": "perf-decision",
+                "status": "executed",
+                "created_at": now - timedelta(days=1),
+                "payload": {"action": {"type": "generate_bot_decision"}, "result": {"ok": True}},
+            }),
+        ]
+
+    async def _fake_events(user_id, *, event_types, limit=90):
+        return [
+            {
+                "type": "finn_decision_review",
+                "description": "Risico en sizing zijn opnieuw getoetst.",
+                "payload": {"decision_status": "modify", "query": "Beoordeel deze trade"},
+            },
+            {
+                "type": "finn_plan_adherence_review",
+                "description": "Je probeert een plan- of strategiegrens te overrulen.",
+                "payload": {"adherence_status": "outside_plan", "threatened_rule": "Plan zegt wachten."},
+            },
+            {
+                "type": "finn_outcome_tracking_summary",
+                "description": "Het netto-effect van dit gedrag is negatief.",
+                "payload": {
+                    "sample_size": 4,
+                    "behavior_pattern": "fomo_outcomes",
+                    "net_effect": "Het netto-effect van dit gedrag is negatief.",
+                },
+            },
+        ]
+
+    monkeypatch.setattr(service, "_get_recent_finn_activity", _fake_activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", _fake_events)
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_personal_performance_response(30, "Geef mijn performance score", {}))
+
+    assert result["intent"] == "personal_performance"
+    assert result["analysis"]["performance_score"] is not None
+    assert len(result["analysis"]["score_breakdown"]) == 5
+    assert result["analysis"]["next_growth_target"]
+    assert "Performance-score" in result["response"]
+
+
+def test_build_trade_journal_intelligence_response_extracts_pattern_from_review_language(monkeypatch):
+    service = _service()
+
+    async def _fake_activity(user_id, limit=180):
+        now = _utc_now()
+        return [
+            service._mission_activity_item({
+                "id": "journal-preflight",
+                "status": "executed",
+                "created_at": now - timedelta(days=2),
+                "payload": {"action": {"type": "live_manual_order_preflight"}, "result": {"ok": True}},
+            }),
+        ]
+
+    async def _fake_events(user_id, *, event_types, limit=90):
+        return [
+            {
+                "type": "finn_decision_review",
+                "description": "Context en risico zijn nog niet stevig genoeg.",
+                "payload": {"query": "Ik voel FOMO maar wil toch kopen zonder duidelijke trigger."},
+            },
+            {
+                "type": "finn_plan_adherence_review",
+                "description": "Plan zegt wachten maar je wilt nu toch handelen.",
+                "payload": {"query": "Mijn plan zegt wachten maar ik wil kopen."},
+            },
+            {
+                "type": "finn_outcome_tracking_summary",
+                "description": "Dit patroon eindigt vaker slecht dan goed.",
+                "payload": {"query": "Na frustratie stap ik vaak toch weer in."},
+            },
+        ]
+
+    monkeypatch.setattr(service, "_get_recent_finn_activity", _fake_activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", _fake_events)
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_trade_journal_intelligence_response(30, "Wat leert mijn trade journal?", {}))
+
+    assert result["intent"] == "trade_journal_intelligence"
+    assert result["analysis"]["journal_pattern"] in {"emotion_led_entries", "rule_conflict_entries", "mixed_operator_entries"}
+    assert result["analysis"]["journal_tags"]
+    assert result["analysis"]["decision_gap"]
+    assert "Journal-pattern" in result["response"]
+
+
+def test_build_finn_report_response_includes_phase_2_and_3_layers(monkeypatch):
+    service = _service()
+    now = _utc_now()
+
+    async def _fake_activity(user_id, limit=200):
+        return [
+            service._mission_activity_item({
+                "id": "phase4-skip",
+                "status": "executed",
+                "created_at": now - timedelta(days=2),
+                "payload": {"action": {"type": "skip_bot_decision"}, "result": {"ok": True, "status": "skipped"}},
+            }),
+        ]
+
+    async def _fake_governance(user_id, *, event_types, limit=80):
+        return [
+            {
+                "type": "finn_outcome_tracking_summary",
+                "description": "Planafwijkingen eindigden vaker slecht dan goed.",
+                "payload": {
+                    "behavior_pattern": "plan_override_outcomes",
+                    "sample_size": 4,
+                    "historical_result_summary": "Planafwijkingen eindigden vaker slecht dan goed.",
+                    "net_effect": "Het netto-effect van dit gedrag is negatief.",
+                    "query": "Mijn plan zegt wachten maar ik wil kopen.",
+                },
+            }
+        ]
+
+    monkeypatch.setattr(service, "_get_recent_finn_activity", _fake_activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", _fake_governance)
+
+    result = asyncio.run(service.build_finn_report_response(30, "Geef mijn Finn rapport", {}))
+
+    assert result["intent"] == "finn_report"
+    assert result["analysis"]["personal_performance"]["performance_score"] is not None
+    assert result["analysis"]["personal_coach"]["coach_mode"]
+    assert result["analysis"]["trade_journal_intelligence"]["journal_pattern"]
+    assert result["analysis"]["portfolio_operating_system"]["do_now"] is not None
+    assert result["analysis"]["portfolio_operating_system"]["capital_focus"] is not None
+    assert "personal_performance_count" in result["analysis"]["governance_events_summary"]
+    assert "personal_coach_count" in result["analysis"]["governance_events_summary"]
+    assert "trade_journal_intelligence_count" in result["analysis"]["governance_events_summary"]
+
+
+def test_build_personal_coach_response_chooses_interruptive_mode(monkeypatch):
+    service = _service()
+
+    async def _fake_activity(user_id, limit=180):
+        now = _utc_now()
+        return [
+            service._mission_activity_item({
+                "id": "coach-skip",
+                "status": "executed",
+                "created_at": now - timedelta(days=2),
+                "payload": {"action": {"type": "skip_bot_decision"}, "result": {"ok": True, "status": "skipped"}},
+            }),
+        ]
+
+    async def _fake_events(user_id, *, event_types, limit=90):
+        return [
+            {
+                "type": "finn_outcome_tracking_summary",
+                "description": "Het netto-effect van dit gedrag is negatief.",
+                "payload": {
+                    "behavior_pattern": "fomo_outcomes",
+                    "sample_size": 6,
+                    "historical_result_summary": "FOMO-momenten eindigden vaker in verlies.",
+                    "net_effect": "Het netto-effect van dit gedrag is negatief.",
+                },
+            },
+            {
+                "type": "finn_trade_journal_intelligence_summary",
+                "description": "Je reviewtaal mengt objectieve checks met emotionele druk.",
+                "payload": {
+                    "journal_pattern": "emotion_led_entries",
+                    "decision_gap": "Je reviewtaal mengt objectieve checks met emotionele druk.",
+                },
+            },
+        ]
+
+    monkeypatch.setattr(service, "_get_recent_finn_activity", _fake_activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", _fake_events)
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+    monkeypatch.setattr(service, "build_mission_control_response", AsyncMock(return_value={
+        "analysis": {
+            "portfolio_operating_system": {
+                "operating_posture": "risk_first",
+                "portfolio_pressure": {"source": "BTC exposure is te dominant."},
+                "do_now": ["Open eerst Mission Control en pak het bovenste risico-item."],
+            }
+        }
+    }))
+
+    result = asyncio.run(service.build_personal_coach_response(30, "Coach me op basis van mijn laatste fouten", {}))
+
+    assert result["intent"] == "personal_coach"
+    assert result["analysis"]["coach_mode"] == "interruptive"
+    assert result["analysis"]["next_best_rule"]
+    assert "Stop even" in result["response"]
 
 
 def test_behavioral_memory_friction_slows_repeated_bot_decisions():

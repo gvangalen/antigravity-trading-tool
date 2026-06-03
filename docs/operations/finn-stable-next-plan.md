@@ -105,3 +105,11 @@ The sequence should now be:
   - overtrading coaching
   - latency outliers
 - then move primary effort to trader-facing value
+
+## Current Evolution
+
+That next step is now real:
+
+- FINN 3.0 is the current stable direction
+- the next roadmap focus is now:
+  - [FINN Roadmap V4](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-roadmap-v4.md)

@@ -9,6 +9,7 @@ This document defines the product and engineering roadmap for FINN 3.0.
 See also:
 
 - [FINN 3.0 Operator Fix Backlog V2](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-3-operator-fix-backlog-v2.md)
+- [FINN Roadmap V4](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-roadmap-v4.md)
 
 The goal of FINN 3.0 is to move beyond:
 

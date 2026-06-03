@@ -43,6 +43,10 @@ READ_ONLY_FLOWS = {
     "decision_review",
     "plan_adherence_review",
     "outcome_tracking",
+    "outcome_memory",
+    "personal_performance",
+    "trade_journal_intelligence",
+    "personal_coach",
     "portfolio_intelligence",
     "priority_engine",
     "portfolio_operating_system",
@@ -68,6 +72,10 @@ ROUTE_FAMILY_BY_FLOW = {
     "decision_review": "review",
     "plan_adherence_review": "coaching",
     "outcome_tracking": "coaching",
+    "outcome_memory": "coaching",
+    "personal_performance": "coaching",
+    "trade_journal_intelligence": "coaching",
+    "personal_coach": "coaching",
     "portfolio_intelligence": "review",
     "priority_engine": "explain",
     "portfolio_operating_system": "explain",
@@ -1048,6 +1056,14 @@ class FinnPlanService:
             return False
         if self.looks_like_weekly_reflection_request(query):
             return False
+        if self.looks_like_outcome_memory_request(query):
+            return False
+        if self.looks_like_personal_performance_request(query):
+            return False
+        if self.looks_like_trade_journal_intelligence_request(query):
+            return False
+        if self.looks_like_personal_coach_request(query):
+            return False
         if self.looks_like_behavioral_memory_request(query):
             return False
         if self.looks_like_finn_report_request(query):
@@ -1582,6 +1598,115 @@ class FinnPlanService:
         return any(term in q for term in memory_terms) and (
             any(term in q for term in behavior_terms) or any(term in q for term in report_terms)
         )
+
+    def looks_like_outcome_memory_request(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        explicit_terms = [
+            "wat onthoudt finn van mijn uitkomsten",
+            "welk gedrag kost me de laatste maand het meeste",
+            "welke uitkomstpatronen ziet finn",
+            "welk patroon blijft terugkomen in mijn uitkomsten",
+            "wat blijft zich herhalen in mijn resultaten",
+            "wat zegt mijn historie over mijn gedrag",
+            "welke fouten blijven terugkomen",
+            "welke patronen blijven me geld kosten",
+            "wat onthoudt finn van mijn laatste fouten",
+            "wat leert mijn historie over mijn gedrag",
+        ]
+        if any(term in q for term in explicit_terms):
+            return True
+        has_memory = any(term in q for term in [
+            "onthoudt finn",
+            "outcome memory",
+            "uitkomst geheugen",
+            "historie",
+            "blijft terugkomen",
+            "herhalen",
+        ])
+        has_outcome = any(term in q for term in [
+            "uitkomst",
+            "uitkomsten",
+            "resultaat",
+            "resultaten",
+            "fouten",
+            "gedrag",
+            "verlies",
+            "winst",
+        ])
+        return has_memory and has_outcome
+
+    def looks_like_personal_performance_request(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        explicit_terms = [
+            "hoe goed trade ik eigenlijk",
+            "hoe handel ik eigenlijk",
+            "geef mijn persoonlijke performance",
+            "geef mijn performance score",
+            "wat is mijn performance score",
+            "hoe ziet mijn performance eruit",
+            "hoe goed is mijn discipline en follow through",
+            "hoe goed is mijn discipline en follow-through",
+            "hoe goed trade ik de laatste 30 dagen",
+            "wat zegt finn over mijn trading kwaliteit",
+            "hoe sterk is mijn persoonlijke trading performance",
+        ]
+        if any(term in q for term in explicit_terms):
+            return True
+        performance_terms = [
+            "performance", "kwaliteit", "score", "quality", "groei", "groeidoel",
+            "follow through", "follow-through", "selectiviteit", "patience", "geduld",
+            "herstel", "recovery", "discipline", "trading kwaliteit",
+        ]
+        self_terms = ["mijn", "ik", "persoonlijke", "persoonlijk", "hoe goed", "hoe sterk"]
+        return (
+            any(term in q for term in performance_terms)
+            and any(term in q for term in self_terms)
+            and not self.looks_like_weekly_reflection_request(query)
+        )
+
+    def looks_like_trade_journal_intelligence_request(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        explicit_terms = [
+            "wat leert mijn trade journal",
+            "wat ziet finn in mijn trade journal",
+            "wat staat er tussen mijn trade notes",
+            "wat zegt mijn journal over mijn trades",
+            "haal intelligence uit mijn trade journal",
+            "welke patronen zitten in mijn notities",
+            "wat leren mijn post trade notities",
+            "wat leert mijn dagboek over mijn trades",
+        ]
+        if any(term in q for term in explicit_terms):
+            return True
+        journal_terms = [
+            "journal", "dagboek", "notities", "note", "notes",
+            "trade note", "trade notes", "trade journal", "post trade",
+            "post-trade", "reviewnotities", "reflectienotities",
+        ]
+        intelligence_terms = [
+            "patroon", "patronen", "intelligence", "inzichten", "lesson",
+            "les", "wat zegt", "wat leert", "analyseer", "samenvat",
+            "welke fout", "welke emotie", "thesis",
+        ]
+        return any(term in q for term in journal_terms) and any(term in q for term in intelligence_terms)
+
+    def looks_like_personal_coach_request(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        explicit_terms = [
+            "coach me op basis van mijn laatste fouten",
+            "coach me persoonlijk",
+            "wees mijn persoonlijke trading coach",
+            "wat is mijn grootste persoonlijke performance lek",
+            "waar verlies ik het meest discipline",
+            "wat moet ik nu in mezelf onderbreken",
+            "welk patroon moet ik nu doorbreken",
+            "hoe coach jij mij nu het beste",
+        ]
+        if any(term in q for term in explicit_terms):
+            return True
+        coach_terms = ["coach", "coaching", "patroon", "discipline", "fouten", "lek", "doorbreken", "onderbreken", "persoonlijk"]
+        guidance_terms = ["wat moet ik", "help me", "hoe", "welk", "waar", "op basis van", "nu", "beste"]
+        return any(term in q for term in coach_terms) and any(term in q for term in guidance_terms)
 
     def looks_like_daily_score_refresh_request(self, query: str) -> bool:
         q = (query or "").lower()
@@ -2799,8 +2924,12 @@ class FinnPlanService:
         mission: Dict[str, Any],
         priority_engine: Dict[str, Any],
         memory: Dict[str, Any],
+        personal_performance: Optional[Dict[str, Any]] = None,
+        trade_journal_intelligence: Optional[Dict[str, Any]] = None,
         governance_events: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
+        personal_performance = personal_performance or {}
+        trade_journal_intelligence = trade_journal_intelligence or {}
         portfolio_risk = mission.get("portfolio_risk") or daily_analysis.get("portfolio_risk") or {}
         plan_health = mission.get("plan_health") or []
         summary = mission.get("summary") or {}
@@ -2809,6 +2938,9 @@ class FinnPlanService:
         high_priority_count = int((priority_engine.get("open_counts") or {}).get("high_priority_count") or 0)
         memory_pattern = memory.get("memory_pattern")
         memory_confidence = memory.get("confidence_level")
+        performance_score = personal_performance.get("performance_score")
+        performance_flags = personal_performance.get("performance_risk_flags") or []
+        journal_pattern = trade_journal_intelligence.get("journal_pattern")
         governance_types = [str(event.get("type") or "") for event in governance_events or []]
         recent_override_signals = len([t for t in governance_types if t == "finn_plan_adherence_review"])
         recent_review_signals = len([t for t in governance_types if t == "finn_decision_review"])
@@ -2817,6 +2949,8 @@ class FinnPlanService:
             posture = "risk_first"
         elif high_priority_count > 0 or action_count >= 3:
             posture = "review_first"
+        elif performance_score is not None and performance_score < 65:
+            posture = "performance_rebuild"
         elif memory_pattern not in {None, "insufficient_memory_signal"} and memory_confidence in {"medium", "high"}:
             posture = "discipline_first"
         else:
@@ -2829,12 +2963,45 @@ class FinnPlanService:
             "ignore_today_count": len(portfolio_risk.get("ignore_today_assets") or []),
             "live_hotspot_count": len(portfolio_risk.get("live_bot_hotspots") or []),
         }
+        portfolio_pressure = {
+            "source": (
+                portfolio_risk.get("top_reason")
+                or (performance_flags[0] if performance_flags else None)
+                or trade_journal_intelligence.get("decision_gap")
+                or priority_engine.get("why_now")
+            ),
+            "level": (
+                "high"
+                if posture in {"risk_first", "performance_rebuild"} else
+                "medium"
+                if posture in {"review_first", "discipline_first"} else
+                "low"
+            ),
+            "summary": portfolio_risk.get("message") or portfolio_risk.get("top_reason") or priority_engine.get("headline"),
+        }
+        capital_focus = {
+            "focus_asset": portfolio_risk.get("top_asset"),
+            "top_reason": portfolio_risk.get("top_reason") or portfolio_risk.get("message"),
+            "ignore_today_assets": portfolio_risk.get("ignore_today_assets") or [],
+        }
+        conflict_stack = [
+            item
+            for item in [
+                portfolio_risk.get("top_reason"),
+                (performance_flags[0] if performance_flags else None),
+                trade_journal_intelligence.get("decision_gap"),
+                priority_engine.get("why_now"),
+            ]
+            if item
+        ][:4]
         governance_layer = {
             "posture": posture,
             "decision_review_signal_count": recent_review_signals,
             "plan_adherence_signal_count": recent_override_signals,
             "memory_pattern": memory_pattern,
             "memory_confidence": memory_confidence,
+            "performance_score": performance_score,
+            "journal_pattern": journal_pattern,
             "priority_headline": priority_engine.get("headline"),
         }
         subsystems = {
@@ -2859,6 +3026,16 @@ class FinnPlanService:
                 "status": "active" if memory_confidence in {"medium", "high"} else "early",
                 "pattern": memory_pattern,
             },
+            "personal_performance": {
+                "status": "active" if performance_score is not None else "early",
+                "performance_score": performance_score,
+                "risk_flag_count": len(performance_flags),
+            },
+            "trade_journal_intelligence": {
+                "status": "active" if journal_pattern and journal_pattern != "insufficient_journal_signal" else "early",
+                "pattern": journal_pattern,
+                "tag_count": len(trade_journal_intelligence.get("journal_tags") or []),
+            },
         }
         control_plane = {
             "headline": (
@@ -2866,6 +3043,8 @@ class FinnPlanService:
                 if posture == "risk_first" else
                 "Portfolio Operating System staat nu op review-first."
                 if posture == "review_first" else
+                "Portfolio Operating System staat nu op performance-rebuild."
+                if posture == "performance_rebuild" else
                 "Portfolio Operating System staat nu op discipline-first."
                 if posture == "discipline_first" else
                 "Portfolio Operating System draait nu stabiel zonder harde escalatie."
@@ -2873,6 +3052,8 @@ class FinnPlanService:
             "why_now": (
                 priority_engine.get("why_now")
                 or portfolio_risk.get("message")
+                or personal_performance.get("next_growth_target")
+                or trade_journal_intelligence.get("decision_gap")
                 or memory.get("behavioral_cost")
                 or "Er is nu geen enkele subsystem-laag die alle andere overstemt."
             ),
@@ -2882,13 +3063,26 @@ class FinnPlanService:
                 if item.get("title")
             ][:3],
         }
+        do_now = control_plane.get("next_best_actions") or []
+        do_next = [
+            item.get("title")
+            for item in (priority_engine.get("review_queue") or [])
+            if item.get("title")
+        ][:3]
+        ignore_today = priority_engine.get("ignore_today") or capital_focus.get("ignore_today_assets") or []
         return {
             "operating_posture": posture,
+            "portfolio_pressure": portfolio_pressure,
+            "capital_focus": capital_focus,
+            "conflict_stack": conflict_stack,
+            "do_now": do_now,
+            "do_next": do_next,
+            "ignore_today": ignore_today,
             "portfolio_layer": portfolio_layer,
             "governance_layer": governance_layer,
             "subsystems": subsystems,
             "control_plane": control_plane,
-            "next_best_actions": control_plane.get("next_best_actions") or [],
+            "next_best_actions": do_now,
             "open_counts": {
                 "asset_count": len(plan_health),
                 "open_action_count": action_count,
@@ -2909,13 +3103,30 @@ class FinnPlanService:
                 f"Governance-focus: {governance.get('memory_pattern')} "
                 f"({governance.get('memory_confidence')} confidence)."
             )
+        if governance.get("performance_score") is not None:
+            lines.append(f"Personal performance: {governance.get('performance_score')}/100.")
+        if governance.get("journal_pattern") and governance.get("journal_pattern") != "insufficient_journal_signal":
+            lines.append(f"Journal-signaal: {governance.get('journal_pattern')}.")
         portfolio_layer = analysis.get("portfolio_layer") or {}
         if portfolio_layer.get("top_reason"):
             lines.append(f"Portfolio-laag: {portfolio_layer.get('top_reason')}")
+        portfolio_pressure = analysis.get("portfolio_pressure") or {}
+        if portfolio_pressure.get("source"):
+            lines.append(f"Drukbron nu: {portfolio_pressure.get('source')}")
         next_actions = analysis.get("next_best_actions") or []
         if next_actions:
             lines.append("Volgende beste acties:")
             for item in next_actions[:3]:
+                lines.append(f"- {item}")
+        do_next = analysis.get("do_next") or []
+        if do_next:
+            lines.append("Daarna:")
+            for item in do_next[:2]:
+                lines.append(f"- {item}")
+        ignore_today = analysis.get("ignore_today") or []
+        if ignore_today:
+            lines.append("Vandaag laten liggen:")
+            for item in ignore_today[:2]:
                 lines.append(f"- {item}")
         return "\n".join([line for line in lines if line])
 
@@ -2946,6 +3157,10 @@ class FinnPlanService:
                 "finn_decision_review",
                 "finn_plan_adherence_review",
                 "finn_outcome_tracking_summary",
+                "finn_outcome_memory_summary",
+                "finn_personal_performance_summary",
+                "finn_personal_coach_summary",
+                "finn_trade_journal_intelligence_summary",
                 "finn_portfolio_intelligence",
                 "finn_priority_engine_summary",
                 "finn_memory_v2_summary",
@@ -2958,6 +3173,8 @@ class FinnPlanService:
             self._priority_engine_governance_signals(governance_events),
         )
         memory_v2 = self._build_memory_v2_summary(activity_feed, governance_events)
+        personal_performance = self._build_personal_performance_summary(activity_feed, governance_events, behavioral)
+        trade_journal_intelligence = self._build_trade_journal_intelligence_summary(activity_feed, governance_events)
         memory = {
             **self._build_behavioral_memory_report(activity_feed, behavioral),
             **memory_v2,
@@ -2967,6 +3184,8 @@ class FinnPlanService:
             mission=mission,
             priority_engine=priority_engine,
             memory=memory,
+            personal_performance=personal_performance,
+            trade_journal_intelligence=trade_journal_intelligence,
             governance_events=governance_events,
         )
         await self._record_governance_event(
@@ -2983,6 +3202,12 @@ class FinnPlanService:
                 "control_plane": analysis.get("control_plane"),
                 "portfolio_layer": analysis.get("portfolio_layer"),
                 "governance_layer": analysis.get("governance_layer"),
+                "portfolio_pressure": analysis.get("portfolio_pressure"),
+                "capital_focus": analysis.get("capital_focus"),
+                "conflict_stack": analysis.get("conflict_stack"),
+                "do_now": analysis.get("do_now"),
+                "do_next": analysis.get("do_next"),
+                "ignore_today": analysis.get("ignore_today"),
                 "subsystems": analysis.get("subsystems"),
                 "next_best_actions": analysis.get("next_best_actions"),
             },
@@ -4535,6 +4760,145 @@ class FinnPlanService:
         ]
         if analysis.get("operator_next_step"):
             lines.append(f"Volgende stap: {analysis.get('operator_next_step')}")
+        return "\n".join([line for line in lines if line])
+
+    def _outcome_memory_message(self, analysis: Dict[str, Any]) -> str:
+        lines = [
+            analysis.get("headline") or "Hier is wat Finn nu echt uit je uitkomsten onthoudt.",
+            f"Pattern: {analysis.get('memory_pattern')}.",
+            analysis.get("behavioral_cost") or "",
+        ]
+        if analysis.get("repeat_trigger"):
+            lines.append(f"Terugkerende trigger: {analysis.get('repeat_trigger')}")
+        if analysis.get("supporting_evidence_count") is not None:
+            lines.append(
+                f"Evidence: {analysis.get('supporting_evidence_count')} signalen in {analysis.get('time_window')} "
+                f"({analysis.get('confidence_level')} confidence)."
+            )
+        if analysis.get("latest_outcome_summary"):
+            lines.append(f"Laatste duidelijke uitkomstlijn: {analysis.get('latest_outcome_summary')}")
+        if analysis.get("recommended_rule"):
+            lines.append(f"Aanbevolen regel: {analysis.get('recommended_rule')}")
+        evidence = analysis.get("supporting_evidence") or []
+        if evidence:
+            lines.append("Waarom Finn dit onthoudt:")
+            for item in evidence[:3]:
+                lines.append(f"- {item}")
+        if analysis.get("operator_next_step"):
+            lines.append(f"Volgende stap: {analysis.get('operator_next_step')}")
+        return "\n".join([line for line in lines if line])
+
+    def _personal_performance_message(self, analysis: Dict[str, Any]) -> str:
+        lines = [
+            analysis.get("headline") or "Hier is hoe Finn je persoonlijke trading performance nu leest.",
+            (
+                f"Performance-score: {analysis.get('performance_score')}/100."
+                if analysis.get("performance_score") is not None else
+                "Performance-score: nog niet sterk genoeg te onderbouwen."
+            ),
+        ]
+        breakdown = analysis.get("score_breakdown") or []
+        if breakdown:
+            lines.append("Score-opbouw:")
+            for item in breakdown[:5]:
+                lines.append(f"- {item.get('label')}: {item.get('score')}/100 - {item.get('summary')}")
+        drivers = analysis.get("performance_drivers") or []
+        if drivers:
+            lines.append("Wat nu het zwaarst meeweegt:")
+            for item in drivers[:4]:
+                lines.append(f"- {item.get('label')}: {item.get('summary')}")
+        if analysis.get("discipline_delta"):
+            delta = analysis.get("discipline_delta") or {}
+            lines.append(f"Discipline-delta: {delta.get('summary') or delta.get('direction')}")
+        if analysis.get("recovery_status"):
+            lines.append(f"Herstelstatus: {analysis.get('recovery_status')}")
+        risk_flags = analysis.get("performance_risk_flags") or []
+        if risk_flags:
+            lines.append("Prestatie-risico's:")
+            for item in risk_flags[:3]:
+                lines.append(f"- {item}")
+        if analysis.get("next_growth_target"):
+            lines.append(f"Volgende groeidoel: {analysis.get('next_growth_target')}")
+        if analysis.get("operator_next_step"):
+            lines.append(f"Veilige volgende stap: {analysis.get('operator_next_step')}")
+        return "\n".join([line for line in lines if line])
+
+    def _trade_journal_intelligence_message(self, analysis: Dict[str, Any]) -> str:
+        lines = [
+            analysis.get("headline") or "Hier is wat Finn uit je trade-journal signalen en reviewtaal haalt.",
+            f"Journal-pattern: {analysis.get('journal_pattern')}.",
+        ]
+        tags = analysis.get("journal_tags") or []
+        if tags:
+            lines.append("Tags: " + ", ".join(tags[:6]))
+        if analysis.get("thesis_quality"):
+            lines.append(f"Thesis-kwaliteit: {analysis.get('thesis_quality')}")
+        if analysis.get("emotion_signal"):
+            lines.append(f"Emotioneel signaal: {analysis.get('emotion_signal')}")
+        if analysis.get("decision_gap"):
+            lines.append(f"Beslisgat: {analysis.get('decision_gap')}")
+        if analysis.get("post_trade_lesson"):
+            lines.append(f"Post-trade les: {analysis.get('post_trade_lesson')}")
+        if analysis.get("journal_coaching_note"):
+            lines.append(f"Coachnotitie: {analysis.get('journal_coaching_note')}")
+        evidence = analysis.get("supporting_evidence") or []
+        if evidence:
+            lines.append("Ondersteunend bewijs:")
+            for item in evidence[:3]:
+                lines.append(f"- {item}")
+        if analysis.get("operator_next_step"):
+            lines.append(f"Volgende stap: {analysis.get('operator_next_step')}")
+        return "\n".join([line for line in lines if line])
+
+    def _personal_coach_message(self, analysis: Dict[str, Any]) -> str:
+        mode = str(analysis.get("coach_mode") or "")
+        if mode == "interruptive":
+            lines = [
+                "Stop even en onderbreek deze lus nu.",
+                analysis.get("current_pattern") or "Ik zie een patroon dat nu niet geholpen moet worden door snelheid.",
+                f"Wat dit kost: {analysis.get('what_it_costs')}",
+                f"Wat je nu moet onderbreken: {analysis.get('what_to_interrupt_now')}",
+                f"Volgende regel: {analysis.get('next_best_rule')}",
+            ]
+        elif mode == "recovery":
+            lines = [
+                "Je hoeft dit nu niet terug te winnen; eerst herstel.",
+                analysis.get("current_pattern") or "Ik zie herstelgedrag als eerstvolgende prioriteit.",
+                f"Wat dit kost: {analysis.get('what_it_costs')}",
+                f"Wat je nu moet onderbreken: {analysis.get('what_to_interrupt_now')}",
+                f"Volgende regel: {analysis.get('next_best_rule')}",
+            ]
+        elif mode == "pre_trade":
+            lines = [
+                "Voor je iets nieuws doet: laat kwaliteit eerst winnen van drang.",
+                analysis.get("current_pattern") or "Ik zie pre-trade druk op je oordeel.",
+                f"Wat dit kost: {analysis.get('what_it_costs')}",
+                f"Wat je nu moet onderbreken: {analysis.get('what_to_interrupt_now')}",
+                f"Volgende regel: {analysis.get('next_best_rule')}",
+            ]
+        elif mode == "post_trade":
+            lines = [
+                "Gebruik dit moment niet om jezelf gelijk te geven, maar om iets bruikbaars te leren.",
+                analysis.get("current_pattern") or "Ik zie een patroon dat beter wordt als je het expliciet terugleest.",
+                f"Wat dit kost: {analysis.get('what_it_costs')}",
+                f"Wat je nu moet onderbreken: {analysis.get('what_to_interrupt_now')}",
+                f"Volgende regel: {analysis.get('next_best_rule')}",
+            ]
+        else:
+            lines = [
+                "Ik coach je hier op je echte gedrag, niet alleen op de trade voor je neus.",
+                analysis.get("current_pattern") or "Ik zie nog geen enkelvoudig patroon dat alles overstemt.",
+                f"Wat dit kost: {analysis.get('what_it_costs')}",
+                f"Wat je nu moet onderbreken: {analysis.get('what_to_interrupt_now')}",
+                f"Volgende regel: {analysis.get('next_best_rule')}",
+            ]
+        if analysis.get("coach_follow_up"):
+            lines.append(f"Follow-up: {analysis.get('coach_follow_up')}")
+        evidence = analysis.get("supporting_signals") or []
+        if evidence:
+            lines.append("Waar ik dit op baseer:")
+            for item in evidence[:3]:
+                lines.append(f"- {item}")
         return "\n".join([line for line in lines if line])
 
     def _portfolio_intelligence_contract(
@@ -9603,6 +9967,9 @@ class FinnPlanService:
                 "finn_decision_review",
                 "finn_plan_adherence_review",
                 "finn_outcome_tracking_summary",
+                "finn_outcome_memory_summary",
+                "finn_personal_performance_summary",
+                "finn_trade_journal_intelligence_summary",
                 "finn_portfolio_intelligence",
                 "finn_priority_engine_summary",
                 "finn_memory_v2_summary",
@@ -9623,17 +9990,32 @@ class FinnPlanService:
             self._priority_engine_governance_signals(governance_events),
         )
         memory_v2 = self._build_memory_v2_summary(activity_window, governance_events)
+        personal_performance = self._build_personal_performance_summary(activity_window, governance_events, behavioral_insight)
+        trade_journal_intelligence = self._build_trade_journal_intelligence_summary(activity_window, governance_events)
         portfolio_operating_system = self._portfolio_operating_system_contract(
             daily_analysis=analysis,
             mission=mission,
             priority_engine=priority_engine,
             memory={**(memory or {}), **memory_v2},
+            personal_performance=personal_performance,
+            trade_journal_intelligence=trade_journal_intelligence,
             governance_events=governance_events,
+        )
+        personal_coach = self._build_personal_coach_summary(
+            query="Open Mission Control",
+            outcome_memory=self._build_outcome_memory_summary(governance_events, activity_window),
+            personal_performance=personal_performance,
+            trade_journal_intelligence=trade_journal_intelligence,
+            portfolio_operating_system=portfolio_operating_system,
         )
         governance_events_summary = {
             "decision_review_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_decision_review"]),
             "plan_adherence_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_plan_adherence_review"]),
             "outcome_tracking_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_outcome_tracking_summary"]),
+            "outcome_memory_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_outcome_memory_summary"]),
+            "personal_performance_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_personal_performance_summary"]),
+            "personal_coach_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_personal_coach_summary"]),
+            "trade_journal_intelligence_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_trade_journal_intelligence_summary"]),
             "portfolio_intelligence_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_portfolio_intelligence"]),
             "priority_engine_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_priority_engine_summary"]),
             "memory_v2_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_memory_v2_summary"]),
@@ -9675,6 +10057,9 @@ class FinnPlanService:
             "coaching_loop": coaching_loop,
             "priority_engine": priority_engine,
             "memory_v2": memory_v2,
+            "personal_performance": personal_performance,
+            "personal_coach": personal_coach,
+            "trade_journal_intelligence": trade_journal_intelligence,
             "portfolio_operating_system": portfolio_operating_system,
             "governance_events_summary": governance_events_summary,
             "data_readiness": analysis.get("data_readiness") or {},
@@ -9684,6 +10069,9 @@ class FinnPlanService:
                 "route_source": "finn",
                 "priority_engine": priority_engine,
                 "memory_v2": memory_v2,
+                "personal_performance": personal_performance,
+                "personal_coach": personal_coach,
+                "trade_journal_intelligence": trade_journal_intelligence,
                 "portfolio_operating_system": portfolio_operating_system,
                 "governance_events_summary": governance_events_summary,
                 "context_confidence": {
@@ -10348,10 +10736,16 @@ class FinnPlanService:
             limit=80,
         )
         memory_v2 = self._build_memory_v2_summary(activity_feed, governance_events)
+        outcome_memory = self._build_outcome_memory_summary(governance_events, activity_feed)
+        personal_performance = self._build_personal_performance_summary(activity_feed, governance_events, behavioral)
+        trade_journal_intelligence = self._build_trade_journal_intelligence_summary(activity_feed, governance_events)
         memory = {
             **memory,
             **memory_v2,
             "memory_v2": memory_v2,
+            "outcome_memory": outcome_memory,
+            "personal_performance": personal_performance,
+            "trade_journal_intelligence": trade_journal_intelligence,
         }
         await self._record_governance_event(
             user_id,
@@ -10387,6 +10781,9 @@ class FinnPlanService:
                 "current_flow": "behavioral_memory",
                 "analysis": memory,
                 "behavioral_insight": behavioral,
+                "outcome_memory": outcome_memory,
+                "personal_performance": personal_performance,
+                "trade_journal_intelligence": trade_journal_intelligence,
                 "advice_only": True,
             },
             "analysis": memory,
@@ -10394,6 +10791,892 @@ class FinnPlanService:
                 "Vraag: geef mijn weekreflectie",
                 "Vraag: open Mission Control",
                 "Vraag: waar wijk ik vaak af van mijn plan?",
+            ],
+        }
+
+    def _build_outcome_memory_summary(
+        self,
+        governance_events: List[Dict[str, Any]],
+        activity_feed: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        patterns = {
+            "fomo_outcomes": {
+                "score": 0,
+                "evidence": [],
+                "cost": "FOMO-uitkomsten trekken je naar entries die vaker kapitaal lekken dan kwaliteit toevoegen.",
+                "rule": "Geen entry op basis van haast of gemiste move zonder nieuwe objectieve trigger.",
+                "trigger": "druk om niet achter te blijven op de markt",
+            },
+            "plan_override_outcomes": {
+                "score": 0,
+                "evidence": [],
+                "cost": "Plan-overrides maken goede reviews minder waard en verlagen je disciplinekwaliteit.",
+                "rule": "Geen override zonder expliciete hercheck van trigger, sizing en exposure.",
+                "trigger": "de neiging om bestaande regels tijdelijk opzij te schuiven",
+            },
+            "overtrading_outcomes": {
+                "score": 0,
+                "evidence": [],
+                "cost": "Te vaak opnieuw handelen verhoogt frictie, verlaagt selectiviteit en stapelt slechte follow-through.",
+                "rule": "Na een trade of block volgt eerst cooldown en review voordat je opnieuw actie zoekt.",
+                "trigger": "de drang om snel weer iets te doen",
+            },
+            "concentration_outcomes": {
+                "score": 0,
+                "evidence": [],
+                "cost": "Concentratie-uitkomsten stapelen risico in plaats van kwaliteit, ook als losse beslissingen verdedigbaar lijken.",
+                "rule": "Voeg geen extra risico toe als dezelfde asset al dominant is in je allocatie.",
+                "trigger": "het blijven toevoegen aan dezelfde dominante exposure",
+            },
+            "recovery_outcomes": {
+                "score": 0,
+                "evidence": [],
+                "cost": "Je beste herstel komt uit vertragen en opnieuw prioriteren, niet uit forceren.",
+                "rule": "Gebruik skip, snooze of review als eerste herstelactie zodra druk oploopt.",
+                "trigger": "druk na verlies, blokkade of onrust",
+            },
+        }
+
+        latest_summary = None
+        for event in governance_events or []:
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            event_type = str(event.get("type") or "")
+            if event_type == "finn_outcome_tracking_summary":
+                behavior_pattern = str(payload.get("behavior_pattern") or "")
+                net_effect = str(payload.get("net_effect") or "")
+                history = str(payload.get("historical_result_summary") or "")
+                sample_size = int(payload.get("sample_size") or 0)
+                if not latest_summary and history:
+                    latest_summary = history
+                if behavior_pattern == "fomo_outcomes":
+                    patterns["fomo_outcomes"]["score"] += 3 if sample_size >= 3 else 1
+                    patterns["fomo_outcomes"]["evidence"].append(history or net_effect or event.get("description"))
+                elif behavior_pattern in {"plan_override_outcomes", "plan_adherence_outcomes"}:
+                    patterns["plan_override_outcomes"]["score"] += 3 if sample_size >= 2 else 1
+                    patterns["plan_override_outcomes"]["evidence"].append(history or net_effect or event.get("description"))
+                elif behavior_pattern == "overtrading_outcomes":
+                    patterns["overtrading_outcomes"]["score"] += 3 if sample_size >= 2 else 1
+                    patterns["overtrading_outcomes"]["evidence"].append(history or net_effect or event.get("description"))
+                if any(term in net_effect.lower() for term in ["negatief", "vaker slecht", "kapitaal lekt"]):
+                    if behavior_pattern == "fomo_outcomes":
+                        patterns["fomo_outcomes"]["score"] += 2
+                    elif behavior_pattern in {"plan_override_outcomes", "plan_adherence_outcomes"}:
+                        patterns["plan_override_outcomes"]["score"] += 2
+                    elif behavior_pattern == "overtrading_outcomes":
+                        patterns["overtrading_outcomes"]["score"] += 2
+            elif event_type == "finn_plan_adherence_review":
+                adherence = str(payload.get("adherence_status") or "")
+                if adherence in {"forced_override", "outside_plan"}:
+                    patterns["plan_override_outcomes"]["score"] += 2
+                    patterns["plan_override_outcomes"]["evidence"].append(
+                        payload.get("threatened_rule") or event.get("description")
+                    )
+            elif event_type == "finn_portfolio_intelligence":
+                portfolio_status = str(payload.get("portfolio_status") or "")
+                if portfolio_status in {"concentrated", "high_attention"}:
+                    patterns["concentration_outcomes"]["score"] += 2
+                    patterns["concentration_outcomes"]["evidence"].append(
+                        payload.get("concentration_warning")
+                        or payload.get("stacked_risk_warning")
+                        or event.get("description")
+                    )
+
+        skipped = len([item for item in activity_feed or [] if str(item.get("resolve_state") or "") == "skipped"])
+        snoozed = len([item for item in activity_feed or [] if str(item.get("resolve_state") or "") == "snoozed"])
+        if skipped + snoozed >= 3:
+            patterns["recovery_outcomes"]["score"] += 2
+            patterns["recovery_outcomes"]["evidence"].append(
+                f"{skipped} skips en {snoozed} snoozes laten zien dat vertragen je vaak beter beschermt dan doorzetten."
+            )
+
+        primary_pattern, primary_data = max(
+            patterns.items(),
+            key=lambda item: (item[1]["score"], len(item[1]["evidence"])),
+        )
+        evidence = [str(item) for item in (primary_data.get("evidence") or []) if item]
+        evidence = list(dict.fromkeys(evidence))[:4]
+        evidence_count = len(evidence)
+        if primary_data.get("score", 0) >= 6 and evidence_count >= 2:
+            confidence = "high"
+        elif primary_data.get("score", 0) >= 3 and evidence_count >= 1:
+            confidence = "medium"
+        else:
+            confidence = "low"
+
+        if confidence == "low":
+            primary_pattern = "insufficient_outcome_memory"
+            behavioral_cost = "Ik zie nog losse uitkomstsignalen, maar nog niet genoeg om een vaste uitkomstregel te onthouden."
+            recommended_rule = "Blijf reviews, adherence-checks en uitkomstvragen via Finn laten lopen zodat deze memory-laag rijker wordt."
+            repeat_trigger = "nog niet sterk genoeg af te leiden"
+        else:
+            behavioral_cost = str(primary_data.get("cost") or "")
+            recommended_rule = str(primary_data.get("rule") or "")
+            repeat_trigger = str(primary_data.get("trigger") or "")
+
+        operator_next_step = (
+            "Gebruik dit patroon als pre-trade rem: herken de trigger eerder en laat Finn eerst reviewen voordat je iets toevoegt."
+            if confidence in {"medium", "high"} else
+            "Verzamel eerst meer echte review-, adherence- en uitkomstsignalen voordat Finn hier een hardere regel van maakt."
+        )
+        return {
+            "memory_pattern": primary_pattern,
+            "supporting_evidence_count": evidence_count,
+            "time_window": "last_90_days",
+            "behavioral_cost": behavioral_cost,
+            "repeat_trigger": repeat_trigger,
+            "recommended_rule": recommended_rule,
+            "confidence_level": confidence,
+            "supporting_evidence": evidence,
+            "latest_outcome_summary": latest_summary,
+            "operator_next_step": operator_next_step,
+        }
+
+    async def build_outcome_memory_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
+        governance_events = await self._fetch_recent_governance_events(
+            user_id,
+            event_types=[
+                "finn_outcome_tracking_summary",
+                "finn_plan_adherence_review",
+                "finn_portfolio_intelligence",
+            ],
+            limit=80,
+        )
+        analysis = self._build_outcome_memory_summary(activity_feed=activity_feed, governance_events=governance_events)
+        analysis["headline"] = "Ik kijk nu welk uitkomstpatroon Finn echt van je gedrag mag onthouden."
+        await self._record_governance_event(
+            user_id,
+            event_type="finn_outcome_memory_summary",
+            symbol=context.get("symbol") if isinstance(context, dict) else None,
+            title="Finn bouwde een Outcome Memory samenvatting",
+            description=analysis.get("behavioral_cost") or analysis.get("recommended_rule"),
+            severity="info",
+            payload={
+                "phase": "outcome_memory_engine",
+                "query": query,
+                "memory_pattern": analysis.get("memory_pattern"),
+                "supporting_evidence_count": analysis.get("supporting_evidence_count"),
+                "time_window": analysis.get("time_window"),
+                "behavioral_cost": analysis.get("behavioral_cost"),
+                "repeat_trigger": analysis.get("repeat_trigger"),
+                "recommended_rule": analysis.get("recommended_rule"),
+                "confidence_level": analysis.get("confidence_level"),
+            },
+            cooldown_hours=6,
+        )
+        return {
+            "response": self._outcome_memory_message(analysis),
+            "intent": "outcome_memory",
+            "flow": "outcome_memory",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "current_flow": "outcome_memory",
+                "analysis": analysis,
+                "advice_only": True,
+            },
+            "analysis": analysis,
+            "suggested_actions": [
+                "Vraag: welk gedrag kost me de laatste maand het meeste?",
+                "Vraag: wat onthoudt Finn van mijn laatste fouten?",
+                "Vraag: open Mission Control",
+            ],
+        }
+
+    def _build_personal_performance_summary(
+        self,
+        activity_feed: List[Dict[str, Any]],
+        governance_events: List[Dict[str, Any]],
+        behavioral: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        weekly = self._build_weekly_reflection_from_behavioral(behavioral, activity_feed)
+        memory = self._build_behavioral_memory_report(activity_feed, behavioral)
+        outcome_memory = self._build_outcome_memory_summary(governance_events, activity_feed)
+
+        decision_events = [event for event in governance_events if str(event.get("type") or "") == "finn_decision_review"]
+        adherence_events = [event for event in governance_events if str(event.get("type") or "") == "finn_plan_adherence_review"]
+        outcome_events = [event for event in governance_events if str(event.get("type") or "") == "finn_outcome_tracking_summary"]
+        portfolio_events = [event for event in governance_events if str(event.get("type") or "") == "finn_portfolio_intelligence"]
+
+        insufficient_decisions = 0
+        blocked_or_modify = 0
+        for event in decision_events:
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            status = str(payload.get("decision_status") or "")
+            if status == "insufficient_context":
+                insufficient_decisions += 1
+            if status in {"block", "modify"}:
+                blocked_or_modify += 1
+
+        override_events = 0
+        outside_plan_events = 0
+        for event in adherence_events:
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            status = str(payload.get("adherence_status") or "")
+            if status == "forced_override":
+                override_events += 1
+            if status in {"outside_plan", "forced_override"}:
+                outside_plan_events += 1
+
+        negative_outcomes = 0
+        strong_outcomes = 0
+        for event in outcome_events:
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            net_effect = str(payload.get("net_effect") or "").lower()
+            if any(term in net_effect for term in ["negatief", "lekt", "vaker slecht", "verlies"]):
+                negative_outcomes += 1
+            if int(payload.get("sample_size") or 0) >= 3:
+                strong_outcomes += 1
+
+        concentrated_portfolio = 0
+        for event in portfolio_events:
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            if str(payload.get("portfolio_status") or "") in {"concentrated", "high_attention"}:
+                concentrated_portfolio += 1
+
+        metrics_7d = weekly.get("metrics") or {}
+        metrics_30d = memory.get("metrics") or {}
+        skipped = int(metrics_30d.get("skipped_30d") or 0)
+        snoozed = int(metrics_30d.get("snoozed_30d") or 0)
+        monitored = int(metrics_30d.get("monitor_30d") or 0)
+        review_actions = int(metrics_30d.get("review_actions_30d") or 0)
+        churn_30d = int(metrics_30d.get("decision_churn_events_30d") or 0)
+
+        discipline_base = weekly.get("discipline_score")
+        discipline_quality = discipline_base if discipline_base is not None else 70
+        discipline_quality -= override_events * 8
+        discipline_quality -= max(0, outside_plan_events - override_events) * 5
+        discipline_quality = max(35, min(95, discipline_quality))
+
+        decision_quality = 72 + min(8, len(decision_events) * 2)
+        decision_quality -= insufficient_decisions * 7
+        decision_quality -= concentrated_portfolio * 4
+        decision_quality += min(6, blocked_or_modify * 2)
+        decision_quality = max(40, min(94, decision_quality))
+
+        follow_through_quality = 64
+        if review_actions >= 3:
+            follow_through_quality += 10
+        follow_through_quality += min(8, skipped + snoozed + monitored)
+        if churn_30d:
+            follow_through_quality -= churn_30d * 4
+        follow_through_quality = max(38, min(92, follow_through_quality))
+
+        recovery_quality = 62
+        if outcome_memory.get("memory_pattern") == "recovery_outcomes":
+            recovery_quality += 14
+        if skipped + snoozed >= 2:
+            recovery_quality += 8
+        if negative_outcomes >= 2 and skipped + snoozed == 0:
+            recovery_quality -= 8
+        recovery_quality = max(35, min(92, recovery_quality))
+
+        selectivity_quality = 66
+        selectivity_quality -= churn_30d * 5
+        selectivity_quality -= concentrated_portfolio * 6
+        if blocked_or_modify >= 2:
+            selectivity_quality += 6
+        selectivity_quality = max(35, min(90, selectivity_quality))
+
+        score_breakdown = [
+            {
+                "key": "decision_quality",
+                "label": "Decision quality",
+                "score": int(round(decision_quality)),
+                "summary": "Hoe scherp je review, risico en context samenkomen voordat je iets doet.",
+            },
+            {
+                "key": "discipline_quality",
+                "label": "Discipline quality",
+                "score": int(round(discipline_quality)),
+                "summary": "Hoe vaak je plan, guardrails en wachtdiscipline overeind blijven onder druk.",
+            },
+            {
+                "key": "follow_through_quality",
+                "label": "Follow-through quality",
+                "score": int(round(follow_through_quality)),
+                "summary": "Of je open reviews echt afrondt, bewaakt of bewust parkeert.",
+            },
+            {
+                "key": "recovery_quality",
+                "label": "Recovery quality",
+                "score": int(round(recovery_quality)),
+                "summary": "Hoe goed je na druk, twijfel of verlies terugschakelt naar veilig gedrag.",
+            },
+            {
+                "key": "selectivity_quality",
+                "label": "Selectivity quality",
+                "score": int(round(selectivity_quality)),
+                "summary": "Of je kwaliteit boven activiteit zet en niet te veel tegelijk wilt forceren.",
+            },
+        ]
+        performance_score = int(round(sum(item["score"] for item in score_breakdown) / len(score_breakdown)))
+
+        drivers: List[Dict[str, Any]] = []
+        if skipped + snoozed + monitored >= 2:
+            drivers.append({
+                "type": "positive",
+                "label": "Bewust vertragen helpt je",
+                "summary": f"{skipped} skips, {snoozed} snoozes en {monitored} monitor-acties laten zien dat je niet alles hoeft te forceren.",
+            })
+        if strong_outcomes >= 2:
+            drivers.append({
+                "type": "positive",
+                "label": "Outcome-bewijs wordt bruikbaar",
+                "summary": f"{strong_outcomes} uitkomstsignalen geven Finn genoeg bewijs om gedrag echt aan resultaat te koppelen.",
+            })
+        if override_events:
+            drivers.append({
+                "type": "negative",
+                "label": "Plan-overrides drukken je score",
+                "summary": f"{override_events} override-signaal/signalen laten zien dat discipline onder druk nog kwetsbaar is.",
+            })
+        if churn_30d:
+            drivers.append({
+                "type": "negative",
+                "label": "Decision-churn verlaagt je selectiviteit",
+                "summary": f"{churn_30d} churn-event(s) suggereren dat je soms te snel een volgende beslissing zoekt.",
+            })
+        if concentrated_portfolio:
+            drivers.append({
+                "type": "negative",
+                "label": "Concentratierisico trekt aan je kwaliteit",
+                "summary": f"{concentrated_portfolio} portfolio-waarschuwing(en) laten zien dat goede losse ideeën samen te veel risico kunnen stapelen.",
+            })
+
+        risk_flags = [
+            driver["summary"]
+            for driver in drivers
+            if driver.get("type") == "negative"
+        ][:4]
+
+        week_summary = ((weekly.get("week_over_week") or {}).get("summary") or "").strip()
+        if week_summary and "nog geen" not in week_summary.lower():
+            discipline_delta = {
+                "direction": "mixed" if "evenveel" in week_summary else "up" if "minder" in week_summary else "down",
+                "summary": week_summary,
+            }
+        else:
+            discipline_delta = {
+                "direction": "flat",
+                "summary": "Nog te weinig vergelijkingshistorie om je disciplineontwikkeling hard te scoren.",
+            }
+
+        if recovery_quality >= 78:
+            recovery_status = "stable_recovery"
+        elif negative_outcomes >= 2 and skipped + snoozed == 0:
+            recovery_status = "under_pressure_without_brake"
+        else:
+            recovery_status = "mixed_recovery"
+
+        weakest = min(score_breakdown, key=lambda item: item["score"])
+        growth_targets = {
+            "decision_quality": "Laat Finn vaker eerst reviewen met expliciete setup-, sizing- en exposuredata voordat je een trade verdedigt.",
+            "discipline_quality": "Maak van planbreuk een harde pauzeknop: eerst hercheck, dan pas actie.",
+            "follow_through_quality": "Rond open reviews bewuster af zodat je minder halve beslissingen laat hangen.",
+            "recovery_quality": "Gebruik na druk of verlies eerst skip, snooze of review als herstelactie in plaats van snelheid.",
+            "selectivity_quality": "Verlaag de drang om steeds opnieuw actie te zoeken; kwaliteit moet zwaarder wegen dan activiteit.",
+        }
+        next_growth_target = growth_targets.get(weakest["key"])
+        operator_next_step = (
+            "Gebruik deze performance-laag als weekanker: pak eerst het zwakste component aan voordat je meer volume of complexiteit toevoegt."
+        )
+
+        return {
+            "performance_score": performance_score,
+            "score_breakdown": score_breakdown,
+            "performance_drivers": drivers[:5],
+            "discipline_delta": discipline_delta,
+            "recovery_status": recovery_status,
+            "performance_risk_flags": risk_flags,
+            "next_growth_target": next_growth_target,
+            "operator_next_step": operator_next_step,
+            "headline": "Ik kijk nu niet alleen naar uitkomsten, maar naar de kwaliteit van hoe je trade, wacht en herstelt.",
+            "time_window": "last_30_days",
+            "source": {
+                "decision_reviews": len(decision_events),
+                "adherence_events": len(adherence_events),
+                "outcome_events": len(outcome_events),
+                "portfolio_events": len(portfolio_events),
+            },
+        }
+
+    async def build_personal_performance_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
+        day_log = self._mission_day_log(activity_feed)
+        behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        governance_events = await self._fetch_recent_governance_events(
+            user_id,
+            event_types=[
+                "finn_decision_review",
+                "finn_plan_adherence_review",
+                "finn_outcome_tracking_summary",
+                "finn_outcome_memory_summary",
+                "finn_portfolio_intelligence",
+            ],
+            limit=90,
+        )
+        analysis = self._build_personal_performance_summary(activity_feed, governance_events, behavioral)
+        await self._record_governance_event(
+            user_id,
+            event_type="finn_personal_performance_summary",
+            symbol=context.get("symbol") if isinstance(context, dict) else None,
+            title="Finn bouwde een Personal Performance samenvatting",
+            description=analysis.get("next_growth_target") or analysis.get("operator_next_step"),
+            severity="info",
+            payload={
+                "phase": "personal_performance_layer",
+                "query": query,
+                "performance_score": analysis.get("performance_score"),
+                "score_breakdown": analysis.get("score_breakdown"),
+                "recovery_status": analysis.get("recovery_status"),
+                "next_growth_target": analysis.get("next_growth_target"),
+                "performance_risk_flags": analysis.get("performance_risk_flags"),
+            },
+            cooldown_hours=6,
+        )
+        return {
+            "response": self._personal_performance_message(analysis),
+            "intent": "personal_performance",
+            "flow": "personal_performance",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "current_flow": "personal_performance",
+                "analysis": analysis,
+                "behavioral_insight": behavioral,
+                "advice_only": True,
+            },
+            "analysis": analysis,
+            "suggested_actions": [
+                "Vraag: welk gedrag kost me de laatste maand het meeste?",
+                "Vraag: geef mijn weekreflectie",
+                "Vraag: open Mission Control",
+            ],
+        }
+
+    def _build_trade_journal_intelligence_summary(
+        self,
+        activity_feed: List[Dict[str, Any]],
+        governance_events: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        evidence_lines: List[str] = []
+        raw_queries: List[str] = []
+        for event in governance_events or []:
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            query = str(payload.get("query") or "").strip()
+            if query:
+                raw_queries.append(query)
+                evidence_lines.append(query)
+            description = str(event.get("description") or "").strip()
+            if description:
+                evidence_lines.append(description)
+
+        journal_entries = self._build_report_activity_journal(activity_feed).get("entries") or []
+        for item in journal_entries[:6]:
+            label = str(item.get("label") or "").strip()
+            asset = str(item.get("asset") or "").strip()
+            if label:
+                evidence_lines.append(f"{label}{f' ({asset})' if asset else ''}")
+
+        evidence_lines = list(dict.fromkeys([item for item in evidence_lines if item]))[:8]
+        evidence_blob = " ".join(evidence_lines).lower()
+        query_blob = " ".join(raw_queries).lower()
+
+        objective_terms = ["setup", "strategie", "strategy", "risico", "risk", "exposure", "trigger", "sizing", "stop-loss", "allocatie", "portfolio"]
+        emotion_terms = ["fomo", "twijfel", "bang", "frustratie", "baal", "terugpakken", "haast", "stress", "paniek", "impuls", "emotioneel"]
+        rule_break_terms = ["override", "toch", "plan zegt wachten", "stop-loss verwijderen", "grotere positie", "buiten mijn plan", "afwijken"]
+        patience_terms = ["wachten", "skip", "snooze", "monitor", "later"]
+
+        objective_hits = sum(1 for term in objective_terms if term in evidence_blob)
+        emotion_hits = sum(1 for term in emotion_terms if term in evidence_blob)
+        rule_break_hits = sum(1 for term in rule_break_terms if term in evidence_blob)
+        patience_hits = sum(1 for term in patience_terms if term in evidence_blob)
+
+        tags: List[str] = []
+        if objective_hits:
+            tags.append("structured_review")
+        if emotion_hits:
+            tags.append("emotion_pressure")
+        if rule_break_hits:
+            tags.append("rule_conflict")
+        if patience_hits:
+            tags.append("patience_signal")
+        if "btc" in evidence_blob:
+            tags.append("btc_focus")
+        if "eth" in evidence_blob:
+            tags.append("eth_focus")
+
+        if len(evidence_lines) < 3 and not raw_queries:
+            journal_pattern = "insufficient_journal_signal"
+            thesis_quality = "thin_evidence"
+            emotion_signal = "unknown"
+            decision_gap = "Ik zie nog te weinig expliciete journal- of note-signalen om een beslisgat hard te benoemen."
+            post_trade_lesson = "Laat Finn meer post-trade reflectievragen en reviewtaal vastleggen; dan wordt deze laag bruikbaarder."
+            coaching_note = "Gebruik na een trade of block 1 korte reflectieregel: waarom deed je dit, wat voelde je, wat negeerde je?"
+        else:
+            if emotion_hits >= max(2, objective_hits):
+                journal_pattern = "emotion_led_entries"
+            elif rule_break_hits:
+                journal_pattern = "rule_conflict_entries"
+            elif objective_hits >= 2:
+                journal_pattern = "structured_review_entries"
+            else:
+                journal_pattern = "mixed_operator_entries"
+
+            if objective_hits >= 3 and emotion_hits <= 1:
+                thesis_quality = "strong"
+            elif objective_hits >= 1:
+                thesis_quality = "mixed"
+            else:
+                thesis_quality = "thin_evidence"
+
+            if emotion_hits >= 2:
+                emotion_signal = "elevated"
+            elif patience_hits >= 2 and emotion_hits == 0:
+                emotion_signal = "calm"
+            else:
+                emotion_signal = "mixed"
+
+            if rule_break_hits:
+                decision_gap = "Je benoemt de druk of wens om toch te handelen sneller dan de objectieve reden waarom de trade nog geldig zou zijn."
+            elif objective_hits and emotion_hits:
+                decision_gap = "Je reviewtaal mengt objectieve checks met emotionele druk; dat maakt overtuiging kwetsbaar."
+            elif objective_hits:
+                decision_gap = "Je basisreview oogt redelijk gestructureerd, maar Finn ziet nog weinig expliciete post-trade lesformulering."
+            else:
+                decision_gap = "Je journal-signalen zijn nog te impliciet; Finn mist nog duidelijk verwoorde trigger, risico en les."
+
+            if "fomo" in query_blob or "verlies" in evidence_blob:
+                post_trade_lesson = "Gebruik verlies- of FOMO-notities als harde rem: beschrijf niet alleen wat je voelde, maar welke regel je de volgende keer vooraf activeert."
+            elif rule_break_hits:
+                post_trade_lesson = "Maak planbreuk expliciet in je notities: welke regel werd bedreigd en waarom vond je dat toch aantrekkelijk?"
+            else:
+                post_trade_lesson = "Sluit trades of reviews af met één verdedigbare les, zodat Finn patroon en uitkomst later beter kan verbinden."
+
+            coaching_note = (
+                "Schrijf journal-notities in vier stukken: trigger, risico, emotie, les. Dan kan Finn veel rijkere persoonlijke feedback geven."
+            )
+
+        operator_next_step = "Laat na je volgende trade of blokkade 1 expliciete reflectieregel vastleggen, zodat deze journal-laag minder hoeft te raden."
+        return {
+            "journal_pattern": journal_pattern,
+            "journal_tags": tags,
+            "thesis_quality": thesis_quality,
+            "emotion_signal": emotion_signal,
+            "decision_gap": decision_gap,
+            "post_trade_lesson": post_trade_lesson,
+            "journal_coaching_note": coaching_note,
+            "supporting_evidence_count": len(evidence_lines),
+            "supporting_evidence": evidence_lines,
+            "headline": "Ik lees je journal-intelligence nu uit de reviewtaal, reflecties en Finn-auditsporen die je al achterlaat.",
+            "operator_next_step": operator_next_step,
+            "time_window": "last_30_days",
+        }
+
+    async def build_trade_journal_intelligence_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
+        governance_events = await self._fetch_recent_governance_events(
+            user_id,
+            event_types=[
+                "finn_decision_review",
+                "finn_plan_adherence_review",
+                "finn_outcome_tracking_summary",
+                "finn_outcome_memory_summary",
+                "finn_portfolio_intelligence",
+            ],
+            limit=90,
+        )
+        analysis = self._build_trade_journal_intelligence_summary(activity_feed, governance_events)
+        await self._record_governance_event(
+            user_id,
+            event_type="finn_trade_journal_intelligence_summary",
+            symbol=context.get("symbol") if isinstance(context, dict) else None,
+            title="Finn bouwde een Trade Journal Intelligence samenvatting",
+            description=analysis.get("post_trade_lesson") or analysis.get("decision_gap"),
+            severity="info",
+            payload={
+                "phase": "trade_journal_intelligence",
+                "query": query,
+                "journal_pattern": analysis.get("journal_pattern"),
+                "journal_tags": analysis.get("journal_tags"),
+                "thesis_quality": analysis.get("thesis_quality"),
+                "emotion_signal": analysis.get("emotion_signal"),
+                "decision_gap": analysis.get("decision_gap"),
+                "post_trade_lesson": analysis.get("post_trade_lesson"),
+            },
+            cooldown_hours=6,
+        )
+        return {
+            "response": self._trade_journal_intelligence_message(analysis),
+            "intent": "trade_journal_intelligence",
+            "flow": "trade_journal_intelligence",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "current_flow": "trade_journal_intelligence",
+                "analysis": analysis,
+                "advice_only": True,
+            },
+            "analysis": analysis,
+            "suggested_actions": [
+                "Vraag: wat leert mijn trade journal?",
+                "Vraag: wat onthoudt Finn van mijn uitkomsten?",
+                "Vraag: geef mijn Finn rapport",
+            ],
+        }
+
+    def _build_personal_coach_summary(
+        self,
+        *,
+        query: str,
+        outcome_memory: Dict[str, Any],
+        personal_performance: Dict[str, Any],
+        trade_journal_intelligence: Dict[str, Any],
+        portfolio_operating_system: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        q = self._normalized_query(query)
+        posture = str(portfolio_operating_system.get("operating_posture") or "")
+        performance_score = personal_performance.get("performance_score")
+        recovery_status = str(personal_performance.get("recovery_status") or "")
+        journal_pattern = str(trade_journal_intelligence.get("journal_pattern") or "")
+        memory_pattern = str(outcome_memory.get("memory_pattern") or "")
+
+        if any(term in q for term in ["coach me op basis van mijn laatste fouten", "wat is mijn grootste persoonlijke performance lek", "waar verlies ik het meest discipline", "wat moet ik nu in mezelf onderbreken", "welk patroon moet ik nu doorbreken"]):
+            coach_mode = "interruptive"
+        elif any(term in q for term in ["wat moet ik nu", "moet ik deze trade", "nu instappen", "nu kopen", "nu doen"]):
+            coach_mode = "pre_trade"
+        elif any(term in q for term in ["laatste fouten", "achteraf", "post trade", "post-trade", "wat leer"]):
+            coach_mode = "post_trade"
+        elif recovery_status == "under_pressure_without_brake" or memory_pattern == "recovery_outcomes":
+            coach_mode = "recovery"
+        elif posture in {"risk_first", "performance_rebuild"} or any(term in q for term in ["onderbreken", "doorbreken", "meest discipline", "performance lek"]):
+            coach_mode = "interruptive"
+        else:
+            coach_mode = "reflective"
+
+        if coach_mode == "interruptive":
+            current_pattern = (
+                trade_journal_intelligence.get("decision_gap")
+                or personal_performance.get("next_growth_target")
+                or outcome_memory.get("repeat_trigger")
+                or "Je zoekt te snel een volgende actie terwijl je echte rempunt nog niet is opgelost."
+            )
+            what_it_costs = (
+                (personal_performance.get("performance_risk_flags") or [None])[0]
+                or outcome_memory.get("behavioral_cost")
+                or "Dit kost je vooral disciplinekwaliteit en maakt goede reviews minder waard."
+            )
+            what_to_interrupt_now = (
+                portfolio_operating_system.get("portfolio_pressure", {}).get("source")
+                or trade_journal_intelligence.get("decision_gap")
+                or "De drang om nu iets te doen zonder dat je beste reden al objectief klopt."
+            )
+        elif coach_mode == "recovery":
+            current_pattern = outcome_memory.get("repeat_trigger") or "Je beste herstel komt niet uit snelheid maar uit vertragen en opnieuw prioriteren."
+            what_it_costs = outcome_memory.get("behavioral_cost") or "Als je herstel overslaat, ga je sneller van onrust naar een slechtere volgende beslissing."
+            what_to_interrupt_now = "De neiging om na druk, verlies of frustratie meteen een volgende actie te zoeken."
+        elif coach_mode == "pre_trade":
+            current_pattern = trade_journal_intelligence.get("decision_gap") or "Je pre-trade overtuiging wordt nu sneller door druk dan door kwaliteit gestuurd."
+            what_it_costs = (
+                outcome_memory.get("behavioral_cost")
+                or (personal_performance.get("performance_risk_flags") or [None])[0]
+                or "Dit kost je vooral selectiviteit en verhoogt de kans op een trade die je achteraf niet goed kunt verdedigen."
+            )
+            what_to_interrupt_now = "De stap van review naar uitvoering zolang trigger, sizing en exposure nog niet hard genoeg staan."
+        elif coach_mode == "post_trade":
+            current_pattern = journal_pattern if journal_pattern and journal_pattern != "insufficient_journal_signal" else "Je noteert of herinnert de les nog niet scherp genoeg."
+            what_it_costs = (
+                trade_journal_intelligence.get("post_trade_lesson")
+                or "Zonder expliciete les herhaal je sneller hetzelfde gedrag met een nieuw excuus."
+            )
+            what_to_interrupt_now = "De reflex om te rationaliseren in plaats van één bruikbare regel terug te schrijven."
+        else:
+            current_pattern = (
+                outcome_memory.get("memory_pattern")
+                or trade_journal_intelligence.get("journal_pattern")
+                or "Ik zie nog geen enkel patroon dat alle andere overstemt."
+            )
+            what_it_costs = (
+                outcome_memory.get("behavioral_cost")
+                or "De grootste kost zit nu niet in één trade, maar in herhaling van kleine kwaliteitslekken."
+            )
+            what_to_interrupt_now = (
+                trade_journal_intelligence.get("decision_gap")
+                or portfolio_operating_system.get("portfolio_pressure", {}).get("source")
+                or "De gewoonte om te reageren voordat je eerst je beste regel activeert."
+            )
+
+        next_best_rule = (
+            outcome_memory.get("recommended_rule")
+            or personal_performance.get("next_growth_target")
+            or trade_journal_intelligence.get("journal_coaching_note")
+            or "Gebruik eerst review, regel en context; snelheid komt pas daarna."
+        )
+        do_now = portfolio_operating_system.get("do_now") or []
+        coach_follow_up = (
+            (do_now[0] if do_now else None)
+            or personal_performance.get("operator_next_step")
+            or trade_journal_intelligence.get("operator_next_step")
+            or "Laat Finn eerst je volgende review of reflectieregel vastleggen."
+        )
+        supporting_signals = [
+            item for item in [
+                outcome_memory.get("latest_outcome_summary"),
+                (personal_performance.get("performance_drivers") or [{}])[0].get("summary") if personal_performance.get("performance_drivers") else None,
+                trade_journal_intelligence.get("decision_gap"),
+                portfolio_operating_system.get("portfolio_pressure", {}).get("source"),
+            ] if item
+        ]
+        return {
+            "coach_mode": coach_mode,
+            "current_pattern": current_pattern,
+            "what_it_costs": what_it_costs,
+            "what_to_interrupt_now": what_to_interrupt_now,
+            "next_best_rule": next_best_rule,
+            "coach_follow_up": coach_follow_up,
+            "supporting_signals": supporting_signals[:4],
+            "headline": "Ik combineer nu je uitkomstgeheugen, performance, journal-signalen en portfolio-posture tot één persoonlijke coachlaag.",
+            "source_layers": {
+                "outcome_memory": outcome_memory.get("memory_pattern"),
+                "performance_score": performance_score,
+                "journal_pattern": journal_pattern,
+                "operating_posture": posture,
+            },
+        }
+
+    async def build_personal_coach_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
+        day_log = self._mission_day_log(activity_feed)
+        behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        governance_events = await self._fetch_recent_governance_events(
+            user_id,
+            event_types=[
+                "finn_decision_review",
+                "finn_plan_adherence_review",
+                "finn_outcome_tracking_summary",
+                "finn_outcome_memory_summary",
+                "finn_personal_performance_summary",
+                "finn_personal_coach_summary",
+                "finn_trade_journal_intelligence_summary",
+                "finn_portfolio_intelligence",
+                "finn_priority_engine_summary",
+                "finn_memory_v2_summary",
+                "finn_portfolio_operating_system_summary",
+            ],
+            limit=90,
+        )
+        outcome_memory = self._build_outcome_memory_summary(governance_events, activity_feed)
+        personal_performance = self._build_personal_performance_summary(activity_feed, governance_events, behavioral)
+        trade_journal_intelligence = self._build_trade_journal_intelligence_summary(activity_feed, governance_events)
+
+        mission_context = {}
+        try:
+            mission_context = await self.build_mission_control_response(user_id, {"page": "mission_control"})
+        except Exception:
+            mission_context = {}
+        portfolio_operating_system = (
+            (mission_context.get("analysis") or {}).get("portfolio_operating_system")
+            or mission_context.get("portfolio_operating_system")
+            or {}
+        )
+        if not portfolio_operating_system:
+            portfolio_operating_system = self._portfolio_operating_system_contract(
+                daily_analysis={},
+                mission={"summary": {}, "plan_health": [], "portfolio_risk": {}, "workqueue": []},
+                priority_engine={},
+                memory={},
+                personal_performance=personal_performance,
+                trade_journal_intelligence=trade_journal_intelligence,
+                governance_events=governance_events,
+            )
+
+        analysis = self._build_personal_coach_summary(
+            query=query,
+            outcome_memory=outcome_memory,
+            personal_performance=personal_performance,
+            trade_journal_intelligence=trade_journal_intelligence,
+            portfolio_operating_system=portfolio_operating_system,
+        )
+        await self._record_governance_event(
+            user_id,
+            event_type="finn_personal_coach_summary",
+            symbol=context.get("symbol") if isinstance(context, dict) else None,
+            title="Finn bouwde een Personal Coach samenvatting",
+            description=analysis.get("what_to_interrupt_now") or analysis.get("next_best_rule"),
+            severity="info",
+            payload={
+                "phase": "personal_coach_engine",
+                "query": query,
+                "coach_mode": analysis.get("coach_mode"),
+                "current_pattern": analysis.get("current_pattern"),
+                "what_it_costs": analysis.get("what_it_costs"),
+                "what_to_interrupt_now": analysis.get("what_to_interrupt_now"),
+                "next_best_rule": analysis.get("next_best_rule"),
+                "coach_follow_up": analysis.get("coach_follow_up"),
+            },
+            cooldown_hours=4,
+        )
+        return {
+            "response": self._personal_coach_message(analysis),
+            "intent": "personal_coach",
+            "flow": "personal_coach",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "current_flow": "personal_coach",
+                "analysis": analysis,
+                "outcome_memory": outcome_memory,
+                "personal_performance": personal_performance,
+                "trade_journal_intelligence": trade_journal_intelligence,
+                "portfolio_operating_system": portfolio_operating_system,
+                "advice_only": True,
+            },
+            "analysis": analysis,
+            "suggested_actions": [
+                "Vraag: wat is mijn grootste persoonlijke performance lek?",
+                "Vraag: wat leert mijn trade journal?",
+                "Vraag: open Mission Control",
             ],
         }
 
@@ -10506,6 +11789,9 @@ class FinnPlanService:
                 "finn_decision_review",
                 "finn_plan_adherence_review",
                 "finn_outcome_tracking_summary",
+                "finn_outcome_memory_summary",
+                "finn_personal_performance_summary",
+                "finn_trade_journal_intelligence_summary",
                 "finn_portfolio_intelligence",
                 "finn_priority_engine_summary",
                 "finn_memory_v2_summary",
@@ -10521,17 +11807,33 @@ class FinnPlanService:
             self._priority_engine_governance_signals(governance_events),
         )
         memory_v2 = self._build_memory_v2_summary(activity_feed, governance_events)
+        outcome_memory = self._build_outcome_memory_summary(governance_events, activity_feed)
+        personal_performance = self._build_personal_performance_summary(activity_feed, governance_events, behavioral)
+        trade_journal_intelligence = self._build_trade_journal_intelligence_summary(activity_feed, governance_events)
         portfolio_operating_system = self._portfolio_operating_system_contract(
             daily_analysis=mission_analysis,
             mission=mission,
             priority_engine=priority_engine,
             memory={**behavioral, **memory_v2},
+            personal_performance=personal_performance,
+            trade_journal_intelligence=trade_journal_intelligence,
             governance_events=governance_events,
+        )
+        personal_coach = self._build_personal_coach_summary(
+            query=query,
+            outcome_memory=outcome_memory,
+            personal_performance=personal_performance,
+            trade_journal_intelligence=trade_journal_intelligence,
+            portfolio_operating_system=portfolio_operating_system,
         )
         governance_events_summary = {
             "decision_review_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_decision_review"]),
             "plan_adherence_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_plan_adherence_review"]),
             "outcome_tracking_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_outcome_tracking_summary"]),
+            "outcome_memory_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_outcome_memory_summary"]),
+            "personal_performance_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_personal_performance_summary"]),
+            "personal_coach_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_personal_coach_summary"]),
+            "trade_journal_intelligence_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_trade_journal_intelligence_summary"]),
             "portfolio_intelligence_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_portfolio_intelligence"]),
             "priority_engine_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_priority_engine_summary"]),
             "memory_v2_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_memory_v2_summary"]),
@@ -10541,6 +11843,10 @@ class FinnPlanService:
             **report,
             "priority_engine": priority_engine,
             "memory_v2": memory_v2,
+            "outcome_memory": outcome_memory,
+            "personal_performance": personal_performance,
+            "personal_coach": personal_coach,
+            "trade_journal_intelligence": trade_journal_intelligence,
             "portfolio_operating_system": portfolio_operating_system,
             "governance_events_summary": governance_events_summary,
         }
@@ -10568,6 +11874,10 @@ class FinnPlanService:
                 "operating_rules": report.get("operating_rules"),
                 "priority_engine": priority_engine,
                 "memory_v2": memory_v2,
+                "outcome_memory": outcome_memory,
+                "personal_performance": personal_performance,
+                "personal_coach": personal_coach,
+                "trade_journal_intelligence": trade_journal_intelligence,
                 "portfolio_operating_system": portfolio_operating_system,
                 "governance_events_summary": governance_events_summary,
                 "advice_only": True,
@@ -11761,6 +13071,19 @@ class FinnPlanService:
                 lines.append(f"- {item.get('label')}: {item.get('meaning')} ({item.get('count')}x)")
         else:
             lines.append("Finn heeft in deze periode geen zware guardrail-interventie gevonden.")
+        personal_performance = report.get("personal_performance") or {}
+        if personal_performance.get("performance_score") is not None:
+            lines.append(
+                "Personal performance: "
+                f"{personal_performance.get('performance_score')}/100. "
+                f"Groeidoel: {personal_performance.get('next_growth_target')}"
+            )
+        journal = report.get("trade_journal_intelligence") or {}
+        if journal.get("journal_pattern"):
+            lines.append(
+                "Journal intelligence: "
+                f"{journal.get('journal_pattern')} - {journal.get('decision_gap')}"
+            )
         verdicts = report.get("agent_verdicts") or []
         if verdicts:
             lines.append("Agent-verdicts:")
