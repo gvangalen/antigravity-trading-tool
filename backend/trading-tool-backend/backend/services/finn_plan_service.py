@@ -1762,12 +1762,16 @@ class FinnPlanService:
 
     def looks_like_personal_coach_request(self, query: str) -> bool:
         q = self._normalized_query(query)
+        if any(term in q for term in [
+            "waar verlies ik het meeste discipline",
+            "waar verlies ik het meest discipline",
+        ]):
+            return False
         explicit_terms = [
             "coach me op basis van mijn laatste fouten",
             "coach me persoonlijk",
             "wees mijn persoonlijke trading coach",
             "wat is mijn grootste persoonlijke performance lek",
-            "waar verlies ik het meest discipline",
             "wat moet ik nu in mezelf onderbreken",
             "welk patroon moet ik nu doorbreken",
             "hoe coach jij mij nu het beste",
@@ -11563,7 +11567,7 @@ class FinnPlanService:
         journal_pattern = str(trade_journal_intelligence.get("journal_pattern") or "")
         memory_pattern = str(outcome_memory.get("memory_pattern") or "")
 
-        if any(term in q for term in ["coach me op basis van mijn laatste fouten", "wat is mijn grootste persoonlijke performance lek", "waar verlies ik het meest discipline", "wat moet ik nu in mezelf onderbreken", "welk patroon moet ik nu doorbreken"]):
+        if any(term in q for term in ["coach me op basis van mijn laatste fouten", "wat is mijn grootste persoonlijke performance lek", "wat moet ik nu in mezelf onderbreken", "welk patroon moet ik nu doorbreken"]):
             coach_mode = "interruptive"
         elif any(term in q for term in ["word ik beter of slechter", "ben ik beter of slechter", "aan het worden", "volgende beste coachregel"]):
             coach_mode = "reflective"

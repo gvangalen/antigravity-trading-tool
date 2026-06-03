@@ -5033,9 +5033,16 @@ def test_personal_coach_request_detection_is_separate_from_generic_coaching():
 
     assert service.looks_like_personal_coach_request("Coach me op basis van mijn laatste fouten") is True
     assert service.looks_like_personal_coach_request("Wat is mijn grootste persoonlijke performance lek?") is True
-    assert service.looks_like_personal_coach_request("Waar verlies ik het meest discipline?") is True
+    assert service.looks_like_personal_coach_request("Waar verlies ik het meest discipline?") is False
     assert service.looks_like_personal_coach_request("Geef mijn daily brief") is False
     assert service.looks_like_personal_coach_request("Maak een BTC setup") is False
+
+
+def test_discipline_leak_prompt_prefers_personal_performance_over_personal_coach():
+    service = _service()
+
+    assert service.looks_like_personal_performance_request("Waar verlies ik het meeste discipline?") is True
+    assert service.looks_like_personal_coach_request("Waar verlies ik het meeste discipline?") is False
 
 
 def test_decision_review_request_detection_is_read_only():
