@@ -355,6 +355,44 @@ def test_build_finn_core_rescue_envelope_prefers_personal_coach_builder():
     assert response["intent"] == "personal_coach"
 
 
+def test_build_finn_core_rescue_envelope_prefers_behavioral_intelligence_for_overtrading():
+    finn = FinnPlanService(db_session=object())
+    finn.build_behavioral_intelligence_response = AsyncMock(
+        return_value={"intent": "behavioral_intelligence", "flow": "behavioral_intelligence"}
+    )
+
+    response = asyncio.run(_build_finn_core_rescue_envelope(
+        finn=finn,
+        user_id=30,
+        query="Overtrade ik?",
+        context_payload={},
+    ))
+
+    finn.build_behavioral_intelligence_response.assert_awaited_once()
+    assert response["intent"] == "behavioral_intelligence"
+
+
+def test_build_finn_core_rescue_envelope_prefers_personal_coach_for_growth_direction_prompt():
+    finn = FinnPlanService(db_session=object())
+    finn.build_personal_coach_response = AsyncMock(
+        return_value={"intent": "personal_coach", "flow": "personal_coach"}
+    )
+    finn.build_personal_performance_response = AsyncMock(
+        return_value={"intent": "personal_performance", "flow": "personal_performance"}
+    )
+
+    response = asyncio.run(_build_finn_core_rescue_envelope(
+        finn=finn,
+        user_id=30,
+        query="Word ik beter of slechter als trader?",
+        context_payload={},
+    ))
+
+    finn.build_personal_coach_response.assert_awaited_once()
+    finn.build_personal_performance_response.assert_not_awaited()
+    assert response["intent"] == "personal_coach"
+
+
 def test_build_finn_core_rescue_envelope_prefers_portfolio_intelligence_builder():
     finn = _finn()
     finn.build_portfolio_intelligence_response = AsyncMock(

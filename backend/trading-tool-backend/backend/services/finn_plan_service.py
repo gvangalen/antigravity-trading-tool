@@ -1480,6 +1480,19 @@ class FinnPlanService:
 
     def looks_like_behavioral_intelligence_request(self, query: str) -> bool:
         q = (query or "").lower()
+        explicit_behavioral_questions = [
+            "overtrade ik",
+            "ben ik aan het overtraden",
+            "handel ik te impulsief",
+            "ben ik te impulsief",
+            "neem ik te vroeg winst",
+            "pak ik te vroeg winst",
+            "stap ik te laat uit",
+            "laat ik winnaars te vroeg los",
+            "laat ik verliezers te lang lopen",
+        ]
+        if any(term in q for term in explicit_behavioral_questions):
+            return True
         behavioral_terms = [
             "discipline", "gedrag", "behavior", "behaviour", "fomo", "revenge",
             "impulsief", "impulsieve", "emotie", "emotioneel", "overtrade",
@@ -1612,6 +1625,9 @@ class FinnPlanService:
             "welke patronen blijven me geld kosten",
             "wat onthoudt finn van mijn laatste fouten",
             "wat leert mijn historie over mijn gedrag",
+            "wat zie je terugkeren in mijn verliestrades",
+            "wat keert terug in mijn verliestrades",
+            "welke fout keert terug in mijn verliestrades",
         ]
         if any(term in q for term in explicit_terms):
             return True
@@ -1633,10 +1649,36 @@ class FinnPlanService:
             "verlies",
             "winst",
         ])
+        has_recurrence = any(term in q for term in [
+            "terugkeren",
+            "terugkomt",
+            "blijft terugkomen",
+            "herhalen",
+            "herhaalt",
+            "patroon",
+            "fouten",
+        ])
+        has_loss_focus = any(term in q for term in [
+            "verliestrades",
+            "verlies trades",
+            "verliezen",
+            "drawdown",
+            "geld kosten",
+        ])
+        if has_recurrence and has_loss_focus:
+            return True
         return has_memory and has_outcome
 
     def looks_like_personal_performance_request(self, query: str) -> bool:
         q = self._normalized_query(query)
+        if any(term in q for term in [
+            "word ik beter of slechter",
+            "ben ik beter of slechter",
+            "mijn grootste performance lek",
+            "mijn grootste persoonlijke performance lek",
+            "volgende beste coachregel",
+        ]):
+            return False
         explicit_terms = [
             "hoe goed trade ik eigenlijk",
             "hoe handel ik eigenlijk",
@@ -1675,6 +1717,11 @@ class FinnPlanService:
             "welke patronen zitten in mijn notities",
             "wat leren mijn post trade notities",
             "wat leert mijn dagboek over mijn trades",
+            "welke les moet ik uit mijn laatste trades trekken",
+            "welke les haal ik uit mijn laatste trades",
+            "wat leren mijn laatste trades me",
+            "wat leren mijn verliestrades me",
+            "welke terugkerende fout zit in mijn laatste trades",
         ]
         if any(term in q for term in explicit_terms):
             return True
@@ -1683,12 +1730,23 @@ class FinnPlanService:
             "trade note", "trade notes", "trade journal", "post trade",
             "post-trade", "reviewnotities", "reflectienotities",
         ]
+        trade_review_terms = [
+            "mijn laatste trades",
+            "mijn trades",
+            "verliestrades",
+            "laatste trades",
+            "trade review",
+            "trades review",
+        ]
         intelligence_terms = [
             "patroon", "patronen", "intelligence", "inzichten", "lesson",
             "les", "wat zegt", "wat leert", "analyseer", "samenvat",
             "welke fout", "welke emotie", "thesis",
         ]
-        return any(term in q for term in journal_terms) and any(term in q for term in intelligence_terms)
+        return (
+            (any(term in q for term in journal_terms) and any(term in q for term in intelligence_terms))
+            or (any(term in q for term in trade_review_terms) and any(term in q for term in intelligence_terms))
+        )
 
     def looks_like_personal_coach_request(self, query: str) -> bool:
         q = self._normalized_query(query)
@@ -1701,6 +1759,11 @@ class FinnPlanService:
             "wat moet ik nu in mezelf onderbreken",
             "welk patroon moet ik nu doorbreken",
             "hoe coach jij mij nu het beste",
+            "wat is mijn volgende beste coachregel",
+            "wat is mijn grootste performance lek",
+            "word ik beter of slechter als trader",
+            "word ik beter of slechter",
+            "ben ik beter of slechter aan het worden",
         ]
         if any(term in q for term in explicit_terms):
             return True
@@ -11474,6 +11537,8 @@ class FinnPlanService:
 
         if any(term in q for term in ["coach me op basis van mijn laatste fouten", "wat is mijn grootste persoonlijke performance lek", "waar verlies ik het meest discipline", "wat moet ik nu in mezelf onderbreken", "welk patroon moet ik nu doorbreken"]):
             coach_mode = "interruptive"
+        elif any(term in q for term in ["word ik beter of slechter", "ben ik beter of slechter", "aan het worden", "volgende beste coachregel"]):
+            coach_mode = "reflective"
         elif any(term in q for term in ["wat moet ik nu", "moet ik deze trade", "nu instappen", "nu kopen", "nu doen"]):
             coach_mode = "pre_trade"
         elif any(term in q for term in ["laatste fouten", "achteraf", "post trade", "post-trade", "wat leer"]):

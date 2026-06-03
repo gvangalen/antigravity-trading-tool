@@ -6185,6 +6185,19 @@ def test_build_outcome_memory_response_extracts_repeating_negative_pattern(monke
     assert "Aanbevolen regel" in result["response"]
 
 
+def test_phase4_prompt_detectors_cover_behavior_loss_and_coach_evolution():
+    service = _service()
+
+    assert service.looks_like_behavioral_intelligence_request("Overtrade ik?") is True
+    assert service.looks_like_behavioral_intelligence_request("Handel ik te impulsief?") is True
+    assert service.looks_like_behavioral_intelligence_request("Neem ik te vroeg winst of stap ik te laat uit?") is True
+    assert service.looks_like_outcome_memory_request("Wat zie je terugkeren in mijn verliestrades?") is True
+    assert service.looks_like_trade_journal_intelligence_request("Welke les moet ik uit mijn laatste trades trekken?") is True
+    assert service.looks_like_personal_coach_request("Word ik beter of slechter als trader?") is True
+    assert service.looks_like_personal_coach_request("Wat is mijn volgende beste coachregel?") is True
+    assert service.looks_like_personal_performance_request("Word ik beter of slechter als trader?") is False
+
+
 def test_build_finn_report_response_includes_outcome_memory(monkeypatch):
     service = _service()
     now = _utc_now()
