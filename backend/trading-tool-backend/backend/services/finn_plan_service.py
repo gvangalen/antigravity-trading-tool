@@ -1771,6 +1771,19 @@ class FinnPlanService:
         guidance_terms = ["wat moet ik", "help me", "hoe", "welk", "waar", "op basis van", "nu", "beste"]
         return any(term in q for term in coach_terms) and any(term in q for term in guidance_terms)
 
+    def _is_lightweight_personal_coach_prompt(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        return any(term in q for term in [
+            "word ik beter of slechter",
+            "ben ik beter of slechter",
+            "aan het worden",
+            "mijn grootste performance lek",
+            "mijn grootste persoonlijke performance lek",
+            "mijn volgende beste coachregel",
+            "wat is mijn volgende beste coachregel",
+            "coach me op basis van mijn laatste fouten",
+        ])
+
     def looks_like_daily_score_refresh_request(self, query: str) -> bool:
         q = (query or "").lower()
         if any(phrase in q for phrase in [
@@ -11647,7 +11660,10 @@ class FinnPlanService:
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         context = context or {}
-        activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
+        lightweight_prompt = self._is_lightweight_personal_coach_prompt(query)
+        activity_limit = 90 if lightweight_prompt else 180
+        governance_limit = 60 if lightweight_prompt else 90
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=activity_limit)
         day_log = self._mission_day_log(activity_feed)
         behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
         governance_events = await self._fetch_recent_governance_events(
@@ -11665,17 +11681,18 @@ class FinnPlanService:
                 "finn_memory_v2_summary",
                 "finn_portfolio_operating_system_summary",
             ],
-            limit=90,
+            limit=governance_limit,
         )
         outcome_memory = self._build_outcome_memory_summary(governance_events, activity_feed)
         personal_performance = self._build_personal_performance_summary(activity_feed, governance_events, behavioral)
         trade_journal_intelligence = self._build_trade_journal_intelligence_summary(activity_feed, governance_events)
 
         mission_context = {}
-        try:
-            mission_context = await self.build_mission_control_response(user_id, {"page": "mission_control"})
-        except Exception:
-            mission_context = {}
+        if not lightweight_prompt:
+            try:
+                mission_context = await self.build_mission_control_response(user_id, {"page": "mission_control"})
+            except Exception:
+                mission_context = {}
         portfolio_operating_system = (
             (mission_context.get("analysis") or {}).get("portfolio_operating_system")
             or mission_context.get("portfolio_operating_system")

@@ -6450,6 +6450,56 @@ def test_build_personal_coach_response_chooses_interruptive_mode(monkeypatch):
     assert "Stop even" in result["response"]
 
 
+def test_build_personal_coach_response_uses_lightweight_path_for_evolution_prompts(monkeypatch):
+    service = _service()
+
+    async def _fake_activity(user_id, limit=180):
+        now = _utc_now()
+        return [
+            service._mission_activity_item({
+                "id": "coach-light-skip",
+                "status": "executed",
+                "created_at": now - timedelta(days=2),
+                "payload": {"action": {"type": "skip_bot_decision"}, "result": {"ok": True, "status": "skipped"}},
+            }),
+        ]
+
+    async def _fake_events(user_id, *, event_types, limit=90):
+        return [
+            {
+                "type": "finn_outcome_tracking_summary",
+                "description": "FOMO-momenten eindigden vaker in verlies.",
+                "payload": {
+                    "behavior_pattern": "fomo_outcomes",
+                    "sample_size": 6,
+                    "historical_result_summary": "FOMO-momenten eindigden vaker in verlies.",
+                    "net_effect": "Het netto-effect van dit gedrag is negatief.",
+                },
+            },
+            {
+                "type": "finn_trade_journal_intelligence_summary",
+                "description": "Je reviewtaal mengt objectieve checks met emotionele druk.",
+                "payload": {
+                    "journal_pattern": "emotion_led_entries",
+                    "decision_gap": "Je reviewtaal mengt objectieve checks met emotionele druk.",
+                },
+            },
+        ]
+
+    mission_mock = AsyncMock(side_effect=AssertionError("mission control should not be called for lightweight coach prompts"))
+    monkeypatch.setattr(service, "_get_recent_finn_activity", _fake_activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", _fake_events)
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+    monkeypatch.setattr(service, "build_mission_control_response", mission_mock)
+
+    result = asyncio.run(service.build_personal_coach_response(30, "Word ik beter of slechter als trader?", {}))
+
+    mission_mock.assert_not_awaited()
+    assert result["intent"] == "personal_coach"
+    assert result["analysis"]["coach_mode"] == "reflective"
+    assert result["analysis"]["next_best_rule"]
+
+
 def test_behavioral_memory_friction_slows_repeated_bot_decisions():
     service = _service()
     memory = {
