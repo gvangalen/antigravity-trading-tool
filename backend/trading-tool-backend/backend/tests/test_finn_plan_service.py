@@ -6302,6 +6302,54 @@ def test_build_personal_performance_response_scores_quality_layers(monkeypatch):
     assert "Performance-score" in result["response"]
 
 
+def test_build_personal_performance_response_uses_lightweight_path_for_discipline_prompt(monkeypatch):
+    service = _service()
+    activity_limits = []
+    governance_limits = []
+
+    async def _fake_activity(user_id, limit=180):
+        activity_limits.append(limit)
+        now = _utc_now()
+        return [
+            service._mission_activity_item({
+                "id": "perf-light-skip",
+                "status": "executed",
+                "created_at": now - timedelta(days=3),
+                "payload": {"action": {"type": "skip_bot_decision"}, "result": {"ok": True, "status": "skipped"}},
+            }),
+        ]
+
+    async def _fake_events(user_id, *, event_types, limit=90):
+        governance_limits.append(limit)
+        return [
+            {
+                "type": "finn_plan_adherence_review",
+                "description": "Je probeert een plan- of strategiegrens te overrulen.",
+                "payload": {"adherence_status": "outside_plan", "threatened_rule": "Plan zegt wachten."},
+            },
+            {
+                "type": "finn_outcome_tracking_summary",
+                "description": "Het netto-effect van dit gedrag is negatief.",
+                "payload": {
+                    "sample_size": 4,
+                    "behavior_pattern": "fomo_outcomes",
+                    "net_effect": "Het netto-effect van dit gedrag is negatief.",
+                },
+            },
+        ]
+
+    monkeypatch.setattr(service, "_get_recent_finn_activity", _fake_activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", _fake_events)
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_personal_performance_response(30, "Waar verlies ik het meeste discipline?", {}))
+
+    assert result["intent"] == "personal_performance"
+    assert activity_limits == [90]
+    assert governance_limits == [60]
+    assert result["analysis"]["performance_score"] is not None
+
+
 def test_build_trade_journal_intelligence_response_extracts_pattern_from_review_language(monkeypatch):
     service = _service()
 

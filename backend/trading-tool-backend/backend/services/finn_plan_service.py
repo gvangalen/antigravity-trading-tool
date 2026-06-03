@@ -1706,6 +1706,18 @@ class FinnPlanService:
             and not self.looks_like_weekly_reflection_request(query)
         )
 
+    def _is_lightweight_personal_performance_prompt(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        return any(term in q for term in [
+            "geef mijn performance score",
+            "wat is mijn performance score",
+            "hoe goed trade ik de laatste 30 dagen",
+            "wat zegt finn over mijn trading kwaliteit",
+            "waar verlies ik het meeste discipline",
+            "waar verlies ik het meest discipline",
+            "hoe sterk is mijn persoonlijke trading performance",
+        ])
+
     def looks_like_trade_journal_intelligence_request(self, query: str) -> bool:
         q = self._normalized_query(query)
         explicit_terms = [
@@ -11294,7 +11306,10 @@ class FinnPlanService:
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         context = context or {}
-        activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
+        lightweight_prompt = self._is_lightweight_personal_performance_prompt(query)
+        activity_limit = 90 if lightweight_prompt else 180
+        governance_limit = 60 if lightweight_prompt else 90
+        activity_feed = await self._get_recent_finn_activity(user_id, limit=activity_limit)
         day_log = self._mission_day_log(activity_feed)
         behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
         governance_events = await self._fetch_recent_governance_events(
@@ -11306,7 +11321,7 @@ class FinnPlanService:
                 "finn_outcome_memory_summary",
                 "finn_portfolio_intelligence",
             ],
-            limit=90,
+            limit=governance_limit,
         )
         analysis = self._build_personal_performance_summary(activity_feed, governance_events, behavioral)
         await self._record_governance_event(
