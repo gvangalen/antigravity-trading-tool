@@ -22,6 +22,8 @@ from backend.infrastructure.repositories.technical_data_repository import Techni
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
 from backend.services.bot_service import BotService
+from backend.services.finn_action_policy_service import FinnActionPolicyService
+from backend.services.finn_execution_governance_service import FinnExecutionGovernanceService
 from backend.services.indicator_config_service import IndicatorConfigService
 from backend.services.macro_data_service import MacroDataService
 from backend.services.score_service import ScoreService
@@ -50,6 +52,7 @@ READ_ONLY_FLOWS = {
     "portfolio_intelligence",
     "priority_engine",
     "portfolio_operating_system",
+    "governed_action_review",
     "context_explain",
     "mission_control_explain",
     "behavioral_intelligence",
@@ -79,6 +82,7 @@ ROUTE_FAMILY_BY_FLOW = {
     "portfolio_intelligence": "review",
     "priority_engine": "explain",
     "portfolio_operating_system": "explain",
+    "governed_action_review": "review",
     "context_explain": "explain",
     "mission_control_explain": "explain",
     "behavioral_intelligence": "coaching",
@@ -429,9 +433,78 @@ class FinnPlanService:
     def __init__(self, db_session: AsyncSession, trace_id: Optional[str] = None):
         self.session = db_session
         self.trace_id = trace_id
+        self.action_policy_service = FinnActionPolicyService()
+        self.execution_governance_service = FinnExecutionGovernanceService()
 
     def _normalized_query(self, query: str) -> str:
         return (query or "").strip().lower()
+
+    def _infer_governed_action_from_query(
+        self,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        q = self._normalized_query(query)
+        context = context or {}
+
+        if any(term in q for term in ["live order", "live trade", "live uitvoeren", "live uitgevoerd", "direct live", "manual order"]):
+            return {"action_type": "live_manual_order", "subject_type": "trade", "subject_id": context.get("bot_id") or context.get("decision_id")}
+        if any(term in q for term in ["rebalance", "allocatie wijzigen", "portfolio mutatie", "herverdelen"]):
+            return {"action_type": "portfolio_rebalance", "subject_type": "portfolio", "subject_id": None}
+        if any(term in q for term in ["trade plan opslaan", "sla dit trade plan op", "save trade plan"]):
+            return {"action_type": "save_trade_plan", "subject_type": "decision", "subject_id": context.get("decision_id") or context.get("bot_id")}
+        if any(term in q for term in ["risicoprofiel aanpassen", "risk profile", "risk profiel"]):
+            return {"action_type": "update_risk_profile", "subject_type": "profile", "subject_id": None}
+        if any(term in q for term in ["watchlist toevoegen", "zet op watchlist", "voeg toe aan watchlist"]):
+            return {"action_type": "watchlist_add", "subject_type": "asset", "subject_id": context.get("symbol") or context.get("asset")}
+        if any(term in q for term in ["watchlist verwijderen", "haal van watchlist", "verwijder uit watchlist"]):
+            return {"action_type": "watchlist_remove", "subject_type": "asset", "subject_id": context.get("symbol") or context.get("asset")}
+        if any(term in q for term in ["bot activeren", "deze bot activeren", "mag finn deze bot activeren", "mag deze bot live draaien"]):
+            return {"action_type": "activate_bot", "subject_type": "bot", "subject_id": context.get("bot_id")}
+        if any(term in q for term in ["strategie activeren", "deze strategie activeren", "mag finn deze strategie activeren"]):
+            return {"action_type": "create_strategy", "subject_type": "strategy", "subject_id": context.get("strategy_id")}
+        if any(term in q for term in ["setup activeren", "deze setup activeren"]):
+            return {"action_type": "activate_setup", "subject_type": "setup", "subject_id": context.get("setup_id")}
+        if any(term in q for term in ["bot aanmaken", "bot klaarzetten", "bot opzetten", "maak deze bot"]):
+            return {"action_type": "create_bot", "subject_type": "bot", "subject_id": context.get("bot_id")}
+        if any(term in q for term in ["strategie aanmaken", "strategie klaarzetten", "maak deze strategie"]):
+            return {"action_type": "create_strategy", "subject_type": "strategy", "subject_id": context.get("strategy_id")}
+        if any(term in q for term in ["setup aanmaken", "setup klaarzetten", "maak deze setup"]):
+            return {"action_type": "create_setup", "subject_type": "setup", "subject_id": context.get("setup_id")}
+        if "portfolio" in q or "portefeuille" in q:
+            return {"action_type": "portfolio_review", "subject_type": "portfolio", "subject_id": None}
+        if "bot" in q:
+            return {"action_type": "bot_review", "subject_type": "bot", "subject_id": context.get("bot_id")}
+        if "strategie" in q or "strategy" in q:
+            return {"action_type": "strategy_review", "subject_type": "strategy", "subject_id": context.get("strategy_id")}
+        if "setup" in q:
+            return {"action_type": "setup_review", "subject_type": "setup", "subject_id": context.get("setup_id")}
+        return {"action_type": "decision_review", "subject_type": "trade", "subject_id": context.get("decision_id") or context.get("bot_id")}
+
+    def _governed_action_context_sufficiency(
+        self,
+        *,
+        action_type: str,
+        context: Optional[Dict[str, Any]],
+        decision_status: Optional[str],
+    ) -> str:
+        context = context or {}
+        has_asset = bool(context.get("symbol") or context.get("asset") or next(iter(_asset_mentions(str(context.get("query") or ""))), None))
+        has_subject = bool(context.get("setup_id") or context.get("strategy_id") or context.get("bot_id") or context.get("decision_id"))
+
+        if action_type == "portfolio_review":
+            return "sufficient"
+        if action_type in {"activate_bot", "create_bot"} and (context.get("bot_id") or context.get("strategy_id") or context.get("setup_id")):
+            return "sufficient"
+        if action_type in {"activate_setup", "create_setup"} and (context.get("setup_id") or has_asset):
+            return "sufficient"
+        if action_type in {"create_strategy"} and (context.get("strategy_id") or context.get("setup_id") or has_asset):
+            return "sufficient"
+        if action_type in {"live_manual_order", "save_trade_plan"} and (has_asset or has_subject):
+            return "sufficient" if decision_status != "insufficient_context" else "partial"
+        if has_asset or has_subject:
+            return "sufficient"
+        return "insufficient"
 
     def _parse_iso_datetime(self, value: Any) -> Optional[datetime]:
         if not value:
@@ -2086,6 +2159,63 @@ class FinnPlanService:
             "geef mijn operating system status",
         ]
         return any(phrase in q for phrase in phrases)
+
+    def looks_like_governed_action_review_request(
+        self,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        q = self._normalized_query(query)
+        context = context or {}
+        phrases = [
+            "mag finn deze strategie activeren",
+            "mag finn deze bot activeren",
+            "kan finn deze bot voor me klaarzetten",
+            "kun je deze bot voor me klaarzetten",
+            "mag dit live uitgevoerd worden",
+            "welke bevestiging is hiervoor nodig",
+            "waarom blokkeer je deze actie",
+            "welke context mist nog voor uitvoering",
+            "mag deze actie uitgevoerd worden",
+            "is deze actie toegestaan",
+            "mag dit uitgevoerd worden",
+            "welke governance geldt hier",
+        ]
+        if any(phrase in q for phrase in phrases):
+            return True
+        has_action = any(term in q for term in [
+            "activeren",
+            "uitvoeren",
+            "klaarzetten",
+            "aanmaken",
+            "opslaan",
+            "bevestiging",
+            "confirm",
+            "uitvoering",
+            "actie",
+        ])
+        has_governance = any(term in q for term in [
+            "mag",
+            "toegestaan",
+            "governance",
+            "geblokkeerd",
+            "blokkeer",
+            "waarom niet",
+            "wat mist nog",
+            "welke context",
+        ])
+        has_subject = any(term in q for term in [
+            "setup",
+            "strategie",
+            "strategy",
+            "bot",
+            "trade plan",
+            "live order",
+            "live trade",
+            "portfolio",
+            "portefeuille",
+        ]) or bool(context.get("setup_id") or context.get("strategy_id") or context.get("bot_id"))
+        return has_action and has_governance and has_subject
 
     def looks_like_decision_review_request(
         self,
@@ -5058,6 +5188,154 @@ class FinnPlanService:
         if analysis.get("portfolio_safe_alternative"):
             lines.append(f"Veiliger alternatief: {analysis.get('portfolio_safe_alternative')}")
         return "\n".join([line for line in lines if line])
+
+    def _governed_action_review_message(self, analysis: Dict[str, Any]) -> str:
+        status = str(analysis.get("governance_status") or "recommend")
+        action_type = str(analysis.get("action_type") or "actie").replace("_", " ")
+        labels = {
+            "explain": f"Deze {action_type} is nu vooral iets om uit te leggen en voor te bereiden.",
+            "recommend": f"Deze {action_type} lijkt inhoudelijk verdedigbaar, maar ik zou hem nog niet blind doorzetten.",
+            "confirm": f"Deze {action_type} mag alleen verder via expliciete bevestiging en guardrails.",
+            "block": f"Deze {action_type} blokkeer ik nu op governance-gronden.",
+        }
+        lines = [labels.get(status, labels["recommend"])]
+        if analysis.get("blocking_reason"):
+            lines.append(f"Waarom: {analysis.get('blocking_reason')}")
+        warnings = analysis.get("warnings") or []
+        if warnings:
+            lines.append("Let op:")
+            lines.extend(f"- {item}" for item in warnings[:3])
+        lines.append(f"Volgende stap: {analysis.get('recommended_next_step')}")
+        return "\n".join([line for line in lines if line])
+
+    async def build_governed_action_review_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = dict(context or {})
+        context["query"] = query
+        action = self._infer_governed_action_from_query(query, context)
+        policy = self.action_policy_service.resolve_action_policy(
+            action["action_type"],
+            subject_type=action.get("subject_type"),
+            subject_id=action.get("subject_id"),
+        )
+
+        decision_review = {}
+        if action["action_type"] in {
+            "decision_review",
+            "setup_review",
+            "strategy_review",
+            "bot_review",
+            "activate_setup",
+            "activate_bot",
+            "live_manual_order",
+            "save_trade_plan",
+            "portfolio_rebalance",
+        }:
+            decision_review = await self.build_decision_review_response(user_id, query, context)
+
+        plan_adherence = {}
+        if action["action_type"] in {"activate_setup", "activate_bot", "live_manual_order", "save_trade_plan", "portfolio_rebalance"}:
+            plan_adherence = await self.build_plan_adherence_review_response(user_id, query, context)
+
+        portfolio_intelligence = {}
+        if action["action_type"] in {"portfolio_review", "activate_bot", "live_manual_order", "portfolio_rebalance", "decision_review"}:
+            portfolio_intelligence = await self.build_portfolio_intelligence_response(user_id, query, context)
+
+        decision_analysis = (
+            (decision_review.get("analysis") if isinstance(decision_review.get("analysis"), dict) else {})
+            or (decision_review.get("state") or {}).get("analysis")
+            or {}
+        )
+        adherence_analysis = (
+            (plan_adherence.get("analysis") if isinstance(plan_adherence.get("analysis"), dict) else {})
+            or (plan_adherence.get("state") or {}).get("analysis")
+            or {}
+        )
+        portfolio_analysis = (
+            (portfolio_intelligence.get("analysis") if isinstance(portfolio_intelligence.get("analysis"), dict) else {})
+            or (portfolio_intelligence.get("state") or {}).get("analysis")
+            or {}
+        )
+
+        context_sufficiency = self._governed_action_context_sufficiency(
+            action_type=action["action_type"],
+            context=context,
+            decision_status=decision_analysis.get("decision_status"),
+        )
+
+        plan_alignment = "aligned"
+        adherence_status = str(adherence_analysis.get("adherence_status") or "")
+        if adherence_status in {"outside_plan", "forced_override"}:
+            plan_alignment = "conflict"
+        elif adherence_status in {"insufficiently_justified", "warn"}:
+            plan_alignment = "warn"
+
+        portfolio_conflict_level = "low"
+        blockers = portfolio_analysis.get("portfolio_blockers") or []
+        if blockers:
+            portfolio_conflict_level = "high"
+        elif portfolio_analysis.get("concentration_warning") or portfolio_analysis.get("stacked_risk_warning"):
+            portfolio_conflict_level = "medium"
+
+        governance = self.execution_governance_service.evaluate(
+            action_policy=policy,
+            context_sufficiency=context_sufficiency,
+            plan_alignment=plan_alignment,
+            portfolio_conflict_level=portfolio_conflict_level,
+            explicit_execution_sensitive=action["action_type"] in {"live_manual_order", "activate_bot", "portfolio_rebalance"},
+            decision_status=decision_analysis.get("decision_status"),
+            portfolio_blockers=blockers,
+        )
+
+        analysis = {
+            **governance,
+            "policy": policy,
+            "action_subject": action,
+            "decision_review": {
+                "decision_status": decision_analysis.get("decision_status"),
+                "risk_summary": decision_analysis.get("risk_summary"),
+                "operator_next_step": decision_analysis.get("operator_next_step"),
+            } if decision_analysis else {},
+            "plan_adherence": {
+                "adherence_status": adherence_analysis.get("adherence_status"),
+                "threatened_rule": adherence_analysis.get("threatened_rule"),
+                "suggested_recovery_step": adherence_analysis.get("suggested_recovery_step"),
+            } if adherence_analysis else {},
+            "portfolio_intelligence": {
+                "concentration_warning": portfolio_analysis.get("concentration_warning"),
+                "stacked_risk_warning": portfolio_analysis.get("stacked_risk_warning"),
+                "portfolio_safe_alternative": portfolio_analysis.get("portfolio_safe_alternative"),
+            } if portfolio_analysis else {},
+            "mode": "read_only",
+            "route_source": "finn",
+        }
+
+        return {
+            "response": self._governed_action_review_message(analysis),
+            "intent": "governed_action_review",
+            "flow": "governed_action_review",
+            "draft": None,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "next_question": None,
+            "can_confirm": False,
+            "actions": [],
+            "state": {
+                "current_flow": "governed_action_review",
+                "analysis": analysis,
+                "advice_only": True,
+            },
+            "analysis": analysis,
+            "suggested_actions": [
+                "Vraag: welke bevestiging is hiervoor nodig?",
+                "Vraag: waarom blokkeer je deze actie?",
+                "Vraag: welke context mist nog voor uitvoering?",
+            ],
+        }
 
     async def build_decision_review_response(
         self,

@@ -249,6 +249,25 @@ def test_build_finn_core_rescue_envelope_prefers_plan_adherence_for_stop_loss_re
     assert response["intent"] == "plan_adherence_review"
 
 
+def test_build_finn_core_rescue_envelope_prefers_governed_action_review_builder():
+    finn = _finn()
+    finn.build_governed_action_review_response = AsyncMock(
+        return_value={"intent": "governed_action_review", "flow": "governed_action_review"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Mag FINN deze strategie activeren?",
+            context_payload={"page": "/strategy", "strategy_id": 257, "symbol": "BTC"},
+        )
+    )
+
+    finn.build_governed_action_review_response.assert_awaited_once()
+    assert response["intent"] == "governed_action_review"
+
+
 def test_build_finn_core_rescue_envelope_prefers_outcome_tracking_builder():
     finn = _finn()
     finn.build_outcome_tracking_response = AsyncMock(

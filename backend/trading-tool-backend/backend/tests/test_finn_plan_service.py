@@ -5038,6 +5038,69 @@ def test_personal_coach_request_detection_is_separate_from_generic_coaching():
     assert service.looks_like_personal_coach_request("Maak een BTC setup") is False
 
 
+def test_governed_action_review_request_detection_is_separate_from_generic_help():
+    service = _service()
+
+    assert service.looks_like_governed_action_review_request("Mag FINN deze strategie activeren?", {"strategy_id": 257}) is True
+    assert service.looks_like_governed_action_review_request("Welke bevestiging is hiervoor nodig?", {"bot_id": 19}) is True
+    assert service.looks_like_governed_action_review_request("Waarom blokkeer je deze actie?", {"bot_id": 19}) is True
+    assert service.looks_like_governed_action_review_request("Wat is RSI in simpele taal?", {"symbol": "BTC"}) is False
+
+
+def test_build_governed_action_review_response_blocks_live_action_without_context():
+    service = _service()
+    service.build_decision_review_response = AsyncMock(return_value={
+        "analysis": {"decision_status": "insufficient_context"},
+        "state": {"analysis": {"decision_status": "insufficient_context"}},
+    })
+    service.build_plan_adherence_review_response = AsyncMock(return_value={
+        "analysis": {"adherence_status": "aligned"},
+        "state": {"analysis": {"adherence_status": "aligned"}},
+    })
+    service.build_portfolio_intelligence_response = AsyncMock(return_value={
+        "analysis": {"portfolio_blockers": []},
+        "state": {"analysis": {"portfolio_blockers": []}},
+    })
+
+    result = asyncio.run(service.build_governed_action_review_response(
+        user_id=30,
+        query="Mag dit live uitgevoerd worden?",
+        context={},
+    ))
+
+    assert result["intent"] == "governed_action_review"
+    assert result["analysis"]["action_type"] == "live_manual_order"
+    assert result["analysis"]["governance_status"] == "block"
+    assert result["analysis"]["execution_allowed"] is False
+
+
+def test_build_governed_action_review_response_requires_confirmation_for_bot_activation():
+    service = _service()
+    service.build_decision_review_response = AsyncMock(return_value={
+        "analysis": {"decision_status": "modify", "risk_summary": "context present"},
+        "state": {"analysis": {"decision_status": "modify", "risk_summary": "context present"}},
+    })
+    service.build_plan_adherence_review_response = AsyncMock(return_value={
+        "analysis": {"adherence_status": "aligned"},
+        "state": {"analysis": {"adherence_status": "aligned"}},
+    })
+    service.build_portfolio_intelligence_response = AsyncMock(return_value={
+        "analysis": {"portfolio_blockers": [], "concentration_warning": "Let op je concentratie."},
+        "state": {"analysis": {"portfolio_blockers": [], "concentration_warning": "Let op je concentratie."}},
+    })
+
+    result = asyncio.run(service.build_governed_action_review_response(
+        user_id=30,
+        query="Mag FINN deze bot activeren?",
+        context={"bot_id": 19, "symbol": "BTC"},
+    ))
+
+    assert result["analysis"]["action_type"] == "activate_bot"
+    assert result["analysis"]["governance_status"] == "confirm"
+    assert result["analysis"]["confirmation_required"] is True
+    assert result["analysis"]["portfolio_conflict_level"] == "medium"
+
+
 def test_discipline_leak_prompt_prefers_personal_performance_over_personal_coach():
     service = _service()
 
