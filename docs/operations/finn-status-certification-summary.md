@@ -17,7 +17,7 @@ This document captures the current combined FINN status across the active QA lay
 
 Latest strongest full-run reference:
 
-- commit: `a15f22e`
+- commit: `c31393a`
 - full run date: `2026-06-04`
 
 Scores:
@@ -35,7 +35,8 @@ Interpretation:
 
 - Core now reaches the `90` certification bar in the combined full run
 - Operator has moved into the mid-80s and is materially stronger than the earlier stable baseline
-- the only red replay case in this run is a governance-overlap prompt, not a true product-quality regression
+- the latest full run confirms the same `90 / 85` baseline on the sharper operator tranche
+- governance-overlap on high-risk BTC-risk prompts is now treated as valid lane ownership in the QA promptset
 
 ### FINN 4.0 dedicated Performance Intelligence reference
 

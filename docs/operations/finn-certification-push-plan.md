@@ -30,10 +30,11 @@ Interpretation:
 - 4.0 Performance Intelligence is strong
 - 5.0 Governance is strong
 - Core has now crossed the `90` bar on the latest full run
+- QA/rubric alignment now accepts governance takeover on the high-risk BTC-risk operator prompt family
 - the broad certification bottleneck is now concentrated in:
   - Operator `85 -> 90+`
   - latency polish where strict replay gates still care
-  - QA/rubric alignment where governance correctly takes over the riskiest operator prompts
+  - richer operator polish above the new safer lane ownership
 
 ## Main Decision
 
@@ -46,6 +47,11 @@ Run one focused certification push across:
 3. QA/rubric alignment for governance overlap
 
 This is the shortest route to a cleaner overall FINN status.
+
+Current note:
+
+- the known high-risk BTC-risk governance overlap has been aligned in the shared full promptset
+- remaining work is now mainly product polish, not lane-ownership cleanup
 
 ## Priority Order
 
