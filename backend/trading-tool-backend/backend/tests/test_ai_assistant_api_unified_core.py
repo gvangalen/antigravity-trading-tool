@@ -306,6 +306,25 @@ def test_build_finn_core_rescue_envelope_prefers_governed_action_review_for_audi
     assert response["intent"] == "governed_action_review"
 
 
+def test_build_finn_core_rescue_envelope_prefers_governed_action_review_for_prepare_trade_prompt():
+    finn = _finn()
+    finn.build_governed_action_review_response = AsyncMock(
+        return_value={"intent": "governed_action_review", "flow": "governed_action_review"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Bereid deze trade voor, maar voer hem nog niet uit.",
+            context_payload={"symbol": "BTC"},
+        )
+    )
+
+    finn.build_governed_action_review_response.assert_awaited_once()
+    assert response["intent"] == "governed_action_review"
+
+
 def test_build_finn_core_rescue_envelope_prefers_outcome_tracking_builder():
     finn = _finn()
     finn.build_outcome_tracking_response = AsyncMock(

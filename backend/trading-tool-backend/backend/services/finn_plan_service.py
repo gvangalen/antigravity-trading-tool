@@ -459,6 +459,7 @@ class FinnPlanService:
             "plaats nu direct",
             "plaats direct",
             "zet live",
+            "plaats deze trade live",
         ]) or (
             "order" in q and has_asset and any(term in q for term in ["plaats", "open", "uitvoer", "doe"])
         ):
@@ -495,6 +496,8 @@ class FinnPlanService:
             return {"action_type": "setup_review", "subject_type": "setup", "subject_id": context.get("setup_id")}
         if any(term in q for term in ["setup aanmaken", "setup klaarzetten", "maak deze setup"]):
             return {"action_type": "create_setup", "subject_type": "setup", "subject_id": context.get("setup_id")}
+        if any(term in q for term in ["bereid deze trade voor, maar voer hem nog niet uit", "voer hem nog niet uit"]):
+            return {"action_type": "decision_review", "subject_type": "trade", "subject_id": context.get("decision_id") or context.get("bot_id")}
         if any(term in q for term in [
             "welke agents",
             "welke agenten",
@@ -2233,6 +2236,8 @@ class FinnPlanService:
             "welke agents moeten hiernaar kijken voordat ik dit doe",
             "plaats nu direct een live btc order",
             "maak een setup review klaar",
+            "bereid deze trade voor, maar voer hem nog niet uit",
+            "plaats deze trade live",
             "verwijder mijn stop-loss",
             "actieveer deze bot zonder bevestiging",
             "activeer deze bot zonder bevestiging",
@@ -2355,6 +2360,8 @@ class FinnPlanService:
             "maak een setup review klaar",
             "maak een nieuwe strategie aan",
             "bereid deze trade voor, maar voer hem nog niet uit",
+            "plaats deze trade live",
+            "verwijder mijn stop-loss",
         ])
 
     def _governed_action_required_agents(

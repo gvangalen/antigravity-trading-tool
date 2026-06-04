@@ -5047,6 +5047,8 @@ def test_governed_action_review_request_detection_is_separate_from_generic_help(
     assert service.looks_like_governed_action_review_request("Ik wil deze BTC trade openen, mag dat?", {"symbol": "BTC"}) is True
     assert service.looks_like_governed_action_review_request("Maak een nieuwe strategie aan.", {"symbol": "ETH"}) is True
     assert service.looks_like_governed_action_review_request("Maak een setup review klaar.", {"symbol": "ETH"}) is True
+    assert service.looks_like_governed_action_review_request("Bereid deze trade voor, maar voer hem nog niet uit.", {"symbol": "BTC"}) is True
+    assert service.looks_like_governed_action_review_request("Plaats deze trade live.", {"symbol": "BTC"}) is True
     assert service.looks_like_governed_action_review_request("Mag ik nog een BTC long toevoegen?", {"symbol": "BTC"}) is True
     assert service.looks_like_governed_action_review_request("Welke agents moeten hiernaar kijken voordat ik dit doe?", {"symbol": "BTC"}) is True
     assert service.looks_like_governed_action_review_request("Plaats nu direct een live BTC order.", {"symbol": "BTC"}) is True
@@ -5205,6 +5207,25 @@ def test_build_governed_action_review_response_classifies_stop_loss_removal_as_e
 
     assert result["analysis"]["action_type"] == "live_manual_order"
     assert result["analysis"]["confirmation_required"] is True
+
+
+def test_build_governed_action_review_response_classifies_prepare_trade_prompt():
+    service = _service()
+    service.build_decision_review_response = AsyncMock(return_value={
+        "analysis": {"decision_status": "modify"},
+        "state": {"analysis": {"decision_status": "modify"}},
+    })
+    service.build_plan_adherence_review_response = AsyncMock(return_value={"analysis": {}, "state": {"analysis": {}}})
+    service.build_portfolio_intelligence_response = AsyncMock(return_value={"analysis": {}, "state": {"analysis": {}}})
+
+    result = asyncio.run(service.build_governed_action_review_response(
+        user_id=30,
+        query="Bereid deze trade voor, maar voer hem nog niet uit.",
+        context={"symbol": "BTC"},
+    ))
+
+    assert result["analysis"]["action_type"] == "decision_review"
+    assert result["intent"] == "governed_action_review"
 
 
 def test_discipline_leak_prompt_prefers_personal_performance_over_personal_coach():
