@@ -31,10 +31,11 @@ Interpretation:
 - 5.0 Governance is strong
 - Core has now crossed the `90` bar on the latest full run
 - QA/rubric alignment now accepts governance takeover on the high-risk BTC-risk operator prompt family
+- the full Core + Operator replay gate is now green on the latest confirm run
 - the broad certification bottleneck is now concentrated in:
   - Operator `85 -> 90+`
-  - latency polish where strict replay gates still care
   - richer operator polish above the new safer lane ownership
+  - dedicated 5.0 governance latency polish if we want that suite formally gate-green too
 
 ## Main Decision
 
@@ -43,7 +44,7 @@ Do not broaden feature scope first.
 Run one focused certification push across:
 
 1. Operator
-2. latency-only replay polish where still needed
+2. latency-only replay polish where still needed on dedicated suites
 3. QA/rubric alignment for governance overlap
 
 This is the shortest route to a cleaner overall FINN status.
@@ -51,6 +52,7 @@ This is the shortest route to a cleaner overall FINN status.
 Current note:
 
 - the known high-risk BTC-risk governance overlap has been aligned in the shared full promptset
+- the shared full replay is now green
 - remaining work is now mainly product polish, not lane-ownership cleanup
 
 ## Priority Order
@@ -166,10 +168,11 @@ This push is done when:
 
 ## Practical Next Step
 
-Start with the **Operator sharpness + rubric alignment tranche**.
+Start with the **Operator sharpness tranche**.
 
 Reason:
 
 - Core is already over the line on the latest full run
-- the remaining blocker is mostly Operator depth plus rubric alignment
+- the shared replay gate is already green
+- the remaining blocker is mostly Operator depth
 - this is the smallest next step that improves the certification story without broadening scope

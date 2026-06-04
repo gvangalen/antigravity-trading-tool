@@ -17,7 +17,7 @@ This document captures the current combined FINN status across the active QA lay
 
 Latest strongest full-run reference:
 
-- commit: `c31393a`
+- commit: `7dcdb71`
 - full run date: `2026-06-04`
 
 Scores:
@@ -27,16 +27,21 @@ Scores:
 
 Run quality:
 
-- `69/69` prompts returned `200`
+- `41/41` replay cases passed
+- `0` failed cases
 - `0` generic failures
-- `0` transport failures
+- `0` transactional misroutes
+- replay gate: `overall_pass = true`
+- avg latency: `205.57 ms`
+- p95 latency: `767.15 ms`
 
 Interpretation:
 
 - Core now reaches the `90` certification bar in the combined full run
 - Operator has moved into the mid-80s and is materially stronger than the earlier stable baseline
-- the latest full run confirms the same `90 / 85` baseline on the sharper operator tranche
+- the latest confirm run keeps the `90 / 85` baseline intact on the lighter governance-overlap path
 - governance-overlap on high-risk BTC-risk prompts is now treated as valid lane ownership in the QA promptset
+- the full Core + Operator replay gate is now formally green
 
 ### FINN 4.0 dedicated Performance Intelligence reference
 
@@ -136,7 +141,8 @@ Reason:
 
 - current Core reference is `90`
 - current Operator reference is `85`
-- one legacy operator expectation still collides with the newer governance lane on a high-risk portfolio prompt
+- all current operator categories are at or above `80`
+- the remaining gap is score depth from `85 -> 90+`, not routing instability
 
 ### FINN 4.0 Performance Intelligence
 
@@ -190,8 +196,7 @@ What is already true:
 What still blocks broader full-stack certification:
 
 - Operator still needs to move from `85` toward `90+`
-- some legacy Core/Operator QA expectations need to acknowledge valid governance takeover on high-risk prompts
-- 5.0 Governance still needs latency-budget polish for a formally green replay gate
+- 5.0 Governance still needs latency-budget polish for a formally green dedicated replay gate
 
 ## Recommended status language
 
@@ -199,12 +204,12 @@ Use this wording in project updates:
 
 - `FINN 3.0 Stable` is the current platform baseline
 - `FINN Core` now reaches the `90` certification threshold on the latest full-run reference
-- `FINN Operator` now sits at `85` on the latest full-run reference and is structurally aligned with the governance layer
+- `FINN Operator` now sits at `85` on the latest full-run reference and the full Core + Operator replay gate is green
 - `FINN 4.0 Performance Intelligence` is now gate-green and certified under its dedicated suite
 - `FINN 5.0 Governance` is now content-green and certified under its dedicated suite, with latency-budget polish still open
 - the next broad certification step remains:
   - Operator `85 -> 90+`
-  - replay and rubric alignment where governance validly owns the riskiest prompts
+  - selective polish on the richest operator categories, not broad lane repairs
 
 ## References
 
