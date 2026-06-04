@@ -2361,6 +2361,9 @@ class FinnPlanService:
             "maak een nieuwe strategie aan",
             "bereid deze trade voor, maar voer hem nog niet uit",
             "plaats deze trade live",
+            "plaats nu direct een live btc order",
+            "plaats nu direct een live order",
+            "live btc order",
             "verwijder mijn stop-loss",
         ])
 
