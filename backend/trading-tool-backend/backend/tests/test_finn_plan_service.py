@@ -5375,6 +5375,7 @@ def test_build_decision_review_response_can_approve_contextual_trade():
     assert result["analysis"]["snapshot"]["asset"] == "BTC"
     assert "setup #62" in (result["analysis"]["context_anchor"] or "")
     assert "Contextanker:" in result["response"]
+    assert "trade review" in result["response"].lower()
 
 
 def test_build_decision_review_response_blocks_extreme_risk_and_exposure():
@@ -5932,6 +5933,7 @@ def test_build_priority_engine_response_varies_copy_by_question_focus(monkeypatc
     assert "dit kan vandaag wachten" in wait["response"].lower()
     assert "dit moet je vandaag juist niet doen" in avoid["response"].lower()
     assert "discipline" in wait["response"].lower()
+    assert "open review beïnvloedt je live uitvoering" in start["response"].lower()
 
 
 def test_build_priority_engine_response_treats_help_me_choose_as_start_now(monkeypatch):
@@ -5958,6 +5960,52 @@ def test_build_priority_engine_response_treats_help_me_choose_as_start_now(monke
 
     assert result["analysis"]["question_focus"] == "start_now"
     assert "begin hier nu mee" in result["response"].lower()
+
+
+def test_build_priority_engine_response_keeps_item_reason_when_governance_signal_exists(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "workqueue": [
+            {
+                "id": "review-btc",
+                "title": "BTC live bots vragen review",
+                "type": "portfolio_live_hotspot",
+                "priority": "high",
+                "priority_rank": 4,
+                "reason": "Open review beïnvloedt je live uitvoering.",
+                "asset": "BTC",
+            },
+            {
+                "id": "blocked-plan-btc",
+                "title": "BTC plan aandacht",
+                "type": "blocked_plan",
+                "priority": "high",
+                "priority_rank": 5,
+                "reason": "Setup blokkeert nog voordat je verder opschaalt.",
+                "asset": "BTC",
+            },
+        ],
+        "summary": {"workqueue_count": 2, "open_action_count": 2},
+    })
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[
+        {
+            "type": "finn_plan_adherence_review",
+            "symbol": "BTC",
+            "description": "Je verwijdert je vooraf afgesproken exit-grens en maakt het verlieskader open.",
+            "payload": {
+                "asset": "BTC",
+                "adherence_status": "forced_override",
+                "threatened_rule": "Je verwijdert je vooraf afgesproken exit-grens en maakt het verlieskader open.",
+            },
+        }
+    ]))
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_priority_engine_response(1, "Waar moet ik vandaag op focussen?", {"page": "/dashboard"}))
+
+    assert result["analysis"]["top_priorities"][0]["why_now"] == "Open review beïnvloedt je live uitvoering."
+    assert "extra governance-frictie" in result["analysis"]["top_priorities"][1]["why_now"].lower()
 
 
 def test_build_mission_control_explain_response_exposes_priority_engine_contract(monkeypatch):

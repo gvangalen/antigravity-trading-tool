@@ -667,7 +667,8 @@
       },
       "expected_intents": [
         "portfolio_intelligence",
-        "decision_review"
+        "decision_review",
+        "governed_action_review"
       ],
       "forbidden_flows": [
         "general_help",

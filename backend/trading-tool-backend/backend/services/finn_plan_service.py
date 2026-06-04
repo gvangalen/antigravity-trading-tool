@@ -3094,6 +3094,25 @@ class FinnPlanService:
                 global_signals.append(signal)
         return {"asset_signals": asset_signals, "global_signals": global_signals[:3]}
 
+    def _priority_item_rationale(
+        self,
+        *,
+        item_type: str,
+        item_reason: Optional[str],
+        signal_reason: Optional[str],
+    ) -> str:
+        item_reason = str(item_reason or "").strip()
+        signal_reason = str(signal_reason or "").strip()
+        if not signal_reason:
+            return item_reason
+        if not item_reason:
+            return signal_reason
+        if signal_reason.lower() == item_reason.lower():
+            return item_reason
+        if item_type in {"portfolio_risk_stack", "blocked_plan"}:
+            return f"{item_reason} Extra governance-frictie: {signal_reason}"
+        return item_reason
+
     def _priority_engine_payload(
         self,
         mission: Dict[str, Any],
@@ -3139,6 +3158,11 @@ class FinnPlanService:
             elif global_signals and item_type in {"portfolio_live_hotspot", "portfolio_risk_stack", "blocked_plan"}:
                 base += int(global_signals[0].get("weight") or 0) // 2
                 signal_reason = global_signals[0].get("reason")
+            rationale = self._priority_item_rationale(
+                item_type=item_type,
+                item_reason=item.get("reason"),
+                signal_reason=signal_reason,
+            )
             ranked_items.append({
                 "id": item.get("id"),
                 "title": title,
@@ -3147,8 +3171,9 @@ class FinnPlanService:
                 "type": item_type,
                 "lane": self._mission_coaching_lane(item),
                 "score": base,
-                "why_now": signal_reason or item.get("reason"),
+                "why_now": rationale,
                 "source_reason": item.get("reason"),
+                "governance_reason": signal_reason or None,
                 "next_action": item.get("next_best_action") or item.get("resolve_action"),
             })
 
@@ -5015,6 +5040,14 @@ class FinnPlanService:
             "timestamp": _utc_now().isoformat(),
         }
 
+    def _decision_review_label(self, review_type: str) -> str:
+        return {
+            "trade_intent_review": "trade review",
+            "setup_readiness_review": "setup review",
+            "strategy_fit_review": "strategie review",
+            "bot_decision_review": "bot review",
+        }.get(review_type, review_type.replace("_", " "))
+
     def _decision_review_message(self, analysis: Dict[str, Any]) -> str:
         checks = analysis.get("checks") or []
         top_blockers = analysis.get("top_blockers") or []
@@ -5839,7 +5872,7 @@ class FinnPlanService:
                 "asset": asset,
             },
             "headline": (
-                f"Ik review nu je {review_type.replace('_', ' ')} voor {asset}."
+                f"Ik review nu je {self._decision_review_label(review_type)} voor {asset}."
                 if asset else
                 "Ik review nu je volgende trading-beslissing."
             ),
