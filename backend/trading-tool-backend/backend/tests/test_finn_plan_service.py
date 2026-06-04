@@ -5044,6 +5044,11 @@ def test_governed_action_review_request_detection_is_separate_from_generic_help(
     assert service.looks_like_governed_action_review_request("Mag FINN deze strategie activeren?", {"strategy_id": 257}) is True
     assert service.looks_like_governed_action_review_request("Welke bevestiging is hiervoor nodig?", {"bot_id": 19}) is True
     assert service.looks_like_governed_action_review_request("Waarom blokkeer je deze actie?", {"bot_id": 19}) is True
+    assert service.looks_like_governed_action_review_request("Ik wil deze BTC trade openen, mag dat?", {"symbol": "BTC"}) is True
+    assert service.looks_like_governed_action_review_request("Maak een nieuwe strategie aan.", {"symbol": "ETH"}) is True
+    assert service.looks_like_governed_action_review_request("Mag ik nog een BTC long toevoegen?", {"symbol": "BTC"}) is True
+    assert service.looks_like_governed_action_review_request("Welke agents moeten hiernaar kijken voordat ik dit doe?", {"symbol": "BTC"}) is True
+    assert service.looks_like_governed_action_review_request("Plaats nu direct een live BTC order.", {"symbol": "BTC"}) is True
     assert service.looks_like_governed_action_review_request("Wat is RSI in simpele taal?", {"symbol": "BTC"}) is False
 
 
@@ -5099,6 +5104,59 @@ def test_build_governed_action_review_response_requires_confirmation_for_bot_act
     assert result["analysis"]["governance_status"] == "confirm"
     assert result["analysis"]["confirmation_required"] is True
     assert result["analysis"]["portfolio_conflict_level"] == "medium"
+
+
+def test_build_governed_action_review_response_routes_trade_permission_and_agent_orchestration():
+    service = _service()
+    service.build_decision_review_response = AsyncMock(return_value={
+        "analysis": {"decision_status": "modify", "risk_summary": "hoog BTC risico", "operator_next_step": "verlaag sizing"},
+        "state": {"analysis": {"decision_status": "modify", "risk_summary": "hoog BTC risico", "operator_next_step": "verlaag sizing"}},
+    })
+    service.build_plan_adherence_review_response = AsyncMock(return_value={
+        "analysis": {"adherence_status": "aligned"},
+        "state": {"analysis": {"adherence_status": "aligned"}},
+    })
+    service.build_portfolio_intelligence_response = AsyncMock(return_value={
+        "analysis": {
+            "portfolio_blockers": [],
+            "concentration_warning": "BTC concentratie is al hoog.",
+            "portfolio_safe_alternative": "Wacht of verlaag bestaande BTC exposure.",
+        },
+        "state": {"analysis": {
+            "portfolio_blockers": [],
+            "concentration_warning": "BTC concentratie is al hoog.",
+            "portfolio_safe_alternative": "Wacht of verlaag bestaande BTC exposure.",
+        }},
+    })
+
+    result = asyncio.run(service.build_governed_action_review_response(
+        user_id=30,
+        query="Ik wil deze BTC trade openen, mag dat?",
+        context={"symbol": "BTC"},
+    ))
+
+    assert result["analysis"]["action_type"] == "decision_review"
+    assert result["analysis"]["portfolio_conflict_level"] == "medium"
+    required_agents = result["analysis"]["required_agents"]
+    assert any(agent["name"] == "Risk Agent" for agent in required_agents)
+    assert any(agent["name"] == "Portfolio Agent" for agent in required_agents)
+
+
+def test_build_governed_action_review_response_classifies_strategy_creation_and_agents():
+    service = _service()
+    service.build_decision_review_response = AsyncMock(return_value={"analysis": {}, "state": {"analysis": {}}})
+    service.build_plan_adherence_review_response = AsyncMock(return_value={"analysis": {}, "state": {"analysis": {}}})
+    service.build_portfolio_intelligence_response = AsyncMock(return_value={"analysis": {}, "state": {"analysis": {}}})
+
+    result = asyncio.run(service.build_governed_action_review_response(
+        user_id=30,
+        query="Maak een nieuwe strategie aan.",
+        context={"symbol": "ETH"},
+    ))
+
+    assert result["analysis"]["action_type"] == "create_strategy"
+    assert result["analysis"]["governance_status"] == "confirm"
+    assert any(agent["name"] == "Strategy Agent" for agent in result["analysis"]["required_agents"])
 
 
 def test_discipline_leak_prompt_prefers_personal_performance_over_personal_coach():

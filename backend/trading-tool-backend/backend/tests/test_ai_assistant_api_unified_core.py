@@ -268,6 +268,25 @@ def test_build_finn_core_rescue_envelope_prefers_governed_action_review_builder(
     assert response["intent"] == "governed_action_review"
 
 
+def test_build_finn_core_rescue_envelope_prefers_governed_action_review_for_trade_permission():
+    finn = _finn()
+    finn.build_governed_action_review_response = AsyncMock(
+        return_value={"intent": "governed_action_review", "flow": "governed_action_review"}
+    )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query="Ik wil deze BTC trade openen, mag dat?",
+            context_payload={"page": "/market/BTC", "symbol": "BTC"},
+        )
+    )
+
+    finn.build_governed_action_review_response.assert_awaited_once()
+    assert response["intent"] == "governed_action_review"
+
+
 def test_build_finn_core_rescue_envelope_prefers_outcome_tracking_builder():
     finn = _finn()
     finn.build_outcome_tracking_response = AsyncMock(
@@ -450,10 +469,10 @@ def test_build_finn_core_rescue_envelope_prefers_portfolio_intelligence_for_expl
     assert response["intent"] == "portfolio_intelligence"
 
 
-def test_build_finn_core_rescue_envelope_prefers_portfolio_intelligence_for_extra_btc_risk_prompt():
+def test_build_finn_core_rescue_envelope_prefers_governance_for_extra_btc_risk_prompt():
     finn = _finn()
-    finn.build_portfolio_intelligence_response = AsyncMock(
-        return_value={"intent": "portfolio_intelligence", "flow": "portfolio_intelligence"}
+    finn.build_governed_action_review_response = AsyncMock(
+        return_value={"intent": "governed_action_review", "flow": "governed_action_review"}
     )
 
     response = asyncio.run(
@@ -465,8 +484,8 @@ def test_build_finn_core_rescue_envelope_prefers_portfolio_intelligence_for_extr
         )
     )
 
-    finn.build_portfolio_intelligence_response.assert_awaited_once()
-    assert response["intent"] == "portfolio_intelligence"
+    finn.build_governed_action_review_response.assert_awaited_once()
+    assert response["intent"] == "governed_action_review"
 
 
 def test_build_finn_core_rescue_envelope_prefers_priority_engine_builder():

@@ -446,8 +446,22 @@ class FinnPlanService:
     ) -> Dict[str, Any]:
         q = self._normalized_query(query)
         context = context or {}
+        asset_mentions = _asset_mentions(query)
+        has_asset = bool(context.get("symbol") or context.get("asset") or asset_mentions)
 
-        if any(term in q for term in ["live order", "live trade", "live uitvoeren", "live uitgevoerd", "direct live", "manual order"]):
+        if any(term in q for term in [
+            "live order",
+            "live trade",
+            "live uitvoeren",
+            "live uitgevoerd",
+            "direct live",
+            "manual order",
+            "plaats nu direct",
+            "plaats direct",
+            "zet live",
+        ]) or (
+            "order" in q and has_asset and any(term in q for term in ["plaats", "open", "uitvoer", "doe"])
+        ):
             return {"action_type": "live_manual_order", "subject_type": "trade", "subject_id": context.get("bot_id") or context.get("decision_id")}
         if any(term in q for term in ["rebalance", "allocatie wijzigen", "portfolio mutatie", "herverdelen"]):
             return {"action_type": "portfolio_rebalance", "subject_type": "portfolio", "subject_id": None}
@@ -467,10 +481,33 @@ class FinnPlanService:
             return {"action_type": "activate_setup", "subject_type": "setup", "subject_id": context.get("setup_id")}
         if any(term in q for term in ["bot aanmaken", "bot klaarzetten", "bot opzetten", "maak deze bot"]):
             return {"action_type": "create_bot", "subject_type": "bot", "subject_id": context.get("bot_id")}
-        if any(term in q for term in ["strategie aanmaken", "strategie klaarzetten", "maak deze strategie"]):
+        if any(term in q for term in ["strategie aanmaken", "strategie klaarzetten", "maak deze strategie", "maak een nieuwe strategie", "nieuwe strategie aanmaken"]):
             return {"action_type": "create_strategy", "subject_type": "strategy", "subject_id": context.get("strategy_id")}
         if any(term in q for term in ["setup aanmaken", "setup klaarzetten", "maak deze setup"]):
             return {"action_type": "create_setup", "subject_type": "setup", "subject_id": context.get("setup_id")}
+        if any(term in q for term in [
+            "welke agents",
+            "welke agenten",
+            "wie moet hiernaar kijken",
+            "wie moet dit reviewen",
+            "voordat ik dit doe",
+        ]):
+            if "bot" in q:
+                return {"action_type": "activate_bot", "subject_type": "bot", "subject_id": context.get("bot_id")}
+            if "strategie" in q or "strategy" in q:
+                return {"action_type": "create_strategy", "subject_type": "strategy", "subject_id": context.get("strategy_id")}
+            if "portfolio" in q or "portefeuille" in q:
+                return {"action_type": "portfolio_review", "subject_type": "portfolio", "subject_id": None}
+            return {"action_type": "decision_review", "subject_type": "trade", "subject_id": context.get("decision_id") or context.get("bot_id")}
+        if has_asset and any(term in q for term in [
+            "trade openen",
+            "long toevoegen",
+            "short toevoegen",
+            "extra risico toevoegen",
+            "deze trade openen",
+            "deze btc trade openen",
+        ]):
+            return {"action_type": "decision_review", "subject_type": "trade", "subject_id": context.get("decision_id") or context.get("bot_id")}
         if "portfolio" in q or "portefeuille" in q:
             return {"action_type": "portfolio_review", "subject_type": "portfolio", "subject_id": None}
         if "bot" in q:
@@ -2167,6 +2204,7 @@ class FinnPlanService:
     ) -> bool:
         q = self._normalized_query(query)
         context = context or {}
+        asset_mentions = _asset_mentions(query)
         phrases = [
             "mag finn deze strategie activeren",
             "mag finn deze bot activeren",
@@ -2180,6 +2218,10 @@ class FinnPlanService:
             "is deze actie toegestaan",
             "mag dit uitgevoerd worden",
             "welke governance geldt hier",
+            "ik wil deze btc trade openen, mag dat",
+            "maak een nieuwe strategie aan",
+            "welke agents moeten hiernaar kijken voordat ik dit doe",
+            "plaats nu direct een live btc order",
         ]
         if any(phrase in q for phrase in phrases):
             return True
@@ -2193,6 +2235,11 @@ class FinnPlanService:
             "confirm",
             "uitvoering",
             "actie",
+            "openen",
+            "plaatsen",
+            "toevoegen",
+            "live zetten",
+            "zonder bevestiging",
         ])
         has_governance = any(term in q for term in [
             "mag",
@@ -2203,6 +2250,13 @@ class FinnPlanService:
             "waarom niet",
             "wat mist nog",
             "welke context",
+            "zonder bevestiging",
+            "bevestigen",
+            "direct",
+            "live",
+            "welke agents",
+            "welke agenten",
+            "voordat ik dit doe",
         ])
         has_subject = any(term in q for term in [
             "setup",
@@ -2214,8 +2268,68 @@ class FinnPlanService:
             "live trade",
             "portfolio",
             "portefeuille",
-        ]) or bool(context.get("setup_id") or context.get("strategy_id") or context.get("bot_id"))
+            "order",
+            "positie",
+            "long",
+            "short",
+            "btc",
+            "eth",
+        ]) or bool(context.get("setup_id") or context.get("strategy_id") or context.get("bot_id") or asset_mentions)
+        has_portfolio_conflict = any(term in q for term in [
+            "extra btc risico",
+            "btc long toevoegen",
+            "te veel exposure",
+            "concentratie",
+            "correlated risk",
+            "correlated exposure",
+            "bot stacking",
+            "setup clustering",
+            "cashbuffer",
+        ])
+        has_execution_intent = any(term in q for term in [
+            "mag ik",
+            "mag dat",
+            "plaats",
+            "uitvoeren",
+            "zet live",
+            "zonder bevestiging",
+            "nu direct",
+            "maak",
+            "activeer",
+        ])
+        if has_portfolio_conflict and (has_execution_intent or bool(asset_mentions)):
+            return True
+        if any(term in q for term in ["welke agents", "welke agenten", "wie moet hiernaar kijken", "wie moet dit reviewen"]):
+            return True
+        if any(term in q for term in ["live order", "live trade", "plaats nu direct", "zet live"]) and (has_subject or bool(asset_mentions)):
+            return True
         return has_action and has_governance and has_subject
+
+    def _governed_action_required_agents(
+        self,
+        *,
+        action_type: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, str]]:
+        context = context or {}
+        agents: List[Dict[str, str]] = []
+
+        def add(name: str, role: str) -> None:
+            if not any(existing.get("name") == name for existing in agents):
+                agents.append({"name": name, "role": role})
+
+        if action_type in {"decision_review", "live_manual_order", "portfolio_rebalance", "portfolio_review"}:
+            add("Risk Agent", "Controleert risico, sizing en execution-frictie.")
+            add("Portfolio Agent", "Controleert exposure, concentratie en correlatierisico.")
+        if action_type in {"decision_review", "activate_bot", "activate_setup", "save_trade_plan", "portfolio_rebalance"}:
+            add("Discipline Agent", "Controleert planfit, overrides en gedragsfrictie.")
+        if action_type in {"create_strategy", "strategy_review", "create_setup", "setup_review", "create_bot", "bot_review"}:
+            add("Strategy Agent", "Controleert of de actie logisch past bij setup, strategie en structuur.")
+        if action_type in {"live_manual_order", "activate_bot", "portfolio_rebalance"}:
+            add("Execution Agent", "Controleert of uitvoering alleen onder bevestiging en guardrails kan.")
+        if context.get("bot_id") or action_type in {"activate_bot", "bot_review", "create_bot"}:
+            add("Bot Agent", "Controleert bot-specific context, status en live readiness.")
+        return agents[:4]
 
     def looks_like_decision_review_request(
         self,
@@ -5205,6 +5319,13 @@ class FinnPlanService:
         if warnings:
             lines.append("Let op:")
             lines.extend(f"- {item}" for item in warnings[:3])
+        required_agents = analysis.get("required_agents") or []
+        if required_agents:
+            lines.append(
+                "Betrek eerst: "
+                + ", ".join(str(agent.get("name") or "").strip() for agent in required_agents[:3] if agent.get("name"))
+                + "."
+            )
         lines.append(f"Volgende stap: {analysis.get('recommended_next_step')}")
         return "\n".join([line for line in lines if line])
 
@@ -5290,11 +5411,26 @@ class FinnPlanService:
             decision_status=decision_analysis.get("decision_status"),
             portfolio_blockers=blockers,
         )
+        required_agents = self._governed_action_required_agents(
+            action_type=action["action_type"],
+            context=context,
+        )
 
         analysis = {
             **governance,
             "policy": policy,
             "action_subject": action,
+            "required_agents": required_agents,
+            "agent_orchestration": {
+                "required_agents": required_agents,
+                "orchestration_status": "pre_execution_review" if required_agents else "minimal",
+                "autonomous_execution_allowed": False,
+            },
+            "auditability": {
+                "audit_required": governance.get("audit_required"),
+                "rollback_mode": governance.get("rollback_mode"),
+                "trace_required": True,
+            },
             "decision_review": {
                 "decision_status": decision_analysis.get("decision_status"),
                 "risk_summary": decision_analysis.get("risk_summary"),
