@@ -463,6 +463,14 @@ class FinnPlanService:
             "order" in q and has_asset and any(term in q for term in ["plaats", "open", "uitvoer", "doe"])
         ):
             return {"action_type": "live_manual_order", "subject_type": "trade", "subject_id": context.get("bot_id") or context.get("decision_id")}
+        if any(term in q for term in [
+            "verwijder mijn stop-loss",
+            "haal mijn stop-loss weg",
+            "zonder stop-loss",
+            "negeer mijn risk limit",
+            "ik bevestig later wel",
+        ]):
+            return {"action_type": "live_manual_order", "subject_type": "trade", "subject_id": context.get("decision_id") or context.get("bot_id")}
         if any(term in q for term in ["rebalance", "allocatie wijzigen", "portfolio mutatie", "herverdelen"]):
             return {"action_type": "portfolio_rebalance", "subject_type": "portfolio", "subject_id": None}
         if any(term in q for term in ["trade plan opslaan", "sla dit trade plan op", "save trade plan"]):
@@ -483,6 +491,8 @@ class FinnPlanService:
             return {"action_type": "create_bot", "subject_type": "bot", "subject_id": context.get("bot_id")}
         if any(term in q for term in ["strategie aanmaken", "strategie klaarzetten", "maak deze strategie", "maak een nieuwe strategie", "nieuwe strategie aanmaken"]):
             return {"action_type": "create_strategy", "subject_type": "strategy", "subject_id": context.get("strategy_id")}
+        if any(term in q for term in ["maak een setup review klaar", "setup review klaar"]):
+            return {"action_type": "setup_review", "subject_type": "setup", "subject_id": context.get("setup_id")}
         if any(term in q for term in ["setup aanmaken", "setup klaarzetten", "maak deze setup"]):
             return {"action_type": "create_setup", "subject_type": "setup", "subject_id": context.get("setup_id")}
         if any(term in q for term in [
@@ -2222,6 +2232,21 @@ class FinnPlanService:
             "maak een nieuwe strategie aan",
             "welke agents moeten hiernaar kijken voordat ik dit doe",
             "plaats nu direct een live btc order",
+            "maak een setup review klaar",
+            "verwijder mijn stop-loss",
+            "actieveer deze bot zonder bevestiging",
+            "activeer deze bot zonder bevestiging",
+            "negeer mijn risk limit en open toch",
+            "voer deze trade uit, ik bevestig later wel",
+            "wat wordt hiervan gelogd",
+            "kan ik later zien waarom finn dit advies gaf",
+            "welke confirmation is nodig",
+            "is deze trade veilig voor mijn portfolio",
+            "bot a en bot b zitten allebei btc long, is dat een probleem",
+            "welke portfolio-conflicten zie je",
+            "laat risk en strategy deze trade beoordelen",
+            "wat zegt performance history over deze actie",
+            "welke laag blokkeert deze actie",
         ]
         if any(phrase in q for phrase in phrases):
             return True
@@ -2257,6 +2282,14 @@ class FinnPlanService:
             "welke agents",
             "welke agenten",
             "voordat ik dit doe",
+            "gelogd",
+            "audit",
+            "trace",
+            "waarom finn",
+            "confirmation",
+            "veilig voor mijn portfolio",
+            "probleem",
+            "blokkeert",
         ])
         has_subject = any(term in q for term in [
             "setup",
@@ -2301,17 +2334,38 @@ class FinnPlanService:
             return True
         if any(term in q for term in ["welke agents", "welke agenten", "wie moet hiernaar kijken", "wie moet dit reviewen"]):
             return True
+        if any(term in q for term in ["wat wordt hiervan gelogd", "kan ik later zien waarom finn dit advies gaf", "welke confirmation is nodig", "welke bevestiging is hiervoor nodig"]):
+            return True
         if any(term in q for term in ["live order", "live trade", "plaats nu direct", "zet live"]) and (has_subject or bool(asset_mentions)):
             return True
         return has_action and has_governance and has_subject
+
+    def _is_lightweight_governance_prompt(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        return any(term in q for term in [
+            "wat wordt hiervan gelogd",
+            "kan ik later zien waarom finn dit advies gaf",
+            "welke confirmation is nodig",
+            "welke bevestiging is hiervoor nodig",
+            "welke agents",
+            "welke agenten",
+            "wie moet hiernaar kijken",
+            "wat zegt performance history over deze actie",
+            "welke laag blokkeert deze actie",
+            "maak een setup review klaar",
+            "maak een nieuwe strategie aan",
+            "bereid deze trade voor, maar voer hem nog niet uit",
+        ])
 
     def _governed_action_required_agents(
         self,
         *,
         action_type: str,
+        query: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, str]]:
         context = context or {}
+        q = self._normalized_query(query)
         agents: List[Dict[str, str]] = []
 
         def add(name: str, role: str) -> None:
@@ -2329,6 +2383,8 @@ class FinnPlanService:
             add("Execution Agent", "Controleert of uitvoering alleen onder bevestiging en guardrails kan.")
         if context.get("bot_id") or action_type in {"activate_bot", "bot_review", "create_bot"}:
             add("Bot Agent", "Controleert bot-specific context, status en live readiness.")
+        if any(term in q for term in ["performance history", "performance", "historie", "eerdere uitkomsten"]):
+            add("Performance Agent", "Controleert of eerdere uitkomsten extra frictie of waarschuwingen geven.")
         return agents[:4]
 
     def looks_like_decision_review_request(
@@ -5319,6 +5375,14 @@ class FinnPlanService:
         if warnings:
             lines.append("Let op:")
             lines.extend(f"- {item}" for item in warnings[:3])
+        confirmation_required = analysis.get("confirmation_required")
+        if confirmation_required is not None:
+            lines.append(f"Bevestiging nodig: {'ja' if confirmation_required else 'nee'}.")
+        auditability = analysis.get("auditability") or {}
+        if auditability.get("audit_required") is not None:
+            lines.append(
+                f"Logging: {'audit log verplicht' if auditability.get('audit_required') else 'lichte trace voldoende'}."
+            )
         required_agents = analysis.get("required_agents") or []
         if required_agents:
             lines.append(
@@ -5343,6 +5407,7 @@ class FinnPlanService:
             subject_type=action.get("subject_type"),
             subject_id=action.get("subject_id"),
         )
+        lightweight_prompt = self._is_lightweight_governance_prompt(query)
 
         decision_review = {}
         if action["action_type"] in {
@@ -5355,15 +5420,18 @@ class FinnPlanService:
             "live_manual_order",
             "save_trade_plan",
             "portfolio_rebalance",
-        }:
+        } and not lightweight_prompt:
             decision_review = await self.build_decision_review_response(user_id, query, context)
 
         plan_adherence = {}
-        if action["action_type"] in {"activate_setup", "activate_bot", "live_manual_order", "save_trade_plan", "portfolio_rebalance"}:
+        if action["action_type"] in {"activate_setup", "activate_bot", "live_manual_order", "save_trade_plan", "portfolio_rebalance"} and not lightweight_prompt:
             plan_adherence = await self.build_plan_adherence_review_response(user_id, query, context)
 
         portfolio_intelligence = {}
-        if action["action_type"] in {"portfolio_review", "activate_bot", "live_manual_order", "portfolio_rebalance", "decision_review"}:
+        if (
+            action["action_type"] in {"portfolio_review", "activate_bot", "live_manual_order", "portfolio_rebalance", "decision_review"}
+            and not lightweight_prompt
+        ):
             portfolio_intelligence = await self.build_portfolio_intelligence_response(user_id, query, context)
 
         decision_analysis = (
@@ -5413,6 +5481,7 @@ class FinnPlanService:
         )
         required_agents = self._governed_action_required_agents(
             action_type=action["action_type"],
+            query=query,
             context=context,
         )
 

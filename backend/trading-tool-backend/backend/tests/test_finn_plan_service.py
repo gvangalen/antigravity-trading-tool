@@ -5046,9 +5046,13 @@ def test_governed_action_review_request_detection_is_separate_from_generic_help(
     assert service.looks_like_governed_action_review_request("Waarom blokkeer je deze actie?", {"bot_id": 19}) is True
     assert service.looks_like_governed_action_review_request("Ik wil deze BTC trade openen, mag dat?", {"symbol": "BTC"}) is True
     assert service.looks_like_governed_action_review_request("Maak een nieuwe strategie aan.", {"symbol": "ETH"}) is True
+    assert service.looks_like_governed_action_review_request("Maak een setup review klaar.", {"symbol": "ETH"}) is True
     assert service.looks_like_governed_action_review_request("Mag ik nog een BTC long toevoegen?", {"symbol": "BTC"}) is True
     assert service.looks_like_governed_action_review_request("Welke agents moeten hiernaar kijken voordat ik dit doe?", {"symbol": "BTC"}) is True
     assert service.looks_like_governed_action_review_request("Plaats nu direct een live BTC order.", {"symbol": "BTC"}) is True
+    assert service.looks_like_governed_action_review_request("Wat wordt hiervan gelogd?", {}) is True
+    assert service.looks_like_governed_action_review_request("Welke confirmation is nodig?", {}) is True
+    assert service.looks_like_governed_action_review_request("Verwijder mijn stop-loss.", {"symbol": "BTC"}) is True
     assert service.looks_like_governed_action_review_request("Wat is RSI in simpele taal?", {"symbol": "BTC"}) is False
 
 
@@ -5157,6 +5161,50 @@ def test_build_governed_action_review_response_classifies_strategy_creation_and_
     assert result["analysis"]["action_type"] == "create_strategy"
     assert result["analysis"]["governance_status"] == "confirm"
     assert any(agent["name"] == "Strategy Agent" for agent in result["analysis"]["required_agents"])
+
+
+def test_build_governed_action_review_response_lightweight_audit_prompt_skips_heavy_reviews():
+    service = _service()
+    service.build_decision_review_response = AsyncMock()
+    service.build_plan_adherence_review_response = AsyncMock()
+    service.build_portfolio_intelligence_response = AsyncMock()
+
+    result = asyncio.run(service.build_governed_action_review_response(
+        user_id=30,
+        query="Wat wordt hiervan gelogd?",
+        context={},
+    ))
+
+    assert result["analysis"]["auditability"]["trace_required"] is True
+    assert "Logging:" in result["response"]
+    service.build_decision_review_response.assert_not_awaited()
+    service.build_plan_adherence_review_response.assert_not_awaited()
+    service.build_portfolio_intelligence_response.assert_not_awaited()
+
+
+def test_build_governed_action_review_response_classifies_stop_loss_removal_as_execution_sensitive():
+    service = _service()
+    service.build_decision_review_response = AsyncMock(return_value={
+        "analysis": {"decision_status": "modify"},
+        "state": {"analysis": {"decision_status": "modify"}},
+    })
+    service.build_plan_adherence_review_response = AsyncMock(return_value={
+        "analysis": {"adherence_status": "conflict"},
+        "state": {"analysis": {"adherence_status": "conflict"}},
+    })
+    service.build_portfolio_intelligence_response = AsyncMock(return_value={
+        "analysis": {"portfolio_blockers": []},
+        "state": {"analysis": {"portfolio_blockers": []}},
+    })
+
+    result = asyncio.run(service.build_governed_action_review_response(
+        user_id=30,
+        query="Verwijder mijn stop-loss.",
+        context={"symbol": "BTC"},
+    ))
+
+    assert result["analysis"]["action_type"] == "live_manual_order"
+    assert result["analysis"]["confirmation_required"] is True
 
 
 def test_discipline_leak_prompt_prefers_personal_performance_over_personal_coach():
