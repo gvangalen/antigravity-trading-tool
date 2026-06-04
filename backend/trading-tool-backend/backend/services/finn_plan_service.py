@@ -862,15 +862,41 @@ class FinnPlanService:
     def _page_supports_entity(self, context: Optional[Dict[str, Any]], entity_type: str) -> bool:
         page_type = self._current_page_type(context)
         mapping = {
-            "strategy": ("strategy",),
-            "setup": ("setup", "setups"),
-            "bot": ("bot",),
-            "report": ("report",),
+            "strategy": ("strategy", "assistant"),
+            "setup": ("setup", "setups", "assistant"),
+            "bot": ("bot", "assistant"),
+            "report": ("report", "assistant"),
             "score": ("dashboard", "score", "market", "setup", "strategy", "bot"),
             "asset": ("dashboard", "market", "setup", "strategy", "bot", "report"),
             "page": ("dashboard", "setup", "strategy", "bot", "report", "market"),
         }
         return any(token in page_type for token in mapping.get(entity_type, (entity_type,)))
+
+    def _follow_up_context_entity_type(self, query: str, context: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        q = self._normalized_query(query)
+        if not any(
+            phrase in q for phrase in [
+                "leg dit uit",
+                "leg die uit",
+                "leg dat uit",
+                "welke is dit",
+                "welke is dat",
+                "wat bedoel je precies",
+                "waar slaat dit op",
+                "wat is dit precies",
+            ]
+        ):
+            return None
+        candidates = [
+            self._read_only_state_entity(context),
+            self._last_context_entity(context),
+        ]
+        candidates.extend(reversed(self._recent_read_only_entities(context)))
+        for item in candidates:
+            entity_type = str(item.get("entity_type") or "")
+            if entity_type in {"strategy", "setup", "bot", "report"}:
+                return entity_type
+        return None
 
     def _resolve_context_target(
         self,
@@ -897,6 +923,12 @@ class FinnPlanService:
                     "welke setup heb ik nu open",
                     "welke strategie heb ik nu open",
                     "welke setup bekijk ik nu",
+                    "welke strategie is dit",
+                    "welke setup is dit",
+                    "leg deze strategie uit",
+                    "leg deze setup uit",
+                    "leg die strategie uit",
+                    "leg die setup uit",
                 ]
             )
         )
@@ -2773,6 +2805,9 @@ class FinnPlanService:
             return "strategy"
         if any(term in q for term in ["setup", "plan"]):
             return "setup"
+        follow_up_target = self._follow_up_context_entity_type(query, context)
+        if follow_up_target:
+            return follow_up_target
         if context.get("strategy_id"):
             return "strategy"
         if context.get("setup_id"):
@@ -3184,12 +3219,21 @@ class FinnPlanService:
             or (global_signals[0].get("reason") if global_signals else None)
             or "Dit geeft nu de meeste combinatie van risico, urgentie en besliswaarde."
         )
+        focus_guidance = {
+            "start_now": "Kies nu eerst de bovenste act-now taak en laat de rest heel even stilvallen.",
+            "focus": "Hou vandaag een smalle focus aan; een te brede reviewstack maakt je besluitvorming slapper.",
+            "wait": "Wachten is hier discipline, niet passiviteit. Laat alleen liggen wat nu geen besliswaarde heeft.",
+            "ignore_today": "Niet doen is hier een guardrail, geen gemiste kans. Bescherm eerst je kapitaal en aandacht.",
+            "top3": "Hou het vandaag bij drie kernacties; meer voegt vooral ruis toe aan je operatorflow.",
+            "headline": "Gebruik dit als je dagvolgorde: eerst risico en reviewdruk, daarna pas nieuwe ideeën.",
+        }.get(question_focus, "Gebruik dit als je dagvolgorde: eerst risico en reviewdruk, daarna pas nieuwe ideeën.")
         return {
             "headline": headline,
             "top_priorities": top_priorities,
             "review_queue": review_queue,
             "ignore_today": ignore_today,
             "why_now": why_now,
+            "focus_guidance": focus_guidance,
             "suppression_reasons": suppression_reasons,
             "question_focus": question_focus,
             "open_counts": {
@@ -3209,6 +3253,8 @@ class FinnPlanService:
             analysis.get("headline") or "Hier is je prioriteitenmotor voor vandaag.",
             analysis.get("why_now") or "",
         ]
+        if analysis.get("focus_guidance"):
+            lines.append(str(analysis.get("focus_guidance")))
         top_priorities = analysis.get("top_priorities") or []
         if top_priorities and question_focus != "ignore_today":
             top_label = "Doe of review nu het volgende:"
@@ -3216,6 +3262,8 @@ class FinnPlanService:
                 top_label = "Begin hier nu mee:"
             elif question_focus == "focus":
                 top_label = "Hier moet vandaag je focus liggen:"
+            elif question_focus == "top3":
+                top_label = "Dit zijn vandaag je 3 belangrijkste acties:"
             lines.append("Doe of review nu het volgende:")
             lines[-1] = top_label
             for item in top_priorities[:3]:
@@ -4976,6 +5024,8 @@ class FinnPlanService:
             f"Status: {analysis.get('decision_status')}.",
             analysis.get("risk_summary") or "",
         ]
+        if analysis.get("context_anchor"):
+            lines.append(f"Contextanker: {analysis.get('context_anchor')}.")
         if checks:
             lines.append("Checks:")
             for check in checks[:4]:
@@ -5606,13 +5656,21 @@ class FinnPlanService:
 
         checks: List[Dict[str, Any]] = []
         context_ready = bool(explicit_asset and (setup_id or strategy_id or bot_id or review_type == "trade_intent_review"))
+        context_anchor = (
+            f"setup #{setup_id}" if setup_id else
+            f"strategie #{strategy_id}" if strategy_id else
+            f"bot #{bot_id}" if bot_id else
+            "expliciete trade-context uit je prompt"
+            if explicit_risk_pct is not None or explicit_setup_score is not None or explicit_mix else
+            "de huidige pagina- en sessiecontext"
+        )
         checks.append({
             "id": "context_ready",
             "label": "Context",
             "status": "pass" if context_ready else "needs_context",
             "severity": "high" if not context_ready else "low",
             "detail": (
-                f"Ik review dit nu voor {asset} met de huidige pagina- en sessiecontext."
+                f"Ik review dit nu voor {asset} met {context_anchor}."
                 if context_ready else
                 "Ik mis nog te veel concrete context om deze beslissing veilig te reviewen."
             ),
@@ -5769,6 +5827,7 @@ class FinnPlanService:
         analysis = {
             "review_type": review_type,
             "decision_status": decision_status,
+            "context_anchor": context_anchor if context_ready else None,
             "checks": checks,
             "top_blockers": top_blockers,
             "recommended_changes": recommended_changes,
@@ -9017,12 +9076,14 @@ class FinnPlanService:
             "waar begin ik",
             "wat moet ik nu eerst doen",
             "wat moet ik vandaag eerst doen",
+            "help me even kiezen wat ik nu moet doen",
         ]):
             return "start_now"
         if any(phrase in q for phrase in [
             "waar moet ik vandaag op focussen",
             "waar moet ik nu op focussen",
             "wat verdient nu mijn aandacht",
+            "wat is nu het belangrijkste",
         ]):
             return "focus"
         if any(phrase in q for phrase in [

@@ -945,6 +945,29 @@ def test_context_explain_reuses_recent_strategy_context_on_assistant_follow_up(m
     assert "geen zekere strategie-entiteit" not in result["response"]
 
 
+def test_context_explain_uses_recent_setup_entity_for_generic_follow_up():
+    service = _service()
+    context = {
+        "page": "/assistant",
+        "page_type": "assistant",
+        "symbol": "BTC",
+        "finn_state": {
+            "current_flow": "context_explain",
+            "recent_context_entities": [
+                {"entity_type": "setup", "entity_id": 62, "asset": "BTC", "page_family": "setup", "resolved_from": "page_context"},
+            ],
+            "analysis": {},
+        },
+    }
+
+    result = asyncio.run(service.build_context_explain_response(30, "Leg dit uit", context))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "setup"
+    assert result["analysis"]["entity"]["id"] == 62
+    assert result["analysis"]["context_entity_resolution"]["resolved_from"] == "recent_read_only_state"
+
+
 def test_build_context_explain_response_handles_report_which_report_question(monkeypatch):
     class _ReportRepo:
         def __init__(self, session):
@@ -5350,6 +5373,8 @@ def test_build_decision_review_response_can_approve_contextual_trade():
     assert result["analysis"]["decision_status"] == "approve"
     assert result["analysis"]["review_type"] == "trade_intent_review"
     assert result["analysis"]["snapshot"]["asset"] == "BTC"
+    assert "setup #62" in (result["analysis"]["context_anchor"] or "")
+    assert "Contextanker:" in result["response"]
 
 
 def test_build_decision_review_response_blocks_extreme_risk_and_exposure():
@@ -5906,6 +5931,33 @@ def test_build_priority_engine_response_varies_copy_by_question_focus(monkeypatc
     assert "begin hier nu mee" in start["response"].lower()
     assert "dit kan vandaag wachten" in wait["response"].lower()
     assert "dit moet je vandaag juist niet doen" in avoid["response"].lower()
+    assert "discipline" in wait["response"].lower()
+
+
+def test_build_priority_engine_response_treats_help_me_choose_as_start_now(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "workqueue": [
+            {
+                "id": "review-btc",
+                "title": "BTC bot review eerst doen",
+                "type": "bot_decision",
+                "priority": "high",
+                "priority_rank": 4,
+                "reason": "Open review beïnvloedt je live uitvoering.",
+                "asset": "BTC",
+            },
+        ],
+        "summary": {"workqueue_count": 1, "open_action_count": 1},
+    })
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_priority_engine_response(1, "Help me even kiezen wat ik nu moet doen.", {"page": "/dashboard"}))
+
+    assert result["analysis"]["question_focus"] == "start_now"
+    assert "begin hier nu mee" in result["response"].lower()
 
 
 def test_build_mission_control_explain_response_exposes_priority_engine_contract(monkeypatch):
