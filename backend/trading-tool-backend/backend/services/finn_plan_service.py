@@ -2397,7 +2397,62 @@ class FinnPlanService:
             "plaats nu direct een live order",
             "live btc order",
             "verwijder mijn stop-loss",
+            "extra risico toevoegen",
+            "extra btc risico toevoegen",
+            "nog een btc long toevoegen",
+            "kan ik nog een btc long openen",
         ])
+
+    def _lightweight_governance_snapshot(
+        self,
+        *,
+        query: str,
+        context: Optional[Dict[str, Any]],
+        action: Dict[str, Any],
+    ) -> Dict[str, Dict[str, Any]]:
+        q = self._normalized_query(query)
+        context = context or {}
+        asset = self._asset_from_query_or_context(query, context)
+        decision_analysis: Dict[str, Any] = {}
+        adherence_analysis: Dict[str, Any] = {}
+        portfolio_analysis: Dict[str, Any] = {}
+
+        if action.get("action_type") == "live_manual_order":
+            decision_analysis = {
+                "decision_status": "modify",
+                "risk_summary": "Live execution blijft read-only tot confirmatie en guardrails rond zijn.",
+                "operator_next_step": "Gebruik eerst confirm + audit in plaats van directe uitvoering.",
+            }
+
+        if any(term in q for term in ["verwijder mijn stop-loss", "haal mijn stop-loss weg", "zonder stop-loss"]):
+            adherence_analysis = {
+                "adherence_status": "forced_override",
+                "threatened_rule": "Je haalt je vooraf afgesproken exit-grens weg.",
+                "suggested_recovery_step": "Laat de stop-loss staan of verlaag eerst je exposure voordat je iets wijzigt.",
+            }
+
+        if any(term in q for term in ["extra risico toevoegen", "extra btc risico toevoegen", "nog een btc long toevoegen", "kan ik nog een btc long openen"]):
+            focus_asset = str(asset or "dezelfde asset").upper() if asset else "dezelfde asset"
+            portfolio_analysis = {
+                "concentration_warning": (
+                    f"Extra {focus_asset}-risico toevoegen stapelt concentratie in dezelfde asset."
+                ),
+                "stacked_risk_warning": (
+                    f"{focus_asset} krijgt nu een extra exposure-laag voordat de bestaande risk stack is afgebouwd."
+                ),
+                "portfolio_blockers": [
+                    f"Voeg nu geen extra {focus_asset}-risico toe zonder eerst bestaande exposure of open risk stack af te bouwen."
+                ],
+                "portfolio_safe_alternative": (
+                    "Verlaag eerst bestaande exposure of kies een niet-gestapelde trade voordat je nieuw risico toevoegt."
+                ),
+            }
+
+        return {
+            "decision_analysis": decision_analysis,
+            "adherence_analysis": adherence_analysis,
+            "portfolio_analysis": portfolio_analysis,
+        }
 
     def _governed_action_required_agents(
         self,
@@ -5501,6 +5556,11 @@ class FinnPlanService:
             subject_id=action.get("subject_id"),
         )
         lightweight_prompt = self._is_lightweight_governance_prompt(query)
+        lightweight_snapshot = self._lightweight_governance_snapshot(
+            query=query,
+            context=context,
+            action=action,
+        ) if lightweight_prompt else {}
 
         decision_review = {}
         if action["action_type"] in {
@@ -5532,16 +5592,22 @@ class FinnPlanService:
             or (decision_review.get("state") or {}).get("analysis")
             or {}
         )
+        if not decision_analysis and lightweight_snapshot.get("decision_analysis"):
+            decision_analysis = lightweight_snapshot.get("decision_analysis") or {}
         adherence_analysis = (
             (plan_adherence.get("analysis") if isinstance(plan_adherence.get("analysis"), dict) else {})
             or (plan_adherence.get("state") or {}).get("analysis")
             or {}
         )
+        if not adherence_analysis and lightweight_snapshot.get("adherence_analysis"):
+            adherence_analysis = lightweight_snapshot.get("adherence_analysis") or {}
         portfolio_analysis = (
             (portfolio_intelligence.get("analysis") if isinstance(portfolio_intelligence.get("analysis"), dict) else {})
             or (portfolio_intelligence.get("state") or {}).get("analysis")
             or {}
         )
+        if not portfolio_analysis and lightweight_snapshot.get("portfolio_analysis"):
+            portfolio_analysis = lightweight_snapshot.get("portfolio_analysis") or {}
 
         context_sufficiency = self._governed_action_context_sufficiency(
             action_type=action["action_type"],

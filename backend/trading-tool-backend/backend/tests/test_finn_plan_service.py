@@ -5271,6 +5271,26 @@ def test_build_governed_action_review_response_lightweight_live_order_prompt_ski
     service.build_portfolio_intelligence_response.assert_not_awaited()
 
 
+def test_build_governed_action_review_response_lightweight_extra_risk_prompt_skips_heavy_reviews():
+    service = _service()
+    service.build_decision_review_response = AsyncMock()
+    service.build_plan_adherence_review_response = AsyncMock()
+    service.build_portfolio_intelligence_response = AsyncMock()
+
+    result = asyncio.run(service.build_governed_action_review_response(
+        user_id=30,
+        query="Mag ik extra BTC risico toevoegen?",
+        context={"symbol": "BTC"},
+    ))
+
+    assert result["analysis"]["action_type"] == "decision_review"
+    assert result["analysis"]["portfolio_conflict_level"] == "high"
+    assert result["analysis"]["portfolio_intelligence"]["concentration_warning"]
+    service.build_decision_review_response.assert_not_awaited()
+    service.build_plan_adherence_review_response.assert_not_awaited()
+    service.build_portfolio_intelligence_response.assert_not_awaited()
+
+
 def test_discipline_leak_prompt_prefers_personal_performance_over_personal_coach():
     service = _service()
 
