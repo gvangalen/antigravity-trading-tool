@@ -12,7 +12,7 @@ Make deploy and rollback flows less sensitive to the recurring host pattern wher
 
 ## What Changed
 
-Implemented in the current working tree:
+Implemented and deployed on production commit `404b4ec`:
 
 - deploy flow now tracks an explicit `BACKEND_APP` per environment
 - deploy flow waits for both:
@@ -37,3 +37,18 @@ This tranche is ready when:
 - deploy does not treat PM2 `online` as sufficient by itself
 - backend bind drift can self-heal through one backend-only restart
 - rollback is less likely to fail on stale `origin/*` ref locks
+
+## Live Outcome
+
+Confirmed after rollout:
+
+- host `HEAD=404b4ec`
+- host `LAST_GOOD_COMMIT=404b4ec`
+- external `/api/health` returned `200`
+- external `/report` returned `200`
+- external `/api/system/health` returned `401` as expected
+
+Operational note:
+
+- this host still needed one manual backend-only restart before `:8000` fully settled
+- that means the tranche is live and useful, but the host itself still has rollout jitter we should keep treating as an ops concern

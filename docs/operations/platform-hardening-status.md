@@ -40,32 +40,32 @@ The main remaining risk is operational scale, not core request correctness:
 | Tranche A - Execution Safety | Green | Bot-generated execution now has DB replay guards, atomic `planned -> executing` claims, explicit `failed_execution` fallback, and honest Celery retry semantics. |
 | Tranche B - Queue Discipline | Green | Dispatcher now enforces backlog-aware skips, per-wave leases, per-user window dedupe, and queue naming is consistent across production/staging policy paths. |
 | Tranche C - Async Session Correctness | Green | Dashboard and assistant context paths no longer parallelize shared-session DB reads, and platform hardening tests now guard those paths explicitly. |
-| Tranche D - Operations Consolidation | Live with rollout caveat | Deploy and rollback now use explicit environment PM2 configs, and the legacy `deploy.sh` path is intentionally blocked. Production smoke recovered to external `/api/health` `200`, `/report` `200`, external `/api/system/health` `401`, while internal deep health remained degraded on broker/celery timeouts during rollout. |
-| Tranche E - Symbol/State Cleanup | Built locally, pending deploy | Bot portfolio state is now scoped by `(bot_id, symbol)` so symbol changes no longer collapse state into one row. |
-| Tranche F - Deploy Stability | Built locally, pending deploy | Deploy/rollback now wait for backend bind plus health, can do a backend-only rescue restart, and rollback clears stale git remote refs before fetch. |
+| Tranche D - Operations Consolidation | Green | Deploy and rollback now use explicit environment PM2 configs, and the legacy `deploy.sh` path is intentionally blocked. |
+| Tranche E - Symbol/State Cleanup | Green | Bot portfolio state is now scoped by `(bot_id, symbol)` so symbol changes no longer collapse state into one row, and the legacy single-column unique constraint is handled during migration. |
+| Tranche F - Deploy Stability | Live with rollout caveat | Deploy/rollback now wait for backend bind plus health, can do a backend-only rescue restart, and rollback clears stale git remote refs before fetch. Production is live on `404b4ec`, but this host still needed one manual backend-only restart before `:8000` settled and external `/api/*` recovered. |
 | Security Hardening Slice | Nearly green | External `/api/system/health` is operator-only, web/mobile auth contracts are corrected, refresh rotation and logout invalidation work, Finn `action_id` execute + replay is live, and rate limits are enforced on execute/manual-order/preflight routes. Remaining QA is a real user-switch cache pass and hard no-write proof for market-data read routes. |
 
 ## Current Live Baseline
 
 Latest deployed hardening commit:
 
-- `ff19938` - `Finish auth refresh-session fix and lock down external system health`
+- `404b4ec` - `Stabilize deploy and rollback recovery flow`
 
 Current rollout candidate:
 
-- `Security slice final QA candidate on Oracle`
+- `Platform hardening baseline is live on Oracle`
 
 Latest smoke results from deploy:
 
-- `/api/health`: `ok`
-- `/api/system/health` externally: `401 Missing access token`
+- `/api/health`: `200 {"status":"ok","message":"API is running"}`
+- `/api/system/health` externally: `401 {"detail":"Missing access token"}`
 - `/report`: `200`
-- Celery workers: `default`, `market-portfolio`, `scoring-execution`, `ai-reporting`
-- Oracle markers: `HEAD=ff19938a`, `LAST_GOOD_COMMIT=ff19938`, `PREVIOUS_GOOD_COMMIT=4ba495f`
+- Celery workers: `default`, `market-portfolio`, `scoring-execution`, `ai-reporting`, `beat`
+- Oracle markers: `HEAD=404b4ec`, `LAST_GOOD_COMMIT=404b4ec`
 
 Latest local regression:
 
-- `pytest -q`: `329 passed`
+- `pytest -q backend/trading-tool-backend/backend/tests/test_enterprise_hardening_step6.py backend/trading-tool-backend/backend/tests/test_runtime_reliability_hardening.py`: `10 passed`
 
 ## What Is Done
 

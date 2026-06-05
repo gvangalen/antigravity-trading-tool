@@ -225,6 +225,12 @@ Do not:
 5. Tranche F — Deploy Stability
 6. rerun platform hardening QA and live smoke
 
+Current state:
+
+- Tranches A through F are now built
+- Tranches D, E, and F are live on production
+- the main remaining operational irritant is host startup jitter, not missing hardening slices
+
 ## Definition Of Done
 
 This hardening plan is meaningfully done when:

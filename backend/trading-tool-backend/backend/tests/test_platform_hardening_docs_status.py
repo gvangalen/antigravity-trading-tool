@@ -9,16 +9,20 @@ PHASE6_DOC = REPO_ROOT / "docs" / "operations" / "platform-hardening-phase6-qa.m
 def test_platform_status_reflects_latest_deployed_hardening_baseline():
     source = STATUS_DOC.read_text()
 
-    assert "`ff19938` - `Finish auth refresh-session fix and lock down external system health`" in source
-    assert "`Security slice final QA candidate on Oracle`" in source
-    assert "`pytest -q`: `329 passed`" in source
+    assert "`404b4ec` - `Stabilize deploy and rollback recovery flow`" in source
+    assert "`Platform hardening baseline is live on Oracle`" in source
+    assert (
+        "`pytest -q backend/trading-tool-backend/backend/tests/test_enterprise_hardening_step6.py "
+        "backend/trading-tool-backend/backend/tests/test_runtime_reliability_hardening.py`: `10 passed`"
+        in source
+    )
     assert "Step 5 - Frontend Cache/Polling" in source
     assert "Step 6 - Enterprise Safety Slice" in source
     assert "Step 7 - Multi-Instance Cache Coordination" in source
     assert "Step 8 - Replay/Exactly-Once Hardening" in source
     assert "Security Hardening Slice" in source
     assert "Remaining QA is a real user-switch cache pass" in source
-    assert "externally: `401 Missing access token`" in source
+    assert 'externally: `401 {"detail":"Missing access token"}`' in source
     assert "LAST_GOOD_COMMIT" in source
     assert "rollback_live.sh <commit>" in source
 
