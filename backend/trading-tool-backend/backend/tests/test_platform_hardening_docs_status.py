@@ -9,7 +9,7 @@ PHASE6_DOC = REPO_ROOT / "docs" / "operations" / "platform-hardening-phase6-qa.m
 def test_platform_status_reflects_latest_deployed_hardening_baseline():
     source = STATUS_DOC.read_text()
 
-    assert "`404b4ec` - `Stabilize deploy and rollback recovery flow`" in source
+    assert "`4b971b2` - `Finish platform hardening V1 proofs`" in source
     assert "`Platform hardening baseline is live on Oracle`" in source
     assert (
         "`pytest -q backend/trading-tool-backend/backend/tests/test_enterprise_hardening_step6.py "

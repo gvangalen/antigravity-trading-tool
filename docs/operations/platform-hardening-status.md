@@ -49,7 +49,7 @@ The main remaining risk is operational scale, not core request correctness:
 
 Latest deployed hardening commit:
 
-- `404b4ec` - `Stabilize deploy and rollback recovery flow`
+- `4b971b2` - `Finish platform hardening V1 proofs`
 
 Current rollout candidate:
 
@@ -61,7 +61,7 @@ Latest smoke results from deploy:
 - `/api/system/health` externally: `401 {"detail":"Missing access token"}`
 - `/report`: `200`
 - Celery workers: `default`, `market-portfolio`, `scoring-execution`, `ai-reporting`, `beat`
-- Oracle markers: `HEAD=404b4ec`, `LAST_GOOD_COMMIT=404b4ec`
+- Oracle markers: `HEAD=4b971b2`, `LAST_GOOD_COMMIT=4b971b2`
 
 Latest local regression:
 
