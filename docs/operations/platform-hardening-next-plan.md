@@ -109,6 +109,11 @@ Target outcomes:
 - no hidden BTC-default or single-symbol collapse in broader portfolio logic
 - cleaner path to multi-asset scaling
 
+Current implementation note:
+
+- first symbol-scoped portfolio state slice is now built locally in
+  [Platform Hardening Tranche E — Symbol/State Cleanup](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-e-symbol-state-cleanup.md)
+
 ## P2 — Read Amplification Strategy
 
 Focus:

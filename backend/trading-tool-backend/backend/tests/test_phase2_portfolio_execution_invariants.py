@@ -53,6 +53,30 @@ def test_bot_generated_execution_idempotency_is_enforced_in_schema_and_repositor
     assert "return False" in agent
 
 
+def test_bot_portfolio_state_is_scoped_by_symbol_in_schema_and_runtime_paths():
+    migration = _read(
+        BACKEND_ROOT
+        / "scripts"
+        / "migrations"
+        / "2026_06_05_bot_portfolio_symbol_scope.py"
+    )
+    repository = _read(
+        BACKEND_ROOT / "infrastructure" / "repositories" / "bot_repository.py"
+    )
+    agent = _read(BACKEND_ROOT / "ai_agents" / "trading_bot_agent.py")
+
+    assert "ux_bot_portfolios_bot_symbol" in migration
+    assert "ON bot_portfolios (bot_id, symbol)" in migration
+    assert "DROP INDEX IF EXISTS" in migration
+
+    assert "ON CONFLICT (bot_id, symbol) DO UPDATE SET" in repository
+    assert "p.symbol = COALESCE(NULLIF(UPPER(c.symbol), ''), NULLIF(UPPER(st.symbol), ''), 'BTC')" in repository
+
+    assert "ON CONFLICT (bot_id, symbol) DO UPDATE SET" in agent
+    assert "WHERE user_id = %s AND bot_id = %s AND symbol = %s" in agent
+    assert 'portfolio_state = get_bot_portfolio_state(conn, user_id, bot["bot_id"], symbol)' in agent
+
+
 def test_bot_decision_generation_is_unique_per_user_bot_decision_date():
     source = _read(BACKEND_ROOT / "ai_agents" / "trading_bot_agent.py")
 

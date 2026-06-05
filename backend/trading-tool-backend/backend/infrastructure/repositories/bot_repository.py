@@ -242,7 +242,7 @@ class BotRepository:
                 CASE WHEN CAST(:qty_delta AS NUMERIC) > 0 THEN ABS(CAST(:cash_delta AS NUMERIC)) ELSE 0 END,
                 CASE WHEN CAST(:qty_delta AS NUMERIC) > 0 THEN ABS(CAST(:cash_delta AS NUMERIC)) / CAST(:qty_delta AS NUMERIC) ELSE 0 END,
                 0, NOW()
-            ON CONFLICT (bot_id) DO UPDATE SET
+            ON CONFLICT (bot_id, symbol) DO UPDATE SET
                 cash_eur = bot_portfolios.cash_eur + EXCLUDED.cash_eur,
                 realized_pnl_eur = bot_portfolios.realized_pnl_eur + (
                     CASE 
@@ -592,9 +592,11 @@ class BotRepository:
                 COALESCE(c.budget_daily_limit_eur, 0) AS budget_daily_limit_eur,
                 COALESCE(c.risk_profile, 'balanced') AS risk_profile
             FROM bot_configs c
-            LEFT JOIN bot_portfolios p ON p.bot_id = c.id
             LEFT JOIN strategies s     ON s.id = c.strategy_id
             LEFT JOIN setups st        ON st.id = s.setup_id
+            LEFT JOIN bot_portfolios p
+                   ON p.bot_id = c.id
+                  AND p.symbol = COALESCE(NULLIF(UPPER(c.symbol), ''), NULLIF(UPPER(st.symbol), ''), 'BTC')
             WHERE c.user_id = :user_id
             ORDER BY c.id ASC
         """)

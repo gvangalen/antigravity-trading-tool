@@ -932,7 +932,7 @@ def record_bot_ledger_entry(
                     CASE WHEN %s > 0 THEN ABS(%s) ELSE 0 END,
                     CASE WHEN %s > 0 THEN ABS(%s) / %s ELSE 0 END,
                     0, NOW()
-                ON CONFLICT (bot_id) DO UPDATE SET
+                ON CONFLICT (bot_id, symbol) DO UPDATE SET
                     cash_eur = bot_portfolios.cash_eur + EXCLUDED.cash_eur,
                     realized_pnl_eur = bot_portfolios.realized_pnl_eur + (
                         CASE 
@@ -1035,15 +1035,15 @@ def get_bot_balance(conn, user_id: int, bot_id: int) -> float:
         )
         return float(cur.fetchone()[0] or 0.0)
 
-def get_bot_portfolio_state(conn, user_id: int, bot_id: int) -> Dict[str, Any]:
+def get_bot_portfolio_state(conn, user_id: int, bot_id: int, symbol: str) -> Dict[str, Any]:
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT cash_eur, position_qty, invested_eur, realized_pnl_eur
             FROM bot_portfolios
-            WHERE user_id = %s AND bot_id = %s
+            WHERE user_id = %s AND bot_id = %s AND symbol = %s
             """,
-            (user_id, bot_id),
+            (user_id, bot_id, (symbol or "BTC").upper()),
         )
         row = cur.fetchone()
         if not row:
@@ -1451,7 +1451,7 @@ def run_trading_bot_agent(
             # =========================
             # PORTFOLIO CONTEXT (ACCURATE)
             # =========================
-            portfolio_state = get_bot_portfolio_state(conn, user_id, bot["bot_id"])
+            portfolio_state = get_bot_portfolio_state(conn, user_id, bot["bot_id"], symbol)
             
             today_spent_eur = get_today_spent_eur(
                 conn,
