@@ -197,6 +197,11 @@ Acceptance:
 - one supported deployment route per environment
 - legacy operator traps are removed from normal deploy flow
 
+Current implementation note:
+
+- first deploy-path consolidation slice is now built locally in
+  [Platform Hardening Tranche D — Operations Consolidation](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-d-operations-consolidation.md)
+
 ## What Not To Do In This Phase
 
 Do not:

@@ -24,7 +24,7 @@ lower_bool() {
 
 case "$ENVIRONMENT" in
   production)
-    PM2_CONFIG="ecosystem.config.js"
+    PM2_CONFIG="ecosystem.production.config.js"
     PM2_DEPLOY_MODE="${PM2_DEPLOY_MODE:-phased}"
     BACKEND_PORT="${BACKEND_PORT:-8000}"
     FRONTEND_PORT="${FRONTEND_PORT:-5002}"
@@ -120,13 +120,8 @@ if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
 
   cd ../..
   if [ ! -f \"$PM2_CONFIG\" ]; then
-    if [ -f ecosystem.config.js ]; then
-      echo \"⚠️ PM2 config $PM2_CONFIG not found; falling back to ecosystem.config.js.\" >&2
-      PM2_CONFIG=\"ecosystem.config.js\"
-    else
-      echo \"❌ PM2 config $PM2_CONFIG not found on remote host.\" >&2
-      exit 1
-    fi
+    echo \"❌ PM2 config $PM2_CONFIG not found on remote host.\" >&2
+    exit 1
   fi
   check_pm2_apps_online() {
     for attempt in \$(seq 1 20); do

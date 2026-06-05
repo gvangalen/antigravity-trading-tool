@@ -34,7 +34,7 @@ def test_rollback_env_persists_previous_commit_and_pm2_fallback():
     source = (REPO_ROOT / "ops" / "deploy" / "rollback_env.sh").read_text(encoding="utf-8")
 
     assert 'CURRENT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || true)"' in source
-    assert "PM2 config $PM2_CONFIG not found; falling back to ecosystem.config.js." in source
+    assert 'echo "❌ PM2 config $PM2_CONFIG not found on remote host." >&2' in source
     assert 'printf "%s\\n" "$CURRENT_COMMIT" > "${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT"' in source
     assert 'sudo tee /var/www/tradamind/ops/deploy/PREVIOUS_GOOD_COMMIT' in source
 

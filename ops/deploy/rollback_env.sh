@@ -53,13 +53,8 @@ git fetch origin
 git reset --hard "$ROLLBACK_COMMIT"
 
 if [ ! -f "$PM2_CONFIG" ]; then
-  if [ -f ecosystem.config.js ]; then
-    echo "⚠️ PM2 config $PM2_CONFIG not found; falling back to ecosystem.config.js." >&2
-    PM2_CONFIG="ecosystem.config.js"
-  else
-    echo "❌ PM2 config $PM2_CONFIG not found on remote host." >&2
-    exit 1
-  fi
+  echo "❌ PM2 config $PM2_CONFIG not found on remote host." >&2
+  exit 1
 fi
 
 check_pm2_apps_online() {
