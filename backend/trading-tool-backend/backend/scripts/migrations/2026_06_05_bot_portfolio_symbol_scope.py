@@ -23,12 +23,15 @@ DO $$
 DECLARE
     index_name text;
 BEGIN
+    ALTER TABLE bot_portfolios
+    DROP CONSTRAINT IF EXISTS bot_portfolios_bot_id_key;
+
     FOR index_name IN
         SELECT indexname
         FROM pg_indexes
         WHERE schemaname = 'public'
           AND tablename = 'bot_portfolios'
-          AND indexdef ILIKE 'CREATE UNIQUE INDEX%ON public.bot_portfolios USING btree (bot_id)%'
+          AND indexdef ILIKE 'CREATE UNIQUE INDEX%ON %.bot_portfolios% (bot_id)%'
     LOOP
         EXECUTE format('DROP INDEX IF EXISTS %I', index_name);
     END LOOP;
