@@ -30,6 +30,10 @@ def test_deploy_script_gates_pm2_processes_and_has_fallback_rebuild():
     assert 'pm2 startOrReload $PM2_CONFIG --update-env && check_pm2_apps_online' in source
     assert "pm2 delete all || true" in source
     assert 'pm2 start $PM2_CONFIG --only \\"$CORE_PM2_APPS\\" --update-env' in source
+    assert 'wait_for_backend_listen()' in source
+    assert 'restart_backend_app()' in source
+    assert 'stabilize_backend_app()' in source
+    assert 'pm2 delete \\"$BACKEND_APP\\" || true' in source
     assert "pm2 save --force" in source
     assert 'PM2_CONFIG="ecosystem.production.config.js"' in source
 
@@ -62,6 +66,7 @@ def test_rollback_helper_resets_code_and_runs_health_smoke_without_migrations():
     assert 'git reset --hard "$ROLLBACK_COMMIT"' in source
     assert 'pm2 startOrReload "$PM2_CONFIG" --update-env' in source
     assert "check_pm2_apps_online" in source
+    assert "stabilize_backend_app" in source
     assert "/api/health" in source
     assert "/api/system/health" in source
     assert 'http://127.0.0.1:${FRONTEND_PORT}/report' in source

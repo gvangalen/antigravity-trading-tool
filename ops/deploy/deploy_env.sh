@@ -26,6 +26,7 @@ case "$ENVIRONMENT" in
   production)
     PM2_CONFIG="ecosystem.production.config.js"
     PM2_DEPLOY_MODE="${PM2_DEPLOY_MODE:-phased}"
+    BACKEND_APP="${BACKEND_APP:-backend}"
     BACKEND_PORT="${BACKEND_PORT:-8000}"
     FRONTEND_PORT="${FRONTEND_PORT:-5002}"
     CORE_PM2_APPS="${CORE_PM2_APPS:-frontend,backend}"
@@ -37,6 +38,7 @@ case "$ENVIRONMENT" in
   staging)
     PM2_CONFIG="ecosystem.staging.config.js"
     PM2_DEPLOY_MODE="${PM2_DEPLOY_MODE:-reload_then_fallback}"
+    BACKEND_APP="${BACKEND_APP:-backend-staging}"
     BACKEND_PORT="${BACKEND_PORT:-8100}"
     FRONTEND_PORT="${FRONTEND_PORT:-5102}"
     CORE_PM2_APPS="${CORE_PM2_APPS:-frontend-staging,backend-staging}"
@@ -182,6 +184,32 @@ PY
     return 1
   }
 
+  wait_for_backend_listen() {
+    local attempts=\"\${1:-60}\"
+    for i in \$(seq 1 \"\$attempts\"); do
+      if ss -ltn | grep -q \":$BACKEND_PORT \"; then
+        return 0
+      fi
+      sleep 2
+    done
+    return 1
+  }
+
+  restart_backend_app() {
+    echo \"⚠️ Restarting backend app ${BACKEND_APP} to recover startup/bind drift.\" >&2
+    pm2 delete \"$BACKEND_APP\" || true
+    pm2 start $PM2_CONFIG --only \"$BACKEND_APP\" --update-env
+  }
+
+  stabilize_backend_app() {
+    if wait_for_backend_listen 45 && wait_for_backend_health 60; then
+      return 0
+    fi
+    restart_backend_app
+    wait_for_backend_listen 60
+    wait_for_backend_health 90
+  }
+
   rebuild_pm2_processes() {
     echo \"⚠️ Rebuilding PM2 process list with phased startup.\" >&2
     if [ \"$DEPLOY_COMPONENT_SET\" = \"backend_only\" ]; then
@@ -190,7 +218,7 @@ PY
       pm2 delete all || true
     fi
     pm2 start $PM2_CONFIG --only \"$CORE_PM2_APPS\" --update-env
-    if ! wait_for_backend_health 120; then
+    if ! stabilize_backend_app; then
       echo \"❌ Backend did not become healthy during phased core startup.\" >&2
       exit 1
     fi
@@ -209,13 +237,13 @@ PY
       rebuild_pm2_processes
     fi
 
-    if ! wait_for_backend_health 45; then
+    if ! stabilize_backend_app; then
       echo \"⚠️ Backend did not become healthy after reload; retrying with clean PM2 rebuild.\" >&2
       rebuild_pm2_processes
     fi
   fi
 
-  if ! wait_for_backend_health 120; then
+  if ! stabilize_backend_app; then
     echo \"❌ Lightweight health did not become ready after clean PM2 rebuild.\" >&2
     exit 1
   fi

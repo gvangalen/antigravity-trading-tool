@@ -28,6 +28,9 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert "External smoke failed" in source
     assert "PREVIOUS_GOOD_COMMIT" in source
     assert "/var/www/tradamind/ops/deploy/PREVIOUS_GOOD_COMMIT" in source
+    assert 'BACKEND_APP="${BACKEND_APP:-backend}"' in source
+    assert 'wait_for_backend_listen()' in source
+    assert 'restart_backend_app()' in source
 
 
 def test_rollback_env_persists_previous_commit_and_pm2_fallback():
@@ -35,8 +38,10 @@ def test_rollback_env_persists_previous_commit_and_pm2_fallback():
 
     assert 'CURRENT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || true)"' in source
     assert 'echo "❌ PM2 config $PM2_CONFIG not found on remote host." >&2' in source
+    assert "Waiting for git lock to clear during rollback" in source
     assert 'printf "%s\\n" "$CURRENT_COMMIT" > "${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT"' in source
     assert 'sudo tee /var/www/tradamind/ops/deploy/PREVIOUS_GOOD_COMMIT' in source
+    assert 'stabilize_backend_app' in source
 
 
 def test_mission_control_api_uses_short_ttl_cache_and_invalidates_after_finn_execute():

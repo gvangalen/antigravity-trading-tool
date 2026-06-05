@@ -222,7 +222,8 @@ Do not:
 2. Workstream B — Queue Discipline
 3. Workstream C — Async Session Correctness
 4. Workstream D — Operations Consolidation
-5. rerun platform hardening QA and live smoke
+5. Tranche F — Deploy Stability
+6. rerun platform hardening QA and live smoke
 
 ## Definition Of Done
 

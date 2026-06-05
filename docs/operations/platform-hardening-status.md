@@ -42,6 +42,7 @@ The main remaining risk is operational scale, not core request correctness:
 | Tranche C - Async Session Correctness | Green | Dashboard and assistant context paths no longer parallelize shared-session DB reads, and platform hardening tests now guard those paths explicitly. |
 | Tranche D - Operations Consolidation | Live with rollout caveat | Deploy and rollback now use explicit environment PM2 configs, and the legacy `deploy.sh` path is intentionally blocked. Production smoke recovered to external `/api/health` `200`, `/report` `200`, external `/api/system/health` `401`, while internal deep health remained degraded on broker/celery timeouts during rollout. |
 | Tranche E - Symbol/State Cleanup | Built locally, pending deploy | Bot portfolio state is now scoped by `(bot_id, symbol)` so symbol changes no longer collapse state into one row. |
+| Tranche F - Deploy Stability | Built locally, pending deploy | Deploy/rollback now wait for backend bind plus health, can do a backend-only rescue restart, and rollback clears stale git remote refs before fetch. |
 | Security Hardening Slice | Nearly green | External `/api/system/health` is operator-only, web/mobile auth contracts are corrected, refresh rotation and logout invalidation work, Finn `action_id` execute + replay is live, and rate limits are enforced on execute/manual-order/preflight routes. Remaining QA is a real user-switch cache pass and hard no-write proof for market-data read routes. |
 
 ## Current Live Baseline
@@ -190,6 +191,7 @@ See also:
 - [Platform Hardening Tranche C — Async Session Correctness](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-c-async-session-correctness.md)
 - [Platform Hardening Tranche D — Operations Consolidation](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-d-operations-consolidation.md)
 - [Platform Hardening Tranche E — Symbol/State Cleanup](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-e-symbol-state-cleanup.md)
+- [Platform Hardening Tranche F — Deploy Stability](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-f-deploy-stability.md)
 
 1. Finish the two remaining security QA proofs.
    - Browser user-switch cache check with a second onboarded account.

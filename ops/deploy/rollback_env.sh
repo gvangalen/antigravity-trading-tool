@@ -15,12 +15,14 @@ NODE_BIN="${NODE_BIN:-/home/ubuntu/.nvm/versions/node/v18.20.8/bin}"
 case "$ENVIRONMENT" in
   production)
     PM2_CONFIG="ecosystem.production.config.js"
+    BACKEND_APP="${BACKEND_APP:-backend}"
     BACKEND_PORT="${BACKEND_PORT:-8000}"
     FRONTEND_PORT="${FRONTEND_PORT:-5002}"
     EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-beat}"
     ;;
   staging)
     PM2_CONFIG="ecosystem.staging.config.js"
+    BACKEND_APP="${BACKEND_APP:-backend-staging}"
     BACKEND_PORT="${BACKEND_PORT:-8100}"
     FRONTEND_PORT="${FRONTEND_PORT:-5102}"
     EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-market-portfolio-staging celery-worker-scoring-execution-staging celery-worker-ai-reporting-staging celery-beat-staging}"
@@ -49,7 +51,14 @@ if [ -z "$ROLLBACK_COMMIT" ]; then
 fi
 
 echo "↩️ Rolling ${ENVIRONMENT} back to ${ROLLBACK_COMMIT}..."
-git fetch origin
+for attempt in $(seq 1 5); do
+  rm -f .git/index.lock .git/refs/remotes/origin/main.lock .git/refs/remotes/origin/main .git/refs/remotes/origin/develop.lock .git/refs/remotes/origin/develop
+  if git fetch origin; then
+    break
+  fi
+  echo "⏳ Waiting for git lock to clear during rollback (attempt $attempt/5)..." >&2
+  sleep 2
+done
 git reset --hard "$ROLLBACK_COMMIT"
 
 if [ ! -f "$PM2_CONFIG" ]; then
@@ -108,8 +117,46 @@ PY
   return 1
 }
 
+wait_for_backend_health() {
+  local attempts="${1:-90}"
+  for i in $(seq 1 "$attempts"); do
+    if curl --max-time 5 -fsS -H 'Host: 127.0.0.1' "http://127.0.0.1:${BACKEND_PORT}/api/health" >/tmp/tradamind_rollback_health.json 2>/dev/null; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+wait_for_backend_listen() {
+  local attempts="${1:-60}"
+  for i in $(seq 1 "$attempts"); do
+    if ss -ltn | grep -q ":${BACKEND_PORT} "; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+restart_backend_app() {
+  echo "⚠️ Restarting backend app ${BACKEND_APP} during rollback stabilization." >&2
+  pm2 delete "$BACKEND_APP" || true
+  pm2 start "$PM2_CONFIG" --only "$BACKEND_APP" --update-env
+}
+
+stabilize_backend_app() {
+  if wait_for_backend_listen 45 && wait_for_backend_health 60; then
+    return 0
+  fi
+  restart_backend_app
+  wait_for_backend_listen 60
+  wait_for_backend_health 90
+}
+
 pm2 startOrReload "$PM2_CONFIG" --update-env
 check_pm2_apps_online
+stabilize_backend_app
 pm2 save --force
 
 curl --max-time 10 -fsS -H 'Host: 127.0.0.1' "http://127.0.0.1:${BACKEND_PORT}/api/health"
