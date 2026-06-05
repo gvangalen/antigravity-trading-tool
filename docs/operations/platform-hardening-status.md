@@ -1,6 +1,6 @@
 # Platform Hardening Status
 
-Last updated: 2026-05-25
+Last updated: 2026-06-05
 
 This document tracks the reliability/platform hardening track after the first six phases. It separates what is now production-ready for V1 from what remains legacy, scale-tuning, or enterprise-level work.
 
@@ -21,6 +21,7 @@ The main remaining risk is operational scale, not core request correctness:
 - old psycopg2/background flows remain explicit legacy boundaries, with regime memory and daily report writes moved behind repositories
 - frontend polling/read-amplification has a first V1 reduction in place
 - first enterprise rollout/tracing controls are in place
+- security/auth hardening is functionally green with two final QA proofs still open
 
 ## Phase Status
 
@@ -36,27 +37,30 @@ The main remaining risk is operational scale, not core request correctness:
 | Step 6 - Enterprise Safety Slice | Green | API responses carry `X-Trace-Id`; deploy verifies expected PM2 apps, rebuilds the process list if reload leaves gaps, persists `LAST_GOOD_COMMIT`, and ships an explicit rollback helper. |
 | Step 7 - Multi-Instance Cache Coordination | Green | Mobile/dashboard, market-intelligence, and transition-risk process-local caches are removed; future caching must be shared/Redis-backed with explicit invalidation. |
 | Step 8 - Replay/Exactly-Once Hardening | Green | Assistant pending actions are atomically claimed before side effects; stored execution results support safe retries; replay inventory documents execution-adjacent guards. |
+| Tranche A - Execution Safety | Built locally, pending deploy | Bot-generated execution now has DB replay guards, atomic `planned -> executing` claims, explicit `failed_execution` fallback, and honest Celery retry semantics. |
+| Security Hardening Slice | Nearly green | External `/api/system/health` is operator-only, web/mobile auth contracts are corrected, refresh rotation and logout invalidation work, Finn `action_id` execute + replay is live, and rate limits are enforced on execute/manual-order/preflight routes. Remaining QA is a real user-switch cache pass and hard no-write proof for market-data read routes. |
 
 ## Current Live Baseline
 
 Latest deployed hardening commit:
 
-- `ab02798` - `Platform reliability step 7 multi-instance cache coordination`
+- `ff19938` - `Finish auth refresh-session fix and lock down external system health`
 
 Current rollout candidate:
 
-- `Platform reliability step 8 replay/exactly-once hardening`
+- `Security slice final QA candidate on Oracle`
 
 Latest smoke results from deploy:
 
 - `/api/health`: `ok`
-- `/api/system/health`: `ok`
+- `/api/system/health` externally: `401 Missing access token`
 - `/report`: `200`
 - Celery workers: `default`, `market-portfolio`, `scoring-execution`, `ai-reporting`
+- Oracle markers: `HEAD=ff19938a`, `LAST_GOOD_COMMIT=ff19938`, `PREVIOUS_GOOD_COMMIT=4ba495f`
 
 Latest local regression:
 
-- `pytest -q`: `298 passed`
+- `pytest -q`: `329 passed`
 
 ## What Is Done
 
@@ -111,6 +115,19 @@ Latest local regression:
 - Bot decision trigger/skip/mark-executed responses carry the request trace.
 - Mission Control activity feed exposes trace ids from `ai_pending_actions`.
 
+### Security/auth hardening
+
+- External deep health now requires auth; deploy/rollback smoke still works over direct localhost access on Oracle.
+- Web login returns cookie-only auth transport and does not expose access/refresh tokens in the JSON body.
+- Mobile login returns rotated access/refresh tokens in the JSON body and still sets cookies.
+- Refresh tokens are DB-backed, rotated on refresh, and revoked on logout.
+- Finn execute accepts server-issued `action_id` only; forged `{ action: ... }` payloads are rejected.
+- Finn replay returns explicit `replayed = true`.
+- Sensitive routes now enforce runtime rate limits:
+  - `/api/assistant/actions/execute`
+  - `/api/orders/manual`
+  - `/api/orders/manual/preflight`
+
 ### Cleanup/consistency
 
 - Notifications API no longer trusts `user_id` from request body for ownership.
@@ -155,29 +172,42 @@ Latest local regression:
 - Deep end-to-end tracing per decision/order/report beyond the request `X-Trace-Id`.
 - Admin search/report trace surfacing can be expanded further once QA decides which operator screens need trace-first filtering.
 - Wider exactly-once semantics can still be expanded into provider/exchange replay protection if external exchange APIs expose stronger idempotency contracts.
+- Security QA still has two non-blocking proofs to close:
+  - browser user A -> user B cache/user-switch validation
+  - hard no-write proof for market-data read routes beyond runtime/log indications
 
 ## Recommended Next Work
 
-1. Controlled legacy queue drain operations are active.
+See also:
+
+- [Tradamind Platform Hardening Plan](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-next-plan.md)
+- [Platform Hardening Tranche A — Execution Safety](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-a-execution-safety.md)
+
+1. Finish the two remaining security QA proofs.
+   - Browser user-switch cache check with a second onboarded account.
+   - Harder no-write observability check for market-data read routes.
+   - No new code is required unless one of those checks finds a regression.
+
+2. Controlled legacy queue drain operations are active.
    - Use `docs/operations/legacy-celery-queue-drain.md`.
    - Save artifacts and compare `operator_summary`.
    - Stop based on `reroute_ratio_after` and `top_tasks_after`, not total backlog alone.
    - Latest controlled run processed `1500`, rerouted `1500`, kept `0`, then stopped on `max_processed_total_reached`.
    - Default queue was about `48714` after the follow-up health check; wait for named queues to visibly drain before another larger cycle.
 
-2. Use queue age/throughput fields in deep health while draining.
+3. Use queue age/throughput fields in deep health while draining.
    - `queue_metrics.<queue>.oldest_message_age_seconds` is available for newly published tasks stamped with `published_at`.
    - `queue_metrics.<queue>.timestamped_sample_size` shows how much of the sampled queue can be aged.
    - `queue_metrics.<queue>.estimated_drain_per_minute` is based on the previous health check in the current backend process.
    - Legacy messages without a publish timestamp intentionally report `age_source = unavailable`.
 
-3. Continue with the remaining platform cleanup sequence.
+4. Continue with the remaining platform cleanup sequence.
    - psycopg2 legacy boundary migration/isolation is complete at the driver boundary: direct driver imports are centralized in `backend/utils/db.py`.
    - regime memory and daily report writes now use repository boundaries instead of direct `get_db_connection()` calls.
    - PushService sync DB cleanup is complete: PushService is async-first and the sync method is compatibility-only.
    - Frontend polling / `no-store` reduction is complete for the shared auth clients, dashboard scores hook, admin logs, intelligence events, market price hooks, and report generation polling.
 
-4. Then return to product OS work.
+5. Then return to product OS work.
    - Portfolio Risk 2.0 or Reports/Reflection 2.0 are now safer to build on top of this platform base.
    - The 8-step reliability remainder is now complete at V1 scope.
 

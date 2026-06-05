@@ -51,4 +51,6 @@ def test_execution_replay_inventory_documents_current_guards():
     assert "Manual orders" in source
     assert "Live preflight token usage" in source
     assert "Bot decision generation" in source
+    assert "Bot-generated execution" in source
     assert "pending -> executing" in source
+    assert "planned -> executing -> executed/failed_execution" in source

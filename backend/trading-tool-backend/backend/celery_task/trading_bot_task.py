@@ -44,7 +44,7 @@ def run_daily_trading_bot(self, user_id: int, report_date: Optional[str] = None)
         )
 
         if not result.get("ok"):
-            return result
+            raise RuntimeError(result.get("error") or "trading_bot_agent_failed")
 
         # 3️⃣ Portfolio snapshot
         try:
@@ -65,4 +65,4 @@ def run_daily_trading_bot(self, user_id: int, report_date: Optional[str] = None)
 
     except Exception as e:
         logger.exception("❌ CRASH")
-        return {"ok": False, "error": str(e)}
+        raise

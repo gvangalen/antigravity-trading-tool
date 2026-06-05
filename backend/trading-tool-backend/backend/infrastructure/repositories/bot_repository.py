@@ -200,9 +200,14 @@ class BotRepository:
     async def create_bot_execution(self, user_id: int, order_id: int, quantity: float, price: float) -> int:
         query = text("""
             INSERT INTO bot_executions (
-                user_id, bot_order_id, filled_qty, avg_fill_price, status, created_at
+                user_id, bot_order_id, filled_qty, avg_fill_price, status, created_at, updated_at
             )
-            VALUES (:user_id,:order_id,:quantity,:price,'filled',NOW())
+            VALUES (:user_id,:order_id,:quantity,:price,'filled',NOW(),NOW())
+            ON CONFLICT (user_id, bot_order_id) DO UPDATE SET
+                filled_qty = EXCLUDED.filled_qty,
+                avg_fill_price = EXCLUDED.avg_fill_price,
+                status = 'filled',
+                updated_at = NOW()
             RETURNING id
         """)
         result = await self.session.execute(query, {"user_id": user_id, "order_id": order_id, "quantity": quantity, "price": price})
@@ -216,11 +221,15 @@ class BotRepository:
                 cash_delta_eur, qty_delta, price_eur, ts
             )
             VALUES (:user_id,:bot_id,:order_id,:symbol,'execute',:cash_delta,:qty_delta,:price_eur,NOW())
+            ON CONFLICT (user_id, order_id, entry_type) WHERE entry_type = 'execute' AND order_id IS NOT NULL DO NOTHING
+            RETURNING id
         """)
-        await self.session.execute(query_ledger, {
+        ledger_result = await self.session.execute(query_ledger, {
             "user_id": user_id, "bot_id": bot_id, "order_id": order_id, "symbol": symbol, 
             "cash_delta": cash_delta, "qty_delta": qty_delta, "price_eur": price_eur
         })
+        if ledger_result.fetchone() is None:
+            return
 
         # 2. Atomic Portfolio Update (WAC Logic)
         # We gebruiken een UPSERT om de staat bij te werken.

@@ -14,6 +14,7 @@ This inventory covers execution-adjacent flows where a retry, browser double-cli
 | Live manual orders | Mandatory idempotency key + risk acknowledgement + approved live preflight token | Missing/replayed unsafe context blocks before persistence. |
 | Live preflight token usage | Token must be an executed `live_preflight_bot_decision` pending action, same bot, fresh timestamp, approved checks | Invalid, stale, wrong-bot, or unapproved tokens return clean `409` codes. |
 | Bot decision generation | Upsert on `(user_id, bot_id, decision_date)` | Regeneration updates the same day/bot decision row instead of creating duplicate daily decisions. |
+| Bot-generated execution | Atomic `planned -> executing` claim on `bot_decisions`, unique `bot_executions (user_id, bot_order_id)`, and unique execute-ledger rows per `(user_id, order_id, entry_type)` | Replays lose the claim race, duplicate execution rows collapse into the same record, and duplicate execute-ledger writes no-op before portfolio mutation. |
 | Portfolio snapshots | Upsert on `(user_id, bot_id, bucket, ts)` and `(user_id, bucket, ts)` | Repeated snapshot jobs write the same time bucket. |
 | Reports | Upsert on user/report natural keys | Repeated report generation updates the same report identity. |
 
@@ -29,3 +30,4 @@ This inventory covers execution-adjacent flows where a retry, browser double-cli
 - Executed pending actions must persist `_execution_result`.
 - Finn maintenance actions must continue using `_try_create_pending_action` and `_wait_for_action_result`.
 - Manual orders must keep the partial unique index `ux_bot_orders_user_idempotency_key`.
+- Bot execution paths must keep the `planned -> executing -> executed/failed_execution` claim boundary and the unique indexes on `bot_executions` / execute-ledger rows.

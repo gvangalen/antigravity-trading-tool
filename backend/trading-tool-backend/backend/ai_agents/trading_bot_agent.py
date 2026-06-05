@@ -900,6 +900,10 @@ def record_bot_ledger_entry(
                 symbol, cash_delta_eur, qty_delta, price_eur, note, meta, ts
             )
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+            ON CONFLICT (user_id, order_id, entry_type)
+            WHERE entry_type = 'execute' AND order_id IS NOT NULL
+            DO NOTHING
+            RETURNING id
             """,
             (
                 user_id,
@@ -915,6 +919,9 @@ def record_bot_ledger_entry(
                 json.dumps(meta or {}),
             ),
         )
+        inserted = cur.fetchone()
+        if inserted is None:
+            return False
 
         # 2. Update Portfolio State (only for 'execute' type)
         if entry_type == "execute":
@@ -961,6 +968,55 @@ def record_bot_ledger_entry(
                 qty_delta, cash_delta_eur,
                 qty_delta, cash_delta_eur, qty_delta
             ))
+    return True
+
+
+def _claim_bot_decision_for_execution(
+    *,
+    conn,
+    user_id: int,
+    bot_id: int,
+    decision_id: int,
+    executed_by: str,
+) -> bool:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE bot_decisions
+            SET status='executing',
+                executed_by=%s,
+                updated_at=NOW()
+            WHERE id=%s
+              AND user_id=%s
+              AND bot_id=%s
+              AND status='planned'
+            RETURNING id
+            """,
+            (executed_by, decision_id, user_id, bot_id),
+        )
+        return cur.fetchone() is not None
+
+
+def _mark_bot_decision_execution_failed(
+    *,
+    conn,
+    user_id: int,
+    bot_id: int,
+    decision_id: int,
+):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE bot_decisions
+            SET status='failed_execution',
+                updated_at=NOW()
+            WHERE id=%s
+              AND user_id=%s
+              AND bot_id=%s
+              AND status='executing'
+            """,
+            (decision_id, user_id, bot_id),
+        )
 
 
 # =====================================================
@@ -1061,6 +1117,9 @@ def _persist_bot_order(
                 updated_at
             )
             VALUES (%s, %s, 'pending', NOW(), NOW())
+            ON CONFLICT (user_id, bot_order_id) DO UPDATE SET
+                status = EXCLUDED.status,
+                updated_at = NOW()
             """,
             (user_id, bot_order_id),
         )
@@ -1685,82 +1744,102 @@ def _auto_execute_decision(
         raise RuntimeError("Invalid execution parameters")
 
     cash_delta, qty_delta, notional = _ledger_deltas(side, qty, price)
+    claimed = _claim_bot_decision_for_execution(
+        conn=conn,
+        user_id=user_id,
+        bot_id=bot_id,
+        decision_id=decision_id,
+        executed_by="auto",
+    )
+    if not claimed:
+        raise RuntimeError("Decision already processing or executed")
 
-    # 0) Live Execution
-    if is_live:
-        _execute_on_exchange_sync(conn, user_id, "bitvavo", symbol, side, qty, price)
+    try:
+        # 0) Live Execution
+        if is_live:
+            _execute_on_exchange_sync(conn, user_id, "bitvavo", symbol, side, qty, price)
 
+        with conn.cursor() as cur:
+            # 1) Order -> filled (BELANGRIJK: filter ook op user/bot/decision)
+            cur.execute(
+                """
+                UPDATE bot_orders
+                SET status='filled',
+                    executed_price_eur=%s,
+                    executed_qty=%s,
+                    quote_amount_eur=COALESCE(quote_amount_eur, %s),
+                    updated_at=NOW()
+                WHERE user_id=%s
+                  AND bot_id=%s
+                  AND decision_id=%s
+                RETURNING id
+                """,
+                (price, qty, notional, user_id, bot_id, decision_id),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise RuntimeError("No bot_order found to execute")
 
-    with conn.cursor() as cur:
-        # 1) Decision -> executed
-        cur.execute(
-            """
-            UPDATE bot_decisions
-            SET status='executed',
-                executed_by='auto',
-                executed_at=NOW(),
-                updated_at=NOW()
-            WHERE id=%s AND user_id=%s AND bot_id=%s
-            """,
-            (decision_id, user_id, bot_id),
-        )
+            bot_order_id = int(row[0])
 
-        # 2) Order -> filled (BELANGRIJK: filter ook op user/bot/decision)
-        cur.execute(
-            """
-            UPDATE bot_orders
-            SET status='filled',
-                executed_price_eur=%s,
-                executed_qty=%s,
-                quote_amount_eur=COALESCE(quote_amount_eur, %s),
-                updated_at=NOW()
-            WHERE user_id=%s
-              AND bot_id=%s
-              AND decision_id=%s
-            RETURNING id
-            """,
-            (price, qty, notional, user_id, bot_id, decision_id),
-        )
-        row = cur.fetchone()
-        if not row:
-            raise RuntimeError("No bot_order found to execute")
+            # 2) Ledger entry
+            record_bot_ledger_entry(
+                conn=conn,
+                user_id=user_id,
+                bot_id=bot_id,
+                entry_type="execute",
+                cash_delta_eur=cash_delta,
+                qty_delta=qty_delta,
+                price_eur=price,
+                symbol=symbol,
+                decision_id=decision_id,
+                order_id=bot_order_id,
+                note="Auto execution",
+                meta={
+                    "side": side,
+                    "price": price,
+                    "qty": qty,
+                    "notional_eur": notional,
+                },
+            )
 
-        bot_order_id = int(row[0])
+            # 3) Execution -> filled
+            cur.execute(
+                """
+                UPDATE bot_executions
+                SET status='filled',
+                    filled_qty=%s,
+                    avg_fill_price=%s,
+                    updated_at=NOW()
+                WHERE user_id=%s
+                  AND bot_order_id=%s
+                """,
+                (qty, price, user_id, bot_order_id),
+            )
 
-        # 3) ✅ Ledger entry (NU CORRECT)
-        record_bot_ledger_entry(
+            # 4) Decision -> executed
+            cur.execute(
+                """
+                UPDATE bot_decisions
+                SET status='executed',
+                    executed_by='auto',
+                    executed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+                  AND user_id=%s
+                  AND bot_id=%s
+                  AND status='executing'
+                """,
+                (decision_id, user_id, bot_id),
+            )
+    except Exception:
+        _mark_bot_decision_execution_failed(
             conn=conn,
             user_id=user_id,
             bot_id=bot_id,
-            entry_type="execute",
-            cash_delta_eur=cash_delta,
-            qty_delta=qty_delta,
-            price_eur=price,
-            symbol=symbol,
             decision_id=decision_id,
-            order_id=bot_order_id,
-            note="Auto execution",
-            meta={
-                "side": side,
-                "price": price,
-                "qty": qty,
-                "notional_eur": notional,
-            },
         )
-
-        # 4) Execution -> filled
-        cur.execute(
-            """
-            UPDATE bot_executions
-            SET status='filled',
-                filled_qty=%s,
-                avg_fill_price=%s,
-                updated_at=NOW()
-            WHERE user_id=%s
-              AND bot_order_id=%s
-            """,
-            (qty, price, user_id, bot_order_id),
-        )
+        raise
 
     logger.info(f"⚡ Auto executed | bot={bot_id} | side={side} | qty={qty} | price={price}")
 
@@ -1775,105 +1854,125 @@ def execute_manual_decision(
     bot_id: int,
     decision_id: int,
 ):
-    # 1) Pak executable order (incl side)
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT o.id, o.symbol, o.side, o.estimated_qty, o.estimated_price_eur
-            FROM bot_orders o
-            JOIN bot_decisions d ON d.id = o.decision_id
-            WHERE d.id=%s
-              AND d.user_id=%s
-              AND d.bot_id=%s
-              AND d.status='planned'
-              AND o.status IN ('ready','pending')
-            """,
-            (decision_id, user_id, bot_id),
-        )
-        row = cur.fetchone()
+    claimed = _claim_bot_decision_for_execution(
+        conn=conn,
+        user_id=user_id,
+        bot_id=bot_id,
+        decision_id=decision_id,
+        executed_by="manual",
+    )
+    if not claimed:
+        raise RuntimeError("Decision already processing or executed")
 
-    if not row:
-        raise RuntimeError("No executable order")
+    try:
+        # 1) Pak executable order (incl side)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT o.id, o.symbol, o.side, o.estimated_qty, o.estimated_price_eur
+                FROM bot_orders o
+                WHERE o.decision_id=%s
+                  AND o.user_id=%s
+                  AND o.bot_id=%s
+                  AND o.status IN ('ready','pending')
+                FOR UPDATE
+                """,
+                (decision_id, user_id, bot_id),
+            )
+            row = cur.fetchone()
 
-    bot_order_id, symbol, side, qty, price = row
-    symbol = (symbol or DEFAULT_SYMBOL).upper()
-    side = (side or "buy").lower().strip()
-    qty = float(qty or 0.0)
-    price = float(price or 0.0)
+        if not row:
+            raise RuntimeError("No executable order")
 
-    if qty <= 0 or price <= 0:
-        raise RuntimeError("Invalid order execution values")
+        bot_order_id, symbol, side, qty, price = row
+        symbol = (symbol or DEFAULT_SYMBOL).upper()
+        side = (side or "buy").lower().strip()
+        qty = float(qty or 0.0)
+        price = float(price or 0.0)
 
-    cash_delta, qty_delta, notional = _ledger_deltas(side, qty, price)
+        if qty <= 0 or price <= 0:
+            raise RuntimeError("Invalid order execution values")
 
-    # 1.5) Live Execution
-    with conn.cursor() as cur:
-        cur.execute("SELECT is_live FROM bot_configs WHERE id=%s", (bot_id,))
-        bot_live = cur.fetchone()[0]
-    
-    if bot_live:
-        _execute_on_exchange_sync(conn, user_id, "bitvavo", symbol, side, qty, price)
+        cash_delta, qty_delta, notional = _ledger_deltas(side, qty, price)
 
+        # 1.5) Live Execution
+        with conn.cursor() as cur:
+            cur.execute("SELECT is_live FROM bot_configs WHERE id=%s", (bot_id,))
+            bot_live = cur.fetchone()[0]
+        
+        if bot_live:
+            _execute_on_exchange_sync(conn, user_id, "bitvavo", symbol, side, qty, price)
 
-    with conn.cursor() as cur:
-        # 2) Decision -> executed
-        cur.execute(
-            """
-            UPDATE bot_decisions
-            SET status='executed',
-                executed_by='manual',
-                executed_at=NOW(),
-                updated_at=NOW()
-            WHERE id=%s AND user_id=%s AND bot_id=%s
-            """,
-            (decision_id, user_id, bot_id),
-        )
+        with conn.cursor() as cur:
+            # 2) Order -> filled
+            cur.execute(
+                """
+                UPDATE bot_orders
+                SET status='filled',
+                    executed_price_eur=%s,
+                    executed_qty=%s,
+                    quote_amount_eur=COALESCE(quote_amount_eur, %s),
+                    updated_at=NOW()
+                WHERE id=%s AND user_id=%s AND bot_id=%s
+                """,
+                (price, qty, notional, bot_order_id, user_id, bot_id),
+            )
 
-        # 3) Order -> filled
-        cur.execute(
-            """
-            UPDATE bot_orders
-            SET status='filled',
-                executed_price_eur=%s,
-                executed_qty=%s,
-                quote_amount_eur=COALESCE(quote_amount_eur, %s),
-                updated_at=NOW()
-            WHERE id=%s AND user_id=%s AND bot_id=%s
-            """,
-            (price, qty, notional, bot_order_id, user_id, bot_id),
-        )
+            # 3) Ledger entry
+            record_bot_ledger_entry(
+                conn=conn,
+                user_id=user_id,
+                bot_id=bot_id,
+                entry_type="execute",
+                cash_delta_eur=cash_delta,
+                qty_delta=qty_delta,
+                price_eur=price,
+                symbol=symbol,
+                decision_id=decision_id,
+                order_id=bot_order_id,
+                note="Manual execution",
+                meta={
+                    "side": side,
+                    "price": price,
+                    "qty": qty,
+                    "notional_eur": notional,
+                },
+            )
 
-        # 4) ✅ Ledger entry (NU CORRECT)
-        record_bot_ledger_entry(
+            # 4) Execution -> filled
+            cur.execute(
+                """
+                UPDATE bot_executions
+                SET status='filled',
+                    filled_qty=%s,
+                    avg_fill_price=%s,
+                    updated_at=NOW()
+                WHERE user_id=%s
+                  AND bot_order_id=%s
+                """,
+                (qty, price, user_id, bot_order_id),
+            )
+
+            # 5) Decision -> executed
+            cur.execute(
+                """
+                UPDATE bot_decisions
+                SET status='executed',
+                    executed_by='manual',
+                    executed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+                  AND user_id=%s
+                  AND bot_id=%s
+                  AND status='executing'
+                """,
+                (decision_id, user_id, bot_id),
+            )
+    except Exception:
+        _mark_bot_decision_execution_failed(
             conn=conn,
             user_id=user_id,
             bot_id=bot_id,
-            entry_type="execute",
-            cash_delta_eur=cash_delta,
-            qty_delta=qty_delta,
-            price_eur=price,
-            symbol=symbol,
             decision_id=decision_id,
-            order_id=bot_order_id,
-            note="Manual execution",
-            meta={
-                "side": side,
-                "price": price,
-                "qty": qty,
-                "notional_eur": notional,
-            },
         )
-
-        # 5) Execution -> filled
-        cur.execute(
-            """
-            UPDATE bot_executions
-            SET status='filled',
-                filled_qty=%s,
-                avg_fill_price=%s,
-                updated_at=NOW()
-            WHERE user_id=%s
-              AND bot_order_id=%s
-            """,
-            (qty, price, user_id, bot_order_id),
-        )
+        raise
