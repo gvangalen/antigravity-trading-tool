@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import { fetchAuth } from "@/lib/api/auth";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 
 // ⭐ JULLIE STANDAARD
 import { useModal } from "@/components/modal/ModalProvider";
@@ -24,19 +25,16 @@ export default function TopSetupsMini() {
   const [loading, setLoading] = useState(true);
   const [trendFilter, setTrendFilter] = useState("all");
   const [lastUpdated, setLastUpdated] = useState(null);
+  const loadingRef = useRef(false);
 
   /* -------------------------------------------------------------
      🔄 Data ophalen
   ------------------------------------------------------------- */
-  useEffect(() => {
-    loadTopSetups();
-    const interval = setInterval(() => loadTopSetups(), 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  async function loadTopSetups() {
+  async function loadTopSetups({ silent = false } = {}) {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       let data;
 
@@ -67,8 +65,16 @@ export default function TopSetupsMini() {
       setTopSetups([]);
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
   }
+
+  useVisibilityPolling(() => loadTopSetups({ silent: true }), {
+    intervalMs: 60000,
+    backgroundIntervalMs: 180000,
+    runImmediately: true,
+    deps: [],
+  });
 
   /* -------------------------------------------------------------
      🎚 Filter

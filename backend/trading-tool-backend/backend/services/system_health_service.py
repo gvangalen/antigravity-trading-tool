@@ -10,6 +10,7 @@ from sqlalchemy import text
 from backend.celery_task.legacy_queue_drain import summarize_legacy_queue_messages
 from backend.celery_task.queue_policy import DEFAULT_QUEUE, NAMED_QUEUES, rate_limit_summary_by_queue
 from backend.infrastructure.database import async_session_factory
+from backend.services.platform_metrics import process_metrics_snapshot
 
 
 def _utcnow() -> datetime:
@@ -75,12 +76,15 @@ class SystemHealthService:
             "market_snapshot": await cls._check_latest_market_snapshot(),
             "scores": await cls._check_latest_score(),
         }
+        cls._attach_queue_runtime_metadata(components)
         overall = cls._overall_status(components)
+        metrics = process_metrics_snapshot()
         return {
             "status": overall,
             "checked_at": _utcnow().isoformat(),
             "duration_ms": round((time.perf_counter() - started) * 1000, 2),
             "components": components,
+            **metrics,
         }
 
     @staticmethod
@@ -283,6 +287,25 @@ class SystemHealthService:
                 **depth_trends.get(queue_name, {}),
             }
         return metrics
+
+    @staticmethod
+    def _attach_queue_runtime_metadata(components: Dict[str, Dict[str, Any]]) -> None:
+        broker = components.get("broker") or {}
+        celery = components.get("celery") or {}
+        queue_metrics = broker.get("queue_metrics")
+        if not isinstance(queue_metrics, dict):
+            return
+
+        workers_by_queue = celery.get("workers_by_queue") if isinstance(celery.get("workers_by_queue"), dict) else {}
+        rate_limits = celery.get("rate_limits_by_queue") if isinstance(celery.get("rate_limits_by_queue"), dict) else {}
+
+        for queue_name, metric in queue_metrics.items():
+            workers = list(workers_by_queue.get(queue_name, []))
+            rate_limit = None
+            if queue_name in rate_limits and isinstance(rate_limits[queue_name], dict):
+                rate_limit = rate_limits[queue_name].get("rate_limit")
+            metric["workers"] = workers
+            metric["rate_limit"] = rate_limit
 
     @staticmethod
     async def _check_celery() -> Dict[str, Any]:

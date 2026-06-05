@@ -22,6 +22,7 @@ The main remaining risk is operational scale, not core request correctness:
 - frontend polling/read-amplification has a first V1 reduction in place
 - first enterprise rollout/tracing controls are in place
 - security/auth hardening is now regression-backed and green at V1 scope
+- runtime and repo state must now be read separately during Phase 2 scale work
 
 ## Phase Status
 
@@ -51,6 +52,15 @@ Latest deployed hardening commit:
 
 - `4b971b2` - `Finish platform hardening V1 proofs`
 
+Deploy/status convention for the next phase:
+
+- `repo_head`: the repository commit under evaluation locally or on `main`
+- `production_head`: the live runtime commit currently deployed on Oracle
+- `LAST_GOOD_COMMIT`: the last rollback-safe production marker written by deploy/rollback
+
+Generated frontend `out/` artifacts are not a source of truth for API/security contract review.
+Use source under `frontend/trading-tool-frontend/lib/` and `frontend/trading-tool-frontend/public/` first.
+
 Current rollout candidate:
 
 - `Platform hardening baseline is live on Oracle`
@@ -61,6 +71,12 @@ Latest smoke results from deploy:
 - `/api/system/health` externally: `401 {"detail":"Missing access token"}`
 - `/report`: `200`
 - Celery workers: `default`, `market-portfolio`, `scoring-execution`, `ai-reporting`, `beat`
+- Phase 2 worker topology target:
+  - `celery-worker-default`: `concurrency=2`
+  - `celery-worker-market-portfolio`: `concurrency=2`
+  - `celery-worker-scoring-execution`: `concurrency=2`
+  - `celery-worker-ai-reporting`: `concurrency=1`
+  - `celery-beat`: unchanged
 - Oracle markers: `HEAD=4b971b2`, `LAST_GOOD_COMMIT=4b971b2`
 
 Latest local regression:
@@ -162,6 +178,16 @@ Latest local regression:
 
 - `PushService` is async-first; its sync compatibility method opens an async session and does not carry sync query logic.
 - psycopg2 remains directly imported only in `backend/utils/db.py`; older background/scoring/reporting paths that still need sync access must go through an explicit boundary instead of importing the driver.
+- Remaining allowed sync DB helper boundaries are explicitly constrained to:
+  - `backend/ai_agents/trading_bot_agent.py`
+  - `backend/services/bot_service.py`
+  - `backend/services/macro_data_service.py`
+  - `backend/services/market_data_service.py`
+  - `backend/services/portfolio_snapshot_service.py`
+  - `backend/services/report_snapshot_service.py`
+  - `backend/services/setup_service.py`
+  - `backend/services/strategy_service.py`
+  - `backend/services/technical_data_service.py`
 - Recently migrated off direct helper calls:
   - `backend/ai_core/regime_memory.py`
   - `backend/celery_task/daily_report_task.py`
@@ -213,6 +239,12 @@ See also:
 4. Then return to product OS work.
    - Portfolio Risk 2.0 or Reports/Reflection 2.0 are now safer to build on top of this platform base.
    - The 8-step reliability remainder is now complete at V1 scope.
+
+5. Platform Phase 2 now shifts from correctness to scale/ops.
+   - raise worker throughput conservatively per queue class
+   - surface queue lag / retry / replay / dedupe counters in deep health
+   - keep frontend polling single-flight and visibility-aware on read-heavy surfaces
+   - treat generated frontend artifacts as review byproducts, not contract authority
 
 ## QA Reference
 

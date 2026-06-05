@@ -22,6 +22,13 @@ const ENVIRONMENTS = {
   },
 };
 
+const WORKER_CONCURRENCY = {
+  default: 2,
+  marketPortfolio: 2,
+  scoringExecution: 2,
+  aiReporting: 1,
+};
+
 function createEcosystem(environmentName) {
   const environment = ENVIRONMENTS[environmentName];
   if (!environment) {
@@ -67,7 +74,7 @@ function createEcosystem(environmentName) {
       {
         name: defaultWorker,
         script: CELERY_BIN,
-        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=1 -Q ${queuePrefix}celery -n ${environmentName}-default@%h`,
+        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=${WORKER_CONCURRENCY.default} -Q ${queuePrefix}celery -n ${environmentName}-default@%h`,
         cwd: backendDir,
         interpreter: "none",
         env: {
@@ -78,7 +85,7 @@ function createEcosystem(environmentName) {
       {
         name: marketPortfolioWorker,
         script: CELERY_BIN,
-        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=1 -Q ${queuePrefix}market_data,${queuePrefix}portfolio -n ${environmentName}-market-portfolio@%h`,
+        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=${WORKER_CONCURRENCY.marketPortfolio} -Q ${queuePrefix}market_data,${queuePrefix}portfolio -n ${environmentName}-market-portfolio@%h`,
         cwd: backendDir,
         interpreter: "none",
         env: {
@@ -89,7 +96,7 @@ function createEcosystem(environmentName) {
       {
         name: scoringExecutionWorker,
         script: CELERY_BIN,
-        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=1 -Q ${queuePrefix}scoring,${queuePrefix}execution_critical -n ${environmentName}-scoring-execution@%h`,
+        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=${WORKER_CONCURRENCY.scoringExecution} -Q ${queuePrefix}scoring,${queuePrefix}execution_critical -n ${environmentName}-scoring-execution@%h`,
         cwd: backendDir,
         interpreter: "none",
         env: {
@@ -100,7 +107,7 @@ function createEcosystem(environmentName) {
       {
         name: aiReportingWorker,
         script: CELERY_BIN,
-        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=1 -Q ${queuePrefix}ai_generation -n ${environmentName}-ai-reporting@%h`,
+        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=${WORKER_CONCURRENCY.aiReporting} -Q ${queuePrefix}ai_generation -n ${environmentName}-ai-reporting@%h`,
         cwd: backendDir,
         interpreter: "none",
         env: {
@@ -126,4 +133,5 @@ function createEcosystem(environmentName) {
 module.exports = {
   createEcosystem,
   ENVIRONMENTS,
+  WORKER_CONCURRENCY,
 };

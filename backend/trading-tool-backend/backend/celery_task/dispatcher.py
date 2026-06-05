@@ -10,6 +10,7 @@ from backend.celery_task.queue_policy import (
     resolve_dispatch_window_seconds,
     resolve_workload_class,
 )
+from backend.services.platform_metrics import increment_dispatcher_counter
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,7 @@ def dispatch_for_all_users(
                     pass
 
         if skipped_due_to_existing_wave:
+            increment_dispatcher_counter("wave_lease_skip_count")
             logger.warning(
                 "⏭️ Dispatcher skip task=%s queue=%s workload=%s reason=wave_already_active window=%s",
                 task_name,
@@ -185,6 +187,7 @@ def dispatch_for_all_users(
             }
 
         if skipped_due_to_backlog:
+            increment_dispatcher_counter("backlog_skip_count")
             logger.warning(
                 "⏭️ Dispatcher skip task=%s queue=%s workload=%s reason=queue_backlog depth=%s limit=%s",
                 task_name,
@@ -267,6 +270,7 @@ def dispatch_for_all_users(
 
                 if not user_lease_acquired:
                     deduped += 1
+                    increment_dispatcher_counter("window_dedupe_skip_count")
                     logger.info(
                         "⏭️ Dispatch dedupe task=%s queue=%s user=%s window=%s",
                         task_name,

@@ -9,6 +9,7 @@ from backend.utils.db import get_db_connection
 from backend.engine.bot_brain import run_bot_brain
 import asyncio
 from backend.services.exchange_service import ExchangeService
+from backend.services.platform_metrics import increment_execution_safety_counter
 from backend.utils.encryption_utils import EncryptionUtils
 
 
@@ -994,7 +995,10 @@ def _claim_bot_decision_for_execution(
             """,
             (executed_by, decision_id, user_id, bot_id),
         )
-        return cur.fetchone() is not None
+        claimed = cur.fetchone() is not None
+        if not claimed:
+            increment_execution_safety_counter("replay_block_hits")
+        return claimed
 
 
 def _mark_bot_decision_execution_failed(

@@ -17,6 +17,7 @@ from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
+from backend.services.platform_metrics import record_latency_sample
 from backend.services.setup_service import SetupService
 from backend.services.finn_plan_service import FinnPlanService
 
@@ -1895,102 +1896,109 @@ class AiAssistantService:
         return mapping.get(intent, "assistant")
 
     async def _build_context(self, user_id: int, intent: str) -> str:
-        context_parts = []
-        today = date.today()
+        started = time.perf_counter()
+        try:
+            context_parts = []
+            today = date.today()
 
-        if intent == "decision":
-            # The repositories behind this service often share one AsyncSession.
-            # Keep these reads sequential to avoid concurrent session use.
-            scores = await self.score_repo.get_master_score(user_id)
-            setups = await self.setup_repo.get_user_setups(user_id)
-            context_parts.append(f"CURRENT MASTER SCORE: {scores.avg_score if scores else 'N/A'}")
-            context_parts.append(f"ACTIVE SETUPS: {[s.name for s in setups]}")
+            if intent == "decision":
+                # The repositories behind this service often share one AsyncSession.
+                # Keep these reads sequential to avoid concurrent session use.
+                scores = await self.score_repo.get_master_score(user_id)
+                setups = await self.setup_repo.get_user_setups(user_id)
+                context_parts.append(f"CURRENT MASTER SCORE: {scores.avg_score if scores else 'N/A'}")
+                context_parts.append(f"ACTIVE SETUPS: {[s.name for s in setups]}")
 
-        elif intent == "report":
-            # Latest Report
-            report = await self.report_repo.get_latest_report(user_id, "daily_reports")
-            context_parts.append(f"LATEST DAILY REPORT: {report.get('summary') if report else 'No report available'}")
+            elif intent == "report":
+                # Latest Report
+                report = await self.report_repo.get_latest_report(user_id, "daily_reports")
+                context_parts.append(f"LATEST DAILY REPORT: {report.get('summary') if report else 'No report available'}")
 
-        elif intent == "coach":
-            # Strategy and history are read sequentially to keep the shared
-            # SQLAlchemy AsyncSession task-safe.
-            start_date = today - timedelta(days=7)
-            strategy = await self.strategy_repo.get_last_strategy(user_id)
-            history = await self.bot_repo.get_bot_history(user_id, start_date, today)
+            elif intent == "coach":
+                # Strategy and history are read sequentially to keep the shared
+                # SQLAlchemy AsyncSession task-safe.
+                start_date = today - timedelta(days=7)
+                strategy = await self.strategy_repo.get_last_strategy(user_id)
+                history = await self.bot_repo.get_bot_history(user_id, start_date, today)
 
-            strat_info = "No active strategy found."
-            if strategy:
-                strat_data = strategy.get('data') or {}
-                if isinstance(strat_data, str):
-                    import json
-                    strat_data = json.loads(strat_data)
-                
-                strat_info = {
-                    "name": strategy.get("name"),
-                    "type": strategy.get("setup_type"),
-                    "symbol": strategy.get("setup_symbol") or strategy.get("symbol"),
-                    "timeframe": strategy.get("setup_timeframe") or strategy.get("timeframe"),
-                    "entry_logic": strat_data.get("entry_logic") or strat_data.get("entry", "N/A"),
-                    "indicators": strat_data.get("indicators", "N/A")
+                strat_info = "No active strategy found."
+                if strategy:
+                    strat_data = strategy.get('data') or {}
+                    if isinstance(strat_data, str):
+                        import json
+                        strat_data = json.loads(strat_data)
+                    
+                    strat_info = {
+                        "name": strategy.get("name"),
+                        "type": strategy.get("setup_type"),
+                        "symbol": strategy.get("setup_symbol") or strategy.get("symbol"),
+                        "timeframe": strategy.get("setup_timeframe") or strategy.get("timeframe"),
+                        "entry_logic": strat_data.get("entry_logic") or strat_data.get("entry", "N/A"),
+                        "indicators": strat_data.get("indicators", "N/A")
+                    }
+
+                trades = [h for h in history if h.get("action") in ["buy", "sell"]]
+                skipped = [h for h in history if h.get("status") in ["skipped", "rejected"]]
+                missed_signals = [h for h in history if h.get("status") == "skipped" and h.get("action") == "buy"]
+
+                performance = {
+                    "trades_last_7d": len(trades),
+                    "missed_signals_count": len(missed_signals),
+                    "skipped_actions": len(skipped),
+                    "last_history": history[:5]
                 }
 
-            trades = [h for h in history if h.get("action") in ["buy", "sell"]]
-            skipped = [h for h in history if h.get("status") in ["skipped", "rejected"]]
-            missed_signals = [h for h in history if h.get("status") == "skipped" and h.get("action") == "buy"]
+                context_parts.append(f"COACH DATA - STRATEGY: {strat_info}")
+                context_parts.append(f"COACH DATA - PERFORMANCE: {performance}")
 
-            performance = {
-                "trades_last_7d": len(trades),
-                "missed_signals_count": len(missed_signals),
-                "skipped_actions": len(skipped),
-                "last_history": history[:5]
-            }
+            elif intent == "analysis":
+                # 📊 Market Trends & Scores with Global Fallback parallelized
+                categories = ["macro", "market", "technical"]
+                category_data = {}
 
-            context_parts.append(f"COACH DATA - STRATEGY: {strat_info}")
-            context_parts.append(f"COACH DATA - PERFORMANCE: {performance}")
+                async def get_insight_for_category(cat):
+                    stmt = select(AiCategoryInsight).where(
+                        AiCategoryInsight.user_id == user_id,
+                        AiCategoryInsight.category == cat
+                    ).order_by(AiCategoryInsight.date.desc()).limit(1)
+                    
+                    res = await self.score_repo.db.execute(stmt)
+                    user_insight = res.scalars().first()
 
-        elif intent == "analysis":
-            # 📊 Market Trends & Scores with Global Fallback parallelized
-            categories = ["macro", "market", "technical"]
-            category_data = {}
-
-            async def get_insight_for_category(cat):
-                stmt = select(AiCategoryInsight).where(
-                    AiCategoryInsight.user_id == user_id,
-                    AiCategoryInsight.category == cat
-                ).order_by(AiCategoryInsight.date.desc()).limit(1)
-                
-                res = await self.score_repo.db.execute(stmt)
-                user_insight = res.scalars().first()
-
-                if user_insight:
-                    return cat, {
-                        "summary": user_insight.summary,
-                        "bias": user_insight.bias,
-                        "score": float(user_insight.avg_score or 0)
-                    }
-                else:
-                    global_insight = await self.score_repo.get_global_insight(cat)
-                    if global_insight:
+                    if user_insight:
                         return cat, {
-                            "summary": global_insight["summary"],
-                            "bias": global_insight["bias"],
-                            "score": float(global_insight["avg_score"] or 0),
-                            "note": "GLOBAL_FALLBACK"
+                            "summary": user_insight.summary,
+                            "bias": user_insight.bias,
+                            "score": float(user_insight.avg_score or 0)
                         }
-                    return cat, None
+                    else:
+                        global_insight = await self.score_repo.get_global_insight(cat)
+                        if global_insight:
+                            return cat, {
+                                "summary": global_insight["summary"],
+                                "bias": global_insight["bias"],
+                                "score": float(global_insight["avg_score"] or 0),
+                                "note": "GLOBAL_FALLBACK"
+                            }
+                        return cat, None
 
-            for cat in categories:
-                _, data = await get_insight_for_category(cat)
-                if data:
-                    category_data[cat] = data
+                for cat in categories:
+                    _, data = await get_insight_for_category(cat)
+                    if data:
+                        category_data[cat] = data
 
-            context_parts.append(f"AI ANALYSIS CONTEXT: {category_data}")
+                context_parts.append(f"AI ANALYSIS CONTEXT: {category_data}")
 
-        # Always add basic context if needed or fallbacks
-        if not context_parts:
-            context_parts.append("General assistance mode. No specific deep context loaded.")
+            # Always add basic context if needed or fallbacks
+            if not context_parts:
+                context_parts.append("General assistance mode. No specific deep context loaded.")
 
-        return "\n".join(context_parts)
+            return "\n".join(context_parts)
+        finally:
+            record_latency_sample(
+                "assistant_context_latency_ms",
+                (time.perf_counter() - started) * 1000,
+            )
 
     async def _handle_implicit_feedback(self, user_id: int, query: str):
         # Selective preference updates only for style/tone/adaptive feedback

@@ -1,6 +1,6 @@
 # Tradamind Platform Hardening Plan
 
-Last updated: 2026-06-04
+Last updated: 2026-06-05
 
 ## Purpose
 
@@ -13,6 +13,7 @@ This plan starts from an important truth:
 
 - FINN product layers are now materially stronger
 - the next major quality gains are more platform-oriented than feature-oriented
+- the next tranche is now scale/ops optimization rather than correctness rescue
 
 ## Current Reading
 
@@ -125,6 +126,16 @@ Target outcomes:
 
 - lower backend read amplification
 - clearer freshness policy per endpoint class
+
+## Phase 2 — Scale & Observability
+
+Current implementation focus:
+
+1. queue-specific worker concurrency instead of one global worker setting
+2. deep-health process-lifetime counters for retry/replay/dedupe/latency
+3. source-vs-generated artifact hygiene in frontend contract review
+4. visibility-aware single-flight polling on read-heavy frontend surfaces
+5. explicit containment of remaining legacy sync DB boundaries
 
 ## Workstreams
 

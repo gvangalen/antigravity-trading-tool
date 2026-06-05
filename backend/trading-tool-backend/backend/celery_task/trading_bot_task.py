@@ -7,6 +7,7 @@ from typing import Optional
 from celery import shared_task
 
 from backend.ai_agents.trading_bot_agent import run_trading_bot_agent
+from backend.services.platform_metrics import increment_retry_counter
 from backend.services.portfolio_snapshot_service import snapshot_all_for_user
 from backend.celery_task.strategy_task import run_daily_strategy_snapshot
 
@@ -65,4 +66,5 @@ def run_daily_trading_bot(self, user_id: int, report_date: Optional[str] = None)
 
     except Exception as e:
         logger.exception("❌ CRASH")
+        increment_retry_counter("trading_bot_task")
         raise

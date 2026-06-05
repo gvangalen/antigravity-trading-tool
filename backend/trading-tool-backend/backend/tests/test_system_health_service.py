@@ -6,6 +6,13 @@ from backend.services.system_health_service import (
     _age_seconds,
     _as_utc,
 )
+from backend.services.platform_metrics import (
+    increment_dispatcher_counter,
+    increment_execution_safety_counter,
+    increment_retry_counter,
+    record_latency_sample,
+    reset_process_metrics,
+)
 
 
 def test_as_utc_handles_naive_datetime_as_utc():
@@ -97,6 +104,15 @@ def test_overall_status_ok_when_all_components_ok():
 
 
 def test_deep_health_returns_component_statuses(monkeypatch):
+    reset_process_metrics()
+    increment_dispatcher_counter("wave_lease_skip_count", 2)
+    increment_execution_safety_counter("replay_block_hits", 1)
+    increment_retry_counter("trading_bot_task", 3)
+    record_latency_sample("dashboard_aggregation_latency_ms", 100)
+    record_latency_sample("dashboard_aggregation_latency_ms", 250)
+    record_latency_sample("assistant_context_latency_ms", 80)
+    record_latency_sample("assistant_context_latency_ms", 160)
+
     async def ok_database():
         return {"status": "ok", "latency_ms": 1.0}
 
@@ -137,6 +153,12 @@ def test_deep_health_returns_component_statuses(monkeypatch):
     assert response["components"]["broker"]["status"] == "down"
     assert response["components"]["celery"]["worker_count"] == 1
     assert response["components"]["celery"]["rate_limits_by_queue"]["market_data"]["rate_limit"] == "20/m"
+    assert response["metrics_scope"] == "process_lifetime"
+    assert response["dispatcher_counters"]["wave_lease_skip_count"] == 2
+    assert response["execution_safety_counters"]["replay_block_hits"] == 1
+    assert response["retry_counters"]["trading_bot_task"] == 3
+    assert response["latency_metrics"]["dashboard_aggregation_latency_ms_p50"] == 100.0
+    assert response["latency_metrics"]["assistant_context_latency_ms_p95"] == 160.0
     assert response["duration_ms"] >= 0
 
 
@@ -224,3 +246,28 @@ def test_check_broker_includes_default_queue_sample(monkeypatch):
     assert result["queue_metrics"]["celery"]["depth"] == 3
     assert result["queue_metrics"]["celery"]["timestamped_sample_size"] == 1
     assert result["queue_metrics"]["market_data"]["depth"] == 0
+
+
+def test_attach_queue_runtime_metadata_adds_workers_and_rate_limit():
+    components = {
+        "broker": {
+            "queue_metrics": {
+                "market_data": {"depth": 4},
+                "portfolio": {"depth": 0},
+            }
+        },
+        "celery": {
+            "workers_by_queue": {"market_data": ["worker-a"], "portfolio": []},
+            "rate_limits_by_queue": {
+                "market_data": {"rate_limit": "20/m"},
+                "portfolio": {"rate_limit": None},
+            },
+        },
+    }
+
+    SystemHealthService._attach_queue_runtime_metadata(components)
+
+    assert components["broker"]["queue_metrics"]["market_data"]["workers"] == ["worker-a"]
+    assert components["broker"]["queue_metrics"]["market_data"]["rate_limit"] == "20/m"
+    assert components["broker"]["queue_metrics"]["portfolio"]["workers"] == []
+    assert components["broker"]["queue_metrics"]["portfolio"]["rate_limit"] is None

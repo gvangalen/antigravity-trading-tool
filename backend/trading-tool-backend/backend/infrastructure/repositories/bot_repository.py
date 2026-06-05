@@ -4,6 +4,8 @@ from sqlalchemy import text
 from datetime import date
 import json
 
+from backend.services.platform_metrics import increment_execution_safety_counter
+
 class BotRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -229,6 +231,7 @@ class BotRepository:
             "cash_delta": cash_delta, "qty_delta": qty_delta, "price_eur": price_eur
         })
         if ledger_result.fetchone() is None:
+            increment_execution_safety_counter("execution_duplicate_guard_hits")
             return
 
         # 2. Atomic Portfolio Update (WAC Logic)

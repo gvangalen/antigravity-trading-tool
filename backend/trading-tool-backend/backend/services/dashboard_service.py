@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import datetime, timezone
 from typing import List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +7,7 @@ from sqlalchemy import text
 from fastapi import HTTPException
 
 from backend.infrastructure.repositories.dashboard_repository import DashboardRepository
+from backend.services.platform_metrics import record_latency_sample
 from backend.schemas.dashboard_schema import (
     DashboardResponse, MobileOverviewResponse, MobilePortfolioOverviewSchema,
     MobileAssetWatchlistSchema, MobileActiveBotSchema, MobileFinnBriefingSchema,
@@ -51,6 +53,7 @@ class DashboardService:
         )
 
     async def get_dashboard_data(self, user_id: int, symbol: str = "BTC") -> DashboardResponse:
+        started = time.perf_counter()
         try:
             # A single AsyncSession backs this service. Keep DB work sequential
             # so one request cannot concurrently drive multiple awaits through
@@ -124,6 +127,11 @@ class DashboardService:
         except Exception as e:
             logger.error(f"❌ Dashboard data aggregatie faalde: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Dashboard data ophalen mislukt.")
+        finally:
+            record_latency_sample(
+                "dashboard_aggregation_latency_ms",
+                (time.perf_counter() - started) * 1000,
+            )
             
     async def get_trading_advice(self, symbol: str, user_id: int) -> dict:
         row = await self.repository.get_latest_trading_advice(user_id, symbol)

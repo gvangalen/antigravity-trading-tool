@@ -3,6 +3,8 @@
 import { fetchWithRetry } from "@/lib/utils/fetchWithRetry";
 import { fetchAuth } from "@/lib/api/auth";
 
+const inflightLatestPriceRequests = new Map();
+
 //
 // =======================================================
 // 1) PUBLIC MARKET DATA (GEEN AUTH)
@@ -10,15 +12,25 @@ import { fetchAuth } from "@/lib/api/auth";
 //
 
 export const fetchMarketData7d = (symbol = "BTC") => fetchWithRetry(`/api/market_data/7d?symbol=${symbol}`, "GET");
-export const fetchLatestPrice = (symbol = "BTC", options = {}) =>
-  fetchWithRetry(
+export const fetchLatestPrice = (symbol = "BTC", options = {}) => {
+  const requestKey = `${String(symbol || "BTC").toUpperCase()}:${options.forceFresh === false ? "cached" : "fresh"}`;
+  const existing = inflightLatestPriceRequests.get(requestKey);
+  if (existing) return existing;
+
+  const request = fetchWithRetry(
     `/api/market_data/${symbol}/latest`,
     "GET",
     null,
     3,
     2000,
     options.forceFresh === false ? {} : { cache: "no-store" }
-  );
+  ).finally(() => {
+    inflightLatestPriceRequests.delete(requestKey);
+  });
+
+  inflightLatestPriceRequests.set(requestKey, request);
+  return request;
+};
 export const fetchLatestBTC = () => fetchLatestPrice("BTC"); // Fallback
 
 export const syncMarketData7d = (symbol = "BTC", overwrite = false) =>
