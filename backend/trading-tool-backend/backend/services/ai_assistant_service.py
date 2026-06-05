@@ -1899,11 +1899,10 @@ class AiAssistantService:
         today = date.today()
 
         if intent == "decision":
-            # Scores & Setups parallelized
-            scores, setups = await asyncio.gather(
-                self.score_repo.get_master_score(user_id),
-                self.setup_repo.get_user_setups(user_id)
-            )
+            # The repositories behind this service often share one AsyncSession.
+            # Keep these reads sequential to avoid concurrent session use.
+            scores = await self.score_repo.get_master_score(user_id)
+            setups = await self.setup_repo.get_user_setups(user_id)
             context_parts.append(f"CURRENT MASTER SCORE: {scores.avg_score if scores else 'N/A'}")
             context_parts.append(f"ACTIVE SETUPS: {[s.name for s in setups]}")
 
@@ -1913,12 +1912,11 @@ class AiAssistantService:
             context_parts.append(f"LATEST DAILY REPORT: {report.get('summary') if report else 'No report available'}")
 
         elif intent == "coach":
-            # 1. Fetch Strategy and History in parallel
+            # Strategy and history are read sequentially to keep the shared
+            # SQLAlchemy AsyncSession task-safe.
             start_date = today - timedelta(days=7)
-            strategy, history = await asyncio.gather(
-                self.strategy_repo.get_last_strategy(user_id),
-                self.bot_repo.get_bot_history(user_id, start_date, today)
-            )
+            strategy = await self.strategy_repo.get_last_strategy(user_id)
+            history = await self.bot_repo.get_bot_history(user_id, start_date, today)
 
             strat_info = "No active strategy found."
             if strategy:
@@ -1981,8 +1979,8 @@ class AiAssistantService:
                         }
                     return cat, None
 
-            results = await asyncio.gather(*(get_insight_for_category(cat) for cat in categories))
-            for cat, data in results:
+            for cat in categories:
+                _, data = await get_insight_for_category(cat)
                 if data:
                     category_data[cat] = data
 

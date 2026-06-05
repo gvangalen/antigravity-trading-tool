@@ -1,5 +1,4 @@
 import logging
-import asyncio
 from datetime import datetime, timezone
 from typing import List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,18 +52,13 @@ class DashboardService:
 
     async def get_dashboard_data(self, user_id: int, symbol: str = "BTC") -> DashboardResponse:
         try:
-            # Parallel Database Queries
-            market_data_task = self.repository.get_latest_market_data(user_id, symbol)
-            technical_data_task = self.repository.get_latest_technical_data(user_id, symbol)
-            macro_data_task = self.repository.get_latest_macro_data(user_id)
-            setups_task = self.repository.get_user_setups_summary(user_id)
-            
-            market_data, technical_rows, macro_data, setups = await asyncio.gather(
-                market_data_task,
-                technical_data_task,
-                macro_data_task,
-                setups_task
-            )
+            # A single AsyncSession backs this service. Keep DB work sequential
+            # so one request cannot concurrently drive multiple awaits through
+            # the same transaction/session state.
+            market_data = await self.repository.get_latest_market_data(user_id, symbol)
+            technical_rows = await self.repository.get_latest_technical_data(user_id, symbol)
+            macro_data = await self.repository.get_latest_macro_data(user_id)
+            setups = await self.repository.get_user_setups_summary(user_id)
             
             # Formatting Technical Data
             technical_data = {

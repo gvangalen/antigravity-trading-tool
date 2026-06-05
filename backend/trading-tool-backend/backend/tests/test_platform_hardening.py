@@ -5,6 +5,7 @@ from pathlib import Path
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.ai_gateway import AiGateway
+from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.dashboard_service import DashboardService
 from backend.services import portfolio_snapshot_service
 
@@ -89,6 +90,24 @@ def test_mobile_overview_does_not_parallelize_shared_session_work():
     assert "get_bot_portfolios" in source
 
 
+def test_dashboard_data_does_not_parallelize_shared_session_work():
+    source = inspect.getsource(DashboardService.get_dashboard_data)
+
+    assert "asyncio.gather" not in source
+    assert "get_latest_market_data" in source
+    assert "get_latest_technical_data" in source
+
+
+def test_assistant_context_builder_does_not_parallelize_shared_session_work():
+    source = inspect.getsource(AiAssistantService._build_context)
+
+    assert "asyncio.gather" not in source
+    assert "get_master_score" in source
+    assert "get_user_setups" in source
+    assert "get_last_strategy" in source
+    assert "get_bot_history" in source
+
+
 def test_main_startup_is_schema_read_only():
     main_path = Path(__file__).resolve().parents[1] / "main.py"
     source = main_path.read_text()
@@ -103,9 +122,12 @@ def test_main_startup_is_schema_read_only():
 
 def test_deploy_script_has_no_user_specific_business_actions():
     deploy_path = Path(__file__).resolve().parents[4] / "deploy_live.sh"
-    source = deploy_path.read_text()
+    deploy_source = deploy_path.read_text()
+    deploy_env_path = Path(__file__).resolve().parents[4] / "ops" / "deploy" / "deploy_env.sh"
+    source = deploy_env_path.read_text()
 
-    assert "UID=30" not in source
+    assert "deploy_env.sh" in deploy_source
+    assert "UID=30" not in deploy_source
     assert "run_market_agent" not in source
     assert "run_macro_agent" not in source
     assert "run_technical_agent" not in source
@@ -113,14 +135,14 @@ def test_deploy_script_has_no_user_specific_business_actions():
     assert "/api/health" in source
     assert "/api/system/health" in source
     assert "tradamind_deep_health.json" in source
-    assert "seq 1 180" in source
+    assert "wait_for_backend_health" in source
     assert "health_ready=false" in source
-    assert "--max-time 30" in source
+    assert "--max-time 45" in source
     assert "json.load" in source
     assert "STRICT_DEEP_HEALTH" in source
     assert "'down', 'error'" in source or '"down", "error"' in source
-    assert "pm2 delete celery-worker" in source
-    assert "pm2 startOrReload ecosystem.config.js" in source
+    assert "pm2 delete all" in source or "pm2 delete backend" in source
+    assert "pm2 startOrReload $PM2_CONFIG --update-env" in source
 
 
 class _FakeCursor:

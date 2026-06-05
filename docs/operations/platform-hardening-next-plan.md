@@ -174,6 +174,11 @@ Acceptance:
 - no shared `AsyncSession` is awaited concurrently
 - known dashboard and assistant read paths are explicitly safe under load
 
+Current implementation note:
+
+- first shared-session cleanup slice is now built locally in
+  [Platform Hardening Tranche C — Async Session Correctness](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-c-async-session-correctness.md)
+
 ## Workstream D — Operations Consolidation
 
 Primary files and likely touchpoints:
