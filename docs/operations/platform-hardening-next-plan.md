@@ -156,6 +156,11 @@ Acceptance:
 - duplicate enqueues for same user/workflow window are prevented
 - staging/production queue names are consistent end to end
 
+Current implementation note:
+
+- first backlog-aware + overlap-safe dispatcher slice is now built locally in
+  [Platform Hardening Tranche B — Queue Discipline](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-b-queue-discipline.md)
+
 ## Workstream C — Async Session Correctness
 
 Primary files and likely touchpoints:

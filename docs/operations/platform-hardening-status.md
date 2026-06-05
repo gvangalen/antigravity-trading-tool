@@ -38,6 +38,7 @@ The main remaining risk is operational scale, not core request correctness:
 | Step 7 - Multi-Instance Cache Coordination | Green | Mobile/dashboard, market-intelligence, and transition-risk process-local caches are removed; future caching must be shared/Redis-backed with explicit invalidation. |
 | Step 8 - Replay/Exactly-Once Hardening | Green | Assistant pending actions are atomically claimed before side effects; stored execution results support safe retries; replay inventory documents execution-adjacent guards. |
 | Tranche A - Execution Safety | Built locally, pending deploy | Bot-generated execution now has DB replay guards, atomic `planned -> executing` claims, explicit `failed_execution` fallback, and honest Celery retry semantics. |
+| Tranche B - Queue Discipline | Built locally, pending deploy | Dispatcher now enforces backlog-aware skips, per-wave leases, per-user window dedupe, and queue naming is consistent across production/staging policy paths. |
 | Security Hardening Slice | Nearly green | External `/api/system/health` is operator-only, web/mobile auth contracts are corrected, refresh rotation and logout invalidation work, Finn `action_id` execute + replay is live, and rate limits are enforced on execute/manual-order/preflight routes. Remaining QA is a real user-switch cache pass and hard no-write proof for market-data read routes. |
 
 ## Current Live Baseline

@@ -19,6 +19,7 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from backend.celery_task.queue_policy import (
+    DEFAULT_QUEUE,
     NAMED_QUEUES,
     build_dispatch_schedule_entry,
     build_task_schedule_entry,
@@ -54,7 +55,7 @@ celery_app = Celery(
 # =========================================================
 celery_app.conf.enable_utc = False
 celery_app.conf.timezone = "Europe/Amsterdam"
-celery_app.conf.task_default_queue = "celery"
+celery_app.conf.task_default_queue = DEFAULT_QUEUE
 celery_app.conf.task_queues = tuple(Queue(queue_name) for queue_name in NAMED_QUEUES)
 celery_app.conf.task_routes = celery_task_routes()
 

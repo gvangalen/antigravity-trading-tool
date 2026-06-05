@@ -134,7 +134,7 @@ class SystemHealthService:
                     "ok",
                     broker="redis",
                     latency_ms=round((time.perf_counter() - started) * 1000, 2),
-                    default_queue_depth=queue_depths.get(os.getenv("CELERY_DEFAULT_QUEUE", "celery"), 0),
+                    default_queue_depth=queue_depths.get(DEFAULT_QUEUE, 0),
                     default_queue_sample=default_queue_sample,
                     queue_depths=queue_depths,
                     queue_metrics=queue_metrics,

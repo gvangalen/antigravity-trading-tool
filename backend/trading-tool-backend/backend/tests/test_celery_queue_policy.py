@@ -1,8 +1,10 @@
 import ast
+import importlib
 
 from backend.celery_task.queue_policy import (
     ALLOWED_DEFAULT_TASKS,
     DISPATCHER_TASK_NAME,
+    LOGICAL_NAMED_QUEUES,
     NAMED_QUEUES,
     QUEUE_RATE_LIMITS,
     TASK_QUEUE_ROUTES,
@@ -19,24 +21,26 @@ from backend.celery_task.queue_policy import (
 def test_pm2_config_splits_named_queue_workers():
     from pathlib import Path
 
-    ecosystem_path = Path(__file__).resolve().parents[4] / "ecosystem.config.js"
-    source = ecosystem_path.read_text()
+    production_ecosystem = Path(__file__).resolve().parents[4] / "ecosystem.production.config.js"
+    shared_ecosystem = Path(__file__).resolve().parents[4] / "ops" / "deploy" / "ecosystem.shared.js"
+    source = production_ecosystem.read_text() + "\n" + shared_ecosystem.read_text()
 
     assert "celery-worker-default" in source
     assert "celery-worker-market-portfolio" in source
     assert "celery-worker-scoring-execution" in source
     assert "celery-worker-ai-reporting" in source
-    assert "-Q celery -n default@%h" in source
-    assert "-Q market_data,portfolio -n market-portfolio@%h" in source
-    assert "-Q scoring,execution_critical -n scoring-execution@%h" in source
-    assert "-Q ai_generation -n ai-reporting@%h" in source
+    assert "-Q ${queuePrefix}celery -n ${environmentName}-default@%h" in source
+    assert "-Q ${queuePrefix}market_data,${queuePrefix}portfolio -n ${environmentName}-market-portfolio@%h" in source
+    assert "-Q ${queuePrefix}scoring,${queuePrefix}execution_critical -n ${environmentName}-scoring-execution@%h" in source
+    assert "-Q ${queuePrefix}ai_generation -n ${environmentName}-ai-reporting@%h" in source
 
 
 def test_all_named_queues_are_assigned_to_pm2_workers():
     from pathlib import Path
 
-    ecosystem_path = Path(__file__).resolve().parents[4] / "ecosystem.config.js"
-    source = ecosystem_path.read_text()
+    production_ecosystem = Path(__file__).resolve().parents[4] / "ecosystem.production.config.js"
+    shared_ecosystem = Path(__file__).resolve().parents[4] / "ops" / "deploy" / "ecosystem.shared.js"
+    source = production_ecosystem.read_text() + "\n" + shared_ecosystem.read_text()
 
     for queue_name in NAMED_QUEUES:
         assert queue_name in source
@@ -51,6 +55,7 @@ def test_named_queues_include_default_and_workload_classes():
         "ai_generation",
         "execution_critical",
     ]
+    assert LOGICAL_NAMED_QUEUES == NAMED_QUEUES
 
 
 def test_task_queue_resolution_is_deterministic():
@@ -149,3 +154,26 @@ def test_celery_publisher_stamps_published_at_header():
 
     assert "published_at" in headers
     assert headers["published_at"].endswith("+00:00")
+
+
+def test_staging_queue_names_are_prefixed_consistently(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "staging")
+    monkeypatch.delenv("CELERY_QUEUE_PREFIX", raising=False)
+
+    import backend.celery_task.queue_policy as queue_policy
+
+    reloaded = importlib.reload(queue_policy)
+    try:
+        assert reloaded.DEFAULT_QUEUE == "staging-celery"
+        assert reloaded.NAMED_QUEUES == [
+            "staging-celery",
+            "staging-market_data",
+            "staging-scoring",
+            "staging-portfolio",
+            "staging-ai_generation",
+            "staging-execution_critical",
+        ]
+        assert reloaded.resolve_task_queue("backend.celery_task.trading_bot_task.run_daily_trading_bot") == "staging-execution_critical"
+    finally:
+        monkeypatch.setenv("APP_ENV", "production")
+        importlib.reload(queue_policy)

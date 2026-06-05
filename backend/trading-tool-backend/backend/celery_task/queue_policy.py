@@ -1,16 +1,28 @@
+import os
 from typing import Dict, Iterable, List, Optional
 
 
-DEFAULT_QUEUE = "celery"
+def _queue_name_prefix() -> str:
+    explicit = os.getenv("CELERY_QUEUE_PREFIX")
+    if explicit is not None:
+        return explicit
+    app_env = str(os.getenv("APP_ENV", "production") or "production").lower()
+    return "staging-" if app_env == "staging" else ""
+
+
+QUEUE_NAME_PREFIX = _queue_name_prefix()
+DEFAULT_QUEUE_LOGICAL = "celery"
+DEFAULT_QUEUE = f"{QUEUE_NAME_PREFIX}{DEFAULT_QUEUE_LOGICAL}"
 DISPATCHER_TASK_NAME = "backend.celery_task.dispatcher.dispatch_for_all_users"
-NAMED_QUEUES: List[str] = [
-    DEFAULT_QUEUE,
+LOGICAL_NAMED_QUEUES: List[str] = [
+    DEFAULT_QUEUE_LOGICAL,
     "market_data",
     "scoring",
     "portfolio",
     "ai_generation",
     "execution_critical",
 ]
+NAMED_QUEUES: List[str] = [f"{QUEUE_NAME_PREFIX}{queue_name}" for queue_name in LOGICAL_NAMED_QUEUES]
 
 TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.ai_agents.score_ai_agent.generate_master_score": "ai_generation",
@@ -69,13 +81,44 @@ QUEUE_RATE_LIMITS: Dict[str, str] = {
     "execution_critical": "30/m",
 }
 
+QUEUE_BACKLOG_LIMITS: Dict[str, int] = {
+    "market_data": 2000,
+    "scoring": 1500,
+    "portfolio": 1500,
+    "ai_generation": 800,
+    "execution_critical": 400,
+    DEFAULT_QUEUE_LOGICAL: 500,
+}
+
+DISPATCH_WINDOW_SECONDS: Dict[str, int] = {
+    "backend.celery_task.macro_task.fetch_macro_data": 2 * 60 * 60,
+    "backend.celery_task.technical_task.fetch_technical_data_day": 2 * 60 * 60,
+    "backend.celery_task.market_task.fetch_market_indicators": 2 * 60 * 60,
+    "backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot": 15 * 60,
+    "backend.celery_task.setup_task.run_setup_agent_daily": 15 * 60,
+    "backend.celery_task.trading_bot_task.run_daily_trading_bot": 15 * 60,
+    "backend.celery_task.macro_task.run_macro_agent_daily": 24 * 60 * 60,
+    "backend.celery_task.market_task.run_market_agent_daily": 24 * 60 * 60,
+    "backend.celery_task.technical_task.run_technical_agent_daily": 24 * 60 * 60,
+    "backend.celery_task.regime_memory_task.run_regime_memory": 24 * 60 * 60,
+    "backend.celery_task.strategy_task.run_daily_strategy_snapshot": 12 * 60 * 60,
+    "backend.celery_task.daily_report_task.generate_daily_report": 24 * 60 * 60,
+}
+
+
+def _logical_queue_name(queue_name: str) -> str:
+    if QUEUE_NAME_PREFIX and queue_name.startswith(QUEUE_NAME_PREFIX):
+        return queue_name[len(QUEUE_NAME_PREFIX):]
+    return queue_name
+
 
 def resolve_task_queue(task_name: str) -> str:
-    return TASK_QUEUE_ROUTES.get(task_name, DEFAULT_QUEUE)
+    logical_queue = TASK_QUEUE_ROUTES.get(task_name, DEFAULT_QUEUE_LOGICAL)
+    return f"{QUEUE_NAME_PREFIX}{logical_queue}"
 
 
 def resolve_workload_class(task_name: str) -> str:
-    return WORKLOAD_CLASS_BY_QUEUE.get(resolve_task_queue(task_name), "default_fallback")
+    return WORKLOAD_CLASS_BY_QUEUE.get(_logical_queue_name(resolve_task_queue(task_name)), "default_fallback")
 
 
 def celery_task_routes() -> Dict[str, Dict[str, str]]:
@@ -83,7 +126,15 @@ def celery_task_routes() -> Dict[str, Dict[str, str]]:
 
 
 def resolve_task_rate_limit(task_name: str) -> Optional[str]:
-    return QUEUE_RATE_LIMITS.get(resolve_task_queue(task_name))
+    return QUEUE_RATE_LIMITS.get(_logical_queue_name(resolve_task_queue(task_name)))
+
+
+def resolve_queue_backlog_limit(task_name: str) -> Optional[int]:
+    return QUEUE_BACKLOG_LIMITS.get(_logical_queue_name(resolve_task_queue(task_name)))
+
+
+def resolve_dispatch_window_seconds(task_name: str, *, fallback_seconds: int) -> int:
+    return int(DISPATCH_WINDOW_SECONDS.get(task_name, fallback_seconds))
 
 
 def celery_task_annotations() -> Dict[str, Dict[str, str]]:
@@ -144,11 +195,12 @@ def unmapped_task_names(task_names: Iterable[str]) -> List[str]:
 def rate_limit_summary_by_queue() -> Dict[str, Dict[str, object]]:
     summary: Dict[str, Dict[str, object]] = {}
     for queue_name in NAMED_QUEUES:
+        logical_queue = _logical_queue_name(queue_name)
         task_names = sorted(
             task_name for task_name, mapped_queue in TASK_QUEUE_ROUTES.items()
-            if mapped_queue == queue_name
+            if mapped_queue == logical_queue
         )
-        rate_limit = QUEUE_RATE_LIMITS.get(queue_name)
+        rate_limit = QUEUE_RATE_LIMITS.get(logical_queue)
         summary[queue_name] = {
             "rate_limit": rate_limit,
             "task_count": len(task_names),
