@@ -32,6 +32,14 @@ def test_market_latest_and_7d_get_routes_are_read_only():
     assert "sync_symbol_7day_data" not in seven_day_section
 
 
+def test_market_forward_get_routes_are_read_only():
+    source = _read(BACKEND_ROOT / "api" / "market_data_api.py")
+    forward_section = source.split("# =========================================================\n# FORWARD RETURNS", 1)[1]
+
+    assert "sync_symbol_forward_returns" not in forward_section
+    assert "RUNTIME TRIGGER" not in forward_section
+
+
 def test_market_fill_route_requires_authenticated_user():
     source = _read(BACKEND_ROOT / "api" / "market_data_api.py")
 

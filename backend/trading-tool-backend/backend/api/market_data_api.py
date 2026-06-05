@@ -204,15 +204,7 @@ async def get_market_forward_returns(
 ):
     try:
         service = MarketDataService(db)
-        data = await service.get_market_forward_returns(symbol)
-        
-        # 🔥 RUNTIME TRIGGER
-        if not data:
-            logger.info(f"🚀 Geen forward returns voor {symbol}. Trigger on-the-fly fetch...")
-            await service.sync_symbol_forward_returns(symbol)
-            data = await service.get_market_forward_returns(symbol)
-            
-        return data
+        return await service.get_market_forward_returns(symbol)
     except Exception as e:
         logger.error(f"❌ [forward] {symbol} Fout: {e}")
         raise HTTPException(500, "Fout bij ophalen forward returns.")
@@ -224,11 +216,7 @@ async def get_week_returns(
 ):
     try:
         service = MarketDataService(db)
-        data = await service.get_forward_returns_aggregated('7d', symbol=symbol)
-        if not data:
-            await service.sync_symbol_forward_returns(symbol)
-            data = await service.get_forward_returns_aggregated('7d', symbol=symbol)
-        return data
+        return await service.get_forward_returns_aggregated('7d', symbol=symbol)
     except Exception as e:
          logger.error(f"❌ Week returns {symbol} error: {e}")
          raise HTTPException(500, "Fout bij ophalen week returns.")
@@ -240,11 +228,7 @@ async def get_month_returns(
 ):
     try:
         service = MarketDataService(db)
-        data = await service.get_forward_returns_aggregated('30d', symbol=symbol)
-        if not data:
-            await service.sync_symbol_forward_returns(symbol)
-            data = await service.get_forward_returns_aggregated('30d', symbol=symbol)
-        return data
+        return await service.get_forward_returns_aggregated('30d', symbol=symbol)
     except Exception as e:
          logger.error(f"❌ Month returns {symbol} error: {e}")
          raise HTTPException(500, "Fout bij ophalen maand returns.")
@@ -256,11 +240,7 @@ async def get_quarter_returns(
 ):
     try:
         service = MarketDataService(db)
-        data = await service.get_forward_returns_aggregated('90d', symbol=symbol)
-        if not data:
-            await service.sync_symbol_forward_returns(symbol)
-            data = await service.get_forward_returns_aggregated('90d', symbol=symbol)
-        return data
+        return await service.get_forward_returns_aggregated('90d', symbol=symbol)
     except Exception as e:
          logger.error(f"❌ Quarter returns {symbol} error: {e}")
          raise HTTPException(500, "Fout bij ophalen kwartaal returns.")
@@ -272,11 +252,7 @@ async def get_year_returns(
 ):
     try:
         service = MarketDataService(db)
-        data = await service.get_forward_returns_aggregated('365d', symbol=symbol)
-        if not data:
-            await service.sync_symbol_forward_returns(symbol)
-            data = await service.get_forward_returns_aggregated('365d', symbol=symbol)
-        return data
+        return await service.get_forward_returns_aggregated('365d', symbol=symbol)
     except Exception as e:
          logger.error(f"❌ Year returns {symbol} error: {e}")
          raise HTTPException(500, "Fout bij ophalen jaar returns.")

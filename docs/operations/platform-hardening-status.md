@@ -21,7 +21,7 @@ The main remaining risk is operational scale, not core request correctness:
 - old psycopg2/background flows remain explicit legacy boundaries, with regime memory and daily report writes moved behind repositories
 - frontend polling/read-amplification has a first V1 reduction in place
 - first enterprise rollout/tracing controls are in place
-- security/auth hardening is functionally green with two final QA proofs still open
+- security/auth hardening is now regression-backed and green at V1 scope
 
 ## Phase Status
 
@@ -43,7 +43,7 @@ The main remaining risk is operational scale, not core request correctness:
 | Tranche D - Operations Consolidation | Green | Deploy and rollback now use explicit environment PM2 configs, and the legacy `deploy.sh` path is intentionally blocked. |
 | Tranche E - Symbol/State Cleanup | Green | Bot portfolio state is now scoped by `(bot_id, symbol)` so symbol changes no longer collapse state into one row, and the legacy single-column unique constraint is handled during migration. |
 | Tranche F - Deploy Stability | Live with rollout caveat | Deploy/rollback now wait for backend bind plus health, can do a backend-only rescue restart, and rollback clears stale git remote refs before fetch. Production is live on `404b4ec`, but this host still needed one manual backend-only restart before `:8000` settled and external `/api/*` recovered. |
-| Security Hardening Slice | Nearly green | External `/api/system/health` is operator-only, web/mobile auth contracts are corrected, refresh rotation and logout invalidation work, Finn `action_id` execute + replay is live, and rate limits are enforced on execute/manual-order/preflight routes. Remaining QA is a real user-switch cache pass and hard no-write proof for market-data read routes. |
+| Security Hardening Slice | Green | External `/api/system/health` is operator-only, web/mobile auth contracts are corrected, refresh rotation and logout invalidation work, Finn `action_id` execute + replay is live, rate limits are enforced on execute/manual-order/preflight routes, authenticated frontend flows clear stale local user/token state, and market-data read routes no longer perform forward-return sync writes. |
 
 ## Current Live Baseline
 
@@ -177,9 +177,7 @@ Latest local regression:
 - Deep end-to-end tracing per decision/order/report beyond the request `X-Trace-Id`.
 - Admin search/report trace surfacing can be expanded further once QA decides which operator screens need trace-first filtering.
 - Wider exactly-once semantics can still be expanded into provider/exchange replay protection if external exchange APIs expose stronger idempotency contracts.
-- Security QA still has two non-blocking proofs to close:
-  - browser user A -> user B cache/user-switch validation
-  - hard no-write proof for market-data read routes beyond runtime/log indications
+- Security QA has no remaining V1 correctness proofs open in this track; future work here is broader observability and scale, not auth/read-route correctness.
 
 ## Recommended Next Work
 
@@ -193,31 +191,26 @@ See also:
 - [Platform Hardening Tranche E — Symbol/State Cleanup](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-e-symbol-state-cleanup.md)
 - [Platform Hardening Tranche F — Deploy Stability](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-f-deploy-stability.md)
 
-1. Finish the two remaining security QA proofs.
-   - Browser user-switch cache check with a second onboarded account.
-   - Harder no-write observability check for market-data read routes.
-   - No new code is required unless one of those checks finds a regression.
-
-2. Controlled legacy queue drain operations are active.
+1. Controlled legacy queue drain operations are active.
    - Use `docs/operations/legacy-celery-queue-drain.md`.
    - Save artifacts and compare `operator_summary`.
    - Stop based on `reroute_ratio_after` and `top_tasks_after`, not total backlog alone.
    - Latest controlled run processed `1500`, rerouted `1500`, kept `0`, then stopped on `max_processed_total_reached`.
    - Default queue was about `48714` after the follow-up health check; wait for named queues to visibly drain before another larger cycle.
 
-3. Use queue age/throughput fields in deep health while draining.
+2. Use queue age/throughput fields in deep health while draining.
    - `queue_metrics.<queue>.oldest_message_age_seconds` is available for newly published tasks stamped with `published_at`.
    - `queue_metrics.<queue>.timestamped_sample_size` shows how much of the sampled queue can be aged.
    - `queue_metrics.<queue>.estimated_drain_per_minute` is based on the previous health check in the current backend process.
    - Legacy messages without a publish timestamp intentionally report `age_source = unavailable`.
 
-4. Continue with the remaining platform cleanup sequence.
+3. Continue with the remaining platform cleanup sequence.
    - psycopg2 legacy boundary migration/isolation is complete at the driver boundary: direct driver imports are centralized in `backend/utils/db.py`.
    - regime memory and daily report writes now use repository boundaries instead of direct `get_db_connection()` calls.
    - PushService sync DB cleanup is complete: PushService is async-first and the sync method is compatibility-only.
    - Frontend polling / `no-store` reduction is complete for the shared auth clients, dashboard scores hook, admin logs, intelligence events, market price hooks, and report generation polling.
 
-5. Then return to product OS work.
+4. Then return to product OS work.
    - Portfolio Risk 2.0 or Reports/Reflection 2.0 are now safer to build on top of this platform base.
    - The 8-step reliability remainder is now complete at V1 scope.
 

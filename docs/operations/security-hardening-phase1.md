@@ -1,6 +1,6 @@
 # Security Hardening Phase 1
 
-Last updated: 2026-05-25
+Last updated: 2026-06-05
 
 This phase closes the two critical pre-live security findings from the security review.
 
@@ -45,3 +45,30 @@ Expected: rejected; no side effect.
 
 3. Generate a real Finn action through chat and execute only the returned `action_id`.
 4. Confirm duplicate/replay behavior remains clean.
+
+## Current Live Status
+
+Live baseline on Oracle:
+
+- commit: `404b4ec`
+- `LAST_GOOD_COMMIT = 404b4ec`
+
+What is now live-green:
+
+- external `/api/system/health` returns `401 Missing access token`
+- web login returns `auth_mode = web`, `token_transport = cookie`, and no auth tokens in the JSON body
+- mobile login returns `auth_mode = mobile`, `token_transport = body+cookie`, and includes rotated access/refresh tokens in the JSON body
+- refresh rotation works for both web and mobile
+- logout invalidates refresh tokens
+- Mission Control nested Finn actions expose real `action_id`
+- second Finn execute returns explicit `replayed = true`
+- rate limits are live on:
+  - `/api/assistant/actions/execute`
+  - `/api/orders/manual`
+  - `/api/orders/manual/preflight`
+
+What is now also regression-backed:
+
+1. authenticated frontend flows clear local user/token state on logout and failed refresh
+2. login overwrites the local user snapshot instead of preserving stale user identity
+3. market-data GET routes no longer trigger forward-return sync writes on data misses

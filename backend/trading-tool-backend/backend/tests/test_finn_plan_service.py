@@ -1187,28 +1187,21 @@ def test_build_behavioral_intelligence_response_uses_direct_coach_for_overtradin
     assert "werk eerst je open beslissingen af" in analysis["what_to_do_now"].lower()
 
 
-def test_execute_issued_action_accepts_valid_refresh_fallback_action_without_pending_row():
+def test_execute_issued_action_rejects_missing_pending_action_without_server_row():
     service = _service()
     service.session = object()
-    action = {
-        "id": "finn-maint-333adbe0336899de096f330a",
-        "type": "refresh_daily_scores",
-        "payload": {"assets": ["BTC"], "scope": "asset"},
-    }
-    service._maintenance_action_id = lambda action_type, parts: "finn-maint-333adbe0336899de096f330a"
     service._get_pending_action_row = AsyncMock(return_value=None)
-    service.execute_action = AsyncMock(return_value={"ok": True, "message": "Daily scores ververst"})
 
-    result = asyncio.run(
-        service.execute_issued_action(
-            30,
-            "finn-maint-333adbe0336899de096f330a-u30",
-            fallback_action=action,
+    try:
+        asyncio.run(
+            service.execute_issued_action(
+                30,
+                "finn-maint-333adbe0336899de096f330a-u30",
+            )
         )
-    )
-
-    service.execute_action.assert_awaited_once_with(30, action)
-    assert result["ok"] is True
+        assert False, "Expected HTTPException"
+    except HTTPException as exc:
+        assert exc.status_code == 404
 
 
 def test_build_response_analysis_metadata_sets_route_family():

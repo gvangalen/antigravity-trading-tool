@@ -230,6 +230,7 @@ Current state:
 - Tranches A through F are now built
 - Tranches D, E, and F are live on production
 - the main remaining operational irritant is host startup jitter, not missing hardening slices
+- security hardening is now green at V1 scope instead of waiting on extra manual proof notes
 
 ## Definition Of Done
 

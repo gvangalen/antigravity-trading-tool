@@ -21,7 +21,8 @@ def test_platform_status_reflects_latest_deployed_hardening_baseline():
     assert "Step 7 - Multi-Instance Cache Coordination" in source
     assert "Step 8 - Replay/Exactly-Once Hardening" in source
     assert "Security Hardening Slice" in source
-    assert "Remaining QA is a real user-switch cache pass" in source
+    assert "authenticated frontend flows clear stale local user/token state" in source
+    assert "market-data read routes no longer perform forward-return sync writes" in source
     assert 'externally: `401 {"detail":"Missing access token"}`' in source
     assert "LAST_GOOD_COMMIT" in source
     assert "rollback_live.sh <commit>" in source
