@@ -224,6 +224,56 @@ class ReportService:
             "watchlist": watchlist,
         }
 
+    def _normalize_daily_preview_from_existing_report(self, report: Dict[str, Any]) -> Dict[str, Any]:
+        if not report:
+            return {}
+
+        import json
+
+        def safe_json_parse(val):
+            if isinstance(val, str):
+                try:
+                    return json.loads(val)
+                except Exception:
+                    return val
+            return val
+
+        meta = safe_json_parse(report.get("meta_json")) if report.get("meta_json") else {}
+        meta = meta if isinstance(meta, dict) else {}
+
+        def first_value(*candidates):
+            for value in candidates:
+                if value not in (None, ""):
+                    return value
+            return None
+
+        preview = {
+            "executive_summary": first_value(meta.get("executive_summary"), report.get("executive_summary"), report.get("summary")),
+            "market_analysis": first_value(meta.get("market_analysis"), meta.get("market_overview"), report.get("market_analysis"), report.get("market_overview")),
+            "macro_context": first_value(meta.get("macro_context"), report.get("macro_context"), report.get("macro_summary")),
+            "technical_analysis": first_value(meta.get("technical_analysis"), report.get("technical_analysis"), report.get("technical_summary")),
+            "setup_validation": first_value(meta.get("setup_validation"), report.get("setup_validation"), report.get("setup_summary")),
+            "strategy_implication": first_value(meta.get("strategy_implication"), report.get("strategy_implication"), report.get("recommended_action")),
+            "bot_strategy": first_value(meta.get("bot_strategy"), report.get("bot_strategy"), report.get("bot_summary")),
+            "outlook": first_value(meta.get("outlook"), report.get("outlook")),
+            "watchlist": safe_json_parse(first_value(meta.get("watchlist"), report.get("watchlist"), [])) or [],
+            "best_setup": safe_json_parse(first_value(meta.get("best_setup"), report.get("best_setup"))),
+            "transition": safe_json_parse(first_value(meta.get("transition"), report.get("transition"))),
+            "price": first_value(meta.get("price"), report.get("price")),
+            "change_24h": first_value(meta.get("change_24h"), report.get("change_24h")),
+            "volume": first_value(meta.get("volume"), report.get("volume")),
+            "macro_score": first_value(meta.get("macro_score"), report.get("macro_score")),
+            "technical_score": first_value(meta.get("technical_score"), report.get("technical_score")),
+            "market_score": first_value(meta.get("market_score"), report.get("market_score")),
+            "setup_score": first_value(meta.get("setup_score"), report.get("setup_score")),
+            "market_indicator_highlights": safe_json_parse(first_value(meta.get("market_indicator_highlights"), report.get("market_indicator_highlights"), [])) or [],
+            "macro_indicator_highlights": safe_json_parse(first_value(meta.get("macro_indicator_highlights"), report.get("macro_indicator_highlights"), [])) or [],
+            "technical_indicator_highlights": safe_json_parse(first_value(meta.get("technical_indicator_highlights"), report.get("technical_indicator_highlights"), [])) or [],
+            "active_strategy": safe_json_parse(first_value(meta.get("active_strategy"), report.get("active_strategy"))),
+            "bot_snapshot": safe_json_parse(first_value(meta.get("bot_snapshot"), report.get("bot_snapshot"))),
+        }
+        return {key: value for key, value in preview.items() if value is not None}
+
     async def get_latest_report(self, user_id: int, table_name: str, symbol: Optional[str] = None, format_type: Optional[str] = None) -> Dict[str, Any]:
         row = await self.repository.get_latest_report(user_id, table_name, symbol=symbol)
         if not row:
@@ -284,6 +334,20 @@ class ReportService:
         cached = self._get_cached_daily_preview(user_id)
         if cached is not None:
             return cached
+        latest_report = None
+        if hasattr(self.repository, "get_latest_report"):
+            latest_report = await self.repository.get_latest_report(user_id, "daily_reports")
+        latest_report_date = latest_report.get("report_date") if latest_report else None
+        if latest_report and hasattr(latest_report_date, "isoformat") and latest_report_date == datetime.utcnow().date():
+            response = {
+                "status": "ok",
+                "generated_at": datetime.utcnow().isoformat(),
+                "user_id": user_id,
+                "report": self._normalize_daily_preview_from_existing_report(latest_report),
+                "source": "latest_daily_report",
+            }
+            self._store_cached_daily_preview(user_id, response)
+            return response
         try:
             report = await asyncio.to_thread(generate_daily_report_sections, user_id=user_id)
         except TypeError:
@@ -294,6 +358,7 @@ class ReportService:
             "generated_at": datetime.utcnow().isoformat(),
             "user_id": user_id,
             "report": report,
+            "source": "generated_preview",
         }
         self._store_cached_daily_preview(user_id, response)
         return response

@@ -1197,6 +1197,8 @@ class FinnPlanService:
             return False
         if any(phrase in q for phrase in ["mission control", "dit scherm", "deze pagina", "wat kan ik hier doen"]):
             return False
+        if any(phrase in q for phrase in ["dashboardcontext", "dashboard context", "huidige dashboardcontext", "huidige dashboard context"]):
+            return True
         if context.get("setup_id") and any(term in q for term in ["setup", "plan", "open"]):
             return True
         if context.get("strategy_id") and any(term in q for term in ["strategie", "strategy", "open"]):
@@ -2874,7 +2876,18 @@ class FinnPlanService:
     def _context_explain_target(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
         q = self._normalized_query(query)
         context = context or {}
-        if any(phrase in q for phrase in ["wat bekijk ik nu", "leg dit scherm uit", "wat zie ik nu", "welke pagina", "dit scherm", "deze pagina"]):
+        if any(phrase in q for phrase in [
+            "wat bekijk ik nu",
+            "leg dit scherm uit",
+            "wat zie ik nu",
+            "welke pagina",
+            "dit scherm",
+            "deze pagina",
+            "dashboardcontext",
+            "dashboard context",
+            "huidige dashboardcontext",
+            "huidige dashboard context",
+        ]):
             return "page"
         if "mission control" in q:
             return "mission_control"
@@ -3928,19 +3941,32 @@ class FinnPlanService:
             return await self.build_mission_control_explain_response(user_id, query, context)
 
         if target == "page":
-            page_type = str(context.get("page_type") or context.get("page") or "Tradamind")
+            inferred_page = context.get("page") or context.get("page_type")
+            q_lower = self._normalized_query(query)
+            if not inferred_page:
+                if "dashboard" in q_lower:
+                    inferred_page = "dashboard"
+                elif "report" in q_lower or "rapport" in q_lower:
+                    inferred_page = "report"
+                elif "bot" in q_lower:
+                    inferred_page = "bot"
+                elif "strategie" in q_lower or "strategy" in q_lower:
+                    inferred_page = "strategy"
+                elif "setup" in q_lower or "plan" in q_lower:
+                    inferred_page = "setup"
+            page_type = str(inferred_page or "Tradamind")
             page_confidence = {
-                "level": "high" if context.get("page") or context.get("page_type") else "medium",
+                "level": "high" if inferred_page else "medium",
                 "entity_type": "page",
-                "entity_id": context.get("page") or page_type,
-                "reason": "page context available" if context.get("page") or context.get("page_type") else "page inferred from generic context",
-                "why": "page context available" if context.get("page") or context.get("page_type") else "page inferred from generic context",
+                "entity_id": inferred_page or page_type,
+                "reason": "page context available" if inferred_page else "page inferred from generic context",
+                "why": "page context available" if inferred_page else "page inferred from generic context",
             }
             return self._context_explain_payload(
-                response=self._page_summary_message(context),
+                response=self._page_summary_message({**context, "page": inferred_page or context.get("page"), "page_type": page_type}),
                 confidence=page_confidence,
                 entity_type="page",
-                entity={"page": context.get("page"), "page_type": page_type},
+                entity={"page": inferred_page or context.get("page"), "page_type": page_type},
             )
 
         if target == "score":
