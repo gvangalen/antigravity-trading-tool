@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { Suspense, useEffect, useRef, useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Wallet, Plus } from "lucide-react";
 
@@ -419,8 +419,10 @@ function BotPageInner() {
 
 export default function BotPage() {
   return (
-    <ActiveBotProvider>
-      <BotPageInner />
-    </ActiveBotProvider>
+    <Suspense fallback={<div className="min-h-screen bg-[#020617]" />}>
+      <ActiveBotProvider>
+        <BotPageInner />
+      </ActiveBotProvider>
+    </Suspense>
   );
 }

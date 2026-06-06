@@ -10,20 +10,21 @@ export const metadata = {
   description: BRANDING.META_DESCRIPTION,
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://www.tradamind.com"),
   manifest: "/manifest.json",
-  themeColor: "#2F6BFF",
   alternates: {
     canonical: "/",
-  },
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    viewportFit: "cover",
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: BRANDING.APP_NAME,
   },
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#2F6BFF",
 };
 
 export default function RootLayout({ children }) {

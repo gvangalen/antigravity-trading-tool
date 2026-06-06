@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
+import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2 } from "lucide-react";
@@ -22,7 +22,7 @@ import SetupForm from "@/components/setup/SetupForm";
 import StrategyForm from "@/components/strategy/StrategyForm";
 import AddBotForm from "@/components/bot/AddBotForm";
 
-export default function AIAssistant({ isOpen, setIsOpen }) {
+function AIAssistantContent({ isOpen, setIsOpen }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { selectedAsset: globalSymbol } = useAsset();
@@ -3774,6 +3774,14 @@ export default function AIAssistant({ isOpen, setIsOpen }) {
         </div>
       </div>
     </aside>
+  );
+}
+
+export default function AIAssistant(props) {
+  return (
+    <Suspense fallback={null}>
+      <AIAssistantContent {...props} />
+    </Suspense>
   );
 }
 

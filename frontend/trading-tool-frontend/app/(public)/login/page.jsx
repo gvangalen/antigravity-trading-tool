@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Mail, Lock, LogIn, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
 import Link from "next/link";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, isAuthenticated, loading, sessionChecked } = useAuth();
@@ -175,5 +175,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[var(--bg-premium-gradient)]" />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,9 @@
+const path = require("path");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export', // ✅ Required for Capacitor
+  outputFileTracingRoot: path.join(__dirname, ".."),
   images: {
     unoptimized: true, // ✅ Required for static export
   },

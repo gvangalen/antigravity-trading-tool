@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ReportLayout from "@/components/report/layout/ReportLayout";
 import { API_BASE_URL } from "@/lib/config";
 
-export default function DailyPrintReportPage() {
+function DailyPrintReportPageContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const [report, setReport] = useState(null);
@@ -61,5 +61,13 @@ export default function DailyPrintReportPage() {
       {/* Playwright signal - ONLY rendered on success */}
       <div id="print-ready" className="hidden" aria-hidden="true" />
     </div>
+  );
+}
+
+export default function DailyPrintReportPage() {
+  return (
+    <Suspense fallback={<div className="p-8 font-mono animate-pulse">Laden van rapport...</div>}>
+      <DailyPrintReportPageContent />
+    </Suspense>
   );
 }
