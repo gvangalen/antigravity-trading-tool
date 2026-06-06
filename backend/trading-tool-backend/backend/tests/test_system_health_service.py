@@ -12,6 +12,7 @@ from backend.services.platform_metrics import (
     increment_retry_counter,
     record_latency_sample,
     reset_process_metrics,
+    runtime_identity_snapshot,
 )
 
 
@@ -154,11 +155,16 @@ def test_deep_health_returns_component_statuses(monkeypatch):
     assert response["components"]["celery"]["worker_count"] == 1
     assert response["components"]["celery"]["rate_limits_by_queue"]["market_data"]["rate_limit"] == "20/m"
     assert response["metrics_scope"] == "process_lifetime"
+    assert response["runtime_identity"]["instance_id"] == runtime_identity_snapshot()["instance_id"]
+    assert response["observability_scope"]["cluster_rollup_ready"] is False
     assert response["dispatcher_counters"]["wave_lease_skip_count"] == 2
     assert response["execution_safety_counters"]["replay_block_hits"] == 1
     assert response["retry_counters"]["trading_bot_task"] == 3
     assert response["latency_metrics"]["dashboard_aggregation_latency_ms_p50"] == 100.0
     assert response["latency_metrics"]["assistant_context_latency_ms_p95"] == 160.0
+    assert response["cluster_observability"]["instance_id"] == runtime_identity_snapshot()["instance_id"]
+    assert response["cluster_observability"]["visible_worker_count"] == 1
+    assert response["cluster_observability"]["degraded_components"] == ["broker"]
     assert response["duration_ms"] >= 0
 
 
@@ -269,5 +275,42 @@ def test_attach_queue_runtime_metadata_adds_workers_and_rate_limit():
 
     assert components["broker"]["queue_metrics"]["market_data"]["workers"] == ["worker-a"]
     assert components["broker"]["queue_metrics"]["market_data"]["rate_limit"] == "20/m"
+    assert components["broker"]["queue_metrics"]["market_data"]["worker_mapping_source"] == "celery_active_queues_inspect"
+    assert components["broker"]["queue_metrics"]["market_data"]["rate_limit_source"] == "queue_policy_static"
+    assert components["broker"]["queue_metrics"]["market_data"]["depth_source"] == "redis_llen"
     assert components["broker"]["queue_metrics"]["portfolio"]["workers"] == []
     assert components["broker"]["queue_metrics"]["portfolio"]["rate_limit"] is None
+
+
+def test_cluster_observability_summary_explains_instance_scope():
+    metrics = {
+        "runtime_identity": {
+            "instance_id": "production:host-a:123",
+            "hostname": "host-a",
+            "pid": 123,
+            "app_env": "production",
+            "process_started_at": "2026-06-06T10:00:00+00:00",
+        },
+        "observability_scope": {
+            "queue_truth_scope": "broker_snapshot_at_check_time",
+            "worker_truth_scope": "celery_inspect_snapshot_visible_from_current_instance",
+            "counter_truth_scope": "instance_process_lifetime",
+            "latency_truth_scope": "instance_process_window_last_256_samples",
+            "cluster_rollup_ready": False,
+            "cluster_rollup_note": "Aggregate externally.",
+        },
+    }
+    components = {
+        "database": {"status": "ok"},
+        "broker": {"status": "ok", "total_queue_depth": 12},
+        "celery": {"status": "ok", "worker_count": 2, "workers": ["worker-a", "worker-b"]},
+        "scores": {"status": "stale"},
+    }
+
+    result = SystemHealthService._cluster_observability_summary(components, metrics)
+
+    assert result["instance_id"] == "production:host-a:123"
+    assert result["visible_worker_count"] == 2
+    assert result["total_queue_depth"] == 12
+    assert result["degraded_components"] == ["scores"]
+    assert result["cluster_rollup_ready"] is False

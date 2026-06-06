@@ -208,6 +208,7 @@ Latest local regression:
 - Process-local read caches should remain opt-in unless moved to Redis/shared cache with explicit invalidation.
 - Queue age/throughput metrics would make backlog health easier to interpret than depth alone.
 - Current Phase 2 metrics are process-lifetime only; cluster-wide queue/retry/replay truth is still a Phase 2.1 follow-up.
+- The first Phase 2.1 bridge is now in code on `main`: deep health exposes `runtime_identity`, `observability_scope`, and `cluster_observability` so operators can compare multiple instances without pretending the counters are already cluster-aggregated.
 
 ### Enterprise later
 

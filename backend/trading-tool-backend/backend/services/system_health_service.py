@@ -84,6 +84,7 @@ class SystemHealthService:
             "checked_at": _utcnow().isoformat(),
             "duration_ms": round((time.perf_counter() - started) * 1000, 2),
             "components": components,
+            "cluster_observability": cls._cluster_observability_summary(components, metrics),
             **metrics,
         }
 
@@ -306,6 +307,38 @@ class SystemHealthService:
                 rate_limit = rate_limits[queue_name].get("rate_limit")
             metric["workers"] = workers
             metric["rate_limit"] = rate_limit
+            metric["worker_mapping_source"] = "celery_active_queues_inspect"
+            metric["rate_limit_source"] = "queue_policy_static"
+            metric["depth_source"] = "redis_llen"
+
+    @staticmethod
+    def _cluster_observability_summary(
+        components: Dict[str, Dict[str, Any]],
+        metrics: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        runtime_identity = metrics.get("runtime_identity") if isinstance(metrics.get("runtime_identity"), dict) else {}
+        observability_scope = (
+            metrics.get("observability_scope")
+            if isinstance(metrics.get("observability_scope"), dict)
+            else {}
+        )
+        degraded_components = sorted(
+            component_name
+            for component_name, component in components.items()
+            if isinstance(component, dict) and component.get("status") != "ok"
+        )
+        celery = components.get("celery") if isinstance(components.get("celery"), dict) else {}
+        broker = components.get("broker") if isinstance(components.get("broker"), dict) else {}
+        return {
+            **runtime_identity,
+            "default_queue_name": DEFAULT_QUEUE,
+            "named_queue_count": len(NAMED_QUEUES),
+            "visible_worker_count": celery.get("worker_count", 0),
+            "visible_workers": celery.get("workers", []),
+            "total_queue_depth": broker.get("total_queue_depth"),
+            "degraded_components": degraded_components,
+            **observability_scope,
+        }
 
     @staticmethod
     async def _check_celery() -> Dict[str, Any]:

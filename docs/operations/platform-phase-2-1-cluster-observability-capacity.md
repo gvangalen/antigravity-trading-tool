@@ -96,6 +96,18 @@ Target outcomes:
 Primary goal:
 make current observability less process-myopic.
 
+Current status:
+
+- first bridge slice is now in code on `main`
+- `/api/system/health` now exposes:
+  - `runtime_identity`
+  - `observability_scope`
+  - `cluster_observability`
+- queue metrics now label their source for:
+  - depth
+  - worker mapping
+  - rate limits
+
 Likely touchpoints:
 
 - [backend/trading-tool-backend/backend/services/system_health_service.py](/Users/gvangalen/Documents/antigravity-trading-tool/backend/trading-tool-backend/backend/services/system_health_service.py)

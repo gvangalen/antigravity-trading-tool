@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import math
+import os
+import socket
 from collections import defaultdict, deque
+from datetime import datetime, timezone
 from threading import Lock
 from typing import Deque, Dict
 
@@ -13,6 +16,21 @@ _DISPATCHER_COUNTERS: dict[str, int] = defaultdict(int)
 _EXECUTION_SAFETY_COUNTERS: dict[str, int] = defaultdict(int)
 _RETRY_COUNTERS: dict[str, int] = defaultdict(int)
 _LATENCY_SAMPLES: dict[str, Deque[float]] = defaultdict(lambda: deque(maxlen=256))
+_PROCESS_STARTED_AT = datetime.now(timezone.utc)
+_PROCESS_HOSTNAME = socket.gethostname()
+_PROCESS_PID = os.getpid()
+_PROCESS_APP_ENV = os.getenv("APP_ENV", "unknown")
+
+
+def runtime_identity_snapshot() -> Dict[str, object]:
+    instance_id = f"{_PROCESS_APP_ENV}:{_PROCESS_HOSTNAME}:{_PROCESS_PID}"
+    return {
+        "instance_id": instance_id,
+        "hostname": _PROCESS_HOSTNAME,
+        "pid": _PROCESS_PID,
+        "app_env": _PROCESS_APP_ENV,
+        "process_started_at": _PROCESS_STARTED_AT.isoformat(),
+    }
 
 
 def increment_dispatcher_counter(name: str, amount: int = 1) -> None:
@@ -68,6 +86,18 @@ def process_metrics_snapshot() -> Dict[str, object]:
     assistant_latency = latency_summary("assistant_context_latency_ms")
     return {
         "metrics_scope": "process_lifetime",
+        "runtime_identity": runtime_identity_snapshot(),
+        "observability_scope": {
+            "queue_truth_scope": "broker_snapshot_at_check_time",
+            "worker_truth_scope": "celery_inspect_snapshot_visible_from_current_instance",
+            "counter_truth_scope": "instance_process_lifetime",
+            "latency_truth_scope": "instance_process_window_last_256_samples",
+            "cluster_rollup_ready": False,
+            "cluster_rollup_note": (
+                "Aggregate multiple /api/system/health payloads externally for true cluster-wide "
+                "interpretation."
+            ),
+        },
         "dispatcher_counters": {
             "wave_lease_skip_count": dispatcher.get("wave_lease_skip_count", 0),
             "backlog_skip_count": dispatcher.get("backlog_skip_count", 0),

@@ -265,6 +265,7 @@ This hardening plan is meaningfully done when:
 Start with:
 
 - [Platform Phase 2.1 — Cluster Observability & Capacity Validation](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-phase-2-1-cluster-observability-capacity.md)
+- first bridge slice now landed on `main` with `runtime_identity`, `observability_scope`, and `cluster_observability` in deep health
 
 Reason:
 
