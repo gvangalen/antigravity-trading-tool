@@ -128,6 +128,15 @@ Acceptance:
 Primary goal:
 measure the current topology instead of assuming it is enough.
 
+Current status:
+
+- the first safe capacity harness is now in repo:
+  - [Platform Phase 2.1 Capacity Harness](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-phase-2-1-capacity-harness.md)
+- it is intentionally read-first:
+  - no execute endpoints
+  - no report generation endpoints
+  - optional manual-order preview only with an explicit fixture
+
 Profiles:
 
 1. read-heavy dashboard/report traffic
