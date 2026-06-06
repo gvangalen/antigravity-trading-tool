@@ -21,6 +21,8 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
 
     assert 'DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"' in source
     assert 'AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"' in source
+    assert 'DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-6}"' in source
+    assert 'DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"' in source
     assert "lower_bool()" in source
     assert 'if [ "$DEPLOY_COMPONENT_SET" = "backend_only" ]; then' in source
     assert 'if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then' in source
@@ -31,6 +33,9 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'BACKEND_APP="${BACKEND_APP:-backend}"' in source
     assert 'wait_for_backend_listen()' in source
     assert 'restart_backend_app()' in source
+    assert 'deep_health_ready=false' in source
+    assert 'for attempt in \\$(seq 1 \\"$DEEP_HEALTH_ATTEMPTS\\"); do' in source
+    assert 'Deep health not ready yet' in source
 
 
 def test_rollback_env_persists_previous_commit_and_pm2_fallback():

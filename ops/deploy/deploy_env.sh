@@ -17,6 +17,8 @@ NODE_BIN="${NODE_BIN:-/home/ubuntu/.nvm/versions/node/v18.20.8/bin}"
 STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
 DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
 AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"
+DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-6}"
+DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"
 
 lower_bool() {
   printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]'
@@ -264,10 +266,12 @@ PY
   fi
   curl --max-time 10 -fsS -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/health
   echo
-  curl --max-time 45 -fsS -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/system/health >/tmp/tradamind_deep_health.json
-  cat /tmp/tradamind_deep_health.json
-  echo
-  python3 - <<'PY'
+  deep_health_ready=false
+  for attempt in \$(seq 1 \"$DEEP_HEALTH_ATTEMPTS\"); do
+    if curl --max-time 45 -fsS -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/system/health >/tmp/tradamind_deep_health.json; then
+      cat /tmp/tradamind_deep_health.json
+      echo
+      if python3 - <<'PY'
 import json
 import os
 import sys
@@ -298,6 +302,18 @@ elif status != 'ok':
 else:
     print('✅ Deep health gate passed.')
 PY
+      then
+        deep_health_ready=true
+        break
+      fi
+    fi
+    echo \"⏳ Deep health not ready yet (attempt \$attempt/$DEEP_HEALTH_ATTEMPTS); waiting ${DEEP_HEALTH_RETRY_DELAY_SECONDS}s...\" >&2
+    sleep \"$DEEP_HEALTH_RETRY_DELAY_SECONDS\"
+  done
+  if [ \"\$deep_health_ready\" != \"true\" ]; then
+    echo \"❌ Deep health did not stabilize within deploy retry window.\" >&2
+    exit 1
+  fi
   if [ \"$DEPLOY_COMPONENT_SET\" != \"backend_only\" ]; then
     curl --max-time 10 -fsSI http://127.0.0.1:$FRONTEND_PORT/report | head -n 1
   fi
