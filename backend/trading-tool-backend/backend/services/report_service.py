@@ -1,7 +1,10 @@
 import logging
 import io
 import asyncio
+import os
+import time
 from typing import Dict, Any, List, Optional
+from copy import deepcopy
 from datetime import datetime
 from fastapi.responses import StreamingResponse
 
@@ -14,6 +17,9 @@ from backend.celery_task.monthly_report_task import generate_monthly_report
 from backend.celery_task.quarterly_report_task import generate_quarterly_report
 
 logger = logging.getLogger(__name__)
+
+DAILY_REPORT_PREVIEW_CACHE_TTL_SECONDS = int(os.getenv("DAILY_REPORT_PREVIEW_CACHE_TTL_SECONDS", "30"))
+_daily_report_preview_cache: Dict[int, Dict[str, Any]] = {}
 
 from backend.services.intelligence_semantics import get_macro_semantics, get_technical_semantics, get_market_semantics
 
@@ -36,6 +42,23 @@ def _get_structure_label(score: Optional[float], category: str) -> str:
 class ReportService:
     def __init__(self, repository: ReportRepository):
         self.repository = repository
+
+    @staticmethod
+    def _get_cached_daily_preview(user_id: int) -> Optional[Dict[str, Any]]:
+        cached = _daily_report_preview_cache.get(int(user_id))
+        if not cached:
+            return None
+        if float(cached.get("expires_at") or 0) <= time.time():
+            _daily_report_preview_cache.pop(int(user_id), None)
+            return None
+        return deepcopy(cached.get("response"))
+
+    @staticmethod
+    def _store_cached_daily_preview(user_id: int, response: Dict[str, Any]) -> None:
+        _daily_report_preview_cache[int(user_id)] = {
+            "expires_at": time.time() + max(1, DAILY_REPORT_PREVIEW_CACHE_TTL_SECONDS),
+            "response": deepcopy(response),
+        }
         
     def _parse_date(self, date_str: str):
         try:
@@ -258,17 +281,22 @@ class ReportService:
     # =================
 
     async def preview_daily_report(self, user_id: int) -> Dict[str, Any]:
+        cached = self._get_cached_daily_preview(user_id)
+        if cached is not None:
+            return cached
         try:
             report = await asyncio.to_thread(generate_daily_report_sections, user_id=user_id)
         except TypeError:
             report = await asyncio.to_thread(generate_daily_report_sections)
-            
-        return {
+
+        response = {
             "status": "ok",
             "generated_at": datetime.utcnow().isoformat(),
             "user_id": user_id,
             "report": report,
         }
+        self._store_cached_daily_preview(user_id, response)
+        return response
 
     async def generate_report(self, user_id: int, period: str) -> Dict[str, Any]:
         task_func = {

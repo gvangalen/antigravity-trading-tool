@@ -1,7 +1,9 @@
 import hashlib
 import json
+import os
 import re
 import asyncio
+import time
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -37,6 +39,8 @@ SUPPORTED_ASSETS = {"BTC", "ETH", "SOL"}
 KNOWN_ASSET_CANDIDATES = ("BTC", "ETH", "SOL", "DOGE", "XRP", "ADA", "BNB", "AVAX", "LINK", "MATIC", "PEPE")
 NUMBER_WITH_DELIMITER = r"([0-9][0-9.,]*)(?=\s|,|/|$)"
 FINN_STATE_VERSION = 2
+MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS", "15"))
+GOVERNANCE_EVENT_CACHE_TTL_SECONDS = int(os.getenv("GOVERNANCE_EVENT_CACHE_TTL_SECONDS", "15"))
 TRANSACTIONAL_FLOWS = {"plan_creation", "strategy_creation", "bot_creation", "indicator_config"}
 READ_ONLY_FLOWS = {
     "general_help",
@@ -111,6 +115,26 @@ PRODUCT_REFRESH_HELP_PHRASES = (
     "waarom is mijn daily score oud",
     "waarom zie ik nog oude scores",
 )
+
+_mission_control_preview_cache: Dict[int, Dict[str, Any]] = {}
+_governance_event_cache: Dict[str, Dict[str, Any]] = {}
+
+
+def _cache_get(cache: Dict[Any, Dict[str, Any]], key: Any) -> Optional[Any]:
+    cached = cache.get(key)
+    if not cached:
+        return None
+    if float(cached.get("expires_at") or 0) <= time.time():
+        cache.pop(key, None)
+        return None
+    return deepcopy(cached.get("value"))
+
+
+def _cache_set(cache: Dict[Any, Dict[str, Any]], key: Any, value: Any, ttl_seconds: int) -> None:
+    cache[key] = {
+        "expires_at": time.time() + max(1, ttl_seconds),
+        "value": deepcopy(value),
+    }
 
 GENERAL_CAPABILITY_FOLLOW_UP_PHRASES = (
     "leg dat in een simpele zin uit",
@@ -435,6 +459,14 @@ class FinnPlanService:
         self.trace_id = trace_id
         self.action_policy_service = FinnActionPolicyService()
         self.execution_governance_service = FinnExecutionGovernanceService()
+
+    @classmethod
+    def invalidate_runtime_caches_for_user(cls, user_id: int) -> None:
+        _mission_control_preview_cache.pop(int(user_id), None)
+        prefix = f"{int(user_id)}:"
+        for key in list(_governance_event_cache.keys()):
+            if str(key).startswith(prefix):
+                _governance_event_cache.pop(key, None)
 
     def _normalized_query(self, query: str) -> str:
         return (query or "").strip().lower()
@@ -5200,6 +5232,10 @@ class FinnPlanService:
     ) -> List[Dict[str, Any]]:
         if not self.session or not event_types or not hasattr(self.session, "execute"):
             return []
+        cache_key = f"{int(user_id)}:{max(1, min(limit, 200))}:{'|'.join(sorted(str(event_type) for event_type in event_types))}"
+        cached = _cache_get(_governance_event_cache, cache_key)
+        if cached is not None:
+            return cached
         rows = await self.session.execute(text("""
             SELECT id, type, symbol, title, description, severity, payload, status, created_at
             FROM ai_intelligence_events
@@ -5223,6 +5259,12 @@ class FinnPlanService:
                     payload = {}
             mapping["payload"] = payload if isinstance(payload, dict) else {}
             events.append(mapping)
+        _cache_set(
+            _governance_event_cache,
+            cache_key,
+            events,
+            GOVERNANCE_EVENT_CACHE_TTL_SECONDS,
+        )
         return events
 
     def _governance_event_follow_through(
@@ -6707,20 +6749,15 @@ class FinnPlanService:
             "suggested_actions": analysis.get("suggested_actions") or [],
         }
 
-    async def build_portfolio_daily_coach_response(
+    async def _load_portfolio_daily_coach_base_analysis(
         self,
         user_id: int,
-        query: str,
-        context: Optional[Dict[str, Any]] = None,
+        *,
+        mission_control_fast: bool,
+        mission_control_preview_only: bool,
     ) -> Dict[str, Any]:
-        context = context or {}
         asset_analyses: List[Dict[str, Any]] = []
         setup_context_by_asset: Dict[str, Dict[str, Any]] = {}
-        mission_control_fast = bool(
-            context.get("scope") == "mission_control"
-            or context.get("mission_control_fast")
-        )
-        mission_control_preview_only = bool(context.get("mission_control_preview_only"))
 
         if self.session:
             score_repo = ScoreRepository(self.session)
@@ -6795,7 +6832,7 @@ class FinnPlanService:
                             insight = await self.build_indicator_insight_response(
                                 user_id,
                                 f"Welke macro technical market data gebruikt Finn voor {asset} vandaag?",
-                                {**context, "symbol": asset},
+                                {"symbol": asset},
                             )
                             indicator_analysis = (insight.get("state") or {}).get("analysis") or {}
                         except Exception as exc:
@@ -6825,7 +6862,38 @@ class FinnPlanService:
             except Exception:
                 portfolio_context = {}
 
-        analysis = self._build_portfolio_daily_coach_analysis(asset_analyses, portfolio_context, setup_context_by_asset)
+        return self._build_portfolio_daily_coach_analysis(asset_analyses, portfolio_context, setup_context_by_asset)
+
+    async def build_portfolio_daily_coach_response(
+        self,
+        user_id: int,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        context = context or {}
+        mission_control_fast = bool(
+            context.get("scope") == "mission_control"
+            or context.get("mission_control_fast")
+        )
+        mission_control_preview_only = bool(context.get("mission_control_preview_only"))
+        preview_cache_key = int(user_id) if mission_control_fast and mission_control_preview_only else None
+
+        analysis = _cache_get(_mission_control_preview_cache, preview_cache_key) if preview_cache_key is not None else None
+        if analysis is None:
+            analysis = await self._load_portfolio_daily_coach_base_analysis(
+                user_id,
+                mission_control_fast=mission_control_fast,
+                mission_control_preview_only=mission_control_preview_only,
+            )
+            if preview_cache_key is not None:
+                cache_value = deepcopy(analysis)
+                cache_value.pop("question_focus", None)
+                _cache_set(
+                    _mission_control_preview_cache,
+                    preview_cache_key,
+                    cache_value,
+                    MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS,
+                )
         analysis["question_focus"] = self._portfolio_question_focus(query)
         response = self._portfolio_daily_coach_message(analysis)
 

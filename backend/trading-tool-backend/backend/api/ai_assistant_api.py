@@ -1271,6 +1271,7 @@ async def execute_pending_action(
             finn = FinnPlanService(db, trace_id=trace_id)
             result = await finn.execute_issued_action(user_id, str(action_id))
             _invalidate_mission_control_cache(user_id)
+            FinnPlanService.invalidate_runtime_caches_for_user(user_id)
             return result
         except HTTPException:
             raise

@@ -2,6 +2,7 @@ import logging
 import time
 import uuid
 import asyncio
+import os
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional, AsyncGenerator
 from sqlalchemy import select, update, and_, desc
@@ -22,6 +23,27 @@ from backend.services.setup_service import SetupService
 from backend.services.finn_plan_service import FinnPlanService
 
 logger = logging.getLogger(__name__)
+
+ASSISTANT_CONTEXT_CACHE_TTL_SECONDS = int(os.getenv("ASSISTANT_CONTEXT_CACHE_TTL_SECONDS", "20"))
+_assistant_context_cache: Dict[str, Dict[str, Any]] = {}
+
+
+def _get_cached_assistant_context(cache_key: str) -> Optional[str]:
+    cached = _assistant_context_cache.get(cache_key)
+    if not cached:
+        return None
+    if float(cached.get("expires_at") or 0) <= time.time():
+        _assistant_context_cache.pop(cache_key, None)
+        return None
+    value = cached.get("value")
+    return str(value) if value is not None else None
+
+
+def _store_cached_assistant_context(cache_key: str, context: str) -> None:
+    _assistant_context_cache[cache_key] = {
+        "expires_at": time.time() + max(1, ASSISTANT_CONTEXT_CACHE_TTL_SECONDS),
+        "value": str(context),
+    }
 
 class AiAssistantService:
     def __init__(
@@ -1898,6 +1920,10 @@ class AiAssistantService:
     async def _build_context(self, user_id: int, intent: str) -> str:
         started = time.perf_counter()
         try:
+            cache_key = f"{int(user_id)}:{str(intent or 'general').strip().lower()}"
+            cached = _get_cached_assistant_context(cache_key)
+            if cached is not None:
+                return cached
             context_parts = []
             today = date.today()
 
@@ -1993,7 +2019,9 @@ class AiAssistantService:
             if not context_parts:
                 context_parts.append("General assistance mode. No specific deep context loaded.")
 
-            return "\n".join(context_parts)
+            context_value = "\n".join(context_parts)
+            _store_cached_assistant_context(cache_key, context_value)
+            return context_value
         finally:
             record_latency_sample(
                 "assistant_context_latency_ms",
