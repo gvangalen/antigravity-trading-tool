@@ -7,6 +7,7 @@ import uuid
 import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.routing import APIRoute
 from dotenv import load_dotenv
@@ -35,6 +36,9 @@ logger = logging.getLogger(__name__)
 # 🚀 FastAPI app
 # ------------------------------------------------------------
 app = FastAPI(title="Market Dashboard API", version="1.0")
+UNSAFE_HTTP_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+CSRF_COOKIE_NAME = "csrf_token"
+CSRF_HEADER_NAME = "x-csrf-token"
 
 
 @app.middleware("http")
@@ -44,6 +48,22 @@ async def request_trace_id_middleware(request, call_next):
     response = await call_next(request)
     response.headers["X-Trace-Id"] = trace_id
     return response
+
+
+@app.middleware("http")
+async def csrf_protect_cookie_auth_middleware(request, call_next):
+    if request.url.path.startswith("/api/") and request.method.upper() in UNSAFE_HTTP_METHODS:
+        authorization = request.headers.get("authorization", "")
+        using_bearer_auth = authorization.lower().startswith("bearer ")
+        session_cookie = request.cookies.get("access_token") or request.cookies.get("refresh_token")
+
+        if session_cookie and not using_bearer_auth:
+            csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME)
+            csrf_header = request.headers.get(CSRF_HEADER_NAME)
+            if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+                return JSONResponse(status_code=403, content={"detail": "CSRF validation failed."})
+
+    return await call_next(request)
 
 
 @app.middleware("http")

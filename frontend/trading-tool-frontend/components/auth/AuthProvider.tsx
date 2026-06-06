@@ -41,6 +41,7 @@ async function fetchWithAuth(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
+  const method = String(options.method || "GET").toUpperCase();
   return fetch(url, {
     credentials: "include",
     headers: {
@@ -48,7 +49,7 @@ async function fetchWithAuth(
         buildAuthHeaders({
           "Content-Type": "application/json",
           ...(options.headers ?? {}),
-        }).entries()
+        }, method).entries()
       ),
     },
     ...options,
@@ -73,7 +74,7 @@ export function AuthProvider({ children }) {
     return fetch(`${API_BASE_URL}/api/auth/me`, {
       credentials: "include",
       headers: Object.fromEntries(
-        buildAuthHeaders({ "Content-Type": "application/json" }).entries()
+        buildAuthHeaders({ "Content-Type": "application/json" }, "GET").entries()
       ),
       signal,
     });

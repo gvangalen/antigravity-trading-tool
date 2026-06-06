@@ -1,5 +1,6 @@
 import os
 import logging
+import secrets
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Cookie, Body, Header, Request
@@ -43,10 +44,20 @@ COOKIE_SETTINGS = dict(
     path="/",
 )
 
+CSRF_COOKIE_SETTINGS = dict(
+    httponly=False,
+    secure=is_prod_https,
+    samesite=samesite_val,
+    domain=cookie_domain,
+    path="/",
+)
+
 auth_rate_limiter = InMemoryRateLimiter(requests_limit=10, window_seconds=300)
 AUTH_LOGIN_EMAIL_LIMIT = 6
 AUTH_LOGIN_IP_LIMIT = 20
 AUTH_REFRESH_IP_LIMIT = 30
+CSRF_COOKIE_NAME = "csrf_token"
+CSRF_HEADER_NAME = "X-CSRF-Token"
 
 
 def _auth_client_mode(x_tradamind_client: Optional[str]) -> str:
@@ -92,6 +103,17 @@ def _apply_auth_refresh_rate_limit(raw_request: Request) -> None:
 
 def _safe_auth_error(message: str, status_code: int) -> HTTPException:
     return HTTPException(status_code=status_code, detail=message)
+
+
+def _issue_csrf_cookie(response: Response) -> str:
+    token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        CSRF_COOKIE_NAME,
+        token,
+        max_age=60 * 60 * 24 * 7,
+        **CSRF_COOKIE_SETTINGS,
+    )
+    return token
 
 async def get_auth_service(db: AsyncSession = Depends(get_db)):
     repo = UserRepository(db)
@@ -150,6 +172,7 @@ async def login(
             max_age=60 * 60 * 24 * 7,
             **COOKIE_SETTINGS,
         )
+        _issue_csrf_cookie(response)
 
         sys_logger.log_info(f"User logged in: {body.email}", source="auth", endpoint="/auth/login", user_id=result["user"].id)
 
@@ -206,6 +229,7 @@ async def refresh_token(
             max_age=60 * 60 * 24 * 7,
             **COOKIE_SETTINGS,
         )
+        _issue_csrf_cookie(resp)
         return resp
         
     except ValueError as e:
@@ -235,7 +259,7 @@ async def logout(
     # op verschillende (sub)domeinen te voorkomen.
     
     # 1. Voor het geconfigureerde domein (.tradamind.com)
-    for cookie_name in ["access_token", "refresh_token"]:
+    for cookie_name in ["access_token", "refresh_token", CSRF_COOKIE_NAME]:
         resp.delete_cookie(
             cookie_name, 
             path="/",
@@ -264,11 +288,15 @@ async def logout(
 
 @router.get("/auth/me", response_model=UserOut)
 async def get_me(
+    response: Response,
+    csrf_token: Optional[str] = Cookie(default=None),
     current_user: dict = Depends(get_current_user),
     service: AuthService = Depends(get_auth_service)
 ):
     try:
         user_id = current_user["id"]
+        if not csrf_token:
+            _issue_csrf_cookie(response)
         return await service.get_me(user_id)
     except ValueError as e:
         raise _safe_auth_error("Gebruiker niet gevonden.", 404)

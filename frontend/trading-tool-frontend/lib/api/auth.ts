@@ -42,12 +42,26 @@ export function clearStoredAuth() {
   clearUserLocal();
 }
 
-export function buildAuthHeaders(headers?: HeadersInit) {
+export function getCsrfToken() {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+export function buildAuthHeaders(headers?: HeadersInit, method: string = "GET") {
   const merged = new Headers(headers || {});
   const accessToken = loadAccessToken();
 
   if (accessToken && !merged.has("Authorization")) {
     merged.set("Authorization", `Bearer ${accessToken}`);
+  }
+
+  const normalizedMethod = String(method || "GET").toUpperCase();
+  if (!IS_NATIVE_APP && ["POST", "PUT", "PATCH", "DELETE"].includes(normalizedMethod)) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken && !merged.has("X-CSRF-Token")) {
+      merged.set("X-CSRF-Token", csrfToken);
+    }
   }
 
   return merged;
@@ -112,7 +126,7 @@ async function fetchAuthInternal(
     headers: {
       "Content-Type": "application/json",
       ...noStoreHeaders,
-      ...Object.fromEntries(buildAuthHeaders(options.headers).entries()),
+      ...Object.fromEntries(buildAuthHeaders(options.headers, method).entries()),
     },
   });
 
@@ -172,7 +186,10 @@ export async function apiLogin(email: string, password: string) {
     const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...Object.fromEntries(buildAuthHeaders(undefined, "POST").entries()),
+      },
       body: JSON.stringify({ email, password }),
     });
 
@@ -215,7 +232,7 @@ export async function apiLogout() {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        ...Object.fromEntries(buildAuthHeaders().entries()),
+        ...Object.fromEntries(buildAuthHeaders(undefined, "POST").entries()),
       },
     });
     clearStoredAuth();
@@ -238,7 +255,7 @@ export async function apiRefresh(refreshToken?: string) {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        ...Object.fromEntries(buildAuthHeaders().entries()),
+        ...Object.fromEntries(buildAuthHeaders(undefined, "POST").entries()),
       },
       body: tokenForRequest
         ? JSON.stringify({ refresh_token: tokenForRequest })
@@ -270,7 +287,7 @@ export async function apiMe() {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        ...Object.fromEntries(buildAuthHeaders().entries()),
+        ...Object.fromEntries(buildAuthHeaders(undefined, "GET").entries()),
       },
     });
 

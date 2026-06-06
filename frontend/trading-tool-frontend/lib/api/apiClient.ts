@@ -12,7 +12,7 @@ function resolveCacheMode(method: string, init?: ApiRequestInit): RequestCache {
   return "default";
 }
 
-function buildJsonHeaders(init: ApiRequestInit | undefined, cacheMode: RequestCache) {
+function buildJsonHeaders(method: string, init: ApiRequestInit | undefined, cacheMode: RequestCache) {
   const headers = new Headers(init?.headers || {});
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -24,7 +24,7 @@ function buildJsonHeaders(init: ApiRequestInit | undefined, cacheMode: RequestCa
     headers.set("Expires", "0");
   }
 
-  return Object.fromEntries(buildAuthHeaders(headers).entries());
+  return Object.fromEntries(buildAuthHeaders(headers, method).entries());
 }
 
 //----------------------------------------------------------
@@ -39,7 +39,7 @@ export async function apiGet<T>(path: string, init?: ApiRequestInit): Promise<T>
     ...init,
     method: "GET",
     credentials: "include",
-    headers: buildJsonHeaders(init, cacheMode),
+    headers: buildJsonHeaders("GET", init, cacheMode),
     cache: cacheMode,
   });
 
@@ -83,7 +83,7 @@ export async function apiPost<T>(
     ...init,
     method: "POST",
     credentials: "include",
-    headers: buildJsonHeaders(init, cacheMode),
+    headers: buildJsonHeaders("POST", init, cacheMode),
     cache: cacheMode,
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -128,7 +128,7 @@ export async function apiPut<T>(
     ...init,
     method: "PUT",
     credentials: "include",
-    headers: buildJsonHeaders(init, cacheMode),
+    headers: buildJsonHeaders("PUT", init, cacheMode),
     cache: cacheMode,
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -169,7 +169,7 @@ export async function apiDelete<T>(path: string, init?: ApiRequestInit): Promise
     ...init,
     method: "DELETE",
     credentials: "include",
-    headers: buildJsonHeaders(init, cacheMode),
+    headers: buildJsonHeaders("DELETE", init, cacheMode),
     cache: cacheMode,
   });
 
