@@ -42,7 +42,8 @@ async def complete_step(
         user_id = current_user["id"]
         return await service.complete_step(user_id, payload.step)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning("⚠️ Ongeldige onboarding stap voor user %s: %s", current_user["id"], e)
+        raise HTTPException(status_code=400, detail="Ongeldige onboarding stap.")
     except Exception as e:
         logger.exception("❌ Error voltooien onboarding step")
         raise HTTPException(status_code=500, detail="Internal Server Error")

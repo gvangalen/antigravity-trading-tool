@@ -151,7 +151,7 @@ async def preview_manual_order(
         raise
     except Exception as e:
         logger.error(f"❌ [preview_manual_order] Error: {e}", exc_info=True)
-        raise HTTPException(500, detail=str(e))
+        raise HTTPException(500, detail="Preview van order mislukt.")
 
 @router.post("/orders/manual")
 async def create_manual_order(

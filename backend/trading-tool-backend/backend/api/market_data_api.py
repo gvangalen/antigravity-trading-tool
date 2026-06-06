@@ -100,7 +100,7 @@ async def get_market_indicator_names(db: AsyncSession = Depends(get_db)):
         return await service.get_global_indicators()
     except Exception as e:
         logger.error(f"❌ [indicator_names] {e}")
-        raise HTTPException(500, detail=str(e))
+        raise HTTPException(500, "Fout bij ophalen market-indicatornamen.")
 
 @router.get("/market/indicator_rules/{name}")
 async def get_market_indicator_rules(
@@ -113,7 +113,7 @@ async def get_market_indicator_rules(
         return await service.get_indicator_rules(name, int(current_user["id"]))
     except Exception as e:
         logger.error(f"❌ [indicator_rules] {e}")
-        raise HTTPException(500, detail=str(e))
+        raise HTTPException(500, "Fout bij ophalen market-indicatorregels.")
 
 
 # =========================================================

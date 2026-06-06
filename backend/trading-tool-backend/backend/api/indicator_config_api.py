@@ -36,7 +36,8 @@ async def get_indicator_config(
         col_res = await service.get_indicator_config(category, indicator, user_id)
         return col_res
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning("⚠️ Ongeldige indicator config request: %s", e)
+        raise HTTPException(status_code=400, detail="Ongeldige indicator-configuratie.")
     except Exception as e:
         logger.exception("❌ Error getting indicator config")
         raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -61,7 +62,8 @@ async def update_indicator_settings(
         )
         return {"ok": True, "indicator": payload.indicator}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning("⚠️ Ongeldige indicator settings update: %s", e)
+        raise HTTPException(status_code=400, detail="Ongeldige indicator-instellingen.")
     except Exception as e:
         logger.exception("❌ Error updating indicator settings")
         raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -86,7 +88,8 @@ async def save_custom_rules(
         )
         return {"ok": True}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning("⚠️ Ongeldige indicator rules save: %s", e)
+        raise HTTPException(status_code=400, detail="Ongeldige indicatorregels.")
     except Exception as e:
         logger.exception("❌ Error saving custom rules")
         raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -109,8 +112,8 @@ async def reset_indicator_rules(
         )
         return {"ok": True}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning("⚠️ Ongeldige indicator reset request: %s", e)
+        raise HTTPException(status_code=400, detail="Ongeldige reset-aanvraag.")
     except Exception as e:
         logger.exception("❌ Error resetting indicator rules")
         raise HTTPException(status_code=500, detail="Internal Server Error")
-

@@ -128,7 +128,7 @@ async def get_all_macro_indicators(db: AsyncSession = Depends(get_db)):
         return await service.get_all_macro_indicators()
     except Exception as e:
         logger.error(f"❌ [macro_indicator_names] {e}")
-        raise HTTPException(500, detail=str(e))
+        raise HTTPException(500, "Fout bij ophalen macro-indicatornamen.")
 
 @router.get("/macro_indicator_rules/{name}", response_model=List[MacroIndicatorRuleResponse])
 async def get_rules_for_macro_indicator(
@@ -141,4 +141,4 @@ async def get_rules_for_macro_indicator(
         return await service.get_rules_for_macro_indicator(name, int(current_user["id"]))
     except Exception as e:
         logger.error(f"❌ [macro_indicator_rules] {e}")
-        raise HTTPException(500, detail=str(e))
+        raise HTTPException(500, "Fout bij ophalen macro-indicatorregels.")

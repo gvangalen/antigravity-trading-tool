@@ -1,3 +1,5 @@
+import hashlib
+
 from fastapi import APIRouter, HTTPException, Query, Depends
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +15,10 @@ def get_report_service(db: AsyncSession = Depends(get_db)):
     repo = ReportRepository(db)
     return ReportService(repo)
 
+
+def _token_fingerprint(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:12]
+
 @router.get("/public/report")
 async def get_public_report(
     token: str = Query(...),
@@ -25,7 +31,7 @@ async def get_public_report(
     - Print view
     - Public sharing links
     """
-    logger.info("🔓 Public report request | token=%s", token[:12])
+    logger.info("🔓 Public report request | token_fingerprint=%s", _token_fingerprint(token))
     
     try:
         return await service.get_public_report(token)
@@ -33,12 +39,12 @@ async def get_public_report(
         logger.warning("❌ Snapshot not found")
         raise HTTPException(status_code=404, detail="Snapshot not found")
     except PermissionError as e:
-        logger.warning(f"⛔ Snapshot link issue: {e}")
+        logger.warning("⛔ Snapshot link issue: %s", e)
         if str(e) == "Link expired":
             raise HTTPException(status_code=410, detail="Link expired")
         elif str(e) == "Report not ready":
             raise HTTPException(status_code=425, detail="Report not ready")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(status_code=403, detail="Access denied")
     except ValueError as e:
         logger.warning("⏳ Snapshot not ready yet")
         raise HTTPException(status_code=425, detail="Report not ready")
