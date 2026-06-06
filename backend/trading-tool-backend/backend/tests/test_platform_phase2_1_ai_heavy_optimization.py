@@ -54,6 +54,53 @@ def test_mission_control_preview_cache_reuses_base_analysis_and_invalidates(monk
     assert calls["count"] == 2
 
 
+def test_mission_control_explain_cache_reuses_response_and_invalidates(monkeypatch):
+    finn_module._mission_control_preview_cache.clear()
+    finn_module._mission_control_explain_cache.clear()
+    service = FinnPlanService(None)
+    calls = {"daily": 0, "governance": 0}
+
+    async def fake_daily(user_id, query, context):
+        calls["daily"] += 1
+        return {
+            "state": {
+                "analysis": {
+                    "portfolio_risk": {"status": "watch", "message": "BTC review"},
+                    "blocked_assets": [],
+                    "warning_assets": [],
+                    "reasons": [],
+                    "suggested_actions": [],
+                }
+            }
+        }
+
+    async def fake_governance(user_id, *, event_types, limit=40):
+        calls["governance"] += 1
+        return []
+
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", fake_daily)
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {"summary": {"open_action_count": 2}})
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", fake_governance)
+    monkeypatch.setattr(service, "_priority_engine_payload", lambda mission, analysis, signals: {
+        "headline": "Vandaag eerst BTC reviewen.",
+        "top_priorities": [{"title": "BTC review", "type": "review", "priority": "high", "why_now": "hoge exposure", "asset": "BTC"}],
+        "ignore_today": [],
+        "open_counts": {"workqueue_count": 2, "high_priority_count": 1},
+    })
+    monkeypatch.setattr(service, "_priority_engine_governance_signals", lambda events: {})
+
+    first = asyncio.run(service.build_mission_control_explain_response(5, "Vat Mission Control samen in drie bullets", {"page": "dashboard"}))
+    second = asyncio.run(service.build_mission_control_explain_response(5, "Vat Mission Control samen in drie bullets", {"page": "dashboard"}))
+
+    assert calls == {"daily": 1, "governance": 1}
+    assert first == second
+
+    FinnPlanService.invalidate_runtime_caches_for_user(5)
+    asyncio.run(service.build_mission_control_explain_response(5, "Vat Mission Control samen in drie bullets", {"page": "dashboard"}))
+
+    assert calls == {"daily": 2, "governance": 2}
+
+
 def test_recent_governance_events_cache_reuses_same_window():
     finn_module._governance_event_cache.clear()
 

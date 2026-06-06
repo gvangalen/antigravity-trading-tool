@@ -40,6 +40,7 @@ KNOWN_ASSET_CANDIDATES = ("BTC", "ETH", "SOL", "DOGE", "XRP", "ADA", "BNB", "AVA
 NUMBER_WITH_DELIMITER = r"([0-9][0-9.,]*)(?=\s|,|/|$)"
 FINN_STATE_VERSION = 2
 MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS", "15"))
+MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS", "15"))
 GOVERNANCE_EVENT_CACHE_TTL_SECONDS = int(os.getenv("GOVERNANCE_EVENT_CACHE_TTL_SECONDS", "15"))
 TRANSACTIONAL_FLOWS = {"plan_creation", "strategy_creation", "bot_creation", "indicator_config"}
 READ_ONLY_FLOWS = {
@@ -117,6 +118,7 @@ PRODUCT_REFRESH_HELP_PHRASES = (
 )
 
 _mission_control_preview_cache: Dict[int, Dict[str, Any]] = {}
+_mission_control_explain_cache: Dict[str, Dict[str, Any]] = {}
 _governance_event_cache: Dict[str, Dict[str, Any]] = {}
 
 
@@ -463,6 +465,10 @@ class FinnPlanService:
     @classmethod
     def invalidate_runtime_caches_for_user(cls, user_id: int) -> None:
         _mission_control_preview_cache.pop(int(user_id), None)
+        explain_prefix = f"{int(user_id)}:"
+        for key in list(_mission_control_explain_cache.keys()):
+            if str(key).startswith(explain_prefix):
+                _mission_control_explain_cache.pop(key, None)
         prefix = f"{int(user_id)}:"
         for key in list(_governance_event_cache.keys()):
             if str(key).startswith(prefix):
@@ -3819,6 +3825,11 @@ class FinnPlanService:
         query: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        context = context or {}
+        explain_cache_key = f"{int(user_id)}:{self._normalized_query(query)}:{str(context.get('page') or context.get('scope') or 'mission_control')}"
+        cached = _cache_get(_mission_control_explain_cache, explain_cache_key)
+        if cached is not None:
+            return cached
         daily = await self.build_portfolio_daily_coach_response(
             user_id,
             "Geef mijn daily brief",
@@ -3883,7 +3894,7 @@ class FinnPlanService:
             f"Open nu: {counts.get('workqueue_count', 0)} items, "
             f"{counts.get('high_priority_count', 0)} met hoge prioriteit."
         )
-        return {
+        response = {
             "response": "\n".join(response_lines),
             "intent": "mission_control_explain",
             "flow": "mission_control_explain",
@@ -3906,6 +3917,13 @@ class FinnPlanService:
             },
             "actions": [],
         }
+        _cache_set(
+            _mission_control_explain_cache,
+            explain_cache_key,
+            response,
+            MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS,
+        )
+        return response
 
     async def build_education_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         topic = self._match_education_topic(query)
