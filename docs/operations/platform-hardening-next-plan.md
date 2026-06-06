@@ -1,6 +1,6 @@
 # Tradamind Platform Hardening Plan
 
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 ## Purpose
 
@@ -137,6 +137,11 @@ Current implementation focus:
 4. visibility-aware single-flight polling on read-heavy frontend surfaces
 5. explicit containment of remaining legacy sync DB boundaries
 
+Current implementation note:
+
+- the first Phase 2 scale/observability slice is now live on production commit `52fbc52`
+- deploy stability now tolerates temporary broker/deep-health startup noise instead of rolling back on the first timeout
+
 ## Workstreams
 
 ## Workstream A — Execution Safety
@@ -242,6 +247,7 @@ Current state:
 - Tranches D, E, and F are live on production
 - the main remaining operational irritant is host startup jitter, not missing hardening slices
 - security hardening is now green at V1 scope instead of waiting on extra manual proof notes
+- the first Phase 2 scale/observability slice is live at `52fbc52`
 
 ## Definition Of Done
 
@@ -258,10 +264,10 @@ This hardening plan is meaningfully done when:
 
 Start with:
 
-- [Platform Hardening Tranche A — Execution Safety](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-a-execution-safety.md)
+- [Platform Phase 2.1 — Cluster Observability & Capacity Validation](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-phase-2-1-cluster-observability-capacity.md)
 
 Reason:
 
-- this is the highest ROI safety work
-- it reduces the most expensive class of failures first
-- it improves both product trust and scale readiness
+- the remaining risk is now cluster-scale behavior, not missing safety invariants
+- current process-lifetime counters are useful operator hints but not distributed truth
+- the next meaningful proof is measured throughput and observability under load

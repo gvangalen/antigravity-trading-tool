@@ -1,6 +1,6 @@
 # Platform Hardening Tranche F — Deploy Stability
 
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 ## Goal
 
@@ -12,7 +12,7 @@ Make deploy and rollback flows less sensitive to the recurring host pattern wher
 
 ## What Changed
 
-Implemented and deployed on production commit `404b4ec`:
+Originally implemented on production commit `404b4ec`, then extended again on June 6, 2026 by commit `52fbc52`:
 
 - deploy flow now tracks an explicit `BACKEND_APP` per environment
 - deploy flow waits for both:
@@ -20,6 +20,7 @@ Implemented and deployed on production commit `404b4ec`:
   - backend `/api/health`
 - if backend startup drifts, deploy now does a backend-only PM2 rescue restart
   before giving up
+- deep health now retries across temporary broker/startup instability instead of rolling back on the first timeout
 - rollback now clears stale git remote refs before `git fetch`
 - rollback now uses the same backend bind + health stabilization logic
 
@@ -42,13 +43,13 @@ This tranche is ready when:
 
 Confirmed after rollout:
 
-- host `HEAD=404b4ec`
-- host `LAST_GOOD_COMMIT=404b4ec`
+- host `HEAD=52fbc52`
+- host `LAST_GOOD_COMMIT=52fbc52`
 - external `/api/health` returned `200`
 - external `/report` returned `200`
 - external `/api/system/health` returned `401` as expected
 
 Operational note:
 
-- this host still needed one manual backend-only restart before `:8000` fully settled
-- that means the tranche is live and useful, but the host itself still has rollout jitter we should keep treating as an ops concern
+- this host still shows rollout jitter, especially while backend bind, Redis responsiveness, and Celery inspect are settling
+- the June 6, 2026 deploy path is much less trigger-happy now: it can wait through temporary broker/deep-health noise instead of immediately rolling back a good build

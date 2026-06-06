@@ -1,6 +1,6 @@
 # Platform Hardening Status
 
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 This document tracks the reliability/platform hardening track after the first six phases. It separates what is now production-ready for V1 from what remains legacy, scale-tuning, or enterprise-level work.
 
@@ -43,14 +43,21 @@ The main remaining risk is operational scale, not core request correctness:
 | Tranche C - Async Session Correctness | Green | Dashboard and assistant context paths no longer parallelize shared-session DB reads, and platform hardening tests now guard those paths explicitly. |
 | Tranche D - Operations Consolidation | Green | Deploy and rollback now use explicit environment PM2 configs, and the legacy `deploy.sh` path is intentionally blocked. |
 | Tranche E - Symbol/State Cleanup | Green | Bot portfolio state is now scoped by `(bot_id, symbol)` so symbol changes no longer collapse state into one row, and the legacy single-column unique constraint is handled during migration. |
-| Tranche F - Deploy Stability | Live with rollout caveat | Deploy/rollback now wait for backend bind plus health, can do a backend-only rescue restart, and rollback clears stale git remote refs before fetch. Production is live on `404b4ec`, but this host still needed one manual backend-only restart before `:8000` settled and external `/api/*` recovered. |
+| Tranche F - Deploy Stability | Green with rollout caveat | Deploy/rollback now wait for backend bind plus health, can do a backend-only rescue restart, and rollback clears stale git remote refs before fetch. The June 6, 2026 rollout on `52fbc52` also retries deep health across temporary broker startup noise instead of rolling back on the first timeout. |
+| Phase 2 - Scale & Observability Slice | Green at V1 scope | Queue-specific worker concurrency is configured centrally, deep health now surfaces process-lifetime retry/replay/dedupe/latency counters, generated frontend `out/` files are explicitly not contract authority, and read-heavy polling paths are normalized toward visibility-aware single-flight behavior. |
 | Security Hardening Slice | Green | External `/api/system/health` is operator-only, web/mobile auth contracts are corrected, refresh rotation and logout invalidation work, Finn `action_id` execute + replay is live, rate limits are enforced on execute/manual-order/preflight routes, authenticated frontend flows clear stale local user/token state, and market-data read routes no longer perform forward-return sync writes. |
 
 ## Current Live Baseline
 
 Latest deployed hardening commit:
 
-- `4b971b2` - `Finish platform hardening V1 proofs`
+- `52fbc52` - `Relax deploy deep health gate around broker startup`
+
+Current code and runtime truth:
+
+- `repo_head`: `52fbc52` on `main` as of June 6, 2026
+- `production_head`: `52fbc52` on Oracle as of June 6, 2026
+- `LAST_GOOD_COMMIT`: `52fbc52`
 
 Deploy/status convention for the next phase:
 
@@ -63,13 +70,14 @@ Use source under `frontend/trading-tool-frontend/lib/` and `frontend/trading-too
 
 Current rollout candidate:
 
-- `Platform hardening baseline is live on Oracle`
+- `Platform hardening baseline plus Phase 2 slice is live on Oracle`
 
 Latest smoke results from deploy:
 
 - `/api/health`: `200 {"status":"ok","message":"API is running"}`
 - `/api/system/health` externally: `401 {"detail":"Missing access token"}`
 - `/report`: `200`
+- internal `/api/system/health`: `degraded` during rollout acceptance on June 6, 2026 because broker/celery inspection lagged while large named-queue backlogs were still present
 - Celery workers: `default`, `market-portfolio`, `scoring-execution`, `ai-reporting`, `beat`
 - Phase 2 worker topology target:
   - `celery-worker-default`: `concurrency=2`
@@ -77,11 +85,11 @@ Latest smoke results from deploy:
   - `celery-worker-scoring-execution`: `concurrency=2`
   - `celery-worker-ai-reporting`: `concurrency=1`
   - `celery-beat`: unchanged
-- Oracle markers: `HEAD=4b971b2`, `LAST_GOOD_COMMIT=4b971b2`
+- Oracle markers: `HEAD=52fbc52`, `LAST_GOOD_COMMIT=52fbc52`
 
 Latest local regression:
 
-- `pytest -q backend/trading-tool-backend/backend/tests/test_enterprise_hardening_step6.py backend/trading-tool-backend/backend/tests/test_runtime_reliability_hardening.py`: `10 passed`
+- `pytest -q backend/trading-tool-backend/backend/tests/test_phase2_portfolio_execution_invariants.py backend/trading-tool-backend/backend/tests/test_celery_dispatcher.py backend/trading-tool-backend/backend/tests/test_celery_queue_policy.py backend/trading-tool-backend/backend/tests/test_system_health_service.py backend/trading-tool-backend/backend/tests/test_platform_hardening.py backend/trading-tool-backend/backend/tests/test_runtime_reliability_hardening.py backend/trading-tool-backend/backend/tests/test_platform_hardening_docs_status.py backend/trading-tool-backend/backend/tests/test_security_phase1.py backend/trading-tool-backend/backend/tests/test_security_phase3.py backend/trading-tool-backend/backend/tests/test_security_phase7.py backend/trading-tool-backend/backend/tests/test_frontend_cache_polling_policy.py backend/trading-tool-backend/backend/tests/test_platform_phase2_scale_observability.py`: `84 passed, 8 warnings`
 
 ## What Is Done
 
@@ -121,12 +129,14 @@ Latest local regression:
 
 - Lightweight health stays load-balancer friendly.
 - Deep health is operationally useful and rollout-gated.
+- Deep health now carries non-breaking process-lifetime dispatcher, replay, retry, and latency counters for V1 operator guidance.
 - Deploy script no longer runs user-specific business actions.
 - Deploy readiness window is robust enough for current backend startup time.
 - Deploy captures the previous known-good commit in `ops/deploy/PREVIOUS_GOOD_COMMIT`.
 - Successful deploys write `ops/deploy/LAST_GOOD_COMMIT`.
 - Failed deploys print a ready-to-run `rollback_live.sh <commit>` command.
 - `rollback_live.sh` resets code, reloads PM2, gates expected apps, and smokes `/api/health`, `/api/system/health`, and `/report` without running schema migrations.
+- `deploy_env.sh` now retries deep health across temporary broker startup timeouts before treating rollout noise as a real failure.
 
 ### Traceability
 
@@ -197,6 +207,7 @@ Latest local regression:
 - Frontend polling and `no-store` read amplification have a broader pass complete across dashboard, admin logs, intelligence events, market price hooks, and report generation polling.
 - Process-local read caches should remain opt-in unless moved to Redis/shared cache with explicit invalidation.
 - Queue age/throughput metrics would make backlog health easier to interpret than depth alone.
+- Current Phase 2 metrics are process-lifetime only; cluster-wide queue/retry/replay truth is still a Phase 2.1 follow-up.
 
 ### Enterprise later
 
@@ -245,6 +256,11 @@ See also:
    - surface queue lag / retry / replay / dedupe counters in deep health
    - keep frontend polling single-flight and visibility-aware on read-heavy surfaces
    - treat generated frontend artifacts as review byproducts, not contract authority
+
+6. Start Platform Phase 2.1.
+   - move from process-local operator hints to cluster-aware observability
+   - prove throughput under read-heavy, AI-heavy, and bot/execution-heavy load profiles
+   - align statusdocs and runtime markers on every rollout so repo truth and production truth do not drift
 
 ## QA Reference
 

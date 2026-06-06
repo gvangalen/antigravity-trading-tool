@@ -9,13 +9,24 @@ PHASE6_DOC = REPO_ROOT / "docs" / "operations" / "platform-hardening-phase6-qa.m
 def test_platform_status_reflects_latest_deployed_hardening_baseline():
     source = STATUS_DOC.read_text()
 
-    assert "`4b971b2` - `Finish platform hardening V1 proofs`" in source
-    assert "`Platform hardening baseline is live on Oracle`" in source
+    assert "`52fbc52` - `Relax deploy deep health gate around broker startup`" in source
+    assert "`Platform hardening baseline plus Phase 2 slice is live on Oracle`" in source
     assert (
-        "`pytest -q backend/trading-tool-backend/backend/tests/test_enterprise_hardening_step6.py "
-        "backend/trading-tool-backend/backend/tests/test_runtime_reliability_hardening.py`: `10 passed`"
+        "`pytest -q backend/trading-tool-backend/backend/tests/test_phase2_portfolio_execution_invariants.py "
+        "backend/trading-tool-backend/backend/tests/test_celery_dispatcher.py "
+        "backend/trading-tool-backend/backend/tests/test_celery_queue_policy.py "
+        "backend/trading-tool-backend/backend/tests/test_system_health_service.py "
+        "backend/trading-tool-backend/backend/tests/test_platform_hardening.py "
+        "backend/trading-tool-backend/backend/tests/test_runtime_reliability_hardening.py "
+        "backend/trading-tool-backend/backend/tests/test_platform_hardening_docs_status.py "
+        "backend/trading-tool-backend/backend/tests/test_security_phase1.py "
+        "backend/trading-tool-backend/backend/tests/test_security_phase3.py "
+        "backend/trading-tool-backend/backend/tests/test_security_phase7.py "
+        "backend/trading-tool-backend/backend/tests/test_frontend_cache_polling_policy.py "
+        "backend/trading-tool-backend/backend/tests/test_platform_phase2_scale_observability.py`: `84 passed, 8 warnings`"
         in source
     )
+    assert "Phase 2 - Scale & Observability Slice" in source
     assert "Step 5 - Frontend Cache/Polling" in source
     assert "Step 6 - Enterprise Safety Slice" in source
     assert "Step 7 - Multi-Instance Cache Coordination" in source
@@ -24,6 +35,8 @@ def test_platform_status_reflects_latest_deployed_hardening_baseline():
     assert "authenticated frontend flows clear stale local user/token state" in source
     assert "market-data read routes no longer perform forward-return sync writes" in source
     assert 'externally: `401 {"detail":"Missing access token"}`' in source
+    assert "repo_head" in source
+    assert "production_head" in source
     assert "LAST_GOOD_COMMIT" in source
     assert "rollback_live.sh <commit>" in source
 

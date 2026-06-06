@@ -50,8 +50,8 @@ Expected: rejected; no side effect.
 
 Live baseline on Oracle:
 
-- commit: `4b971b2`
-- `LAST_GOOD_COMMIT = 4b971b2`
+- commit: `52fbc52`
+- `LAST_GOOD_COMMIT = 52fbc52`
 
 What is now live-green:
 
