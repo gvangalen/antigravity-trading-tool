@@ -204,8 +204,9 @@ async def build_clients(
 
     health_client: Optional[httpx.AsyncClient] = None
     if health_url:
+        normalized_health_url = health_url.rstrip("/")
         health_client = httpx.AsyncClient(
-            base_url=health_url.rstrip("/"),
+            base_url=normalized_health_url,
             timeout=timeout_seconds,
             verify=verify,
             headers={"Accept": "application/json"},
@@ -213,6 +214,7 @@ async def build_clients(
         )
         if health_bearer_token:
             health_client.headers["Authorization"] = f"Bearer {health_bearer_token}"
+        health_client._tt_health_url = normalized_health_url  # type: ignore[attr-defined]
 
     return traffic_client, health_client
 
@@ -227,7 +229,8 @@ async def fetch_health_snapshot(
 
     started = time.perf_counter()
     try:
-        response = await client.get("")
+        health_url = getattr(client, "_tt_health_url", str(client.base_url))
+        response = await client.get(health_url)
         latency_ms = round((time.perf_counter() - started) * 1000, 2)
         payload = _safe_json(response.text)
         return {
