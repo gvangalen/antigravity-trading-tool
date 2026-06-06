@@ -106,4 +106,6 @@ def test_frontend_generated_output_is_not_treated_as_contract_authority():
     generated_candidates = list((FRONTEND_ROOT / "out").glob("**/*"))
 
     assert "body: JSON.stringify({ action_id: actionId })" in source
+    assert "localStorage.getItem('token')" not in source
+    assert "buildAuthHeaders" in source
     assert generated_candidates, "Expected generated frontend artifacts to exist for drift protection."

@@ -1,6 +1,6 @@
 'use client';
 
-import { fetchAuth } from '@/lib/api/auth';  // ✅ JUISTE AUTH
+import { buildAuthHeaders, fetchAuth } from '@/lib/api/auth';  // ✅ JUISTE AUTH
 import { API_BASE_URL } from '@/lib/config';
 
 //
@@ -164,13 +164,9 @@ export const assistantChatStream = async (query, context = {}, history = [], onC
     if (signal.aborted) return;
 
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
+      const headers = Object.fromEntries(
+        buildAuthHeaders({ 'Content-Type': 'application/json' }, 'POST').entries()
+      );
 
       const response = await fetch(`${API_BASE_URL}/api/assistant/chat/stream`, {
         method: 'POST',
