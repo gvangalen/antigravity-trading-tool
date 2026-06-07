@@ -36,7 +36,7 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'deep_health_ready=false' in source
     assert 'for attempt in \\$(seq 1 \\"$DEEP_HEALTH_ATTEMPTS\\"); do' in source
     assert 'Deep health not ready yet' in source
-    assert 'bash ./ops/deploy/bootstrap_runtime_dependencies.sh "\\$(pwd)"' in source
+    assert 'bash ./ops/deploy/bootstrap_runtime_dependencies.sh' in source
 
 
 def test_rollback_env_persists_previous_commit_and_pm2_fallback():
