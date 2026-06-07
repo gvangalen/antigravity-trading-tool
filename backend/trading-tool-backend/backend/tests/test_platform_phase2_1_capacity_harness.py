@@ -42,6 +42,50 @@ def test_default_profiles_are_safe_by_construction():
             assert "/api/report/daily/generate" not in request["path"]
 
 
+def test_mixed_load_distribution_matches_target_user_mix():
+    module = _load_script_module()
+
+    distribution = module.allocate_profile_mix(
+        virtual_users=100,
+        read_share=80,
+        ai_share=15,
+        bot_share=5,
+    )
+
+    assert distribution == {
+        "read-heavy": 80,
+        "ai-heavy": 15,
+        "bot-execution-heavy": 5,
+    }
+
+
+def test_mixed_load_requests_stay_safe_and_user_scoped():
+    module = _load_script_module()
+
+    requests, distribution = module.build_mixed_profile_requests(
+        virtual_users=20,
+        iterations_per_user=1,
+        read_share=80,
+        ai_share=15,
+        bot_share=5,
+        manual_order_preview_fixture=None,
+    )
+
+    assert distribution == {
+        "read-heavy": 16,
+        "ai-heavy": 3,
+        "bot-execution-heavy": 1,
+    }
+    assert requests
+    for request in requests:
+        assert request["profile"] == "mixed-load"
+        assert request["scenario_profile"] in {"read-heavy", "ai-heavy", "bot-execution-heavy"}
+        assert request["virtual_user"] >= 1
+        assert "/api/assistant/actions/execute" not in request["path"]
+        assert "/api/orders/manual" not in request["path"]
+        assert "/api/report/daily/generate" not in request["path"]
+
+
 def test_bot_execution_profile_only_uses_preview_when_fixture_is_present(tmp_path: Path):
     module = _load_script_module()
 
@@ -81,5 +125,7 @@ def test_capacity_harness_doc_references_script_and_safe_profiles():
     assert "read-heavy" in source
     assert "ai-heavy" in source
     assert "bot-execution-heavy" in source
+    assert "mixed-load" in source
+    assert "80% dashboard/read" in source
     assert "no execute endpoints" in source
     assert "manual-order preview only when an explicit fixture is supplied" in source

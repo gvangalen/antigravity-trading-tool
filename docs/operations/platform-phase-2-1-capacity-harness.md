@@ -18,6 +18,7 @@ The goal is to measure:
 - request latency under profile load
 - queue/deep-health behavior before, during, and after a run
 - whether the current worker topology stays calm enough under realistic V1 traffic
+- first mixed-load behavior for a realistic staging user blend
 
 ## Script
 
@@ -49,6 +50,20 @@ Exercises governance/preview-style traffic without real execution:
 - `/api/bot/portfolios`
 - `/api/assistant/chat` with governance prompts
 - optional `/api/orders/preview` only when an explicit fixture is supplied
+
+### `mixed-load`
+
+Exercises the first platform-scale staging blend:
+
+- `80% dashboard/read` users
+- `15% FINN/AI` users
+- `5% bot/governance-preview` users
+
+The mixed profile reuses the same safe request families as the dedicated profiles:
+
+- no execute endpoints
+- no live/manual orders
+- no report-generation writes
 
 ## Usage
 
@@ -87,6 +102,29 @@ python3 /Users/gvangalen/Documents/antigravity-trading-tool/backend/trading-tool
   --output-md /tmp/platform-phase2-1-capacity.md
 ```
 
+Mixed staging baseline example:
+
+```bash
+export TT_USER_PASSWORD="<password>"
+export TT_HEALTH_BEARER_TOKEN="<operator-token>"
+
+python3 /Users/gvangalen/Documents/antigravity-trading-tool/backend/trading-tool-backend/backend/scripts/run_platform_capacity_profiles.py \
+  --base-url https://staging.tradamind.com \
+  --login-email "<email>" \
+  --password-env TT_USER_PASSWORD \
+  --health-url https://staging.tradamind.com/api/system/health \
+  --health-bearer-token-env TT_HEALTH_BEARER_TOKEN \
+  --profiles mixed-load \
+  --virtual-users 100 \
+  --iterations-per-user 1 \
+  --read-share 80 \
+  --ai-share 15 \
+  --bot-share 5 \
+  --mixed-concurrency 20 \
+  --output-json /tmp/platform-scale-staging-mixed-100.json \
+  --output-md /tmp/platform-scale-staging-mixed-100.md
+```
+
 If the local machine has a broken CA bundle for this environment, add `--insecure`.
 
 ## Optional manual-order preview fixture
@@ -117,6 +155,7 @@ The harness writes:
 Each run records:
 
 - per-profile request count
+- mixed-load virtual-user distribution when used
 - success/failure counts
 - avg/p95/max latency
 - status distribution

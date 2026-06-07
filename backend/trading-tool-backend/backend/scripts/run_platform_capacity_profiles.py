@@ -39,6 +39,8 @@ SAFE_GOVERNANCE_QUERIES = [
     "Welke confirmation is nodig voordat ik dit uitvoer?",
 ]
 
+PROFILE_CHOICES = ["read-heavy", "ai-heavy", "bot-execution-heavy", "mixed-load"]
+
 
 def _percentile(values: List[float], percentile: float) -> float:
     if not values:
@@ -160,11 +162,86 @@ def build_profile_requests(
     raise ValueError(f"Unknown profile: {profile}")
 
 
-def profile_concurrency(profile: str) -> int:
+def allocate_profile_mix(
+    *,
+    virtual_users: int,
+    read_share: int,
+    ai_share: int,
+    bot_share: int,
+) -> Dict[str, int]:
+    if virtual_users <= 0:
+        raise ValueError("virtual_users must be greater than 0.")
+
+    weights = {
+        "read-heavy": max(0, int(read_share)),
+        "ai-heavy": max(0, int(ai_share)),
+        "bot-execution-heavy": max(0, int(bot_share)),
+    }
+    total_weight = sum(weights.values())
+    if total_weight <= 0:
+        raise ValueError("At least one traffic share must be greater than 0.")
+
+    raw_counts = {
+        profile: (virtual_users * weight) / total_weight
+        for profile, weight in weights.items()
+    }
+    counts = {profile: int(value) for profile, value in raw_counts.items()}
+    assigned = sum(counts.values())
+    remainders = sorted(
+        (
+            (raw_counts[profile] - counts[profile], weights[profile], profile)
+            for profile in weights
+        ),
+        reverse=True,
+    )
+    for _, _, profile in remainders[: max(0, virtual_users - assigned)]:
+        counts[profile] += 1
+    return counts
+
+
+def build_mixed_profile_requests(
+    *,
+    virtual_users: int,
+    iterations_per_user: int,
+    read_share: int,
+    ai_share: int,
+    bot_share: int,
+    manual_order_preview_fixture: Optional[Dict[str, Any]] = None,
+) -> tuple[List[Dict[str, Any]], Dict[str, int]]:
+    distribution = allocate_profile_mix(
+        virtual_users=virtual_users,
+        read_share=read_share,
+        ai_share=ai_share,
+        bot_share=bot_share,
+    )
+    requests: List[Dict[str, Any]] = []
+    virtual_user_id = 0
+    for scenario_profile in ["read-heavy", "ai-heavy", "bot-execution-heavy"]:
+        for _ in range(distribution[scenario_profile]):
+            virtual_user_id += 1
+            profile_requests = build_profile_requests(
+                scenario_profile,
+                iterations=iterations_per_user,
+                manual_order_preview_fixture=manual_order_preview_fixture,
+            )
+            for request in profile_requests:
+                requests.append(
+                    {
+                        **request,
+                        "profile": "mixed-load",
+                        "scenario_profile": scenario_profile,
+                        "virtual_user": virtual_user_id,
+                    }
+                )
+    return requests, distribution
+
+
+def profile_concurrency(profile: str, mixed_concurrency: int = 20) -> int:
     return {
         "read-heavy": 4,
         "ai-heavy": 2,
         "bot-execution-heavy": 2,
+        "mixed-load": max(1, int(mixed_concurrency)),
     }[profile]
 
 
@@ -317,13 +394,30 @@ async def run_profile(
     profile: str,
     iterations: int,
     manual_order_preview_fixture: Optional[Dict[str, Any]],
+    mixed_virtual_users: int = 100,
+    mixed_iterations_per_user: int = 1,
+    mixed_read_share: int = 80,
+    mixed_ai_share: int = 15,
+    mixed_bot_share: int = 5,
+    mixed_concurrency: int = 20,
 ) -> Dict[str, Any]:
-    specs = build_profile_requests(
-        profile,
-        iterations=iterations,
-        manual_order_preview_fixture=manual_order_preview_fixture,
-    )
-    semaphore = asyncio.Semaphore(profile_concurrency(profile))
+    mix_distribution: Optional[Dict[str, int]] = None
+    if profile == "mixed-load":
+        specs, mix_distribution = build_mixed_profile_requests(
+            virtual_users=mixed_virtual_users,
+            iterations_per_user=mixed_iterations_per_user,
+            read_share=mixed_read_share,
+            ai_share=mixed_ai_share,
+            bot_share=mixed_bot_share,
+            manual_order_preview_fixture=manual_order_preview_fixture,
+        )
+    else:
+        specs = build_profile_requests(
+            profile,
+            iterations=iterations,
+            manual_order_preview_fixture=manual_order_preview_fixture,
+        )
+    semaphore = asyncio.Semaphore(profile_concurrency(profile, mixed_concurrency=mixed_concurrency))
 
     async def _guarded(spec: Dict[str, Any]) -> Dict[str, Any]:
         async with semaphore:
@@ -333,11 +427,14 @@ async def run_profile(
     results = await asyncio.gather(*[_guarded(spec) for spec in specs])
     latencies = [item["latency_ms"] for item in results]
     status_counts: Dict[str, int] = {}
+    profile_counts: Dict[str, int] = {}
     for item in results:
         key = str(item["http_status"])
         status_counts[key] = status_counts.get(key, 0) + 1
+        scenario_profile = item.get("scenario_profile") or item["profile"]
+        profile_counts[scenario_profile] = profile_counts.get(scenario_profile, 0) + 1
 
-    return {
+    summary = {
         "profile": profile,
         "request_count": len(results),
         "duration_ms": round((time.perf_counter() - started) * 1000, 2),
@@ -347,8 +444,20 @@ async def run_profile(
         "success_count": sum(1 for item in results if item["ok"]),
         "failure_count": sum(1 for item in results if not item["ok"]),
         "status_counts": status_counts,
+        "scenario_request_counts": profile_counts,
         "results": results,
     }
+    if mix_distribution is not None:
+        summary["mixed_distribution"] = mix_distribution
+        summary["virtual_users"] = mixed_virtual_users
+        summary["iterations_per_user"] = mixed_iterations_per_user
+        summary["mixed_concurrency"] = mixed_concurrency
+        summary["traffic_mix"] = {
+            "read_share": mixed_read_share,
+            "ai_share": mixed_ai_share,
+            "bot_share": mixed_bot_share,
+        }
+    return summary
 
 
 def render_markdown(summary: Dict[str, Any]) -> str:
@@ -363,6 +472,13 @@ def render_markdown(summary: Dict[str, Any]) -> str:
     for profile in summary["profile_summaries"]:
         lines.append(f"## {profile['profile']}")
         lines.append("")
+        if profile["profile"] == "mixed-load":
+            lines.append(f"- virtual_users: `{profile.get('virtual_users')}`")
+            lines.append(f"- iterations_per_user: `{profile.get('iterations_per_user')}`")
+            lines.append(f"- mixed_concurrency: `{profile.get('mixed_concurrency')}`")
+            lines.append(f"- mixed_distribution: `{profile.get('mixed_distribution')}`")
+            lines.append(f"- scenario_request_counts: `{profile.get('scenario_request_counts')}`")
+            lines.append(f"- traffic_mix: `{profile.get('traffic_mix')}`")
         lines.append(f"- request_count: `{profile['request_count']}`")
         lines.append(f"- success_count: `{profile['success_count']}`")
         lines.append(f"- failure_count: `{profile['failure_count']}`")
@@ -399,9 +515,15 @@ async def async_main(argv: Optional[Iterable[str]] = None) -> int:
         "--profiles",
         nargs="+",
         default=["read-heavy", "ai-heavy", "bot-execution-heavy"],
-        choices=["read-heavy", "ai-heavy", "bot-execution-heavy"],
+        choices=PROFILE_CHOICES,
     )
     parser.add_argument("--iterations", type=int, default=2)
+    parser.add_argument("--virtual-users", type=int, default=100)
+    parser.add_argument("--iterations-per-user", type=int, default=1)
+    parser.add_argument("--read-share", type=int, default=80)
+    parser.add_argument("--ai-share", type=int, default=15)
+    parser.add_argument("--bot-share", type=int, default=5)
+    parser.add_argument("--mixed-concurrency", type=int, default=20)
     parser.add_argument("--health-interval-seconds", type=float, default=10.0)
     parser.add_argument("--timeout-seconds", type=float, default=45.0)
     parser.add_argument("--manual-order-preview-fixture", type=Path, default=None)
@@ -449,6 +571,12 @@ async def async_main(argv: Optional[Iterable[str]] = None) -> int:
                         profile=profile,
                         iterations=args.iterations,
                         manual_order_preview_fixture=manual_order_preview_fixture,
+                        mixed_virtual_users=args.virtual_users,
+                        mixed_iterations_per_user=args.iterations_per_user,
+                        mixed_read_share=args.read_share,
+                        mixed_ai_share=args.ai_share,
+                        mixed_bot_share=args.bot_share,
+                        mixed_concurrency=args.mixed_concurrency,
                     )
                 )
         finally:

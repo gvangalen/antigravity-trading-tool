@@ -137,6 +137,12 @@ Current implementation focus:
 4. visibility-aware single-flight polling on read-heavy frontend surfaces
 5. explicit containment of remaining legacy sync DB boundaries
 
+Next operating sprint after the staging HTTPS milestone:
+
+- [Tradamind Platform Scale Sprint](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-scale-sprint-post-staging.md)
+- immediate execution tranche:
+  - [Platform Scale P0.1 — Staging Baseline](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-scale-staging-baseline.md)
+
 Current implementation note:
 
 - the first Phase 2 scale/observability slice is now live on production commit `52fbc52`
@@ -266,6 +272,8 @@ Start with:
 
 - [Platform Phase 2.1 — Cluster Observability & Capacity Validation](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-phase-2-1-cluster-observability-capacity.md)
 - first bridge slice now landed on `main` with `runtime_identity`, `observability_scope`, and `cluster_observability` in deep health
+- first profile runs now captured in [Platform Phase 2.1 Capacity Baseline](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-phase-2-1-capacity-baseline.md)
+- the next narrow optimization target is now captured in [Platform Phase 2.1 AI-heavy Optimization Checklist](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-phase-2-1-ai-heavy-optimization-checklist.md)
 
 Reason:
 

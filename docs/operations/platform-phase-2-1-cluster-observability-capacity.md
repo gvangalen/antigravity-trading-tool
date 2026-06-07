@@ -132,6 +132,12 @@ Current status:
 
 - the first safe capacity harness is now in repo:
   - [Platform Phase 2.1 Capacity Harness](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-phase-2-1-capacity-harness.md)
+- the first post-staging scale sprint baseline is now tracked in:
+  - [Platform Scale P0.1 — Staging Baseline](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-scale-staging-baseline.md)
+- the first baseline runs are also now recorded in:
+  - [Platform Phase 2.1 Capacity Baseline](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-phase-2-1-capacity-baseline.md)
+- the next narrow follow-up is tracked in:
+  - [Platform Phase 2.1 AI-heavy Optimization Checklist](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-phase-2-1-ai-heavy-optimization-checklist.md)
 - it is intentionally read-first:
   - no execute endpoints
   - no report generation endpoints
@@ -142,6 +148,7 @@ Profiles:
 1. read-heavy dashboard/report traffic
 2. AI-heavy assistant/report traffic
 3. bot/execution-heavy workflow traffic
+4. mixed-load staging traffic using `80/15/5` distribution
 
 Acceptance:
 
