@@ -25,6 +25,7 @@ numexpr>=2.8  # 🔧 fix voor setups_api en report_api
 # ✅ File Uploads & Templates
 python-multipart
 jinja2
+email-validator
 
 # ✅ AI
 openai>=1.0
@@ -41,3 +42,6 @@ tenacity>=8.2
 
 # ✅ Exchange Connectivity
 ccxt>=4.1
+
+# ✅ Report Rendering
+playwright

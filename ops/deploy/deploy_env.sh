@@ -115,6 +115,7 @@ if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   }
   sync_git_ref
   git reset --hard $DEPLOY_REF
+  bash ./ops/deploy/bootstrap_runtime_dependencies.sh "$(pwd)"
 
   cd backend/trading-tool-backend
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_18_manual_order_idempotency.py

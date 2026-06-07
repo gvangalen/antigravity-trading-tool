@@ -36,6 +36,7 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'deep_health_ready=false' in source
     assert 'for attempt in \\$(seq 1 \\"$DEEP_HEALTH_ATTEMPTS\\"); do' in source
     assert 'Deep health not ready yet' in source
+    assert 'bash ./ops/deploy/bootstrap_runtime_dependencies.sh "$(pwd)"' in source
 
 
 def test_rollback_env_persists_previous_commit_and_pm2_fallback():
@@ -47,6 +48,18 @@ def test_rollback_env_persists_previous_commit_and_pm2_fallback():
     assert 'printf "%s\\n" "$CURRENT_COMMIT" > "${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT"' in source
     assert 'sudo tee /var/www/tradamind/ops/deploy/PREVIOUS_GOOD_COMMIT' in source
     assert 'stabilize_backend_app' in source
+
+
+def test_runtime_bootstrap_covers_backend_frontend_and_playwright_dependencies():
+    source = (REPO_ROOT / "ops" / "deploy" / "bootstrap_runtime_dependencies.sh").read_text(encoding="utf-8")
+    requirements = (BACKEND_ROOT / "requirements.txt").read_text(encoding="utf-8")
+
+    assert 'python3 -m pip install -r "${BACKEND_REQUIREMENTS}"' in source
+    assert 'npm ci --no-audit --no-fund' in source
+    assert 'python3 -m playwright install chromium' in source
+    assert 'required = ("email_validator", "playwright")' in source
+    assert "email-validator" in requirements
+    assert "playwright" in requirements
 
 
 def test_mission_control_api_uses_short_ttl_cache_and_invalidates_after_finn_execute():
