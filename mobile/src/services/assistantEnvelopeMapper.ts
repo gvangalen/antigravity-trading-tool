@@ -13,6 +13,12 @@ export function mapAssistantEnvelopeToFeedItems(envelope: AssistantEnvelope): As
       type: 'message',
       role: 'assistant',
       text: envelope.response,
+      summary: envelope.summary ?? null,
+      riskSummary: envelope.risk_summary ?? null,
+      nextBestAction: envelope.next_best_action ?? null,
+      reviewReason: envelope.review_reason ?? null,
+      flow: envelope.flow ?? null,
+      intent: envelope.intent ?? null,
     },
   ];
 

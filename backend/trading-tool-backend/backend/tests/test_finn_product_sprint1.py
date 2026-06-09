@@ -1,5 +1,8 @@
 from backend.api.ai_assistant_api import _normalize_finn_response_contract
 from backend.services.finn_product_analytics_service import FinnProductAnalyticsService
+from backend.services.finn_plan_service import FinnPlanService
+import asyncio
+import pytest
 
 
 def test_normalize_finn_response_contract_promotes_primary_fields():
@@ -109,3 +112,57 @@ def test_finn_product_analytics_snapshot_counts_prompts_screens_and_funnel():
     assert snapshot["decision_review_usage_count"] == 1
     assert snapshot["priority_engine_usage_count"] == 1
     assert snapshot["repeated_user_signal"]["users_with_multiple_sessions"] == 1
+
+
+def test_general_capability_response_carries_operator_contract():
+    service = FinnPlanService(None)
+
+    payload = asyncio.run(service.build_general_capability_response(
+        7,
+        "Wat kan Finn hier doen?",
+        {"page": "setup", "page_type": "Setup", "symbol": "BTC"},
+    ))
+
+    assert payload["summary"]
+    assert payload["risk_summary"]
+    assert payload["next_best_action"]
+    assert payload["review_reason"]
+    assert payload["analysis"]["summary"] == payload["summary"]
+    assert payload["analysis"]["operator_resolution"]["summary"] == payload["review_reason"]
+
+
+def test_decision_review_response_carries_operator_summary_and_next_step():
+    service = FinnPlanService(None)
+
+    payload = asyncio.run(service.build_decision_review_response(
+        7,
+        "Beoordeel deze trade voor BTC met 3% risico",
+        {"page": "setup", "page_type": "Setup", "symbol": "BTC"},
+    ))
+
+    assert payload["intent"] == "decision_review"
+    assert payload["summary"]
+    assert payload["risk_summary"]
+    assert payload["next_best_action"]
+    assert payload["review_reason"]
+    assert payload["analysis"]["summary"] == payload["summary"]
+    assert payload["analysis"]["next_best_action"] == payload["next_best_action"]
+    assert payload["analysis"]["operator_resolution"]["what_next"][0] == payload["next_best_action"]
+
+
+def test_plan_adherence_response_carries_operator_summary_and_recovery():
+    service = FinnPlanService(None)
+
+    payload = asyncio.run(service.build_plan_adherence_review_response(
+        7,
+        "Mijn plan zegt wachten maar ik wil toch kopen",
+        {"page": "setup", "page_type": "Setup", "symbol": "BTC"},
+    ))
+
+    assert payload["intent"] == "plan_adherence_review"
+    assert payload["summary"]
+    assert payload["risk_summary"]
+    assert payload["next_best_action"]
+    assert payload["review_reason"]
+    assert payload["analysis"]["summary"] == payload["summary"]
+    assert payload["analysis"]["operator_resolution"]["summary"] == payload["review_reason"]

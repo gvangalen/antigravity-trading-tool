@@ -32,6 +32,12 @@ export function AssistantFeedRenderer({
               author={item.role === 'user' ? 'You' : 'Tradamind AI'}
               text={item.text}
               isUser={item.role === 'user'}
+              summary={item.summary}
+              riskSummary={item.riskSummary}
+              nextBestAction={item.nextBestAction}
+              reviewReason={item.reviewReason}
+              flow={item.flow}
+              intent={item.intent}
             />
           );
         }
