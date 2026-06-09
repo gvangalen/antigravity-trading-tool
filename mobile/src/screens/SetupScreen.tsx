@@ -4,6 +4,7 @@ import type { NavigationProp, RouteProp } from '@react-navigation/native';
 import { Pressable, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 
 import { BotDecisionCard } from '../components/cards/BotDecisionCard';
+import { AppButton } from '../components/buttons/AppButton';
 import { CardShell } from '../components/cards/CardShell';
 import { InsightCard } from '../components/cards/InsightCard';
 import { RiskWarningCard } from '../components/cards/RiskWarningCard';
@@ -33,6 +34,7 @@ import {
 import { triggerHaptic } from '../utils/haptics';
 import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
 import { useFinnOverlay } from '../contexts/FinnOverlayContext';
+import { trackAssistantEvent } from '../services/assistantAnalytics';
 
 type UnknownRecord = Record<string, unknown>;
 type SheetKey = 'setup' | 'strategy' | 'risk' | 'confirm' | null;
@@ -69,6 +71,14 @@ export function SetupScreen() {
   const [actionStatus, setActionStatus] = useState<string>('');
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'briefing' | 'actief' | 'setups' | 'strategies'>('briefing');
+
+  useEffect(() => {
+    trackAssistantEvent({
+      event_name: 'screen_view',
+      page: 'setup',
+      flow_type: activeTab,
+    });
+  }, [activeTab]);
 
   const fetchStrategies = useCallback(() => intelligenceApi.queryStrategies({}), []);
   const strategiesResource = useApiResource<any | undefined>({
@@ -187,7 +197,7 @@ export function SetupScreen() {
         bot_id: botMeta.botId,
         report_date: botMeta.reportDate,
       });
-      setActionStatus('Botactie is overgeslagen. De backend-status is bijgewerkt.');
+      setActionStatus('Botactie is overgeslagen. De backend-status is bijgewerkt en Finn helpt je nu bepalen wat je moet blijven volgen.');
       await botResource.refresh();
       openFinn({
         prefill: `Ik heb de botactie voor ${activeAsset} overgeslagen. Leg kort uit wat ik nu moet blijven monitoren.`,
@@ -209,7 +219,7 @@ export function SetupScreen() {
         bot_id: botMeta.botId,
         decision_id: botMeta.decisionId,
       });
-      setActionStatus('Botactie is gemarkeerd als uitgevoerd.');
+      setActionStatus('Botactie is gemarkeerd als uitgevoerd. Finn vat nu kort samen wat dit betekent voor je volgende review.');
       await botResource.refresh();
       openFinn({
         prefill: `Ik heb de botactie voor ${activeAsset} gemarkeerd als uitgevoerd. Vat de impact samen voor mijn volgende rapport.`,
@@ -332,7 +342,7 @@ export function SetupScreen() {
           {activeTab === 'setups' && (
             <View style={{ paddingHorizontal: theme.spacing.lg }}>
               <SectionHeader
-                label="Other Setups"
+                label="Andere setups"
                 title="Andere setups"
                 description="Blader door alle setups of filter op status."
               />
@@ -362,7 +372,7 @@ export function SetupScreen() {
           {activeTab === 'strategies' && (
             <View style={{ paddingHorizontal: theme.spacing.lg }}>
               <SectionHeader
-                label="Strategies"
+                label="Strategieën"
                 title="Beheer strategieën"
                 description="Lijst van al jouw opgeslagen strategieën."
               />
@@ -379,8 +389,9 @@ export function SetupScreen() {
                 />
               </View>
 
-              <TouchableOpacity
-                style={{ backgroundColor: theme.colors.accent, padding: theme.spacing.sm, borderRadius: 6, alignItems: 'center', marginBottom: theme.spacing.md }}
+              <AppButton
+                label="+ Nieuwe strategie"
+                style={{ marginBottom: theme.spacing.md }}
                 onPress={() => {
                   openFinn({
                     prefill: `Vraag letterlijk: "Wil je een strategie maken voor ${activeAsset}?"`,
@@ -388,9 +399,7 @@ export function SetupScreen() {
                     symbol: activeAsset,
                   });
                 }}
-              >
-                <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>+ NIEUWE STRATEGIE</Text>
-              </TouchableOpacity>
+              />
 
               {strategiesResource.loading ? (
                 <Text style={{ color: theme.colors.textSoft }}>Laden...</Text>
@@ -405,7 +414,7 @@ export function SetupScreen() {
                 ))
               ) : (
                 <InsightCard
-                  label="Strategies"
+                  label="Strategieën"
                   title="Geen strategieën gevonden"
                   body="Je hebt nog geen strategieën aangemaakt."
                   tone="neutral"
@@ -428,20 +437,20 @@ export function SetupScreen() {
             'Controleer backend/API status.'
           }
           tone="warning"
-          cta="Pull to refresh"
+          cta="Ververs"
         />
       ) : null}
 
-      <BottomSheet visible={sheet === 'setup'} title="Active setup" onClose={() => setSheet(null)}>
+      <BottomSheet visible={sheet === 'setup'} title="Actieve setup" onClose={() => setSheet(null)}>
         <SetupSheet setup={setup} />
       </BottomSheet>
-      <BottomSheet visible={sheet === 'strategy'} title="Strategy detail" onClose={() => setSheet(null)}>
+      <BottomSheet visible={sheet === 'strategy'} title="Strategiedetail" onClose={() => setSheet(null)}>
         <StrategySheet strategy={strategySource} fallback={strategy} />
       </BottomSheet>
-      <BottomSheet visible={sheet === 'risk'} title="Risk explanation" onClose={() => setSheet(null)}>
+      <BottomSheet visible={sheet === 'risk'} title="Laat Finn risico uitleggen" onClose={() => setSheet(null)}>
         <RiskSheet decisionState={decisionState} setup={setup} botReasons={botMeta.reasons} />
       </BottomSheet>
-      <BottomSheet visible={sheet === 'confirm'} title="Review bot action" onClose={() => setSheet(null)}>
+      <BottomSheet visible={sheet === 'confirm'} title="Bevestig botactie" onClose={() => setSheet(null)}>
         <ConfirmBotSheet
           actionLoading={actionLoading}
           actionStatus={actionStatus}
@@ -462,7 +471,7 @@ function SetupTabBar({ activeTab, onSelect }: { activeTab: string; onSelect: (ta
         { key: 'briefing', label: 'Briefing' },
         { key: 'actief', label: 'Actief' },
         { key: 'setups', label: 'Setups' },
-        { key: 'strategies', label: 'Strategies' },
+        { key: 'strategies', label: 'Strategieën' },
       ]}
       selected={activeTab}
       onChange={(value) => onSelect(value as 'briefing' | 'actief' | 'setups' | 'strategies')}
@@ -760,7 +769,7 @@ function TopSetupsCard({ setups }: { setups: SetupSummary[] }) {
         title="Geen top setups gevonden."
         body="De backend heeft nog geen setup-ranking teruggegeven voor deze gebruiker."
         tone="neutral"
-        cta="Pull to refresh"
+        cta="Ververs"
       />
     );
   }
@@ -907,19 +916,25 @@ function ConfirmBotSheet({
 
   return (
     <View style={styles.sheetStack}>
-      <Text style={[styles.sheetTitle, { color: colors.text }]}>{botDecision.botName}</Text>
-      <Text style={[styles.bodyText, { color: colors.textMuted }]}>{botDecision.reason}</Text>
+      <Text style={[styles.sheetTitle, { color: colors.text }]}>Bevestig botactie voor {botDecision.botName}</Text>
+      <Text style={[styles.bodyText, { color: colors.textMuted }]}>
+        {botDecision.reason}
+      </Text>
       <View style={{ gap: 8, marginTop: theme.spacing.md }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 13, color: colors.textDim }}>Action</Text>
+          <Text style={{ fontSize: 13, color: colors.textDim }}>Context</Text>
+          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{botDecision.botName}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={{ fontSize: 13, color: colors.textDim }}>Actie</Text>
           <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{botDecision.action}</Text>
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 13, color: colors.textDim }}>Amount</Text>
+          <Text style={{ fontSize: 13, color: colors.textDim }}>Impact</Text>
           <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{botDecision.amount}</Text>
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 13, color: colors.textDim }}>Confidence</Text>
+          <Text style={{ fontSize: 13, color: colors.textDim }}>Vertrouwen</Text>
           <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{botDecision.confidence}</Text>
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -927,12 +942,15 @@ function ConfirmBotSheet({
           <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{botMeta.status || 'review'}</Text>
         </View>
       </View>
-      <Text style={styles.warningCopy}>{botDecision.guardrail}</Text>
+      <Text style={styles.warningCopy}>Veiligheid: {botDecision.guardrail}</Text>
+      <Text style={[styles.bodyText, { color: colors.textMuted }]}>
+        Daarna verversen we de backend-status en laat Finn kort weten wat je nu moet monitoren.
+      </Text>
       <View style={styles.sheetActions}>
         <ActionButton disabled={!canSkip || actionLoading} label="Sla botactie over" tone="warning" onPress={onSkip} />
         <ActionButton
           disabled={!botMeta.canMarkExecuted || actionLoading}
-          label="Markeer uitgevoerd"
+          label="Markeer botactie als uitgevoerd"
           tone="accent"
           onPress={onMarkExecuted}
         />
@@ -970,25 +988,22 @@ function ActionButton({
   const palette = statusTones[tone];
 
   return (
-    <Pressable
+    <AppButton
       disabled={disabled}
+      label={label}
+      variant={tone === 'warning' ? 'secondary' : 'primary'}
+      textColor={tone === 'warning' ? (disabled ? colors.textDim : palette.color) : undefined}
       onPress={async () => {
         await triggerHaptic('impact');
         onPress();
       }}
-      style={({ pressed }) => [
-        styles.sheetButton,
-        {
-          backgroundColor: disabled ? colors.surfaceMuted : palette.background,
-          borderColor: disabled ? colors.border : palette.border,
-        },
-        pressed && !disabled && styles.pressed,
-      ]}
-    >
-      <Text style={[styles.sheetButtonText, { color: disabled ? colors.textDim : palette.color }]}>
-        {label}
-      </Text>
-    </Pressable>
+      style={tone === 'warning'
+        ? {
+            backgroundColor: disabled ? colors.surfaceMuted : palette.background,
+            borderColor: disabled ? colors.border : palette.border,
+          }
+        : undefined}
+    />
   );
 }
 
@@ -1344,7 +1359,7 @@ function StrategyListCard({ strat }: { strat: any }) {
     >
       <View style={{ backgroundColor: '#F1F5F9', padding: 6, borderRadius: 4, marginBottom: theme.spacing.sm }}>
         <Text style={{ color: '#475569', fontSize: 10, fontWeight: '900', letterSpacing: 1.2 }}>
-          {strat.setup_name?.toUpperCase() || strat.name?.toUpperCase() || 'SETUP'}  >  {strat.name?.toUpperCase() || 'STRATEGIE'}
+          {strat.setup_name?.toUpperCase() || strat.name?.toUpperCase() || 'SETUP'} {'>'} {strat.name?.toUpperCase() || 'STRATEGIE'}
         </Text>
       </View>
 
@@ -2080,19 +2095,6 @@ const styles = StyleSheet.create({
   sheetActions: {
     gap: theme.spacing.sm,
     marginTop: theme.spacing.md,
-  },
-  sheetButton: {
-    alignItems: 'center',
-    borderRadius: theme.radius.button,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 50,
-  },
-  sheetButtonText: {
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
   },
   sheetStack: {
     gap: theme.spacing.md,

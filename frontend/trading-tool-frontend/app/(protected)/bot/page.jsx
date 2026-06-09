@@ -23,6 +23,8 @@ import {
 } from "@/app/providers/ActiveBotProvider";
 import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
+import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
+import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 function BotPageInner() {
   const { openConfirm, showSnackbar } = useModal();
@@ -69,6 +71,15 @@ function BotPageInner() {
   }, [loadStrategies]);
 
   useEffect(() => {
+    trackAssistantEvent({
+      event_name: "screen_view",
+      page: "/bot",
+      surface: "web",
+      flow_type: "portfolio_review",
+    });
+  }, []);
+
+  useEffect(() => {
     if (bots.length === 0) {
       setActiveBot(null);
       return;
@@ -77,6 +88,60 @@ function BotPageInner() {
       setActiveBot(bots[0]);
     }
   }, [bots, activeBot, setActiveBot]);
+
+  useEffect(() => {
+    if (!bots.length) return;
+
+    const requestedBotId = Number(searchParams.get("bot_id"));
+    const requestedSymbol = (searchParams.get("symbol") || "").toUpperCase();
+    const requestedFocus = searchParams.get("focus");
+
+    const targetBot =
+      (Number.isFinite(requestedBotId) && requestedBotId > 0
+        ? bots.find((bot) => bot.id === requestedBotId)
+        : null) ||
+      (requestedSymbol
+        ? bots.find((bot) => String(bot?.symbol || bot?.strategy?.symbol || "").toUpperCase() === requestedSymbol)
+        : null);
+
+    if (targetBot && activeBot?.id !== targetBot.id) {
+      setActiveBot(targetBot);
+    }
+
+    if (requestedFocus === "trade") {
+      requestAnimationFrame(() => {
+        document.getElementById("execution-guardrail-panel")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    }
+  }, [bots, activeBot?.id, searchParams, setActiveBot]);
+
+  useEffect(() => {
+    const handleExecutionHandoff = (event) => {
+      const detail = event?.detail || {};
+      const botId = Number(detail.botId);
+      const symbol = String(detail.symbol || "").toUpperCase();
+      const targetBot =
+        (Number.isFinite(botId) && botId > 0 ? bots.find((bot) => bot.id === botId) : null) ||
+        (symbol ? bots.find((bot) => String(bot?.symbol || bot?.strategy?.symbol || "").toUpperCase() === symbol) : null);
+
+      if (targetBot) {
+        setActiveBot(targetBot);
+      }
+
+      requestAnimationFrame(() => {
+        document.getElementById("execution-guardrail-panel")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    };
+
+    window.addEventListener("execution-guardrail-handoff", handleExecutionHandoff);
+    return () => window.removeEventListener("execution-guardrail-handoff", handleExecutionHandoff);
+  }, [bots, setActiveBot]);
 
   const dailyScores = today?.daily_scores ?? today?.scores ?? {
     macro: 10, technical: 10, market: 10, setup: 10
@@ -159,12 +224,18 @@ function BotPageInner() {
   const handleAddBot = (initialValues = {}) => {
     formRef.current = initialValues;
     openConfirm({
-      title: "➕ New Bot",
+      title: "Bot aanmaken",
+      statusLabel: "Concept aanmaken",
       description: <BotForm strategies={strategies} initialValues={initialValues} onChange={(v) => (formRef.current = v)} />,
-      confirmText: "Create Bot",
+      context: <p>{initialValues.symbol || formRef.current?.symbol || "Nieuwe bot"} · {(initialValues.is_live || formRef.current?.is_live) ? "Live" : "Paper"}</p>,
+      impact: <p>Je maakt een nieuwe botconfig aan met een eigen strategie, budget en review-lane.</p>,
+      safety: <p>Controleer modus, budget en strategie. Live-activiteit blijft pas na expliciete review mogelijk.</p>,
+      consequence: <p>Na opslaan verversen we de botlijst en kun je Finn direct laten controleren of de bot goed is ingericht.</p>,
+      confirmText: "Sla bot op",
+      busyText: "Bot wordt opgeslagen...",
       onConfirm: async () => {
-        if (!formRef.current?.name || !formRef.current?.strategy_id) { showSnackbar("Please fill in all fields", "danger"); return; }
-        await createBot(formRef.current); showSnackbar("Bot added", "success");
+        if (!formRef.current?.name || !formRef.current?.strategy_id) { showSnackbar("Vul naam en strategie in voordat je de bot opslaat.", "danger"); return; }
+        await createBot(formRef.current); showSnackbar("Bot opgeslagen. Laat Finn nu de configuratie en risico's kort checken.", "success");
       },
     });
   };
@@ -198,10 +269,16 @@ function BotPageInner() {
     if (type === "general") {
       formRef.current = bot;
       openConfirm({
-        title: "⚙️ Settings",
+        title: `Botinstellingen bijwerken – ${bot.name}`,
+        statusLabel: "Configuratie wijzigen",
         description: <BotForm strategies={strategies} initialValues={bot} onChange={(v) => (formRef.current = v)} />,
-        confirmText: "Save",
-        onConfirm: async () => { await updateBot(bot.id, formRef.current); showSnackbar("Bot updated", "success"); },
+        context: <p>{bot.symbol || "Bot"} · {bot.is_live ? "Live" : "Paper"}</p>,
+        impact: <p>Je past naam, strategie of uitvoeringsinstellingen van deze bot aan.</p>,
+        safety: <p>Wijzigingen gelden meteen voor volgende reviews en voorstellen. Controleer live/paper en strategie opnieuw.</p>,
+        consequence: <p>Na opslaan verversen we de bot en kun je Finn vragen welke vervolgstap nu logisch is.</p>,
+        confirmText: "Sla instellingen op",
+        busyText: "Instellingen worden opgeslagen...",
+        onConfirm: async () => { await updateBot(bot.id, formRef.current); showSnackbar("Bot bijgewerkt. Finn kan nu samenvatten wat er inhoudelijk veranderde.", "success"); },
       });
       return;
     }
@@ -209,9 +286,15 @@ function BotPageInner() {
       const portfolio = portfolios.find((p) => p.bot_id === bot.id);
       budgetRef.current = { total_eur: portfolio?.budget?.total_eur ?? 0, daily_limit_eur: portfolio?.budget?.daily_limit_eur ?? 0, max_order_eur: portfolio?.budget?.max_order_eur ?? 0, max_asset_exposure_pct: portfolio?.budget?.max_asset_exposure_pct ?? 100 };
       openConfirm({
-        title: "💰 Portfolio & Budget",
+        title: `Budget en limieten bijwerken – ${bot.name}`,
+        statusLabel: "Risicolimieten",
         description: <BotBudgetForm initialBudget={budgetRef.current} onChange={(v) => (budgetRef.current = v)} />,
-        confirmText: "Save",
+        context: <p>{bot.symbol || "Bot"} · {bot.is_live ? "Live" : "Paper"}</p>,
+        impact: <p>Je wijzigt budget, daglimiet, maximale ordergrootte en asset-exposure voor deze bot.</p>,
+        safety: <p>Nieuwe limieten beïnvloeden direct de guardrails van volgende beslissingen. Houd live-bots extra conservatief.</p>,
+        consequence: <p>Na opslaan verversen we de guardrails en genereren we opnieuw een voorstel op basis van de nieuwe grenzen.</p>,
+        confirmText: "Sla limieten op",
+        busyText: "Limieten worden opgeslagen...",
         onConfirm: async () => {
           await updateBot(bot.id, {
             budget_total_eur: budgetRef.current.total_eur,
@@ -219,16 +302,29 @@ function BotPageInner() {
             budget_max_order_eur: budgetRef.current.max_order_eur,
             max_asset_exposure_pct: budgetRef.current.max_asset_exposure_pct,
           });
-          showSnackbar("Budget updated", "success");
+          showSnackbar("Budget en limieten bijgewerkt. Finn kan nu uitleggen wat dit doet met je volgende botactie.", "success");
           // 🔥 Refresh decision to apply new budget to guardrails
           await handleGenerateDecision(bot);
         },
       });
       return;
     }
-    if (type === "pause") { await updateBot(bot.id, { is_active: false }); showSnackbar("Bot paused", "info"); return; }
-    if (type === "resume") { await updateBot(bot.id, { is_active: true }); showSnackbar("Bot resumed", "success"); return; }
-    if (type === "delete") { openConfirm({ title: "🗑️ Delete", tone: "danger", confirmText: "Delete", onConfirm: async () => { await deleteBot(bot.id); showSnackbar("Bot deleted", "danger"); } }); }
+    if (type === "pause") { await updateBot(bot.id, { is_active: false }); showSnackbar("Bot gepauzeerd. Finn kan nu toelichten wat je handmatig moet blijven volgen.", "info"); return; }
+    if (type === "resume") { await updateBot(bot.id, { is_active: true }); showSnackbar("Bot hervat. Controleer met Finn of de huidige context nog veilig is.", "success"); return; }
+    if (type === "delete") {
+      openConfirm({
+        title: `Bot verwijderen – ${bot.name}`,
+        statusLabel: "Gevoelige actie",
+        tone: "danger",
+        context: <p>{bot.symbol || "Bot"} · {bot.is_live ? "Live" : "Paper"}</p>,
+        impact: <p>Je verwijdert deze botconfig en de gekoppelde operationele lane uit het control panel.</p>,
+        safety: <p>Controleer of open reviews, budgetcontext of portfolio-afspraken eerst zijn afgerond.</p>,
+        consequence: <p>Na verwijderen verversen we de lijst. Laat Finn daarna bepalen of je een vervangende bot of handmatige follow-up nodig hebt.</p>,
+        confirmText: "Verwijder bot",
+        busyText: "Bot wordt verwijderd...",
+        onConfirm: async () => { await deleteBot(bot.id); showSnackbar("Bot verwijderd. Vraag Finn welke opvolgstap nu het meest logisch is.", "danger"); }
+      });
+    }
   };
 
   /* =====================================================
@@ -289,7 +385,7 @@ function BotPageInner() {
         <div className="flex-1 min-w-0 space-y-12">
           {error && (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
-              Bot data laden mislukt: {error}
+              Botdata kon niet volledig geladen worden. Sommige cijfers kunnen verouderd zijn. Ververs de pagina of laat Finn eerst de huidige bot- en risicocontext samenvatten.
             </div>
           )}
 
@@ -352,9 +448,9 @@ function BotPageInner() {
                     <SystemConnectivity />
                   </DashboardErrorBoundary>
 
-                  <button onClick={handleAddBot} className="flex items-center gap-2 px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-[12px] uppercase tracking-[0.15em] shadow-xl shadow-blue-600/20 transition-all active:scale-95">
+                  <button onClick={handleAddBot} className={actionButtonStyles({ variant: "primary", className: "min-h-12 px-6 rounded-2xl shadow-sm" })}>
                     <Plus size={18} strokeWidth={3} />
-                    New Bot
+                    Bot aanmaken
                   </button>
                 </div>
               </div>

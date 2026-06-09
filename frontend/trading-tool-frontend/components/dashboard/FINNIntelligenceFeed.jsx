@@ -91,7 +91,7 @@ export default function FINNIntelligenceFeed() {
   return (
     <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
       
-      {/* 🚀 HEADER: BLOOMBERG TERMINAL STYLE */}
+      {/* 🚀 HEADER: FINN LIVE CONTEXT */}
       <div className="card-header border-b border-slate-100 dark:border-slate-800 p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="relative flex h-3 w-3">
@@ -101,7 +101,7 @@ export default function FINNIntelligenceFeed() {
           <div>
             <h3 className="card-title text-slate-900 dark:text-white uppercase tracking-widest text-[12px] font-black flex items-center gap-2">
               <Terminal className="w-4 h-4 text-blue-600" />
-              FINN Live Intelligence Terminal
+              FINN Live Context
             </h3>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold tracking-tight mt-0.5">
               Realtime risico-evaluatie & marktonderzoek • Server-Driven

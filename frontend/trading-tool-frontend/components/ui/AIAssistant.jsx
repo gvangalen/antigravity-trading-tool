@@ -21,6 +21,8 @@ import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import SetupForm from "@/components/setup/SetupForm";
 import StrategyForm from "@/components/strategy/StrategyForm";
 import AddBotForm from "@/components/bot/AddBotForm";
+import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
+import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 function AIAssistantContent({ isOpen, setIsOpen }) {
   const pathname = usePathname();
@@ -50,6 +52,17 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   const loadedFinnStateRef = useRef(false);
   const activeStreamIdRef = useRef(null);
   const [showReasoning, setShowReasoning] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    trackAssistantEvent({
+      event_name: "screen_view",
+      page: pathname || "/assistant",
+      surface: "finn_overlay",
+      asset: globalSymbol || null,
+      flow_type: "finn_overlay",
+    });
+  }, [isOpen, pathname, globalSymbol]);
 
   const normalizeStreamingText = (text) => {
     if (!text || text.length < 8) return text;
@@ -350,10 +363,26 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
   const handleFollowUpAction = async (action) => {
     if (action?.handoff === "bot_execution_console" || action?.type === "open_bot_execution_console") {
+      trackAssistantEvent({
+        event_name: "next_best_action_clicked",
+        page: pathname || "/assistant",
+        surface: "finn_overlay",
+        asset: action?.asset || globalSymbol || null,
+        flow_type: action?.handoff || "bot_execution_console",
+        next_best_action: action?.label || action?.prompt || null,
+      });
       openExecutionConsole(action);
       return;
     }
     if (!action?.prompt) return;
+    trackAssistantEvent({
+      event_name: "next_best_action_clicked",
+      page: pathname || "/assistant",
+      surface: "finn_overlay",
+      asset: action?.asset || globalSymbol || null,
+      flow_type: action?.handoff || "chat",
+      next_best_action: action?.label || action?.prompt || null,
+    });
     await handleChat(action.prompt);
   };
 
@@ -612,7 +641,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         <div className="flex items-center justify-between gap-2">
           <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
             <Brain size={11} />
-            Finn Controller
+            Hoofdconclusie
           </span>
           <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">
             {controller.dominant_label || controller.dominant_agent}
@@ -782,7 +811,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {!compact && (
           <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
             <Brain size={11} className="text-blue-500" />
-            Agent Verdicts
+            Controlelagen
           </div>
         )}
         <div className={`grid gap-1.5 ${compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}>
@@ -978,7 +1007,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       },
       {
         key: "p7",
-        label: "Portfolio OS",
+        label: "Portfolio-overzicht",
         value: Array.isArray(portfolioOS?.next_best_actions) ? portfolioOS.next_best_actions.length : 0,
         tone: "text-cyan-600 dark:text-cyan-300",
         status: portfolioOS?.operating_posture || "quiet",
@@ -992,10 +1021,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
               <Terminal size={11} className="text-cyan-500" />
-              FINN 3.0 Control Plane
+              Finn overzicht
             </div>
             <p className="mt-1 text-[11px] font-black text-slate-900 dark:text-slate-100 leading-snug">
-              {portfolioOS?.control_plane?.headline || priorityEngine?.headline || "De 3.0-lagen zijn actief in Mission Control."}
+              {portfolioOS?.control_plane?.headline || priorityEngine?.headline || "Finn laat hier zien hoe prioriteit, discipline en portfolio-overzicht samenkomen."}
             </p>
           </div>
           {portfolioOS?.operating_posture && (
@@ -1989,8 +2018,8 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         }
       }
     }
-    console.error("Finn Mission Control laden mislukt", lastError);
-    setMissionControlLoadError(lastError?.message || "Mission Control tijdelijk niet beschikbaar.");
+    console.error("Finn overzicht laden mislukt", lastError);
+    setMissionControlLoadError(lastError?.message || "Finn overzicht tijdelijk niet beschikbaar.");
     return null;
   }
 
@@ -2066,10 +2095,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       const requestContext = latestAssistantState?.current_flow
         ? { ...context, ...latestAssistantState }
         : context;
+      const sessionId = getAssistantSessionId();
 
       await assistantChatStream(
         activeQuery,
-        requestContext,
+        { ...requestContext, session_id: sessionId },
         cleanHistory,
         (token) => {
           // onChunk
@@ -2117,6 +2147,26 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             return copy;
           });
           activeStreamIdRef.current = null;
+          if (envelope?.flow === "decision_review" || envelope?.intent === "decision_review") {
+            trackAssistantEvent({
+              event_name: "decision_review_used",
+              session_id: sessionId,
+              page: pathname || "/assistant",
+              surface: "finn_overlay",
+              asset: requestContext?.symbol || globalSymbol || null,
+              flow_type: "decision_review",
+            });
+          }
+          if (envelope?.flow === "priority_engine" || envelope?.intent === "priority_engine") {
+            trackAssistantEvent({
+              event_name: "priority_engine_used",
+              session_id: sessionId,
+              page: pathname || "/assistant",
+              surface: "finn_overlay",
+              asset: requestContext?.symbol || globalSymbol || null,
+              flow_type: "priority_engine",
+            });
+          }
 
           if (["plan_creation_cancelled", "strategy_creation_cancelled", "bot_creation_cancelled", "indicator_config_cancelled"].includes(envelope.intent)) {
             setFinnDraft(null);
@@ -2200,9 +2250,21 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     }));
   };
 
+  const trackFinnConfirmEvent = (eventName, draftType) => {
+    trackAssistantEvent({
+      event_name: eventName,
+      page: pathname || "/assistant",
+      surface: "finn_overlay",
+      asset: globalSymbol || null,
+      flow_type: "confirm",
+      action_type: draftType,
+    });
+  };
+
   const handleEditDraft = async (draft, onSuccess) => {
     if (draft.type === "setup") {
       try {
+        trackFinnConfirmEvent("finn_confirm_opened", "setup_draft");
         openConfirm({
           title: `Bewerk Setup Concept`,
           tone: "primary",
@@ -2221,8 +2283,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             </div>
           ),
           onConfirm: () => {
+            trackFinnConfirmEvent("finn_confirm_confirmed", "setup_draft");
             document.querySelector("#setup-edit-submit")?.click();
-          }
+          },
+          onCancel: () => trackFinnConfirmEvent("finn_confirm_canceled", "setup_draft"),
         });
       } catch (err) {
         console.error("Failed to load SetupForm", err);
@@ -2230,6 +2294,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     } else if (draft.type === "strategy") {
       try {
         const setupsList = await fetchSetups();
+        trackFinnConfirmEvent("finn_confirm_opened", "strategy_draft");
         openConfirm({
           title: `Bewerk Strategie Concept`,
           tone: "primary",
@@ -2260,8 +2325,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             </div>
           ),
           onConfirm: () => {
+            trackFinnConfirmEvent("finn_confirm_confirmed", "strategy_draft");
             document.querySelector("#strategy-edit-submit")?.click();
-          }
+          },
+          onCancel: () => trackFinnConfirmEvent("finn_confirm_canceled", "strategy_draft"),
         });
       } catch (err) {
         console.error("Failed to load StrategyForm", err);
@@ -2270,6 +2337,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       try {
         const stratList = await fetchStrategies();
         let currentFormVal = {};
+        trackFinnConfirmEvent("finn_confirm_opened", "bot_draft");
         openConfirm({
           title: `Bewerk Bot Concept`,
           tone: "primary",
@@ -2294,6 +2362,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             </div>
           ),
           onConfirm: async () => {
+            trackFinnConfirmEvent("finn_confirm_confirmed", "bot_draft");
             const payload = {
               name: currentFormVal.name || draft.payload.name,
               strategy_id: currentFormVal.strategy_id || draft.payload.strategy_id || stratList[0]?.id,
@@ -2311,7 +2380,8 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             await createBotConfig(payload);
             showSnackbar("Bot succesvol aangemaakt!", "success");
             onSuccess();
-          }
+          },
+          onCancel: () => trackFinnConfirmEvent("finn_confirm_canceled", "bot_draft"),
         });
       } catch (err) {
         console.error("Failed to load AddBotForm", err);
@@ -2403,11 +2473,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
       if (action.type === "resolve_mission_item" || action.type === "snooze_mission_item") {
         if (!res?.ok || !res?.verified?.mission_item_resolved) {
-          throw new Error("Mission Control item is nog niet verifieerbaar afgehandeld.");
+          throw new Error("Dit overzichtsitem is nog niet verifieerbaar afgehandeld.");
         }
         setMessages(prev => [...prev, {
           role: "assistant",
-          text: res.message || "Mission Control item bijgewerkt.",
+          text: res.message || "Overzichtsitem bijgewerkt.",
           intent: "mission_item_resolved",
           operatorResolution: res.operator_resolution,
         }]);
@@ -2860,13 +2930,42 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <ListChecks size={13} />
           Finn Actie Ter Bevestiging
         </div>
+        <div className="grid gap-2">
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
+            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">Context</div>
+            <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+              {context.page_type || "Finn"} · {context.symbol || "BTC"} · {context.timeframe || "1D"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
+            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">Impact</div>
+            <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+              Finn werkt pas iets bij nadat jij expliciet bevestigt welke voorgestelde stap door mag.
+            </p>
+          </div>
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
+            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">Veiligheid</div>
+            <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+              Er worden vanuit deze kaart geen live trades geplaatst. Gevoelige acties blijven review-first.
+            </p>
+          </div>
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
+            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">Daarna</div>
+            <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+              Na bevestigen geeft Finn een korte statusupdate en de eerstvolgende veilige stap.
+            </p>
+          </div>
+        </div>
         <div className="space-y-2">
           {actionOnly.map((action, index) => (
             <button
               key={`${action.type}-${action.id || index}`}
               onClick={() => handleExecuteAction(action)}
               disabled={executingAction}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/15"
+              className={actionButtonStyles({
+                variant: "primary",
+                className: "w-full justify-center gap-2 px-4 py-3 rounded-xl text-[11px] tracking-widest shadow-sm",
+              })}
             >
               {executingAction ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
               {action.label || "Bevestigen"}
@@ -2921,6 +3020,15 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
   const progress = activeState ? getFlowProgress(activeState) : null;
   const activeStep = progress ? Math.min(progress.filled + 1, progress.total) : 1;
+  const finnContextLabel = [context.page_type || "Finn", context.symbol || "BTC", context.timeframe || "1D"]
+    .filter(Boolean)
+    .join(" · ");
+  const finnModeLabel =
+    activeState?.current_flow && activeState.current_flow !== "none"
+      ? "Concept"
+      : pathname?.includes("/portfolio")
+      ? "Paper"
+      : "Read-only";
 
   if (!isOpen) return null;
 
@@ -2939,12 +3047,12 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">FINN</h2>
-              <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">Chief of Staff</span>
+              <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">{finnModeLabel}</span>
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-[10px] font-bold text-secondary dark:text-slate-500 uppercase tracking-widest leading-none">
-                {context.page_type} · {context.symbol} · {context.timeframe}
+                {finnContextLabel}
               </span>
             </div>
           </div>
@@ -3001,13 +3109,13 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                   <p className="text-sm font-bold text-foreground dark:text-slate-100 leading-snug">
                     {/* 🎖️ CELEBRATION MODE */}
                     {stepStatus?.[`has_${pathname.split('/').pop()}`] ? (
-                      `Excellent. The ${pathname.split('/').pop()} data stream is now stabilized and streaming high-fidelity intelligence to your cockpit. Return to the Launch Center for the next protocol.`
+                      `Mooi. De ${pathname.split('/').pop()}-stroom draait nu stabiel. Ga terug naar het startoverzicht voor de volgende stap.`
                     ) : (
                       pathname.includes("market") ? "Market data is required to monitor live price action. Search for BTC and add it to your monitor." :
                       pathname.includes("macro") ? "Macro indicators track global liquidity and dollar strength. Search for DXY and add it to your monitor." :
                       pathname.includes("technical") ? "Technical signals identify price momentum and trends. Search for RSI and add it to your monitor." :
                       pathname.includes("setup") ? "Setups define your specific entry and exit rules. Click the 'New Setup' button to create your first rule-set." :
-                      pathname.includes("strategy") ? "The strategy engine builds your AI-driven execution model. Click the 'Generate Strategy' button to finalize your cockpit." :
+                      pathname.includes("strategy") ? "De strategielaag bouwt je uitvoeringsmodel. Klik op 'Strategie genereren' om je volgende stap klaar te zetten." :
                       "I will guide you through the 5 steps to activate your system. Once initialized, your dashboard will be fully operational with live data and AI insights."
                     )}
                   </p>
@@ -3031,7 +3139,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <Activity size={12} className="text-blue-600" />
-                <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Mission Control</span>
+                <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Werkoverzicht</span>
               </div>
               <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
                 missionControl.summary?.posture === "stable"
@@ -3252,7 +3360,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-400">
                     <Brain size={11} className="text-blue-500" />
-                    Agent Verdicts
+                    Controlelagen
                   </span>
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
                     {missionControl.agent_verdicts.length}
@@ -3262,7 +3370,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 {missionControl.agent_accountability?.performance_light?.summary && (
                   <div className="mt-2 rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 px-3 py-2 text-blue-700 dark:text-blue-300">
                     <div className="text-[8px] font-black uppercase tracking-widest opacity-75">
-                      Agent learning light
+                      Verbeterpunt
                     </div>
                     <p className="mt-1 text-[10px] font-semibold leading-snug">
                       {missionControl.agent_accountability.performance_light.summary}
@@ -3365,7 +3473,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-400">
                   <Bot size={11} className="text-violet-500" />
-                  Bot Review Queue
+                  Bot review
                 </div>
                 {missionControl.bot_review_queue.slice(0, 3).map((item) => (
                   <div key={`${item.bot_id}-${item.decision_id}`} className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/20 px-3 py-2">
@@ -3466,9 +3574,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
               <Terminal size={14} className="text-blue-600" />
-              FINN Live Intelligence Terminal
+              Finn live context
             </h3>
-            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">Mission Control</span>
+            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">Werkoverzicht</span>
           </div>
 
           {missionControl?.coaching_loop && (
@@ -3529,7 +3637,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           {!missionControl?.coaching_loop && missionControlLoadError && (
             <div className="rounded-xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2">
               <div className="text-[8px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-300">
-                Mission Control opnieuw laden
+                Overzicht opnieuw laden
               </div>
               <p className="mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
                 De coaching-loop kwam net niet schoon binnen. Ik probeer de shell bij de volgende refresh opnieuw aan te vullen.
@@ -3546,7 +3654,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             ) : events.length === 0 ? (
               <div className="py-8 text-center bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 p-4">
                 <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest italic">
-                  Geen actieve risico-meldingen. Cockpit draait stabiel.
+                  Geen actieve risico-meldingen. Alles draait stabiel.
                 </p>
               </div>
             ) : (
@@ -3761,7 +3869,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleChat()}
-            placeholder="Ask a question..."
+            placeholder="Vraag Finn om context, risico of een volgende stap..."
             className="w-full pl-6 pr-14 py-4 bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-600/5 focus:bg-white dark:focus:bg-slate-800 focus:border-blue-600/20 transition-all outline-none text-sm text-foreground dark:text-slate-100"
           />
           <button 
@@ -4152,7 +4260,7 @@ function ActionCard({ action, onAction }) {
       case "remove_from_watchlist": return `Remove ${act.symbol || ""} from Watchlist`;
       case "open_setup_page": return `Configure Setup for ${act.symbol || ""}`;
       case "generate_strategy": return `Generate ${act.symbol || ""} Strategy`;
-      case "open_bot_draft": return `Deploy ${act.symbol || ""} Paper Bot`;
+      case "open_bot_draft": return `Zet ${act.symbol || ""} paper bot klaar`;
       case "navigate_to_page": return `Ga naar ${act.params?.label || "Pagina"}`;
       default: return "Execute Action";
     }
@@ -4181,7 +4289,7 @@ function ActionCard({ action, onAction }) {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
               </span>
-              🛒 AI Operator Checkout
+              Actiecontrole
             </h4>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-1">
               Approve and deploy the suggested pipeline
@@ -4254,12 +4362,12 @@ function ActionCard({ action, onAction }) {
           }`}
         >
           {bundleStatus === "running" 
-            ? "Executing Pipeline..." 
+            ? "Acties worden verwerkt..." 
             : bundleStatus === "success" 
-              ? "✓ Pipeline Deployed Successfully" 
+              ? "✓ Acties opgeslagen" 
               : bundleStatus === "failed"
-                ? "Retry Pipeline"
-                : `Confirm & Deploy (${steps.length} Actions)`}
+                ? "Probeer opnieuw"
+                : `Bevestig acties (${steps.length})`}
         </button>
       </div>
     );
@@ -4362,7 +4470,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
         <div className="flex items-start justify-between">
           <div className="space-y-0.5">
             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-              AI Concept Operator
+              Concept review
             </span>
             <h4 className="text-xs font-black text-foreground dark:text-slate-200 tracking-tight leading-snug">
               {draft.payload.name || "Nieuw Concept"}
@@ -4526,7 +4634,7 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
           <div className="space-y-0.5">
             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              Live Concept
+              Actief concept
             </span>
             <h4 className="text-xs font-black text-foreground dark:text-slate-200 tracking-tight leading-snug">
               {flowType === "setup" ? `${slots?.symbol || "..."} Setup Concept` :

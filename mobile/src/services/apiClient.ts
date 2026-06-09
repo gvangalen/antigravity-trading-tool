@@ -10,7 +10,7 @@ export const API_BASE_URL =
   process.env?.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '') || DEFAULT_API_BASE_URL;
 
 export type ApiRequestOptions = {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined | null>;
   timeoutMs?: number;
@@ -95,6 +95,14 @@ class APIClient {
 
   post<T>(path: string, body?: unknown, query?: ApiRequestOptions['query']) {
     return this.request<T>(path, { body, method: 'POST', query });
+  }
+
+  put<T>(path: string, body?: unknown, query?: ApiRequestOptions['query']) {
+    return this.request<T>(path, { body, method: 'PUT', query });
+  }
+
+  delete<T>(path: string, query?: ApiRequestOptions['query']) {
+    return this.request<T>(path, { method: 'DELETE', query });
   }
 
   private buildUrl(path: string, query?: ApiRequestOptions['query']) {

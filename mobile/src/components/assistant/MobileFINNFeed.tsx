@@ -45,15 +45,15 @@ export function MobileFINNFeed({ events, onArchive, onDiscuss }: MobileFINNFeedP
       <View style={styles.feedHeader}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text style={{ color: theme.colors.accent, fontWeight: '900' }}>{'>_'}</Text>
-          <Text style={styles.feedTitle}>FINN LIVE INTELLIGENCE TERMINAL</Text>
+          <Text style={styles.feedTitle}>FINN LIVE CONTEXT</Text>
         </View>
-        <Text style={styles.feedSubtitle}>MISSION CONTROL</Text>
+        <Text style={styles.feedSubtitle}>WERKOVERZICHT</Text>
       </View>
 
       <View style={styles.eventList}>
         {!events || events.length === 0 ? (
           <View style={styles.emptyStateBox}>
-            <Text style={styles.emptyStateText}>Geen actieve risico-meldingen. Cockpit draait stabiel.</Text>
+            <Text style={styles.emptyStateText}>Geen actieve risico-meldingen.</Text>
           </View>
         ) : (
           sortedEvents.map((item, index) => {

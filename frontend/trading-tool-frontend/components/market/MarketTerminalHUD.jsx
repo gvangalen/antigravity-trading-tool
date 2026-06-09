@@ -39,7 +39,7 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
                </div>
                <div>
                   <div className="text-[10px] sm:text-[11px] font-bold text-secondary/60 uppercase tracking-[0.2em] mb-0.5">Intelligence Consensus</div>
-                  <div className="text-xl sm:text-2xl font-black text-foreground tracking-tight uppercase leading-none">Sentiment Terminal</div>
+                  <div className="text-xl sm:text-2xl font-black text-foreground tracking-tight uppercase leading-none">Marktbeeld</div>
                </div>
             </div>
             

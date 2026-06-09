@@ -48,6 +48,10 @@ class AssistantChatResponse(BaseModel):
     next_question: Optional[str] = None
     can_confirm: bool = False
     actions: List[Dict[str, Any]] = Field(default_factory=list)
+    summary: Optional[str] = None
+    risk_summary: Optional[str] = None
+    next_best_action: Optional[str] = None
+    review_reason: Optional[str] = None
 
 class AssistantActionExecuteRequest(BaseModel):
     action: Dict[str, Any]
@@ -77,6 +81,29 @@ class AssistantInsightResponse(BaseModel):
     market_insight: Optional[Dict[str, str]] = None
     context_detected: Optional[Dict[str, Any]] = None
     suggested_actions: Optional[List[str]] = None  # Server-Driven proactive action chips
+
+
+class AssistantAnalyticsEvent(BaseModel):
+    event_name: str
+    session_id: Optional[str] = None
+    surface: str = "unknown"
+    page: Optional[str] = None
+    asset: Optional[str] = None
+    flow_type: Optional[str] = None
+    action_type: Optional[str] = None
+    report_type: Optional[str] = None
+    decision_id: Optional[str] = None
+    bot_id: Optional[int] = None
+    setup_id: Optional[int] = None
+    strategy_id: Optional[int] = None
+    trace_id: Optional[str] = None
+    prompt_text: Optional[str] = None
+    next_best_action: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    class Config:
+        extra = "allow"
 
 # =====================================================
 # Chat Session Management schemas

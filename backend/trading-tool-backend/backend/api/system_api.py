@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request, Cookie, Header
 
 from backend.utils.auth_utils import decode_token, get_current_user
 from backend.services.system_health_service import SystemHealthService
+from backend.services.finn_product_analytics_service import finn_product_analytics
 from backend.services.system_service import SystemService
 from backend.schemas.system_schema import BootstrapAgentsResponse
 
@@ -70,6 +71,12 @@ async def system_health(current_user: dict = Depends(require_operator)):
     Keep /api/health lightweight for load balancers.
     """
     return await SystemHealthService.deep_health()
+
+
+@router.get("/system/finn-analytics")
+async def system_finn_analytics(current_user: dict = Depends(require_operator)):
+    """Lean FINN product analytics for early operator review."""
+    return finn_product_analytics.snapshot()
 
 # =====================================================
 # 🚀 BOOTSTRAP AGENTS (na onboarding)

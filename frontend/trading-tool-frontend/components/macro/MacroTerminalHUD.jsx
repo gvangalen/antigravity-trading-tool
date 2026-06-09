@@ -27,7 +27,7 @@ export default function MacroTerminalHUD({ score, bias, trend, risk, loading = f
   return (
     <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
       
-      {/* 🔮 MODULE 1: GLOBAL MACRO TERMINAL */}
+      {/* 🔮 MODULE 1: GLOBAL MACRO OVERVIEW */}
       <div className="lg:col-span-2 bg-card rounded-[2.5rem] border border-[var(--color-border)] p-6 sm:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col justify-between relative overflow-hidden group transition-all hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)]">
          <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:24px_24px]" />
          
@@ -38,7 +38,7 @@ export default function MacroTerminalHUD({ score, bias, trend, risk, loading = f
                </div>
                <div>
                   <div className="text-[10px] sm:text-[11px] font-bold text-secondary/60 uppercase tracking-[0.2em] mb-0.5">Global Economic Context</div>
-                  <div className="text-xl sm:text-2xl font-black text-foreground tracking-tight uppercase leading-none">Macro Terminal</div>
+                  <div className="text-xl sm:text-2xl font-black text-foreground tracking-tight uppercase leading-none">Macro Overzicht</div>
                </div>
             </div>
             

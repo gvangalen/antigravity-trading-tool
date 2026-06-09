@@ -42,6 +42,11 @@ const scoreLabel = (v) => {
 const rangeText = (min, max) =>
   `${scoreLabel(min)} → ${scoreLabel(max)}`;
 
+const setupNameById = (setups, id) => {
+  const setup = Array.isArray(setups) ? setups.find((item) => item.id === id) : null;
+  return setup?.name || setup?.symbol || "Deze setup";
+};
+
 /* =========================================================
    COMPONENT
 ========================================================= */
@@ -150,7 +155,7 @@ export default function SetupList({
       }));
     } catch (e) {
       console.error(e);
-      showSnackbar("FINN 3.0 review mislukt", "danger");
+      showSnackbar("Finn review mislukt", "danger");
     } finally {
       setFinnLoading((p) => ({ ...p, [setup.id]: false }));
     }
@@ -162,22 +167,18 @@ export default function SetupList({
   function openDeleteModal(id) {
     openConfirm({
       title: "Setup verwijderen",
+      statusLabel: "Gevoelige actie",
       tone: "danger",
-      confirmText: "Verwijderen",
+      confirmText: "Verwijder setup",
       cancelText: "Annuleren",
-      description: (
-        <p>
-          Weet je zeker dat je deze setup wilt verwijderen?
-          <br />
-          <span className="text-red-600 font-medium">
-            Dit kan niet ongedaan worden gemaakt.
-          </span>
-        </p>
-      ),
+      context: <p>{setupNameById(localSetups, id)}</p>,
+      impact: <p>De setup verdwijnt uit je actieve lijst en is niet meer beschikbaar voor review of vervolgacties.</p>,
+      safety: <p>Dit verwijdert alleen deze setup. Verwijderen kan niet ongedaan worden gemaakt.</p>,
+      consequence: <p>Na bevestigen verversen we de lijst en kun je Finn gebruiken om een nieuwe setup te laten beoordelen.</p>,
       onConfirm: async () => {
         await removeSetup(id);
         reload && reload();
-        showSnackbar("Setup verwijderd", "success");
+        showSnackbar("Setup verwijderd. Vraag Finn om een nieuwe setup te reviewen als je wilt verdergaan.", "success");
       },
     });
   }
@@ -188,10 +189,12 @@ export default function SetupList({
   function openEditModal(setup) {
     openConfirm({
       title: `Setup bewerken – ${setup.name}`,
+      statusLabel: "Wijzig concept",
       tone: "primary",
-      confirmText: "Opslaan",
+      confirmText: "Sla setup op",
       cancelText: "Annuleren",
       description: <SetupFormWrapper setup={setup} />,
+      consequence: <p>Na opslaan verversen we de setup en kun je Finn direct opnieuw laten beoordelen of hij nog past bij je plan.</p>,
       onConfirm: () =>
         document.querySelector("#setup-edit-submit")?.click(),
     });
@@ -205,7 +208,7 @@ export default function SetupList({
           initialData={setup}
           onSaved={() => {
             reload && reload();
-            showSnackbar("Setup bijgewerkt", "success");
+            showSnackbar("Setup bijgewerkt. Finn kan nu opnieuw checken of deze setup nog klopt.", "success");
           }}
         />
       </div>
@@ -241,8 +244,16 @@ export default function SetupList({
   --------------------------------------------------------- */
   return (
     <div className="space-y-6 mt-4">
-      {loading && <p className="text-sm text-gray-500">Setups laden…</p>}
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {loading && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
+          Setups worden geladen. Zodra de context binnen is, kun je Finn direct laten reviewen wat aandacht nodig heeft.
+        </div>
+      )}
+      {error && (
+        <div className="rounded-2xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+          Setups konden niet geladen worden. De lijst kan daardoor verouderd zijn. Ververs de pagina of vraag Finn om de huidige setupcontext kort samen te vatten.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {filteredSetups.length > 0 ? (
@@ -391,7 +402,7 @@ export default function SetupList({
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 text-slate-600">
                       <Brain size={15} className="text-violet-500" />
-                      <span className="text-[10px] font-black uppercase tracking-widest">FINN 3.0 Review</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest">Finn review</span>
                     </div>
                     {finnBusy && <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Laden…</span>}
                   </div>
@@ -456,7 +467,7 @@ export default function SetupList({
                   className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-violet-600 bg-violet-50 hover:bg-violet-100 transition-all border-2 border-violet-100/50"
                 >
                   <Brain size={16} />
-                  {finnBusy ? "FINN REVIEW…" : "FINN 3.0 REVIEW"}
+                  {finnBusy ? "Finn review…" : "Review met Finn"}
                 </button>
               </div>
 
@@ -506,7 +517,9 @@ export default function SetupList({
             </div>
           ))
         ) : (
-          <p className="text-sm text-gray-500">Geen setups gevonden.</p>
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 px-4 py-4 text-sm text-slate-600 dark:text-slate-300">
+            Geen setups voor deze selectie. Dat kan normaal zijn als je context net is ververst of als er nog geen actief concept klaarstaat. Vraag Finn om een nieuw setupconcept als je verder wilt.
+          </div>
         )}
       </div>
     </div>

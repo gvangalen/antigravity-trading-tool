@@ -44,9 +44,12 @@ export default function SetupMatchCard() {
   if (!dailySetups || dailySetups.length === 0) {
     return (
       <CardWrapper>
-        <p className="text-sm text-[var(--text-light)]">
-          Geen setup-scores beschikbaar voor vandaag.
-        </p>
+        <div className="space-y-2 text-sm text-[var(--text-light)]">
+          <p>Er zijn nog geen setup-scores voor vandaag.</p>
+          <p className="text-xs opacity-80">
+            Dat kan normaal zijn als de marktcontext net is ververst. Vraag Finn om een compact setup-overzicht totdat de nieuwe scores klaarstaan.
+          </p>
+        </div>
       </CardWrapper>
     );
   }

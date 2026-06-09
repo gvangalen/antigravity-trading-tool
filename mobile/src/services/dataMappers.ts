@@ -5,7 +5,7 @@ import { AssistantInsightResponse, MobileOverviewResponse } from './tradamindApi
 type UnknownRecord = Record<string, unknown>;
 
 export function mapAssistantInsightToBriefing(insight?: AssistantInsightResponse) {
-  if (!insight) return { asset: 'BTC', status: 'Wachten op data', summary: 'Geen actieve intelligence context beschikbaar.', risk: '', nextAction: 'Pull to refresh', updatedAt: nowLabel() };
+  if (!insight) return { asset: 'BTC', status: 'Wachten op data', summary: 'Nog geen actieve FINN-context beschikbaar.', risk: 'Dat kan normaal zijn vlak na verversen of in een rustige sessie.', nextAction: 'Ververs of vraag Finn om context', updatedAt: nowLabel() };
 
   const marketInsight = insightText(insight.market_insight);
   const botInsight = insightText(insight.bot_insight);
@@ -13,10 +13,10 @@ export function mapAssistantInsightToBriefing(insight?: AssistantInsightResponse
 
   return {
     asset: insight.context_detected?.symbol || 'BTC',
-    status: context || 'Live FINN context',
-    summary: insight.greeting || marketInsight || 'Geen summary beschikbaar.',
-    risk: botInsight || 'No execution action is taken from mobile. Review context before acting.',
-    nextAction: 'Ask FINN',
+    status: context || 'Live Finn context',
+    summary: insight.greeting || marketInsight || 'Nog geen samenvatting beschikbaar.',
+    risk: botInsight || 'Mobile blijft read-only voor execution. Review context eerst voordat je iets bevestigt.',
+    nextAction: 'Vraag Finn om de volgende stap',
     updatedAt: nowLabel(),
   };
 }
@@ -26,8 +26,8 @@ export function mapAssistantInsightCard(insight?: AssistantInsightResponse) {
   const botInsight = insightText(insight?.bot_insight);
 
   return {
-    body: marketInsight || botInsight || 'Geen summary beschikbaar.',
-    title: insight?.greeting || 'FINN is reading your current trading context.',
+    body: marketInsight || botInsight || 'Nog geen samenvatting beschikbaar.',
+    title: insight?.greeting || 'Finn leest je huidige tradingcontext.',
   };
 }
 
@@ -55,7 +55,7 @@ export function mapMobileOverviewBriefing(overview?: MobileOverviewResponse, ins
     status: totalProfit >= 0 ? 'Mobile overview live' : 'Portfolio needs attention',
     summary: `${overview.finn_briefing.greeting} ${overview.finn_briefing.summary}`.trim(),
     risk,
-    nextAction: overview.finn_briefing.suggested_actions[0] || 'Ask FINN',
+    nextAction: overview.finn_briefing.suggested_actions[0] || 'Vraag Finn om de volgende stap',
     updatedAt: nowLabel(),
   };
 }
