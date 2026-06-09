@@ -287,6 +287,51 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     return normalizeFollowUpActions([controllerAction, ...parseSuggestedActions(message?.text)].filter(Boolean));
   };
 
+  const getMessageSummary = (message) => (
+    message?.summary ||
+    message?.state?.analysis?.summary ||
+    message?.analysis?.summary ||
+    null
+  );
+
+  const getMessageRiskSummary = (message) => (
+    message?.riskSummary ||
+    message?.risk_summary ||
+    message?.state?.analysis?.risk_summary ||
+    message?.analysis?.risk_summary ||
+    null
+  );
+
+  const getMessageNextBestAction = (message) => (
+    message?.nextBestAction ||
+    message?.next_best_action ||
+    message?.state?.analysis?.next_best_action ||
+    message?.analysis?.next_best_action ||
+    message?.state?.analysis?.operator_next_step ||
+    message?.analysis?.operator_next_step ||
+    null
+  );
+
+  const getMessageReviewReason = (message) => (
+    message?.reviewReason ||
+    message?.review_reason ||
+    message?.state?.analysis?.review_reason ||
+    message?.analysis?.review_reason ||
+    null
+  );
+
+  const shouldRenderOperatorReadout = (message) => {
+    if (message?.role !== "assistant" || message?.isComplete === false) return false;
+    if (getMessageOperatorResolution(message)) return false;
+    const intent = message?.intent || message?.flow || message?.state?.current_flow || "";
+    if (["decision_review", "plan_adherence_review"].includes(intent)) return false;
+    const summary = getMessageSummary(message);
+    const risk = getMessageRiskSummary(message);
+    const next = getMessageNextBestAction(message);
+    const reason = getMessageReviewReason(message);
+    return Boolean(risk || next || reason || (summary && summary !== message?.text));
+  };
+
   const getBriefingFollowUpActions = () => {
     return normalizeFollowUpActions(
       insight?.follow_up_actions ||
@@ -1328,6 +1373,56 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     );
   };
 
+  const renderOperatorReadoutCard = (message) => {
+    if (!shouldRenderOperatorReadout(message)) return null;
+
+    const summary = getMessageSummary(message);
+    const risk = getMessageRiskSummary(message);
+    const next = getMessageNextBestAction(message);
+    const reason = getMessageReviewReason(message);
+    const intent = message?.intent || message?.flow || message?.state?.current_flow || "context_explain";
+    const tone = ["general_help", "product_help"].includes(intent)
+      ? "border-sky-100 dark:border-sky-900/50 bg-sky-50/60 dark:bg-sky-950/20 text-sky-700 dark:text-sky-300"
+      : ["mission_control_explain", "priority_engine"].includes(intent)
+        ? "border-violet-100 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-950/20 text-violet-700 dark:text-violet-300"
+        : "border-slate-200 dark:border-slate-800 bg-white/75 dark:bg-slate-950/35 text-slate-700 dark:text-slate-300";
+
+    return (
+      <div className={`mt-3 rounded-xl border px-3 py-3 ${tone}`}>
+        <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+          <Shield size={11} />
+          Operator Readout
+        </div>
+        {summary && summary !== message?.text && (
+          <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
+            {summary}
+          </p>
+        )}
+        {reason && (
+          <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">
+            {reason}
+          </p>
+        )}
+        {(risk || next) && (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {risk && (
+              <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+                <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Risicoframe</div>
+                <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{risk}</p>
+              </div>
+            )}
+            {next && (
+              <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+                <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Volgende stap</div>
+                <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{next}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderDecisionReviewV3Card = (analysis) => {
     if (!analysis?.decision_status) return null;
     const tone = analysis.decision_status === "block"
@@ -1357,6 +1452,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {analysis.risk_summary && (
           <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">
             {analysis.risk_summary}
+          </p>
+        )}
+        {analysis.summary && (
+          <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">
+            {analysis.summary}
           </p>
         )}
         {checks.length > 0 && (
@@ -1392,6 +1492,22 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             </div>
           </div>
         )}
+        {(analysis.review_reason || analysis.operator_next_step || analysis.next_best_action) && (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {analysis.review_reason && (
+              <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+                <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Waarom nu</div>
+                <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.review_reason}</p>
+              </div>
+            )}
+            {(analysis.operator_next_step || analysis.next_best_action) && (
+              <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
+                <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Volgende stap</div>
+                <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.operator_next_step || analysis.next_best_action}</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -1421,6 +1537,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         </div>
         {analysis.adherence_reason && (
           <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">{analysis.adherence_reason}</p>
+        )}
+        {analysis.summary && (
+          <p className="mt-2 text-[10px] font-semibold leading-snug opacity-90">{analysis.summary}</p>
         )}
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
           {analysis.threatened_rule && (
@@ -1912,6 +2031,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           role: "assistant",
           text: envelope.response,
           intent: envelope.intent,
+          flow: envelope.flow,
           draft: envelope.draft,
           actions: Array.isArray(envelope.actions) ? envelope.actions : [],
           missingFields: envelope.missing_fields || [],
@@ -1921,6 +2041,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           suggestedActions: envelope.suggested_actions || [],
           reasoning: envelope.reasoning,
           state: envelope.state || null,
+          summary: envelope.summary || null,
+          riskSummary: envelope.risk_summary || null,
+          nextBestAction: envelope.next_best_action || null,
+          reviewReason: envelope.review_reason || null,
           restoredFinnDraft: true,
           isComplete: true,
         }];
@@ -2127,6 +2251,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 ...copy[msgIndex],
                 text: envelope.response,
                 intent: envelope.intent,
+                flow: envelope.flow,
                 action: envelope.action,
                 draft: envelope.draft,
                 actions: Array.isArray(envelope.actions)
@@ -2141,6 +2266,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 suggestedActions: envelope.suggested_actions || [],
                 reasoning: envelope.reasoning,
                 state: envelope.state || null,
+                summary: envelope.summary || null,
+                riskSummary: envelope.risk_summary || null,
+                nextBestAction: envelope.next_best_action || null,
+                reviewReason: envelope.review_reason || null,
                 isComplete: true,
               };
             }
@@ -3716,6 +3845,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                     : "bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-foreground dark:text-slate-100"
                 }`}>
                 <p className="text-sm leading-relaxed">{m.text}</p>
+                {m.role === "assistant" && m.isComplete !== false && renderOperatorReadoutCard(m)}
                 {m.role === "assistant" && m.isComplete !== false && renderAgentController(getMessageAgentController(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderDecisionReviewV3Card(getMessageDecisionReview(m))}
                 {m.role === "assistant" && m.isComplete !== false && renderPlanAdherenceCard(getMessagePlanAdherenceReview(m))}

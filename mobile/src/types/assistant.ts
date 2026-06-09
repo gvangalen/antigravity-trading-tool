@@ -73,11 +73,16 @@ export type AssistantConversationState = {
 export type AssistantEnvelope = {
   response: string;
   intent?: string;
+  flow?: string;
   action?: AssistantAction | null;
   draft?: AssistantDraft | null;
   state?: AssistantConversationState | null;
   reasoning?: AssistantReasoning | null;
   trace_id?: string | null;
+  summary?: string | null;
+  risk_summary?: string | null;
+  next_best_action?: string | null;
+  review_reason?: string | null;
 };
 
 export type AssistantFeedItem =
@@ -86,6 +91,12 @@ export type AssistantFeedItem =
       type: 'message';
       role: ChatRole;
       text: string;
+      summary?: string | null;
+      riskSummary?: string | null;
+      nextBestAction?: string | null;
+      reviewReason?: string | null;
+      flow?: string | null;
+      intent?: string | null;
     }
   | {
       id: string;

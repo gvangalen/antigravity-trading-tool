@@ -477,6 +477,90 @@ class FinnPlanService:
     def _normalized_query(self, query: str) -> str:
         return (query or "").strip().lower()
 
+    def _operator_resolution_status(
+        self,
+        status: Optional[str],
+        *,
+        default: str = "review",
+    ) -> str:
+        normalized = str(status or "").strip().lower()
+        if normalized in {"approve", "in_plan", "ready", "stable", "steady", "resolved"}:
+            return "resolved"
+        if normalized in {"block", "forced_override", "outside_plan", "attention"}:
+            return "attention"
+        if normalized in {"modify", "insufficient_context", "insufficiently_justified", "warn"}:
+            return "review"
+        return default
+
+    def _enrich_operator_contract(
+        self,
+        payload: Dict[str, Any],
+        *,
+        summary: Optional[str],
+        risk_summary: Optional[str] = None,
+        next_best_action: Optional[str] = None,
+        review_reason: Optional[str] = None,
+        resolution_status: Optional[str] = None,
+        resolution_title: Optional[str] = None,
+        what_changed: Optional[List[str]] = None,
+        what_next: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        analysis = dict(payload.get("analysis") or {})
+        state = dict(payload.get("state") or {})
+
+        normalized_summary = str(summary or "").strip() or None
+        normalized_risk = str(risk_summary or "").strip() or None
+        normalized_next = str(next_best_action or "").strip() or None
+        normalized_reason = str(review_reason or "").strip() or None
+
+        changed_items = [
+            str(item).strip()
+            for item in (what_changed or [])
+            if str(item or "").strip()
+        ]
+        next_items = [
+            str(item).strip()
+            for item in (what_next or [])
+            if str(item or "").strip()
+        ]
+        if not changed_items and normalized_reason:
+            changed_items = [normalized_reason]
+        if not next_items and normalized_next:
+            next_items = [normalized_next]
+
+        if normalized_summary:
+            analysis["summary"] = normalized_summary
+            payload["summary"] = normalized_summary
+        if normalized_risk:
+            analysis["risk_summary"] = normalized_risk
+            payload["risk_summary"] = normalized_risk
+        if normalized_next:
+            analysis["next_best_action"] = normalized_next
+            payload["next_best_action"] = normalized_next
+        if normalized_reason:
+            analysis["review_reason"] = normalized_reason
+            payload["review_reason"] = normalized_reason
+
+        if normalized_summary or normalized_reason or next_items:
+            resolution = {
+                "type": "operator_resolution",
+                "status": self._operator_resolution_status(resolution_status),
+                "title": resolution_title or "Wat dit nu voor je verandert",
+                "summary": normalized_reason or normalized_summary,
+                "what_changed": changed_items[:3],
+                "what_next": next_items[:3],
+            }
+            analysis["operator_resolution"] = resolution
+            analysis["action_follow_through"] = resolution
+
+        if state:
+            state["analysis"] = analysis
+            if analysis.get("operator_resolution"):
+                state["operator_resolution"] = analysis["operator_resolution"]
+            payload["state"] = state
+        payload["analysis"] = analysis
+        return payload
+
     def _infer_governed_action_from_query(
         self,
         query: str,
@@ -2610,7 +2694,7 @@ class FinnPlanService:
             "Denk aan: je actieve setup of strategie uitleggen, score- en blocker-uitleg geven, "
             "dagcoaching doen, Mission Control samenvatten en bot-decisions reviewen voordat je iets uitvoert."
         )
-        return {
+        return self._enrich_operator_contract({
             "response": response,
             "intent": "general_help",
             "flow": "general_help",
@@ -2629,7 +2713,11 @@ class FinnPlanService:
                 ],
             },
             "actions": [],
-        }
+        },
+        summary=f"Ik kan je hier helpen met uitleg, review en veilige vervolgstappen in {page}{asset_text}.",
+        risk_summary="Deze route blijft read-only: ik leg uit, review en stuur je pas daarna naar een concrete vervolgactie.",
+        next_best_action="Vraag Finn om je huidige context, een setup-review of je volgende beste stap.",
+        review_reason="Begin hier als je eerst wilt begrijpen wat je ziet voordat je iets bevestigt.")
 
     def _product_capability_inventory(self, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
@@ -2686,7 +2774,7 @@ class FinnPlanService:
             f"Als je echt iets wilt bouwen of wijzigen, kan ik ook helpen met: {mutations}. "
             "Wat ik nog niet breed zelf doet: watchlists aanpassen en vrije portfolio-mutaties."
         )
-        return {
+        return self._enrich_operator_contract({
             "response": response,
             "intent": "product_help",
             "flow": "product_help",
@@ -2704,7 +2792,11 @@ class FinnPlanService:
                 "product_help": inventory,
             },
             "actions": [],
-        }
+        },
+        summary=f"Op {page} help ik je vooral met begrijpen, reviewen en veilig kiezen wat je hierna doet.",
+        risk_summary="Ik gebruik deze route om je binnen de productgrenzen te houden: uitleg eerst, uitvoering pas via de juiste review-flow.",
+        next_best_action="Vraag Finn om het huidige scherm uit te leggen of om een concrete review van setup, strategie of bot.",
+        review_reason="Zo voorkom je dat een productvraag meteen aanvoelt als een uitvoeractie.")
 
     async def build_product_refresh_help_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
@@ -2723,7 +2815,7 @@ class FinnPlanService:
                 "suggested_next_step": f"Ververs daily scores voor {asset}",
             },
         }
-        return {
+        return self._enrich_operator_contract({
             "response": response,
             "intent": "product_help",
             "flow": "product_help",
@@ -2734,7 +2826,11 @@ class FinnPlanService:
             },
             "analysis": analysis,
             "actions": [],
-        }
+        },
+        summary=f"De data voor {asset} lijkt nu vooral achter te lopen, niet per se inhoudelijk fout te zijn.",
+        risk_summary="Verouderde scoredata kan je context troebel maken, maar is op zichzelf nog geen trading-signaal.",
+        next_best_action=f"Ververs daily scores voor {asset}.",
+        review_reason="Ik behandel dit eerst als datakwaliteitsvraag voordat je op basis van oude scores reageert.")
 
     def _education_topic_catalog(self) -> Dict[str, Dict[str, Any]]:
         return {
@@ -2950,6 +3046,12 @@ class FinnPlanService:
         entity: Optional[Dict[str, Any]] = None,
         state_overrides: Optional[Dict[str, Any]] = None,
         actions: Optional[List[Dict[str, Any]]] = None,
+        summary: Optional[str] = None,
+        risk_summary: Optional[str] = None,
+        next_best_action: Optional[str] = None,
+        review_reason: Optional[str] = None,
+        resolution_status: Optional[str] = None,
+        resolution_title: Optional[str] = None,
     ) -> Dict[str, Any]:
         entity = entity or {}
         context_resolution = self._context_resolution_payload(confidence, entity_type, entity)
@@ -2968,14 +3070,20 @@ class FinnPlanService:
         state = {"current_flow": "context_explain", "analysis": analysis}
         if state_overrides:
             state.update(state_overrides)
-        return {
+        return self._enrich_operator_contract({
             "response": response,
             "intent": "context_explain",
             "flow": "context_explain",
             "state": state,
             "analysis": analysis,
             "actions": actions or [],
-        }
+        },
+        summary=summary or response,
+        risk_summary=risk_summary,
+        next_best_action=next_best_action,
+        review_reason=review_reason,
+        resolution_status=resolution_status,
+        resolution_title=resolution_title)
 
     def _page_summary_message(self, context: Optional[Dict[str, Any]] = None) -> str:
         context = context or {}
@@ -3473,7 +3581,7 @@ class FinnPlanService:
             },
             cooldown_hours=2,
         )
-        return {
+        return self._enrich_operator_contract({
             "response": self._priority_engine_message(priority_engine),
             "intent": "priority_engine",
             "flow": "priority_engine",
@@ -3496,7 +3604,21 @@ class FinnPlanService:
                 "reasons": [priority_engine.get("why_now") or priority_engine.get("headline")],
                 "coaching_level": "priority_engine",
             },
-        }
+        },
+        summary=str(priority_engine.get("headline") or "Hier ligt vandaag je operatorfocus.").strip(),
+        risk_summary=str(
+            (priority_engine.get("suppression_reasons") or [None])[0]
+            or priority_engine.get("why_now")
+            or "De prioritering volgt actuele reviewdruk, risico en portfolio-conflicten."
+        ).strip(),
+        next_best_action=str(
+            ((priority_engine.get("top_priorities") or [{}])[0].get("title"))
+            or ((priority_engine.get("review_queue") or [{}])[0].get("title"))
+            or "Begin met je hoogste open prioriteit."
+        ).strip(),
+        review_reason="Deze rangorde is gekozen op actuele risico-, review- en portfoliodruk.",
+        resolution_status="review",
+        resolution_title="Hoe Finn je werkvolgorde nu leest")
 
     def _portfolio_operating_system_contract(
         self,
@@ -3894,7 +4016,7 @@ class FinnPlanService:
             f"Open nu: {counts.get('workqueue_count', 0)} items, "
             f"{counts.get('high_priority_count', 0)} met hoge prioriteit."
         )
-        response = {
+        response = self._enrich_operator_contract({
             "response": "\n".join(response_lines),
             "intent": "mission_control_explain",
             "flow": "mission_control_explain",
@@ -3916,7 +4038,20 @@ class FinnPlanService:
                 "context_confidence": {"level": "high", "entity_type": "mission_control", "entity_id": "mission_control", "reason": "mission control summary requested", "why": "mission control summary requested"},
             },
             "actions": [],
-        }
+        },
+        summary=str(summary.get("headline") or "Mission Control vat nu je werkvolgorde samen.").strip(),
+        risk_summary=str(
+            ((summary.get("avoid_today") or [{}])[0].get("reason"))
+            or priority_engine.get("why_now")
+            or f"Open nu: {(summary.get('open_counts') or {}).get('workqueue_count', 0)} items."
+        ).strip(),
+        next_best_action=str(
+            ((summary.get("top_3") or [{}])[0].get("title"))
+            or "Review eerst je hoogste open item."
+        ).strip(),
+        review_reason="Mission Control helpt je het verschil zien tussen direct handelen, reviewen en bewust laten liggen.",
+        resolution_status="review",
+        resolution_title="Wat Mission Control hier nu mee bedoelt")
         _cache_set(
             _mission_control_explain_cache,
             explain_cache_key,
@@ -3985,6 +4120,11 @@ class FinnPlanService:
                 confidence=page_confidence,
                 entity_type="page",
                 entity={"page": inferred_page or context.get("page"), "page_type": page_type},
+                summary=f"Dit scherm draait vooral om {page_type} en de beslissingen die daaruit volgen.",
+                risk_summary="Lees hier eerst de context voordat je een setup, strategie of bot als uitvoeractie behandelt.",
+                next_best_action="Vraag Finn om de actieve setup, score of volgende beste stap op dit scherm.",
+                review_reason="Ik gebruik je huidige scherm om te bepalen of je nu vooral moet begrijpen, reviewen of handelen.",
+                resolution_title="Wat dit scherm nu voor je betekent",
             )
 
         if target == "score":
@@ -4028,6 +4168,11 @@ class FinnPlanService:
                             "operator_implication": f"Focus nu eerst op {weakest['category']} voordat je zwaarder leunt op de sterkere scoreblokken.",
                         },
                         state_overrides={"asset": asset},
+                        summary=f"{asset} wordt nu vooral afgeremd door {weakest['category']} en gesteund door {strongest['category']}.",
+                        risk_summary=f"Zolang {weakest['category']} achterblijft, blijft opschalen of versnellen fragiel.",
+                        next_best_action=f"Focus eerst op {weakest['category']} voordat je zwaarder leunt op de sterkere scoreblokken.",
+                        review_reason="De daily score laat nu zien welk blok je eerst moet oplossen of opnieuw toetsen.",
+                        resolution_title="Wat deze score nu voor je betekent",
                     )
 
             response = (
@@ -4040,6 +4185,11 @@ class FinnPlanService:
                 entity_type="score",
                 entity={"asset": asset},
                 state_overrides={"asset": asset},
+                summary=f"Ik kan de score voor {asset} nog niet betrouwbaar citeren.",
+                risk_summary="Zonder betrouwbare daily score zou ik geen harde operator-conclusie trekken.",
+                next_best_action=f"Ververs daily scores voor {asset}.",
+                review_reason="Ik wil hier liever eerst goede data dan schijnzekerheid.",
+                resolution_status="review",
             )
 
         if target == "report":
@@ -4089,6 +4239,11 @@ class FinnPlanService:
                             "recommended_follow_up": follow_up,
                         },
                         state_overrides={"report_type": table_name},
+                        summary=f"Je {period_label} geeft nu vooral één terugblik: {summary if summary else 'de kern van je recente markt- of gedragscontext.'}",
+                        risk_summary=risk_or_behavior,
+                        next_best_action=follow_up,
+                        review_reason="Gebruik dit rapport als terugblik en vertaal het pas daarna naar een concrete review of vervolgstap.",
+                        resolution_title="Wat dit rapport nu voor je betekent",
                     )
 
             response = (
@@ -4100,6 +4255,10 @@ class FinnPlanService:
                 confidence=report_confidence,
                 entity_type="report",
                 entity={"table_name": self._report_table_from_query_or_context(query, context)},
+                summary="Ik mis nu een recente rapport-rij om veilig een rapportconclusie te trekken.",
+                risk_summary="Zonder actuele rapportdata blijft dit eerder een navigatievraag dan een inhoudelijke review.",
+                next_best_action="Open het juiste dag-, week- of maandrapport opnieuw.",
+                review_reason="Ik wil eerst zeker weten welk rapport je bedoelt voordat ik conclusies trek.",
             )
 
         if target == "strategy" and strategy_id and self.session:
@@ -4125,6 +4284,11 @@ class FinnPlanService:
                         "setup_id": strategy.get("setup_id"),
                         "asset": strategy.get("symbol"),
                     },
+                    summary=f"Strategie #{strategy['id']} vertaalt je setup voor {strategy.get('symbol')} naar entry-, stop- en targetregels.",
+                    risk_summary="Een strategie is pas sterk als de onderliggende setup en timing nog steeds kloppen.",
+                    next_best_action="Toets entry, stop en targets tegen de huidige setup voordat je activeert of automatiseert.",
+                    review_reason="Hier bepaal je niet óf je een idee hebt, maar hoe je dat idee concreet en disciplinevast uitvoert.",
+                    resolution_title="Wat deze strategie nu voor je betekent",
                 )
 
         if target == "strategy" and strategy_id:
@@ -4141,6 +4305,10 @@ class FinnPlanService:
                 entity_type="strategy",
                 entity={"id": strategy_id, "asset": asset},
                 state_overrides={"strategy_id": strategy_id, "asset": asset},
+                summary=f"Je huidige context wijst nu naar strategie #{strategy_id}{f' voor {asset}' if asset else ''}.",
+                risk_summary="Zonder de volledige strategie-rij blijft dit een werkhypothese, geen harde uitvoerconclusie.",
+                next_best_action="Open de strategie of vraag Finn om de entry-, stop- en targetlogica uit te leggen.",
+                review_reason="Ik gebruik je recente context om de juiste strategie te volgen voordat je iets verandert.",
             )
 
         if target == "setup" and setup_id and self.session:
@@ -4160,6 +4328,11 @@ class FinnPlanService:
                         "setup_id": setup["id"],
                         "asset": setup.get("symbol"),
                     },
+                    summary=f"Setup #{setup['id']} is je toetslaag voor {setup.get('symbol')} op {setup.get('timeframe')}.",
+                    risk_summary="Zonder heldere setup-validiteit wordt strategie- of botwerk sneller los van context.",
+                    next_best_action="Review eerst blockers, scorebereik en setup-logica voordat je een strategie of bot bouwt.",
+                    review_reason="De setup vertelt je of dit idee überhaupt stevig genoeg is om verder te vertalen.",
+                    resolution_title="Wat deze setup nu voor je betekent",
                 )
 
         if target == "setup" and setup_id:
@@ -4176,6 +4349,10 @@ class FinnPlanService:
                 entity_type="setup",
                 entity={"id": setup_id, "asset": asset},
                 state_overrides={"setup_id": setup_id, "asset": asset},
+                summary=f"Je huidige context wijst nu naar setup #{setup_id}{f' voor {asset}' if asset else ''}.",
+                risk_summary="Zonder de volledige setup-rij blijft dit contextueel nuttig, maar nog geen harde setup-review.",
+                next_best_action="Open de setup of vraag Finn welke blockers of scoreblokken hier het zwaarst wegen.",
+                review_reason="Ik gebruik je recente leescontext om de juiste setup te volgen voordat je verder bouwt.",
             )
 
         if target == "bot" and bot_id:
@@ -4261,6 +4438,11 @@ class FinnPlanService:
                         "setup_id": bot.get("setup_id"),
                         "asset": bot.get("symbol"),
                     },
+                    summary=f"Bot #{bot['id']} bewaakt nu de vertaalslag van strategie naar review- of execution-momenten voor {bot.get('symbol')}.",
+                    risk_summary=f"Status nu: {status_text}. Zolang de bot in state '{operating_state}' zit, wil je vooral snappen waarop hij wacht.",
+                    next_best_action=next_step,
+                    review_reason="Deze bot hoort niet blind uit te voeren, maar juist de veilige hand-off tussen context, review en uitvoering te bewaken.",
+                    resolution_title="Wat deze bot nu voor je betekent",
                 )
 
             response = f"Je werkt nu met bot #{bot_id}. Als je wilt kan ik uitleggen waarom deze bot actief is, welke strategie hij volgt of welke review-openingen er zijn."
@@ -4270,6 +4452,10 @@ class FinnPlanService:
                 entity_type="bot",
                 entity={"id": bot_id},
                 state_overrides={"bot_id": bot_id},
+                summary=f"Je huidige context wijst naar bot #{bot_id}.",
+                risk_summary="Zonder botdetails blijft dit vooral een navigatie- en contextuitleg, geen bot-review.",
+                next_best_action="Vraag Finn welke strategie deze bot volgt of welke review-openingen er nu zijn.",
+                review_reason="Ik wil eerst de botcontext scherp hebben voordat ik iets over execution of status concludeer.",
             )
 
         if target == "asset":
@@ -4307,6 +4493,10 @@ class FinnPlanService:
                 entity_type="asset",
                 entity={"asset": asset, "bot_id": related_bot_id},
                 state_overrides={"asset": asset, "bot_id": related_bot_id},
+                summary=f"{asset} is nu je actieve asset-context.",
+                risk_summary="Dat zegt nog niet vanzelf of je vooral score-, setup-, strategie- of botreview nodig hebt.",
+                next_best_action=f"Vraag Finn om score-, setup-, strategie- of botuitleg voor {asset}.",
+                review_reason="Ik scheid eerst de asset-context van de uitvoercontext zodat je niet te snel een conclusie forceert.",
             )
 
         if target in {"setup", "strategy", "bot", "report"}:
@@ -5982,6 +6172,12 @@ class FinnPlanService:
             "block": "Mijn review blokkeert dit nu: de context of het risico klopt nog niet hard genoeg.",
             "insufficient_context": "Ik kan dit nog niet eerlijk goedkeuren omdat de kerncontext te dun is.",
         }[decision_status]
+        operator_summary = {
+            "approve": f"Deze {self._decision_review_label(review_type)} voor {asset} is nu verdedigbaar, zolang je binnen je bestaande setup- en risicokader blijft.",
+            "modify": f"Deze {self._decision_review_label(review_type)} voor {asset} is nog niet scherp genoeg; ik zou eerst risico, exposure of context aanscherpen.",
+            "block": f"Deze {self._decision_review_label(review_type)} voor {asset} moet je nu niet uitvoeren in deze vorm.",
+            "insufficient_context": f"Ik mis nog te veel context om deze {self._decision_review_label(review_type)} voor {asset} eerlijk te reviewen.",
+        }[decision_status]
         operator_next_step = (
             "Voer niets uit; verzamel eerst de ontbrekende setup- of strategiecontext."
             if decision_status == "insufficient_context" else
@@ -5990,6 +6186,13 @@ class FinnPlanService:
             "Niet doen in deze vorm. Los eerst de blocker op en check daarna opnieuw."
             if decision_status == "block" else
             "Je kunt dit verder beoordelen tegen entry, invalidatie en execution timing."
+        )
+        review_reason = (
+            top_blockers[0]
+            if top_blockers else
+            recommended_changes[0]
+            if recommended_changes else
+            "Deze review toetst context, risico, strategie-fit en portfolio-impact in dezelfde operator-pass."
         )
 
         portfolio_contract = self._portfolio_intelligence_contract(
@@ -6016,8 +6219,11 @@ class FinnPlanService:
             "checks": checks,
             "top_blockers": top_blockers,
             "recommended_changes": recommended_changes,
+            "summary": operator_summary,
             "risk_summary": risk_summary,
             "operator_next_step": operator_next_step,
+            "next_best_action": operator_next_step,
+            "review_reason": review_reason,
             "subject": {
                 "type": subject.get("entity_type"),
                 "id": subject.get("entity_id"),
@@ -6059,7 +6265,7 @@ class FinnPlanService:
             },
         )
 
-        return {
+        return self._enrich_operator_contract({
             "response": self._decision_review_message(analysis),
             "intent": "decision_review",
             "flow": "decision_review",
@@ -6084,7 +6290,15 @@ class FinnPlanService:
                 "reasons": top_blockers or [risk_summary],
                 "coaching_level": "decision_review",
             },
-        }
+        },
+        summary=operator_summary,
+        risk_summary=risk_summary,
+        next_best_action=operator_next_step,
+        review_reason=review_reason,
+        resolution_status=decision_status,
+        resolution_title="Wat deze review nu voor je verandert",
+        what_changed=top_blockers[:2] or recommended_changes[:1],
+        what_next=[operator_next_step])
 
     def _plan_adherence_message(self, analysis: Dict[str, Any]) -> str:
         lines = [
@@ -6278,6 +6492,17 @@ class FinnPlanService:
             "review_reference": review_analysis.get("snapshot"),
             "headline": "Ik check nu of deze beslissing nog binnen je plan valt.",
         }
+        operator_summary = {
+            "in_plan": "Deze beslissing blijft nu binnen je plan, zolang je uitvoering klein en gedisciplineerd blijft.",
+            "outside_plan": "Deze beslissing botst nu met je plan of risicokaders en hoort niet zo doorgezet te worden.",
+            "forced_override": "Je probeert nu een expliciete plan- of risicoregel te overrulen.",
+            "insufficiently_justified": "Ik zie nog te weinig onderbouwing om te zeggen dat dit echt binnen je plan valt.",
+        }[adherence_status]
+        review_reason = threatened_rule or adherence_reason
+        analysis["summary"] = operator_summary
+        analysis["risk_summary"] = adherence_reason
+        analysis["next_best_action"] = analysis.get("suggested_recovery_step")
+        analysis["review_reason"] = review_reason
         await self._record_governance_event(
             user_id,
             event_type="finn_plan_adherence_review",
@@ -6298,7 +6523,7 @@ class FinnPlanService:
                 "review_reference": review_analysis.get("snapshot"),
             },
         )
-        return {
+        return self._enrich_operator_contract({
             "response": self._plan_adherence_message(analysis),
             "intent": "plan_adherence_review",
             "flow": "plan_adherence_review",
@@ -6322,7 +6547,15 @@ class FinnPlanService:
                 "reasons": [adherence_reason],
                 "coaching_level": "plan_adherence_review",
             },
-        }
+        },
+        summary=operator_summary,
+        risk_summary=adherence_reason,
+        next_best_action=analysis.get("suggested_recovery_step"),
+        review_reason=review_reason,
+        resolution_status=adherence_status,
+        resolution_title="Wat deze plancheck nu voor je verandert",
+        what_changed=[review_reason] if review_reason else [],
+        what_next=[analysis.get("suggested_recovery_step")] if analysis.get("suggested_recovery_step") else [])
 
     async def build_outcome_tracking_response(
         self,
