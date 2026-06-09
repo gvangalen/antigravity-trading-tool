@@ -2637,10 +2637,15 @@ class FinnPlanService:
             "is dit een goede trade",
             "past dit bij mijn strategie",
             "past deze trade bij mijn strategie",
+            "past deze trade bij mijn plan",
             "past deze setup bij mijn strategie",
             "past deze setup nu bij mijn strategie",
             "past deze strategie bij mijn setup",
             "past deze bot bij mijn strategie",
+            "klopt deze setup met mijn aanpak",
+            "klopt deze trade met mijn aanpak",
+            "is dit slim binnen mijn strategie",
+            "is dit slim binnen mijn plan",
             "beoordeel deze setup",
             "beoordeel deze strategie",
             "review deze setup",
@@ -2656,11 +2661,15 @@ class FinnPlanService:
             "zou je dit nu openen",
             "zou jij dit nu nemen",
             "zou je dit nu nemen",
+            "zou jij deze entry nemen",
+            "zou je deze entry nemen",
+            "zou jij deze entry nu nemen",
+            "zou je deze entry nu nemen",
         ]
         if any(term in q for term in review_terms):
             return True
-        has_review_verb = any(term in q for term in ["beoordeel", "review", "controleer", "check", "valideer"])
-        has_target = any(term in q for term in ["trade", "setup", "strategie", "strategy", "bot", "instap", "entry"])
+        has_review_verb = any(term in q for term in ["beoordeel", "review", "controleer", "check", "valideer", "klopt"])
+        has_target = any(term in q for term in ["trade", "setup", "strategie", "strategy", "bot", "instap", "entry", "plan", "aanpak"])
         if has_review_verb and has_target:
             return True
         natural_trade_review = any(term in q for term in [
@@ -2674,8 +2683,14 @@ class FinnPlanService:
             "zou je dit nemen",
             "zou jij dit nu nemen",
             "zou je dit nu nemen",
+            "zou jij deze entry nemen",
+            "zou je deze entry nemen",
+            "zou jij deze entry nu nemen",
+            "zou je deze entry nu nemen",
             "is dit slim",
             "zou dit slim zijn",
+            "is dit slim binnen mijn strategie",
+            "is dit slim binnen mijn plan",
         ])
         trade_context = bool(
             context.get("setup_id")
@@ -2685,6 +2700,10 @@ class FinnPlanService:
             or self._page_family(context) in {"setup", "strategy", "bot", "dashboard", "market"}
         )
         if natural_trade_review and trade_context:
+            return True
+        has_fit_or_match_language = any(term in q for term in ["past deze", "past dit", "klopt deze", "klopt dit", "slim binnen"])
+        has_plan_or_strategy_anchor = any(term in q for term in ["strategie", "strategy", "plan", "aanpak"])
+        if has_fit_or_match_language and has_target and has_plan_or_strategy_anchor and trade_context:
             return True
         return bool(
             has_target

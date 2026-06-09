@@ -185,3 +185,21 @@ def test_decision_review_classifier_catches_short_trade_intent_prompt():
         "Zou jij dit nu openen?",
         {"page": "setup", "page_type": "Setup", "setup_id": 12, "symbol": "BTC"},
     )
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Past deze trade bij mijn plan?",
+        "Klopt deze setup met mijn aanpak?",
+        "Is dit slim binnen mijn strategie?",
+        "Zou jij deze entry nu nemen?",
+    ],
+)
+def test_decision_review_classifier_catches_implicit_variant_prompts(prompt: str):
+    service = FinnPlanService(None)
+
+    assert service.looks_like_decision_review_request(
+        prompt,
+        {"page": "setup", "page_type": "Setup", "setup_id": 12, "strategy_id": 3, "symbol": "BTC"},
+    )
