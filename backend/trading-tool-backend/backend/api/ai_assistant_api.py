@@ -26,6 +26,7 @@ from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
 from backend.infrastructure.models import ChatSession, ChatMessage
 from backend.schemas.assistant_schema import (
+    AssistantAnalyticsEvent,
     AssistantActionExecuteRequest,
     AssistantActionExecuteResponse,
     AssistantChatRequest,
@@ -38,6 +39,7 @@ from backend.schemas.assistant_schema import (
     ChatSessionDetailResponse,
 )
 from backend.services.ai_assistant_service import AiAssistantService
+from backend.services.finn_product_analytics_service import finn_product_analytics
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.ai_gateway import AiGateway
 from backend.infrastructure.repositories.score_repository import ScoreRepository
@@ -124,6 +126,101 @@ def _audit_success_label(response: Optional[dict]) -> str:
     if text.startswith("⚠️") or text.startswith("warning"):
         return "degraded"
     return "success"
+
+
+def _normalize_finn_response_contract(response: Optional[dict]) -> dict:
+    payload = deepcopy(response or {})
+    analysis = payload.get("analysis") if isinstance(payload.get("analysis"), dict) else {}
+    state = payload.get("state") if isinstance(payload.get("state"), dict) else {}
+    state_analysis = state.get("analysis") if isinstance(state.get("analysis"), dict) else {}
+
+    summary = (
+        payload.get("summary")
+        or analysis.get("summary")
+        or state_analysis.get("summary")
+        or analysis.get("headline")
+        or state_analysis.get("headline")
+        or payload.get("response")
+    )
+    risk_summary = (
+        payload.get("risk_summary")
+        or analysis.get("risk_summary")
+        or state_analysis.get("risk_summary")
+        or analysis.get("portfolio_risk", {}).get("message")
+        or state_analysis.get("portfolio_risk", {}).get("message")
+        or analysis.get("review_reason")
+        or state_analysis.get("review_reason")
+    )
+    next_best_action = (
+        payload.get("next_best_action")
+        or analysis.get("next_best_action")
+        or state_analysis.get("next_best_action")
+        or (analysis.get("next_best_actions") or [None])[0]
+        or (state_analysis.get("next_best_actions") or [None])[0]
+    )
+    review_reason = (
+        payload.get("review_reason")
+        or analysis.get("review_reason")
+        or state_analysis.get("review_reason")
+        or analysis.get("adherence_reason")
+        or state_analysis.get("adherence_reason")
+    )
+
+    if isinstance(next_best_action, dict):
+        next_best_action = (
+            next_best_action.get("label")
+            or next_best_action.get("prompt")
+            or next_best_action.get("title")
+        )
+
+    payload["summary"] = str(summary).strip() if summary else None
+    payload["risk_summary"] = str(risk_summary).strip() if risk_summary else None
+    payload["next_best_action"] = str(next_best_action).strip() if next_best_action else None
+    payload["review_reason"] = str(review_reason).strip() if review_reason else None
+    return payload
+
+
+def _record_finn_product_event(
+    *,
+    user_id: int,
+    event_name: str,
+    session_id: Optional[str] = None,
+    surface: str = "backend",
+    page: Optional[str] = None,
+    asset: Optional[str] = None,
+    flow_type: Optional[str] = None,
+    action_type: Optional[str] = None,
+    report_type: Optional[str] = None,
+    decision_id: Optional[str] = None,
+    bot_id: Optional[int] = None,
+    setup_id: Optional[int] = None,
+    strategy_id: Optional[int] = None,
+    trace_id: Optional[str] = None,
+    prompt_text: Optional[str] = None,
+    next_best_action: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+ ) -> Dict[str, Any]:
+    return finn_product_analytics.record_event(
+        user_id=user_id,
+        event={
+            "event_name": event_name,
+            "session_id": session_id,
+            "surface": surface,
+            "page": page,
+            "asset": asset,
+            "flow_type": flow_type,
+            "action_type": action_type,
+            "report_type": report_type,
+            "decision_id": decision_id,
+            "bot_id": bot_id,
+            "setup_id": setup_id,
+            "strategy_id": strategy_id,
+            "trace_id": trace_id,
+            "prompt_text": prompt_text,
+            "next_best_action": next_best_action,
+            "metadata": metadata or {},
+        },
+    )
 
 
 def _legacy_response_is_generic_failure(response_text: Optional[str]) -> bool:
@@ -416,6 +513,7 @@ async def _finalize_finn_response(
 ) -> AssistantChatResponse:
     response["trace_id"] = trace_id
     response = finn._build_response_analysis_metadata(response, context_payload, route_source=route_source)
+    response = _normalize_finn_response_contract(response)
     _redact_assistant_reasoning(response)
     await finn.issue_response_actions(user_id, response)
     if persist_state:
@@ -441,6 +539,21 @@ async def _finalize_finn_response(
         legacy_rescue_reason=legacy_rescue_reason,
         latency_ms=latency_ms,
     )
+    _record_finn_product_event(
+        user_id=user_id,
+        event_name="finn_response_received",
+        session_id=(context_payload or {}).get("session_id"),
+        surface=route_source,
+        page=(context_payload or {}).get("page"),
+        asset=(context_payload or {}).get("symbol") or (context_payload or {}).get("asset"),
+        flow_type=response.get("flow") or (response.get("state") or {}).get("current_flow"),
+        bot_id=(response.get("state") or {}).get("bot_id") or (context_payload or {}).get("bot_id"),
+        setup_id=(response.get("state") or {}).get("setup_id") or (context_payload or {}).get("setup_id"),
+        strategy_id=(response.get("state") or {}).get("strategy_id") or (context_payload or {}).get("strategy_id"),
+        trace_id=trace_id,
+        next_best_action=response.get("next_best_action"),
+        metadata={"intent": response.get("intent")},
+    )
     return AssistantChatResponse(**response)
 
 
@@ -459,6 +572,7 @@ async def _prepare_finn_envelope(
 ) -> dict:
     envelope["trace_id"] = trace_id
     envelope = finn._build_response_analysis_metadata(envelope, context_payload, route_source=route_source)
+    envelope = _normalize_finn_response_contract(envelope)
     _redact_assistant_reasoning(envelope)
     await finn.issue_response_actions(user_id, envelope)
     if persist_state:
@@ -484,6 +598,21 @@ async def _prepare_finn_envelope(
         legacy_rescue_reason=legacy_rescue_reason,
         latency_ms=latency_ms,
     )
+    _record_finn_product_event(
+        user_id=user_id,
+        event_name="finn_response_received",
+        session_id=(context_payload or {}).get("session_id"),
+        surface=route_source,
+        page=(context_payload or {}).get("page"),
+        asset=(context_payload or {}).get("symbol") or (context_payload or {}).get("asset"),
+        flow_type=envelope.get("flow") or (envelope.get("state") or {}).get("current_flow"),
+        bot_id=(envelope.get("state") or {}).get("bot_id") or (context_payload or {}).get("bot_id"),
+        setup_id=(envelope.get("state") or {}).get("setup_id") or (context_payload or {}).get("setup_id"),
+        strategy_id=(envelope.get("state") or {}).get("strategy_id") or (context_payload or {}).get("strategy_id"),
+        trace_id=trace_id,
+        next_best_action=envelope.get("next_best_action"),
+        metadata={"intent": envelope.get("intent")},
+    )
     return envelope
 
 
@@ -503,12 +632,28 @@ async def assistant_chat(
         finn = FinnPlanService(db)
         context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
         context_payload = finn.sanitize_context_for_query(request.query, context_payload)
+        if request.session_id:
+            context_payload["session_id"] = request.session_id
         _apply_assistant_rate_limit(
             user_id=user_id,
             raw_request=raw_request,
             query=request.query,
             context=context_payload,
             endpoint="/assistant/chat",
+        )
+        _record_finn_product_event(
+            user_id=user_id,
+            event_name="finn_prompt_submitted",
+            session_id=request.session_id,
+            surface="assistant_chat",
+            page=context_payload.get("page"),
+            asset=context_payload.get("symbol") or context_payload.get("asset"),
+            flow_type=context_payload.get("current_flow"),
+            bot_id=context_payload.get("bot_id"),
+            setup_id=context_payload.get("setup_id"),
+            strategy_id=context_payload.get("strategy_id"),
+            trace_id=trace_id,
+            prompt_text=request.query,
         )
         if finn.looks_like_daily_score_refresh_request(request.query):
             finn_response = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
@@ -752,6 +897,7 @@ async def assistant_chat(
             context_payload,
             route_source="legacy",
         )
+        legacy_response = _normalize_finn_response_contract(legacy_response)
         _log_finn_prompt_audit(
             trace_id=trace_id,
             user_id=user_id,
@@ -771,6 +917,21 @@ async def assistant_chat(
             draft_rejected_reason=(context_payload.get("_finn_sanitization") or {}).get("draft_rejected_reason"),
             latency_ms=(time.perf_counter() - started_at) * 1000,
         )
+        _record_finn_product_event(
+            user_id=user_id,
+            event_name="finn_response_received",
+            session_id=actual_session_id or request.session_id,
+            surface="legacy_assistant",
+            page=context_payload.get("page"),
+            asset=context_payload.get("symbol") or context_payload.get("asset"),
+            flow_type=(state or {}).get("current_flow"),
+            bot_id=(state or {}).get("bot_id") or context_payload.get("bot_id"),
+            setup_id=(state or {}).get("setup_id") or context_payload.get("setup_id"),
+            strategy_id=(state or {}).get("strategy_id") or context_payload.get("strategy_id"),
+            trace_id=trace_id,
+            next_best_action=legacy_response.get("next_best_action"),
+            metadata={"intent": intent},
+        )
         return AssistantChatResponse(
             response=response,
             intent=intent,
@@ -780,7 +941,11 @@ async def assistant_chat(
             reasoning=reasoning,
             suggested_actions=suggested_actions,
             trace_id=trace_id,
-            session_id=actual_session_id
+            session_id=actual_session_id,
+            summary=legacy_response.get("summary"),
+            risk_summary=legacy_response.get("risk_summary"),
+            next_best_action=legacy_response.get("next_best_action"),
+            review_reason=legacy_response.get("review_reason"),
         )
     except HTTPException:
         raise
@@ -920,12 +1085,28 @@ async def assistant_chat_stream(
             finn = FinnPlanService(db)
             context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
             context_payload = finn.sanitize_context_for_query(request.query, context_payload)
+            if request.session_id:
+                context_payload["session_id"] = request.session_id
             _apply_assistant_rate_limit(
                 user_id=user_id,
                 raw_request=raw_request,
                 query=request.query,
                 context=context_payload,
                 endpoint="/assistant/chat/stream",
+            )
+            _record_finn_product_event(
+                user_id=user_id,
+                event_name="finn_prompt_submitted",
+                session_id=request.session_id,
+                surface="assistant_chat_stream",
+                page=context_payload.get("page"),
+                asset=context_payload.get("symbol") or context_payload.get("asset"),
+                flow_type=context_payload.get("current_flow"),
+                bot_id=context_payload.get("bot_id"),
+                setup_id=context_payload.get("setup_id"),
+                strategy_id=context_payload.get("strategy_id"),
+                trace_id=trace_id,
+                prompt_text=request.query,
             )
             if finn.looks_like_daily_score_refresh_request(request.query):
                 envelope = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
@@ -1272,6 +1453,15 @@ async def execute_pending_action(
             result = await finn.execute_issued_action(user_id, str(action_id))
             _invalidate_mission_control_cache(user_id)
             FinnPlanService.invalidate_runtime_caches_for_user(user_id)
+            _record_finn_product_event(
+                user_id=user_id,
+                event_name="finn_confirm_confirmed",
+                surface="assistant_execute",
+                flow_type="confirm",
+                action_type="execute_issued_action",
+                trace_id=trace_id,
+                metadata={"action_id": str(action_id)},
+            )
             return result
         except HTTPException:
             raise
@@ -1279,6 +1469,33 @@ async def execute_pending_action(
             logger.error(f"❌ AI Assistant Action Error: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Fout bij Finn action")
     return await engine.execute_pending_action(action_id, user_id, trace_id=trace_id)
+
+
+@router.post("/assistant/analytics/events")
+async def record_assistant_analytics_event(
+    payload: AssistantAnalyticsEvent,
+    current_user: dict = Depends(get_current_user),
+):
+    event = _record_finn_product_event(
+        user_id=current_user["id"],
+        event_name=payload.event_name,
+        session_id=payload.session_id,
+        surface=payload.surface,
+        page=payload.page,
+        asset=payload.asset,
+        flow_type=payload.flow_type,
+        action_type=payload.action_type,
+        report_type=payload.report_type,
+        decision_id=payload.decision_id,
+        bot_id=payload.bot_id,
+        setup_id=payload.setup_id,
+        strategy_id=payload.strategy_id,
+        trace_id=payload.trace_id,
+        prompt_text=payload.prompt_text,
+        next_best_action=payload.next_best_action,
+        metadata=payload.metadata,
+    )
+    return {"ok": True, "event": event}
 
 @router.get("/assistant/finn/state")
 async def get_finn_state(

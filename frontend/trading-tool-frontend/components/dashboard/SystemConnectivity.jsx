@@ -44,7 +44,14 @@ export default function SystemConnectivity() {
 
   const handleOpenSettings = () => {
     openConfirm({
-      title: "Exchange Connection",
+      title: "Exchangeverbinding beheren",
+      statusLabel: exchanges.length > 0 ? "Verbonden" : "Nog niet gekoppeld",
+      context: exchanges.length > 0
+        ? "Je beheert de gekoppelde exchange-sleutels voor deze omgeving."
+        : "Je koppelt een exchange zodat Finn en bots order- en portfolioinformatie kunnen gebruiken.",
+      impact: "Alleen de exchange-instellingen van deze omgeving worden bijgewerkt.",
+      safety: "Controleer goed of je de juiste omgeving gebruikt. Live- en staging-sleutels blijven gescheiden.",
+      consequence: "Na opslaan vernieuwt de verbindingsstatus direct in dit scherm.",
       description: <ExchangeSettingsForm onSave={handleSave} onCancel={closeModal} />,
       icon: <Zap size={20} />,
       tone: "info"
@@ -64,7 +71,7 @@ export default function SystemConnectivity() {
         }`}
       >
         <LinkIcon size={14} />
-        {isConnected ? 'Exchange Settings' : 'Connect Exchange'}
+        {isConnected ? 'Beheer exchange' : 'Koppel exchange'}
       </button>
 
       <div className="flex items-center gap-3">

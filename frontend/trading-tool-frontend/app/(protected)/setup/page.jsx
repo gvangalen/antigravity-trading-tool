@@ -19,6 +19,7 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
+import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 export default function SetupPage() {
   const [search, setSearch] = useState("");
@@ -45,6 +46,15 @@ export default function SetupPage() {
   ===================================================== */
   useEffect(() => {
     loadSetups();
+  }, []);
+
+  useEffect(() => {
+    trackAssistantEvent({
+      event_name: "screen_view",
+      page: "/setup",
+      surface: "web",
+      flow_type: "setup",
+    });
   }, []);
 
   /* =====================================================

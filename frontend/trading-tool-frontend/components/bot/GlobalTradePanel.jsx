@@ -25,7 +25,7 @@ export default function GlobalTradePanel({
   const timeframe = activeBot?.strategy?.timeframe || activeBot?.timeframe || "—";
 
   return (
-    <div className="space-y-6">
+    <div id="execution-guardrail-panel" className="space-y-6">
       
       {/* 🧭 BOT CONTEXT (High 3D) */}
       <div className="card">

@@ -341,7 +341,7 @@ function WatchlistSidebar({ onNavigate, pathname }) {
     <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80">
       <p className="px-5 text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-3 flex items-center gap-2">
         <Star size={10} className="text-amber-400 fill-amber-400 animate-pulse" />
-        Intelligence Terminal
+        Marktcontext
       </p>
       <div className="space-y-2.5 px-1.5">
         {watchlist.map((symbol) => {
@@ -366,7 +366,10 @@ function WatchlistSidebar({ onNavigate, pathname }) {
               onRemove={() => {
                 openConfirm({
                   title: "Asset verwijderen?",
-                  description: `Weet je zeker dat je ${symbol} wilt verwijderen van je watchlist? De asset is dan niet meer zichtbaar in je actieve tracking engine.`,
+                  context: `${symbol} verdwijnt uit je actieve watchlist.`,
+                  impact: "De asset blijft bestaan, maar verdwijnt uit je huidige tracking en snelle context-switches.",
+                  safety: "Dit start geen orders of datawijzigingen. Alleen je persoonlijke watchlist verandert.",
+                  consequence: "Na bevestigen vernieuwt je watchlist en focust Finn op je overgebleven assets.",
                   tone: "danger",
                   confirmText: "Verwijder",
                   cancelText: "Annuleer",

@@ -50,8 +50,33 @@ import { triggerHaptic } from '../utils/haptics';
 import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
 import { useAuth } from '../auth/AuthProvider';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
+import { trackAssistantEvent } from '../services/assistantAnalytics';
 
 type SheetType = 'risk' | 'confirm' | 'draft' | null;
+
+function formatFinnContextLabel(pageType?: string, symbol?: string, timeframe?: string) {
+  const laneMap: Record<string, string> = {
+    FINN: 'Finn',
+    Portfolio: 'Portfolio',
+    Report: 'Report',
+    Setup: 'Setup',
+    Setups: 'Setup',
+    Strategies: 'Setup',
+    Watchlist: 'Watchlist',
+  };
+
+  const lane = laneMap[pageType || ''] || pageType || 'Finn';
+  return `${lane} · ${symbol || 'BTC'} · ${(timeframe || '1D').toUpperCase()}`;
+}
+
+function deriveFinnModeLabel(source?: string, activeState?: any) {
+  if (activeState?.current_flow && activeState.current_flow !== 'none') {
+    return 'Concept';
+  }
+  if (source?.includes('live')) return 'Live';
+  if (source?.includes('paper')) return 'Paper';
+  return 'Read-only';
+}
 
 export function FinnScreen({
   isOverlay = false,
@@ -87,6 +112,11 @@ export function FinnScreen({
     symbol: context.asset,
     timeframe: context.timeframe,
   }), [context.asset, context.timeframe]);
+  const finnContextLabel = useMemo(
+    () => formatFinnContextLabel(context.screen || context.page_type || context.page || 'FINN', context.asset, context.timeframe),
+    [context.asset, context.page_type, context.screen, context.timeframe, context.page]
+  );
+  const finnModeLabel = useMemo(() => deriveFinnModeLabel(source, activeState), [source, activeState]);
 
   const fetchOverview = useCallback(() => mobileApi.overview(), []);
   const fetchInsight = useCallback(() => assistantApi.insight(apiContext), [apiContext]);
@@ -98,6 +128,14 @@ export function FinnScreen({
     fallbackData: undefined,
     fetcher: fetchInsight,
   });
+  useEffect(() => {
+    trackAssistantEvent({
+      event_name: 'screen_view',
+      page: isOverlay ? 'finn_overlay' : 'finn',
+      flow_type: source || 'finn',
+      asset: symbol || context.asset || null,
+    });
+  }, [context.asset, isOverlay, source, symbol]);
   useEffect(() => {
     if (overviewResource.data?.intelligence_events) {
       setLocalEvents(overviewResource.data.intelligence_events);
@@ -314,7 +352,13 @@ export function FinnScreen({
         <View style={styles.overlayHeader}>
           <View style={styles.dragHandle} />
           <View style={styles.overlayHeaderRow}>
-            <Text style={[styles.overlayTitle, { color: colors.text }]}>FINN</Text>
+            <View style={{ gap: 4 }}>
+              <Text style={[styles.overlayTitle, { color: colors.text }]}>FINN</Text>
+              <View style={styles.headerSubRow}>
+                <View style={styles.greenDot} />
+                <Text style={[styles.headerContextText, { color: colors.textDim }]}>{finnContextLabel}</Text>
+              </View>
+            </View>
             <Pressable onPress={onClose} style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}>
               <Text style={styles.closeBtnText}>SLUITEN</Text>
             </Pressable>
@@ -341,13 +385,13 @@ export function FinnScreen({
               </View>
               <Text style={[styles.headerTitle, { color: colors.text }]}>FINN</Text>
               <View style={styles.headerBadge}>
-                <Text style={styles.headerBadgeText}>CHIEF OF STAFF</Text>
+                <Text style={styles.headerBadgeText}>{finnModeLabel.toUpperCase()}</Text>
               </View>
             </View>
             <View style={styles.headerSubRow}>
               <View style={styles.greenDot} />
               <Text style={[styles.headerContextText, { color: colors.textDim }]}>
-                STRATEGIES · {context.asset} · {context.timeframe?.toUpperCase() ?? 'DAILY'}
+                {finnContextLabel}
               </Text>
             </View>
           </View>
@@ -423,7 +467,7 @@ export function FinnScreen({
               multiline
               maxLength={240}
               onChangeText={setQuery}
-              placeholder="Ask a question..."
+              placeholder="Vraag Finn om context, risico of een volgende stap..."
               placeholderTextColor={colors.textDim}
               style={[styles.input, { color: colors.text }]}
               value={query}
@@ -443,13 +487,13 @@ export function FinnScreen({
         </View>
       </KeyboardAvoidingView>
 
-      <BottomSheet visible={sheet === 'risk'} title="Risk explanation" onClose={() => setSheet(null)}>
+      <BottomSheet visible={sheet === 'risk'} title="Laat Finn risico uitleggen" onClose={() => setSheet(null)}>
         <RiskExplanationSheetContent />
       </BottomSheet>
-      <BottomSheet visible={sheet === 'confirm'} title="Confirm action pattern" onClose={() => setSheet(null)}>
+      <BottomSheet visible={sheet === 'confirm'} title="Review voorgestelde actie" onClose={() => setSheet(null)}>
         <ConfirmActionSheetContent onDone={() => setSheet(null)} />
       </BottomSheet>
-      <BottomSheet visible={sheet === 'draft'} title="Draft review" onClose={() => setSheet(null)}>
+      <BottomSheet visible={sheet === 'draft'} title="Review concept" onClose={() => setSheet(null)}>
         <DraftReviewSheetContent
           draft={currentDraft}
           onConfirm={async () => {

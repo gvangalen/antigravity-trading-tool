@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import type { NavigationProp } from '@react-navigation/native';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -26,6 +26,7 @@ import {
 import { triggerHaptic } from '../utils/haptics';
 import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
 import { useFinnOverlay } from '../contexts/FinnOverlayContext';
+import { trackAssistantEvent } from '../services/assistantAnalytics';
 
 type UnknownRecord = Record<string, unknown>;
 type EnvFilter = 'all' | 'paper' | 'live';
@@ -88,6 +89,14 @@ export function PortfolioScreen() {
   const [tradeMode, setTradeMode] = useState<TradeMode>('buy');
   const [executionExpanded, setExecutionExpanded] = useState(false);
   const [amountUnit, setAmountUnit] = useState<AmountUnit>('EUR');
+
+  useEffect(() => {
+    trackAssistantEvent({
+      event_name: 'screen_view',
+      page: 'portfolio',
+      flow_type: 'portfolio_review',
+    });
+  }, []);
   const [amountValue, setAmountValue] = useState('');
   const [amountPreset, setAmountPreset] = useState(0);
   const [tradePreview, setTradePreview] = useState<OrderPreviewResponse | null>(null);

@@ -143,6 +143,24 @@ export type MobileReportResponse = {
 };
 
 export type ReportResponse = Record<string, unknown>;
+export type AssistantAnalyticsPayload = {
+  event_name: string;
+  session_id?: string;
+  surface?: string;
+  page?: string;
+  asset?: string | null;
+  flow_type?: string | null;
+  action_type?: string | null;
+  report_type?: string | null;
+  decision_id?: string | null;
+  bot_id?: number | null;
+  setup_id?: number | null;
+  strategy_id?: number | null;
+  trace_id?: string | null;
+  prompt_text?: string | null;
+  next_best_action?: string | null;
+  metadata?: Record<string, unknown>;
+};
 
 export const assistantApi = {
   insight(context: AssistantRuntimeContext) {
@@ -158,6 +176,15 @@ export const assistantApi = {
       context,
       history,
       query,
+    });
+  },
+};
+
+export const analyticsApi = {
+  track(event: AssistantAnalyticsPayload) {
+    return apiClient.post<{ ok: boolean }>('/api/assistant/analytics/events', {
+      surface: 'mobile',
+      ...event,
     });
   },
 };

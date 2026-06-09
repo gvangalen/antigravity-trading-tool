@@ -120,7 +120,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
       setFinnAdherence(adherence?.analysis || adherence?.state?.analysis || null);
     } catch (err) {
       console.error("FINN strategy review failed:", err);
-      showSnackbar("FINN 3.0 review mislukt", "danger");
+      showSnackbar("Finn review mislukt", "danger");
     } finally {
       setFinnLoading(false);
     }
@@ -138,12 +138,18 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
   function openDel() {
     openConfirm({
       title: "Strategie verwijderen",
-      description: "Weet je zeker dat je deze strategie wilt verwijderen?",
+      statusLabel: "Gevoelige actie",
+      context: <p>{strategyName} · {symbol} · {timeframe}</p>,
+      impact: <p>Deze strategie verdwijnt uit je review-lane en gekoppelde workflows verliezen hun strategiecontext.</p>,
+      safety: <p>Verwijderen is definitief. Controleer eerst of je bot of setup deze strategie nog gebruikt.</p>,
+      consequence: <p>Na verwijderen verversen we de lijst en kun je Finn vragen om een nieuw concept of een veiliger alternatief.</p>,
       icon: <Trash />,
       tone: "danger",
+      confirmText: "Verwijder strategie",
       onConfirm: async () => {
         await deleteStrategy(id);
         onRefresh?.();
+        showSnackbar("Strategie verwijderd. Finn kan je helpen een nieuw concept op te zetten.", "success");
       },
     });
   }
@@ -270,7 +276,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-slate-600">
                   <Brain size={15} className="text-violet-500" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">FINN 3.0 Review</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest">Finn review</span>
                 </div>
                 {finnLoading && (
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Laden…</span>
@@ -368,7 +374,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
             </button>
             <button onClick={handleFinnReview} disabled={finnLoading} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary hover:text-blue-600 transition-colors disabled:opacity-50">
                <Brain size={12} />
-               {finnLoading ? "Finn review…" : "FINN 3.0"}
+               {finnLoading ? "Finn review…" : "Review met Finn"}
             </button>
          </div>
          

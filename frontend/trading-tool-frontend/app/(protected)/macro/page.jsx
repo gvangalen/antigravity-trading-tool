@@ -120,13 +120,19 @@ export default function MacroPage() {
     const symbol = SYMBOL_MAP[normalized] || "BINANCE:BTCUSDT";
 
     openConfirm({
-      title: `Live Chart: ${name}`,
+      title: `Bekijk chart: ${name}`,
+      statusLabel: "Read-only",
+      context: `Je bekijkt de live chart van ${name} binnen Macro.`,
+      impact: "Er verandert niets aan je macroset of analyse. Dit is alleen een extra controlemoment.",
+      safety: "Veilig om te openen tijdens review. Er worden geen indicatoren aangepast.",
+      consequence: "Na sluiten keer je terug naar je huidige macro-overzicht.",
       description: (
         <div className="w-full h-[400px] mt-4">
           <TradingViewChart symbol={symbol} height={400} />
         </div>
       ),
-      confirmText: "Close",
+      confirmText: "Sluiten",
+      cancelText: "Terug",
       icon: <LineChart className="w-5 h-5 text-blue-500" />,
       tone: "info"
     });
@@ -139,18 +145,21 @@ export default function MacroPage() {
     if (!name) return;
 
     openConfirm({
-      title: "Remove Indicator",
-      description: `Are you sure you want to remove '${name}' from your macro analysis?`,
-      confirmText: "Delete",
-      cancelText: "Cancel",
+      title: "Indicator verwijderen",
+      context: `Je verwijdert ${name} uit je macro-analyse voor ${selectedAsset}.`,
+      impact: "Deze indicator telt niet meer mee in je macro-overzicht en bijbehorende conclusies.",
+      safety: "Dit raakt geen trades of marktdata. Alleen je analysekader verandert.",
+      consequence: "Na bevestigen wordt je macro-overzicht direct vernieuwd.",
+      confirmText: "Verwijder indicator",
+      cancelText: "Annuleren",
       tone: "danger",
       onConfirm: async () => {
         try {
           await removeMacroIndicator(name);
-          showSnackbar(`'${name}' successfully removed`, "success");
+          showSnackbar(`'${name}' verwijderd`, "success");
         } catch (err) {
           console.error("❌ Removal failed:", err);
-          showSnackbar("Error removing indicator", "danger");
+          showSnackbar("Verwijderen mislukt", "danger");
         }
       },
     });

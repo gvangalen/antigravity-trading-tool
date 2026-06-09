@@ -43,13 +43,19 @@ export default function MacroSummaryTableForDashboard({
     const symbol = SYMBOL_MAP[normalized] || "BINANCE:BTCUSDT";
 
     openConfirm({
-      title: `Live Chart: ${name}`,
+      title: `Bekijk chart: ${name}`,
+      statusLabel: "Read-only",
+      context: `Je bekijkt de live chart van ${name} binnen Macro.`,
+      impact: "Er verandert niets aan je indicatoren of macro-overzicht.",
+      safety: "Veilig om te gebruiken tijdens review. Er worden geen instellingen aangepast.",
+      consequence: "Na sluiten keer je terug naar je huidige macrocontext.",
       description: (
         <div className="w-full h-[400px] mt-4">
           <TradingViewChart symbol={symbol} height={400} />
         </div>
       ),
-      confirmText: "Close",
+      confirmText: "Sluiten",
+      cancelText: "Terug",
       icon: <LineChart className="w-5 h-5 text-blue-500" />,
       tone: "info"
     });

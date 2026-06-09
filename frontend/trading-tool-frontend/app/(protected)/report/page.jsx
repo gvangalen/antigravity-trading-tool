@@ -36,6 +36,8 @@ import DashboardErrorBoundary from '@/components/ui/DashboardErrorBoundary';
 import ReportGenerateOverlay from '@/components/ui/ReportGenerateOverlay';
 import { useModal } from '@/components/modal/ModalProvider';
 import { waitUntilVisible } from '@/hooks/useVisibilityPolling';
+import { actionButtonStyles } from '@/components/ui/actionButtonStyles';
+import { trackAssistantEvent } from '@/lib/api/assistantAnalytics';
 
 import {
   Download,
@@ -77,28 +79,28 @@ const FINN_REPORT_OPTIONS = [
   {
     key: 'today',
     label: 'Vandaag',
-    eyebrow: 'Operator dagrapport',
+    eyebrow: 'Dagreflectie',
     prompt: 'Geef mijn Finn rapport van vandaag',
     empty: 'Nog geen Finn-activiteit vandaag. Zodra Finn iets begeleidt, blokkeert of vastlegt, verschijnt het hier.',
   },
   {
     key: 'week',
     label: 'Weekreflectie',
-    eyebrow: 'Behavioral Intelligence 2.0+ · Discipline weekbeeld',
+    eyebrow: 'Weekbeeld',
     prompt: 'Geef mijn weekreflectie',
     empty: 'Nog te weinig weekhistorie. Finn toont hier pas patronen wanneer er auditdata is.',
   },
   {
     key: 'blocked',
     label: 'Geblokkeerd',
-    eyebrow: 'Risk-officer log',
+    eyebrow: 'Risicolog',
     prompt: 'Wat heeft Finn vandaag geblokkeerd?',
     empty: 'Geen blokkades vandaag. Finn heeft nog geen risicovolle actie hoeven afremmen.',
   },
   {
     key: 'behavior',
     label: '30 dagen gedrag',
-    eyebrow: 'Behavioral Intelligence 2.0+ · Behavioral memory',
+    eyebrow: 'Gedragsbeeld',
     prompt: 'Geef mijn gedragsrapport van de laatste 30 dagen',
     empty: 'Nog te weinig gedragsdata over 30 dagen. Finn verzint hier geen profiel zonder bewijs.',
   },
@@ -173,6 +175,28 @@ function formatFinnReportSource(report) {
   return source || 'Finn auditdata';
 }
 
+function formatFinnReportTimestamp(report) {
+  const raw =
+    getNested(report, 'state.generated_at') ||
+    getNested(report, 'state.updated_at') ||
+    report?.generated_at ||
+    report?.updated_at ||
+    null;
+
+  if (!raw) return 'Nog niet beschikbaar';
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return String(raw);
+
+  return new Intl.DateTimeFormat('nl-NL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(parsed);
+}
+
 function finnAgentVerdictTone(verdict = {}) {
   const status = String(verdict.status || '').toLowerCase();
   const priority = String(verdict.priority || '').toLowerCase();
@@ -194,7 +218,7 @@ function FinnAgentVerdicts({ verdicts = [] }) {
       <div className="flex items-center justify-between gap-3 mb-3">
         <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
           <Brain size={13} className="text-blue-600 dark:text-blue-400" />
-          Agent Verdicts
+          Controlelagen
         </span>
         <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
           {items.length}
@@ -243,7 +267,7 @@ function FinnAgentController({ controller }) {
       <div className="flex items-center justify-between gap-3">
         <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
           <Brain size={13} />
-          Finn Controller
+          Hoofdconclusie
         </span>
         <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
           {controller.dominant_label || controller.dominant_agent}
@@ -555,7 +579,7 @@ function FinnBehavioralIntelligenceBlocks({ analysis, forceVisible = false }) {
         <div className="flex items-center gap-2">
           <Brain size={14} />
           <span className="text-[10px] font-black uppercase tracking-[0.16em]">
-            Behavioral Intelligence 2.0+
+            Gedragsbeeld
           </span>
         </div>
         <p className="mt-2 text-sm font-semibold leading-relaxed">
@@ -723,7 +747,7 @@ function FinnGovernanceSurface({ analysis }) {
     ['Portfolio Intelligence', governanceSummary?.portfolio_intelligence_count || 0, 'text-amber-700 dark:text-amber-300', <Activity size={11} className="text-amber-500" />],
     ['Priority Engine', governanceSummary?.priority_engine_count || 0, 'text-violet-600 dark:text-violet-300', <Target size={11} className="text-violet-500" />],
     ['Memory V2', governanceSummary?.memory_v2_count || 0, 'text-fuchsia-600 dark:text-fuchsia-300', <Brain size={11} className="text-fuchsia-500" />],
-    ['Portfolio OS', governanceSummary?.portfolio_operating_system_count || 0, 'text-cyan-600 dark:text-cyan-300', <Bot size={11} className="text-cyan-500" />],
+    ['Portfolio-overzicht', governanceSummary?.portfolio_operating_system_count || 0, 'text-cyan-600 dark:text-cyan-300', <Bot size={11} className="text-cyan-500" />],
   ];
 
   const topPriorities = Array.isArray(priorityEngine?.top_priorities) ? priorityEngine.top_priorities.slice(0, 3) : [];
@@ -762,7 +786,7 @@ function FinnGovernanceSurface({ analysis }) {
           <div>
             <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
               <Terminal size={14} className="text-cyan-500" />
-              FINN 3.0 Governance Layer
+              Finn governance-overzicht
             </div>
             <p className="mt-2 text-sm font-black leading-relaxed text-slate-900 dark:text-slate-100">
               {portfolioOS?.control_plane?.headline || priorityEngine?.headline || 'Finn laat hier zien hoe decision review, discipline, prioriteit en portfolio-control samen werken.'}
@@ -921,6 +945,13 @@ function FinnReportsPanel() {
 
     setFinnLoading(true);
     setFinnError('');
+    trackAssistantEvent({
+      event_name: 'report_finn_requested',
+      page: '/report',
+      surface: 'web',
+      flow_type: 'report_explain',
+      report_type: option.key,
+    });
 
     try {
       const data = await assistantChat(
@@ -945,6 +976,15 @@ function FinnReportsPanel() {
   };
 
   useEffect(() => {
+    trackAssistantEvent({
+      event_name: 'screen_view',
+      page: '/report',
+      surface: 'web',
+      flow_type: 'report',
+    });
+  }, []);
+
+  useEffect(() => {
     loadFinnReport(activeOption);
   }, [activeFinnReport]);
 
@@ -958,6 +998,7 @@ function FinnReportsPanel() {
   const metrics = analysis?.metrics || {};
   const source = formatFinnReportSource(finnReport);
   const summary = getFinnReportSummary(finnReport);
+  const latestUpdateLabel = formatFinnReportTimestamp(finnReport);
   const reportType = finnReport?.state?.report_type || analysis?.report_type || 'finn_reflection_report';
   const separateFrom = finnReport?.state?.separate_from || analysis?.separate_from || 'daily_trading_report';
   const isFinnReport = finnReport?.intent === 'finn_report' && finnReport?.flow === 'finn_report';
@@ -977,23 +1018,23 @@ function FinnReportsPanel() {
   ].filter(([, value]) => value !== undefined && value !== null);
 
   return (
-    <section className="my-10 md:my-12">
+    <section className="my-8 md:my-10">
       <div className="flex items-center gap-2 mb-4">
         <Brain size={14} className="text-blue-600 dark:text-blue-400" />
         <span className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
-          Finn Reports
+          Finn rapportage
         </span>
       </div>
 
-      <div className="rounded-[2rem] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-xl shadow-blue-900/5 overflow-hidden">
-        <div className="p-6 md:p-8 border-b border-slate-100 dark:border-slate-800/80">
+      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-lg shadow-slate-900/5 overflow-hidden">
+        <div className="p-6 md:p-7 border-b border-slate-100 dark:border-slate-800/80">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
             <div className="max-w-3xl">
-              <h2 className="text-2xl md:text-3xl font-black tracking-tight text-slate-950 dark:text-slate-100">
+              <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100">
                 Persoonlijke Finn rapportage
               </h2>
               <p className="mt-3 text-sm md:text-[15px] leading-relaxed text-slate-500 dark:text-slate-400 max-w-2xl">
-                Read-only rapporten over je Finn-activiteit, risicochecks en beslisflows.
+                Read-only rapportage over je Finn-activiteit, risicochecks en beslisflows.
                 Los van trading reports. Dit rapport analyseert je gebruik van Finn, niet de markt.
               </p>
             </div>
@@ -1011,8 +1052,8 @@ function FinnReportsPanel() {
           </div>
         </div>
 
-        <div className="p-6 md:p-8">
-          <div className="mb-6 overflow-x-auto">
+        <div className="p-6 md:p-7">
+          <div className="mb-5 overflow-x-auto">
             <div className="inline-flex min-w-full sm:min-w-0 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-1">
               {FINN_REPORT_OPTIONS.map((option) => {
                 const active = option.key === activeFinnReport;
@@ -1054,8 +1095,11 @@ function FinnReportsPanel() {
           ) : (
             <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-5 md:p-6">
               <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                      Laatste Finn rapport
+                    </span>
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
                       <ClipboardList size={13} />
                       {activeOption.eyebrow}
@@ -1068,12 +1112,73 @@ function FinnReportsPanel() {
                     </span>
                   </div>
 
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_220px] md:items-start">
+                    <div className="min-w-0">
+                      <p className="text-sm md:text-[15px] leading-relaxed text-slate-700 dark:text-slate-300 max-w-3xl">
+                        {summary || activeOption.empty}
+                      </p>
+
+                      <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
+                        <div className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3">
+                          <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                            Type
+                          </div>
+                          <div className="mt-1 text-sm font-black text-slate-900 dark:text-slate-100 truncate">
+                            Gebruikersactiviteit
+                          </div>
+                        </div>
+                        <div className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3">
+                          <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                            Laatste update
+                          </div>
+                          <div className="mt-1 text-sm font-black text-slate-900 dark:text-slate-100">
+                            {latestUpdateLabel}
+                          </div>
+                        </div>
+                        <div className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3">
+                          <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                            Bron
+                          </div>
+                          <div className="mt-1 text-sm font-black text-slate-900 dark:text-slate-100 truncate">
+                            {source}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2 sm:flex-row md:flex-col md:items-stretch md:justify-start">
+                      <button
+                        onClick={() => setExpanded((value) => !value)}
+                        className={actionButtonStyles({
+                          variant: 'primary',
+                          className: 'justify-center gap-2 rounded-xl px-5 py-3 text-[11px] tracking-widest active:scale-[0.98]',
+                        })}
+                      >
+                        Lees Finn rapport
+                        <ChevronDown
+                          size={14}
+                          className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
+                        />
+                      </button>
+                      <button
+                        onClick={() => loadFinnReport(activeOption, true)}
+                        className={actionButtonStyles({
+                          variant: 'secondary',
+                          className: 'justify-center gap-2 rounded-xl px-5 py-3 text-[11px] tracking-widest active:scale-[0.98]',
+                        })}
+                      >
+                        <RefreshCw size={13} />
+                        Vernieuw
+                      </button>
+                    </div>
+                  </div>
+
                   {showBehavioralTabLegend && (
                     <div className="mb-4 rounded-2xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/70 dark:bg-violet-950/20 p-4 text-violet-700 dark:text-violet-300">
                       <div className="flex items-center gap-2">
                         <Brain size={14} />
                         <span className="text-[10px] font-black uppercase tracking-[0.16em]">
-                          Behavioral Intelligence 2.0+
+                          Gedragsbeeld
                         </span>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -1093,11 +1198,29 @@ function FinnReportsPanel() {
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
 
-                  <p className="text-sm md:text-[15px] leading-relaxed text-slate-700 dark:text-slate-300 max-w-3xl">
-                    {summary || activeOption.empty}
-                  </p>
-
+              {expanded && (
+                <div className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-5">
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.14em] border ${
+                      isContractValid
+                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300'
+                    }`}>
+                      <ShieldCheck size={12} />
+                      {isContractValid ? 'Contract OK' : 'Contract controleren'}
+                    </span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                      Bron: {source}
+                    </span>
+                  </div>
+                  <div className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-4">
+                    <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
+                      {finnReport?.response || 'Geen rapporttekst beschikbaar.'}
+                    </p>
+                  </div>
                   <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
                     {(metricItems.length ? metricItems : [['Bron', source], ['Type', reportType], ['Scheiding', separateFrom]]).map(([label, value]) => (
                       <div
@@ -1124,7 +1247,7 @@ function FinnReportsPanel() {
                   {analysis?.agent_accountability?.performance_light?.summary && (
                     <div className="mt-5 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 p-4 text-blue-700 dark:text-blue-300">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] mb-2">
-                        Agent learning light
+                        Verbeterpunt
                       </div>
                       <p className="text-sm font-semibold leading-relaxed">
                         {analysis.agent_accountability.performance_light.summary}
@@ -1133,49 +1256,6 @@ function FinnReportsPanel() {
                   )}
                   <FinnAgentVerdicts verdicts={analysis?.agent_verdicts || []} />
                   <FinnReflectionBlocks analysis={analysis} />
-                </div>
-
-                <div className="flex flex-col gap-2 sm:flex-row xl:flex-col xl:min-w-[180px]">
-                  <button
-                    onClick={() => setExpanded((value) => !value)}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 dark:bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-widest text-white hover:bg-blue-700 dark:hover:bg-blue-500 transition-all active:scale-[0.98]"
-                  >
-                    Lees Finn rapport
-                    <ChevronDown
-                      size={14}
-                      className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
-                    />
-                  </button>
-                  <button
-                    onClick={() => loadFinnReport(activeOption, true)}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-5 py-3 text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all active:scale-[0.98]"
-                  >
-                    <RefreshCw size={13} />
-                    Vernieuw
-                  </button>
-                </div>
-              </div>
-
-              {expanded && (
-                <div className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-5">
-                  <div className="flex flex-wrap items-center gap-2 mb-4">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.14em] border ${
-                      isContractValid
-                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300'
-                        : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300'
-                    }`}>
-                      <ShieldCheck size={12} />
-                      {isContractValid ? 'Contract OK' : 'Contract controleren'}
-                    </span>
-                    <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                      Bron: {source}
-                    </span>
-                  </div>
-                  <div className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-4">
-                    <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
-                      {finnReport?.response || 'Geen rapporttekst beschikbaar.'}
-                    </p>
-                  </div>
                 </div>
               )}
             </div>
@@ -1272,7 +1352,7 @@ LOAD
       setReport(data || null);
       lastSignatureRef.current = getReportSignature(data);
     } catch {
-      setError('An error occurred while loading the report.');
+      setError('Rapport laden mislukt. De inhoud kan tijdelijk verouderd zijn.');
     } finally {
       setLoading(false);
     }
@@ -1448,8 +1528,9 @@ RENDER
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 p-6 rounded-2xl flex items-center gap-4 text-red-700 dark:text-red-300 shadow-sm transition-colors">
            <AlertTriangle size={24} />
            <div>
-               <div className="text-[11px] font-black uppercase tracking-widest">Error Message</div>
+               <div className="text-[11px] font-black uppercase tracking-widest">Rapport tijdelijk niet compleet</div>
                <div className="text-sm font-medium">{error}</div>
+               <div className="mt-1 text-xs opacity-80">Ververs de pagina of vraag Finn om de belangrijkste conclusie en risico’s kort samen te vatten.</div>
            </div>
         </div>
       )}

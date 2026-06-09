@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NavigationProp, RouteProp } from '@react-navigation/native';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -18,6 +18,7 @@ import { useApiResource } from '../hooks/useApiResource';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import { MobileReportHighlight, MobileReportResponse, ReportResponse, intelligenceApi } from '../services/tradamindApi';
+import { trackAssistantEvent } from '../services/assistantAnalytics';
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly';
 type ReportPayload = { full?: ReportResponse; mobile?: MobileReportResponse };
@@ -85,6 +86,16 @@ export function ReportScreen() {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
+  useEffect(() => {
+    trackAssistantEvent({
+      event_name: 'screen_view',
+      page: 'report',
+      flow_type: period,
+      asset: activeSymbol,
+      report_type: period,
+    });
+  }, [period, activeSymbol]);
+
   const fetchReport = useCallback(async (): Promise<ReportPayload> => {
     if (period === 'weekly') {
       const [mobile, full] = await Promise.all([
@@ -147,12 +158,21 @@ export function ReportScreen() {
         <ReportNotificationCard
           notificationType={notificationType}
           symbol={activeSymbol}
-          onAskFinn={() =>
+          onAskFinn={() => {
+            trackAssistantEvent({
+              event_name: 'report_finn_requested',
+              page: 'report',
+              flow_type: 'report_explain',
+              asset: activeSymbol,
+              report_type: period,
+            });
+            return (
             openFinn({
               prefill: `Leg uit wat belangrijk is in het ${period} rapport voor ${activeSymbol}. Geef conclusie, risico en veilige volgende stap.`,
               source: `push-${notificationType}`,
             })
-          }
+            );
+          }}
         />
       ) : null}
 

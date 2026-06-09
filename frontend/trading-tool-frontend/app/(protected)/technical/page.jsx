@@ -68,13 +68,19 @@ export default function TechnicalPage() {
     const symbol = SYMBOL_MAP[normalized] || "BINANCE:BTCUSDT";
 
     openConfirm({
-      title: `Live Chart: ${name}`,
+      title: `Bekijk chart: ${name}`,
+      statusLabel: "Read-only",
+      context: `Je bekijkt de live chart van ${name} binnen Technical.`,
+      impact: "Er verandert niets aan je indicatoren of analyse. Dit opent alleen een visuele controlelaag.",
+      safety: "Veilig om te gebruiken tijdens review. Er worden geen datafeeds aangepast.",
+      consequence: "Na sluiten keer je terug naar je huidige technical context.",
       description: (
         <div className="w-full h-[400px] mt-4">
           <TradingViewChart symbol={symbol} height={400} />
         </div>
       ),
-      confirmText: "Close",
+      confirmText: "Sluiten",
+      cancelText: "Terug",
       icon: <LineChart className="w-5 h-5 text-blue-500" />,
       tone: "info"
     });
@@ -87,18 +93,21 @@ export default function TechnicalPage() {
     if (!name) return;
 
     openConfirm({
-      title: "Disconnect",
-      description: `Are you sure you want to disconnect '${name}' from your analysis?`,
-      confirmText: "Disconnect",
-      cancelText: "Cancel",
+      title: "Indicator loskoppelen",
+      context: `Je verwijdert ${name} uit je technische analyse voor ${selectedAsset}.`,
+      impact: "Deze indicator telt niet meer mee in je technische overzicht en bijbehorende conclusies.",
+      safety: "Dit verandert geen marktdata of trades. Alleen je analyse-opbouw wordt bijgewerkt.",
+      consequence: "Na bevestigen wordt de pagina vernieuwd met de aangepaste indicatorenset.",
+      confirmText: "Koppel los",
+      cancelText: "Annuleren",
       tone: "danger",
       onConfirm: async () => {
         try {
           await removeTechnicalIndicator(name);
-          showSnackbar(`'${name}' successfully disconnected`, "success");
+          showSnackbar(`'${name}' losgekoppeld`, "success");
         } catch (err) {
           console.error("❌ Disconnect failed:", err);
-          showSnackbar("Error disconnecting", "danger");
+          showSnackbar("Loskoppelen mislukt", "danger");
         }
       },
     });

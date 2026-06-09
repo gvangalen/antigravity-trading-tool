@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CardShell } from '../components/cards/CardShell';
@@ -23,6 +23,7 @@ import {
 } from '../services/tradamindApi';
 import { triggerHaptic } from '../utils/haptics';
 import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
+import { trackAssistantEvent } from '../services/assistantAnalytics';
 
 type Timeframe = '15m' | '1h' | '4h' | '1d';
 
@@ -32,6 +33,15 @@ export function WatchlistScreen() {
   const { context, updateContext } = useIntelligenceContext();
   const selectedSymbol = context.asset;
   const [timeframe, setTimeframe] = useState<Timeframe>('1h');
+
+  useEffect(() => {
+    trackAssistantEvent({
+      event_name: 'screen_view',
+      page: 'watchlist',
+      flow_type: 'watchlist',
+      asset: selectedSymbol,
+    });
+  }, [selectedSymbol]);
 
   const fetchOverview = useCallback(() => mobileApi.overview(), []);
   const overviewResource = useApiResource<MobileOverviewResponse | undefined>({
@@ -90,11 +100,11 @@ export function WatchlistScreen() {
         insightResource.refresh();
       }}
     >
-      <AssetContextHeader asset={selectedSymbol} context="Watchlist market terminal" updatedAt={overviewResource.updatedAt} />
+      <AssetContextHeader asset={selectedSymbol} context="Watchlist context" updatedAt={overviewResource.updatedAt} />
       <SectionHeader
         label="Watchlist"
-        title="Market intelligence terminal"
-        description="TradingView-lite scanning, compact charting and FINN-aware setup context."
+        title="Marktcontext"
+        description="Prijscontext, trend en Finn-signalen per asset in een rustige leeslaag."
       />
 
       <WatchlistIntelligenceTerminal
@@ -121,10 +131,10 @@ export function WatchlistScreen() {
 
       {overviewResource.error ? (
         <InsightCard
-          label="Watchlist error"
-          title="Mobile overview kon niet live laden."
+          label="Watchlist fout"
+          title="Watchlistcontext kon niet live laden."
           body={overviewResource.error.message}
-          cta="Retry"
+          cta="Probeer opnieuw"
           tone="danger"
           onPress={overviewResource.refresh}
         />
@@ -133,9 +143,9 @@ export function WatchlistScreen() {
       {chartResource.error ? (
         <InsightCard
           label="Chart fallback"
-          title="Chartdata gebruikt tijdelijk een synthetische fallback."
+          title="Chartdata gebruikt tijdelijk een veilige fallback."
           body={chartResource.error.message}
-          cta="Retry chart"
+          cta="Laad chart opnieuw"
           tone="warning"
           onPress={chartResource.refresh}
         />
@@ -171,7 +181,7 @@ function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntell
         <View style={styles.assetIdentity}>
           <AssetIcon symbol={intelligence.symbol} />
           <View>
-            <Text style={styles.intelLabel}>Selected asset</Text>
+            <Text style={styles.intelLabel}>Actieve asset</Text>
             <Text style={[styles.intelSymbol, { color: colors.text }]}>{intelligence.symbol}</Text>
           </View>
         </View>
@@ -191,7 +201,7 @@ function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntell
       <View style={styles.scoreStrip}>
         <MiniMetric label="Setup" value={String(intelligence.setupScore)} tone={toneForScore(intelligence.setupScore)} />
         <MiniMetric label="Technical" value={String(intelligence.technicalScore)} tone={toneForScore(intelligence.technicalScore)} />
-        <MiniMetric label="Desk read" value={intelligence.marketPosture} tone={intelligence.marketPostureTone} />
+        <MiniMetric label="Marktbeeld" value={intelligence.marketPosture} tone={intelligence.marketPostureTone} />
       </View>
     </CardShell>
   );
@@ -219,7 +229,7 @@ function CompactLiveChart({
     <View style={{ borderBottomWidth: 0.5, borderColor: colors.border, paddingVertical: theme.spacing.md }}>
       <View style={styles.chartHeader}>
         <View>
-          <Text style={styles.chartLabel}>Compact live chart</Text>
+          <Text style={styles.chartLabel}>Compacte live chart</Text>
           <Text style={[styles.chartTitle, { color: colors.text }]}>{symbol}USD</Text>
         </View>
         <StatusChip label="RSI · MA200 · VOL" tone="accent" />
@@ -418,8 +428,8 @@ function WatchlistIntelligenceTerminal({
         <View style={styles.terminalTitleRow}>
           <Text style={styles.terminalStar}>★</Text>
           <View>
-            <Text style={styles.terminalLabel}>Intelligence Terminal</Text>
-            <Text style={[styles.terminalSubtitle, { color: colors.textMuted }]}>Desktop watchlist logic</Text>
+            <Text style={styles.terminalLabel}>Marktcontext</Text>
+            <Text style={[styles.terminalSubtitle, { color: colors.textMuted }]}>Live watchlist</Text>
           </View>
         </View>
         <StatusChip label={stale ? 'Stale' : 'Live'} tone={stale ? 'warning' : 'success'} />
