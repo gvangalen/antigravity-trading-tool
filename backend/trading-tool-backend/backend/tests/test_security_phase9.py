@@ -28,6 +28,9 @@ def test_main_enforces_csrf_for_cookie_authenticated_unsafe_api_requests():
 
     assert 'UNSAFE_HTTP_METHODS = {"POST", "PUT", "PATCH", "DELETE"}' in source
     assert "async def csrf_protect_cookie_auth_middleware" in source
+    assert "CSRF_EXEMPT_PATHS = {" in source
+    assert '"/api/auth/login"' in source
+    assert '"/api/auth/register"' in source
     assert 'request.url.path.startswith("/api/")' in source
     assert 'request.cookies.get("access_token") or request.cookies.get("refresh_token")' in source
     assert 'request.headers.get(CSRF_HEADER_NAME)' in source
