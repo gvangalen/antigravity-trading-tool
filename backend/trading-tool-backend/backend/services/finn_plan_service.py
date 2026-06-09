@@ -902,6 +902,38 @@ class FinnPlanService:
             phrase in q for phrase in GENERAL_CAPABILITY_FOLLOW_UP_PHRASES
         )
 
+    def looks_like_ultra_implicit_review_prompt(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        prompt_terms = [
+            "doe ik dit goed",
+            "hmm en deze dan",
+            "hmm, en deze dan",
+            "is deze te doen",
+            "voelt dit goed genoeg",
+            "zou jij hier instappen",
+            "is dit nog oke",
+            "is dit nog oké",
+            "is deze entry het waard",
+        ]
+        return any(term in q for term in prompt_terms)
+
+    def _has_strong_review_context(self, context: Optional[Dict[str, Any]] = None) -> bool:
+        context = context or {}
+        return bool(
+            context.get("setup_id")
+            or context.get("strategy_id")
+            or context.get("bot_id")
+            or context.get("symbol")
+            or self._page_family(context) in {"setup", "strategy", "bot", "dashboard", "market", "report"}
+        )
+
+    def should_route_ultra_implicit_prompt_to_decision_review(
+        self,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        return self.looks_like_ultra_implicit_review_prompt(query) and self._has_strong_review_context(context)
+
     def looks_like_product_refresh_help_request(self, query: str) -> bool:
         q = self._normalized_query(query)
         if self.looks_like_daily_score_refresh_request(query):
@@ -2665,6 +2697,12 @@ class FinnPlanService:
             "zou je deze entry nemen",
             "zou jij deze entry nu nemen",
             "zou je deze entry nu nemen",
+            "is deze te doen",
+            "voelt dit goed genoeg",
+            "zou jij hier instappen",
+            "is dit nog oke",
+            "is dit nog oké",
+            "is deze entry het waard",
         ]
         if any(term in q for term in review_terms):
             return True
@@ -2691,6 +2729,12 @@ class FinnPlanService:
             "zou dit slim zijn",
             "is dit slim binnen mijn strategie",
             "is dit slim binnen mijn plan",
+            "is deze te doen",
+            "voelt dit goed genoeg",
+            "zou jij hier instappen",
+            "is dit nog oke",
+            "is dit nog oké",
+            "is deze entry het waard",
         ])
         trade_context = bool(
             context.get("setup_id")
@@ -2750,6 +2794,36 @@ class FinnPlanService:
         risk_summary="Deze route blijft read-only: ik leg uit, review en stuur je pas daarna naar een concrete vervolgactie.",
         next_best_action="Vraag Finn om je huidige context, een setup-review of je volgende beste stap.",
         review_reason="Begin hier als je eerst wilt begrijpen wat je ziet voordat je iets bevestigt.")
+
+    async def build_quick_general_help_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        page = context.get("page_type") or context.get("page") or "Tradamind"
+        asset = context.get("symbol") or context.get("asset")
+        asset_text = f" voor {str(asset).upper()}" if asset else ""
+        response = (
+            f"Ik kan dit kort voor je spiegelen op {page}{asset_text}, maar deze vraag is nog te impliciet om er meteen een harde review van te maken. "
+            "Noem de setup, trade of entry die je bedoelt, dan maak ik er direct een concrete review van."
+        )
+        return self._enrich_operator_contract({
+            "response": response,
+            "intent": "general_help",
+            "flow": "general_help",
+            "state": {
+                "current_flow": "general_help",
+                "page": context.get("page"),
+                "asset": asset,
+            },
+            "analysis": {
+                "mode": "read_only",
+                "route_source": "finn_fast_help",
+                "variant": "ultra_implicit_help",
+            },
+            "actions": [],
+        },
+        summary=f"Ik heb nog net te weinig context om hier meteen een harde review van te maken{asset_text}.",
+        risk_summary="Bij een te vage prompt wil ik geen schijnzeker review-oordeel geven zonder duidelijk trade-, setup- of entry-anker.",
+        next_best_action="Noem de setup, trade of entry die je bedoelt, dan review ik die direct.",
+        review_reason="Deze vraag zit op de grens tussen algemene hulp en decision review, dus ik houd hem eerst compact en veilig.")
 
     def _product_capability_inventory(self, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}

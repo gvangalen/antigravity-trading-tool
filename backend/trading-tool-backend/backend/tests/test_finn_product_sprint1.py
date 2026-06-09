@@ -203,3 +203,53 @@ def test_decision_review_classifier_catches_implicit_variant_prompts(prompt: str
         prompt,
         {"page": "setup", "page_type": "Setup", "setup_id": 12, "strategy_id": 3, "symbol": "BTC"},
     )
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Is deze te doen?",
+        "Voelt dit goed genoeg?",
+        "Zou jij hier instappen?",
+        "Is dit nog oké?",
+        "Is deze entry het waard?",
+    ],
+)
+def test_decision_review_classifier_catches_indirect_boundary_prompts(prompt: str):
+    service = FinnPlanService(None)
+
+    assert service.looks_like_decision_review_request(
+        prompt,
+        {"page": "setup", "page_type": "Setup", "setup_id": 12, "strategy_id": 3, "symbol": "BTC"},
+    )
+
+
+def test_ultra_implicit_prompt_policy_routes_to_decision_review_with_context():
+    service = FinnPlanService(None)
+
+    assert service.looks_like_ultra_implicit_review_prompt("Doe ik dit goed?")
+    assert service.should_route_ultra_implicit_prompt_to_decision_review(
+        "Doe ik dit goed?",
+        {"page": "setup", "page_type": "Setup", "setup_id": 12, "symbol": "BTC"},
+    )
+
+
+def test_ultra_implicit_prompt_policy_stays_fast_help_without_context():
+    service = FinnPlanService(None)
+
+    assert service.looks_like_ultra_implicit_review_prompt("Hmm, en deze dan?")
+    assert not service.should_route_ultra_implicit_prompt_to_decision_review(
+        "Hmm, en deze dan?",
+        {"page": None, "page_type": None},
+    )
+
+    payload = asyncio.run(service.build_quick_general_help_response(
+        7,
+        "Hmm, en deze dan?",
+        {"page": None, "page_type": None},
+    ))
+
+    assert payload["intent"] == "general_help"
+    assert payload["analysis"]["route_source"] == "finn_fast_help"
+    assert payload["summary"]
+    assert payload["next_best_action"]

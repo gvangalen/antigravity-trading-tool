@@ -257,6 +257,7 @@ def _query_prefers_non_transactional_finn_response(
         finn.looks_like_priority_engine_request(query, context_payload),
         finn.looks_like_portfolio_operating_system_request(query),
         finn.looks_like_decision_review_request(query, context_payload),
+        finn.looks_like_ultra_implicit_review_prompt(query),
         finn.looks_like_mission_control_explain_request(query, context_payload),
         finn.looks_like_entity_explain_request(query, context_payload),
         finn.looks_like_behavioral_intelligence_request(query),
@@ -329,6 +330,10 @@ async def _build_finn_core_rescue_envelope(
         return await finn.build_portfolio_operating_system_response(user_id, query, context_payload)
     if finn.looks_like_decision_review_request(query, context_payload):
         return await finn.build_decision_review_response(user_id, query, context_payload)
+    if finn.should_route_ultra_implicit_prompt_to_decision_review(query, context_payload):
+        return await finn.build_decision_review_response(user_id, query, context_payload)
+    if finn.looks_like_ultra_implicit_review_prompt(query):
+        return await finn.build_quick_general_help_response(user_id, query, context_payload)
     if finn.looks_like_mission_control_explain_request(query, context_payload):
         return await finn.build_mission_control_explain_response(user_id, query, context_payload)
     if finn.looks_like_entity_explain_request(query, context_payload):
@@ -727,6 +732,16 @@ async def assistant_chat(
             )
         if finn.looks_like_decision_review_request(request.query, context_payload):
             finn_response = await finn.build_decision_review_response(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
+            )
+        if finn.should_route_ultra_implicit_prompt_to_decision_review(request.query, context_payload):
+            finn_response = await finn.build_decision_review_response(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
+            )
+        if finn.looks_like_ultra_implicit_review_prompt(request.query):
+            finn_response = await finn.build_quick_general_help_response(user_id, request.query, context_payload)
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
             )
@@ -1200,6 +1215,18 @@ async def assistant_chat_stream(
 
             if finn.looks_like_decision_review_request(request.query, context_payload):
                 envelope = await finn.build_decision_review_response(user_id, request.query, context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.should_route_ultra_implicit_prompt_to_decision_review(request.query, context_payload):
+                envelope = await finn.build_decision_review_response(user_id, request.query, context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_ultra_implicit_review_prompt(request.query):
+                envelope = await finn.build_quick_general_help_response(user_id, request.query, context_payload)
                 envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
                 yield _sse_event("envelope", envelope)
                 return
