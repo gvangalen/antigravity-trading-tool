@@ -56,6 +56,13 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   useEffect(() => {
     if (!isOpen) return;
     trackAssistantEvent({
+      event_name: "finn_overlay_opened",
+      page: pathname || "/assistant",
+      surface: "finn_overlay",
+      asset: globalSymbol || null,
+      flow_type: "finn_overlay",
+    });
+    trackAssistantEvent({
       event_name: "screen_view",
       page: pathname || "/assistant",
       surface: "finn_overlay",

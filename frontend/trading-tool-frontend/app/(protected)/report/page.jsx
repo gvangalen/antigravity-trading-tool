@@ -946,6 +946,13 @@ function FinnReportsPanel() {
     setFinnLoading(true);
     setFinnError('');
     trackAssistantEvent({
+      event_name: 'report_ask_finn_used',
+      page: '/report',
+      surface: 'web',
+      flow_type: 'report_explain',
+      report_type: option.key,
+    });
+    trackAssistantEvent({
       event_name: 'report_finn_requested',
       page: '/report',
       surface: 'web',
