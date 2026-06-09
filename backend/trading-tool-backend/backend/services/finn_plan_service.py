@@ -1725,6 +1725,8 @@ class FinnPlanService:
 
     def looks_like_daily_coach_request(self, query: str) -> bool:
         q = (query or "").lower()
+        if self.looks_like_decision_review_request(query, {}):
+            return False
         portfolio_risk_terms = [
             "grootste portfolio risico", "grootste risico", "portfolio risico",
             "portefeuille risico", "portfolio exposure", "te veel exposure",
@@ -2636,6 +2638,9 @@ class FinnPlanService:
             "past dit bij mijn strategie",
             "past deze trade bij mijn strategie",
             "past deze setup bij mijn strategie",
+            "past deze setup nu bij mijn strategie",
+            "past deze strategie bij mijn setup",
+            "past deze bot bij mijn strategie",
             "beoordeel deze setup",
             "beoordeel deze strategie",
             "review deze setup",
@@ -2647,6 +2652,10 @@ class FinnPlanService:
             "zou je dit doen",
             "zou jij dit openen",
             "zou je dit openen",
+            "zou jij dit nu openen",
+            "zou je dit nu openen",
+            "zou jij dit nu nemen",
+            "zou je dit nu nemen",
         ]
         if any(term in q for term in review_terms):
             return True
@@ -2659,8 +2668,12 @@ class FinnPlanService:
             "zou je dit doen",
             "zou jij dit openen",
             "zou je dit openen",
+            "zou jij dit nu openen",
+            "zou je dit nu openen",
             "zou jij dit nemen",
             "zou je dit nemen",
+            "zou jij dit nu nemen",
+            "zou je dit nu nemen",
             "is dit slim",
             "zou dit slim zijn",
         ])
@@ -2675,7 +2688,7 @@ class FinnPlanService:
             return True
         return bool(
             has_target
-            and any(term in q for term in ["mag ik", "kan ik", "moet ik", "past dit", "goede trade"])
+            and any(term in q for term in ["mag ik", "kan ik", "moet ik", "past dit", "past deze", "goede trade"])
             and (
                 context.get("setup_id")
                 or context.get("strategy_id")
