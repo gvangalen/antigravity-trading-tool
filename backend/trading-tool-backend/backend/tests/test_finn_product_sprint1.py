@@ -166,3 +166,22 @@ def test_plan_adherence_response_carries_operator_summary_and_recovery():
     assert payload["review_reason"]
     assert payload["analysis"]["summary"] == payload["summary"]
     assert payload["analysis"]["operator_resolution"]["summary"] == payload["review_reason"]
+
+
+def test_decision_review_classifier_catches_setup_strategy_fit_prompt():
+    service = FinnPlanService(None)
+
+    assert service.looks_like_decision_review_request(
+        "Past deze setup nu bij mijn strategie?",
+        {"page": "setup", "page_type": "Setup", "setup_id": 12, "symbol": "BTC"},
+    )
+    assert not service.looks_like_daily_coach_request("Past deze setup nu bij mijn strategie?")
+
+
+def test_decision_review_classifier_catches_short_trade_intent_prompt():
+    service = FinnPlanService(None)
+
+    assert service.looks_like_decision_review_request(
+        "Zou jij dit nu openen?",
+        {"page": "setup", "page_type": "Setup", "setup_id": 12, "symbol": "BTC"},
+    )
