@@ -39,6 +39,10 @@ app = FastAPI(title="Market Dashboard API", version="1.0")
 UNSAFE_HTTP_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 CSRF_COOKIE_NAME = "csrf_token"
 CSRF_HEADER_NAME = "x-csrf-token"
+CSRF_EXEMPT_PATHS = {
+    "/api/auth/login",
+    "/api/auth/register",
+}
 
 
 @app.middleware("http")
@@ -52,7 +56,11 @@ async def request_trace_id_middleware(request, call_next):
 
 @app.middleware("http")
 async def csrf_protect_cookie_auth_middleware(request, call_next):
-    if request.url.path.startswith("/api/") and request.method.upper() in UNSAFE_HTTP_METHODS:
+    if (
+        request.url.path.startswith("/api/")
+        and request.method.upper() in UNSAFE_HTTP_METHODS
+        and request.url.path not in CSRF_EXEMPT_PATHS
+    ):
         authorization = request.headers.get("authorization", "")
         using_bearer_auth = authorization.lower().startswith("bearer ")
         session_cookie = request.cookies.get("access_token") or request.cookies.get("refresh_token")
