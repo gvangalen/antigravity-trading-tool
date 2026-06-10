@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "@/lib/config";
-import { apiRefresh, clearStoredAuth, buildAuthHeaders } from "@/lib/api/auth";
+import { apiRefresh, clearStoredAuth, buildAuthHeaders, ensureCsrfCookie } from "@/lib/api/auth";
 
 type ApiRequestInit = RequestInit & {
   _retry?: boolean;
@@ -76,6 +76,7 @@ export async function apiPost<T>(
   body?: any,
   init?: ApiRequestInit
 ): Promise<T> {
+  await ensureCsrfCookie();
   const url = `${API_BASE_URL}${path}`;
   const cacheMode = resolveCacheMode("POST", init);
 
@@ -121,6 +122,7 @@ export async function apiPut<T>(
   body?: any,
   init?: ApiRequestInit
 ): Promise<T> {
+  await ensureCsrfCookie();
   const url = `${API_BASE_URL}${path}`;
   const cacheMode = resolveCacheMode("PUT", init);
 
@@ -162,6 +164,7 @@ export async function apiPut<T>(
 //----------------------------------------------------------
 
 export async function apiDelete<T>(path: string, init?: ApiRequestInit): Promise<T> {
+  await ensureCsrfCookie();
   const url = `${API_BASE_URL}${path}`;
   const cacheMode = resolveCacheMode("DELETE", init);
 
