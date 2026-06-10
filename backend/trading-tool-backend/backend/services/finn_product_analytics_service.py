@@ -4,7 +4,7 @@ import logging
 import threading
 from collections import Counter, defaultdict, deque
 from copy import deepcopy
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Deque, Dict, Optional
 
 from backend.utils.db import get_db_connection, jsonb_param
@@ -15,11 +15,11 @@ PERSISTED_EVENTS_TABLE = "finn_product_events"
 
 
 def _utc_now() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class FinnProductAnalyticsService:
-    """Lean in-memory product analytics for early FINN product validation."""
+    """Lean FINN product analytics with persistent storage for operator review."""
 
     def __init__(self, *, max_events: int = 5000, screen_dedupe_seconds: int = 20) -> None:
         self.max_events = max_events
