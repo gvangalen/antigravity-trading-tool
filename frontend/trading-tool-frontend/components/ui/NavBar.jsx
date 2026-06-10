@@ -18,7 +18,8 @@ import {
   X,
   ShieldCheck,
   ShieldAlert,
-  Users
+  Users,
+  Activity
 } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { BRANDING } from "@/lib/branding";
@@ -59,6 +60,7 @@ export default function NavBar() {
   if (isAdmin) {
     ADMIN_LINKS.push(
       { href: "/admin/ai", label: t.nav.admin_ai, icon: <ShieldCheck size={18} /> },
+      { href: "/admin/telemetry", label: "Telemetry", icon: <Activity size={18} /> },
       { href: "/admin/users", label: t.nav.users, icon: <Users size={18} /> },
       { href: "/admin/logs", label: t.nav.logs, icon: <FileText size={18} /> }
     );
