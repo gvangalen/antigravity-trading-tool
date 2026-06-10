@@ -174,6 +174,42 @@ def test_finn_product_analytics_snapshot_counts_prompts_screens_and_funnel():
     assert snapshot["repeated_user_signal"]["users_with_multiple_sessions"] == 1
 
 
+def test_finn_product_analytics_persists_normalized_events(monkeypatch):
+    service = FinnProductAnalyticsService(max_events=5, screen_dedupe_seconds=30)
+    captured = []
+
+    monkeypatch.setattr(service, "_persist_event", lambda event: captured.append(event))
+
+    service.record_event(
+        user_id=11,
+        event={
+            "event_name": "finn_prompt_submitted",
+            "prompt_text": "  Beoordeel   deze setup   voor BTC  ",
+            "session_id": "sess-persist",
+            "surface": "web",
+            "page": "/setup",
+            "flow_type": "decision_review",
+        },
+    )
+
+    assert len(captured) == 1
+    assert captured[0]["prompt_text"] == "Beoordeel deze setup voor BTC"
+    assert captured[0]["user_id"] == 11
+    assert captured[0]["page"] == "/setup"
+    assert captured[0]["timestamp"] is not None
+
+
+def test_finn_product_analytics_snapshot_prefers_persistent_store(monkeypatch):
+    service = FinnProductAnalyticsService(max_events=5, screen_dedupe_seconds=30)
+
+    monkeypatch.setattr(service, "_persistent_snapshot", lambda: {"metrics_scope": "persistent_store", "event_count": 9})
+
+    snapshot = service.snapshot()
+
+    assert snapshot["metrics_scope"] == "persistent_store"
+    assert snapshot["event_count"] == 9
+
+
 def test_general_capability_response_carries_operator_contract():
     service = FinnPlanService(None)
 
