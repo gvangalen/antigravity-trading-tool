@@ -1,5 +1,6 @@
 import logging
 import json
+import os
 from celery import shared_task
 
 from backend.utils.db import get_db_connection
@@ -9,10 +10,53 @@ from backend.ai_agents.score_ai_agent import generate_master_score
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+RULE_BASED_SCORES_LEASE_KEY = "task-lease:run_rule_based_daily_scores"
+RULE_BASED_SCORES_LEASE_SECONDS = 30 * 60
+
 
 def _jsonb(value):
     """Zorgt dat we altijd geldige JSON naar jsonb casten."""
     return json.dumps(value or [], ensure_ascii=False)
+
+
+def _broker_client():
+    broker_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    import redis
+
+    return redis.from_url(broker_url, socket_connect_timeout=1, socket_timeout=1)
+
+
+def _try_acquire_rule_based_scores_lease() -> object | None:
+    try:
+        client = _broker_client()
+        acquired = bool(
+            client.set(
+                RULE_BASED_SCORES_LEASE_KEY,
+                "1",
+                nx=True,
+                ex=RULE_BASED_SCORES_LEASE_SECONDS,
+            )
+        )
+        if acquired:
+            return client
+        client.close()
+    except Exception as exc:
+        logger.warning("⚠️ Kon rule-based-scores lease niet claimen: %s", exc)
+    return None
+
+
+def _release_rule_based_scores_lease(client) -> None:
+    if client is None:
+        return
+    try:
+        client.delete(RULE_BASED_SCORES_LEASE_KEY)
+    except Exception as exc:
+        logger.warning("⚠️ Kon rule-based-scores lease niet vrijgeven: %s", exc)
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
 
 
 # =========================================================
@@ -149,24 +193,32 @@ def run_rule_based_daily_scores():
     AL GEDRAAID heeft voor vandaag.
     """
 
+    lease_client = _try_acquire_rule_based_scores_lease()
+    if lease_client is None:
+        logger.warning("⏭️ RULE-BASED daily_scores overgeslagen: vorige run is nog actief")
+        return {"ok": True, "skipped": True, "reason": "lease_already_active"}
+
     logger.info("🚀 Start RULE-BASED daily_scores (alle users)")
 
-    conn = get_db_connection()
-    if not conn:
-        logger.error("❌ Geen DB-verbinding")
-        return
-
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id FROM users;")
-            users = [r[0] for r in cur.fetchall()]
+        conn = get_db_connection()
+        if not conn:
+            logger.error("❌ Geen DB-verbinding")
+            return
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM users;")
+                users = [r[0] for r in cur.fetchall()]
+        finally:
+            conn.close()
+
+        for user_id in users:
+            build_daily_scores_for_user(user_id)
+
+        logger.info("✅ RULE-BASED daily_scores klaar")
     finally:
-        conn.close()
-
-    for user_id in users:
-        build_daily_scores_for_user(user_id)
-
-    logger.info("✅ RULE-BASED daily_scores klaar")
+        _release_rule_based_scores_lease(lease_client)
 
 
 # =========================================================

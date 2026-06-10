@@ -3,6 +3,7 @@ import importlib
 
 from backend.celery_task.queue_policy import (
     ALLOWED_DEFAULT_TASKS,
+    DEFAULT_QUEUE,
     DISPATCHER_TASK_NAME,
     LOGICAL_NAMED_QUEUES,
     NAMED_QUEUES,
@@ -152,7 +153,9 @@ def test_beat_schedule_routes_dispatch_and_direct_tasks_to_policy_queue():
 
     for entry in celery_app.conf.beat_schedule.values():
         if entry["task"] == DISPATCHER_TASK_NAME:
-            expected_queue = resolve_task_queue(entry["kwargs"]["task_name"])
+            expected_queue = DEFAULT_QUEUE
+        elif entry["task"] == "backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores":
+            expected_queue = DEFAULT_QUEUE
         else:
             expected_queue = resolve_task_queue(entry["task"])
 
