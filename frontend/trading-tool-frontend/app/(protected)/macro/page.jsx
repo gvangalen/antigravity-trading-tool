@@ -17,6 +17,7 @@ import MacroTerminalHUD from "@/components/macro/MacroTerminalHUD";
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import { useModal } from "@/components/modal/ModalProvider";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
+import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 // Icons
 import { Globe, Brain, Activity, LineChart } from "lucide-react";
@@ -84,6 +85,16 @@ export default function MacroPage() {
   // ===============================
   const { macro } = useScoresData(selectedAsset);
   const { openConfirm, showSnackbar } = useModal();
+
+  useEffect(() => {
+    trackAssistantEvent({
+      event_name: "screen_view",
+      page: "/macro",
+      surface: "web",
+      flow_type: "macro",
+      asset: selectedAsset || null,
+    });
+  }, [selectedAsset]);
 
   // ===============================
   // 🔥 ONBOARDING TRIGGER

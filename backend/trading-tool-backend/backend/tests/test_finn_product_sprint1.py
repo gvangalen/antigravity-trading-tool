@@ -102,13 +102,73 @@ def test_finn_product_analytics_snapshot_counts_prompts_screens_and_funnel():
             "flow_type": "priority_engine",
         },
     )
+    service.record_event(
+        user_id=7,
+        event={
+            "event_name": "screen_view",
+            "session_id": "sess-c",
+            "surface": "web",
+            "page": "/onboarding",
+        },
+    )
+    service.record_event(
+        user_id=7,
+        event={
+            "event_name": "onboarding_step_clicked",
+            "session_id": "sess-c",
+            "surface": "web",
+            "page": "/onboarding",
+            "action_type": "market",
+        },
+    )
+    service.record_event(
+        user_id=7,
+        event={
+            "event_name": "onboarding_step_completed",
+            "session_id": "sess-c",
+            "surface": "web",
+            "page": "/market",
+            "action_type": "market",
+        },
+    )
+    service.record_event(
+        user_id=7,
+        event={
+            "event_name": "onboarding_completed",
+            "session_id": "sess-c",
+            "surface": "web",
+            "page": "/onboarding",
+        },
+    )
+    service.record_event(
+        user_id=7,
+        event={
+            "event_name": "onboarding_dashboard_activated",
+            "session_id": "sess-c",
+            "surface": "web",
+            "page": "/onboarding",
+            "action_type": "activate_dashboard",
+        },
+    )
 
     snapshot = service.snapshot()
 
-    assert snapshot["event_counts"]["screen_view"] == 1
+    assert snapshot["event_counts"]["screen_view"] == 2
     assert snapshot["top_prompts"][0]["prompt"] == "Beoordeel deze setup voor BTC"
     assert snapshot["top_screens"][0]["page"] == "/setup"
+    assert snapshot["top_first_screens"][0]["page"] == "/setup"
     assert snapshot["confirm_funnel"] == {"opened": 1, "confirmed": 1, "canceled": 0}
+    assert snapshot["onboarding_funnel"] == {
+        "sessions_seen": 1,
+        "step_clicked": 1,
+        "step_completed": 1,
+        "completed": 1,
+        "dashboard_activated": 1,
+    }
+    assert snapshot["first_session_summary"]["sessions_seen"] == 2
+    assert snapshot["first_session_summary"]["sessions_with_prompt"] == 1
+    assert snapshot["first_session_summary"]["sessions_with_confirm"] == 1
+    assert snapshot["top_cta_actions"][0]["action"] in {"market", "activate_dashboard"}
     assert snapshot["decision_review_usage_count"] == 1
     assert snapshot["priority_engine_usage_count"] == 1
     assert snapshot["repeated_user_signal"]["users_with_multiple_sessions"] == 1

@@ -9,13 +9,22 @@ import { intelligenceApi } from '../services/tradamindApi';
 import { mapStrategy } from '../services/dataMappers';
 import { useCallback } from 'react';
 import { Strategy } from '../types/strategy';
+import { trackAssistantEvent } from '../services/assistantAnalytics';
 
 export function StrategyScreen() {
-    const fetchStrategy = useCallback(() => intelligenceApi.activeStrategyToday(), []);
+  const fetchStrategy = useCallback(() => intelligenceApi.activeStrategyToday(), []);
   const { data, loading, error } = useApiResource({
     fetcher: fetchStrategy,
     fallbackData: undefined
   });
+
+  useEffect(() => {
+    trackAssistantEvent({
+      event_name: 'screen_view',
+      page: 'strategy',
+      flow_type: 'strategy',
+    });
+  }, []);
   
   const rawStrategy = mapStrategy(data);
   const strategy = data ? {

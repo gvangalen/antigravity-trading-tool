@@ -98,6 +98,73 @@ class FinnProductAnalyticsService:
             for event in events
             if event["event_name"] == "screen_view" and event.get("page")
         )
+        first_screen_per_session: Dict[str, str] = {}
+        for event in events:
+            if event["event_name"] != "screen_view" or not event.get("page") or not event.get("session_id"):
+                continue
+            session_id = str(event["session_id"])
+            first_screen_per_session.setdefault(session_id, str(event["page"]))
+
+        first_screen_counts = Counter(first_screen_per_session.values())
+
+        onboarding_sessions = {
+            str(event.get("session_id"))
+            for event in events
+            if event.get("session_id") and str(event.get("page") or "").startswith("/onboarding")
+        }
+        onboarding_funnel = {
+            "sessions_seen": len(onboarding_sessions),
+            "step_clicked": event_counts.get("onboarding_step_clicked", 0),
+            "step_completed": event_counts.get("onboarding_step_completed", 0),
+            "completed": event_counts.get("onboarding_completed", 0),
+            "dashboard_activated": event_counts.get("onboarding_dashboard_activated", 0),
+        }
+
+        first_session_summary = {
+            "sessions_seen": len(first_screen_per_session),
+            "sessions_with_prompt": len(
+                {
+                    str(event["session_id"])
+                    for event in events
+                    if event["event_name"] == "finn_prompt_submitted" and event.get("session_id")
+                }
+            ),
+            "sessions_with_confirm": len(
+                {
+                    str(event["session_id"])
+                    for event in events
+                    if event["event_name"] in {"finn_confirm_opened", "finn_confirm_confirmed", "finn_confirm_canceled"}
+                    and event.get("session_id")
+                }
+            ),
+            "sessions_reaching_report": len(
+                {
+                    str(event["session_id"])
+                    for event in events
+                    if event["event_name"] == "screen_view" and event.get("session_id") and str(event.get("page")) == "/report"
+                }
+            ),
+            "sessions_reaching_dashboard": len(
+                {
+                    str(event["session_id"])
+                    for event in events
+                    if event["event_name"] == "screen_view" and event.get("session_id") and str(event.get("page")) == "/dashboard"
+                }
+            ),
+        }
+
+        cta_counts = Counter()
+        for event in events:
+            event_name = event["event_name"]
+            if event_name in {
+                "onboarding_step_clicked",
+                "onboarding_dashboard_activated",
+                "onboarding_complete_continue_clicked",
+                "report_ask_finn_used",
+                "finn_overlay_opened",
+            }:
+                label = event.get("action_type") or event_name
+                cta_counts[str(label)] += 1
 
         confirm_funnel = {
             "opened": event_counts.get("finn_confirm_opened", 0),
@@ -125,7 +192,17 @@ class FinnProductAnalyticsService:
                 {"page": page, "count": count}
                 for page, count in screen_counts.most_common(10)
             ],
+            "top_first_screens": [
+                {"page": page, "count": count}
+                for page, count in first_screen_counts.most_common(10)
+            ],
             "confirm_funnel": confirm_funnel,
+            "onboarding_funnel": onboarding_funnel,
+            "first_session_summary": first_session_summary,
+            "top_cta_actions": [
+                {"action": action, "count": count}
+                for action, count in cta_counts.most_common(10)
+            ],
             "decision_review_usage_count": sum(
                 1
                 for event in events

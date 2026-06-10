@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { usePathname } from "next/navigation";
 
 import {
   getOnboardingStatus,
@@ -8,6 +9,7 @@ import {
   finishOnboarding,
   resetOnboarding,
 } from "@/lib/api/onboarding";
+import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 /**
  * =====================================================
@@ -18,6 +20,7 @@ import {
  * =====================================================
  */
 export function useOnboarding() {
+  const pathname = usePathname();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -61,6 +64,13 @@ export function useOnboarding() {
       await completeOnboardingStep(step);
 
       console.log(`✅ [Onboarding] Step "${step}" succesvol gemarkeerd`);
+      trackAssistantEvent({
+        event_name: "onboarding_step_completed",
+        page: pathname || "/onboarding",
+        surface: "web",
+        flow_type: "onboarding",
+        action_type: step,
+      });
       await fetchStatus();
 
     } catch (err) {
@@ -83,6 +93,12 @@ export function useOnboarding() {
       await finishOnboarding();
 
       console.log("✅ [Onboarding] finishOnboarding succesvol");
+      trackAssistantEvent({
+        event_name: "onboarding_completed",
+        page: pathname || "/onboarding",
+        surface: "web",
+        flow_type: "onboarding",
+      });
       await fetchStatus();
 
     } catch (err) {

@@ -15,6 +15,7 @@ import { useScoresData } from "@/hooks/useScoresData";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { useModal } from "@/components/modal/ModalProvider";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
+import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 import TechnicalIndicatorScoreView from "@/components/technical/TechnicalIndicatorScoreView";
 
@@ -45,6 +46,16 @@ export default function TechnicalPage() {
 
   const { technical: technicalScore } = useScoresData(selectedAsset);
   const { status, completeStep } = useOnboarding();
+
+  useEffect(() => {
+    trackAssistantEvent({
+      event_name: "screen_view",
+      page: "/technical",
+      surface: "web",
+      flow_type: "technical",
+      asset: selectedAsset || null,
+    });
+  }, [selectedAsset]);
 
   // ===============================
   // 🔥 ONBOARDING TRIGGER
