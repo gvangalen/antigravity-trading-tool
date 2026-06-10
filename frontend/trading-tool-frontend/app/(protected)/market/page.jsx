@@ -17,6 +17,7 @@ import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
+import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 import { useCurrentAsset } from "@/hooks/useCurrentAsset";
 
@@ -44,6 +45,16 @@ export default function MarketPage() {
   // 📈 SCORE DATA
   // ===============================
   const { market: marketScore } = useScoresData(activeSymbol);
+
+  useEffect(() => {
+    trackAssistantEvent({
+      event_name: "screen_view",
+      page: "/market",
+      surface: "web",
+      flow_type: "market",
+      asset: activeSymbol || null,
+    });
+  }, [activeSymbol]);
 
   // ===============================
   // 🔥 ONBOARDING TRIGGER

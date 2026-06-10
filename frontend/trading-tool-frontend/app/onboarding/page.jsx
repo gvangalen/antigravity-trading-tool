@@ -17,6 +17,7 @@ import {
   Rocket
 } from "lucide-react";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -27,6 +28,28 @@ export default function OnboardingPage() {
     onboardingComplete,
     allowedSteps,
   } = useOnboarding();
+
+  useEffect(() => {
+    if (loading || !status) return;
+    const stepsComplete = [
+      status.has_market,
+      status.has_macro,
+      status.has_technical,
+      status.has_setup,
+      status.has_strategy,
+    ].filter(Boolean).length;
+
+    trackAssistantEvent({
+      event_name: "screen_view",
+      page: "/onboarding",
+      surface: "web",
+      flow_type: "onboarding",
+      metadata: {
+        onboarding_complete: Boolean(onboardingComplete),
+        steps_complete: stepsComplete,
+      },
+    });
+  }, [loading, status, onboardingComplete]);
 
   if (loading || !status) {
     return (
@@ -165,7 +188,22 @@ export default function OnboardingPage() {
           return (
             <div 
               key={step.key}
-              onClick={() => isUnlocked && router.push(step.link)}
+              onClick={() => {
+                if (!isUnlocked) return;
+                trackAssistantEvent({
+                  event_name: "onboarding_step_clicked",
+                  page: "/onboarding",
+                  surface: "web",
+                  flow_type: "onboarding",
+                  action_type: step.key,
+                  metadata: {
+                    done: isDone,
+                    target_page: step.link,
+                    title: step.title,
+                  },
+                });
+                router.push(step.link);
+              }}
               className={`
                 group relative p-8 rounded-3xl border-2 transition-all duration-300 overflow-hidden cursor-pointer
                 ${isDone 
@@ -237,12 +275,21 @@ export default function OnboardingPage() {
                      <p className="text-emerald-500/60 font-medium text-sm">System ready for live operation.</p>
                   </div>
                </div>
-               <a 
-                 href="/dashboard" 
+               <button
+                 onClick={() => {
+                   trackAssistantEvent({
+                     event_name: "onboarding_dashboard_activated",
+                     page: "/onboarding",
+                     surface: "web",
+                     flow_type: "first_session",
+                     action_type: "activate_dashboard",
+                   });
+                   router.push("/dashboard");
+                 }}
                  className="w-full md:w-auto px-10 py-5 bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase tracking-[0.2em] text-xs rounded-2xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-all text-center"
                >
                  Activate Dashboard →
-               </a>
+               </button>
             </div>
          </div>
       )}

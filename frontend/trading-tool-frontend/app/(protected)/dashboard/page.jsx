@@ -38,6 +38,7 @@ import useBotData from "@/hooks/useBotData";
 import ScoreHistoryChart from "@/components/dashboard/ScoreHistoryChart";
 
 import { useCurrentAsset } from "@/hooks/useCurrentAsset";
+import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 export default function DashboardPage() {
   const { t } = useTranslation();
@@ -48,6 +49,16 @@ export default function DashboardPage() {
   const { activeSetup, focusedBotId, setFocusedBotId } = useActiveSetup();
   const { configs: botConfigs } = useBotData();
   const { symbol: activeSymbol } = useCurrentAsset();
+
+  useEffect(() => {
+    trackAssistantEvent({
+      event_name: "screen_view",
+      page: "/dashboard",
+      surface: "web",
+      flow_type: "dashboard",
+      asset: activeSymbol || null,
+    });
+  }, [activeSymbol]);
 
   // Sync URL param to global state if they differ
   useEffect(() => {

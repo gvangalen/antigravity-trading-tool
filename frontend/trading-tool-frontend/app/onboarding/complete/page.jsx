@@ -1,15 +1,33 @@
 "use client";
 
+import { useEffect } from "react";
 import { CheckCircle2, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import useBootstrapAgents from "@/hooks/useBootstrapAgents";
+import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 export default function OnboardingCompletePage() {
 
   const router = useRouter();
   const { runBootstrap, loading } = useBootstrapAgents();
 
+  useEffect(() => {
+    trackAssistantEvent({
+      event_name: "screen_view",
+      page: "/onboarding/complete",
+      surface: "web",
+      flow_type: "onboarding_complete",
+    });
+  }, []);
+
   const handleGoToDashboard = async () => {
+    trackAssistantEvent({
+      event_name: "onboarding_complete_continue_clicked",
+      page: "/onboarding/complete",
+      surface: "web",
+      flow_type: "first_session",
+      action_type: "go_to_dashboard",
+    });
 
     try {
 
