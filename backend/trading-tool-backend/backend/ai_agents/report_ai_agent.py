@@ -131,6 +131,289 @@ def _safe_json(obj):
     return obj
 
 
+def _score_bucket(score: Optional[float]) -> str:
+    value = to_float(score)
+    if value is None:
+        return "onduidelijk"
+    if value >= 75:
+        return "sterk"
+    if value >= 60:
+        return "constructief"
+    if value >= 45:
+        return "gemengd"
+    if value >= 30:
+        return "kwetsbaar"
+    return "defensief"
+
+
+def _format_pct(value: Optional[float], digits: int = 1) -> str:
+    number = to_float(value)
+    if number is None:
+        return "onbekend"
+    return f"{number:.{digits}f}%"
+
+
+def _format_price(value: Optional[float]) -> str:
+    number = to_float(value)
+    if number is None:
+        return "onbekend"
+    rounded = int(round(number))
+    return f"${rounded:,.0f}".replace(",", ".")
+
+
+def _format_volume(value: Optional[float]) -> str:
+    number = to_float(value)
+    if number is None:
+        return "onbekend"
+    rounded = int(round(number))
+    return f"{rounded:,.0f}".replace(",", ".")
+
+
+def _join_symbols(symbols: List[str], max_items: int = 3) -> str:
+    cleaned = [str(symbol).upper() for symbol in symbols if symbol]
+    if not cleaned:
+        return "de watchlist"
+    subset = cleaned[:max_items]
+    if len(subset) == 1:
+        return subset[0]
+    if len(subset) == 2:
+        return f"{subset[0]} en {subset[1]}"
+    return f"{', '.join(subset[:-1])} en {subset[-1]}"
+
+
+def _watchlist_focus_summary(watchlist_data: Optional[List[Dict[str, Any]]]) -> Tuple[str, Optional[Dict[str, Any]]]:
+    if not watchlist_data:
+        return "De watchlist geeft vandaag geen duidelijke relatieve voorsprong tussen assets.", None
+
+    ranked = []
+    for item in watchlist_data:
+        scores = item.get("scores") or {}
+        ranked.append(
+            {
+                "symbol": item.get("symbol"),
+                "technical": to_float(scores.get("technical_score")) or 0.0,
+                "market": to_float(scores.get("market_score")) or 0.0,
+                "setup": to_float(scores.get("setup_score")) or 0.0,
+            }
+        )
+
+    ranked.sort(key=lambda entry: (entry["setup"], entry["technical"], entry["market"]), reverse=True)
+    leader = ranked[0] if ranked else None
+    if not leader:
+        return "De watchlist geeft vandaag geen duidelijke relatieve voorsprong tussen assets.", None
+
+    summary = (
+        f"Binnen de watchlist trekt {leader['symbol']} nu de meeste aandacht, "
+        f"met een setupscore van {int(round(leader['setup']))} en een technische score van "
+        f"{int(round(leader['technical']))}."
+    )
+    return summary, leader
+
+
+def _first_indicator_narrative(items: Optional[List[Dict[str, Any]]], category_label: str) -> str:
+    if not items:
+        return f"De {category_label}-indicatoren geven vandaag geen extra uitschieter."
+    top = items[0]
+    name = top.get("indicator") or top.get("name") or f"{category_label}-indicator"
+    interpretation = (top.get("interpretation") or "").strip()
+    score = to_float(top.get("score"))
+    if interpretation:
+        return f"Binnen de {category_label}-laag springt {name} eruit: {interpretation}."
+    if score is not None:
+        return f"Binnen de {category_label}-laag springt {name} eruit met een score van {int(round(score))}."
+    return f"Binnen de {category_label}-laag springt {name} eruit als richtinggevend signaal."
+
+
+def _build_executive_summary_fallback(
+    watchlist_data: List[Dict[str, Any]],
+    market: Dict[str, Any],
+    scores: Dict[str, Any],
+    deltas: Dict[str, Any],
+    regime: Optional[Dict[str, Any]],
+    transition: Optional[Dict[str, Any]],
+    best_setup: Optional[Dict[str, Any]],
+) -> str:
+    symbols = _join_symbols([item.get("symbol") for item in watchlist_data])
+    leader_summary, leader = _watchlist_focus_summary(watchlist_data)
+    regime_label = (regime or {}).get("label") or "het huidige regime"
+    transition_state = None
+    if isinstance(transition, dict):
+        transition_state = transition.get("state") or transition.get("label") or transition.get("regime_shift")
+    market_delta = deltas.get("market_delta")
+    delta_phrase = (
+        f"Ten opzichte van gisteren verschoof de market score met {market_delta:+.1f} punt."
+        if market_delta is not None
+        else "Ten opzichte van gisteren bleef het samengestelde marktbeeld grotendeels in dezelfde bandbreedte."
+    )
+    setup_name = (best_setup or {}).get("name")
+    setup_phrase = (
+        f"De best bruikbare setup is nu {setup_name}, maar alleen zolang de interne bevestiging in de watchlist overeind blijft."
+        if setup_name
+        else "Er springt nog geen setup uit die direct om actie vraagt, wat discipline belangrijker maakt dan snelheid."
+    )
+    transition_phrase = (
+        f"De transitie-indicator wijst op {transition_state}, wat aangeeft dat we vooral moeten letten op bevestiging in plaats van op los momentum."
+        if transition_state
+        else "Er is geen harde regimebreuk zichtbaar, waardoor bevestiging belangrijker blijft dan anticiperen."
+    )
+    return (
+        f"Het dagrapport voor {symbols} opent in {regime_label}, met een marktpostuur dat nu "
+        f"{_score_bucket(scores.get('market_score'))} aanvoelt bij een 24-uurs verandering van {_format_pct(market.get('change_24h'))}. "
+        f"{delta_phrase} {leader_summary} {transition_phrase} {setup_phrase}"
+    )
+
+
+def _build_market_analysis_fallback(
+    watchlist_data: List[Dict[str, Any]],
+    market: Dict[str, Any],
+    scores: Dict[str, Any],
+    deltas: Dict[str, Any],
+) -> str:
+    symbols = _join_symbols([item.get("symbol") for item in watchlist_data])
+    leader_summary, _ = _watchlist_focus_summary(watchlist_data)
+    price = _format_price(market.get("price"))
+    volume = _format_volume(market.get("volume"))
+    market_delta = deltas.get("market_delta")
+    delta_phrase = (
+        f"De market score verschoof met {market_delta:+.1f} punt, wat laat zien dat de breedte van de beweging veranderde en niet alleen de headlineprijs."
+        if market_delta is not None
+        else "De market score bleef dicht bij het vorige niveau, wat betekent dat de beweging vooral bevestiging zoekt in plaats van versnelling."
+    )
+    return (
+        f"De markt handelt rond {price} met een 24-uurs mutatie van {_format_pct(market.get('change_24h'))} en volume van {volume}. "
+        f"Dat zet {symbols} in een context die {_score_bucket(scores.get('market_score'))} oogt, maar nog niet vanzelf duurzaam is. "
+        f"{delta_phrase} {leader_summary} Zolang volume en relatieve sterkte niet breder meelopen, blijft dit eerder een gecontroleerde beweging dan een overtuigende expansie."
+    )
+
+
+def _build_macro_context_fallback(
+    scores: Dict[str, Any],
+    macro_ind: List[Dict[str, Any]],
+    regime: Optional[Dict[str, Any]],
+) -> str:
+    regime_label = (regime or {}).get("label") or "het huidige regime"
+    indicator_phrase = _first_indicator_narrative(macro_ind, "macro")
+    return (
+        f"Macro blijft vandaag {_score_bucket(scores.get('macro_score'))} en ondersteunt daarmee {regime_label} zonder al een nieuw risicoklimaat af te dwingen. "
+        f"{indicator_phrase} Dat betekent dat de speelruimte voor agressie nog steeds afhangt van bevestiging op markt- en technieklaag, niet alleen van een macro-meewind. "
+        f"Zolang macro niet duidelijk versnelt of verslechtert, is de juiste lezing dat de markt vooral moet bewijzen dat de recente beweging meer is dan tijdelijke opluchting."
+    )
+
+
+def _build_technical_analysis_fallback(
+    watchlist_data: List[Dict[str, Any]],
+    scores: Dict[str, Any],
+    tech_ind: List[Dict[str, Any]],
+) -> str:
+    leader_summary, leader = _watchlist_focus_summary(watchlist_data)
+    leader_symbol = leader["symbol"] if leader else "de sterkste asset"
+    indicator_phrase = _first_indicator_narrative(tech_ind, "technische")
+    return (
+        f"Technisch oogt het beeld {_score_bucket(scores.get('technical_score'))}, maar de kwaliteit van de bevestiging zit nog niet overal gelijkmatig in de watchlist. "
+        f"{leader_summary} {indicator_phrase} Voor {leader_symbol} is dat constructief zolang de rest van de watchlist niet achterblijft, want anders krijg je relatieve sterkte zonder brede bevestiging. "
+        f"De praktische conclusie is dat techniek nu meer richting geeft dan harde vrijbrief: bruikbaar voor review, nog niet automatisch voor agressieve uitbreiding."
+    )
+
+
+def _build_setup_validation_fallback(
+    best_setup: Optional[Dict[str, Any]],
+    watchlist_data: List[Dict[str, Any]],
+    scores: Dict[str, Any],
+) -> str:
+    if not best_setup:
+        return (
+            f"De setup-laag blijft {_score_bucket(scores.get('setup_score'))}, maar zonder één duidelijke kandidaat die breed genoeg wordt gedragen door markt en techniek. "
+            "Dat betekent dat selectiviteit hier een feature is in plaats van een gemis: de data dwingt nog geen nieuwe positie af. "
+            "De juiste vervolgstap is daarom setups blijven reviewen op bevestiging, niet op haast."
+        )
+
+    leader_summary, _ = _watchlist_focus_summary(watchlist_data)
+    return (
+        f"De best scorende setup is {best_setup.get('name')} op {best_setup.get('timeframe')}, met een score van {int(round(to_float(best_setup.get('score')) or 0))}. "
+        f"{leader_summary} Dat maakt deze setup bruikbaar als focuspunt, maar alleen als de huidige relatieve sterkte overeind blijft en niet terugvalt naar een gemengd marktbeeld. "
+        "Kort gezegd: dit is een kandidaat om strak te reviewen, niet iets om blind als voldongen feit te behandelen."
+    )
+
+
+def _build_strategy_implication_fallback(
+    active_strategy: Optional[Dict[str, Any]],
+    scores: Dict[str, Any],
+    best_setup: Optional[Dict[str, Any]],
+) -> str:
+    if not active_strategy:
+        return (
+            f"Er ligt nu geen actieve strategie die vanzelf logisch wordt vanuit een {_score_bucket(scores.get('market_score'))} marktlaag en een "
+            f"{_score_bucket(scores.get('technical_score'))} technische laag. "
+            "Dat is geen tekortkoming maar een signaal dat de context nog niet scherp genoeg samenvalt. "
+            "De juiste discipline is daarom wachten op extra bevestiging voordat strategie weer voorrang krijgt boven observatie."
+        )
+
+    setup_name = active_strategy.get("setup_name") or (best_setup or {}).get("name") or "de actieve setup"
+    confidence = active_strategy.get("confidence_score")
+    confidence_phrase = (
+        f"De huidige confidence rond deze strategie ligt op {int(round(confidence))}."
+        if confidence is not None
+        else "De huidige confidence vraagt om contextuele bevestiging."
+    )
+    return (
+        f"De actieve strategie rond {setup_name} blijft valide zolang markt, techniek en setup niet uit elkaar beginnen te lopen. "
+        f"{confidence_phrase} Dat betekent dat de strategie vooral robuust is als bevestiging doorzet, maar fragiel wordt zodra de marktlaag terugvalt zonder dat techniek mee verbetert. "
+        "Operationeel is dit dus een omgeving om aannames te toetsen en niet om de risicobandbreedte onnodig te verbreden."
+    )
+
+
+def _build_bot_strategy_fallback(
+    bot_snapshot: Dict[str, Any],
+    portfolio_health: Optional[Dict[str, Any]],
+    best_setup: Optional[Dict[str, Any]],
+) -> str:
+    action = (bot_snapshot or {}).get("action") or "hold"
+    setup_match = (bot_snapshot or {}).get("setup_match") or (best_setup or {}).get("name")
+    equity = (portfolio_health or {}).get("equity_eur")
+    invested = (portfolio_health or {}).get("invested_eur")
+    portfolio_phrase = ""
+    if equity is not None and invested is not None:
+        portfolio_phrase = (
+            f" Binnen de portefeuille staat ongeveer EUR {int(round(invested))} aan kapitaal aan het werk op een equitybasis van EUR {int(round(equity))}, "
+            "waardoor position sizing en follow-through zwaarder wegen dan alleen signaalsterkte."
+        )
+    if action == "hold":
+        return (
+            "De bot blijft vandaag bewust in hold-modus, wat aangeeft dat de drempels voor uitvoering nog niet schoon genoeg zijn doorlopen. "
+            f"De meest waarschijnlijke kandidaat blijft {setup_match or 'de huidige reviewcontext'}, maar de data geeft nog geen vrijbrief om die mechanisch om te zetten naar actie."
+            f"{portfolio_phrase} Dat is precies het soort terughoudendheid dat je wilt zien wanneer bevestiging nog niet breed genoeg is."
+        )
+
+    return (
+        f"De bot heeft vandaag een {action}-beslissing genomen vanuit een context waarin {setup_match or 'de best scorende setup'} het dichtst bij uitvoerbare bevestiging lag. "
+        f"De waarde daarvan zit niet alleen in de actie zelf, maar in het feit dat markt, techniek en setup voldoende samenvielen om uitvoering te rechtvaardigen.{portfolio_phrase} "
+        "De juiste lezing is daarom dat de bot hier risicobeheer volgt, niet dat hij een vrijbrief geeft voor meer agressie buiten hetzelfde kader."
+    )
+
+
+def _build_outlook_fallback(
+    transition: Optional[Dict[str, Any]],
+    scores: Dict[str, Any],
+    watchlist_data: List[Dict[str, Any]],
+) -> str:
+    _, leader = _watchlist_focus_summary(watchlist_data)
+    leader_symbol = leader["symbol"] if leader else "de leidende asset"
+    transition_state = None
+    if isinstance(transition, dict):
+        transition_state = transition.get("state") or transition.get("label") or transition.get("regime_shift")
+    shift_phrase = (
+        f"Als de transitie-indicator verder doorschuift richting {transition_state}, dan moet de markt dat bevestigen via bredere meebeweging buiten alleen {leader_symbol}."
+        if transition_state
+        else f"Als de leidende signalen verder aantrekken, dan moet de markt dat bevestigen via bredere meebeweging buiten alleen {leader_symbol}."
+    )
+    return (
+        f"Voor de komende 24 tot 48 uur ligt de focus op bevestiging van een {_score_bucket(scores.get('market_score'))} marktlaag en een "
+        f"{_score_bucket(scores.get('technical_score'))} technische laag. {shift_phrase} "
+        "Als die bevestiging uitblijft, dan blijft het basisscenario dat de markt terugvalt naar selectie en review in plaats van expansie. "
+        "Als ze wel samen optrekken, ontstaat juist ruimte om setups en strategie met meer vertrouwen opnieuw te wegen."
+    )
+
+
 # =====================================================
 # Delta helpers (today vs previous report_date)
 # =====================================================
@@ -1124,23 +1407,87 @@ Keys:
     except Exception:
         logger.exception("❌ Batched AI generation failed")
 
+    fallback_sections = {
+        "executive_summary": _build_executive_summary_fallback(
+            watchlist_data,
+            market,
+            scores,
+            deltas,
+            regime,
+            transition,
+            best_setup,
+        ),
+        "market_analysis": _build_market_analysis_fallback(
+            watchlist_data,
+            market,
+            scores,
+            deltas,
+        ),
+        "macro_context": _build_macro_context_fallback(
+            scores,
+            macro_ind,
+            regime,
+        ),
+        "technical_analysis": _build_technical_analysis_fallback(
+            watchlist_data,
+            scores,
+            tech_ind,
+        ),
+        "setup_validation": _build_setup_validation_fallback(
+            best_setup,
+            watchlist_data,
+            scores,
+        ),
+        "strategy_implication": _build_strategy_implication_fallback(
+            active_strategy,
+            scores,
+            best_setup,
+        ),
+        "bot_strategy": _build_bot_strategy_fallback(
+            bot_snapshot,
+            portfolio_health,
+            best_setup,
+        ),
+        "outlook": _build_outlook_fallback(
+            transition,
+            scores,
+            watchlist_data,
+        ),
+    }
+
+    weak_defaults = {
+        "regime intact.",
+        "market steady.",
+        "macro unchanged.",
+        "technicals neutral.",
+        "setups selective.",
+        "strategy stable.",
+        "bot inactive.",
+        "await confirmation.",
+    }
+
     seen_sentences: List[str] = []
-    def get_section(key: str, default: str) -> str:
-        text = batched_result.get(key, default)
-        return reduce_repetition(str(text).strip(), seen_sentences)
+
+    def get_section(key: str) -> str:
+        fallback = fallback_sections[key]
+        raw_text = batched_result.get(key)
+        text = str(raw_text).strip() if raw_text not in (None, "") else fallback
+        if text.lower() in weak_defaults or len(text) < 40:
+            text = fallback
+        return reduce_repetition(text, seen_sentences)
 
     # -------------------------------------------------
     # RESULT
     # -------------------------------------------------
     result = {
-        "executive_summary": get_section("executive_summary", "Regime intact."),
-        "market_analysis": get_section("market_analysis", "Market steady."),
-        "macro_context": get_section("macro_context", "Macro unchanged."),
-        "technical_analysis": get_section("technical_analysis", "Technicals neutral."),
-        "setup_validation": get_section("setup_validation", "Setups selective."),
-        "strategy_implication": get_section("strategy_implication", "Strategy stable."),
-        "bot_strategy": get_section("bot_strategy", "Bot inactive."),
-        "outlook": get_section("outlook", "Await confirmation."),
+        "executive_summary": get_section("executive_summary"),
+        "market_analysis": get_section("market_analysis"),
+        "macro_context": get_section("macro_context"),
+        "technical_analysis": get_section("technical_analysis"),
+        "setup_validation": get_section("setup_validation"),
+        "strategy_implication": get_section("strategy_implication"),
+        "bot_strategy": get_section("bot_strategy"),
+        "outlook": get_section("outlook"),
         "watchlist": watchlist_data,
         "best_setup": best_setup,
         "transition": transition,
