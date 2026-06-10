@@ -49,3 +49,31 @@ export const analyzeAdminLogs = () => {
     method: 'POST',
   });
 };
+
+export const fetchSystemHealth = () => {
+  return fetchAuth(`/api/system/health`, {
+    method: 'GET',
+  });
+};
+
+export const fetchFinnAnalytics = () => {
+  return fetchAuth(`/api/system/finn-analytics`, {
+    method: 'GET',
+  });
+};
+
+export const fetchOpenAiRuntime = () => {
+  return fetchAuth(`/api/system/openai-runtime`, {
+    method: 'GET',
+  });
+};
+
+export const fetchAdminTelemetry = async () => {
+  const [health, analytics, openaiRuntime] = await Promise.all([
+    fetchSystemHealth(),
+    fetchFinnAnalytics(),
+    fetchOpenAiRuntime(),
+  ]);
+
+  return { health, analytics, openaiRuntime };
+};
