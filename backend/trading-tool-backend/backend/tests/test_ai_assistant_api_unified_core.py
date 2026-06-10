@@ -22,6 +22,7 @@ def test_legacy_response_is_generic_failure_detects_default_failures():
     assert _legacy_response_is_generic_failure("⚠️ Kon geen analyse ophalen. Probeer opnieuw.")
     assert _legacy_response_is_generic_failure("Interne authenticatiefout")
     assert _legacy_response_is_generic_failure("insufficient_quota")
+    assert _legacy_response_is_generic_failure("AI quota bereikt")
     assert _legacy_response_is_generic_failure("")
 
 

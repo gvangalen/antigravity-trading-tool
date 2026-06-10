@@ -43,6 +43,51 @@ if api_key:
 TEXT_TEMP = float(os.getenv("OPENAI_TEXT_TEMP", "0.4"))
 JSON_TEMP = float(os.getenv("OPENAI_JSON_TEMP", "0.2"))
 MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "500"))
+QUOTA_COOLDOWN_SECONDS = int(os.getenv("OPENAI_QUOTA_COOLDOWN_SECONDS", "3600"))
+
+_openai_runtime_state: Dict[str, Any] = {
+    "quota_exhausted_until": 0.0,
+    "quota_failures": 0,
+    "blocked_calls": 0,
+    "text_calls": 0,
+    "json_calls": 0,
+    "last_error": None,
+    "last_error_at": None,
+}
+
+
+def _quota_breaker_active() -> bool:
+    return float(_openai_runtime_state.get("quota_exhausted_until") or 0.0) > time.time()
+
+
+def _mark_runtime_error(message: str) -> None:
+    _openai_runtime_state["last_error"] = str(message)
+    _openai_runtime_state["last_error_at"] = int(time.time())
+
+
+def _mark_quota_exhausted() -> None:
+    _openai_runtime_state["quota_failures"] = int(_openai_runtime_state.get("quota_failures") or 0) + 1
+    _openai_runtime_state["quota_exhausted_until"] = time.time() + max(60, QUOTA_COOLDOWN_SECONDS)
+    _mark_runtime_error("insufficient_quota")
+
+
+def get_openai_runtime_status() -> Dict[str, Any]:
+    exhausted_until = float(_openai_runtime_state.get("quota_exhausted_until") or 0.0)
+    breaker_active = exhausted_until > time.time()
+    remaining = int(max(0, exhausted_until - time.time())) if breaker_active else 0
+    return {
+        "configured": bool(api_key),
+        "model": model,
+        "quota_breaker_active": breaker_active,
+        "quota_exhausted_until_epoch": int(exhausted_until) if exhausted_until else None,
+        "quota_cooldown_remaining_seconds": remaining,
+        "quota_failures": int(_openai_runtime_state.get("quota_failures") or 0),
+        "blocked_calls": int(_openai_runtime_state.get("blocked_calls") or 0),
+        "text_calls": int(_openai_runtime_state.get("text_calls") or 0),
+        "json_calls": int(_openai_runtime_state.get("json_calls") or 0),
+        "last_error": _openai_runtime_state.get("last_error"),
+        "last_error_at_epoch": _openai_runtime_state.get("last_error_at"),
+    }
 
 # ============================================================
 # 🧰 JSON parsing helper
@@ -88,6 +133,12 @@ def ask_gpt_json(
     if not client:
         logger.error("❌ GPT JSON Call gefaald: Geen OpenAI Client (Missing API Key)")
         return {"error": "AI is offline"}
+    if _quota_breaker_active():
+        _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
+        logger.warning("⛔ GPT JSON Call overgeslagen: quota breaker actief")
+        return {"error": "quota"}
+
+    _openai_runtime_state["json_calls"] = int(_openai_runtime_state.get("json_calls") or 0) + 1
 
     messages = [
         {"role": "system", "content": system_role},
@@ -114,10 +165,12 @@ def ask_gpt_json(
             
         except Exception as e:
             logger.error(f"❌ OpenAI JSON API Error (Attempt {attempt}): {e}")
+            _mark_runtime_error(str(e))
 
             # 🔥 STOP bij quota errors
             if "insufficient_quota" in str(e):
                 logger.error("❌ QUOTA bereikt → stop retries")
+                _mark_quota_exhausted()
                 return {"error": "quota"}
 
             if attempt == retries:
@@ -142,6 +195,12 @@ def ask_gpt_text(
     if not client:
         logger.error("❌ GPT Text Call gefaald: Geen OpenAI Client (Missing API Key)")
         return "De AI assistent is momenteel offline omdat de OpenAI API sleutel ontbreekt. Controleer je .env bestand."
+    if _quota_breaker_active():
+        _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
+        logger.warning("⛔ GPT Text Call overgeslagen: quota breaker actief")
+        return "AI quota bereikt"
+
+    _openai_runtime_state["text_calls"] = int(_openai_runtime_state.get("text_calls") or 0) + 1
 
     messages = [
         {"role": "system", "content": system_role},
@@ -165,10 +224,12 @@ def ask_gpt_text(
 
         except Exception as e:
             logger.error(f"❌ OpenAI Text API Error (Attempt {attempt}): {e}")
+            _mark_runtime_error(str(e))
 
             # 🔥 STOP bij quota errors
             if "insufficient_quota" in str(e):
                 logger.error("❌ QUOTA bereikt → stop retries")
+                _mark_quota_exhausted()
                 return "AI quota bereikt"
 
             if attempt == retries:

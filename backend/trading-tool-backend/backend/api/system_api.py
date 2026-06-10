@@ -7,6 +7,7 @@ from backend.utils.auth_utils import decode_token, get_current_user
 from backend.services.system_health_service import SystemHealthService
 from backend.services.finn_product_analytics_service import finn_product_analytics
 from backend.services.system_service import SystemService
+from backend.utils.openai_client import get_openai_runtime_status
 from backend.schemas.system_schema import BootstrapAgentsResponse
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,12 @@ async def system_health(current_user: dict = Depends(require_operator)):
 async def system_finn_analytics(current_user: dict = Depends(require_operator)):
     """Lean FINN product analytics for early operator review."""
     return finn_product_analytics.snapshot()
+
+
+@router.get("/system/openai-runtime")
+async def system_openai_runtime(current_user: dict = Depends(require_operator)):
+    """Operator view on OpenAI runtime cost controls and quota breaker state."""
+    return get_openai_runtime_status()
 
 # =====================================================
 # 🚀 BOOTSTRAP AGENTS (na onboarding)

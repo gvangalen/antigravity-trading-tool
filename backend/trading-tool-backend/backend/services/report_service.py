@@ -19,6 +19,7 @@ from backend.celery_task.quarterly_report_task import generate_quarterly_report
 logger = logging.getLogger(__name__)
 
 DAILY_REPORT_PREVIEW_CACHE_TTL_SECONDS = int(os.getenv("DAILY_REPORT_PREVIEW_CACHE_TTL_SECONDS", "30"))
+DAILY_REPORT_REGEN_COOLDOWN_SECONDS = int(os.getenv("DAILY_REPORT_REGEN_COOLDOWN_SECONDS", "1800"))
 _daily_report_preview_cache: Dict[int, Dict[str, Any]] = {}
 
 from backend.services.intelligence_semantics import get_macro_semantics, get_technical_semantics, get_market_semantics
@@ -364,6 +365,25 @@ class ReportService:
         return response
 
     async def generate_report(self, user_id: int, period: str) -> Dict[str, Any]:
+        if period == "daily" and hasattr(self.repository, "get_latest_report"):
+            latest_report = await self.repository.get_latest_report(user_id, "daily_reports")
+            latest_report_date = latest_report.get("report_date") if latest_report else None
+            generated_at = latest_report.get("generated_at") if latest_report else None
+            if (
+                latest_report
+                and latest_report_date == datetime.utcnow().date()
+                and isinstance(generated_at, datetime)
+            ):
+                age_seconds = int((datetime.utcnow() - generated_at.replace(tzinfo=None)).total_seconds())
+                if age_seconds < max(60, DAILY_REPORT_REGEN_COOLDOWN_SECONDS):
+                    return {
+                        "message": "Dagrapport al recent gegenereerd; bestaand rapport wordt hergebruikt.",
+                        "task_id": None,
+                        "user_id": user_id,
+                        "source": "existing_daily_report",
+                        "report_age_seconds": age_seconds,
+                    }
+
         task_func = {
             "daily": generate_daily_report,
             "weekly": generate_weekly_report,
