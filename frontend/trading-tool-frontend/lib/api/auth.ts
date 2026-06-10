@@ -48,6 +48,37 @@ export function getCsrfToken() {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+let csrfBootstrapPromise: Promise<boolean> | null = null;
+
+export async function ensureCsrfCookie() {
+  if (IS_NATIVE_APP) return true;
+  if (getCsrfToken()) return true;
+  if (csrfBootstrapPromise) return csrfBootstrapPromise;
+
+  csrfBootstrapPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...Object.fromEntries(buildAuthHeaders(undefined, "GET").entries()),
+        },
+      });
+
+      if (!res.ok) return false;
+      return !!getCsrfToken();
+    } catch (err) {
+      console.warn("⚠️ CSRF bootstrap via /auth/me failed:", err);
+      return false;
+    } finally {
+      csrfBootstrapPromise = null;
+    }
+  })();
+
+  return csrfBootstrapPromise;
+}
+
 export function buildAuthHeaders(headers?: HeadersInit, method: string = "GET") {
   const merged = new Headers(headers || {});
   const accessToken = loadAccessToken();
@@ -109,6 +140,9 @@ async function fetchAuthInternal(
   options: FetchAuthOptions = {}
 ): Promise<any> {
   const method = String(options.method || "GET").toUpperCase();
+  if (!IS_NATIVE_APP && ["POST", "PUT", "PATCH", "DELETE"].includes(method) && !getCsrfToken()) {
+    await ensureCsrfCookie();
+  }
   const cacheMode = options.cache ?? (options.forceFresh || method !== "GET" ? "no-store" : "default");
   const noStoreHeaders =
     cacheMode === "no-store"
