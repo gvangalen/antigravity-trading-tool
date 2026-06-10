@@ -232,6 +232,7 @@ def _legacy_response_is_generic_failure(response_text: Optional[str]) -> bool:
         or "probeer opnieuw" in text and text.startswith("⚠️")
         or "interne authenticatiefout" in text
         or "insufficient_quota" in text
+        or "ai quota bereikt" in text
     )
 
 
