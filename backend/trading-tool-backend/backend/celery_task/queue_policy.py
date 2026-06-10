@@ -151,11 +151,12 @@ def build_task_schedule_entry(
     schedule,
     *,
     kwargs: dict | None = None,
+    queue_override: str | None = None,
 ) -> Dict[str, object]:
     entry: Dict[str, object] = {
         "task": task_name,
         "schedule": schedule,
-        "options": {"queue": resolve_task_queue(task_name)},
+        "options": {"queue": queue_override or resolve_task_queue(task_name)},
     }
     if kwargs:
         entry["kwargs"] = kwargs
@@ -183,7 +184,7 @@ def build_dispatch_schedule_entry(
         "task": DISPATCHER_TASK_NAME,
         "schedule": schedule,
         "kwargs": kwargs,
-        "options": {"queue": resolve_task_queue(target_task_name)},
+        "options": {"queue": DEFAULT_QUEUE},
     }
 
 

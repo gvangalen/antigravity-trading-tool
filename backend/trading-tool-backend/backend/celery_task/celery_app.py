@@ -118,6 +118,7 @@ celery_app.conf.beat_schedule = {
     "run_rule_based_scores": build_task_schedule_entry(
         "backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores",
         crontab(minute="*/15"),
+        queue_override=DEFAULT_QUEUE,
     ),
 
     # =====================================================
