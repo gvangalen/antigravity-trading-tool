@@ -135,6 +135,7 @@ export function useOnboarding() {
     if (!status) return null;
 
     const steps = {
+      profile: !!status.has_profile,
       market: !!status.has_market,
       macro: !!status.has_macro,
       technical: !!status.has_technical,
@@ -168,7 +169,8 @@ export function useOnboarding() {
   // 5️⃣ Unlock logic (volgorde)
   // =====================================================
   const allowedSteps = {
-    market: true,
+    profile: true,
+    market: stepStatus?.profile ?? false,
     macro: stepStatus?.market ?? false,
     technical: stepStatus?.macro ?? false,
     setup: stepStatus?.technical ?? false,

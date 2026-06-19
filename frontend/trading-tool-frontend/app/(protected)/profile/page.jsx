@@ -1,17 +1,71 @@
 "use client";
 
 import { useAuth } from "@/components/auth/AuthProvider";
-import { User, Mail, Shield, Zap, ArrowUpRight, Brain, LogOut, Loader2 } from "lucide-react";
+import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
+import {
+  ASSET_FOCUS,
+  createOptionLabelMap,
+  EXPERIENCE_LEVELS,
+  GOALS,
+  normalizeTraderProfilePreferences,
+  RISK_PROFILES,
+  serializeTraderProfilePreferences,
+  TIMEFRAMES,
+  TRADER_TYPES,
+} from "@/lib/traderProfileOptions";
+import { User, Mail, Shield, ArrowUpRight, Brain, LogOut, Loader2, Sparkles, Pencil, Save } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useModal } from "@/components/modal/ModalProvider";
+
+function MultiChoiceGroup({ title, subtitle, options, values, onToggle }) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-4">
+        <h3 className="text-lg font-black tracking-tight text-slate-900">{title}</h3>
+        <p className="mt-1 text-sm font-medium leading-relaxed text-slate-500">{subtitle}</p>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {options.map((option) => {
+          const active = values.includes(option.value);
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onToggle(option.value)}
+              className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                active
+                  ? "border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                  : "border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-200 hover:bg-white"
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 export default function ProfilePage() {
   const { user, logout } = useAuth();
   const { showSnackbar } = useModal();
   const router = useRouter();
   const [loadingLogout, setLoadingLogout] = useState(false);
+  const [loadingPreferences, setLoadingPreferences] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileError, setProfileError] = useState(null);
+  const [profileForm, setProfileForm] = useState({
+    trader_types: [],
+    primary_timeframes: [],
+    asset_focus: [],
+    investment_goals_list: [],
+    experience_levels: [],
+    risk_profiles: [],
+  });
 
   if (!user) {
     return (
@@ -32,6 +86,93 @@ export default function ProfilePage() {
   const requestsUsed = user.ai_requests_used_day || 0;
   const requestsLimit = user.ai_requests_limit_day || 25;
   const usagePct = Math.min((requestsUsed / requestsLimit) * 100, 100);
+  const traderTypeMap = useMemo(() => createOptionLabelMap(TRADER_TYPES), []);
+  const timeframeMap = useMemo(() => createOptionLabelMap(TIMEFRAMES), []);
+  const assetFocusMap = useMemo(() => createOptionLabelMap(ASSET_FOCUS), []);
+  const goalsMap = useMemo(() => createOptionLabelMap(GOALS), []);
+  const experienceMap = useMemo(() => createOptionLabelMap(EXPERIENCE_LEVELS), []);
+  const riskMap = useMemo(() => createOptionLabelMap(RISK_PROFILES), []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPreferences() {
+      try {
+        setLoadingPreferences(true);
+        const response = await getAssistantPreferences();
+        const preferences = response?.preferences || {};
+        if (cancelled) return;
+
+        setProfileForm(normalizeTraderProfilePreferences(preferences));
+      } catch (err) {
+        console.error("Traderprofiel laden mislukt", err);
+        if (!cancelled) {
+          setProfileError("Het traderprofiel kon niet geladen worden.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingPreferences(false);
+        }
+      }
+    }
+
+    loadPreferences();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const hasCompleteProfile = useMemo(() => {
+    return (
+      profileForm.trader_types.length > 0 &&
+      profileForm.primary_timeframes.length > 0 &&
+      profileForm.asset_focus.length > 0 &&
+      profileForm.investment_goals_list.length > 0 &&
+      profileForm.experience_levels.length > 0 &&
+      profileForm.risk_profiles.length > 0
+    );
+  }, [profileForm]);
+
+  const toggleMulti = (field, value) => {
+    setProfileForm((current) => {
+      const list = current[field];
+      const nextList = list.includes(value)
+        ? list.filter((item) => item !== value)
+        : [...list, value];
+
+      return {
+        ...current,
+        [field]: nextList,
+      };
+    });
+  };
+
+  const handleSaveProfile = async () => {
+    if (!hasCompleteProfile) {
+      setProfileError("Vul eerst alle traderprofielvelden in zodat Finn je goed kan begeleiden.");
+      return;
+    }
+
+    try {
+      setSavingProfile(true);
+      setProfileError(null);
+      await updateAssistantPreferences(serializeTraderProfilePreferences(profileForm));
+      setEditingProfile(false);
+      showSnackbar("Tradingprofiel opgeslagen", "success");
+    } catch (err) {
+      console.error("Traderprofiel opslaan mislukt", err);
+      setProfileError("Opslaan van je traderprofiel is mislukt. Probeer het nog eens.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const summaryChips = [
+    ...profileForm.trader_types.map((value) => traderTypeMap[value]).filter(Boolean),
+    ...profileForm.investment_goals_list.map((value) => goalsMap[value]).filter(Boolean),
+    ...profileForm.experience_levels.map((value) => experienceMap[value]).filter(Boolean),
+    ...profileForm.risk_profiles.map((value) => riskMap[value]).filter(Boolean),
+  ].filter(Boolean);
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300 p-8 pt-12">
@@ -119,6 +260,255 @@ export default function ProfilePage() {
           </div>
         </div>
 
+      </div>
+
+      <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10 space-y-8">
+        <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+          <div className="max-w-2xl">
+            <div className="mb-3 flex items-center gap-3">
+              <div className="rounded-2xl bg-blue-50 p-4 text-blue-600">
+                <Sparkles className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-600">
+                  Tradingprofiel
+                </div>
+                <h2 className="text-3xl font-black tracking-tight text-slate-900">
+                  Finn leert hier wie jij bent als trader
+                </h2>
+              </div>
+            </div>
+            <p className="text-sm font-medium leading-relaxed text-slate-500">
+              Finn gebruikt dit profiel om uitleg, waarschuwingen, setups en coaching op jouw stijl
+              af te stemmen. Pas dit gerust aan als je horizon, risico of focus verandert.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {summaryChips.length > 0 ? (
+              summaryChips.map((chip) => (
+                <span
+                  key={chip}
+                  className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600"
+                >
+                  {chip}
+                </span>
+              ))
+            ) : (
+              <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
+                Nog niet ingevuld
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setEditingProfile((current) => !current);
+                setProfileError(null);
+              }}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-700 transition hover:border-blue-200 hover:bg-white"
+            >
+              <Pencil size={14} />
+              {editingProfile ? "Sluiten" : "Profiel aanpassen"}
+            </button>
+          </div>
+        </div>
+
+        {loadingPreferences ? (
+          <div className="flex items-center gap-3 rounded-3xl border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+            Traderprofiel laden...
+          </div>
+        ) : editingProfile ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-6">
+              <MultiChoiceGroup
+                title="Wat voor trader ben je?"
+                subtitle="Kies een of meer stijlen die passen bij hoe jij normaal handelt of investeert."
+                options={TRADER_TYPES}
+                values={profileForm.trader_types}
+                onToggle={(value) => toggleMulti("trader_types", value)}
+              />
+
+              <MultiChoiceGroup
+                title="Welke timeframes gebruik je?"
+                subtitle="Je kunt meerdere selecteren. Finn gebruikt dit om irrelevante signalen te dempen."
+                options={TIMEFRAMES}
+                values={profileForm.primary_timeframes}
+                onToggle={(value) => toggleMulti("primary_timeframes", value)}
+              />
+
+              <MultiChoiceGroup
+                title="Waar focus je op?"
+                subtitle="Kies de markten of assets waar Finn in je context vooral rekening mee moet houden."
+                options={ASSET_FOCUS}
+                values={profileForm.asset_focus}
+                onToggle={(value) => toggleMulti("asset_focus", value)}
+              />
+
+              <MultiChoiceGroup
+                title="Wat is je doel?"
+                subtitle="Kies een of meer doelen. Finn gebruikt dit om coaching en waarschuwingen op jouw intentie af te stemmen."
+                options={GOALS}
+                values={profileForm.investment_goals_list}
+                onToggle={(value) => toggleMulti("investment_goals_list", value)}
+              />
+
+              <MultiChoiceGroup
+                title="Hoeveel ervaring heb je?"
+                subtitle="Kies wat nu het best bij je past. Je kunt meerdere lagen aanvinken als je tussen niveaus in zit."
+                options={EXPERIENCE_LEVELS}
+                values={profileForm.experience_levels}
+                onToggle={(value) => toggleMulti("experience_levels", value)}
+              />
+
+              <MultiChoiceGroup
+                title="Wat is je risicoprofiel?"
+                subtitle="Zo kan Finn beter kiezen tussen remmen, waarschuwen of juist ruimte geven. Je kunt combineren als je per context verschilt."
+                options={RISK_PROFILES}
+                values={profileForm.risk_profiles}
+                onToggle={(value) => toggleMulti("risk_profiles", value)}
+              />
+            </div>
+
+            {profileError ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                {profileError}
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:flex-row md:items-center md:justify-between">
+              <p className="text-sm font-medium leading-relaxed text-slate-500">
+                Werk dit profiel bij wanneer je stijl verandert. Dan blijft Finn relevant en krijg
+                je minder signalen die niet bij jouw manier van traden passen.
+              </p>
+              <button
+                type="button"
+                onClick={handleSaveProfile}
+                disabled={!hasCompleteProfile || savingProfile}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {savingProfile ? "Profiel opslaan..." : "Profiel opslaan"}
+                <Save size={14} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Stijl & doel</div>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <div className="text-sm font-black text-slate-900">Trader type</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.trader_types.length > 0 ? (
+                      profileForm.trader_types.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {traderTypeMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">Nog niet ingevuld</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-black text-slate-900">Doel</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.investment_goals_list.length > 0 ? (
+                      profileForm.investment_goals_list.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {goalsMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">Nog niet ingevuld</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-black text-slate-900">Risicoprofiel</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.risk_profiles.length > 0 ? (
+                      profileForm.risk_profiles.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {riskMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">Nog niet ingevuld</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Context voor Finn</div>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <div className="text-sm font-black text-slate-900">Timeframes</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.primary_timeframes.length > 0 ? (
+                      profileForm.primary_timeframes.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {timeframeMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">Nog niet ingevuld</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-black text-slate-900">Asset focus</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.asset_focus.length > 0 ? (
+                      profileForm.asset_focus.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {assetFocusMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">Nog niet ingevuld</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-black text-slate-900">Ervaring</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.experience_levels.length > 0 ? (
+                      profileForm.experience_levels.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {experienceMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">Nog niet ingevuld</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
       </div>
 
       {/* 3. ACTIONS */}

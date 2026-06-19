@@ -1,37 +1,45 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  CheckCircle2, 
-  Circle, 
-  Lock, 
-  ArrowRight, 
-  Activity, 
-  Globe, 
-  LineChart, 
-  Zap, 
+import {
+  CheckCircle2,
+  Lock,
+  ArrowRight,
+  Activity,
+  Globe,
+  LineChart,
+  Zap,
   Bot,
-  Terminal,
-  Cpu,
-  Rocket
+  Sparkles,
+  LayoutDashboard,
+  FileText,
+  ShieldCheck,
+  TimerReset,
+  Shield,
+  TrendingUp,
+  User,
 } from "lucide-react";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
+const ICONS = {
+  profile: User,
+  market: Globe,
+  macro: Activity,
+  technical: LineChart,
+  setup: Zap,
+  strategy: Bot,
+};
+
 export default function OnboardingPage() {
   const router = useRouter();
-  const {
-    status,
-    loading,
-    saving,
-    onboardingComplete,
-    allowedSteps,
-  } = useOnboarding();
+  const { status, loading, onboardingComplete, allowedSteps } = useOnboarding();
 
   useEffect(() => {
     if (loading || !status) return;
     const stepsComplete = [
+      status.has_profile,
       status.has_market,
       status.has_macro,
       status.has_technical,
@@ -53,80 +61,90 @@ export default function OnboardingPage() {
 
   if (loading || !status) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Initializing System...</p>
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600/30 border-t-blue-600" />
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+            Finn zet je werkplek klaar...
+          </p>
         </div>
       </div>
     );
   }
 
-  /* ⭐ Step Icons Map */
-  const ICONS = {
-    market: Globe,
-    macro: Activity,
-    technical: LineChart,
-    setup: Zap,
-    strategy: Bot,
-  };
-
   const steps = [
     {
+      key: "profile",
+      title: "Jouw tradingprofiel",
+      description: "Vertel eerst wat voor trader je bent, welke horizon je gebruikt en waar Finn op moet letten.",
+      finnHelp: "Finn gebruikt dit profiel om advies, waarschuwingen en uitleg direct beter op jouw stijl af te stemmen.",
+      unlocks: "Persoonlijkere coaching en relevantere signalen",
+      done: status.has_profile,
+      link: "/onboarding/profile",
+      unlocked: allowedSteps.profile,
+    },
+    {
       key: "market",
-      title: "Market Intelligence",
-      description: "Establishing live feed from global price & volume indices.",
+      title: "Marktcontext",
+      description: "Bekijk live marktdata en laat Finn eerst het marktbeeld neerzetten.",
+      finnHelp: "Finn gebruikt dit om jouw eerste context en prioriteiten op te bouwen.",
+      unlocks: "Eerste marktbriefing en live context",
       done: status.has_market,
       link: "/market",
       unlocked: allowedSteps.market,
     },
     {
       key: "macro",
-      title: "Macro Environment",
-      description: "Calibrating DXY, Bond Yields, and Liquidity benchmarks.",
+      title: "Macrobeeld",
+      description: "Voeg macrocontext toe zodat Finn regime en risico beter kan wegen.",
+      finnHelp: "Denk aan DXY, yields en liquiditeit: dit geeft Finn het grotere plaatje.",
+      unlocks: "Betere risico-inschatting en regime-duiding",
       done: status.has_macro,
       link: "/macro",
       unlocked: allowedSteps.macro,
     },
     {
       key: "technical",
-      title: "Technical Matrix",
-      description: "Initializing RSI, Momentum, and Structural volatility maps.",
+      title: "Technische signalen",
+      description: "Controleer technische signalen zodat Finn entries en timing beter kan duiden.",
+      finnHelp: "Deze stap geeft Finn houvast voor trend, momentum en timing.",
+      unlocks: "Sterkere timing, trend- en momentumuitleg",
       done: status.has_technical,
       link: "/technical",
       unlocked: allowedSteps.technical,
     },
     {
       key: "setup",
-      title: "Core Setups",
-      description: "Configuring entry clusters and risk management parameters.",
+      title: "Setup maken",
+      description: "Leg je eerste setup vast zodat Finn jouw context aan concrete regels koppelt.",
+      finnHelp: "Hier wordt Finn specifieker: niet alleen context, maar ook jouw voorkeuren.",
+      unlocks: "Persoonlijkere reviews en scherpere next steps",
       done: status.has_setup,
       link: "/setup",
       unlocked: allowedSteps.setup,
     },
     {
       key: "strategy",
-      title: "Strategy Engine",
-      description: "Generating AI-driven execution models based on your setup.",
+      title: "Strategie kiezen",
+      description: "Maak je eerste strategie zodat dashboard, reports en reviews echt bruikbaar worden.",
+      finnHelp: "Na deze stap kan Finn beslissingen beter reviewen, blokkeren en prioriteren.",
+      unlocks: "Volledige dashboard-, report- en reviewflow",
       done: status.has_strategy,
       link: "/strategy",
       unlocked: allowedSteps.strategy,
     },
   ];
 
-  /* Calculation for progress ring */
-  const completedCount = steps.filter(s => s.done).length;
+  const completedCount = steps.filter((step) => step.done).length;
   const progressPercent = (completedCount / steps.length) * 100;
+  const nextStep = steps.find((step) => !step.done) || null;
 
   return (
-    <div className="max-w-4xl mx-auto py-8 animate-fade-in relative z-10">
-      
-      {/* 🚀 HUB HEADER */}
-      <div className="mb-16 flex flex-col md:flex-row items-center gap-12">
-        {/* PROGRESS RING */}
-        <div className="relative w-48 h-48 group">
-          <div className="absolute inset-0 bg-blue-600/10 rounded-full blur-2xl group-hover:bg-blue-600/20 transition-all" />
-          <svg className="w-full h-full -rotate-90">
+    <div className="relative z-10 mx-auto max-w-5xl py-8 animate-fade-in">
+      <div className="mb-16 flex flex-col items-center gap-12 md:flex-row">
+        <div className="group relative h-48 w-48">
+          <div className="absolute inset-0 rounded-full bg-blue-600/10 blur-2xl transition-all group-hover:bg-blue-600/20" />
+          <svg className="h-full w-full -rotate-90">
             <circle
               cx="96"
               cy="96"
@@ -134,7 +152,7 @@ export default function OnboardingPage() {
               stroke="currentColor"
               strokeWidth="4"
               fill="transparent"
-              className="text-slate-900"
+              className="text-slate-200"
             />
             <circle
               cx="96"
@@ -145,48 +163,109 @@ export default function OnboardingPage() {
               fill="transparent"
               strokeDasharray={502.4}
               strokeDashoffset={502.4 - (502.4 * progressPercent) / 100}
-              className="text-blue-600 drop-shadow-[0_0_8px_rgba(37,99,235,0.5)] transition-all duration-1000 ease-out"
+              className="text-blue-600 drop-shadow-[0_0_8px_rgba(37,99,235,0.25)] transition-all duration-1000 ease-out"
               strokeLinecap="round"
             />
           </svg>
-          <div className="absolute inset-x-0 inset-y-0 flex flex-col items-center justify-center">
-            <span className="text-4xl font-black tracking-tight">{Math.round(progressPercent)}%</span>
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Initialized</span>
-            
-            {/* 🚩 NEXT MILESTONE LABEL */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-4xl font-black tracking-tight text-slate-900">
+              {Math.round(progressPercent)}%
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+              Klaar
+            </span>
             {!onboardingComplete && (
-               <div className="absolute top-[180px] w-max animate-pulse">
-                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-blue-600/60">
-                     Next Milestone: <span className="text-blue-500">{steps.find(s => !s.done)?.title || 'Complete Protocol'}</span>
-                  </p>
-               </div>
+              <div className="absolute top-[180px] w-max animate-pulse">
+                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-blue-600/60">
+                  Volgende stap:{" "}
+                  <span className="text-blue-500">{nextStep?.title || "Dashboard"}</span>
+                </p>
+              </div>
             )}
           </div>
         </div>
 
         <div className="flex-1 text-center md:text-left">
-           <div className="flex items-center gap-3 justify-center md:justify-start mb-4">
-              <Terminal size={14} className="text-blue-600" />
-              <span className="text-[12px] font-black uppercase tracking-[0.3em] text-blue-600">System Core Ready</span>
-           </div>
-           <h2 className="text-4xl font-black tracking-tight mb-4">System Initialization</h2>
-           <p className="text-slate-400 font-medium max-w-lg leading-relaxed">
-             Establish your core data streams to unlock the Live Trading Cockpit. 
-             Once the protocol is complete, your dashboard will immediately populate 
-             with real-time AI signals and market intelligence.
-           </p>
+          <div className="mb-4 flex items-center justify-center gap-3 md:justify-start">
+            <Sparkles size={14} className="text-blue-600" />
+            <span className="text-[12px] font-black uppercase tracking-[0.3em] text-blue-600">
+              Finn begeleidt je setup
+            </span>
+          </div>
+          <h2 className="mb-4 text-4xl font-black tracking-tight text-slate-900">
+            Start in zes duidelijke stappen
+          </h2>
+          <p className="max-w-2xl text-slate-500 font-medium leading-relaxed">
+            Je hoeft hier niet alles tegelijk te snappen. Werk de stappen rustig af van boven naar
+            beneden. Finn gebruikt deze route om jouw marktcontext, setup en strategie op te bouwen
+            zodat advies, reviews en reports daarna echt bruikbaar worden.
+          </p>
+
+          <div className="mt-5 flex flex-wrap gap-2 text-[11px] font-bold">
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 shadow-sm">
+              <TimerReset size={12} />
+              3-5 minuten
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 shadow-sm">
+              <Shield size={12} />
+              Geen live trades in onboarding
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 shadow-sm">
+              <Sparkles size={12} />
+              Finn begeleidt elke stap
+            </span>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 text-left shadow-sm">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
+              <Sparkles size={14} />
+              Finn zegt
+            </div>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700">
+              {onboardingComplete
+                ? "Je basis staat. Open nu je dashboard, bekijk je eerste report en vraag Finn om je volgende stap."
+                : `${nextStep?.title || "Marktcontext"} is nu je beste volgende stap. ${nextStep?.finnHelp || "Finn gebruikt dit om je eerste context op te bouwen."}`}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* 🧱 SYSTEM MODULES GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {!onboardingComplete && nextStep && (
+        <div className="mb-10 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
+                Aanbevolen route
+              </div>
+              <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900">{nextStep.title}</h3>
+              <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
+                {nextStep.description}
+              </p>
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700">
+                <TrendingUp size={12} />
+                Daarna ontgrendel je: {nextStep.unlocks}
+              </div>
+            </div>
+            <button
+              onClick={() => router.push(nextStep.link)}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 active:scale-95"
+            >
+              Open stap
+              <ArrowRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         {steps.map((step, idx) => {
           const Icon = ICONS[step.key];
           const isDone = !!step.done;
           const isUnlocked = !!step.unlocked;
+          const isRecommended = step.key === nextStep?.key;
 
           return (
-            <div 
+            <div
               key={step.key}
               onClick={() => {
                 if (!isUnlocked) return;
@@ -204,94 +283,153 @@ export default function OnboardingPage() {
                 });
                 router.push(step.link);
               }}
-              className={`
-                group relative p-8 rounded-3xl border-2 transition-all duration-300 overflow-hidden cursor-pointer
-                ${isDone 
-                  ? "border-emerald-500/20 bg-emerald-500/[0.02]" 
-                  : isUnlocked 
-                    ? "border-slate-800 bg-[#0f172a] hover:border-blue-600/50 hover:bg-[#11192d] hover:shadow-2xl hover:shadow-blue-600/10" 
-                    : "border-slate-800 opacity-40 grayscale cursor-not-allowed"
-                }
-              `}
+              className={`group relative cursor-pointer overflow-hidden rounded-3xl border-2 p-8 transition-all duration-300 ${
+                isDone
+                  ? "border-emerald-500/20 bg-emerald-500/[0.02]"
+                  : isUnlocked
+                    ? isRecommended
+                      ? "border-blue-200 bg-white shadow-lg shadow-blue-500/10 hover:border-blue-300"
+                      : "border-slate-200 bg-white hover:border-blue-200 hover:shadow-xl hover:shadow-blue-500/5"
+                    : "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"
+              }`}
             >
-              {/* STATUS LABEL */}
-              <div className="absolute top-8 right-8 flex items-center gap-2">
-                <div className={`w-1.5 h-1.5 rounded-full ${isDone ? 'bg-emerald-500' : isUnlocked ? 'bg-blue-600 animate-pulse' : 'bg-slate-700'}`} />
-                <span className={`text-[9px] font-black uppercase tracking-[0.2em] ${isDone ? 'text-emerald-500' : isUnlocked ? 'text-blue-600' : 'text-slate-600'}`}>
-                  {isDone ? 'ACTIVE' : isUnlocked ? 'READY' : 'ENCRYPTED'}
+              <div className="absolute right-8 top-8 flex items-center gap-2">
+                <div
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    isDone ? "bg-emerald-500" : isUnlocked ? "animate-pulse bg-blue-600" : "bg-slate-400"
+                  }`}
+                />
+                <span
+                  className={`text-[9px] font-black uppercase tracking-[0.2em] ${
+                    isDone ? "text-emerald-500" : isUnlocked ? "text-blue-600" : "text-slate-500"
+                  }`}
+                >
+                  {isDone ? "Klaar" : isUnlocked ? (isRecommended ? "Aanbevolen" : "Beschikbaar") : "Nog vergrendeld"}
                 </span>
               </div>
 
-              {/* MODULE CONTENT */}
               <div className="relative z-10">
-                <div className={`p-4 w-fit rounded-2xl mb-6 shadow-xl border ${isDone ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-slate-900 border-slate-800'}`}>
-                   <Icon className={`w-6 h-6 ${isDone ? 'text-emerald-500' : 'text-blue-600'}`} />
+                <div
+                  className={`mb-6 w-fit rounded-2xl border p-4 shadow-sm ${
+                    isDone
+                      ? "border-emerald-500/20 bg-emerald-500/10"
+                      : isUnlocked
+                        ? "border-blue-100 bg-blue-50"
+                        : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <Icon className={`h-6 w-6 ${isDone ? "text-emerald-500" : isUnlocked ? "text-blue-600" : "text-slate-400"}`} />
                 </div>
-                
-                <h3 className="text-xl font-black tracking-tight mb-3">
-                  {step.title}
-                </h3>
-                <p className="text-sm font-medium text-slate-500 leading-relaxed mb-8 max-w-[200px]">
+
+                <h3 className="mb-3 text-xl font-black tracking-tight text-slate-900">{step.title}</h3>
+                <p className="mb-4 max-w-[340px] text-sm font-medium leading-relaxed text-slate-500">
                   {step.description}
                 </p>
+                <p className="mb-8 text-[13px] font-semibold leading-relaxed text-slate-600">
+                  <span className="text-blue-600">Finn helpt:</span> {step.finnHelp}
+                </p>
+
+                <div className="mb-8 flex flex-wrap gap-2">
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">
+                    Ontgrendelt
+                  </span>
+                  <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700">
+                    {step.unlocks}
+                  </span>
+                </div>
 
                 <div className="flex items-center gap-3">
-                   {isDone ? (
-                     <div className="flex items-center gap-2 text-emerald-500">
-                        <CheckCircle2 size={16} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Initialization Complete</span>
-                     </div>
-                   ) : isUnlocked ? (
-                     <div className="btn-v2-primary py-3 px-6 rounded-xl flex items-center gap-2 group/btn">
-                        <span className="text-[10px] font-black uppercase tracking-widest">Initiate Step</span>
-                        <ArrowRight size={14} className="group-hover/btn:translate-x-1 transition-transform" />
-                     </div>
-                   ) : (
-                     <div className="flex items-center gap-2 text-slate-600">
-                        <Lock size={14} />
-                        <span className="text-[10px] font-black uppercase tracking-widest leading-none">Complete {steps[idx-1]?.title || 'previous step'} to unlock</span>
-                     </div>
-                   )}
+                  {isDone ? (
+                    <div className="flex items-center gap-2 text-emerald-500">
+                      <CheckCircle2 size={16} />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Stap afgerond</span>
+                    </div>
+                  ) : isUnlocked ? (
+                    <div className="rounded-xl bg-blue-600 px-5 py-3 text-white shadow-md transition group-hover:bg-blue-700">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-widest">Open stap</span>
+                        <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-slate-500">
+                      <Lock size={14} />
+                      <span className="text-[10px] font-black uppercase tracking-widest leading-none">
+                        Rond eerst {steps[idx - 1]?.title || "de vorige stap"} af
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* DYNAMIC BG GLOW */}
-              <div className={`absolute bottom-0 right-0 w-32 h-32 blur-[80px] pointer-events-none transition-opacity duration-500 ${isDone ? 'bg-emerald-500/10 opacity-100' : isUnlocked ? 'bg-blue-600/10 opacity-40 group-hover:opacity-100' : 'opacity-0'}`} />
+              <div
+                className={`pointer-events-none absolute bottom-0 right-0 h-32 w-32 blur-[80px] transition-opacity duration-500 ${
+                  isDone
+                    ? "bg-emerald-500/10 opacity-100"
+                    : isUnlocked
+                      ? "bg-blue-600/10 opacity-40 group-hover:opacity-100"
+                      : "opacity-0"
+                }`}
+              />
             </div>
           );
         })}
       </div>
 
-      {/* FOOTER ACTION */}
       {onboardingComplete && (
-         <div className="mt-16 animate-slide-up">
-            <div className="p-10 rounded-3xl bg-emerald-500/5 border-2 border-emerald-500/20 flex flex-col md:flex-row items-center justify-between gap-8">
-               <div className="flex items-center gap-6">
-                  <div className="p-4 bg-emerald-500 rounded-2xl shadow-2xl shadow-emerald-500/30">
-                     <Rocket className="w-8 h-8 text-white" />
-                  </div>
-                  <div>
-                     <h2 className="text-2xl font-black tracking-tight mb-1">Final Authorization Complete</h2>
-                     <p className="text-emerald-500/60 font-medium text-sm">System ready for live operation.</p>
-                  </div>
-               </div>
-               <button
-                 onClick={() => {
-                   trackAssistantEvent({
-                     event_name: "onboarding_dashboard_activated",
-                     page: "/onboarding",
-                     surface: "web",
-                     flow_type: "first_session",
-                     action_type: "activate_dashboard",
-                   });
-                   router.push("/dashboard");
-                 }}
-                 className="w-full md:w-auto px-10 py-5 bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase tracking-[0.2em] text-xs rounded-2xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-all text-center"
-               >
-                 Activate Dashboard →
-               </button>
+        <div className="mt-10 rounded-3xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
+          <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+            <div className="max-w-2xl">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-600">
+                <ShieldCheck size={14} />
+                Basis staat
+              </div>
+              <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900">
+                Je kunt nu echt met Tradamind werken
+              </h3>
+              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
+                Je onboarding is klaar. Open nu je dashboard voor het totaalbeeld, bekijk je report
+                voor samenvatting en vraag Finn om je eerste concrete volgende stap.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold">
+                <span className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-emerald-700">
+                  Dashboard openen
+                </span>
+                <span className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-emerald-700">
+                  Report lezen
+                </span>
+                <span className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-emerald-700">
+                  Vraag Finn om je volgende stap
+                </span>
+              </div>
             </div>
-         </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => {
+                  trackAssistantEvent({
+                    event_name: "onboarding_dashboard_activated",
+                    page: "/onboarding",
+                    surface: "web",
+                    flow_type: "first_session",
+                    action_type: "activate_dashboard",
+                  });
+                  router.push("/dashboard");
+                }}
+                className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-md transition hover:bg-slate-800"
+              >
+                <LayoutDashboard size={14} />
+                Dashboard
+              </button>
+              <button
+                onClick={() => router.push("/report")}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-700 shadow-sm transition hover:border-slate-300"
+              >
+                <FileText size={14} />
+                Report
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

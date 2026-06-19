@@ -9,6 +9,7 @@ logger = logging.getLogger("onboarding")
 DEFAULT_FLOW = "default"
 
 DEFAULT_STEPS: List[str] = [
+    "profile",
     "market",
     "macro",
     "technical",
@@ -19,6 +20,7 @@ DEFAULT_STEPS: List[str] = [
 PIPELINE_STEP = "strategy"
 
 STEP_FLAG_MAP = {
+    "profile": "has_profile",
     "market": "has_market",
     "macro": "has_macro",
     "technical": "has_technical",
