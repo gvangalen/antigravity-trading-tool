@@ -96,6 +96,10 @@ The sequence should now be:
 2. run one short polish sprint
 3. shift toward next-generation user value
 
+One of the clearest next-value tracks is:
+
+- [FINN Onboarding Trader Profile Plan](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-onboarding-trader-profile-plan.md)
+
 ## Short Version
 
 - `852232c` = `FINN 2.0 Stable`
@@ -113,3 +117,5 @@ That next step is now real:
 - FINN 3.0 is the current stable direction
 - the next roadmap focus is now:
   - [FINN Roadmap V4](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-roadmap-v4.md)
+- the next certification push is:
+  - [FINN Certification Push Plan](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-certification-push-plan.md)

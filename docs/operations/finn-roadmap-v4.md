@@ -10,6 +10,9 @@ See also:
 
 - [FINN Roadmap V3](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-roadmap-v3.md)
 - [FINN Stable + Next Plan](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-stable-next-plan.md)
+- [FINN Status + Certification Summary](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-status-certification-summary.md)
+- [FINN 4.0 QA Suite - Performance Intelligence](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-4-performance-intelligence-qa.md)
+- [FINN 4.0 Latency-Green Checklist](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-4-latency-green-checklist.md)
 
 The goal of FINN 4.0 is to move beyond operator-grade routing, review, and prioritization and turn FINN into a deeply personal performance layer for the trader behind the system.
 
@@ -453,6 +456,11 @@ Extend the FINN promptset with 4.0-style cases such as:
 - "coach me op basis van mijn laatste fouten"
 
 Do not relax 3.0 routing and operator gates while adding 4.0 capability.
+
+Official QA assets for this layer:
+
+- [FINN 4.0 QA Suite — Performance Intelligence](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-4-performance-intelligence-qa.md)
+- [FINN 4.0 Performance Promptset](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-qa-promptset-performance-intelligence.json)
 
 ### Product acceptance
 

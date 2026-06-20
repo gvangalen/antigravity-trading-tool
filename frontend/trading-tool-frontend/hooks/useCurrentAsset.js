@@ -12,7 +12,8 @@ import { useSearchParams } from "next/navigation";
  * 3. URL Query Param (?symbol=...)
  * 4. Global Asset Switcher
  */
-export function useCurrentAsset() {
+export function useCurrentAsset(options = {}) {
+  const { includeFocusedBotLookup = true } = options;
   const searchParams = useSearchParams();
   
   // Try searchParams first, then window.location as fallback
@@ -24,9 +25,13 @@ export function useCurrentAsset() {
   
   const { selectedAsset } = useAsset();
   const { activeSetup, focusedBotId } = useActiveSetup();
-  const { configs: botConfigs } = useBotData();
+  const { configs: botConfigs } = useBotData({
+    skipInitialLoad: !includeFocusedBotLookup || !focusedBotId,
+  });
 
-  const focusedBot = botConfigs.find(b => b.id === focusedBotId);
+  const focusedBot = includeFocusedBotLookup
+    ? botConfigs.find((b) => b.id === focusedBotId)
+    : null;
   
   // 🔥 PRIORITY: 1. URL (?symbol=), 2. Bot, 3. Setup, 4. Global
   const activeSymbol = urlSymbol || focusedBot?.symbol || activeSetup?.symbol || selectedAsset;

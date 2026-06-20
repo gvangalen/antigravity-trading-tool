@@ -1,6 +1,6 @@
 # Platform Scale P0.1 — Staging Baseline
 
-Last updated: 2026-06-07
+Last updated: 2026-06-08
 
 ## Goal
 
@@ -56,6 +56,7 @@ First target:
 - `100` virtual users
 - `1` iteration per user
 - `20` request concurrency cap
+- paced FINN/governance requests to avoid measuring only rate-limit collisions
 
 Harness command:
 
@@ -76,6 +77,8 @@ python3 /Users/gvangalen/Documents/antigravity-trading-tool/backend/trading-tool
   --ai-share 15 \
   --bot-share 5 \
   --mixed-concurrency 20 \
+  --mixed-ai-think-time-seconds 2.5 \
+  --mixed-bot-think-time-seconds 3.0 \
   --output-json /tmp/platform-scale-staging-mixed-100.json \
   --output-md /tmp/platform-scale-staging-mixed-100.md
 ```
@@ -105,6 +108,102 @@ Move from `100` to `250` only if:
 
 Move from `250` to `500` only if the `250` run remains operationally readable.
 
+## Measured Baseline Results
+
+### 100-user mixed run — cleaned baseline
+
+Artifacts:
+
+- `/tmp/platform-scale-staging-mixed-100-v3.json`
+- `/tmp/platform-scale-staging-mixed-100-v3.md`
+
+Result:
+
+- requests: `480`
+- success: `440`
+- failures: `40`
+- avg latency: `426.62 ms`
+- p95 latency: `1084.76 ms`
+- max latency: `1686.66 ms`
+
+Operational reading:
+
+- health stayed `ok` before, during, and after
+- broker stayed `ok`
+- celery stayed `ok`
+- total queue depth stayed `0`
+- remaining failures were `429` guardrails on AI/governance chat paths
+
+### 250-user mixed run
+
+Artifacts:
+
+- `/tmp/platform-scale-staging-mixed-250-v1.json`
+- `/tmp/platform-scale-staging-mixed-250-v1.md`
+
+Result:
+
+- requests: `1200`
+- success: `1070`
+- failures: `130`
+- avg latency: `507.24 ms`
+- p95 latency: `1073.24 ms`
+- max latency: `1800.91 ms`
+
+Operational reading:
+
+- health stayed `ok` before, during, and after
+- broker stayed `ok`
+- celery stayed `ok`
+- total queue depth stayed `0`
+- failures remained limited to `429` policy hits on AI/governance chat
+
+### 500-user mixed run
+
+Artifacts:
+
+- `/tmp/platform-scale-staging-mixed-500-v1.json`
+- `/tmp/platform-scale-staging-mixed-500-v1.md`
+
+Result:
+
+- requests: `2400`
+- success: `2120`
+- failures: `280`
+- avg latency: `502.96 ms`
+- p95 latency: `1008.92 ms`
+- max latency: `1971.81 ms`
+
+Operational reading:
+
+- health stayed `ok` before, during, and after
+- broker stayed `ok`
+- celery stayed `ok`
+- total queue depth stayed `0`
+- failures again remained `429` guardrails, not queue collapse or backend faults
+
+## Conclusion
+
+The staging platform now has a meaningful mixed-load proof point through `500` virtual users.
+
+What this does mean:
+
+- mixed read + FINN + governance-preview traffic remains operationally stable
+- queue lanes do not accumulate under this staged load
+- broker and worker topology remain readable under pressure
+
+What this does not mean:
+
+- unlimited FINN chat concurrency is supported
+- AI/governance rate limits should be read as platform failures
+
+Current interpretation:
+
+- the platform bottleneck is no longer queue throughput at this stage
+- the visible guardrail is AI/governance rate limiting by policy
+- this is sufficient to pause further synthetic scale escalation for now
+- the next highest-value work moves back toward FINN/product quality and real user signals
+
 ## Not Part Of This Tranche
 
 - no production concurrency changes
@@ -114,9 +213,8 @@ Move from `250` to `500` only if the `250` run remains operationally readable.
 
 ## Follow-up Decision
 
-After the first `100`-user run, decide one of:
+After the staged `100 -> 250 -> 500` sequence, the current recommendation is:
 
-1. keep current concurrency and move to `250`
-2. raise one queue-class carefully on staging
-3. slim read amplification before scaling load further
-
+1. keep current worker concurrency as-is for now
+2. treat current `429` AI/governance responses as expected guardrails
+3. return to FINN/product-quality work and real-user instrumentation before any larger synthetic scale jump

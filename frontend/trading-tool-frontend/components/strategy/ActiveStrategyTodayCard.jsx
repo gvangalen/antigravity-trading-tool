@@ -15,7 +15,7 @@ import { ScoreCardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
 export default function ActiveStrategyTodayCard({ className = "" }) {
   const { strategy, loading } = useActiveStrategyToday();
-  const { btcLive } = useMarketData();
+  const { btcLive } = useMarketData(undefined, { mode: "live" });
 
   if (loading) {
     return <ScoreCardSkeleton className={className} />;

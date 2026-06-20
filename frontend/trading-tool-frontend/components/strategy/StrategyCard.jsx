@@ -31,7 +31,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
   if (!strategy || typeof strategy !== "object") return null;
 
   const { openConfirm, showSnackbar } = useModal();
-  const { btcLive } = useMarketData(strategy.symbol);
+  const { btcLive } = useMarketData(strategy.symbol, { mode: "live" });
 
   const [loading, setLoading] = useState(false);
   const [justUpdated, setJustUpdated] = useState(false);

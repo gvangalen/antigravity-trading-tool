@@ -78,6 +78,11 @@ class AiUsageLog(Base):
     parser_recovery_triggered = Column(Boolean, default=False)
     confidence_score = Column(Numeric(5, 2), default=None, nullable=True)
     safety_guardrail_triggered = Column(Boolean, default=False)
+    request_source = Column(String, default="unclassified")
+    app_env = Column(String, nullable=True)
+    run_kind = Column(String, nullable=True)
+    entry_point = Column(String, nullable=True)
+    user_email_snapshot = Column(String, nullable=True)
 
 class AiResponseCache(Base):
     __tablename__ = 'ai_response_cache'

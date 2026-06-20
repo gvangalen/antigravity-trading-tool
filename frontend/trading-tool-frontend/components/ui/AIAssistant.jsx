@@ -39,17 +39,21 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   const [preferences, setPreferences] = useState({});
   const [insight, setInsight] = useState(null);
   const [insightLoading, setInsightLoading] = useState(false);
+  const [stableBriefingText, setStableBriefingText] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
   const [activeState, setActiveState] = useState(null);
   const [contextMetric, setContextMetric] = useState(null);
   const [finnDraft, setFinnDraft] = useState(null);
   const [missionControl, setMissionControl] = useState(null);
   const [missionControlLoadError, setMissionControlLoadError] = useState(null);
+  const [missionControlLoading, setMissionControlLoading] = useState(false);
   const [executingAction, setExecutingAction] = useState(false);
+  const [missionDetailSection, setMissionDetailSection] = useState("");
   
   const messagesEndRef = useRef(null);
   const scrollRef = useRef(null);
   const loadedFinnStateRef = useRef(false);
+  const missionControlCacheKeyRef = useRef("");
   const activeStreamIdRef = useRef(null);
   const [showReasoning, setShowReasoning] = useState(false);
 
@@ -92,6 +96,12 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   const { stepStatus, onboardingComplete } = useOnboarding();
   const isOnboarding = (pathname.includes("onboarding") || !onboardingComplete) && pathname !== "/dashboard";
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setMissionDetailSection("");
+    setStableBriefingText("");
+  }, [isOpen, pathname, globalSymbol]);
+
   const getMetricTitle = (metric) => {
     const titles = {
       transition_risk: "Transition Risk Analysis",
@@ -121,6 +131,102 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       default:
         return `FINN analyseert momenteel de realtime datastromen voor ${symbol} (${tf}). Alle achtergrondmodellen en risico-parameters draaien binnen normale drempelwaarden.`;
     }
+  };
+
+  const reviewIdentityKey = (item) => {
+    if (!item || typeof item !== "object") return null;
+    if (item.decision_id) return `decision:${item.decision_id}`;
+    const sourceDecisionId = item?.source_ids?.decision_id;
+    if (sourceDecisionId) return `decision:${sourceDecisionId}`;
+    const botId = item?.bot_id || item?.source_ids?.bot_id;
+    const asset = String(item?.asset || item?.source_ids?.asset || "").trim().toUpperCase();
+    const issueType = String(item?.type || item?.status || item?.resolve_state || item?.label || "review").trim().toLowerCase();
+    if (botId) return `bot:${botId}:${asset}:${issueType}`;
+    return item?.id || `${asset}:${issueType}:${item?.title || item?.reason || "review"}`;
+  };
+
+  const isReviewCandidate = (item) => {
+    const type = String(item?.type || "").toLowerCase();
+    const status = String(item?.status || item?.resolve_state || "").toLowerCase();
+    return Boolean(
+      item?.decision_id ||
+      type.includes("bot_decision") ||
+      status.includes("review") ||
+      String(item?.title || "").toLowerCase().includes("review")
+    );
+  };
+
+  const getOpenReviewCandidates = (currentMissionControl) => {
+    return [
+      ...((currentMissionControl?.bot_review_queue || []).filter(Boolean)),
+      ...((currentMissionControl?.workqueue || []).filter((item) => isReviewCandidate(item))),
+    ];
+  };
+
+  const countUniqueReviewCandidates = (currentMissionControl) => {
+    const seen = new Set();
+    let count = 0;
+    for (const item of getOpenReviewCandidates(currentMissionControl)) {
+      const key = reviewIdentityKey(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      count += 1;
+    }
+    return count;
+  };
+
+  const buildBriefingText = (sourceInsight) => {
+    const openReviews = countUniqueReviewCandidates(missionControl);
+    const blockedCount = Number(missionControl?.summary?.blocked_count || 0);
+    const greetingName = preferences?.first_name || "Gerrit";
+    const primaryItem = primaryCoachingItem || missionControl?.bot_review_queue?.[0] || missionControl?.workqueue?.[0] || null;
+    const symbol = String(primaryItem?.asset || context?.symbol || globalSymbol || "BTC").trim().toUpperCase();
+    const postureLabel = String(
+      missionControl?.summary?.posture ||
+      sourceInsight?.market_insight?.posture ||
+      sourceInsight?.bot_insight?.posture ||
+      ""
+    ).toLowerCase();
+    const cycleLabel = String(
+      sourceInsight?.market_insight?.structural_cycle ||
+      sourceInsight?.market_insight?.cycle ||
+      sourceInsight?.market_insight?.regime ||
+      ""
+    ).toLowerCase();
+    const nowHour = new Date().getHours();
+
+    const greetingLine =
+      `${nowHour < 12 ? "Goedemorgen" : nowHour < 18 ? "Goedemiddag" : "Goedenavond"} ${greetingName}.`;
+
+    let marketLine = `${symbol} vraagt vandaag extra geduld. Nieuwe posities forceren wordt afgeraden.`;
+    if (cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")) {
+      marketLine = `${symbol} zit momenteel in een correctiefase. Nieuwe posities forceren wordt vandaag afgeraden.`;
+    } else if (cycleLabel.includes("recovery") || postureLabel.includes("stable")) {
+      marketLine = `${symbol} oogt vandaag rustiger. Nieuwe posities kun je pas overwegen als je reviewpad schoon is.`;
+    } else if (cycleLabel.includes("distribution")) {
+      marketLine = `${symbol} zit in een twijfelzone. Nieuwe posities forceren wordt vandaag afgeraden.`;
+    }
+
+    const reviewCount = Math.max(openReviews || 0, isReviewCandidate(primaryItem) ? 1 : 0);
+    let reviewLine = "Er staat nu geen review op aandacht.";
+    if (reviewCount === 1) {
+      reviewLine = "Er wacht 1 review op aandacht.";
+    } else if (reviewCount > 1) {
+      reviewLine = `Er wachten ${reviewCount} reviews op aandacht.`;
+    } else if (blockedCount > 0) {
+      reviewLine = blockedCount === 1
+        ? "Er staat 1 blokkerend punt open."
+        : `Er staan ${blockedCount} blokkerende punten open.`;
+    }
+
+    const beginTarget = primaryItem
+      ? humanizeMissionTitle(primaryItem).replace(/^Review\s+/i, "Review ")
+      : blockedCount > 0
+        ? "het blokkerende punt"
+        : "je eerstvolgende veilige stap";
+    const beginLine = `Begin met: ${beginTarget}.`;
+
+    return [greetingLine, marketLine, reviewLine, beginLine].filter(Boolean).join("\n");
   };
 
   // Helper to get nested insight consistently
@@ -179,6 +285,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   };
 
   const context = getContext();
+
+  useEffect(() => {
+    missionControlCacheKeyRef.current = `finn-mission-control:${pathname || "/assistant"}:${globalSymbol || context.symbol || "BTC"}`;
+  }, [pathname, globalSymbol, context.symbol]);
 
   const getLatestAssistantState = () => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -387,6 +497,77 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     return <Zap size={11} className="text-amber-500 shrink-0" />;
   };
 
+  const buildMissionActionContext = (action = {}, sourceItem = null) => {
+    const payload = action?.payload && typeof action.payload === "object" ? action.payload : {};
+    const item = sourceItem && typeof sourceItem === "object" ? sourceItem : {};
+    const hasMissionContext = Boolean(
+      payload.current_flow ||
+      payload.decision_id ||
+      payload.bot_id ||
+      item.decision_id ||
+      item.bot_id
+    );
+    if (!hasMissionContext) return null;
+    return {
+      current_flow: payload.current_flow || item.current_flow || "bot_decision_review",
+      asset: payload.asset || item.asset || globalSymbol || null,
+      bot_id: payload.bot_id || item.bot_id || item.asset_bot_id || null,
+      decision_id: payload.decision_id || item.decision_id || null,
+      bot_name: payload.bot_name || item.bot_name || item.friendly_bot_name || null,
+      setup_id: payload.setup_id || item.setup_id || null,
+      strategy_id: payload.strategy_id || item.strategy_id || null,
+      page_type: context.page_type,
+      symbol: payload.asset || item.asset || context.symbol || globalSymbol || null,
+      timeframe: context.timeframe,
+    };
+  };
+
+  const missionBotDisplayName = (item = {}) => {
+    const explicitName = String(item?.bot_name || item?.friendly_bot_name || "").trim();
+    const asset = String(item?.asset || context.symbol || globalSymbol || "").trim().toUpperCase();
+    const setupType = String(item?.setup_type || "").trim().toLowerCase();
+    const setupName = String(item?.setup_name || "").trim();
+    if (explicitName) return explicitName;
+    if (setupType === "dca" && asset) return `je ${asset} DCA-bot`;
+    if (setupType === "trade" && asset) return `je ${asset} trade-bot`;
+    if (setupName && asset) return `je ${asset} bot voor ${setupName}`;
+    if (asset) return `je ${asset} bot`;
+    return "deze bot";
+  };
+
+  const humanizeMissionTitle = (item = {}) => {
+    const rawTitle = String(item?.title || "").trim();
+    const botLabel = missionBotDisplayName(item);
+    const setupName = String(item?.setup_name || "").trim();
+    if (/review bot-decision/i.test(rawTitle) || item?.type === "bot_decision" || item?.decision_id) {
+      if (setupName) return `Review ${botLabel} voor ${setupName}`;
+      return `Review ${botLabel}`;
+    }
+    return rawTitle || "Eerstvolgende stap";
+  };
+
+  const humanizeMissionReason = (item = {}) => {
+    const botName = missionBotDisplayName(item);
+    const summary = String(item?.summary || item?.reason || "").trim();
+    const action = String(item?.action || "").toLowerCase();
+    if (summary.includes("geen orderbedrag") || action === "hold") {
+      return `${botName} wacht nu op review. Controleer of wachten nog klopt.`;
+    }
+    if (summary && /^([A-Z]{2,10}):/i.test(summary)) {
+      return `Controleer de open stap voor ${botName}.`;
+    }
+    return summary || `Controleer de open stap voor ${botName}.`;
+  };
+
+  const humanizeActionLabel = (action = {}, sourceItem = null) => {
+    const handoff = action?.handoff || action?.type;
+    const botName = missionBotDisplayName(sourceItem || action);
+    if (handoff === "bot_decision_review") return `Leg ${botName} uit`;
+    if (handoff === "bot_decision") return `Nieuwe stap voor ${botName}`;
+    if (handoff === "bot_execution_decision") return `Volgende stap voor ${botName}`;
+    return action?.label || "Open";
+  };
+
   const openExecutionConsole = (action = {}) => {
     const botId = action.bot_id || action.botId || action.asset_bot_id || action.payload?.bot_id || null;
     const symbol = action.asset || action.symbol || action.payload?.symbol || globalSymbol || "BTC";
@@ -413,7 +594,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     router.refresh();
   }
 
-  const handleFollowUpAction = async (action) => {
+  const handleFollowUpAction = async (action, sourceItem = null) => {
     if (action?.handoff === "bot_execution_console" || action?.type === "open_bot_execution_console") {
       trackAssistantEvent({
         event_name: "next_best_action_clicked",
@@ -427,6 +608,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       return;
     }
     if (!action?.prompt) return;
+    const overrideContext = buildMissionActionContext(action, sourceItem);
     trackAssistantEvent({
       event_name: "next_best_action_clicked",
       page: pathname || "/assistant",
@@ -435,7 +617,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       flow_type: action?.handoff || "chat",
       next_best_action: action?.label || action?.prompt || null,
     });
-    await handleChat(action.prompt);
+    await handleChat(action.prompt, false, overrideContext);
   };
 
   const buildExecutionConsoleAction = (action, res) => {
@@ -488,7 +670,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     await handleFollowUpAction(action);
   };
 
-  const renderFollowUpButtons = (actions, compact = false) => (
+  const renderFollowUpButtons = (actions, compact = false, sourceItem = null) => (
     <div className={`flex flex-wrap gap-2 ${compact ? "" : "mt-4 pt-3 border-t border-slate-100/50 dark:border-slate-800/50"}`}>
       {!compact && (
         <span className="w-full text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
@@ -498,7 +680,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       {actions.map((action, idx) => (
         <button
           key={`${action.prompt}-${idx}`}
-          onClick={() => handleFollowUpAction(action)}
+          onClick={() => handleFollowUpAction(action, sourceItem)}
           className={`group inline-flex items-center gap-2 rounded-xl border transition-all active:scale-[0.98] text-left ${
             compact
               ? "border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 shadow-sm hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40"
@@ -506,7 +688,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           }`}
         >
           {followUpIcon(action.handoff)}
-          <span className={compact ? "normal-case tracking-normal text-[11px] leading-tight" : ""}>{action.label}</span>
+          <span className={compact ? "normal-case tracking-normal text-[11px] leading-tight" : ""}>
+            {humanizeActionLabel(action, sourceItem)}
+          </span>
           {action.handoff && action.handoff !== "chat" && (
             <span className="rounded-md bg-blue-100 dark:bg-blue-900/50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">
               {followUpLabel(action.handoff)}
@@ -1777,6 +1961,513 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
   const coachingLoopAction = (item) => item?.action || null;
 
+  const missionIdentityKey = (item) => {
+    if (!item || typeof item !== "object") return null;
+    if (item.decision_id) return `decision:${item.decision_id}`;
+    const sourceDecisionId = item.source_ids?.decision_id;
+    if (sourceDecisionId) return `decision:${sourceDecisionId}`;
+    const botId = item.bot_id || item.source_ids?.bot_id;
+    const asset = String(item.asset || item.source_ids?.asset || "").trim().toUpperCase();
+    const issueType = String(item.type || item.status || item.resolve_state || item.label || "item").trim().toLowerCase();
+    if (botId) return `bot:${botId}:${asset}:${issueType}`;
+    return item.id || `${asset}:${issueType}:${item.title || item.reason || "item"}`;
+  };
+
+  const dedupeMissionItems = (items = [], seen = new Set(), limit = Infinity) => {
+    const unique = [];
+    for (const item of items) {
+      if (!item) continue;
+      const key = missionIdentityKey(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      unique.push(item);
+      if (unique.length >= limit) break;
+    }
+    return unique;
+  };
+
+  const isReviewMissionItem = (item) => {
+    const type = String(item?.type || "").toLowerCase();
+    const status = String(item?.status || item?.resolve_state || "").toLowerCase();
+    return Boolean(
+      item?.decision_id ||
+      type.includes("bot_decision") ||
+      status.includes("review") ||
+      String(item?.title || "").toLowerCase().includes("review")
+    );
+  };
+
+  const isRiskMissionItem = (item) => {
+    const type = String(item?.type || "").toLowerCase();
+    const status = String(item?.status || item?.resolve_state || "").toLowerCase();
+    return [
+      "blocked_plan",
+      "portfolio_risk_stack",
+      "portfolio_live_hotspot",
+      "blocker_explanation",
+      "data_gap",
+      "indicator_gap",
+    ].includes(type) || [
+      "blocked",
+      "blocked_by_data",
+      "stacked_risk",
+      "live_hotspot",
+      "waiting_for_data",
+      "monitor_today",
+    ].includes(status);
+  };
+
+  const humanizePlanHealthTitle = (plan = {}) => {
+    const asset = String(plan?.asset || context.symbol || globalSymbol || "BTC").trim().toUpperCase();
+    const status = String(plan?.status || "").toLowerCase();
+    if (status === "blocked") return `${asset} wacht op vrijgave`;
+    if (status === "data_missing") return `${asset} mist nog data`;
+    return `${asset} vraagt aandacht`;
+  };
+
+  const humanizePlanHealthReason = (plan = {}) => {
+    const asset = String(plan?.asset || context.symbol || globalSymbol || "BTC").trim().toUpperCase();
+    const status = String(plan?.status || "").toLowerCase();
+    if (status === "blocked") {
+      return plan?.reason || `${asset} staat klaar, maar wordt nu nog geblokkeerd door je setup- of risicoregels.`;
+    }
+    if (status === "data_missing") {
+      return plan?.reason || `${asset} mist nog score- of indicatorcontext voordat Finn dit veilig kan vrijgeven.`;
+    }
+    return plan?.reason || `${asset} vraagt eerst een korte controle voordat je verdergaat.`;
+  };
+
+  const humanizeRiskClusterTitle = (item = {}) => {
+    const asset = String(item?.asset || context.symbol || globalSymbol || "BTC").trim().toUpperCase();
+    const type = String(item?.type || "").toLowerCase();
+    const title = String(item?.title || "").toLowerCase();
+    if (type === "blocked_plan" || title.includes("vrijgave")) {
+      return `${asset} staat nu op pauze`;
+    }
+    if (type === "portfolio_risk_stack" || title.includes("risico stapelt")) {
+      return `${asset} risico ligt te hoog`;
+    }
+    if (type === "agent_verdict" || title.includes("agent")) {
+      return `${asset} vraagt extra check`;
+    }
+    if (type === "portfolio_live_hotspot") {
+      return `${asset} live bots vragen aandacht`;
+    }
+    return item?.title || `${asset} vraagt aandacht`;
+  };
+
+  const humanizeRiskClusterReason = (item = {}) => {
+    const asset = String(item?.asset || context.symbol || globalSymbol || "BTC").trim().toUpperCase();
+    const type = String(item?.type || "").toLowerCase();
+    const reason = String(item?.reason || "").trim();
+    if (type === "blocked_plan") {
+      return reason || `Macro of je setup houdt nieuwe ${asset}-actie vandaag nog tegen.`;
+    }
+    if (type === "portfolio_risk_stack") {
+      return reason || `${asset} stapelt nu risico doordat meerdere regels tegelijk tegen je werken.`;
+    }
+    if (type === "portfolio_live_hotspot") {
+      return reason || `${asset} heeft live bots die extra aandacht vragen voordat je verdergaat.`;
+    }
+    if (type === "agent_verdict") {
+      return reason || `${asset} krijgt nu een remsignaal uit je controles.`;
+    }
+    return reason || `${asset} vraagt nu eerst extra controle.`;
+  };
+
+  const humanizeMissionBadge = (item = {}, section = "") => {
+    const raw = String(item?.priority || item?.status || "").toLowerCase();
+    const type = String(item?.type || "").toLowerCase();
+
+    if (section === "risk") {
+      if (type === "blocked_plan" || raw.includes("block")) return "nu niet";
+      if (type === "portfolio_risk_stack" || raw.includes("stack")) return "extra risico";
+      if (type === "agent_verdict") return "extra check";
+      if (raw.includes("high")) return "oppassen";
+      if (raw.includes("medium") || raw.includes("wait")) return "let op";
+      return "risico";
+    }
+
+    if (raw.includes("high")) return "nu";
+    if (raw.includes("medium")) return "straks";
+    if (raw.includes("review")) return "review";
+    if (raw.includes("block")) return "geblokkeerd";
+    return item?.priority || item?.status || null;
+  };
+
+  const buildRiskClusters = (items = []) => {
+    const grouped = new Map();
+
+    items.forEach((item) => {
+      if (!item) return;
+      const asset = String(item.asset || context.symbol || globalSymbol || "BTC").trim().toUpperCase();
+      const type = String(item.type || "").toLowerCase();
+      const groupKey = type === "blocked_plan"
+        ? `${asset}:blocked`
+        : type === "portfolio_risk_stack"
+          ? `${asset}:stack`
+          : type === "portfolio_live_hotspot"
+            ? `${asset}:hotspot`
+            : type === "agent_verdict"
+              ? `${asset}:agent`
+              : `${asset}:${type || "risk"}`;
+
+      const current = grouped.get(groupKey);
+      if (!current) {
+        grouped.set(groupKey, {
+          ...item,
+          asset,
+          id: `risk-cluster:${groupKey}`,
+          title: humanizeRiskClusterTitle({ ...item, asset }),
+          reason: humanizeRiskClusterReason({ ...item, asset }),
+        });
+        return;
+      }
+
+      const reasons = [current.reason, humanizeRiskClusterReason({ ...item, asset })]
+        .filter(Boolean)
+        .filter((value, index, array) => array.indexOf(value) === index);
+      current.reason = reasons[0];
+
+      const priorities = [current.priority, item.priority].filter(Boolean);
+      if (priorities.includes("high")) current.priority = "high";
+      else if (priorities.includes("medium")) current.priority = "medium";
+
+      if (!current.next_best_action && item.next_best_action) {
+        current.next_best_action = item.next_best_action;
+      }
+    });
+
+    return Array.from(grouped.values()).slice(0, 4);
+  };
+
+  const humanizeHistoryTitle = (item = {}) => {
+    const asset = String(item?.asset || context.symbol || globalSymbol || "BTC").trim().toUpperCase();
+    const label = String(item?.label || item?.type || "").toLowerCase();
+    const outcome = String(item?.outcome || "").toLowerCase();
+    const status = String(item?.status || "").toLowerCase();
+
+    if (label.includes("review") || outcome.includes("review")) return `${asset} review bekeken`;
+    if (label.includes("blok") || outcome.includes("blok")) return `${asset} blokkade bekeken`;
+    if (status === "snoozed" || outcome.includes("later")) return `${asset} punt uitgesteld`;
+    if (status === "resolved" || status === "executed") return `${asset} stap afgerond`;
+    if (status === "failed") return `${asset} stap mislukte`;
+    return `${asset} Finn-stap bijgewerkt`;
+  };
+
+  const humanizeHistoryReason = (item = {}) => {
+    const outcome = String(item?.outcome || "").trim();
+    const status = String(item?.status || "").toLowerCase();
+    if (outcome) return outcome;
+    if (status === "snoozed") return "Bewust doorgeschoven naar later.";
+    if (status === "resolved" || status === "executed") return "Afgerond in recente Finn-activiteit.";
+    if (status === "failed") return "Deze stap liep niet netjes door.";
+    return "Recente Finn-activiteit.";
+  };
+
+  const humanizeHistoryStatus = (item = {}) => {
+    const status = String(item?.status || "").toLowerCase();
+    if (status === "executed" || status === "resolved") return "afgerond";
+    if (status === "snoozed") return "later";
+    if (status === "failed") return "mislukt";
+    return "recent";
+  };
+
+  const buildMissionOverlaySections = () => {
+    const seen = new Set();
+
+    const priorityCandidates = [
+      ...(missionControl?.coaching_loop?.daily_priority_stack || []),
+      ...(missionControl?.workqueue || []).filter((item) => {
+        const state = String(item?.resolve_state || item?.status || "").toLowerCase();
+        return [
+          "needs_user_confirmation",
+          "review_ready",
+          "blocked",
+          "blocked_by_data",
+          "waiting_for_data",
+        ].includes(state);
+      }),
+    ].filter(Boolean);
+    const todayItems = dedupeMissionItems(priorityCandidates, seen, 3);
+
+    const reviewCandidates = getOpenReviewCandidates(missionControl).filter(Boolean);
+    const totalReviewCount = countUniqueReviewCandidates(missionControl);
+    const allReviewItems = dedupeMissionItems(reviewCandidates, new Set(), 6);
+    const todayReviewKeys = new Set(
+      todayItems.filter((item) => isReviewCandidate(item)).map((item) => reviewIdentityKey(item))
+    );
+    const reviewItems = allReviewItems.filter((item) => !todayReviewKeys.has(reviewIdentityKey(item)));
+
+    const blockedPlans = (missionControl?.plan_health || [])
+      .filter((item) => item?.status && item.status !== "active")
+      .map((item) => ({
+        ...item,
+        id: `plan-health:${item.asset}:${item.status}:${item.setup?.id || "none"}`,
+        type: item.status === "data_missing" ? "data_gap" : "blocked_plan",
+        title: humanizePlanHealthTitle(item),
+        reason: humanizePlanHealthReason(item),
+      }));
+
+    const verdictRiskItems = (missionControl?.agent_verdicts || [])
+      .filter((verdict) => {
+        const status = String(verdict?.status || "").toLowerCase();
+        return !["clear", "quiet", "ready", "no_open_decision", "no_decision", "stable"].includes(status);
+      })
+      .slice(0, 3)
+      .map((verdict, index) => ({
+        id: `verdict:${verdict.agent || index}`,
+        type: "agent_verdict",
+        asset: verdict.asset || context.symbol || globalSymbol || null,
+        title: verdict.label || "Risico-agent",
+        reason: verdict.reason,
+        status: verdict.status,
+        next_best_action: verdict.next_action
+          ? {
+              type: "chat_prompt",
+              label: verdict.label ? `Waarom ${verdict.label}?` : "Waarom blokkeert dit?",
+              prompt: verdict.next_action,
+              handoff: "daily_coach",
+              requires_confirmation: false,
+            }
+          : null,
+      }));
+
+    const portfolioRiskItems = [
+      ...((missionControl?.portfolio_risk?.risk_stacks || []).slice(0, 3).map((stack, index) => ({
+        id: `risk-stack:${stack.asset || index}`,
+        type: "portfolio_risk_stack",
+        asset: stack.asset,
+        title: `${String(stack.asset || "Portfolio").toUpperCase()} risico stapelt`,
+        reason: stack.reason,
+        risk_score: stack.risk_score,
+        next_best_action: {
+          type: "chat_prompt",
+          label: `${String(stack.asset || "BTC").toUpperCase()} risk stack uitleg`,
+          prompt: `Welke risico's stapelen nu voor ${String(stack.asset || "BTC").toUpperCase()}?`,
+          handoff: "daily_coach",
+          requires_confirmation: false,
+        },
+      })) || []),
+      ...((missionControl?.portfolio_risk?.live_bot_hotspots || []).slice(0, 2).map((hotspot, index) => ({
+        id: `live-hotspot:${hotspot.asset || index}`,
+        type: "portfolio_live_hotspot",
+        asset: hotspot.asset,
+        title: `${String(hotspot.asset || "Portfolio").toUpperCase()} live bots vragen aandacht`,
+        reason: hotspot.summary || hotspot.reason,
+        risk_score: hotspot.risk_score,
+      })) || []),
+    ];
+
+    const riskCandidates = [...blockedPlans, ...portfolioRiskItems, ...verdictRiskItems].filter(Boolean);
+    const riskItems = buildRiskClusters(dedupeMissionItems(riskCandidates, seen, 8));
+
+    const performanceCards = [];
+    if (missionControl?.day_log) {
+      const resolvedCount = missionControl.day_log.resolved_count || 0;
+      const snoozedCount = missionControl.day_log.snoozed_count || 0;
+      let rhythmSummary = null;
+      if (resolvedCount > 0 && snoozedCount > 0) {
+        rhythmSummary = "Je hebt vandaag dingen bewust afgerond en andere bewust naar later gezet.";
+      } else if (resolvedCount > 0) {
+        rhythmSummary = "Je hebt vandaag bewust dingen afgerond.";
+      } else if (snoozedCount > 0) {
+        rhythmSummary = "Je hebt vandaag bewust dingen naar later geschoven.";
+      } else if ((missionControl.day_log.handled_count || 0) > 0) {
+        rhythmSummary = "Finn zag vandaag beweging in je werkritme.";
+      }
+
+      if (rhythmSummary) {
+        performanceCards.push({
+          key: "day-log",
+          title: "Werkritme vandaag",
+          summary: rhythmSummary,
+          tone: "neutral",
+        });
+      }
+    }
+    if (missionControl?.behavioral_insight?.coaching) {
+      performanceCards.push({
+        key: "behavior",
+        title: "Gedrag & discipline",
+        summary: missionControl.behavioral_insight.coaching.primary_reflection,
+        status: behavioralStatusLabel(missionControl?.behavioral_insight?.status),
+        tone: missionControl?.behavioral_insight?.status === "attention" ? "attention" : "positive",
+      });
+    }
+    const historyItems = (missionControl?.activity_feed || [])
+      .filter((item) => {
+        const status = String(item?.status || "").toLowerCase();
+        return ![
+          "needs_user_confirmation",
+          "review_ready",
+          "blocked",
+          "blocked_by_data",
+          "waiting_for_data",
+          "pending",
+        ].includes(status);
+      })
+      .filter(Boolean)
+      .slice(0, 6);
+
+    return {
+      todayItems,
+      totalReviewCount,
+      reviewItems: reviewItems.slice(0, 6),
+      riskItems,
+      performanceCards: performanceCards.slice(0, 2),
+      historyItems,
+    };
+  };
+
+  const renderMissionActionRow = (item, section) => {
+    const action = missionPrimaryAction(item) || coachingLoopAction(item) || item?.next_best_action || item?.action || null;
+    const resolveActions = Array.isArray(item?.resolve_actions) ? item.resolve_actions : [];
+    const markDone = resolveActions.find((candidate) => candidate?.resolution === "resolved");
+    const snooze = resolveActions.find((candidate) => candidate?.resolution === "snoozed");
+
+    return (
+      <div className="mt-3 space-y-2">
+        {action && (
+          <button
+            type="button"
+            onClick={() => handleFollowUpAction(action, item)}
+            disabled={executingAction}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-3 text-[11px] font-black text-white shadow-lg shadow-blue-600/15 transition-colors hover:bg-blue-700 disabled:opacity-60"
+          >
+            {followUpIcon(action.handoff || action.type)}
+            <span className="leading-tight">{humanizeActionLabel(action, item)}</span>
+          </button>
+        )}
+        {(section === "today" || section === "reviews") && (markDone || snooze) && (
+          <div className="flex flex-wrap gap-2">
+            {markDone && (
+              <button
+                type="button"
+                onClick={() => handleMissionPrimaryAction(markDone)}
+                disabled={executingAction}
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-[10px] font-black text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-60 dark:border-emerald-900/50 dark:bg-slate-950/40 dark:text-emerald-300"
+              >
+                <CheckCircle2 size={11} />
+                Markeer klaar
+              </button>
+            )}
+            {snooze && (
+              <button
+                type="button"
+                onClick={() => handleMissionPrimaryAction(snooze)}
+                disabled={executingAction}
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300"
+              >
+                <Activity size={11} />
+                Later bekijken
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderMissionSectionCard = (item, section) => {
+    if (!item) return null;
+    const tone = section === "today"
+      ? "border-blue-100 dark:border-blue-900/50 bg-blue-50/45 dark:bg-blue-950/15"
+      : section === "reviews"
+        ? "border-violet-100 dark:border-violet-900/50 bg-violet-50/45 dark:bg-violet-950/15"
+        : "border-rose-100 dark:border-rose-900/50 bg-rose-50/45 dark:bg-rose-950/15";
+
+    return (
+      <div key={missionIdentityKey(item) || item.id || item.title} className={`rounded-xl border px-3 py-3 ${tone}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
+              {section === "risk" && !isReviewMissionItem(item)
+                ? (item.title || humanizePlanHealthTitle(item))
+                : humanizeMissionTitle(item)}
+            </p>
+            <p className="mt-1 text-[10px] font-semibold leading-snug text-slate-600 dark:text-slate-300">
+              {section === "risk" && !isReviewMissionItem(item)
+                ? (item.reason || humanizePlanHealthReason(item))
+                : humanizeMissionReason(item)}
+            </p>
+          </div>
+          {humanizeMissionBadge(item, section) && (
+            <span className={`text-[8px] font-black uppercase tracking-widest ${
+              String(item.priority || item.status).toLowerCase().includes("high") || String(item.status || "").toLowerCase().includes("block")
+                ? "text-rose-600"
+                : String(item.priority || item.status).toLowerCase().includes("medium") || String(item.status || "").toLowerCase().includes("wait")
+                  ? "text-amber-600"
+                  : "text-emerald-600"
+            }`}>
+              {humanizeMissionBadge(item, section)}
+            </span>
+          )}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {item.asset && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+              {item.asset}
+            </span>
+          )}
+          {item.freshness?.label && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+              {item.freshness.label}
+            </span>
+          )}
+          {item.review_status && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+              {item.review_status}
+            </span>
+          )}
+          {typeof item.confidence === "number" && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+              conf {Math.round(item.confidence * 100)}%
+            </span>
+          )}
+        </div>
+        {renderMissionActionRow(item, section)}
+      </div>
+    );
+  };
+
+  const renderMissionHistoryEntry = (item) => {
+    if (!item) return null;
+    return (
+      <div key={item.id} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 px-3 py-2">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 leading-tight">
+            {humanizeHistoryTitle(item)}
+          </span>
+          <span className={`text-[8px] font-black uppercase tracking-widest ${
+            item.status === "executed" || item.status === "resolved"
+              ? "text-emerald-600"
+              : item.status === "failed"
+                ? "text-rose-600"
+                : "text-slate-400"
+          }`}>
+            {humanizeHistoryStatus(item)}
+          </span>
+        </div>
+        <p className="mt-1 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+          {humanizeHistoryReason(item)}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {item.asset && (
+            <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+              {item.asset}
+            </span>
+          )}
+          {item.agent_accountability?.dominant_label && (
+            <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-300">
+              {item.agent_accountability.dominant_label}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const handleMissionPrimaryAction = async (action) => {
     if (!action) return;
     if (action.prompt) {
@@ -1850,7 +2541,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       <div key={item.id || item.title} className={`rounded-xl border px-3 py-2 ${toneClasses}`}>
         <div className="flex items-center justify-between gap-3">
           <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 leading-tight">
-            {item.title}
+            {humanizeMissionTitle(item)}
           </span>
           {item.priority && (
             <span className={`text-[8px] font-black uppercase tracking-widest ${
@@ -1862,7 +2553,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         </div>
         {item.reason && (
           <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
-            {item.reason}
+            {humanizeMissionReason(item)}
           </p>
         )}
         {item.why_now && (
@@ -1885,12 +2576,12 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {action && (
           <button
             type="button"
-            onClick={() => handleMissionPrimaryAction(action)}
+            onClick={() => handleFollowUpAction(action, item)}
             disabled={executingAction}
             className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 shadow-sm transition-all hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 active:scale-[0.98] disabled:opacity-60"
           >
             {followUpIcon(action.handoff || action.type)}
-            <span className="normal-case tracking-normal text-[11px] leading-tight">{action.label}</span>
+            <span className="normal-case tracking-normal text-[11px] leading-tight">{humanizeActionLabel(action, item)}</span>
           </button>
         )}
       </div>
@@ -1912,7 +2603,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       <div key={item.id} className={`rounded-xl border px-3 py-2 ${missionItemTone(item)}`}>
         <div className="flex items-center justify-between gap-3">
           <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 leading-tight">
-            {item.title}
+            {humanizeMissionTitle(item)}
           </span>
           <span className={`text-[8px] font-black uppercase tracking-widest ${
             item.priority === "high" ? "text-rose-600" : item.priority === "medium" ? "text-amber-600" : "text-emerald-600"
@@ -1921,7 +2612,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           </span>
         </div>
         <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
-          {item.reason}
+          {humanizeMissionReason(item)}
         </p>
         <div className="mt-2 flex flex-wrap gap-1">
           <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
@@ -1953,12 +2644,12 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {action && (
           <button
             type="button"
-            onClick={() => handleMissionPrimaryAction(action)}
+            onClick={() => handleFollowUpAction(action, item)}
             disabled={executingAction}
             className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 shadow-sm transition-all hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 active:scale-[0.98] disabled:opacity-60"
           >
             {followUpIcon(action.handoff || action.type)}
-            <span className="normal-case tracking-normal text-[11px] leading-tight">{action.label}</span>
+            <span className="normal-case tracking-normal text-[11px] leading-tight">{humanizeActionLabel(action, item)}</span>
           </button>
         )}
         {Array.isArray(item.resolve_actions) && item.resolve_actions.length > 0 && (
@@ -2066,6 +2757,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     try {
       const res = await fetchAssistantInsight(context);
       setInsight(res);
+      setStableBriefingText((current) => current || buildBriefingText(res));
       setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error("Failed to fetch AI insight", err);
@@ -2075,6 +2767,20 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   }
 
   async function loadMissionControl() {
+    setMissionControlLoading(true);
+    if (!missionControl && typeof window !== "undefined" && missionControlCacheKeyRef.current) {
+      try {
+        const cached = window.sessionStorage.getItem(missionControlCacheKeyRef.current);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && typeof parsed === "object") {
+            setMissionControl((current) => current || parsed);
+          }
+        }
+      } catch (err) {
+        console.warn("Finn Mission Control cache read failed", err);
+      }
+    }
     let lastError = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -2140,7 +2846,15 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             }
           : null;
         setMissionControl(normalized);
+        if (normalized && typeof window !== "undefined" && missionControlCacheKeyRef.current) {
+          try {
+            window.sessionStorage.setItem(missionControlCacheKeyRef.current, JSON.stringify(normalized));
+          } catch (err) {
+            console.warn("Finn Mission Control cache write failed", err);
+          }
+        }
         setMissionControlLoadError(null);
+        setMissionControlLoading(false);
         return normalized;
       } catch (err) {
         lastError = err;
@@ -2151,6 +2865,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     }
     console.error("Finn overzicht laden mislukt", lastError);
     setMissionControlLoadError(lastError?.message || "Finn overzicht tijdelijk niet beschikbaar.");
+    setMissionControlLoading(false);
     return null;
   }
 
@@ -3166,6 +3881,93 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       ? "Paper"
       : "Read-only";
 
+  const shouldCondenseMissionControl = pathname === "/dashboard" && !isOnboarding;
+  const showFullMissionControl = !shouldCondenseMissionControl;
+  const overlayMissionSections = buildMissionOverlaySections();
+  const primaryCoachingItem =
+    overlayMissionSections.todayItems?.[0] ||
+    missionControl?.coaching_loop?.daily_priority_stack?.[0] ||
+    missionControl?.workqueue?.[0] ||
+    missionControl?.coaching_loop?.monitor_only?.[0] ||
+    missionControl?.coaching_loop?.suppressed_items?.[0] ||
+    null;
+  const compactMissionActions = normalizeFollowUpActions([
+    missionControl?.agent_controller?.primary_action,
+    ...(missionControl?.coaching_loop?.operator_handoffs || []),
+    ...(missionControl?.open_actions || []),
+  ]).slice(0, 2);
+  const briefingFollowUpActions = shouldCondenseMissionControl
+    ? []
+    : getBriefingFollowUpActions();
+  const primaryMissionAction = coachingLoopAction(primaryCoachingItem) || compactMissionActions[0] || null;
+  const compactMissionReason =
+    (primaryCoachingItem ? humanizeMissionReason(primaryCoachingItem) : null) ||
+    primaryCoachingItem?.why_now ||
+    missionControl?.behavioral_insight?.coaching?.safe_next_step ||
+    missionControl?.behavioral_insight?.coaching?.primary_reflection ||
+    missionControl?.summary?.headline ||
+    null;
+  const missionDetailSections = [
+    {
+      key: "today",
+      label: "Vandaag",
+      count: overlayMissionSections.todayItems.length,
+      summary: "Wat Finn nu het eerst van je vraagt. Rond dit af of stel het bewust uit.",
+    },
+    {
+      key: "reviews",
+      label: "Reviews",
+      count: overlayMissionSections.reviewItems.length,
+      summary: "Open reviews die nog niet al bovenaan in Vandaag staan.",
+    },
+    ...(overlayMissionSections.riskItems.length > 0
+      ? [{
+          key: "risk",
+          label: "Risico's",
+          count: overlayMissionSections.riskItems.length,
+          summary: "Wat je nu remt en waarom.",
+        }]
+      : []),
+    ...(overlayMissionSections.performanceCards.length > 0
+      ? [{
+          key: "performance",
+          label: "Performance",
+          count: overlayMissionSections.performanceCards.length,
+          summary: "Zo liep je ritme vandaag.",
+        }]
+      : []),
+    {
+      key: "history",
+      label: "Historie",
+      count: overlayMissionSections.historyItems.length,
+      summary: "Terugblik op recente Finn-activiteit.",
+    },
+  ];
+  const openSummaryCount = overlayMissionSections.todayItems.length || missionControl?.summary?.open_action_count || 0;
+  const openItemsAreReviews =
+    overlayMissionSections.todayItems.length > 0 &&
+    overlayMissionSections.todayItems.every((item) => isReviewCandidate(item));
+  const compactOpenLabel = openItemsAreReviews
+    ? (openSummaryCount === 1 ? "1 review open" : `${openSummaryCount} reviews open`)
+    : (openSummaryCount === 1 ? "1 aandachtspunt open" : `${openSummaryCount} aandachtspunten open`);
+  const showMissionSection = (key) => (showFullMissionControl || shouldCondenseMissionControl) && missionDetailSection === key;
+
+  useEffect(() => {
+    if (!isOpen || isOnboarding) return;
+    const nextBriefing = buildBriefingText(insight);
+    if (nextBriefing) {
+      setStableBriefingText(nextBriefing);
+    }
+  }, [
+    isOpen,
+    isOnboarding,
+    insight,
+    missionControl,
+    preferences?.first_name,
+    context.symbol,
+    primaryCoachingItem,
+  ]);
+
   if (!isOpen) return null;
 
   return (
@@ -3259,18 +4061,31 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
-                "{insight?.greeting || `Hallo ${preferences?.first_name || 'Henk'}, alle ${context.symbol} feeds draaien stabiel.`} {getInsightField('bot_insight', 'conclusion') || getInsightField('market_insight', 'conclusion') || "BTC bevindt zich momenteel in een consolidatiefase met verhoogd correctierisico zolang volume achterblijft."}"
-              </p>
-              {getBriefingFollowUpActions().length > 0 && (
-                renderFollowUpButtons(getBriefingFollowUpActions(), true)
+              <div className="min-h-[52px]">
+                {stableBriefingText ? (
+                  <p className="whitespace-pre-line text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
+                    {stableBriefingText}
+                  </p>
+                ) : insightLoading ? (
+                  <div className="border-l-3 border-blue-500 pl-3 py-1 space-y-2 animate-pulse">
+                    <div className="h-3 w-11/12 rounded-full bg-slate-200 dark:bg-slate-800" />
+                    <div className="h-3 w-8/12 rounded-full bg-slate-200 dark:bg-slate-800" />
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-line text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
+                    {buildBriefingText(insight)}
+                  </p>
+                )}
+              </div>
+              {briefingFollowUpActions.length > 0 && (
+                renderFollowUpButtons(briefingFollowUpActions, true)
               )}
             </div>
           )}
         </div>
 
         {/* SECTION 1B — FINN Mission Control */}
-        {(missionControl?.summary || missionControl?.coaching_loop || missionControl?.behavioral_insight) && (
+        {(shouldCondenseMissionControl || missionControlLoading || missionControl?.summary || missionControl?.coaching_loop || missionControl?.behavioral_insight) && (
           <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f172a] space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
@@ -3278,567 +4093,192 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Werkoverzicht</span>
               </div>
               <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
-                missionControl.summary?.posture === "stable"
+                missionControl?.summary?.posture === "stable"
                   ? "bg-emerald-50 text-emerald-600 border-emerald-200/70 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800/50"
                   : "bg-amber-50 text-amber-700 border-amber-200/70 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800/50"
               }`}>
-                {missionControl.summary?.open_action_count || missionControl.coaching_loop?.daily_priority_stack?.length || 0} open
+                {compactOpenLabel}
               </span>
             </div>
 
-            {missionControl.summary && (
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                ["Actief", missionControl.summary.active_count || 0, "text-emerald-600"],
-                ["Geblokkeerd", missionControl.summary.blocked_count || 0, "text-rose-600"],
-                ["Data", missionControl.summary.data_missing_count || 0, "text-amber-600"],
-              ].map(([label, value, tone]) => (
-                <div key={label} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-2.5">
-                  <div className={`text-sm font-black tabular-nums ${tone}`}>{value}</div>
-                  <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">{label}</div>
+            {missionControlLoading && !missionControl && (
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 px-3 py-3 space-y-2 animate-pulse">
+                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                  <Sparkles size={11} className="text-blue-500" />
+                  Finn haalt je werkoverzicht op
                 </div>
-              ))}
-            </div>
-            )}
-
-            {missionControl.summary && (missionControl.summary.portfolio_ignore_today_count > 0 || missionControl.summary.portfolio_live_hotspot_count > 0) && (
-              <div className="grid grid-cols-2 gap-2">
-                {missionControl.summary.portfolio_ignore_today_count > 0 && (
-                  <div className="rounded-xl border border-rose-100 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/20 p-2.5">
-                    <div className="text-sm font-black tabular-nums text-rose-600 dark:text-rose-300">
-                      {missionControl.summary.portfolio_ignore_today_count}
-                    </div>
-                    <div className="text-[8px] font-black uppercase tracking-widest text-rose-500 dark:text-rose-300/80">
-                      Ignore today
-                    </div>
-                  </div>
-                )}
-                {missionControl.summary.portfolio_live_hotspot_count > 0 && (
-                  <div className="rounded-xl border border-amber-100 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 p-2.5">
-                    <div className="text-sm font-black tabular-nums text-amber-700 dark:text-amber-300">
-                      {missionControl.summary.portfolio_live_hotspot_count}
-                    </div>
-                    <div className="text-[8px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-300/80">
-                      Live hotspots
-                    </div>
-                  </div>
-                )}
+                <div className="h-3 w-2/3 rounded-full bg-slate-200 dark:bg-slate-800" />
+                <div className="h-3 w-1/2 rounded-full bg-slate-200 dark:bg-slate-800" />
               </div>
             )}
 
-            {missionControl.day_log?.handled_count > 0 && (
-              <div className="rounded-xl border border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-2">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-                    Vandaag afgehandeld
-                  </span>
-                  <span className="text-sm font-black tabular-nums text-emerald-700 dark:text-emerald-300">
-                    {missionControl.day_log.handled_count}
-                  </span>
+            {!showFullMissionControl && (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 px-3 py-3 space-y-3">
+                  <div>
+                    <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">Vandaag eerst</div>
+                    <p className="mt-1 text-[12px] font-black leading-snug text-slate-900 dark:text-slate-100">
+                      {primaryCoachingItem ? humanizeMissionTitle(primaryCoachingItem) : (missionControl?.coaching_loop?.headline || "Kies eerst je eerstvolgende veilige stap.")}
+                    </p>
+                    {compactMissionReason && (
+                      <div className="mt-2">
+                        <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Waarom</div>
+                        <p className="mt-1 text-[10px] font-semibold leading-snug text-slate-600 dark:text-slate-300">
+                          {compactMissionReason}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  {primaryMissionAction && (
+                    <button
+                      type="button"
+                      onClick={() => handleFollowUpAction(primaryMissionAction, primaryCoachingItem)}
+                      disabled={executingAction}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-3 text-[11px] font-black text-white shadow-lg shadow-blue-600/15 transition-colors hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      {followUpIcon(primaryMissionAction.handoff || primaryMissionAction.type)}
+                      <span className="leading-tight">{humanizeActionLabel(primaryMissionAction, primaryCoachingItem)}</span>
+                    </button>
+                  )}
                 </div>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {[
-                    ["klaar", missionControl.day_log.resolved_count],
-                    ["monitor", missionControl.day_log.monitor_count],
-                    ["data", missionControl.day_log.waiting_for_data_count],
-                    ["later", missionControl.day_log.snoozed_count],
-                    ["skip", missionControl.day_log.skipped_count],
-                  ].filter(([, value]) => value > 0).map(([label, value]) => (
-                    <span key={label} className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-                      {label} {value}
-                    </span>
+
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 overflow-hidden">
+                  {missionDetailSections.map((section, index) => (
+                    <button
+                      key={section.key}
+                      type="button"
+                      onClick={() => setMissionDetailSection((current) => current === section.key ? "" : section.key)}
+                      className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
+                        missionDetailSection === section.key
+                          ? "bg-blue-50/70 text-blue-700 dark:bg-blue-950/20 dark:text-blue-300"
+                          : "bg-transparent text-slate-900 dark:text-slate-100 hover:bg-slate-100/70 dark:hover:bg-slate-900/40"
+                      } ${index !== missionDetailSections.length - 1 ? "border-b border-slate-200 dark:border-slate-800" : ""}`}
+                    >
+                      <span className="text-[11px] font-black tracking-wide">
+                        {section.label} <span className="text-slate-400 dark:text-slate-500">({section.count})</span>
+                      </span>
+                      <ChevronDown size={16} className={`transition-transform ${missionDetailSection === section.key ? "rotate-180" : ""}`} />
+                    </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {missionControl.behavioral_insight?.coaching && (
-              <div className={`rounded-xl border px-3 py-2 ${behavioralTone(missionControl.behavioral_insight.status)}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
-                    <Brain size={11} />
-                    Gedrag & discipline
-                  </span>
-                  <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
-                    {behavioralStatusLabel(missionControl.behavioral_insight.status)}
-                  </span>
-                </div>
-                <p className="mt-1.5 text-[10px] font-semibold leading-snug">
-                  {missionControl.behavioral_insight.coaching.primary_reflection}
-                </p>
-                {missionControl.behavioral_insight.behavioral_profile?.label && (
-                  <p className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-80">
-                    {missionControl.behavioral_insight.behavioral_profile.label}
-                  </p>
-                )}
-                {Array.isArray(missionControl.behavioral_insight.risk_flags) && missionControl.behavioral_insight.risk_flags.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {missionControl.behavioral_insight.risk_flags.slice(0, 2).map((flag) => (
-                      <span
-                        key={flag.id || flag.label}
-                        className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest"
-                      >
-                        {flag.label}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {missionControl.behavioral_insight.coaching.safe_next_step && (
-                  <p className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-80">
-                    {missionControl.behavioral_insight.coaching.safe_next_step}
-                  </p>
-                )}
-                {(missionControl.behavioral_profile?.label || missionControl.trend?.summary || Array.isArray(missionControl.risk_flags) && missionControl.risk_flags.length > 0) && (
-                  <div className="mt-2 rounded-lg border border-white/60 dark:border-slate-900/40 bg-white/70 dark:bg-slate-950/35 p-2.5 space-y-2">
-                    {missionControl.behavioral_profile?.label && (
-                      <div>
-                        <div className="text-[7px] font-black uppercase tracking-widest opacity-70">Gedragsprofiel</div>
-                        <div className="text-[10px] font-semibold leading-snug">{missionControl.behavioral_profile.label}</div>
-                      </div>
-                    )}
-                    {missionControl.trend?.summary && (
-                      <div>
-                        <div className="text-[7px] font-black uppercase tracking-widest opacity-70">Meerweekse trend</div>
-                        <div className="text-[10px] font-semibold leading-snug">{missionControl.trend.summary}</div>
-                      </div>
-                    )}
-                    {Array.isArray(missionControl.risk_flags) && missionControl.risk_flags.length > 0 && (
-                      <div>
-                        <div className="text-[7px] font-black uppercase tracking-widest opacity-70">Waar Finn rem houdt</div>
-                        <div className="mt-1 flex flex-wrap gap-1.5">
-                          {missionControl.risk_flags.slice(0, 2).map((flag) => (
-                            <span
-                              key={flag.id || flag.label}
-                              className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest"
-                            >
-                              {flag.label}
-                            </span>
-                          ))}
-                        </div>
+            {missionDetailSections.map((section) => {
+              if (missionDetailSection !== section.key) return null;
+
+              if (section.key === "today") {
+                return (
+                  <div key={section.key} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-3 space-y-3">
+                    <p className="text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                      {section.summary}
+                    </p>
+                    {overlayMissionSections.todayItems.length > 0 ? (
+                      overlayMissionSections.todayItems.map((item) => renderMissionSectionCard(item, "today"))
+                    ) : (
+                      <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                        Geen directe acties open. Zodra er weer iets nu aandacht vraagt, zet Finn het hier bovenaan.
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            )}
+                );
+              }
 
-            {missionControl.coaching_loop && (
-              <div className="rounded-2xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/15 p-3 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-                      <Target size={11} />
-                      Coaching Loop 3.0
-                    </div>
-                    <p className="mt-1 text-[11px] font-black text-slate-900 dark:text-slate-100 leading-snug">
-                      {missionControl.coaching_loop.headline}
+              if (section.key === "reviews") {
+                return (
+                  <div key={section.key} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-3 space-y-3">
+                    <p className="text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                      {section.summary}
                     </p>
-                    {missionControl.coaching_loop.today_focus && (
-                      <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
-                        {missionControl.coaching_loop.today_focus}
-                      </p>
+                    {overlayMissionSections.reviewItems.length > 0 ? (
+                      overlayMissionSections.reviewItems.map((item) => renderMissionSectionCard(item, "reviews"))
+                    ) : (
+                      <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                        Geen extra reviews op dit moment. Alles wat nu jouw review vraagt staat al in Vandaag.
+                      </div>
                     )}
                   </div>
-                  <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-                    {missionControl.coaching_loop.status}
-                  </span>
-                </div>
+                );
+              }
 
-                {Array.isArray(missionControl.coaching_loop.daily_priority_stack) && missionControl.coaching_loop.daily_priority_stack.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">Vandaag eerst</div>
-                    {missionControl.coaching_loop.daily_priority_stack.slice(0, 3).map((item) => renderCoachingLoopEntry(
-                      item,
-                      item.lane === "act_now" ? "rose" : item.lane === "review_then_act" ? "amber" : "slate",
-                    ))}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 gap-3">
-                  {Array.isArray(missionControl.coaching_loop.monitor_only) && missionControl.coaching_loop.monitor_only.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">Alleen monitoren</div>
-                      {missionControl.coaching_loop.monitor_only.slice(0, 2).map((item) => renderCoachingLoopEntry(item, "slate"))}
-                    </div>
-                  )}
-                  {Array.isArray(missionControl.coaching_loop.suppressed_items) && missionControl.coaching_loop.suppressed_items.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">Vandaag bewust niet doen</div>
-                      {missionControl.coaching_loop.suppressed_items.slice(0, 3).map((item) => renderCoachingLoopEntry(item, "amber"))}
-                    </div>
-                  )}
-                </div>
-
-                {Array.isArray(missionControl.coaching_loop.operator_handoffs) && missionControl.coaching_loop.operator_handoffs.length > 0 && (
-                  <div>
-                    <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-2">Hand-offs</div>
-                    {renderFollowUpButtons(missionControl.coaching_loop.operator_handoffs, true)}
-                  </div>
-                )}
-
-                {missionControl.coaching_loop.do_not_do && (
-                  <div className="rounded-xl border border-violet-100 dark:border-violet-900/40 bg-white/75 dark:bg-slate-950/30 px-3 py-2">
-                    <div className="text-[8px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-                      Niet doen vandaag
-                    </div>
-                    <p className="mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
-                      {missionControl.coaching_loop.do_not_do}
+              if (section.key === "risk") {
+                return (
+                  <div key={section.key} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-3 space-y-3">
+                    <p className="text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                      {section.summary}
                     </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {renderMissionControlV3Surface()}
-
-            {Array.isArray(missionControl.agent_verdicts) && missionControl.agent_verdicts.length > 0 && (
-              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/65 dark:bg-slate-900/40 p-3">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-400">
-                    <Brain size={11} className="text-blue-500" />
-                    Controlelagen
-                  </span>
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
-                    {missionControl.agent_verdicts.length}
-                  </span>
-                </div>
-                {renderAgentController(missionControl.agent_controller, true)}
-                {missionControl.agent_accountability?.performance_light?.summary && (
-                  <div className="mt-2 rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 px-3 py-2 text-blue-700 dark:text-blue-300">
-                    <div className="text-[8px] font-black uppercase tracking-widest opacity-75">
-                      Verbeterpunt
-                    </div>
-                    <p className="mt-1 text-[10px] font-semibold leading-snug">
-                      {missionControl.agent_accountability.performance_light.summary}
-                    </p>
-                  </div>
-                )}
-                {renderAgentVerdicts(missionControl.agent_verdicts, true)}
-              </div>
-            )}
-
-            {renderPortfolioRisk(missionControl.portfolio_risk, true)}
-
-            {Array.isArray(missionControl.workqueue) && missionControl.workqueue.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-400">
-                    <ListChecks size={11} className="text-blue-500" />
-                    Werkvolgorde
-                  </div>
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
-                    {missionControl.summary.workqueue_count || missionControl.workqueue.length} items
-                  </span>
-                </div>
-                {missionWorkqueueSections().map((section) => (
-                  <div key={section.key} className={`rounded-2xl border p-2 space-y-1.5 ${missionSectionTone(section.tone)}`}>
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-[8px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                        {section.title}
-                      </span>
-                      <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
-                        {section.items.length}
-                      </span>
-                    </div>
-                    {section.items.slice(0, 3).map(renderMissionWorkqueueItem)}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {Array.isArray(missionControl.plan_health) && missionControl.plan_health.length > 0 && (
-              <div className="space-y-1.5">
-                {missionControl.plan_health.slice(0, 3).map((item) => (
-                  <div key={`${item.asset}-${item.setup?.id || item.reason}`} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 px-3 py-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                        {item.asset} · {item.priority}
-                      </span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {typeof item.health_score === "number" && (
-                          <span className="text-[10px] font-black tabular-nums text-slate-700 dark:text-slate-200">
-                            {item.health_score}
-                          </span>
-                        )}
-                        <span className={`text-[8px] font-black uppercase tracking-widest ${
-                          item.status === "active" ? "text-emerald-600" : item.status === "blocked" ? "text-rose-600" : "text-amber-600"
-                        }`}>
-                          {item.health_grade || item.status}
-                        </span>
+                    {overlayMissionSections.riskItems.length > 0 ? (
+                      overlayMissionSections.riskItems.map((item) => renderMissionSectionCard(item, "risk"))
+                    ) : (
+                      <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                        Er zijn nu geen extra blokkades of conflicten die je eerst moet oplossen.
                       </div>
-                    </div>
-                    <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
-                      {item.reason}
+                    )}
+                  </div>
+                );
+              }
+
+              if (section.key === "performance") {
+                return (
+                  <div key={section.key} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-3 space-y-3">
+                    <p className="text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                      {section.summary}
                     </p>
-                    {Array.isArray(item.category_checks) && item.category_checks.length > 0 && (
-                      <div className="mt-2 grid grid-cols-3 gap-1">
-                        {item.category_checks.slice(0, 3).map((check) => (
-                          <div key={`${item.asset}-${check.category}`} className="rounded-lg bg-white/70 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800 px-1.5 py-1">
-                            <div className={`text-[7px] font-black uppercase tracking-widest ${
-                              check.status === "passed" ? "text-emerald-600" : check.status === "blocked" ? "text-rose-600" : "text-slate-400"
-                            }`}>
-                              {check.category}
+                    {overlayMissionSections.performanceCards.length > 0 ? (
+                      <div className="space-y-2">
+                        {overlayMissionSections.performanceCards.map((card) => (
+                          <div
+                            key={card.key}
+                            className={`rounded-xl border px-3 py-3 ${
+                              card.tone === "positive"
+                                ? "border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/30 dark:bg-emerald-950/10"
+                                : card.tone === "attention"
+                                  ? "border-amber-100 dark:border-amber-900/40 bg-amber-50/45 dark:bg-amber-950/15"
+                                  : "border-slate-100 dark:border-slate-800 bg-white/90 dark:bg-slate-950/25"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
+                                {card.title}
+                              </p>
+                              {card.status && (
+                                <span className="rounded-full bg-slate-100 dark:bg-slate-900 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                                  {card.status}
+                                </span>
+                              )}
                             </div>
-                            <div className="text-[9px] font-black text-slate-700 dark:text-slate-200 tabular-nums">
-                              {check.score ?? "—"}
-                            </div>
+                            <p className="mt-1 text-[10px] font-semibold leading-snug text-slate-600 dark:text-slate-300">
+                              {card.summary}
+                            </p>
                           </div>
                         ))}
                       </div>
-                    )}
-                    {item.lifecycle && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {["strategy", "bot", "data"].map((key) => item.lifecycle[key]?.status && (
-                          <span key={`${item.asset}-${key}`} className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                            {key}: {item.lifecycle[key].status}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {item.next_best_action?.prompt && (
-                      <div className="mt-2">
-                        {renderFollowUpButtons([item.next_best_action], true)}
+                    ) : (
+                      <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                        Nog geen dagstatus of discipline-signaal om te tonen.
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              }
 
-            {Array.isArray(missionControl.bot_review_queue) && missionControl.bot_review_queue.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-400">
-                  <Bot size={11} className="text-violet-500" />
-                  Bot review
-                </div>
-                {missionControl.bot_review_queue.slice(0, 3).map((item) => (
-                  <div key={`${item.bot_id}-${item.decision_id}`} className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/20 px-3 py-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                        {item.asset} · #{item.decision_id}
-                      </span>
-                      <span className={`text-[8px] font-black uppercase tracking-widest ${
-                        item.risk_level === "high" ? "text-rose-600" : item.risk_level === "medium" ? "text-amber-600" : "text-emerald-600"
-                      }`}>
-                        {item.risk_level || "review"}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
-                      {item.summary || `${item.action || "decision"} · ${item.review_status || item.status || "needs_review"}`}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {item.review_status && (
-                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                          {item.review_status}
-                        </span>
-                      )}
-                      {typeof item.confidence === "number" && (
-                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                          conf {Math.round(item.confidence * 100)}%
-                        </span>
-                      )}
-                      {item.trade_plan_present && (
-                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                          trade plan
-                        </span>
-                      )}
-                    </div>
-                    {Array.isArray(item.review_actions) && item.review_actions.length > 0 && (
-                      <div className="mt-2">
-                        {renderFollowUpButtons(item.review_actions.slice(0, 1), true)}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {Array.isArray(missionControl.activity_feed) && missionControl.activity_feed.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-400">
-                  <CheckCircle2 size={11} className="text-emerald-500" />
-                  Recente Finn Acties
-                </div>
-                {missionControl.activity_feed.slice(0, 4).map((item) => (
-                  <div key={item.id} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 px-3 py-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-[11px] font-black text-slate-800 dark:text-slate-100 leading-tight">
-                        {item.label || item.type}
-                      </span>
-                      <span className={`text-[8px] font-black uppercase tracking-widest ${
-                        item.status === "executed" ? "text-emerald-600" : item.status === "failed" ? "text-rose-600" : "text-amber-600"
-                      }`}>
-                        {item.status}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
-                      {item.outcome}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {item.asset && (
-                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                          {item.asset}
-                        </span>
-                      )}
-                      {item.entity_ids?.bot_id && (
-                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                          bot #{item.entity_ids.bot_id}
-                        </span>
-                      )}
-                      {item.entity_ids?.decision_id && (
-                        <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                          decision #{item.entity_ids.decision_id}
-                        </span>
-                      )}
-                      {item.agent_accountability?.dominant_label && (
-                        <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-300">
-                          {item.agent_accountability.dominant_label}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {getMissionOpenActions().length > 0 && renderFollowUpButtons(getMissionOpenActions(), true)}
-          </div>
-        )}
-
-        {/* SECTION 2 — FINN Live Intelligence Terminal */}
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f172a] space-y-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
-              <Terminal size={14} className="text-blue-600" />
-              Finn live context
-            </h3>
-            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">Werkoverzicht</span>
-          </div>
-
-          {missionControl?.coaching_loop && (
-            <div className="rounded-2xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/15 p-3 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-                    <Target size={11} />
-                    Coaching Loop 3.0
-                  </div>
-                  <p className="mt-1 text-[11px] font-black text-slate-900 dark:text-slate-100 leading-snug">
-                    {missionControl.coaching_loop.headline}
+              return (
+                <div key={section.key} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-3 space-y-3">
+                  <p className="text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                    {section.summary}
                   </p>
-                  {missionControl.coaching_loop.today_focus && (
-                    <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
-                      {missionControl.coaching_loop.today_focus}
-                    </p>
+                  {overlayMissionSections.historyItems.length > 0 ? (
+                    overlayMissionSections.historyItems.map(renderMissionHistoryEntry)
+                  ) : (
+                    <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                      Nog geen recente Finn-historie. Zodra je dingen afrondt, uitstelt of met Finn terugkijkt, verschijnt dat hier.
+                    </div>
                   )}
                 </div>
-                <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-                  {missionControl.coaching_loop.status}
-                </span>
-              </div>
-
-              {Array.isArray(missionControl.coaching_loop.daily_priority_stack) && missionControl.coaching_loop.daily_priority_stack.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">Vandaag eerst</div>
-                  {missionControl.coaching_loop.daily_priority_stack.slice(0, 3).map((item) => renderCoachingLoopEntry(
-                    item,
-                    item.lane === "act_now" ? "rose" : item.lane === "review_then_act" ? "amber" : "slate",
-                  ))}
-                </div>
-              )}
-
-              {Array.isArray(missionControl.coaching_loop.monitor_only) && missionControl.coaching_loop.monitor_only.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">Alleen monitoren</div>
-                  {missionControl.coaching_loop.monitor_only.slice(0, 2).map((item) => renderCoachingLoopEntry(item, "slate"))}
-                </div>
-              )}
-
-              {Array.isArray(missionControl.coaching_loop.suppressed_items) && missionControl.coaching_loop.suppressed_items.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">Vandaag bewust niet doen</div>
-                  {missionControl.coaching_loop.suppressed_items.slice(0, 3).map((item) => renderCoachingLoopEntry(item, "amber"))}
-                </div>
-              )}
-
-              {Array.isArray(missionControl.coaching_loop.operator_handoffs) && missionControl.coaching_loop.operator_handoffs.length > 0 && (
-                <div>
-                  <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-2">Hand-offs</div>
-                  {renderFollowUpButtons(missionControl.coaching_loop.operator_handoffs, true)}
-                </div>
-              )}
-            </div>
-          )}
-
-          {!missionControl?.coaching_loop && missionControlLoadError && (
-            <div className="rounded-xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2">
-              <div className="text-[8px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-300">
-                Overzicht opnieuw laden
-              </div>
-              <p className="mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
-                De coaching-loop kwam net niet schoon binnen. Ik probeer de shell bij de volgende refresh opnieuw aan te vullen.
-              </p>
-            </div>
-          )}
-
-          <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
-            {eventsLoading && events.length === 0 ? (
-              <div className="py-8 flex flex-col items-center justify-center gap-2 text-center">
-                <Sparkles size={16} className="text-blue-500 animate-spin" />
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Radar synchroniseren...</span>
-              </div>
-            ) : events.length === 0 ? (
-              <div className="py-8 text-center bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 p-4">
-                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest italic">
-                  Geen actieve risico-meldingen. Alles draait stabiel.
-                </p>
-              </div>
-            ) : (
-              events.map(ev => (
-                <div key={ev.id} className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 relative flex flex-col gap-2 transition-all hover:border-blue-500/50">
-                  <button 
-                    onClick={() => archiveEvent(ev.id)}
-                    className="absolute top-2.5 right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                  >
-                    <X size={14} />
-                  </button>
-                  <div className="flex items-center gap-2 pr-6">
-                    <span className="text-xs font-black text-slate-900 dark:text-slate-100">{ev.title}</span>
-                    {ev.symbol && <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">{ev.symbol}</span>}
-                  </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug font-medium mb-0.5">
-                    {ev.description}
-                  </p>
-                </div>
-              ))
-            )}
+              );
+            })}
           </div>
-        </div>
-
-        {/* SECTION 4 — Recent Conversations */}
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800 space-y-4 bg-white dark:bg-[#0f172a]">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 block">Recent Conversations</span>
-          <div className="space-y-2">
-            {[
-              { id: 1, title: "BTC correction review", query: "Vat de laatste BTC correctie en steunniveaus samen" },
-              { id: 2, title: "Weekly portfolio report", query: "Analyseer de wekelijkse portfolio prestaties en allocatierisico" },
-              { id: 3, title: "SOL setup analysis", query: "Beoordeel de huidige SOL setup en DCA drempelwaarden" },
-              { id: 4, title: "Macro contraction discussion", query: "Bespreek de macro contractie en impact op liquiditeit" },
-            ].map(conv => (
-              <button 
-                key={conv.id}
-                onClick={() => handleChat(conv.query, true)}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-600 dark:hover:border-blue-400 hover:shadow-sm transition-all group text-left"
-              >
-                <div className="flex items-center gap-3 truncate">
-                  <MessageSquare size={14} className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 shrink-0" />
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 truncate">{conv.title}</span>
-                </div>
-                <span className="text-[10px] font-bold text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400">→</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        )}
 
         {/* MESSAGES AREA */}
         <div className="p-6 space-y-6 pb-20">

@@ -33,7 +33,6 @@ import { useWatchlist } from "@/hooks/useWatchlist";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { Star, AlertTriangle } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
-import { useScoresData } from "@/hooks/useScoresData";
 
 export default function NavBar() {
   const { t } = useTranslation();
@@ -262,17 +261,6 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
 }
 
 function WatchlistItem({ symbol, isActive, onSelect, onRemove }) {
-  const { macro, technical, market, master } = useScoresData(symbol);
-  
-  const conviction = `${master?.score ?? 75}%`;
-  const techScore = technical?.score ?? 50;
-  const marketScore = market?.score ?? 50;
-  const macroScore = macro?.score ?? 50;
-
-  const structure = techScore >= 65 ? "Bullish Structure" : techScore <= 35 ? "Weak Structure" : "Neutral Structure";
-  const posture = marketScore >= 65 ? "Momentum Rising" : marketScore <= 35 ? "Compression" : "Expansion";
-  const riskState = macroScore >= 70 ? "Laag / Stabiel" : macroScore <= 40 ? "Risk Elevated" : "Gematigd";
-
   return (
     <div
       className={`
@@ -301,30 +289,10 @@ function WatchlistItem({ symbol, isActive, onSelect, onRemove }) {
         </button>
       </div>
 
-      {/* COGNITIVE AI METRICS PANEL */}
-      <div className="grid grid-cols-2 gap-x-2 gap-y-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[9px] font-bold">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[7.5px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 leading-none">Posture</span>
-          <span className="text-slate-700 dark:text-slate-300 truncate">{posture}</span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[7.5px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 leading-none">Structure</span>
-          <span className="text-slate-700 dark:text-slate-300 truncate">{structure}</span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[7.5px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 leading-none">Conviction</span>
-          <span className="text-blue-600 dark:text-blue-400 font-mono font-extrabold">{conviction}</span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[7.5px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 leading-none">Risk State</span>
-          <span className={`truncate font-extrabold ${
-            riskState.includes("Laag") 
-              ? "text-emerald-500" 
-              : riskState.includes("Risk") 
-                ? "text-rose-500" 
-                : "text-amber-500"
-          }`}>{riskState}</span>
-        </div>
+      <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60">
+        <p className="text-[10px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+          Open direct de marktcontext voor <span className="font-black text-slate-700 dark:text-slate-200">{symbol}</span>.
+        </p>
       </div>
     </div>
   );
@@ -332,12 +300,10 @@ function WatchlistItem({ symbol, isActive, onSelect, onRemove }) {
 
 function WatchlistSidebar({ onNavigate, pathname }) {
   const router = require("next/navigation").useRouter();
-  const { watchlist, remove } = useWatchlist();
+  const { watchlist, remove, loading } = useWatchlist();
   const { selectedAsset: activeSymbol, setSelectedAsset } = useAsset();
   const { setActiveSetup, setFocusedBotId } = require("@/app/providers/SetupProvider").useActiveSetup();
   const { openConfirm, showSnackbar } = useModal();
-
-  if (!watchlist || watchlist.length === 0) return null;
 
   return (
     <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80">
@@ -345,47 +311,67 @@ function WatchlistSidebar({ onNavigate, pathname }) {
         <Star size={10} className="text-amber-400 fill-amber-400 animate-pulse" />
         Marktcontext
       </p>
-      <div className="space-y-2.5 px-1.5">
-        {watchlist.map((symbol) => {
-          const isActive = activeSymbol === symbol;
-          return (
-            <WatchlistItem
-              key={symbol}
-              symbol={symbol}
-              isActive={isActive}
-              onSelect={() => {
-                setActiveSetup(null);
-                setFocusedBotId(null);
-                setSelectedAsset(symbol);
-                router.push(`${pathname}?symbol=${symbol}`);
-                
-                import("@/lib/api/market").then(({ initializeAsset }) => {
-                  initializeAsset(symbol).catch(err => console.error("❌ Init error:", err));
-                });
-                
-                if (onNavigate) onNavigate();
-              }}
-              onRemove={() => {
-                openConfirm({
-                  title: "Asset verwijderen?",
-                  context: `${symbol} verdwijnt uit je actieve watchlist.`,
-                  impact: "De asset blijft bestaan, maar verdwijnt uit je huidige tracking en snelle context-switches.",
-                  safety: "Dit start geen orders of datawijzigingen. Alleen je persoonlijke watchlist verandert.",
-                  consequence: "Na bevestigen vernieuwt je watchlist en focust Finn op je overgebleven assets.",
-                  tone: "danger",
-                  confirmText: "Verwijder",
-                  cancelText: "Annuleer",
-                  icon: <AlertTriangle size={20} />,
-                  onConfirm: async () => {
-                    await remove(symbol);
-                    showSnackbar(`${symbol} verwijderd van watchlist`, "success");
-                  }
-                });
-              }}
-            />
-          );
-        })}
-      </div>
+      {loading ? (
+        <div className="space-y-2.5 px-1.5">
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 p-4 animate-pulse">
+            <div className="h-3 w-24 rounded-full bg-slate-200 dark:bg-slate-800 mb-3" />
+            <div className="h-10 rounded-xl bg-slate-200 dark:bg-slate-800" />
+          </div>
+        </div>
+      ) : !watchlist || watchlist.length === 0 ? (
+        <div className="px-1.5">
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 px-4 py-4">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">
+              Nog geen watchlist
+            </p>
+            <p className="mt-2 text-[11px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+              Voeg assets toe via de zoekbalk of laat Finn een asset aan je watchlist toevoegen. Dan verschijnt je marktcontext hier.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2.5 px-1.5">
+          {watchlist.map((symbol) => {
+            const isActive = activeSymbol === symbol;
+            return (
+              <WatchlistItem
+                key={symbol}
+                symbol={symbol}
+                isActive={isActive}
+                onSelect={() => {
+                  setActiveSetup(null);
+                  setFocusedBotId(null);
+                  setSelectedAsset(symbol);
+                  router.push(`${pathname}?symbol=${symbol}`);
+                  
+                  import("@/lib/api/market").then(({ initializeAsset }) => {
+                    initializeAsset(symbol).catch(err => console.error("❌ Init error:", err));
+                  });
+                  
+                  if (onNavigate) onNavigate();
+                }}
+                onRemove={() => {
+                  openConfirm({
+                    title: "Asset verwijderen?",
+                    context: `${symbol} verdwijnt uit je actieve watchlist.`,
+                    impact: "De asset blijft bestaan, maar verdwijnt uit je huidige tracking en snelle context-switches.",
+                    safety: "Dit start geen orders of datawijzigingen. Alleen je persoonlijke watchlist verandert.",
+                    consequence: "Na bevestigen vernieuwt je watchlist en focust Finn op je overgebleven assets.",
+                    tone: "danger",
+                    confirmText: "Verwijder",
+                    cancelText: "Annuleer",
+                    icon: <AlertTriangle size={20} />,
+                    onConfirm: async () => {
+                      await remove(symbol);
+                      showSnackbar(`${symbol} verwijderd van watchlist`, "success");
+                    }
+                  });
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

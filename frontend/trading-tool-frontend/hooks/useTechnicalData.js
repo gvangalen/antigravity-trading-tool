@@ -28,7 +28,8 @@ const getAdvies = (score) =>
 /* ========================================================
    MAIN HOOK — TECHNICAL (CONSISTENT MET MARKET & MACRO)
 ======================================================== */
-export function useTechnicalData(activeTab = "Dag", symbol = "BTC") {
+export function useTechnicalData(activeTab = "Dag", symbol = "BTC", options = {}) {
+  const { includeScoreSummary = true } = options;
   const [technicalData, setTechnicalData] = useState([]);
   const [avgScore, setAvgScore] = useState("N/A");
   const [advies, setAdvies] = useState("⚖️ Neutraal");
@@ -90,13 +91,17 @@ export function useTechnicalData(activeTab = "Dag", symbol = "BTC") {
       /* --------------------------------------------------
          DAGELIJKSE TECHNICAL SCORE
       -------------------------------------------------- */
-      const scores = await getDailyScores(symbol);
-      const backendScore = scores?.technical?.score ?? null;
+      if (includeScoreSummary) {
+        const scores = await getDailyScores(symbol);
+        const backendScore = scores?.technical?.score ?? null;
 
-      if (backendScore !== null) {
-        const rounded = parseFloat(backendScore).toFixed(1);
-        setAvgScore(rounded);
-        setAdvies(getAdvies(backendScore));
+        if (backendScore !== null) {
+          const rounded = parseFloat(backendScore).toFixed(1);
+          setAvgScore(rounded);
+          setAdvies(getAdvies(backendScore));
+        } else {
+          updateScore(normalized);
+        }
       } else {
         updateScore(normalized);
       }

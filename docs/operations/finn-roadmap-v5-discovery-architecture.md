@@ -16,6 +16,12 @@ Important:
 
 No autonomous financial action should bypass explicit governance.
 
+See also:
+
+- [FINN Status + Certification Summary](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-status-certification-summary.md)
+- [FINN 5.0 Governance QA Suite](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-5-governance-qa.md)
+- [FINN 5.0 Governance Promptset](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-qa-promptset-governance.json)
+
 ## Current platform starting point
 
 FINN 5.0 starts from a much stronger base than 3.0 or 4.0 did.

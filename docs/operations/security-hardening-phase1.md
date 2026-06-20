@@ -1,6 +1,6 @@
 # Security Hardening Phase 1
 
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 This phase closes the two critical pre-live security findings from the security review.
 
@@ -50,8 +50,8 @@ Expected: rejected; no side effect.
 
 Live baseline on Oracle:
 
-- commit: `52fbc52`
-- `LAST_GOOD_COMMIT = 52fbc52`
+- commit: `2f56033`
+- `LAST_GOOD_COMMIT = 2f56033`
 
 What is now live-green:
 
@@ -72,3 +72,9 @@ What is now also regression-backed:
 1. authenticated frontend flows clear local user/token state on logout and failed refresh
 2. login overwrites the local user snapshot instead of preserving stale user identity
 3. market-data GET routes no longer trigger forward-return sync writes on data misses
+
+## Retest
+
+For the next clean security-agent rerun, use:
+
+- [Platform Security & Architecture Retest Checklist](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-security-architecture-retest-checklist.md)

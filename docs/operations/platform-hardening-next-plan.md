@@ -153,6 +153,8 @@ Current sprint outcome:
 Active product follow-up:
 
 - [Tradamind FINN Product Sprint 1](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-product-sprint-1.md)
+- [Testing Blind Spots And Improvement Plan](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/testing-blind-spots-and-improvement-plan.md)
+- [Overview And Market Performance Plan](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/overview-market-performance-long-term-plan.md)
 
 Current implementation note:
 

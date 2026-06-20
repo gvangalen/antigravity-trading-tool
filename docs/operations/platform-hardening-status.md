@@ -43,7 +43,7 @@ The main remaining risk is operational scale, not core request correctness:
 | Tranche C - Async Session Correctness | Green | Dashboard and assistant context paths no longer parallelize shared-session DB reads, and platform hardening tests now guard those paths explicitly. |
 | Tranche D - Operations Consolidation | Green | Deploy and rollback now use explicit environment PM2 configs, and the legacy `deploy.sh` path is intentionally blocked. |
 | Tranche E - Symbol/State Cleanup | Green | Bot portfolio state is now scoped by `(bot_id, symbol)` so symbol changes no longer collapse state into one row, and the legacy single-column unique constraint is handled during migration. |
-| Tranche F - Deploy Stability | Green with rollout caveat | Deploy/rollback now wait for backend bind plus health, can do a backend-only rescue restart, and rollback clears stale git remote refs before fetch. The June 6, 2026 rollout on `52fbc52` also retries deep health across temporary broker startup noise instead of rolling back on the first timeout. |
+| Tranche F - Deploy Stability | Green with rollout caveat | Deploy/rollback now wait for backend bind plus health, can do a backend-only rescue restart, and rollback clears stale git remote refs before fetch. The June 6, 2026 rollout path first hardened on `52fbc52` and stayed effective when the Phase 2.1 bridge went live on `8096336`, retrying deep health across temporary broker startup noise instead of rolling back on the first timeout. |
 | Phase 2 - Scale & Observability Slice | Green at V1 scope | Queue-specific worker concurrency is configured centrally, deep health now surfaces process-lifetime retry/replay/dedupe/latency counters, generated frontend `out/` files are explicitly not contract authority, and read-heavy polling paths are normalized toward visibility-aware single-flight behavior. |
 | Security Hardening Slice | Green | External `/api/system/health` is operator-only, web/mobile auth contracts are corrected, refresh rotation and logout invalidation work, Finn `action_id` execute + replay is live, rate limits are enforced on execute/manual-order/preflight routes, authenticated frontend flows clear stale local user/token state, and market-data read routes no longer perform forward-return sync writes. |
 
@@ -51,13 +51,13 @@ The main remaining risk is operational scale, not core request correctness:
 
 Latest deployed hardening commit:
 
-- `52fbc52` - `Relax deploy deep health gate around broker startup`
+- `2f56033` - `Upgrade frontend security stack to Next 15`
 
 Current code and runtime truth:
 
-- `repo_head`: `52fbc52` on `main` as of June 6, 2026
-- `production_head`: `52fbc52` on Oracle as of June 6, 2026
-- `LAST_GOOD_COMMIT`: `52fbc52`
+- `repo_head`: `2f56033` on `main` as of June 6, 2026
+- `production_head`: `2f56033` on Oracle as of June 6, 2026
+- `LAST_GOOD_COMMIT`: `2f56033`
 
 Deploy/status convention for the next phase:
 
@@ -70,14 +70,14 @@ Use source under `frontend/trading-tool-frontend/lib/` and `frontend/trading-too
 
 Current rollout candidate:
 
-- `Platform hardening baseline plus Phase 2 slice is live on Oracle`
+- `Platform hardening baseline, Phase 2.1 observability bridge, and the frontend security stack upgrade to Next 15 are live on Oracle`
 
 Latest smoke results from deploy:
 
 - `/api/health`: `200 {"status":"ok","message":"API is running"}`
 - `/api/system/health` externally: `401 {"detail":"Missing access token"}`
 - `/report`: `200`
-- internal `/api/system/health`: `degraded` during rollout acceptance on June 6, 2026 because broker/celery inspection lagged while large named-queue backlogs were still present
+- internal `/api/system/health`: `degraded` after rollout on June 6, 2026 because broker/celery inspection can still time out while large named-queue backlogs are present, but the new `runtime_identity`, `observability_scope`, and `cluster_observability` fields are live
 - Celery workers: `default`, `market-portfolio`, `scoring-execution`, `ai-reporting`, `beat`
 - Phase 2 worker topology target:
   - `celery-worker-default`: `concurrency=2`
@@ -85,11 +85,11 @@ Latest smoke results from deploy:
   - `celery-worker-scoring-execution`: `concurrency=2`
   - `celery-worker-ai-reporting`: `concurrency=1`
   - `celery-beat`: unchanged
-- Oracle markers: `HEAD=52fbc52`, `LAST_GOOD_COMMIT=52fbc52`
+- Oracle markers: `HEAD=8096336`, `LAST_GOOD_COMMIT=8096336`
 
 Latest local regression:
 
-- `pytest -q backend/trading-tool-backend/backend/tests/test_phase2_portfolio_execution_invariants.py backend/trading-tool-backend/backend/tests/test_celery_dispatcher.py backend/trading-tool-backend/backend/tests/test_celery_queue_policy.py backend/trading-tool-backend/backend/tests/test_system_health_service.py backend/trading-tool-backend/backend/tests/test_platform_hardening.py backend/trading-tool-backend/backend/tests/test_runtime_reliability_hardening.py backend/trading-tool-backend/backend/tests/test_platform_hardening_docs_status.py backend/trading-tool-backend/backend/tests/test_security_phase1.py backend/trading-tool-backend/backend/tests/test_security_phase3.py backend/trading-tool-backend/backend/tests/test_security_phase7.py backend/trading-tool-backend/backend/tests/test_frontend_cache_polling_policy.py backend/trading-tool-backend/backend/tests/test_platform_phase2_scale_observability.py`: `84 passed, 8 warnings`
+- `pytest -q backend/trading-tool-backend/backend/tests/test_security_phase1.py backend/trading-tool-backend/backend/tests/test_security_phase3.py backend/trading-tool-backend/backend/tests/test_security_phase7.py backend/trading-tool-backend/backend/tests/test_platform_hardening_docs_status.py backend/trading-tool-backend/backend/tests/test_phase2_portfolio_execution_invariants.py backend/trading-tool-backend/backend/tests/test_celery_dispatcher.py backend/trading-tool-backend/backend/tests/test_celery_queue_policy.py backend/trading-tool-backend/backend/tests/test_system_health_service.py backend/trading-tool-backend/backend/tests/test_platform_hardening.py backend/trading-tool-backend/backend/tests/test_runtime_reliability_hardening.py backend/trading-tool-backend/backend/tests/test_frontend_cache_polling_policy.py backend/trading-tool-backend/backend/tests/test_platform_phase2_scale_observability.py`: `85 passed, 8 warnings`
 
 ## What Is Done
 
@@ -221,6 +221,8 @@ Latest local regression:
 
 See also:
 
+- [Platform Security & Architecture Retest Checklist](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-security-architecture-retest-checklist.md)
+
 - [Tradamind Platform Hardening Plan](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-next-plan.md)
 - [Platform Hardening Tranche A — Execution Safety](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-a-execution-safety.md)
 - [Platform Hardening Tranche B — Queue Discipline](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-tranche-b-queue-discipline.md)
@@ -262,6 +264,7 @@ See also:
    - move from process-local operator hints to cluster-aware observability
    - prove throughput under read-heavy, AI-heavy, and bot/execution-heavy load profiles
    - align statusdocs and runtime markers on every rollout so repo truth and production truth do not drift
+   - first capacity baseline now lives in [Platform Phase 2.1 Capacity Baseline](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-phase-2-1-capacity-baseline.md)
 
 ## QA Reference
 

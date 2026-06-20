@@ -21,8 +21,13 @@ class UserUsageStat(BaseModel):
     requests_limit: int
     usage_month_eur: float
     usage_today_eur: float
+    interactive_usage_month_eur: float = 0.0
+    background_usage_month_eur: float = 0.0
+    blocked_requests_month: int = 0
+    blocked_estimated_cost_month_eur: float = 0.0
     revenue_month_eur: float
     profit_month_eur: float
+    last_ai_activity_at: Optional[str] = None
 
 class UserDistribution(BaseModel):
     bucket: str # '<10', '10-25', '25-100', '>100'
@@ -43,7 +48,31 @@ class PlatformAiOverview(BaseModel):
     cache_hit_rate: float
     avg_latency_ms: float
     avg_cost_per_full_request: float
+    qa_cost_month_eur: float = 0.0
+    background_cost_month_eur: float = 0.0
+    live_user_cost_month_eur: float = 0.0
+    staging_cost_month_eur: float = 0.0
+    blocked_requests_month: int = 0
+    blocked_estimated_cost_month_eur: float = 0.0
     rejection_breakdown: Optional[Dict[str, int]] = {}
+
+class AiSourceStat(BaseModel):
+    source: str
+    total_requests: int
+    total_cost: float
+    blocked_requests: int = 0
+    blocked_estimated_cost: float = 0.0
+    unique_users: int
+    percentage: float
+
+class AiEntryPointStat(BaseModel):
+    entry_point: str
+    source: str
+    total_requests: int
+    total_cost: float
+    avg_cost: float
+    blocked_requests: int = 0
+    blocked_estimated_cost: float = 0.0
 
 class AiAnomaly(BaseModel):
     type: str
@@ -55,6 +84,8 @@ class AdminAiStatsResponse(BaseModel):
     overview: PlatformAiOverview
     top_users: List[UserUsageStat]
     feature_breakdown: List[FeatureStat]
+    source_breakdown: List[AiSourceStat]
+    top_entry_points: List[AiEntryPointStat]
     mode_distribution: List[AiModeStat]
     latency_stats: List[ModeLatency]
     user_distribution: List[UserDistribution]
@@ -75,8 +106,15 @@ class AdminUserOverview(BaseModel):
     ai_requests_used_day: int
     ai_requests_limit_day: int
     ai_usage_current: float
+    usage_month_eur: float = 0.0
+    usage_today_eur: float = 0.0
+    interactive_usage_month_eur: float = 0.0
+    background_usage_month_eur: float = 0.0
+    blocked_requests_month: int = 0
+    blocked_estimated_cost_month_eur: float = 0.0
     subscription_status: str
     last_login_at: Optional[str] = None
+    last_ai_activity_at: Optional[str] = None
     created_at: Optional[str] = None
 
 class AdminUserUpdate(BaseModel):

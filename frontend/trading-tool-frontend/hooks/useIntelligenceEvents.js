@@ -16,7 +16,7 @@ export default function useIntelligenceEvents() {
     if (!silent) setLoading(true);
     
     try {
-      const data = await apiGet("/api/assistant/events", { forceFresh: true });
+      const data = await apiGet("/api/assistant/events");
       setEvents(data || []);
       setError(null);
     } catch (err) {
@@ -44,8 +44,8 @@ export default function useIntelligenceEvents() {
   };
 
   useVisibilityPolling(() => fetchEvents(true), {
-    intervalMs: 15000,
-    backgroundIntervalMs: 60000,
+    intervalMs: 60000,
+    backgroundIntervalMs: 180000,
     runImmediately: true,
   });
 

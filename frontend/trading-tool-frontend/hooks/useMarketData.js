@@ -29,7 +29,16 @@ const getAdvies = (score) =>
 /* ========================================================
    MAIN HOOK
 ======================================================== */
-export function useMarketData(symbol = "BTC") {
+export function useMarketData(symbol = "BTC", options = {}) {
+  const {
+    includeExtendedData = true,
+    mode = "full",
+    includeSevenDayData,
+    includeForwardData,
+    includeDailyScores,
+    includeMarketDayData,
+    includeIndicators,
+  } = options;
   const [sevenDayData, setSevenDayData] = useState([]);
   const [btcLive, setBtcLive] = useState(null);
 
@@ -59,6 +68,16 @@ export function useMarketData(symbol = "BTC") {
   const [error, setError] = useState("");
   const livePriceFetchingRef = useRef(false);
 
+  const shouldLoadExtended = mode !== "live" && includeExtendedData !== false;
+  const shouldLoadSevenDayData = includeSevenDayData ?? shouldLoadExtended;
+  const shouldLoadForwardData = includeForwardData ?? shouldLoadExtended;
+  const shouldLoadDailyScores = includeDailyScores ?? shouldLoadExtended;
+  const shouldLoadMarketDayData = includeMarketDayData ?? shouldLoadExtended;
+  const shouldLoadIndicators = includeIndicators ?? shouldLoadExtended;
+
+  const unwrapSettled = (result, fallback) =>
+    result?.status === "fulfilled" ? result.value : fallback;
+
   /* --------------------------------------------------------
      INIT
   -------------------------------------------------------- */
@@ -81,25 +100,101 @@ export function useMarketData(symbol = "BTC") {
     setError("");
 
     try {
-      await loadLivePrice();
-      setSevenDayData(await fetchMarketData7d(symbol));
+      // Laat de live prijs niet de rest van de overview blokkeren.
+      void loadLivePrice({ forceFresh: false });
 
-      const [week, maand, kwartaal, jaar] = await Promise.all([
-        fetchForwardReturnsWeek(symbol),
-        fetchForwardReturnsMonth(symbol),
-        fetchForwardReturnsQuarter(symbol),
-        fetchForwardReturnsYear(symbol),
+      if (!shouldLoadExtended) {
+        setLoading(false);
+        return;
+      }
+
+      const settledResults = await Promise.allSettled([
+        shouldLoadSevenDayData ? fetchMarketData7d(symbol) : Promise.resolve(null),
+        shouldLoadForwardData ? fetchForwardReturnsWeek(symbol) : Promise.resolve(null),
+        shouldLoadForwardData ? fetchForwardReturnsMonth(symbol) : Promise.resolve(null),
+        shouldLoadForwardData ? fetchForwardReturnsQuarter(symbol) : Promise.resolve(null),
+        shouldLoadForwardData ? fetchForwardReturnsYear(symbol) : Promise.resolve(null),
+        shouldLoadDailyScores ? getDailyScores(symbol) : Promise.resolve(null),
+        shouldLoadMarketDayData ? fetchMarketDayData(symbol) : Promise.resolve(null),
+        shouldLoadIndicators ? getUserMarketIndicators(symbol) : Promise.resolve(null),
+        shouldLoadIndicators ? getMarketIndicatorNames() : Promise.resolve(null),
       ]);
-      setForwardReturns({ week, maand, kwartaal, jaar });
 
-      const dailyScores = await getDailyScores(symbol);
-      const score = dailyScores?.market?.score ?? 50;
-      setMarketScore(score);
-      setAdviesState(getAdvies(score));
+      const [
+        sevenDayResult,
+        forwardWeekResult,
+        forwardMonthResult,
+        forwardQuarterResult,
+        forwardYearResult,
+        dailyScoresResult,
+        marketDayResult,
+        activeIndicatorsResult,
+        indicatorNamesResult,
+      ] = settledResults;
 
-      setMarketDayData((await fetchMarketDayData(symbol)) || []);
-      setActiveMarketIndicators((await getUserMarketIndicators(symbol)) || []);
-      setAvailableIndicators((await getMarketIndicatorNames()) || []);
+      if (shouldLoadSevenDayData) {
+        setSevenDayData(unwrapSettled(sevenDayResult, []));
+      } else {
+        setSevenDayData([]);
+      }
+
+      if (shouldLoadForwardData) {
+        setForwardReturns({
+          week: unwrapSettled(forwardWeekResult, []),
+          maand: unwrapSettled(forwardMonthResult, []),
+          kwartaal: unwrapSettled(forwardQuarterResult, []),
+          jaar: unwrapSettled(forwardYearResult, []),
+        });
+      } else {
+        setForwardReturns({
+          week: [],
+          maand: [],
+          kwartaal: [],
+          jaar: [],
+        });
+      }
+
+      if (shouldLoadDailyScores) {
+        const dailyScores = unwrapSettled(dailyScoresResult, null);
+        const score = dailyScores?.market?.score ?? 50;
+        setMarketScore(score);
+        setAdviesState(getAdvies(score));
+      }
+
+      if (shouldLoadMarketDayData) {
+        setMarketDayData(unwrapSettled(marketDayResult, []) || []);
+      } else {
+        setMarketDayData([]);
+      }
+
+      if (shouldLoadIndicators) {
+        setActiveMarketIndicators(unwrapSettled(activeIndicatorsResult, []) || []);
+        setAvailableIndicators(unwrapSettled(indicatorNamesResult, []) || []);
+      } else {
+        setActiveMarketIndicators([]);
+        setAvailableIndicators([]);
+      }
+
+      const failedResults = settledResults.filter((result, idx) => {
+        if (result.status !== "rejected") return false;
+        const enabledFlags = [
+          shouldLoadSevenDayData,
+          shouldLoadForwardData,
+          shouldLoadForwardData,
+          shouldLoadForwardData,
+          shouldLoadForwardData,
+          shouldLoadDailyScores,
+          shouldLoadMarketDayData,
+          shouldLoadIndicators,
+          shouldLoadIndicators,
+        ];
+        return enabledFlags[idx];
+      });
+
+      if (failedResults.length > 0) {
+        console.warn(`⚠️ loadAll partial failures (${symbol}):`, failedResults);
+        setError("Een deel van de market data kon niet direct geladen worden.");
+      }
     } catch (err) {
       console.error(`❌ loadAll error (${symbol}):`, err);
       setError("Kon market data niet laden.");
@@ -127,11 +222,11 @@ export function useMarketData(symbol = "BTC") {
   /* --------------------------------------------------------
      LIVE PRICE
   -------------------------------------------------------- */
-  async function loadLivePrice() {
+  async function loadLivePrice(options = { forceFresh: true }) {
     if (livePriceFetchingRef.current) return;
     livePriceFetchingRef.current = true;
     try {
-      setBtcLive(await fetchLatestPrice(symbol, { forceFresh: true }));
+      setBtcLive(await fetchLatestPrice(symbol, options));
     } catch {
       setBtcLive(null);
     } finally {

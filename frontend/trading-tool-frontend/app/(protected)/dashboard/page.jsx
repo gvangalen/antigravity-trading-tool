@@ -1,19 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   LineChart,
-  Activity,
+  Loader2,
 } from "lucide-react";
-
-import TradingViewChart from "@/components/charts/TradingViewChart";
 
 // V2.1 Components
 import CompactGauges from "@/components/dashboard/CompactGauges";
 import TradingBrain from "@/components/dashboard/TradingBrain";
 import TableTabs from "@/components/dashboard/TableTabs";
-import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
 
@@ -27,13 +24,14 @@ import MarketLiveCard from "@/components/market/MarketLiveCard";
 import { useTechnicalData } from "@/hooks/useTechnicalData";
 import { useMacroData } from "@/hooks/useMacroData";
 import { useMarketData } from "@/hooks/useMarketData";
+import { useScoresData } from "@/hooks/useScoresData";
+import { useOverviewSnapshot } from "@/hooks/useOverviewSnapshot";
 
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
-import { mapTechnicalToStudies } from "@/config/indicator_mapping";
 import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
 import BotCard from "@/components/bot/BotCard";
-import useBotData from "@/hooks/useBotData";
+import { fetchBotConfigs } from "@/lib/api/botApi";
 
 import ScoreHistoryChart from "@/components/dashboard/ScoreHistoryChart";
 
@@ -47,8 +45,17 @@ export default function DashboardPage() {
   
   const { selectedAsset, setSelectedAsset } = require("@/app/providers/AssetProvider").useAsset();
   const { activeSetup, focusedBotId, setFocusedBotId } = useActiveSetup();
-  const { configs: botConfigs } = useBotData();
-  const { symbol: activeSymbol } = useCurrentAsset();
+  const { symbol: activeSymbol } = useCurrentAsset({ includeFocusedBotLookup: false });
+  const [showSecondaryPanels, setShowSecondaryPanels] = useState(false);
+  const [showTelemetryPanel, setShowTelemetryPanel] = useState(false);
+  const [showDeepAnalysis, setShowDeepAnalysis] = useState(false);
+  const [showScoreHistory, setShowScoreHistory] = useState(false);
+  const [showPrimaryChart, setShowPrimaryChart] = useState(false);
+  const loadStartedAtRef = useRef(Date.now());
+  const shellReadyLoggedRef = useRef(null);
+  const primaryCardsLoggedRef = useRef(null);
+  const chartReadyLoggedRef = useRef(null);
+  const deepAnalysisLoggedRef = useRef(null);
 
   useEffect(() => {
     trackAssistantEvent({
@@ -67,27 +74,98 @@ export default function DashboardPage() {
     }
   }, [urlSymbol, selectedAsset, setSelectedAsset]);
 
-  const {
-    technicalData,
-    removeTechnicalIndicator: handleRemove,
-    loading: technicalLoading,
-    error: technicalError,
-    reload: technicalReload,
-  } = useTechnicalData("Day", activeSymbol);
+  useEffect(() => {
+    loadStartedAtRef.current = performance.now();
+    shellReadyLoggedRef.current = null;
+    primaryCardsLoggedRef.current = null;
+    chartReadyLoggedRef.current = null;
+    deepAnalysisLoggedRef.current = null;
+    setShowSecondaryPanels(false);
+    setShowTelemetryPanel(false);
+    setShowDeepAnalysis(false);
+    setShowScoreHistory(false);
+    setShowPrimaryChart(false);
 
-  /* --------------------------------------------------------
-     🔹 Afgeleide helpers (BELANGRIJK)
-     GEFIXED: Altijd Array.isArray checken
-  -------------------------------------------------------- */
-  const activeTechnicalIndicatorNames = Array.isArray(technicalData) 
-    ? technicalData.map((i) => i.name)
-    : [];
+    const secondaryTimer = window.setTimeout(() => setShowSecondaryPanels(true), 650);
+    const telemetryTimer = window.setTimeout(() => setShowTelemetryPanel(true), 1600);
+    const chartTimer = window.setTimeout(() => setShowPrimaryChart(true), 900);
+    const analysisTimer = window.setTimeout(() => setShowDeepAnalysis(true), 2800);
+    return () => {
+      window.clearTimeout(secondaryTimer);
+      window.clearTimeout(telemetryTimer);
+      window.clearTimeout(chartTimer);
+      window.clearTimeout(analysisTimer);
+    };
+  }, [activeSymbol]);
 
+  const { snapshot: marketSnapshot, loading: marketSnapshotLoading } = useOverviewSnapshot(activeSymbol);
+  const scoreSnapshot = useScoresData(activeSymbol, { includeHistory: false });
+  const intelligenceSnapshot = useMemo(
+    () => ({
+      data: marketSnapshot?.intelligence ?? null,
+      loading: marketSnapshotLoading && !marketSnapshot?.intelligence,
+    }),
+    [marketSnapshot, marketSnapshotLoading]
+  );
 
-  const { macroData, loading: macroLoading, error: macroError, reload: macroReload } =
-    useMacroData("Dag", activeSymbol);
-  
-   const { sevenDayData, btcLive: assetLive, loading: marketLoading } = useMarketData(activeSymbol);
+  useEffect(() => {
+    if (shellReadyLoggedRef.current === activeSymbol) return;
+    shellReadyLoggedRef.current = activeSymbol;
+    void trackAssistantEvent({
+      event_name: "overview_shell_ready",
+      page: "/dashboard",
+      surface: "web",
+      flow_type: "dashboard",
+      asset: activeSymbol || null,
+      duration_ms: Math.round(performance.now() - loadStartedAtRef.current),
+    });
+  }, [activeSymbol]);
+
+  useEffect(() => {
+    if (
+      !marketSnapshot?.live ||
+      !scoreSnapshot?.master ||
+      primaryCardsLoggedRef.current === activeSymbol
+    ) {
+      return;
+    }
+
+    primaryCardsLoggedRef.current = activeSymbol;
+    void trackAssistantEvent({
+      event_name: "overview_primary_cards_ready",
+      page: "/dashboard",
+      surface: "web",
+      flow_type: "dashboard",
+      asset: activeSymbol || null,
+      duration_ms: Math.round(performance.now() - loadStartedAtRef.current),
+    });
+  }, [activeSymbol, marketSnapshot?.live, scoreSnapshot?.master]);
+
+  useEffect(() => {
+    if (!showPrimaryChart || chartReadyLoggedRef.current === activeSymbol) return;
+    chartReadyLoggedRef.current = activeSymbol;
+    void trackAssistantEvent({
+      event_name: "overview_chart_ready",
+      page: "/dashboard",
+      surface: "web",
+      flow_type: "dashboard",
+      asset: activeSymbol || null,
+      duration_ms: Math.round(performance.now() - loadStartedAtRef.current),
+    });
+  }, [activeSymbol, showPrimaryChart]);
+
+  useEffect(() => {
+    if (!showDeepAnalysis || deepAnalysisLoggedRef.current === activeSymbol) return;
+    deepAnalysisLoggedRef.current = activeSymbol;
+    void trackAssistantEvent({
+      event_name: "overview_deep_analysis_ready",
+      page: "/dashboard",
+      surface: "web",
+      flow_type: "dashboard",
+      asset: activeSymbol || null,
+      duration_ms: Math.round(performance.now() - loadStartedAtRef.current),
+    });
+  }, [activeSymbol, showDeepAnalysis]);
  
    /* --------------------------------------------------------
      🔁 MAPPING & SYNC
@@ -110,12 +188,6 @@ export default function DashboardPage() {
   }
 
   const tvConfig = mapSetupToTradingView(activeSetup, activeSymbol);
-  
-  // 🔥 INDICATOR SYNC: Extract names and map to TV studies
-  const activeIndicatorNames = Array.isArray(technicalData) 
-    ? technicalData.map(i => i.name) 
-    : [];
-  const chartStudies = mapTechnicalToStudies(activeIndicatorNames);
 
 
   return (
@@ -137,7 +209,7 @@ export default function DashboardPage() {
       <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl transition-all duration-300">
         <div className="card-p p-4 sm:p-10">
            <DashboardErrorBoundary>
-             <CompactGauges symbol={activeSymbol} />
+             <CompactGauges symbol={activeSymbol} snapshot={scoreSnapshot} />
            </DashboardErrorBoundary>
         </div>
       </div>
@@ -147,7 +219,11 @@ export default function DashboardPage() {
         <DashboardErrorBoundary>
           <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl transition-all duration-300 overflow-hidden shadow-sm">
             <div className="card-p p-6 sm:p-10">
-              <GlobalMarketDecisionCard symbol={activeSymbol} />
+              {showTelemetryPanel ? (
+                <GlobalMarketDecisionCard symbol={activeSymbol} snapshot={intelligenceSnapshot} />
+              ) : (
+                <DeferredPanelPlaceholder title="Terminal intelligence wordt voorbereid" lines={3} />
+              )}
             </div>
           </div>
         </DashboardErrorBoundary>
@@ -161,7 +237,11 @@ export default function DashboardPage() {
              {/* LEFT: MARKET VIEW */}
              <div className="flex-1 space-y-6">
                 <DashboardErrorBoundary>
-                   <MarketLiveCard symbol={activeSymbol} data={assetLive} loading={!assetLive} />
+                   <MarketLiveCard
+                     symbol={activeSymbol}
+                     data={marketSnapshot?.live ?? null}
+                     loading={Boolean(marketSnapshot?.liveLoading) && !showSecondaryPanels}
+                   />
                 </DashboardErrorBoundary>
 
                 <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden">
@@ -171,18 +251,22 @@ export default function DashboardPage() {
                       {t.dashboard.live_market}
                     </div>
                   </div>
-                  <div className="card-p p-4 sm:p-8">
-                    <DashboardErrorBoundary>
-                      <TradingViewSmartChart
-                        key={`${tvConfig.symbol}-${tvConfig.interval}-${chartStudies.join(',')}-${focusedBotId}`}
-                        symbol={tvConfig.symbol}
-                        interval={tvConfig.interval}
-                        indicators={chartStudies}
-                        focusedBotId={focusedBotId}
-                        setFocusedBotId={setFocusedBotId}
-                        theme="light"
-                        height={typeof window !== 'undefined' && window.innerWidth < 640 ? 300 : 580}
-                      />
+                <div className="card-p p-4 sm:p-8">
+                  <DashboardErrorBoundary>
+                      {showPrimaryChart ? (
+                        <TradingViewSmartChart
+                          key={`${tvConfig.symbol}-${tvConfig.interval}-${focusedBotId}`}
+                          symbol={tvConfig.symbol}
+                          interval={tvConfig.interval}
+                          indicators={[]}
+                          focusedBotId={focusedBotId}
+                          setFocusedBotId={setFocusedBotId}
+                          theme="light"
+                          height={typeof window !== 'undefined' && window.innerWidth < 640 ? 300 : 580}
+                        />
+                      ) : (
+                        <DeferredPanelPlaceholder title="Chart wordt voorbereid" lines={5} />
+                      )}
                     </DashboardErrorBoundary>
                   </div>
                 </div>
@@ -190,70 +274,296 @@ export default function DashboardPage() {
 
              {/* RIGHT: THE BRAIN */}
              <div className="w-full lg:w-[340px] shrink-0">
-                <DashboardErrorBoundary>
-                   <TradingBrain symbol={activeSymbol} />
-                </DashboardErrorBoundary>
+                {showSecondaryPanels ? (
+                  <DashboardErrorBoundary>
+                     <TradingBrain symbol={activeSymbol} scoresSnapshot={scoreSnapshot} />
+                  </DashboardErrorBoundary>
+                ) : (
+                  <DeferredPanelPlaceholder title="Trading Brain wordt geladen" lines={4} />
+                )}
              </div>
           </div>
 
           {/* 📑 BOTTOM: DEEP ANALYSIS TABS */}
-          <DashboardErrorBoundary>
-            <TableTabs 
-               technicalTable={
-                 <TechnicalDayTableForDashboard
-                   data={technicalData}
-                   loading={technicalLoading}
-                   error={technicalError}
-                   onRetry={technicalReload}
-                   onRemove={handleRemove}
-                 />
-               }
-               macroTable={
-                 <MacroSummaryTableForDashboard
-                   data={macroData}
-                   loading={macroLoading}
-                   error={macroError}
-                   onRetry={macroReload}
-                 />
-               }
-               marketTable={
-                 <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden">
-                    <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
-                      <h3 className="card-title text-slate-900 dark:text-white uppercase tracking-widest text-[12px] font-black">{t.dashboard.market_data}</h3>
-                    </div>
-                    <div className="card-p p-8">
-                      <MarketSummaryForDashboard
-                        sevenDayData={sevenDayData}
-                        btcLive={assetLive}
-                        loading={marketLoading}
-                      />
-                    </div>
-                 </div>
-               }
-               botsTable={
-                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {botConfigs.map(bot => (
-                      <BotCard 
-                        key={bot.id} 
-                        bot={bot} 
-                        showActions={false}
-                        onSelect={(id) => setFocusedBotId(id)}
-                      />
-                    ))}
-                 </div>
-               }
+          {showDeepAnalysis ? (
+            <DeferredDashboardAnalysis
+              activeSymbol={activeSymbol}
+              marketSnapshot={marketSnapshot}
+              focusedBotId={focusedBotId}
+              setFocusedBotId={setFocusedBotId}
             />
-          </DashboardErrorBoundary>
+          ) : (
+            <DeferredPanelPlaceholder title="Diepe analyse wordt geladen" lines={6} />
+          )}
 
           {/* 📊 ANALYTICS: SCORE HISTORY (Moved to bottom) */}
-          <DashboardErrorBoundary>
-             <ScoreHistoryChart symbol={activeSymbol} />
-          </DashboardErrorBoundary>
+          <ScoreHistorySection
+            symbol={activeSymbol}
+            isLoaded={showScoreHistory}
+            onLoad={() => setShowScoreHistory(true)}
+          />
 
         </main>
       </div>
 
 
+    </div>
+  );
+}
+
+function DeferredDashboardAnalysis({
+  activeSymbol,
+  marketSnapshot,
+  focusedBotId,
+  setFocusedBotId,
+}) {
+  const [activeAnalysisTab, setActiveAnalysisTab] = useState("technical");
+  return (
+    <>
+      <DashboardErrorBoundary>
+        <TableTabs 
+          onActiveTabChange={setActiveAnalysisTab}
+          technicalTable={() => (
+            <DeferredTechnicalPanel
+              symbol={activeSymbol}
+              isActive={activeAnalysisTab === "technical"}
+            />
+          )}
+          macroTable={() => (
+            <DeferredMacroPanel
+              symbol={activeSymbol}
+              isActive={activeAnalysisTab === "macro"}
+            />
+          )}
+          marketTable={() => (
+            <DeferredMarketAnalysisPanel
+              symbol={activeSymbol}
+              snapshot={marketSnapshot}
+              isActive={activeAnalysisTab === "market"}
+            />
+          )}
+          botsTable={() => (
+            <DeferredBotsPanel
+              isActive={activeAnalysisTab === "bots"}
+              onSelectBot={setFocusedBotId}
+            />
+          )}
+        />
+      </DashboardErrorBoundary>
+
+    </>
+  );
+}
+
+function DeferredTechnicalPanel({ symbol, isActive }) {
+  if (!isActive) {
+    return <DeferredPanelPlaceholder title="Technische analyse laadt wanneer je dit tabblad opent" lines={3} />;
+  }
+
+  return <ActiveTechnicalPanel symbol={symbol} />;
+}
+
+function ActiveTechnicalPanel({ symbol }) {
+  const {
+    technicalData,
+    removeTechnicalIndicator: handleRemove,
+    loading: technicalLoading,
+    error: technicalError,
+    reload: technicalReload,
+  } = useTechnicalData("Day", symbol, { includeScoreSummary: false });
+
+  return (
+    <TechnicalDayTableForDashboard
+      data={technicalData}
+      loading={technicalLoading}
+      error={technicalError}
+      onRetry={technicalReload}
+      onRemove={handleRemove}
+    />
+  );
+}
+
+function DeferredMacroPanel({ symbol, isActive }) {
+  if (!isActive) {
+    return <DeferredPanelPlaceholder title="Macro-overzicht laadt wanneer je dit tabblad opent" lines={3} />;
+  }
+
+  return <ActiveMacroPanel symbol={symbol} />;
+}
+
+function ActiveMacroPanel({ symbol }) {
+  const { macroData, loading: macroLoading, error: macroError, reload: macroReload } =
+    useMacroData("Dag", symbol);
+
+  return (
+    <MacroSummaryTableForDashboard
+      data={macroData}
+      loading={macroLoading}
+      error={macroError}
+      onRetry={macroReload}
+    />
+  );
+}
+
+function DeferredPanelPlaceholder({ title, lines = 4 }) {
+  return (
+    <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden">
+      <div className="card-p p-6 sm:p-8">
+        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-secondary mb-4">
+          {title}
+        </div>
+        <div className="space-y-3 animate-pulse">
+          {Array.from({ length: lines }).map((_, idx) => (
+            <div key={idx} className="h-4 rounded-full bg-slate-100 dark:bg-slate-800" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeferredMarketAnalysisPanel({ symbol, snapshot, isActive }) {
+  const { t } = useTranslation();
+  const { sevenDayData, loading } = useMarketData(symbol, {
+    includeExtendedData: isActive,
+    includeSevenDayData: isActive,
+    includeForwardData: false,
+    includeDailyScores: false,
+    includeMarketDayData: false,
+    includeIndicators: false,
+  });
+
+  if (!isActive) {
+    return (
+      <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden">
+        <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
+          <h3 className="card-title text-slate-900 dark:text-white uppercase tracking-widest text-[12px] font-black">
+            {t.dashboard.market_data}
+          </h3>
+        </div>
+        <div className="card-p p-8">
+          <DeferredPanelPlaceholder title="Marktdata laadt wanneer je dit tabblad opent" lines={3} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden">
+      <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
+        <h3 className="card-title text-slate-900 dark:text-white uppercase tracking-widest text-[12px] font-black">
+          {t.dashboard.market_data}
+        </h3>
+      </div>
+      <div className="card-p p-8">
+        <MarketSummaryForDashboard
+          sevenDayData={sevenDayData}
+          btcLive={snapshot?.live}
+          loading={loading}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DeferredBotsPanel({ isActive, onSelectBot }) {
+  const [bots, setBots] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!isActive || loaded) return;
+
+    let cancelled = false;
+
+    async function loadBots() {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await fetchBotConfigs();
+        if (!cancelled) {
+          setBots(Array.isArray(data) ? data : []);
+          setLoaded(true);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("❌ bots tab load error:", err);
+          setError("Kon bots niet laden.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadBots();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isActive, loaded]);
+
+  if (!isActive) {
+    return <DeferredPanelPlaceholder title="Bots laden wanneer je dit tabblad opent" lines={3} />;
+  }
+
+  if (loading && !loaded) {
+    return <DeferredPanelPlaceholder title="Bots worden geladen" lines={4} />;
+  }
+
+  if (error) {
+    return (
+      <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden">
+        <div className="card-p p-6 sm:p-8">
+          <p className="text-sm font-semibold text-rose-600">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+      {bots.map((bot) => (
+        <BotCard
+          key={bot.id}
+          bot={bot}
+          showActions={false}
+          onSelect={(id) => onSelectBot(id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ScoreHistorySection({ symbol, isLoaded, onLoad }) {
+  if (isLoaded) {
+    return (
+      <DashboardErrorBoundary>
+        <ScoreHistoryChart symbol={symbol} />
+      </DashboardErrorBoundary>
+    );
+  }
+
+  return (
+    <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden">
+      <div className="card-p p-6 sm:p-8 space-y-5">
+        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-secondary">
+          Scorehistorie op aanvraag
+        </div>
+        <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 max-w-2xl">
+          Deze chart vraagt extra historische scoredata op. Open hem pas wanneer je echt in trends en terugblik wilt duiken.
+        </p>
+        <button
+          type="button"
+          onClick={onLoad}
+          className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition hover:bg-blue-700 active:scale-[0.98]"
+        >
+          <Loader2 size={14} className="animate-spin" />
+          Laad scorehistorie
+        </button>
+      </div>
     </div>
   );
 }

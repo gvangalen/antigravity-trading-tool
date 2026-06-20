@@ -110,5 +110,233 @@
       "push_off": "Push Off",
       "login_required": "Log in to enable notifications"
     }
+  },
+  "traderProfile": {
+    "options": {
+      "traderTypes": {
+        "investor": "Investor",
+        "dca_investor": "DCA investor",
+        "swing_trader": "Swing trader",
+        "day_trader": "Day trader",
+        "scalper": "Scalper",
+        "hybrid": "Hybrid"
+      },
+      "timeframes": {
+        "5m": "5m",
+        "15m": "15m",
+        "1h": "1H",
+        "4h": "4H",
+        "1d": "Daily",
+        "1w": "Weekly",
+        "1m": "Monthly"
+      },
+      "assetFocus": {
+        "bitcoin": "Bitcoin",
+        "crypto_general": "Crypto in general",
+        "stocks": "Stocks",
+        "etfs": "ETFs",
+        "forex": "Forex",
+        "commodities": "Commodities"
+      },
+      "goals": {
+        "wealth_building": "Build wealth",
+        "extra_income": "Extra income",
+        "active_trading": "Active trading",
+        "financial_independence": "Financial independence",
+        "retirement": "Retirement",
+        "capital_preservation": "Preserve capital"
+      },
+      "experienceLevels": {
+        "beginner": "Beginner",
+        "intermediate": "Intermediate",
+        "advanced": "Advanced",
+        "professional": "Professional"
+      },
+      "riskProfiles": {
+        "conservative": "Conservative",
+        "balanced": "Balanced",
+        "aggressive": "Aggressive"
+      }
+    },
+    "groups": {
+      "traderTypes": {
+        "title": "What kind of trader are you?",
+        "subtitle": "Pick one or more styles that match how you usually trade or invest."
+      },
+      "timeframes": {
+        "title": "Which timeframes do you use?",
+        "subtitle": "You can select multiple. Finn uses this to mute irrelevant signals."
+      },
+      "assetFocus": {
+        "title": "What do you focus on?",
+        "subtitle": "Choose the markets or assets Finn should weigh most in your context."
+      },
+      "goals": {
+        "title": "What is your goal?",
+        "subtitle": "Choose one or more goals. Finn uses this to align coaching and warnings with your intent."
+      },
+      "experience": {
+        "title": "How much experience do you have?",
+        "subtitle": "Choose what fits you best right now. You can select multiple levels if you sit between them."
+      },
+      "risk": {
+        "title": "What is your risk profile?",
+        "subtitle": "This helps Finn decide when to slow you down, warn you, or give you more room. Combine options if it changes by context."
+      }
+    },
+    "onboardingStep": {
+      "stepNumber": "Step 1 of 6",
+      "title": "Who are you as a trader?",
+      "description": "Finn uses this profile to tune explanations, warnings, and setup guidance to your style right away. That gives you less noise and more relevant advice.",
+      "finnSaysLabel": "Finn says",
+      "finnSaysBody": "You first, then the market. With your profile, Finn can decide which signals, timeframes, and warnings actually matter to you.",
+      "footer": "Save your profile to make the rest of onboarding more personal. After that you unlock the market and setup steps with much less noise.",
+      "saveAndContinue": "Save profile and continue",
+      "saving": "Saving profile...",
+      "validationError": "Please complete all profile fields first so Finn can guide you properly.",
+      "saveError": "Saving your trader profile failed. Please try again."
+    },
+    "profilePage": {
+      "eyebrow": "Trading profile",
+      "title": "This is how Finn learns who you are as a trader",
+      "description": "Finn uses this profile to tailor explanations, warnings, setups, and coaching to your style. Update it whenever your horizon, risk, or focus changes.",
+      "empty": "Not filled in yet",
+      "edit": "Edit profile",
+      "close": "Close",
+      "loading": "Loading trader profile...",
+      "save": "Save profile",
+      "saving": "Saving profile...",
+      "loadError": "The trader profile could not be loaded.",
+      "saveError": "Saving your trader profile failed. Please try again.",
+      "validationError": "Please complete all trader profile fields first so Finn can guide you properly.",
+      "saveSuccess": "Trading profile saved",
+      "styleAndGoal": "Style & goal",
+      "finnContext": "Context for Finn",
+      "helper": "Update this profile whenever your style changes. That keeps Finn relevant and reduces signals that do not fit how you trade."
+    },
+    "banner": {
+      "completeLabel": "Step completed",
+      "recommendedLabel": "Recommended next step",
+      "completeTitle": "Good, this step is done",
+      "completeBody": "You can move on to the next step or go back to your onboarding overview.",
+      "finnHelps": "Finn helps:",
+      "unlocksPrefix": "Then you unlock:",
+      "overviewCta": "View onboarding →",
+      "backToOverviewCta": "Back to overview →",
+      "steps": {
+        "profile": {
+          "title": "Step 1 of 6 — Your trading profile",
+          "action": "Start by sharing what kind of trader you are, which horizon you use, and what Finn should watch.",
+          "help": "Finn uses this to adapt setups, explanations, and risk warnings to your style.",
+          "unlocks": "More personal coaching"
+        },
+        "market": {
+          "title": "Step 2 of 6 — Market context",
+          "action": "Open the market page and let Finn establish the current market picture first.",
+          "help": "Without market context, Finn stays too generic in the advice that follows.",
+          "unlocks": "Your first market briefing"
+        },
+        "macro": {
+          "title": "Step 3 of 6 — Macro picture",
+          "action": "Add macro context so Finn can weigh regime and risk more accurately.",
+          "help": "Think DXY, yields, or liquidity: Finn uses this for the bigger picture.",
+          "unlocks": "Better risk assessment"
+        },
+        "technical": {
+          "title": "Step 4 of 6 — Technical signals",
+          "action": "Check technical signals so Finn can judge entries and timing more accurately.",
+          "help": "This step gives Finn evidence for trend, momentum, and timing.",
+          "unlocks": "Stronger timing explanations"
+        },
+        "setup": {
+          "title": "Step 5 of 6 — Create a setup",
+          "action": "Create your first setup so Finn can connect your rules to real situations.",
+          "help": "This is where Finn becomes more specific: not just context, but your preferences too.",
+          "unlocks": "More personal reviews"
+        },
+        "strategy": {
+          "title": "Step 6 of 6 — Choose a strategy",
+          "action": "Create your first strategy so dashboard, reviews, and reports become truly useful.",
+          "help": "After this step Finn can review and prioritize your decisions much better.",
+          "unlocks": "Full review flow"
+        }
+      }
+    },
+    "onboardingOverview": {
+      "loading": "Finn is preparing your workspace...",
+      "eyebrow": "Finn guides your setup",
+      "title": "Start in six clear steps",
+      "description": "You do not have to understand everything at once. Work through the steps calmly from top to bottom. Finn uses this route to build your market context, setup, and strategy so advice, reviews, and reports become truly useful afterward.",
+      "chips": {
+        "duration": "3-5 minutes",
+        "safe": "No live trades in onboarding",
+        "guided": "Finn guides every step"
+      },
+      "finnSays": "Finn says",
+      "finnComplete": "Your foundation is ready. Open your dashboard now, review your first report, and ask Finn for your next step.",
+      "nextStepPrefix": "Next step:",
+      "ready": "Done",
+      "recommendedRoute": "Recommended route",
+      "openStep": "Open step",
+      "unlocksPrefix": "Then you unlock:",
+      "status": {
+        "done": "Done",
+        "recommended": "Recommended",
+        "available": "Available",
+        "locked": "Still locked"
+      },
+      "steps": {
+        "profile": {
+          "title": "Your trading profile",
+          "description": "Start by telling Finn what kind of trader you are, which horizon you use, and what Finn should pay attention to.",
+          "finnHelp": "Finn uses this profile to tailor advice, warnings, and explanations to your style right away.",
+          "unlocks": "More personal coaching and more relevant signals"
+        },
+        "market": {
+          "title": "Market context",
+          "description": "Review live market data and let Finn establish the market picture first.",
+          "finnHelp": "Finn uses this to build your first context and priorities.",
+          "unlocks": "First market briefing and live context"
+        },
+        "macro": {
+          "title": "Macro picture",
+          "description": "Add macro context so Finn can weigh regime and risk more accurately.",
+          "finnHelp": "Think DXY, yields, and liquidity: this gives Finn the bigger picture.",
+          "unlocks": "Better risk assessment and regime context"
+        },
+        "technical": {
+          "title": "Technical signals",
+          "description": "Check technical signals so Finn can explain entries and timing more clearly.",
+          "finnHelp": "This gives Finn structure for trend, momentum, and timing.",
+          "unlocks": "Stronger timing, trend, and momentum guidance"
+        },
+        "setup": {
+          "title": "Create a setup",
+          "description": "Save your first setup so Finn can attach your context to concrete rules.",
+          "finnHelp": "This is where Finn becomes more specific: not just context, but your preferences too.",
+          "unlocks": "More personal reviews and sharper next steps"
+        },
+        "strategy": {
+          "title": "Choose a strategy",
+          "description": "Create your first strategy so dashboard, reports, and reviews become truly useful.",
+          "finnHelp": "After this step Finn can review, block, and prioritize decisions much better.",
+          "unlocks": "Full dashboard, report, and review flow"
+        }
+      }
+    },
+    "onboardingComplete": {
+      "title": "Onboarding complete",
+      "description": "Your foundation is ready. Finn now has enough context to make your dashboard, reports, and reviews much more targeted. Start calmly: open your dashboard, then check your report, and ask Finn for your next step.",
+      "finnSays": "Finn says",
+      "finnBody": "Open your dashboard first for the full picture. Then use report to see what matters today and ask Finn which next step makes most sense.",
+      "chips": {
+        "dashboard": "Dashboard",
+        "report": "Report",
+        "askFinn": "Ask Finn"
+      },
+      "openDashboard": "Open dashboard",
+      "preparingDashboard": "Preparing dashboard...",
+      "footer": "You can always come back later to market, setup, or strategy to sharpen your context."
+    }
   }
 }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from collections import defaultdict
 from pathlib import Path
 
 
@@ -81,9 +82,20 @@ def test_mixed_load_requests_stay_safe_and_user_scoped():
         assert request["profile"] == "mixed-load"
         assert request["scenario_profile"] in {"read-heavy", "ai-heavy", "bot-execution-heavy"}
         assert request["virtual_user"] >= 1
+        assert request["scheduled_at_offset_s"] >= 0
         assert "/api/assistant/actions/execute" not in request["path"]
         assert "/api/orders/manual" not in request["path"]
         assert "/api/report/daily/generate" not in request["path"]
+
+    ai_offsets_by_user = defaultdict(list)
+    for request in requests:
+        if request["scenario_profile"] == "ai-heavy":
+            ai_offsets_by_user[request["virtual_user"]].append(request["scheduled_at_offset_s"])
+    assert ai_offsets_by_user
+    for offsets in ai_offsets_by_user.values():
+        assert offsets == sorted(offsets)
+        assert len(offsets) >= 2
+        assert any(b - a >= 2.5 for a, b in zip(offsets, offsets[1:]))
 
 
 def test_bot_execution_profile_only_uses_preview_when_fixture_is_present(tmp_path: Path):
@@ -127,5 +139,6 @@ def test_capacity_harness_doc_references_script_and_safe_profiles():
     assert "bot-execution-heavy" in source
     assert "mixed-load" in source
     assert "80% dashboard/read" in source
+    assert "human-like pacing" in source
     assert "no execute endpoints" in source
     assert "manual-order preview only when an explicit fixture is supplied" in source

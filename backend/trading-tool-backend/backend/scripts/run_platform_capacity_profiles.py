@@ -40,6 +40,11 @@ SAFE_GOVERNANCE_QUERIES = [
 ]
 
 PROFILE_CHOICES = ["read-heavy", "ai-heavy", "bot-execution-heavy", "mixed-load"]
+DEFAULT_MIXED_READ_THINK_TIME_SECONDS = 0.15
+DEFAULT_MIXED_AI_THINK_TIME_SECONDS = 2.5
+DEFAULT_MIXED_BOT_THINK_TIME_SECONDS = 3.0
+DEFAULT_MIXED_USER_START_STAGGER_SECONDS = 0.35
+DEFAULT_MIXED_WAVE_WIDTH = 20
 
 
 def _percentile(values: List[float], percentile: float) -> float:
@@ -207,6 +212,11 @@ def build_mixed_profile_requests(
     ai_share: int,
     bot_share: int,
     manual_order_preview_fixture: Optional[Dict[str, Any]] = None,
+    read_think_time_seconds: float = DEFAULT_MIXED_READ_THINK_TIME_SECONDS,
+    ai_think_time_seconds: float = DEFAULT_MIXED_AI_THINK_TIME_SECONDS,
+    bot_think_time_seconds: float = DEFAULT_MIXED_BOT_THINK_TIME_SECONDS,
+    user_start_stagger_seconds: float = DEFAULT_MIXED_USER_START_STAGGER_SECONDS,
+    wave_width: int = DEFAULT_MIXED_WAVE_WIDTH,
 ) -> tuple[List[Dict[str, Any]], Dict[str, int]]:
     distribution = allocate_profile_mix(
         virtual_users=virtual_users,
@@ -216,6 +226,12 @@ def build_mixed_profile_requests(
     )
     requests: List[Dict[str, Any]] = []
     virtual_user_id = 0
+    per_profile_think_time = {
+        "read-heavy": max(0.0, float(read_think_time_seconds)),
+        "ai-heavy": max(0.0, float(ai_think_time_seconds)),
+        "bot-execution-heavy": max(0.0, float(bot_think_time_seconds)),
+    }
+    safe_wave_width = max(1, int(wave_width))
     for scenario_profile in ["read-heavy", "ai-heavy", "bot-execution-heavy"]:
         for _ in range(distribution[scenario_profile]):
             virtual_user_id += 1
@@ -224,13 +240,25 @@ def build_mixed_profile_requests(
                 iterations=iterations_per_user,
                 manual_order_preview_fixture=manual_order_preview_fixture,
             )
-            for request in profile_requests:
+            user_wave_index = (virtual_user_id - 1) % safe_wave_width
+            user_wave_batch = (virtual_user_id - 1) // safe_wave_width
+            start_offset_seconds = (
+                user_wave_index * user_start_stagger_seconds
+            ) + (
+                user_wave_batch * user_start_stagger_seconds
+            )
+            think_time_seconds = per_profile_think_time[scenario_profile]
+            for request_index, request in enumerate(profile_requests):
                 requests.append(
                     {
                         **request,
                         "profile": "mixed-load",
                         "scenario_profile": scenario_profile,
                         "virtual_user": virtual_user_id,
+                        "scheduled_at_offset_s": round(
+                            start_offset_seconds + (request_index * think_time_seconds),
+                            3,
+                        ),
                     }
                 )
     return requests, distribution
@@ -400,6 +428,11 @@ async def run_profile(
     mixed_ai_share: int = 15,
     mixed_bot_share: int = 5,
     mixed_concurrency: int = 20,
+    mixed_read_think_time_seconds: float = DEFAULT_MIXED_READ_THINK_TIME_SECONDS,
+    mixed_ai_think_time_seconds: float = DEFAULT_MIXED_AI_THINK_TIME_SECONDS,
+    mixed_bot_think_time_seconds: float = DEFAULT_MIXED_BOT_THINK_TIME_SECONDS,
+    mixed_user_start_stagger_seconds: float = DEFAULT_MIXED_USER_START_STAGGER_SECONDS,
+    mixed_wave_width: int = DEFAULT_MIXED_WAVE_WIDTH,
 ) -> Dict[str, Any]:
     mix_distribution: Optional[Dict[str, int]] = None
     if profile == "mixed-load":
@@ -410,6 +443,11 @@ async def run_profile(
             ai_share=mixed_ai_share,
             bot_share=mixed_bot_share,
             manual_order_preview_fixture=manual_order_preview_fixture,
+            read_think_time_seconds=mixed_read_think_time_seconds,
+            ai_think_time_seconds=mixed_ai_think_time_seconds,
+            bot_think_time_seconds=mixed_bot_think_time_seconds,
+            user_start_stagger_seconds=mixed_user_start_stagger_seconds,
+            wave_width=mixed_wave_width,
         )
     else:
         specs = build_profile_requests(
@@ -418,8 +456,13 @@ async def run_profile(
             manual_order_preview_fixture=manual_order_preview_fixture,
         )
     semaphore = asyncio.Semaphore(profile_concurrency(profile, mixed_concurrency=mixed_concurrency))
+    profile_started = time.perf_counter()
 
     async def _guarded(spec: Dict[str, Any]) -> Dict[str, Any]:
+        scheduled_offset = float(spec.get("scheduled_at_offset_s", 0.0) or 0.0)
+        elapsed = time.perf_counter() - profile_started
+        if scheduled_offset > elapsed:
+            await asyncio.sleep(scheduled_offset - elapsed)
         async with semaphore:
             return await execute_request(client, spec)
 
@@ -452,6 +495,13 @@ async def run_profile(
         summary["virtual_users"] = mixed_virtual_users
         summary["iterations_per_user"] = mixed_iterations_per_user
         summary["mixed_concurrency"] = mixed_concurrency
+        summary["pacing"] = {
+            "read_think_time_seconds": mixed_read_think_time_seconds,
+            "ai_think_time_seconds": mixed_ai_think_time_seconds,
+            "bot_think_time_seconds": mixed_bot_think_time_seconds,
+            "user_start_stagger_seconds": mixed_user_start_stagger_seconds,
+            "wave_width": mixed_wave_width,
+        }
         summary["traffic_mix"] = {
             "read_share": mixed_read_share,
             "ai_share": mixed_ai_share,
@@ -479,6 +529,7 @@ def render_markdown(summary: Dict[str, Any]) -> str:
             lines.append(f"- mixed_distribution: `{profile.get('mixed_distribution')}`")
             lines.append(f"- scenario_request_counts: `{profile.get('scenario_request_counts')}`")
             lines.append(f"- traffic_mix: `{profile.get('traffic_mix')}`")
+            lines.append(f"- pacing: `{profile.get('pacing')}`")
         lines.append(f"- request_count: `{profile['request_count']}`")
         lines.append(f"- success_count: `{profile['success_count']}`")
         lines.append(f"- failure_count: `{profile['failure_count']}`")
@@ -524,6 +575,11 @@ async def async_main(argv: Optional[Iterable[str]] = None) -> int:
     parser.add_argument("--ai-share", type=int, default=15)
     parser.add_argument("--bot-share", type=int, default=5)
     parser.add_argument("--mixed-concurrency", type=int, default=20)
+    parser.add_argument("--mixed-read-think-time-seconds", type=float, default=DEFAULT_MIXED_READ_THINK_TIME_SECONDS)
+    parser.add_argument("--mixed-ai-think-time-seconds", type=float, default=DEFAULT_MIXED_AI_THINK_TIME_SECONDS)
+    parser.add_argument("--mixed-bot-think-time-seconds", type=float, default=DEFAULT_MIXED_BOT_THINK_TIME_SECONDS)
+    parser.add_argument("--mixed-user-start-stagger-seconds", type=float, default=DEFAULT_MIXED_USER_START_STAGGER_SECONDS)
+    parser.add_argument("--mixed-wave-width", type=int, default=DEFAULT_MIXED_WAVE_WIDTH)
     parser.add_argument("--health-interval-seconds", type=float, default=10.0)
     parser.add_argument("--timeout-seconds", type=float, default=45.0)
     parser.add_argument("--manual-order-preview-fixture", type=Path, default=None)
@@ -577,6 +633,11 @@ async def async_main(argv: Optional[Iterable[str]] = None) -> int:
                         mixed_ai_share=args.ai_share,
                         mixed_bot_share=args.bot_share,
                         mixed_concurrency=args.mixed_concurrency,
+                        mixed_read_think_time_seconds=args.mixed_read_think_time_seconds,
+                        mixed_ai_think_time_seconds=args.mixed_ai_think_time_seconds,
+                        mixed_bot_think_time_seconds=args.mixed_bot_think_time_seconds,
+                        mixed_user_start_stagger_seconds=args.mixed_user_start_stagger_seconds,
+                        mixed_wave_width=args.mixed_wave_width,
                     )
                 )
         finally:

@@ -1,6 +1,6 @@
 # FINN Status + Certification Summary
 
-Last updated: 2026-06-04
+Last updated: 2026-06-09
 
 ## Snapshot
 
@@ -184,6 +184,58 @@ Reason:
 - routing / safety / audit quality are clean
 - remaining formal gap is replay latency budget, not product quality
 
+## Current combined certification stance
+
+This is the practical combined reading across the current strongest references:
+
+- **FINN 2.0**
+  - certified
+- **FINN 3.0**
+  - not fully certified yet
+  - stable and product-credible
+  - remaining gap is mostly Operator depth from `85 -> 90+`
+- **FINN 4.0 Performance Intelligence**
+  - certified on the dedicated suite
+- **FINN 5.0 Governance**
+  - content-certified on the dedicated suite
+  - still latency-polish-sensitive on the strict replay budget
+
+In plain language:
+
+- Core is now across the certification line
+- Performance Intelligence is across the certification line
+- Governance is across the content-quality line
+- the remaining broad-stack certification gap is now mainly an **Operator polish gap**, not a routing or safety gap
+
+Active follow-up plan:
+
+- [FINN Operator 90+ Sprint](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-operator-90-plus-sprint.md)
+
+## Current strongest baselines
+
+Use these as the current reference points unless a newer fully valid run supersedes them:
+
+- **Core baseline:** `90`
+- **Operator baseline:** `85`
+- **Performance Intelligence baseline:** `91`
+- **Governance baseline:** `91`
+
+Supporting references:
+
+- strongest Core + Operator confirm run:
+  - commit: `7dcdb71`
+  - `41/41` passed
+  - replay gate: green
+- strongest dedicated Performance Intelligence run:
+  - commit: `ad18bf6`
+  - `20/20` passed
+  - replay gate: green
+- strongest dedicated Governance run:
+  - commit: `547d3e7`
+  - `24/24` passed
+  - no product or operational failures
+  - strict replay gate still tracks latency separately
+
 ## Practical reading
 
 What is already true:
@@ -198,6 +250,13 @@ What still blocks broader full-stack certification:
 - Operator still needs to move from `85` toward `90+`
 - 5.0 Governance still needs latency-budget polish for a formally green dedicated replay gate
 
+What is no longer a primary blocker:
+
+- broad routing rescue work
+- governance lane ownership on high-risk prompts
+- performance-intelligence reliability
+- replay noise from generic failures or transactional misroutes on the strongest baselines
+
 ## Recommended status language
 
 Use this wording in project updates:
@@ -210,6 +269,12 @@ Use this wording in project updates:
 - the next broad certification step remains:
   - Operator `85 -> 90+`
   - selective polish on the richest operator categories, not broad lane repairs
+
+## Short executive summary
+
+If you need a one-paragraph status update, use this:
+
+> FINN is now strong across four layers: Core `90`, Operator `85`, Performance Intelligence `91`, and Governance `91`. The shared Core + Operator replay gate is green, the dedicated 4.0 suite is green, and the dedicated 5.0 suite is content-clean with remaining latency-budget polish only. The main remaining certification gap is no longer safety or routing; it is pushing Operator quality from a stable `85` toward `90+`.
 
 ## References
 

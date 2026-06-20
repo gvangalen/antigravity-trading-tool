@@ -4,8 +4,12 @@ import React from "react";
 import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
 import MarketDecisionCard from "@/components/bot/MarketDecisionCard";
 
-export default function GlobalMarketDecisionCard({ symbol = "BTC" }) {
-  const { data, loading } = useMarketIntelligence(symbol);
+export default function GlobalMarketDecisionCard({
+  symbol = "BTC",
+  snapshot = null,
+}) {
+  const fallbackSnapshot = useMarketIntelligence(symbol);
+  const { data, loading } = snapshot || fallbackSnapshot;
 
   if (loading) {
     return (

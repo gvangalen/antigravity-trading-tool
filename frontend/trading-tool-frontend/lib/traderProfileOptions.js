@@ -1,52 +1,66 @@
-export const TRADER_TYPES = [
-  { value: "investor", label: "Investeerder" },
-  { value: "dca_investor", label: "DCA-investeerder" },
-  { value: "swing_trader", label: "Swingtrader" },
-  { value: "day_trader", label: "Daytrader" },
-  { value: "scalper", label: "Scalper" },
-  { value: "hybrid", label: "Hybride" },
+export const TRADER_TYPE_VALUES = [
+  "investor",
+  "dca_investor",
+  "swing_trader",
+  "day_trader",
+  "scalper",
+  "hybrid",
 ];
 
-export const TIMEFRAMES = [
-  { value: "5m", label: "5m" },
-  { value: "15m", label: "15m" },
-  { value: "1h", label: "1H" },
-  { value: "4h", label: "4H" },
-  { value: "1d", label: "Dagelijks" },
-  { value: "1w", label: "Wekelijks" },
-  { value: "1m", label: "Maandelijks" },
+export const TIMEFRAME_VALUES = ["5m", "15m", "1h", "4h", "1d", "1w", "1m"];
+
+export const ASSET_FOCUS_VALUES = [
+  "bitcoin",
+  "crypto_general",
+  "stocks",
+  "etfs",
+  "forex",
+  "commodities",
 ];
 
-export const ASSET_FOCUS = [
-  { value: "bitcoin", label: "Bitcoin" },
-  { value: "crypto_general", label: "Crypto algemeen" },
-  { value: "stocks", label: "Aandelen" },
-  { value: "etfs", label: "ETF's" },
-  { value: "forex", label: "Forex" },
-  { value: "commodities", label: "Grondstoffen" },
+export const GOAL_VALUES = [
+  "wealth_building",
+  "extra_income",
+  "active_trading",
+  "financial_independence",
+  "retirement",
+  "capital_preservation",
 ];
 
-export const GOALS = [
-  { value: "wealth_building", label: "Vermogen opbouwen" },
-  { value: "extra_income", label: "Extra inkomen" },
-  { value: "active_trading", label: "Actief traden" },
-  { value: "financial_independence", label: "Financiële onafhankelijkheid" },
-  { value: "retirement", label: "Pensioen" },
-  { value: "capital_preservation", label: "Kapitaal behouden" },
-];
+export const EXPERIENCE_LEVEL_VALUES = ["beginner", "intermediate", "advanced", "professional"];
 
-export const EXPERIENCE_LEVELS = [
-  { value: "beginner", label: "Beginner" },
-  { value: "intermediate", label: "Gemiddeld" },
-  { value: "advanced", label: "Gevorderd" },
-  { value: "professional", label: "Professioneel" },
-];
+export const RISK_PROFILE_VALUES = ["conservative", "balanced", "aggressive"];
 
-export const RISK_PROFILES = [
-  { value: "conservative", label: "Conservatief" },
-  { value: "balanced", label: "Normaal" },
-  { value: "aggressive", label: "Agressief" },
-];
+function createOptions(values, labels = {}) {
+  return values.map((value) => ({
+    value,
+    label: labels[value] || value,
+  }));
+}
+
+export function getTraderTypeOptions(t) {
+  return createOptions(TRADER_TYPE_VALUES, t?.traderProfile?.options?.traderTypes);
+}
+
+export function getTimeframeOptions(t) {
+  return createOptions(TIMEFRAME_VALUES, t?.traderProfile?.options?.timeframes);
+}
+
+export function getAssetFocusOptions(t) {
+  return createOptions(ASSET_FOCUS_VALUES, t?.traderProfile?.options?.assetFocus);
+}
+
+export function getGoalOptions(t) {
+  return createOptions(GOAL_VALUES, t?.traderProfile?.options?.goals);
+}
+
+export function getExperienceLevelOptions(t) {
+  return createOptions(EXPERIENCE_LEVEL_VALUES, t?.traderProfile?.options?.experienceLevels);
+}
+
+export function getRiskProfileOptions(t) {
+  return createOptions(RISK_PROFILE_VALUES, t?.traderProfile?.options?.riskProfiles);
+}
 
 export function createOptionLabelMap(options) {
   return options.reduce((acc, option) => {

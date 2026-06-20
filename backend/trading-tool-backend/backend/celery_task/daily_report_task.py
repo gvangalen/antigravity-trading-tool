@@ -18,6 +18,7 @@ from backend.ai_core.regime_memory import (
 
 # 📸 Snapshot service
 from backend.services.report_snapshot_service import create_report_snapshot
+from backend.services.ai_usage_observability_service import ai_usage_context, get_user_email_snapshot
 
 logging.basicConfig(
     level=logging.INFO,
@@ -76,7 +77,16 @@ def generate_daily_report(user_id: int):
         # -------------------------------------------------
         # 1️⃣ GENERATE REPORT
         # -------------------------------------------------
-        report = generate_daily_report_sections(user_id=user_id)
+        with ai_usage_context(
+            user_id=user_id,
+            user_email=get_user_email_snapshot(user_id),
+            purpose="daily_report_generation",
+            request_source="background_job",
+            run_kind="scheduled",
+            entry_point="daily_report_task",
+            symbol="WATCHLIST",
+        ):
+            report = generate_daily_report_sections(user_id=user_id)
 
         if not isinstance(report, dict):
             raise ValueError("Report agent gaf geen geldig dict terug")

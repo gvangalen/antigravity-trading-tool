@@ -2201,21 +2201,34 @@ async def record_ai_usage_background(
             cost = calculate_cost("gpt-4o-mini", p_tokens, c_tokens)
             
             from sqlalchemy import text
+            from backend.services.ai_usage_observability_service import classify_request_source
+
+            user = await user_repo.get_by_id(user_id)
+            user_email = getattr(user, "email", None) if user else None
+            app_env = os.getenv("APP_ENV", "unknown")
+            request_source = classify_request_source(
+                user_email=user_email,
+                app_env=app_env,
+                run_kind="interactive",
+            )
             stmt = text("""
                 INSERT INTO ai_usage_logs (
                     user_id, model, prompt_tokens, completion_tokens, cost, purpose, status, 
                     response_time_ms, estimated_cost_if_full, symbol, trace_id, 
-                    completion_status, parser_recovery_triggered, confidence_score, safety_guardrail_triggered
+                    completion_status, parser_recovery_triggered, confidence_score, safety_guardrail_triggered,
+                    request_source, app_env, run_kind, entry_point, user_email_snapshot
                 ) VALUES (
                     :u, :m, :p, :c, :co, :pur, :s, 
                     :rt, :ec, :sym, :tid, 
-                    :c_stat, :p_rec, :conf, :s_grd
+                    :c_stat, :p_rec, :conf, :s_grd,
+                    :src, :env, :run_kind, :entry, :email
                 )
             """)
             await db.execute(stmt, {
                 "u": user_id, "m": "gpt-4o-mini", "p": p_tokens, "c": c_tokens, "co": cost, "pur": f"chat_{intent}", "s": "full_ai",
                 "rt": duration_ms, "ec": cost, "sym": resolved_symbol, "tid": trace_id,
-                "c_stat": completion_status, "p_rec": parser_recovery_triggered, "conf": confidence_score, "s_grd": safety_guardrail_triggered
+                "c_stat": completion_status, "p_rec": parser_recovery_triggered, "conf": confidence_score, "s_grd": safety_guardrail_triggered,
+                "src": request_source, "env": app_env, "run_kind": "interactive", "entry": f"assistant_service:{intent}", "email": user_email
             })
             
             # Increment request counter and cost statistics

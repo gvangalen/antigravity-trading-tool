@@ -2,6 +2,7 @@ import logging
 import json
 import hashlib
 import time
+import os
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Union, Tuple, List
 
@@ -11,6 +12,7 @@ from backend.utils.embedding_client import get_embedding
 from backend.infrastructure.vector_store import get_vector_store
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.repositories.score_repository import ScoreRepository
+from backend.services.ai_usage_observability_service import classify_request_source
 from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
@@ -54,6 +56,18 @@ class AiGateway:
         start_time = time.perf_counter()
         norm_query = self._normalize_query(prompt)
         query_hash = hashlib.sha256(norm_query.encode()).hexdigest()
+
+        if user_model is not None:
+            user = user_model
+        else:
+            user = await self.user_repo.get_by_id(user_id)
+
+        if not user:
+            return "Gebruiker niet gevonden."
+
+        app_env = str(os.getenv("APP_ENV", "unknown") or "unknown").lower()
+        user_email = getattr(user, "email", None)
+        request_source = classify_request_source(user_email=user_email, app_env=app_env, run_kind="interactive")
         
         # 1. STEP 1: Exact Match (Context Aware)
         exact_hit = await self._check_exact_match(query_hash, symbol, timeframe, purpose)
@@ -66,7 +80,9 @@ class AiGateway:
                 user_id=user_id, model="cache_exact", p_tokens=0, c_tokens=0, 
                 cost=0.0, purpose=purpose, status="cache_exact",
                 response_time_ms=duration_ms, estimated_cost_if_full=cost,
-                cache_age_seconds=age, symbol=symbol
+                cache_age_seconds=age, symbol=symbol,
+                request_source=request_source, app_env=app_env, run_kind="interactive",
+                entry_point=f"ai_gateway:{purpose}", user_email_snapshot=user_email
             )
             return response
             
@@ -83,17 +99,11 @@ class AiGateway:
                     user_id=user_id, model="cache_semantic", p_tokens=0, c_tokens=0, 
                     cost=0.0, purpose=purpose, status="cache_semantic",
                     response_time_ms=duration_ms, estimated_cost_if_full=cost,
-                    similarity_score=score, cache_age_seconds=age, symbol=symbol
+                    similarity_score=score, cache_age_seconds=age, symbol=symbol,
+                    request_source=request_source, app_env=app_env, run_kind="interactive",
+                    entry_point=f"ai_gateway:{purpose}", user_email_snapshot=user_email
                 )
                 return response
-                
-        # 3. Get User & Quota State
-        if user_model is not None:
-            user = user_model
-        else:
-            user = await self.user_repo.get_by_id(user_id)
-            
-        if not user: return "Gebruiker niet gevonden."
         
         limit = getattr(user, "ai_requests_limit_day", 25) or 25
         used = getattr(user, "ai_requests_used_day", 0) or 0
@@ -104,14 +114,17 @@ class AiGateway:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             await self._log_usage(
                 user_id=user_id, model="fallback", p_tokens=0, c_tokens=0, 
-                cost=0.0, purpose=purpose, status="fallback", response_time_ms=duration_ms, symbol=symbol
+                cost=0.0, purpose=purpose, status="fallback", response_time_ms=duration_ms, symbol=symbol,
+                request_source=request_source, app_env=app_env, run_kind="interactive",
+                entry_point=f"ai_gateway:{purpose}", user_email_snapshot=user_email
             )
             return res
             
         # 5. STEP 3: Full AI Call
         res = await self._execute_ai_call(
             user_id, prompt, norm_query, system_role, mode, schema, 
-            purpose, symbol, timeframe, start_time=start_time
+            purpose, symbol, timeframe, start_time=start_time,
+            request_source=request_source, app_env=app_env, user_email_snapshot=user_email
         )
         return res
 
@@ -172,7 +185,9 @@ class AiGateway:
     async def _execute_ai_call(
         self, user_id: int, original_prompt: str, norm_query: str, 
         system_role: str, mode: str, schema: Optional[Dict[str, Any]], 
-        purpose: str, symbol: str, timeframe: str, start_time: float
+        purpose: str, symbol: str, timeframe: str, start_time: float,
+        request_source: Optional[str] = None, app_env: Optional[str] = None,
+        user_email_snapshot: Optional[str] = None
     ):
         if mode == "json":
             result = await ask_gpt_json_async(prompt=original_prompt, system_role=system_role, schema=schema)
@@ -194,7 +209,9 @@ class AiGateway:
         
         await self._log_usage(
             user_id, model, p_tokens, c_tokens, cost, purpose, "full_ai", 
-            response_time_ms=duration_ms, estimated_cost_if_full=cost, symbol=symbol
+            response_time_ms=duration_ms, estimated_cost_if_full=cost, symbol=symbol,
+            request_source=request_source, app_env=app_env, run_kind="interactive",
+            entry_point=f"ai_gateway:{purpose}", user_email_snapshot=user_email_snapshot
         )
         
         # 6. Save to Cache & Index
@@ -271,17 +288,29 @@ class AiGateway:
         cost: float, purpose: str, status: str, 
         response_time_ms: int = 0, estimated_cost_if_full: float = 0.0,
         similarity_score: float = None, cache_age_seconds: int = None,
-        rejected_reason: str = None, symbol: str = "GLOBAL"
+        rejected_reason: str = None, symbol: str = "GLOBAL",
+        request_source: Optional[str] = None, app_env: Optional[str] = None,
+        run_kind: Optional[str] = None, entry_point: Optional[str] = None,
+        user_email_snapshot: Optional[str] = None
     ):
         try:
             stmt = text("""
-                INSERT INTO ai_usage_logs (user_id, model, prompt_tokens, completion_tokens, cost, purpose, status, response_time_ms, estimated_cost_if_full, similarity_score, cache_age_seconds, rejected_reason, symbol)
-                VALUES (:u, :m, :p, :c, :co, :pur, :s, :rt, :ec, :ss, :cas, :rr, :sym)
+                INSERT INTO ai_usage_logs (
+                    user_id, model, prompt_tokens, completion_tokens, cost, purpose, status,
+                    response_time_ms, estimated_cost_if_full, similarity_score, cache_age_seconds,
+                    rejected_reason, symbol, request_source, app_env, run_kind, entry_point, user_email_snapshot
+                )
+                VALUES (
+                    :u, :m, :p, :c, :co, :pur, :s,
+                    :rt, :ec, :ss, :cas,
+                    :rr, :sym, :src, :env, :run_kind, :entry, :email
+                )
             """)
             await self.user_repo.db.execute(stmt, {
                 "u": user_id, "m": model, "p": p_tokens, "c": c_tokens, "co": cost, "pur": purpose, "s": status,
                 "rt": response_time_ms, "ec": estimated_cost_if_full, "ss": similarity_score, "cas": cache_age_seconds, "rr": rejected_reason,
-                "sym": symbol
+                "sym": symbol, "src": request_source or "unclassified", "env": app_env, "run_kind": run_kind,
+                "entry": entry_point, "email": user_email_snapshot
             })
             await self.user_repo.db.commit()
         except Exception as e:

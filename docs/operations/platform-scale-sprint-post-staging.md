@@ -1,6 +1,6 @@
 # Tradamind Platform Scale Sprint
 
-Last updated: 2026-06-07
+Last updated: 2026-06-08
 
 ## Current Status
 
@@ -129,6 +129,13 @@ Harness:
 
 - [Platform Phase 2.1 Capacity Harness](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-phase-2-1-capacity-harness.md)
 
+Current measured outcome:
+
+- `100` mixed staging users: stable
+- `250` mixed staging users: stable
+- `500` mixed staging users: stable
+- remaining non-`200` traffic is dominated by expected `429` policy hits on AI/governance chat, not by broker, queue, or worker instability
+
 ### 4. Read Amplification
 
 Inspect:
@@ -193,7 +200,27 @@ Deliverables:
 4. first measured staging results
 5. concurrency recommendation before touching production
 
+Current status:
+
+- completed
+- see [Platform Scale P0.1 — Staging Baseline](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-scale-staging-baseline.md)
+
+## Next Focus After The Baseline
+
+With the `100 -> 250 -> 500` staging baseline now recorded, the next priority is no longer more synthetic scale escalation.
+
+The better next work is:
+
+1. FINN/product-quality improvements
+2. platform polish where users will feel it directly
+3. instrumentation for real user behavior
+
+In practice this means:
+
+- continue FINN iteration from a stronger platform footing
+- tighten read amplification only where real usage shows it matters
+- collect real user prompt/screen/returning-user patterns before the next scale jump
+
 Operator runbook:
 
 - [Platform Scale P0.1 — Staging Baseline](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-scale-staging-baseline.md)
-

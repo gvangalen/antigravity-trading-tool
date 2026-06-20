@@ -3,18 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Sparkles, User } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
 import {
-  ASSET_FOCUS,
-  EXPERIENCE_LEVELS,
-  GOALS,
+  getAssetFocusOptions,
+  getExperienceLevelOptions,
+  getGoalOptions,
+  getRiskProfileOptions,
+  getTimeframeOptions,
+  getTraderTypeOptions,
   normalizeTraderProfilePreferences,
-  RISK_PROFILES,
   serializeTraderProfilePreferences,
-  TIMEFRAMES,
-  TRADER_TYPES,
 } from "@/lib/traderProfileOptions";
 
 function MultiChoiceGroup({ title, subtitle, options, values, onToggle }) {
@@ -50,6 +51,7 @@ function MultiChoiceGroup({ title, subtitle, options, values, onToggle }) {
 
 export default function OnboardingProfilePage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { completeStep, saving } = useOnboarding();
   const [loadingPrefs, setLoadingPrefs] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -100,6 +102,13 @@ export default function OnboardingProfilePage() {
     );
   }, [form]);
 
+  const traderTypeOptions = useMemo(() => getTraderTypeOptions(t), [t]);
+  const timeframeOptions = useMemo(() => getTimeframeOptions(t), [t]);
+  const assetFocusOptions = useMemo(() => getAssetFocusOptions(t), [t]);
+  const goalOptions = useMemo(() => getGoalOptions(t), [t]);
+  const experienceOptions = useMemo(() => getExperienceLevelOptions(t), [t]);
+  const riskOptions = useMemo(() => getRiskProfileOptions(t), [t]);
+
   const toggleMulti = (field, value) => {
     setForm((current) => {
       const list = current[field];
@@ -116,7 +125,7 @@ export default function OnboardingProfilePage() {
 
   const handleSubmit = async () => {
     if (!isValid) {
-      setError("Vul eerst alle profielvelden in zodat Finn je goed kan begeleiden.");
+      setError(t?.traderProfile?.onboardingStep?.validationError);
       return;
     }
 
@@ -129,7 +138,7 @@ export default function OnboardingProfilePage() {
       router.push("/onboarding");
     } catch (err) {
       console.error("Profiel opslaan mislukt", err);
-      setError("Opslaan van je traderprofiel is mislukt. Probeer het nog eens.");
+      setError(t?.traderProfile?.onboardingStep?.saveError);
     } finally {
       setSubmitting(false);
     }
@@ -148,27 +157,25 @@ export default function OnboardingProfilePage() {
               </div>
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-600">
-                  Stap 1 van 6
+                  {t?.traderProfile?.onboardingStep?.stepNumber}
                 </div>
                 <h1 className="text-3xl font-black tracking-tight text-slate-900">
-                  Wie ben jij als trader?
+                  {t?.traderProfile?.onboardingStep?.title}
                 </h1>
               </div>
             </div>
             <p className="text-sm font-medium leading-relaxed text-slate-500">
-              Finn gebruikt dit profiel om uitleg, waarschuwingen en setupbegeleiding meteen beter
-              af te stemmen op jouw stijl. Zo krijg je minder ruis en relevanter advies.
+              {t?.traderProfile?.onboardingStep?.description}
             </p>
           </div>
 
           <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
               <Sparkles size={14} />
-              Finn zegt
+              {t?.traderProfile?.onboardingStep?.finnSaysLabel}
             </div>
             <p className="mt-2 max-w-sm">
-              Eerst jij, dan pas de markt. Met jouw profiel kan Finn beter bepalen welke signalen,
-              timeframes en waarschuwingen echt relevant zijn.
+              {t?.traderProfile?.onboardingStep?.finnSaysBody}
             </p>
           </div>
         </div>
@@ -176,49 +183,49 @@ export default function OnboardingProfilePage() {
 
       <div className="grid grid-cols-1 gap-6">
         <MultiChoiceGroup
-          title="Wat voor trader ben je?"
-          subtitle="Kies een of meer stijlen die passen bij hoe jij normaal handelt of investeert."
-          options={TRADER_TYPES}
+          title={t?.traderProfile?.groups?.traderTypes?.title}
+          subtitle={t?.traderProfile?.groups?.traderTypes?.subtitle}
+          options={traderTypeOptions}
           values={form.trader_types}
           onToggle={(value) => toggleMulti("trader_types", value)}
         />
 
         <MultiChoiceGroup
-          title="Welke timeframes gebruik je?"
-          subtitle="Je kunt meerdere selecteren. Finn gebruikt dit om irrelevante signalen te dempen."
-          options={TIMEFRAMES}
+          title={t?.traderProfile?.groups?.timeframes?.title}
+          subtitle={t?.traderProfile?.groups?.timeframes?.subtitle}
+          options={timeframeOptions}
           values={form.primary_timeframes}
           onToggle={(value) => toggleMulti("primary_timeframes", value)}
         />
 
         <MultiChoiceGroup
-          title="Waar focus je op?"
-          subtitle="Kies de markten of assets waar Finn in je context vooral rekening mee moet houden."
-          options={ASSET_FOCUS}
+          title={t?.traderProfile?.groups?.assetFocus?.title}
+          subtitle={t?.traderProfile?.groups?.assetFocus?.subtitle}
+          options={assetFocusOptions}
           values={form.asset_focus}
           onToggle={(value) => toggleMulti("asset_focus", value)}
         />
 
         <MultiChoiceGroup
-          title="Wat is je doel?"
-          subtitle="Kies een of meer doelen. Finn gebruikt dit om coaching en waarschuwingen op jouw intentie af te stemmen."
-          options={GOALS}
+          title={t?.traderProfile?.groups?.goals?.title}
+          subtitle={t?.traderProfile?.groups?.goals?.subtitle}
+          options={goalOptions}
           values={form.investment_goals_list}
           onToggle={(value) => toggleMulti("investment_goals_list", value)}
         />
 
         <MultiChoiceGroup
-          title="Hoeveel ervaring heb je?"
-          subtitle="Kies wat nu het best bij je past. Je kunt meerdere lagen aanvinken als je tussen niveaus in zit."
-          options={EXPERIENCE_LEVELS}
+          title={t?.traderProfile?.groups?.experience?.title}
+          subtitle={t?.traderProfile?.groups?.experience?.subtitle}
+          options={experienceOptions}
           values={form.experience_levels}
           onToggle={(value) => toggleMulti("experience_levels", value)}
         />
 
         <MultiChoiceGroup
-          title="Wat is je risicoprofiel?"
-          subtitle="Zo kan Finn beter kiezen tussen remmen, waarschuwen of juist ruimte geven. Je kunt combineren als je per context verschilt."
-          options={RISK_PROFILES}
+          title={t?.traderProfile?.groups?.risk?.title}
+          subtitle={t?.traderProfile?.groups?.risk?.subtitle}
+          options={riskOptions}
           values={form.risk_profiles}
           onToggle={(value) => toggleMulti("risk_profiles", value)}
         />
@@ -232,8 +239,7 @@ export default function OnboardingProfilePage() {
 
       <div className="mt-8 flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:flex-row md:items-center md:justify-between">
         <p className="text-sm font-medium leading-relaxed text-slate-500">
-          Sla je profiel op om de rest van je onboarding persoonlijker te maken. Daarna ontgrendel
-          je de markt- en setupstappen met veel minder ruis.
+          {t?.traderProfile?.onboardingStep?.footer}
         </p>
         <button
           type="button"
@@ -241,7 +247,9 @@ export default function OnboardingProfilePage() {
           disabled={!isValid || loadingPrefs || saving || submitting}
           className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {submitting || saving ? "Profiel opslaan..." : "Profiel opslaan en doorgaan"}
+          {submitting || saving
+            ? t?.traderProfile?.onboardingStep?.saving
+            : t?.traderProfile?.onboardingStep?.saveAndContinue}
           <ArrowRight size={14} />
         </button>
       </div>

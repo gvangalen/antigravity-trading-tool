@@ -273,23 +273,37 @@ class IntelligenceEventService:
         # Flush & Commit
         # ----------------------------------------------------------------------
         if new_events:
+            push_payloads = [
+                {
+                    "title": f"TM Alert: {ev.title}",
+                    "message": ev.description,
+                    "event_title": ev.title,
+                }
+                for ev in new_events
+                if ev.severity in ["critical", "warning"]
+            ]
             await self.session.flush()
             await self.session.commit()
             
             # Verzend Push Notificaties uitsluitend voor Hoge Prioriteit/Kritieke events
-            for ev in new_events:
-                if ev.severity in ["critical", "warning"]:
-                    try:
-                        title = f"TM Alert: {ev.title}"
-                        message = ev.description
-                        # notify_user stuurt notificatie naar zowel web push (PWA) als expo push tokens (Native Mobile)
-                        await push_service.notify_user_async(self.session, user_id, title, message)
-                        logger.info(f"📱 Proactieve push notification verzonden voor kritiek event: {ev.title} (User: {user_id})")
-                    except Exception as ex:
-                        if _is_missing_mobile_push_table(ex):
-                            logger.warning("Push notification dispatch overgeslagen: mobile_push_tokens table ontbreekt nog.")
-                        else:
-                            logger.error(f"⚠️ Push notification dispatch mislukt: {ex}")
-                        await self.session.rollback()
+            for payload in push_payloads:
+                try:
+                    # Gebruik een verse sessie voor push dispatch, zodat event-evaluatie
+                    # geen onverwachte async DB-IO in de request-session veroorzaakt.
+                    await push_service.notify_user_detached_async(
+                        user_id,
+                        payload["title"],
+                        payload["message"],
+                    )
+                    logger.info(
+                        "📱 Proactieve push notification verzonden voor kritiek event: %s (User: %s)",
+                        payload["event_title"],
+                        user_id,
+                    )
+                except Exception as ex:
+                    if _is_missing_mobile_push_table(ex):
+                        logger.warning("Push notification dispatch overgeslagen: mobile_push_tokens table ontbreekt nog.")
+                    else:
+                        logger.error("⚠️ Push notification dispatch mislukt: %s", ex)
 
         return new_events

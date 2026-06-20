@@ -41,7 +41,7 @@ export default function MarketLiveCard({ symbol = "BTC", data = null, loading: p
     isFetchingRef.current = true;
     setInternalLoading(true);
     try {
-      const resp = await fetchLatestPrice(symbol, { forceFresh: true });
+      const resp = await fetchLatestPrice(symbol, { forceFresh: false });
       setInternalPrice(resp);
       setInternalError("");
     } catch (err) {

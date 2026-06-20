@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "@/app/providers/I18nProvider";
 import {
   CheckCircle2,
   Lock,
@@ -34,6 +35,7 @@ const ICONS = {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { status, loading, onboardingComplete, allowedSteps } = useOnboarding();
 
   useEffect(() => {
@@ -65,70 +67,73 @@ export default function OnboardingPage() {
         <div className="flex flex-col items-center gap-4">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600/30 border-t-blue-600" />
           <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
-            Finn zet je werkplek klaar...
+            {t?.traderProfile?.onboardingOverview?.loading}
           </p>
         </div>
       </div>
     );
   }
 
+  const stepText = t?.traderProfile?.onboardingOverview?.steps || {};
+  const statusText = t?.traderProfile?.onboardingOverview?.status || {};
+
   const steps = [
     {
       key: "profile",
-      title: "Jouw tradingprofiel",
-      description: "Vertel eerst wat voor trader je bent, welke horizon je gebruikt en waar Finn op moet letten.",
-      finnHelp: "Finn gebruikt dit profiel om advies, waarschuwingen en uitleg direct beter op jouw stijl af te stemmen.",
-      unlocks: "Persoonlijkere coaching en relevantere signalen",
+      title: stepText?.profile?.title,
+      description: stepText?.profile?.description,
+      finnHelp: stepText?.profile?.finnHelp,
+      unlocks: stepText?.profile?.unlocks,
       done: status.has_profile,
       link: "/onboarding/profile",
       unlocked: allowedSteps.profile,
     },
     {
       key: "market",
-      title: "Marktcontext",
-      description: "Bekijk live marktdata en laat Finn eerst het marktbeeld neerzetten.",
-      finnHelp: "Finn gebruikt dit om jouw eerste context en prioriteiten op te bouwen.",
-      unlocks: "Eerste marktbriefing en live context",
+      title: stepText?.market?.title,
+      description: stepText?.market?.description,
+      finnHelp: stepText?.market?.finnHelp,
+      unlocks: stepText?.market?.unlocks,
       done: status.has_market,
       link: "/market",
       unlocked: allowedSteps.market,
     },
     {
       key: "macro",
-      title: "Macrobeeld",
-      description: "Voeg macrocontext toe zodat Finn regime en risico beter kan wegen.",
-      finnHelp: "Denk aan DXY, yields en liquiditeit: dit geeft Finn het grotere plaatje.",
-      unlocks: "Betere risico-inschatting en regime-duiding",
+      title: stepText?.macro?.title,
+      description: stepText?.macro?.description,
+      finnHelp: stepText?.macro?.finnHelp,
+      unlocks: stepText?.macro?.unlocks,
       done: status.has_macro,
       link: "/macro",
       unlocked: allowedSteps.macro,
     },
     {
       key: "technical",
-      title: "Technische signalen",
-      description: "Controleer technische signalen zodat Finn entries en timing beter kan duiden.",
-      finnHelp: "Deze stap geeft Finn houvast voor trend, momentum en timing.",
-      unlocks: "Sterkere timing, trend- en momentumuitleg",
+      title: stepText?.technical?.title,
+      description: stepText?.technical?.description,
+      finnHelp: stepText?.technical?.finnHelp,
+      unlocks: stepText?.technical?.unlocks,
       done: status.has_technical,
       link: "/technical",
       unlocked: allowedSteps.technical,
     },
     {
       key: "setup",
-      title: "Setup maken",
-      description: "Leg je eerste setup vast zodat Finn jouw context aan concrete regels koppelt.",
-      finnHelp: "Hier wordt Finn specifieker: niet alleen context, maar ook jouw voorkeuren.",
-      unlocks: "Persoonlijkere reviews en scherpere next steps",
+      title: stepText?.setup?.title,
+      description: stepText?.setup?.description,
+      finnHelp: stepText?.setup?.finnHelp,
+      unlocks: stepText?.setup?.unlocks,
       done: status.has_setup,
       link: "/setup",
       unlocked: allowedSteps.setup,
     },
     {
       key: "strategy",
-      title: "Strategie kiezen",
-      description: "Maak je eerste strategie zodat dashboard, reports en reviews echt bruikbaar worden.",
-      finnHelp: "Na deze stap kan Finn beslissingen beter reviewen, blokkeren en prioriteren.",
-      unlocks: "Volledige dashboard-, report- en reviewflow",
+      title: stepText?.strategy?.title,
+      description: stepText?.strategy?.description,
+      finnHelp: stepText?.strategy?.finnHelp,
+      unlocks: stepText?.strategy?.unlocks,
       done: status.has_strategy,
       link: "/strategy",
       unlocked: allowedSteps.strategy,
@@ -172,12 +177,12 @@ export default function OnboardingPage() {
               {Math.round(progressPercent)}%
             </span>
             <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-              Klaar
+              {statusText?.done}
             </span>
             {!onboardingComplete && (
               <div className="absolute top-[180px] w-max animate-pulse">
                 <p className="text-[9px] font-black uppercase tracking-[0.3em] text-blue-600/60">
-                  Volgende stap:{" "}
+                  {t?.traderProfile?.onboardingOverview?.nextStep}{" "}
                   <span className="text-blue-500">{nextStep?.title || "Dashboard"}</span>
                 </p>
               </div>
@@ -189,42 +194,40 @@ export default function OnboardingPage() {
           <div className="mb-4 flex items-center justify-center gap-3 md:justify-start">
             <Sparkles size={14} className="text-blue-600" />
             <span className="text-[12px] font-black uppercase tracking-[0.3em] text-blue-600">
-              Finn begeleidt je setup
+              {t?.traderProfile?.onboardingOverview?.finnLabel}
             </span>
           </div>
           <h2 className="mb-4 text-4xl font-black tracking-tight text-slate-900">
-            Start in zes duidelijke stappen
+            {t?.traderProfile?.onboardingOverview?.title}
           </h2>
           <p className="max-w-2xl text-slate-500 font-medium leading-relaxed">
-            Je hoeft hier niet alles tegelijk te snappen. Werk de stappen rustig af van boven naar
-            beneden. Finn gebruikt deze route om jouw marktcontext, setup en strategie op te bouwen
-            zodat advies, reviews en reports daarna echt bruikbaar worden.
+            {t?.traderProfile?.onboardingOverview?.description}
           </p>
 
           <div className="mt-5 flex flex-wrap gap-2 text-[11px] font-bold">
             <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 shadow-sm">
               <TimerReset size={12} />
-              3-5 minuten
+              {t?.traderProfile?.onboardingOverview?.chips?.duration}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 shadow-sm">
               <Shield size={12} />
-              Geen live trades in onboarding
+              {t?.traderProfile?.onboardingOverview?.chips?.noLiveTrades}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 shadow-sm">
               <Sparkles size={12} />
-              Finn begeleidt elke stap
+              {t?.traderProfile?.onboardingOverview?.chips?.finnHelps}
             </span>
           </div>
 
           <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 text-left shadow-sm">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
               <Sparkles size={14} />
-              Finn zegt
+              {t?.traderProfile?.onboardingOverview?.finnLabel}
             </div>
             <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700">
               {onboardingComplete
-                ? "Je basis staat. Open nu je dashboard, bekijk je eerste report en vraag Finn om je volgende stap."
-                : `${nextStep?.title || "Marktcontext"} is nu je beste volgende stap. ${nextStep?.finnHelp || "Finn gebruikt dit om je eerste context op te bouwen."}`}
+                ? t?.traderProfile?.onboardingOverview?.finnComplete
+                : `${nextStep?.title || ""} ${nextStep?.finnHelp || ""}`}
             </p>
           </div>
         </div>
@@ -235,7 +238,7 @@ export default function OnboardingPage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
-                Aanbevolen route
+                {t?.traderProfile?.onboardingOverview?.recommendedRoute}
               </div>
               <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900">{nextStep.title}</h3>
               <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
@@ -243,14 +246,14 @@ export default function OnboardingPage() {
               </p>
               <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700">
                 <TrendingUp size={12} />
-                Daarna ontgrendel je: {nextStep.unlocks}
+                {t?.traderProfile?.onboardingOverview?.unlocksPrefix} {nextStep.unlocks}
               </div>
             </div>
             <button
               onClick={() => router.push(nextStep.link)}
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 active:scale-95"
             >
-              Open stap
+              {t?.traderProfile?.onboardingOverview?.openStep}
               <ArrowRight size={14} />
             </button>
           </div>
@@ -304,7 +307,11 @@ export default function OnboardingPage() {
                     isDone ? "text-emerald-500" : isUnlocked ? "text-blue-600" : "text-slate-500"
                   }`}
                 >
-                  {isDone ? "Klaar" : isUnlocked ? (isRecommended ? "Aanbevolen" : "Beschikbaar") : "Nog vergrendeld"}
+                  {isDone
+                    ? statusText?.done
+                    : isUnlocked
+                      ? (isRecommended ? statusText?.recommended : statusText?.available)
+                      : statusText?.locked}
                 </span>
               </div>
 

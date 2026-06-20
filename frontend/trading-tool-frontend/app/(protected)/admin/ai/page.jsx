@@ -51,6 +51,39 @@ const MODE_COLORS = {
   "fallback": "#ef4444"
 };
 
+const SOURCE_LABELS = {
+  live_user: "Live user",
+  qa_user: "QA / smoke",
+  staging_user: "Staging user",
+  background_job: "Background job",
+  system: "System",
+  unclassified: "Legacy / old logs",
+};
+
+const SOURCE_HINTS = {
+  live_user: "Echte productie-interactie vanuit de app.",
+  qa_user: "Testgebruikers, smoke-runs en QA-verkeer.",
+  staging_user: "Gebruik op de staging-omgeving.",
+  background_job: "Automatische rapporten, agents en Celery jobs.",
+  system: "Platforminterne AI-calls zonder user-flow.",
+  unclassified: "Oude logs van voor de nieuwe bronlabels.",
+};
+
+function formatSourceLabel(source) {
+  return SOURCE_LABELS[source] || source.replaceAll("_", " ");
+}
+
+function formatEntryPointLabel(entryPoint) {
+  const value = String(entryPoint || "unclassified");
+  if (value === "unclassified") return "Legacy / old logs";
+  if (value === "scheduled_job") return "Scheduled job";
+  return value
+    .replaceAll("assistant_service:", "Finn / ")
+    .replaceAll("report_service:", "Reports / ")
+    .replaceAll("_task", " task")
+    .replaceAll("_", " ");
+}
+
 export default function AdminAiDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -94,6 +127,8 @@ export default function AdminAiDashboard() {
     overview, 
     top_users, 
     feature_breakdown, 
+    source_breakdown,
+    top_entry_points,
     mode_distribution, 
     latency_stats, 
     user_distribution, 
@@ -139,7 +174,7 @@ export default function AdminAiDashboard() {
 
       {/* 📊 SUMMARY RIBBON */}
       {/* 📊 SUMMARY RIBBON */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-6 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7 gap-6 mb-10">
         <MetricCard 
           title="MTD Profit" 
           value={`€${overview.total_profit_month_eur.toFixed(2)}`} 
@@ -176,6 +211,13 @@ export default function AdminAiDashboard() {
           trend="neutral"
         />
         <MetricCard 
+          title="Blocked AI Spend" 
+          value={`€${overview.blocked_estimated_cost_month_eur.toFixed(2)}`} 
+          icon={<AlertOctagon size={18} className="text-rose-500" />}
+          subtitle={`${overview.blocked_requests_month} quota-blocked attempts`}
+          trend={overview.blocked_requests_month > 0 ? "negative" : "positive"}
+        />
+        <MetricCard 
           title="Total Savings" 
           value={`€${overview.total_savings_month_eur.toFixed(2)}`} 
           icon={<PiggyBank size={18} className="text-blue-600" />}
@@ -183,6 +225,24 @@ export default function AdminAiDashboard() {
           trend="positive"
           isHighlight
         />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
+        <MiniSourceCard label="Live users" value={`€${overview.live_user_cost_month_eur.toFixed(2)}`} tone="emerald" />
+        <MiniSourceCard label="QA / smoke" value={`€${overview.qa_cost_month_eur.toFixed(2)}`} tone="amber" />
+        <MiniSourceCard label="Background jobs" value={`€${overview.background_cost_month_eur.toFixed(2)}`} tone="violet" />
+        <MiniSourceCard label="Staging users" value={`€${overview.staging_cost_month_eur.toFixed(2)}`} tone="blue" />
+      </div>
+
+      <div className="mb-10 p-5 bg-slate-50 border border-slate-100 rounded-[28px]">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {Object.entries(SOURCE_LABELS).map(([key, label]) => (
+            <div key={key} className="bg-white border border-slate-100 rounded-2xl p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 italic">{label}</p>
+              <p className="text-sm font-bold text-slate-600 mt-2">{SOURCE_HINTS[key]}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ⚠️ REAL-TIME ANOMALY ALERT PANEL */}
@@ -376,6 +436,95 @@ export default function AdminAiDashboard() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-10">
+        <div className="p-8 bg-white border border-slate-100 rounded-[32px] shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
+              <Activity size={14} className="text-emerald-600" />
+              Spend by Source
+            </h3>
+          </div>
+          <div className="space-y-4">
+            {source_breakdown.map((item, idx) => (
+              <div key={`${item.source}-${idx}`} className="border border-slate-100 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-black text-slate-900 italic tracking-tight">{formatSourceLabel(item.source)}</p>
+                  <span className="text-sm font-black text-slate-900">€{item.total_cost.toFixed(2)}</span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mb-3">{SOURCE_HINTS[item.source] || "Onbekende bron."}</p>
+                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  <span>{item.total_requests} requests</span>
+                  <span>{item.unique_users} users</span>
+                  <span>{item.percentage.toFixed(1)}%</span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-rose-400 mt-2">
+                  <span>{item.blocked_requests} blocked</span>
+                  <span>€{item.blocked_estimated_cost.toFixed(2)} est.</span>
+                </div>
+                <div className="h-2 w-full bg-slate-50 rounded-full overflow-hidden mt-3">
+                  <div
+                    className="h-full bg-slate-900 rounded-full"
+                    style={{ width: `${Math.min(100, item.percentage)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-8 bg-white border border-slate-100 rounded-[32px] shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
+              <Target size={14} className="text-violet-600" />
+              Most Expensive Entry Points
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-slate-50">
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Entry point</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Source</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">MTD cost</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Blocked</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Avg / call</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {top_entry_points.map((item, idx) => (
+                  <tr key={`${item.entry_point}-${idx}`} className="group hover:bg-slate-50/50 transition-colors">
+                    <td className="py-5 pr-4">
+                      <p className="text-sm font-black text-slate-900 italic tracking-tight">{formatEntryPointLabel(item.entry_point)}</p>
+                      <p className="text-[10px] font-medium text-slate-500 mt-1">{SOURCE_HINTS[item.source] || "Onbekende bron."}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{item.total_requests} calls</p>
+                    </td>
+                    <td className="py-5">
+                      <span className="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border bg-slate-50 text-slate-600 border-slate-100">
+                        {formatSourceLabel(item.source)}
+                      </span>
+                    </td>
+                    <td className="py-5">
+                      <span className="text-sm font-black text-slate-900">€{item.total_cost.toFixed(2)}</span>
+                    </td>
+                    <td className="py-5">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-rose-500">
+                        <div>{item.blocked_requests} hits</div>
+                        <div>€{item.blocked_estimated_cost.toFixed(2)} est.</div>
+                      </div>
+                    </td>
+                    <td className="py-5">
+                      <span className="px-2.5 py-1.5 bg-slate-50 text-slate-700 font-mono text-xs font-bold rounded-xl border border-slate-100/50">
+                        €{item.avg_cost.toFixed(6)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       {/* 💰 FEATURE COST EFFICIENCY GRID */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
          <div className="p-8 bg-white border border-slate-100 rounded-[32px] shadow-sm">
@@ -432,6 +581,9 @@ export default function AdminAiDashboard() {
                       <div className="flex flex-col">
                         <p className="text-[9px] font-black uppercase text-slate-300 italic">Mnd: €{user.usage_month_eur.toFixed(2)}</p>
                         <p className="text-[9px] font-black uppercase text-blue-400 italic">Vandaag: €{user.usage_today_eur.toFixed(2)}</p>
+                        <p className="text-[9px] font-black uppercase text-violet-400 italic">Background: €{user.background_usage_month_eur.toFixed(2)}</p>
+                        <p className="text-[9px] font-black uppercase text-emerald-500 italic">Interactive: €{user.interactive_usage_month_eur.toFixed(2)}</p>
+                        <p className="text-[9px] font-black uppercase text-rose-500 italic">Blocked: {user.blocked_requests_month} / €{user.blocked_estimated_cost_month_eur.toFixed(2)} est.</p>
                       </div>
                     </td>
                     <td className="py-5">
@@ -541,6 +693,23 @@ function MetricCard({ title, value, icon, subtitle, trend, isHighlight }) {
       {isHighlight && (
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 blur-[60px] rounded-full -translate-y-1/2 translate-x-1/2" />
       )}
+    </div>
+  );
+}
+
+function MiniSourceCard({ label, value, tone = "slate" }) {
+  const toneClasses = {
+    emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    amber: "bg-amber-50 text-amber-700 border-amber-100",
+    violet: "bg-violet-50 text-violet-700 border-violet-100",
+    blue: "bg-blue-50 text-blue-700 border-blue-100",
+    slate: "bg-slate-50 text-slate-700 border-slate-100",
+  };
+
+  return (
+    <div className={`p-5 border rounded-[24px] ${toneClasses[tone] || toneClasses.slate}`}>
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] italic opacity-80">{label}</p>
+      <p className="text-2xl font-black tracking-tight mt-3">{value}</p>
     </div>
   );
 }

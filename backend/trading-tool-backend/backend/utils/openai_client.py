@@ -9,6 +9,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from backend.services.ai_usage_observability_service import (
+    elapsed_ms,
+    log_openai_quota_skip_from_context,
+    log_openai_usage_from_context,
+    start_timer,
+)
 
 # ============================================================
 # ⚙️ Setup
@@ -136,6 +142,7 @@ def ask_gpt_json(
     if _quota_breaker_active():
         _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
         logger.warning("⛔ GPT JSON Call overgeslagen: quota breaker actief")
+        log_openai_quota_skip_from_context()
         return {"error": "quota"}
 
     _openai_runtime_state["json_calls"] = int(_openai_runtime_state.get("json_calls") or 0) + 1
@@ -148,6 +155,7 @@ def ask_gpt_json(
     for attempt in range(1, retries + 1):
         try:
             logger.info(f"🧠 GPT JSON Call (Attempt {attempt})")
+            started = start_timer()
             
             response = client.chat.completions.create(
                 model=model,
@@ -161,6 +169,13 @@ def ask_gpt_json(
             parsed = sanitize_json_output(content)
 
             if parsed:
+                usage = getattr(response, "usage", None)
+                log_openai_usage_from_context(
+                    model=str(getattr(response, "model", None) or model),
+                    prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+                    completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+                    response_time_ms=elapsed_ms(started),
+                )
                 return parsed
             
         except Exception as e:
@@ -171,6 +186,7 @@ def ask_gpt_json(
             if "insufficient_quota" in str(e):
                 logger.error("❌ QUOTA bereikt → stop retries")
                 _mark_quota_exhausted()
+                log_openai_quota_skip_from_context()
                 return {"error": "quota"}
 
             if attempt == retries:
@@ -198,6 +214,7 @@ def ask_gpt_text(
     if _quota_breaker_active():
         _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
         logger.warning("⛔ GPT Text Call overgeslagen: quota breaker actief")
+        log_openai_quota_skip_from_context()
         return "AI quota bereikt"
 
     _openai_runtime_state["text_calls"] = int(_openai_runtime_state.get("text_calls") or 0) + 1
@@ -210,6 +227,7 @@ def ask_gpt_text(
     for attempt in range(1, retries + 1):
         try:
             logger.info(f"🧠 GPT Text Call (Attempt {attempt})")
+            started = start_timer()
             
             response = client.chat.completions.create(
                 model=model,
@@ -220,6 +238,13 @@ def ask_gpt_text(
 
             content = response.choices[0].message.content
             if content:
+                usage = getattr(response, "usage", None)
+                log_openai_usage_from_context(
+                    model=str(getattr(response, "model", None) or model),
+                    prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+                    completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+                    response_time_ms=elapsed_ms(started),
+                )
                 return content.strip()
 
         except Exception as e:
@@ -230,6 +255,7 @@ def ask_gpt_text(
             if "insufficient_quota" in str(e):
                 logger.error("❌ QUOTA bereikt → stop retries")
                 _mark_quota_exhausted()
+                log_openai_quota_skip_from_context()
                 return "AI quota bereikt"
 
             if attempt == retries:
