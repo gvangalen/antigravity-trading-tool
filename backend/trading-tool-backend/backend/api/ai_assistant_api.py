@@ -1073,7 +1073,7 @@ def _assistant_context_payload(context) -> dict:
 
 def _sse_event(event_name: str, data_val) -> str:
     if isinstance(data_val, dict):
-        data_str = json.dumps(data_val)
+        data_str = json.dumps(data_val, ensure_ascii=False, default=str)
     else:
         data_str = str(data_val)
     return f"event: {event_name}\ndata: {data_str}\n\n"

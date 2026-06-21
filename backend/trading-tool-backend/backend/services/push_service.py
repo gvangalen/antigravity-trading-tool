@@ -161,6 +161,16 @@ class PushService:
         
         return success_count
 
+    async def notify_user_detached_async(self, user_id: int, title: str, message: str, url: Optional[str] = None) -> int:
+        """
+        Dispatch push notifications in an isolated async session.
+
+        Use this when the caller is outside a clean request/transaction boundary,
+        for example after a separate service already committed its own session.
+        """
+        async with async_session_factory() as session:
+            return await self.notify_user_async(session, user_id, title, message, url)
+
     def notify_user(self, db, user_id: int, title: str, message: str, url: Optional[str] = None) -> int:
         """Legacy sync bridge. Prefer notify_user_async in new code."""
         import asyncio

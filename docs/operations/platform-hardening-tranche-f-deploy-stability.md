@@ -41,10 +41,10 @@ This tranche is ready when:
 
 ## Live Outcome
 
-Confirmed after rollout:
+Confirmed after the latest rollout:
 
-- host `HEAD=52fbc52`
-- host `LAST_GOOD_COMMIT=52fbc52`
+- host `HEAD=8096336`
+- host `LAST_GOOD_COMMIT=8096336`
 - external `/api/health` returned `200`
 - external `/report` returned `200`
 - external `/api/system/health` returned `401` as expected

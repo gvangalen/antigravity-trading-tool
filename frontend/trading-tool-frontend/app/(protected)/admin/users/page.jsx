@@ -29,6 +29,10 @@ const PLAN_BADGES = {
   free: "bg-slate-50 text-slate-600 border-slate-100"
 };
 
+function formatCurrency(value) {
+  return `€${Number(value || 0).toFixed(2)}`;
+}
+
 export default function AdminUsersDashboard() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -137,6 +141,13 @@ export default function AdminUsersDashboard() {
 
       {/* 📋 USER TABLE */}
       <div className="bg-white border border-slate-100 rounded-[32px] shadow-sm overflow-hidden">
+        <div className="px-8 py-5 border-b border-slate-100 bg-slate-50/60">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px] text-slate-500 font-medium">
+            <p><span className="font-black text-violet-500 uppercase tracking-widest">Background</span> zijn automatische rapporten, agent-runs en Celery-jobs voor deze user.</p>
+            <p><span className="font-black text-rose-500 uppercase tracking-widest">Blocked</span> laat zien hoeveel AI-verkeer op quota stukliep en wat dat ongeveer had gekost.</p>
+            <p><span className="font-black text-blue-500 uppercase tracking-widest">MTD</span> blijft de echte succesvolle spend; blocked staat er bewust los naast.</p>
+          </div>
+        </div>
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-slate-50 bg-slate-50/30">
@@ -190,7 +201,10 @@ export default function AdminUsersDashboard() {
                         style={{ width: `${Math.min(100, (user.ai_requests_used_day / user.ai_requests_limit_day) * 100)}%` }}
                       />
                     </div>
-                    <p className="text-[9px] font-black uppercase text-blue-400 mt-2 italic">MTD Cost: €{user.ai_usage_current.toFixed(2)}</p>
+                    <p className="text-[9px] font-black uppercase text-blue-400 mt-2 italic">MTD Cost: {formatCurrency(user.usage_month_eur)}</p>
+                    <p className="text-[9px] font-black uppercase text-emerald-500 mt-1 italic">Today: {formatCurrency(user.usage_today_eur)}</p>
+                    <p className="text-[9px] font-black uppercase text-violet-400 mt-1 italic">Background: {formatCurrency(user.background_usage_month_eur)}</p>
+                    <p className="text-[9px] font-black uppercase text-rose-500 mt-1 italic">Blocked: {user.blocked_requests_month} / {formatCurrency(user.blocked_estimated_cost_month_eur)} est.</p>
                   </div>
                 </td>
                 <td className="px-6 py-6 font-bold">
@@ -202,6 +216,10 @@ export default function AdminUsersDashboard() {
                       <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest italic">
                         <Calendar size={12} className="text-slate-300" />
                         Joined: <span className="text-slate-900">{user.created_at ? new Date(user.created_at).toLocaleDateString() : "Unknown"}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest italic">
+                        <Zap size={12} className="text-slate-300" />
+                        AI Activity: <span className="text-slate-900">{user.last_ai_activity_at ? new Date(user.last_ai_activity_at).toLocaleDateString() : "No usage"}</span>
                       </div>
                    </div>
                 </td>

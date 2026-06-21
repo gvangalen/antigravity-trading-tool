@@ -9,21 +9,25 @@ PHASE6_DOC = REPO_ROOT / "docs" / "operations" / "platform-hardening-phase6-qa.m
 def test_platform_status_reflects_latest_deployed_hardening_baseline():
     source = STATUS_DOC.read_text()
 
-    assert "`52fbc52` - `Relax deploy deep health gate around broker startup`" in source
-    assert "`Platform hardening baseline plus Phase 2 slice is live on Oracle`" in source
+    assert "`2f56033` - `Upgrade frontend security stack to Next 15`" in source
     assert (
-        "`pytest -q backend/trading-tool-backend/backend/tests/test_phase2_portfolio_execution_invariants.py "
+        "`Platform hardening baseline, Phase 2.1 observability bridge, "
+        "and the frontend security stack upgrade to Next 15 are live on Oracle`"
+        in source
+    )
+    assert (
+        "`pytest -q backend/trading-tool-backend/backend/tests/test_security_phase1.py "
+        "backend/trading-tool-backend/backend/tests/test_security_phase3.py "
+        "backend/trading-tool-backend/backend/tests/test_security_phase7.py "
+        "backend/trading-tool-backend/backend/tests/test_platform_hardening_docs_status.py "
+        "backend/trading-tool-backend/backend/tests/test_phase2_portfolio_execution_invariants.py "
         "backend/trading-tool-backend/backend/tests/test_celery_dispatcher.py "
         "backend/trading-tool-backend/backend/tests/test_celery_queue_policy.py "
         "backend/trading-tool-backend/backend/tests/test_system_health_service.py "
         "backend/trading-tool-backend/backend/tests/test_platform_hardening.py "
         "backend/trading-tool-backend/backend/tests/test_runtime_reliability_hardening.py "
-        "backend/trading-tool-backend/backend/tests/test_platform_hardening_docs_status.py "
-        "backend/trading-tool-backend/backend/tests/test_security_phase1.py "
-        "backend/trading-tool-backend/backend/tests/test_security_phase3.py "
-        "backend/trading-tool-backend/backend/tests/test_security_phase7.py "
         "backend/trading-tool-backend/backend/tests/test_frontend_cache_polling_policy.py "
-        "backend/trading-tool-backend/backend/tests/test_platform_phase2_scale_observability.py`: `84 passed, 8 warnings`"
+        "backend/trading-tool-backend/backend/tests/test_platform_phase2_scale_observability.py`: `85 passed, 8 warnings`"
         in source
     )
     assert "Phase 2 - Scale & Observability Slice" in source

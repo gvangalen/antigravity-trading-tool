@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect } from "react";
-import { CheckCircle2, ArrowRight } from "lucide-react";
+import { CheckCircle2, ArrowRight, LayoutDashboard, FileText, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "@/app/providers/I18nProvider";
 import useBootstrapAgents from "@/hooks/useBootstrapAgents";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 export default function OnboardingCompletePage() {
-
   const router = useRouter();
+  const { t } = useTranslation();
   const { runBootstrap, loading } = useBootstrapAgents();
 
   useEffect(() => {
@@ -30,63 +31,66 @@ export default function OnboardingCompletePage() {
     });
 
     try {
-
       await runBootstrap();
-
     } catch (err) {
-
       console.error("Bootstrap agents error:", err);
-
     } finally {
-
       router.push("/");
-
     }
-
   };
 
   return (
-    <div className="max-w-screen-md mx-auto py-20 px-6 animate-fade-slide text-center">
-
-      {/* Icon */}
-      <div className="flex justify-center mb-6">
+    <div className="mx-auto max-w-screen-md animate-fade-slide px-6 py-20 text-center">
+      <div className="mb-6 flex justify-center">
         <CheckCircle2 size={70} className="text-green-500 drop-shadow-md" />
       </div>
 
-      {/* Title */}
-      <h1 className="text-4xl font-bold text-[var(--text-dark)] mb-4">
-        Onboarding voltooid! 🎉
+      <h1 className="mb-4 text-4xl font-bold text-[var(--text-dark)]">
+        {t?.traderProfile?.onboardingComplete?.title}
       </h1>
 
-      {/* Subtitle */}
-      <p className="text-lg text-[var(--text-light)] mb-10 max-w-xl mx-auto leading-relaxed">
-        Je hebt alle stappen succesvol afgerond.  
-        De AI-gestuurde Trading Tool is nu volledig klaar voor gebruik.  
-        Vanaf nu krijg je dagelijks automatische analyses, scores en strategieën.
+      <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-[var(--text-light)]">
+        {t?.traderProfile?.onboardingComplete?.description}
       </p>
 
-      {/* Button */}
+      <div className="mx-auto mb-10 max-w-2xl rounded-3xl border border-blue-100 bg-blue-50 p-6 text-left shadow-sm">
+        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
+          <Sparkles size={14} />
+          {t?.traderProfile?.onboardingComplete?.finnLabel}
+        </div>
+        <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-700">
+          {t?.traderProfile?.onboardingComplete?.finnBody}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-bold text-blue-700">
+            <LayoutDashboard size={12} />
+            {t?.traderProfile?.onboardingComplete?.chips?.dashboard}
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-bold text-blue-700">
+            <FileText size={12} />
+            {t?.traderProfile?.onboardingComplete?.chips?.report}
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-bold text-blue-700">
+            <Sparkles size={12} />
+            {t?.traderProfile?.onboardingComplete?.chips?.askFinn}
+          </span>
+        </div>
+      </div>
+
       <button
         onClick={handleGoToDashboard}
         disabled={loading}
-        className="
-          inline-flex items-center gap-2
-          bg-[var(--primary)] hover:bg-[var(--primary-dark)]
-          text-white px-6 py-3
-          rounded-xl font-semibold shadow-md hover:shadow-lg
-          transition
-          disabled:opacity-60
-        "
+        className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-3 font-semibold text-white shadow-md transition hover:bg-[var(--primary-dark)] hover:shadow-lg disabled:opacity-60"
       >
-        {loading ? "AI agents initialiseren..." : "Ga naar Dashboard"}
+        {loading
+          ? t?.traderProfile?.onboardingComplete?.loading
+          : t?.traderProfile?.onboardingComplete?.cta}
         <ArrowRight size={18} />
       </button>
 
-      {/* Optional note */}
       <p className="mt-6 text-sm text-[var(--text-light)]">
-        Je kunt altijd naar instellingen gaan om je data, setups of strategieën aan te passen.
+        {t?.traderProfile?.onboardingComplete?.footer}
       </p>
-
     </div>
   );
 }

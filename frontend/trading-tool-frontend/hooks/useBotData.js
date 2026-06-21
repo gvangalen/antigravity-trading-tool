@@ -29,7 +29,8 @@ import {
  * ✅ Trade plans editable via saveTradePlan
  */
 
-export default function useBotData() {
+export default function useBotData(options = {}) {
+  const { skipInitialLoad = false } = options;
 
   /* =====================================================
      📦 STATE
@@ -582,13 +583,16 @@ const createManualOrder = useCallback(
   ===================================================== */
 
   useEffect(() => {
+    if (skipInitialLoad) {
+      return;
+    }
 
     loadConfigs();
     loadToday();
     loadHistory(30);
     loadPortfolios();
 
-  }, [loadConfigs, loadToday, loadHistory, loadPortfolios]);
+  }, [loadConfigs, loadToday, loadHistory, loadPortfolios, skipInitialLoad]);
 
   /* =====================================================
      📤 EXPORT

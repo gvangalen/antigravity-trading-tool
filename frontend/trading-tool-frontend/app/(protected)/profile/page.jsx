@@ -1,17 +1,73 @@
 "use client";
 
+import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { User, Mail, Shield, Zap, ArrowUpRight, Brain, LogOut, Loader2 } from "lucide-react";
+import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
+import {
+  createOptionLabelMap,
+  getAssetFocusOptions,
+  getExperienceLevelOptions,
+  getGoalOptions,
+  getRiskProfileOptions,
+  getTimeframeOptions,
+  getTraderTypeOptions,
+  normalizeTraderProfilePreferences,
+  serializeTraderProfilePreferences,
+} from "@/lib/traderProfileOptions";
+import { User, Mail, Shield, ArrowUpRight, Brain, LogOut, Loader2, Sparkles, Pencil, Save } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useModal } from "@/components/modal/ModalProvider";
 
+function MultiChoiceGroup({ title, subtitle, options, values, onToggle }) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-4">
+        <h3 className="text-lg font-black tracking-tight text-slate-900">{title}</h3>
+        <p className="mt-1 text-sm font-medium leading-relaxed text-slate-500">{subtitle}</p>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {options.map((option) => {
+          const active = values.includes(option.value);
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onToggle(option.value)}
+              className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                active
+                  ? "border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                  : "border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-200 hover:bg-white"
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default function ProfilePage() {
+  const { t } = useTranslation();
   const { user, logout } = useAuth();
   const { showSnackbar } = useModal();
   const router = useRouter();
   const [loadingLogout, setLoadingLogout] = useState(false);
+  const [loadingPreferences, setLoadingPreferences] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileError, setProfileError] = useState(null);
+  const [profileForm, setProfileForm] = useState({
+    trader_types: [],
+    primary_timeframes: [],
+    asset_focus: [],
+    investment_goals_list: [],
+    experience_levels: [],
+    risk_profiles: [],
+  });
 
   if (!user) {
     return (
@@ -32,6 +88,102 @@ export default function ProfilePage() {
   const requestsUsed = user.ai_requests_used_day || 0;
   const requestsLimit = user.ai_requests_limit_day || 25;
   const usagePct = Math.min((requestsUsed / requestsLimit) * 100, 100);
+  const traderTypeOptions = useMemo(() => getTraderTypeOptions(t), [t]);
+  const timeframeOptions = useMemo(() => getTimeframeOptions(t), [t]);
+  const assetFocusOptions = useMemo(() => getAssetFocusOptions(t), [t]);
+  const goalOptions = useMemo(() => getGoalOptions(t), [t]);
+  const experienceOptions = useMemo(() => getExperienceLevelOptions(t), [t]);
+  const riskOptions = useMemo(() => getRiskProfileOptions(t), [t]);
+  const traderTypeMap = useMemo(() => createOptionLabelMap(traderTypeOptions), [traderTypeOptions]);
+  const timeframeMap = useMemo(() => createOptionLabelMap(timeframeOptions), [timeframeOptions]);
+  const assetFocusMap = useMemo(() => createOptionLabelMap(assetFocusOptions), [assetFocusOptions]);
+  const goalsMap = useMemo(() => createOptionLabelMap(goalOptions), [goalOptions]);
+  const experienceMap = useMemo(() => createOptionLabelMap(experienceOptions), [experienceOptions]);
+  const riskMap = useMemo(() => createOptionLabelMap(riskOptions), [riskOptions]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPreferences() {
+      try {
+        setLoadingPreferences(true);
+        const response = await getAssistantPreferences();
+        const preferences = response?.preferences || {};
+        if (cancelled) return;
+
+        setProfileForm(normalizeTraderProfilePreferences(preferences));
+      } catch (err) {
+        console.error("Trader profile load failed", err);
+        if (!cancelled) {
+          setProfileError(t?.traderProfile?.profilePage?.loadError || "Trader profile could not be loaded.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingPreferences(false);
+        }
+      }
+    }
+
+    loadPreferences();
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
+
+  const hasCompleteProfile = useMemo(() => {
+    return (
+      profileForm.trader_types.length > 0 &&
+      profileForm.primary_timeframes.length > 0 &&
+      profileForm.asset_focus.length > 0 &&
+      profileForm.investment_goals_list.length > 0 &&
+      profileForm.experience_levels.length > 0 &&
+      profileForm.risk_profiles.length > 0
+    );
+  }, [profileForm]);
+
+  const toggleMulti = (field, value) => {
+    setProfileForm((current) => {
+      const list = current[field];
+      const nextList = list.includes(value)
+        ? list.filter((item) => item !== value)
+        : [...list, value];
+
+      return {
+        ...current,
+        [field]: nextList,
+      };
+    });
+  };
+
+  const handleSaveProfile = async () => {
+    if (!hasCompleteProfile) {
+      setProfileError(
+        t?.traderProfile?.profilePage?.validationError ||
+          "Complete all trader profile fields so Finn can guide you properly."
+      );
+      return;
+    }
+
+    try {
+      setSavingProfile(true);
+      setProfileError(null);
+      await updateAssistantPreferences(serializeTraderProfilePreferences(profileForm));
+      setEditingProfile(false);
+      showSnackbar(t?.traderProfile?.profilePage?.saveSuccess || "Trader profile saved", "success");
+    } catch (err) {
+      console.error("Trader profile save failed", err);
+      setProfileError(t?.traderProfile?.profilePage?.saveError || "Saving your trader profile failed. Please try again.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const summaryChips = [
+    ...profileForm.trader_types.map((value) => traderTypeMap[value]).filter(Boolean),
+    ...profileForm.investment_goals_list.map((value) => goalsMap[value]).filter(Boolean),
+    ...profileForm.experience_levels.map((value) => experienceMap[value]).filter(Boolean),
+    ...profileForm.risk_profiles.map((value) => riskMap[value]).filter(Boolean),
+  ].filter(Boolean);
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300 p-8 pt-12">
@@ -119,6 +271,263 @@ export default function ProfilePage() {
           </div>
         </div>
 
+      </div>
+
+      <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10 space-y-8">
+        <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+          <div className="max-w-2xl">
+            <div className="mb-3 flex items-center gap-3">
+              <div className="rounded-2xl bg-blue-50 p-4 text-blue-600">
+                <Sparkles className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-600">
+                  {t?.traderProfile?.profilePage?.eyebrow || "Trading Profile"}
+                </div>
+                <h2 className="text-3xl font-black tracking-tight text-slate-900">
+                  {t?.traderProfile?.profilePage?.title || "Finn learns who you are as a trader here"}
+                </h2>
+              </div>
+            </div>
+            <p className="text-sm font-medium leading-relaxed text-slate-500">
+              {t?.traderProfile?.profilePage?.description ||
+                "Finn uses this profile to tailor explanations, warnings, setups, and coaching to your style. Update it whenever your horizon, risk, or focus changes."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {summaryChips.length > 0 ? (
+              summaryChips.map((chip) => (
+                <span
+                  key={chip}
+                  className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600"
+                >
+                  {chip}
+                </span>
+              ))
+            ) : (
+              <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
+                {t?.traderProfile?.profilePage?.empty || "Not filled in yet"}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setEditingProfile((current) => !current);
+                setProfileError(null);
+              }}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-700 transition hover:border-blue-200 hover:bg-white"
+            >
+              <Pencil size={14} />
+              {editingProfile
+                ? t?.traderProfile?.profilePage?.close || "Close"
+                : t?.traderProfile?.profilePage?.edit || "Edit profile"}
+            </button>
+          </div>
+        </div>
+
+        {loadingPreferences ? (
+          <div className="flex items-center gap-3 rounded-3xl border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+            {t?.traderProfile?.profilePage?.loading || "Loading trader profile..."}
+          </div>
+        ) : editingProfile ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-6">
+              <MultiChoiceGroup
+                title={t?.traderProfile?.groups?.traderTypes?.title || "What kind of trader are you?"}
+                subtitle={t?.traderProfile?.groups?.traderTypes?.subtitle || "Choose one or more styles that match how you usually trade or invest."}
+                options={traderTypeOptions}
+                values={profileForm.trader_types}
+                onToggle={(value) => toggleMulti("trader_types", value)}
+              />
+
+              <MultiChoiceGroup
+                title={t?.traderProfile?.groups?.timeframes?.title || "Which timeframes do you use?"}
+                subtitle={t?.traderProfile?.groups?.timeframes?.subtitle || "You can select multiple. Finn uses this to filter out irrelevant signals."}
+                options={timeframeOptions}
+                values={profileForm.primary_timeframes}
+                onToggle={(value) => toggleMulti("primary_timeframes", value)}
+              />
+
+              <MultiChoiceGroup
+                title={t?.traderProfile?.groups?.assetFocus?.title || "What do you focus on?"}
+                subtitle={t?.traderProfile?.groups?.assetFocus?.subtitle || "Choose the markets or assets Finn should primarily consider in your context."}
+                options={assetFocusOptions}
+                values={profileForm.asset_focus}
+                onToggle={(value) => toggleMulti("asset_focus", value)}
+              />
+
+              <MultiChoiceGroup
+                title={t?.traderProfile?.groups?.goals?.title || "What is your goal?"}
+                subtitle={t?.traderProfile?.groups?.goals?.subtitle || "Choose one or more goals. Finn uses this to tailor coaching and warnings to your intent."}
+                options={goalOptions}
+                values={profileForm.investment_goals_list}
+                onToggle={(value) => toggleMulti("investment_goals_list", value)}
+              />
+
+              <MultiChoiceGroup
+                title={t?.traderProfile?.groups?.experience?.title || "How much experience do you have?"}
+                subtitle={t?.traderProfile?.groups?.experience?.subtitle || "Choose what fits you best right now. You can select multiple levels if you are in between."}
+                options={experienceOptions}
+                values={profileForm.experience_levels}
+                onToggle={(value) => toggleMulti("experience_levels", value)}
+              />
+
+              <MultiChoiceGroup
+                title={t?.traderProfile?.groups?.risk?.title || "What is your risk profile?"}
+                subtitle={t?.traderProfile?.groups?.risk?.subtitle || "This helps Finn decide whether to slow you down, warn you, or give more room. You can combine options if it varies by context."}
+                options={riskOptions}
+                values={profileForm.risk_profiles}
+                onToggle={(value) => toggleMulti("risk_profiles", value)}
+              />
+            </div>
+
+            {profileError ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                {profileError}
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:flex-row md:items-center md:justify-between">
+              <p className="text-sm font-medium leading-relaxed text-slate-500">
+                {t?.traderProfile?.profilePage?.helper ||
+                  "Update this profile whenever your style changes. That keeps Finn relevant and helps reduce signals that do not fit your way of trading."}
+              </p>
+              <button
+                type="button"
+                onClick={handleSaveProfile}
+                disabled={!hasCompleteProfile || savingProfile}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {savingProfile
+                  ? t?.traderProfile?.profilePage?.saving || "Saving profile..."
+                  : t?.traderProfile?.profilePage?.save || "Save profile"}
+                <Save size={14} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                {t?.traderProfile?.profilePage?.styleAndGoal || "Style & goal"}
+              </div>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.traderTypes?.title || "Trader type"}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.trader_types.length > 0 ? (
+                      profileForm.trader_types.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {traderTypeMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.goals?.title || "Goal"}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.investment_goals_list.length > 0 ? (
+                      profileForm.investment_goals_list.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {goalsMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.risk?.title || "Risk profile"}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.risk_profiles.length > 0 ? (
+                      profileForm.risk_profiles.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {riskMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                {t?.traderProfile?.profilePage?.finnContext || "Context for Finn"}
+              </div>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.timeframes?.title || "Timeframes"}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.primary_timeframes.length > 0 ? (
+                      profileForm.primary_timeframes.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {timeframeMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.assetFocus?.title || "Asset focus"}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.asset_focus.length > 0 ? (
+                      profileForm.asset_focus.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {assetFocusMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.experience?.title || "Experience"}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.experience_levels.length > 0 ? (
+                      profileForm.experience_levels.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {experienceMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
       </div>
 
       {/* 3. ACTIONS */}

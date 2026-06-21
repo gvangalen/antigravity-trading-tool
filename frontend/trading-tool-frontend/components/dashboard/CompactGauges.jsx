@@ -5,32 +5,31 @@ import { Globe2, LineChart, DollarSign, Settings2, Sliders, Save, X, Sparkles } 
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { GaugeSkeleton } from "./DashboardSkeleton";
 import { useState, useEffect } from "react";
-import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
 
 const getStructureLabel = (domain, score) => {
   if (domain === 'macro') {
-    if (score >= 75) return "Expansion Regime";
-    if (score >= 50) return "Recovery Phase";
+    if (score >= 75) return "Expansion";
+    if (score >= 50) return "Recovery";
     if (score >= 35) return "Stagflation Risk";
-    return "Contraction Regime";
+    return "Contraction";
   }
   if (domain === 'technical') {
-    if (score >= 75) return "Bullish Continuation";
-    if (score >= 55) return "Bullish Recovery";
+    if (score >= 75) return "Continuation";
+    if (score >= 55) return "Recovery";
     if (score >= 40) return "Consolidation";
-    return "Bearish Correction";
+    return "Correction";
   }
   if (domain === 'market') {
     if (score >= 75) return "High Conviction";
     if (score >= 50) return "Capital Inflow";
-    if (score >= 35) return "Liquidity Divergence";
+    if (score >= 35) return "Liq. Divergence";
     return "Risk Aversion";
   }
   if (domain === 'setup') {
     if (score >= 75) return "Premium Alignment";
-    if (score >= 50) return "Favorable Risk/Reward";
-    if (score >= 35) return "Sub-optimal Quality";
-    return "High Drawdown Risk";
+    if (score >= 50) return "Favorable R/R";
+    if (score >= 35) return "Suboptimal";
+    return "Drawdown Risk";
   }
   return "Stable Structure";
 };
@@ -39,10 +38,10 @@ const getStructureLabel = (domain, score) => {
  * 📏 CompactGauges — Minimalist Status Bar (V2.1)
  * Replaces large Gauge cards with a slim horizontal strip.
  */
-export default function CompactGauges({ symbol = "BTC" }) {
+export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
   const { t } = useTranslation();
-  const { macro, technical, market, setup, master, loading, saveWeights } = useScoresData(symbol);
-  const { data: marketIntelligence } = useMarketIntelligence(symbol);
+  const fallbackSnapshot = useScoresData(symbol, { includeHistory: false });
+  const { macro, technical, market, setup, master, loading, saveWeights } = snapshot || fallbackSnapshot;
   const [isEditing, setIsEditing] = useState(false);
   const [localWeights, setLocalWeights] = useState({
      macro: 0.25,
@@ -159,38 +158,41 @@ export default function CompactGauges({ symbol = "BTC" }) {
 
           return (
             <div key={idx} className="space-y-2">
-               <div className={`group flex items-center justify-between px-3 sm:px-4 py-2.5 rounded-xl border ${borderClass} ${bgClass} shadow-sm transition-all hover:shadow-md ${isEditing ? 'ring-2 ring-blue-500/20 border-blue-500/40' : ''}`}>
-                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+               <div className={`group relative overflow-visible px-3 sm:px-4 py-3 rounded-xl border ${borderClass} ${bgClass} shadow-sm transition-all hover:shadow-md ${isEditing ? 'ring-2 ring-blue-500/20 border-blue-500/40' : ''}`}>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (typeof window !== "undefined") {
+                        window.dispatchEvent(new CustomEvent('finn-action-trigger', {
+                          detail: { metric: item.id === 'macro' ? 'structural_cycle' : item.id === 'setup' ? 'setup_quality' : 'transition_risk', symbol, timeframe: '1W' }
+                        }));
+                      }
+                    }}
+                    aria-label={`Ask Finn about ${item.title}`}
+                    className="absolute -top-5 right-2 z-10 hidden lg:inline-flex items-center justify-center h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shadow-sm transition-all opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 focus-visible:opacity-100 focus-visible:translate-y-0 hover:scale-105 active:scale-95"
+                  >
+                    <Sparkles size={16} />
+                  </button>
+
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:gap-3 w-full">
                     <div className={`shrink-0 p-2 rounded-lg bg-card dark:bg-slate-800 shadow-sm ${colorClass} border border-slate-50 dark:border-slate-700`}>
                        {item.icon}
                     </div>
+
                     <div className="flex flex-col min-w-0 text-left">
-                      <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-secondary dark:text-slate-500 truncate leading-none">
+                      <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-secondary dark:text-slate-500 leading-none">
                          {item.title}
                       </span>
-                      <span className="text-[9px] font-extrabold uppercase tracking-widest text-[var(--primary)] dark:text-blue-400 truncate mt-1 leading-none">
+                      <span className="mt-1 text-[9px] sm:text-[10px] font-bold tracking-[0.01em] text-[var(--primary)] dark:text-blue-400 leading-tight whitespace-nowrap">
                          {item.structure}
                       </span>
                     </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (typeof window !== "undefined") {
-                          window.dispatchEvent(new CustomEvent('finn-action-trigger', {
-                            detail: { metric: item.id === 'macro' ? 'structural_cycle' : item.id === 'setup' ? 'setup_quality' : 'transition_risk', symbol, timeframe: '1W' }
-                          }));
-                        }
-                      }}
-                      className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all hover:scale-105 active:scale-95 shadow-sm"
-                    >
-                      <Sparkles size={10} /> Ask FINN
-                    </button>
+
+                    <div className="flex items-center justify-end shrink-0 min-w-[3.25rem] sm:min-w-[3.5rem]">
                     <span className={`text-xs sm:text-sm font-black font-mono ${colorClass}`}>
                        {score}%
                     </span>
+                    </div>
                   </div>
                </div>
 

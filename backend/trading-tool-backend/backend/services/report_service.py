@@ -15,6 +15,7 @@ from backend.celery_task.daily_report_task import generate_daily_report
 from backend.celery_task.weekly_report_task import generate_weekly_report
 from backend.celery_task.monthly_report_task import generate_monthly_report
 from backend.celery_task.quarterly_report_task import generate_quarterly_report
+from backend.services.ai_usage_observability_service import ai_usage_context, get_user_email_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -350,9 +351,25 @@ class ReportService:
             self._store_cached_daily_preview(user_id, response)
             return response
         try:
-            report = await asyncio.to_thread(generate_daily_report_sections, user_id=user_id)
+            with ai_usage_context(
+                user_id=user_id,
+                user_email=get_user_email_snapshot(user_id),
+                purpose="daily_report_preview",
+                run_kind="interactive",
+                entry_point="report_service_preview",
+                symbol="WATCHLIST",
+            ):
+                report = await asyncio.to_thread(generate_daily_report_sections, user_id=user_id)
         except TypeError:
-            report = await asyncio.to_thread(generate_daily_report_sections)
+            with ai_usage_context(
+                user_id=user_id,
+                user_email=get_user_email_snapshot(user_id),
+                purpose="daily_report_preview",
+                run_kind="interactive",
+                entry_point="report_service_preview",
+                symbol="WATCHLIST",
+            ):
+                report = await asyncio.to_thread(generate_daily_report_sections)
 
         response = {
             "status": "ok",

@@ -6,6 +6,7 @@ from celery import shared_task
 
 from backend.utils.db import get_db_connection
 from backend.ai_agents.weekly_report_agent import generate_weekly_report_sections
+from backend.services.ai_usage_observability_service import ai_usage_context, get_user_email_snapshot
 
 # =====================================================
 # Logging
@@ -48,7 +49,16 @@ def generate_weekly_report(user_id: int):
     # -------------------------------------------------
     # 1️⃣ AI AGENT — CONTENT ONLY
     # -------------------------------------------------
-    report = generate_weekly_report_sections(user_id=user_id)
+    with ai_usage_context(
+        user_id=user_id,
+        user_email=get_user_email_snapshot(user_id),
+        purpose="weekly_report_generation",
+        request_source="background_job",
+        run_kind="scheduled",
+        entry_point="weekly_report_task",
+        symbol="WATCHLIST",
+    ):
+        report = generate_weekly_report_sections(user_id=user_id)
 
     if not report or not isinstance(report, dict):
         logger.error("❌ Weekly report agent gaf geen geldig resultaat")

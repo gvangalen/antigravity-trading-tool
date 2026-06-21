@@ -1,0 +1,151 @@
+{
+  "name": "FINN 4.0 performance intelligence QA",
+  "chat_latency_budget_ms": 8000,
+  "mission_control_latency_budget_ms": 20000,
+  "cases": [
+    {
+      "id": "performance-outcome-memory-1",
+      "query": "Wat onthoudt Finn van mijn uitkomsten?",
+      "expected_intents": ["outcome_memory"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-outcome-memory-2",
+      "query": "Welk gedrag kost me de laatste maand het meeste?",
+      "expected_intents": ["outcome_memory", "personal_coach"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-outcome-memory-3",
+      "query": "Welke fouten blijven terugkomen in mijn resultaten?",
+      "expected_intents": ["outcome_memory", "personal_coach"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-outcome-memory-4",
+      "query": "Wat zie je terugkeren in mijn verliestrades?",
+      "expected_intents": ["outcome_memory", "trade_journal_intelligence"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+
+    {
+      "id": "performance-personal-performance-1",
+      "query": "Geef mijn performance score",
+      "expected_intents": ["personal_performance"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-personal-performance-2",
+      "query": "Hoe goed trade ik de laatste 30 dagen?",
+      "expected_intents": ["personal_performance"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-personal-performance-3",
+      "query": "Wat zegt Finn over mijn trading kwaliteit?",
+      "expected_intents": ["personal_performance"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-personal-performance-4",
+      "query": "Waar verlies ik het meeste discipline?",
+      "expected_intents": ["personal_performance", "personal_coach"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+
+    {
+      "id": "performance-behavioral-1",
+      "query": "Zie je FOMO-patronen in mijn gedrag?",
+      "expected_intents": ["personal_coach", "behavioral_intelligence"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-behavioral-2",
+      "query": "Overtrade ik?",
+      "expected_intents": ["personal_coach", "behavioral_intelligence"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-behavioral-3",
+      "query": "Handel ik te impulsief?",
+      "expected_intents": ["personal_coach", "behavioral_intelligence"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-behavioral-4",
+      "query": "Neem ik te vroeg winst of stap ik te laat uit?",
+      "expected_intents": ["personal_coach", "behavioral_intelligence"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+
+    {
+      "id": "performance-learning-1",
+      "query": "Wat leert mijn trade journal?",
+      "expected_intents": ["trade_journal_intelligence"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-learning-2",
+      "query": "Welke patronen zitten in mijn notities?",
+      "expected_intents": ["trade_journal_intelligence"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-learning-3",
+      "query": "Wat leren mijn post trade notities?",
+      "expected_intents": ["trade_journal_intelligence"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-learning-4",
+      "query": "Welke les moet ik uit mijn laatste trades trekken?",
+      "expected_intents": ["trade_journal_intelligence", "personal_coach"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+
+    {
+      "id": "performance-coach-evolution-1",
+      "query": "Coach me op basis van mijn laatste fouten",
+      "expected_intents": ["personal_coach"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-coach-evolution-2",
+      "query": "Wat is mijn grootste persoonlijke performance lek?",
+      "expected_intents": ["personal_coach"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-coach-evolution-3",
+      "query": "Word ik beter of slechter als trader?",
+      "expected_intents": ["personal_coach", "personal_performance"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    },
+    {
+      "id": "performance-coach-evolution-4",
+      "query": "Wat is mijn volgende beste coachregel?",
+      "expected_intents": ["personal_coach"],
+      "forbidden_flows": ["setup_creation", "strategy_creation", "bot_creation", "indicator_config"],
+      "expected_mode": "read_only"
+    }
+  ]
+}

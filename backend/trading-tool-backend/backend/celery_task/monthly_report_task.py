@@ -6,6 +6,7 @@ from celery import shared_task
 
 from backend.utils.db import get_db_connection
 from backend.ai_agents.monthly_report_agent import generate_monthly_report_sections
+from backend.services.ai_usage_observability_service import ai_usage_context, get_user_email_snapshot
 
 # =====================================================
 # Logging
@@ -56,7 +57,16 @@ def generate_monthly_report(user_id: int):
     # -------------------------------------------------
     # 1️⃣ AI AGENT
     # -------------------------------------------------
-    report = generate_monthly_report_sections(user_id=user_id)
+    with ai_usage_context(
+        user_id=user_id,
+        user_email=get_user_email_snapshot(user_id),
+        purpose="monthly_report_generation",
+        request_source="background_job",
+        run_kind="scheduled",
+        entry_point="monthly_report_task",
+        symbol="WATCHLIST",
+    ):
+        report = generate_monthly_report_sections(user_id=user_id)
 
     if not report or not isinstance(report, dict):
         logger.error("❌ Monthly report agent gaf geen geldig resultaat")

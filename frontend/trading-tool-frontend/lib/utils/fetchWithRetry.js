@@ -7,8 +7,8 @@ export async function fetchWithRetry(
   endpoint,
   method = "GET",
   body = null,
-  retries = 3,
-  delay = 2000,
+  retries = 2,
+  delay = 500,
   fetchOptions = {}
 ) {
   const baseUrl = API_BASE_URL;
@@ -50,14 +50,16 @@ export async function fetchWithRetry(
       };
 
       // Logging voor body
+      const shouldLog = fetchOptions.debug === true;
+
       if (body && ["POST", "PUT", "PATCH"].includes(method.toUpperCase())) {
         options.body = JSON.stringify(body);
-        console.log(`🔍 [fetchWithRetry] ${method.toUpperCase()} ${url}`);
-        console.log("📦 Body:", body);
-      } else {
-        console.log(
-          `🔍 [fetchWithRetry] ${method.toUpperCase()} ${url} (geen body)`
-        );
+        if (shouldLog) {
+          console.log(`🔍 [fetchWithRetry] ${method.toUpperCase()} ${url}`);
+          console.log("📦 Body:", body);
+        }
+      } else if (shouldLog) {
+        console.log(`🔍 [fetchWithRetry] ${method.toUpperCase()} ${url} (geen body)`);
       }
 
       // API call
@@ -79,9 +81,9 @@ export async function fetchWithRetry(
 
       return data;
     } catch (err) {
-      console.warn(
-        `⚠️ Poging ${attempts + 1} mislukt voor ${url}: ${err.message}`
-      );
+      if (fetchOptions.silent !== true) {
+        console.warn(`⚠️ Poging ${attempts + 1} mislukt voor ${url}: ${err.message}`);
+      }
       attempts++;
 
       if (attempts === retries) throw err;

@@ -65,6 +65,8 @@ The mixed profile reuses the same safe request families as the dedicated profile
 - no live/manual orders
 - no report-generation writes
 
+It also applies light, human-like pacing for FINN and governance traffic so mixed staging runs do not immediately collapse into artificial `429` noise from perfectly healthy rate limits.
+
 ## Usage
 
 Bearer-token example:
@@ -121,6 +123,8 @@ python3 /Users/gvangalen/Documents/antigravity-trading-tool/backend/trading-tool
   --ai-share 15 \
   --bot-share 5 \
   --mixed-concurrency 20 \
+  --mixed-ai-think-time-seconds 2.5 \
+  --mixed-bot-think-time-seconds 3.0 \
   --output-json /tmp/platform-scale-staging-mixed-100.json \
   --output-md /tmp/platform-scale-staging-mixed-100.md
 ```
@@ -156,6 +160,7 @@ Each run records:
 
 - per-profile request count
 - mixed-load virtual-user distribution when used
+- mixed-load pacing settings when used
 - success/failure counts
 - avg/p95/max latency
 - status distribution

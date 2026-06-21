@@ -4,10 +4,8 @@ import React from "react";
 import CardWrapper from "@/components/ui/CardWrapper";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useScoresData } from "@/hooks/useScoresData";
-import { useSidebarData } from "@/hooks/useSidebarData";
 import { useSetupStrategy } from "@/hooks/useSetupStrategy";
 import Link from "next/link";
-import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
 import { 
   Rocket, 
   Target, 
@@ -25,15 +23,14 @@ import { useTranslation } from "@/app/providers/I18nProvider";
  * 🧠 TradingBrain — Unified Decision Panel (V2.1)
  * Combines Master Score, Active Setup, AI Advice, Bot Status, and Daily Snippet.
  */
-export default function TradingBrain({ symbol = "BTC" }) {
+export default function TradingBrain({ symbol = "BTC", scoresSnapshot = null }) {
   const { t } = useTranslation();
   const { activeSetup, loading: setupLoading } = useActiveSetup();
-  const { macro, technical, market, setup: dailySetup, master, loading: scoresLoading } = useScoresData(symbol);
-  const { summary, aiStatus, loading: sidebarLoading } = useSidebarData(symbol);
-  const { data: marketIntelligence, loading: intelLoading } = useMarketIntelligence(symbol);
+  const fallbackSnapshot = useScoresData(symbol, { includeHistory: false });
+  const { macro, technical, market, setup: dailySetup, master, loading: scoresLoading } = scoresSnapshot || fallbackSnapshot;
   const { strategy, loading: strategyLoading } = useSetupStrategy(activeSetup?.id);
 
-  const isLoading = setupLoading || scoresLoading || sidebarLoading || strategyLoading || intelLoading;
+  const isLoading = setupLoading || scoresLoading || strategyLoading;
   
   // 1. DATA PREP
   const ticker = activeSetup?.symbol || "–";
@@ -49,14 +46,13 @@ export default function TradingBrain({ symbol = "BTC" }) {
     riskLevel: strategy?.risk_profile || "Medium",
   };
 
-  const isBotActive = aiStatus?.state === "active" || aiStatus?.state === "running";
-  
   const isDCA = activeSetup?.setup_type?.toLowerCase() === "dca" || 
                 strategy?.setup_type?.toLowerCase() === "dca" || 
                 activeSetup?.name?.toLowerCase().includes("dca");
   
   // Minimal report snippet (1 sentence)
-  const reportSnippet = (marketIntelligence?.summary || master?.summary || summary)?.split('.')[0] + '.';
+  const baseSummary = master?.summary;
+  const reportSnippet = baseSummary ? `${baseSummary.split('.')[0]}.` : null;
 
   if (isLoading && !activeSetup) {
     return <BrainSkeleton />;
@@ -214,7 +210,7 @@ export default function TradingBrain({ symbol = "BTC" }) {
                     <span className="text-[10px] uppercase font-black text-secondary dark:text-slate-500 tracking-widest">{t.dashboard.brain.master_snippet}</span>
                 </div>
                 <div className="text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 font-medium italic">
-                    {sidebarLoading && !reportSnippet ? (
+                    {scoresLoading && !reportSnippet ? (
                       <TextSkeleton lines={2} className="mt-1" />
                     ) : (
                       reportSnippet && reportSnippet !== "undefined." ? `"${reportSnippet}"` : "Nog geen samenvatting beschikbaar."
@@ -231,19 +227,6 @@ export default function TradingBrain({ symbol = "BTC" }) {
           </div>
         </div>
       </CardWrapper>
-
-      {/* 🤖 BOT STATUS (Conditional) */}
-      {isBotActive && (
-        <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 p-3 rounded-xl flex items-center justify-between">
-           <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-              <span className="text-xs font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-tight">{t.dashboard.brain.bot_active}</span>
-           </div>
-           <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">
-              {aiStatus.strategy}
-           </span>
-        </div>
-      )}
     </div>
   );
 }

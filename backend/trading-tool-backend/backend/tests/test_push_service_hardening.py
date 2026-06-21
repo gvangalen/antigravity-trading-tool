@@ -37,3 +37,11 @@ def test_push_service_dead_token_cleanup_is_async():
     assert "async def _delete_dead_token_async" in source
     assert "await db_session.execute(delete(MobilePushToken)" in source
     assert "await db_session.commit()" in source
+
+
+def test_push_service_supports_detached_async_dispatch():
+    source = _source()
+
+    assert "async def notify_user_detached_async" in source
+    assert "async with async_session_factory() as session:" in source
+    assert "return await self.notify_user_async(session, user_id, title, message, url)" in source

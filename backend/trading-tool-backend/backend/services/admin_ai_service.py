@@ -31,13 +31,20 @@ class AdminAiService:
                 COALESCE(SUM(CASE WHEN status = 'cache_exact' THEN 1 ELSE 0 END), 0) as exact_hits,
                 COALESCE(SUM(CASE WHEN status = 'cache_semantic' THEN 1 ELSE 0 END), 0) as semantic_hits,
                 COALESCE(AVG(response_time_ms), 0) as avg_latency,
-                COALESCE(SUM(cost) FILTER (WHERE status = 'full_ai'), 0) / NULLIF(COUNT(*) FILTER (WHERE status = 'full_ai'), 0) as avg_cost_full
+                COALESCE(SUM(cost) FILTER (WHERE status = 'full_ai'), 0) / NULLIF(COUNT(*) FILTER (WHERE status = 'full_ai'), 0) as avg_cost_full,
+                COALESCE(SUM(cost) FILTER (WHERE COALESCE(request_source, 'unclassified') = 'qa_user'), 0) as qa_cost_month,
+                COALESCE(SUM(cost) FILTER (WHERE COALESCE(request_source, 'unclassified') = 'background_job'), 0) as background_cost_month,
+                COALESCE(SUM(cost) FILTER (WHERE COALESCE(request_source, 'unclassified') = 'live_user'), 0) as live_user_cost_month,
+                COALESCE(SUM(cost) FILTER (WHERE COALESCE(request_source, 'unclassified') = 'staging_user'), 0) as staging_cost_month,
+                COALESCE(SUM(CASE WHEN status = 'quota_blocked' THEN 1 ELSE 0 END), 0) as blocked_requests_month,
+                COALESCE(SUM(CASE WHEN status = 'quota_blocked' THEN COALESCE(estimated_cost_if_full, 0) ELSE 0 END), 0) as blocked_estimated_cost_month
             FROM ai_usage_logs
             WHERE timestamp >= date_trunc('month', current_date)
         """)
         
         res_logs = await self.db.execute(stmt_logs)
         logs_stats = res_logs.mappings().first()
+        total_logs = (logs_stats['total_requests'] or 0) or 1
         
         # 2. Revenue totals from active users
         stmt_users = text("SELECT ai_plan, count(*) as count FROM users WHERE is_active = TRUE GROUP BY ai_plan")
@@ -58,12 +65,17 @@ class AdminAiService:
                 COALESCE(u.ai_requests_used_day, 0) as requests_today, 
                 COALESCE(u.ai_requests_limit_day, 0) as requests_limit,
                 COALESCE(SUM(l.cost), 0) as usage_month_eur,
-                COALESCE(SUM(CASE WHEN l.timestamp >= current_date THEN l.cost ELSE 0 END), 0) as usage_today_eur
+                COALESCE(SUM(CASE WHEN l.timestamp >= current_date THEN l.cost ELSE 0 END), 0) as usage_today_eur,
+                COALESCE(SUM(CASE WHEN COALESCE(l.request_source, 'unclassified') = 'background_job' THEN l.cost ELSE 0 END), 0) as background_usage_month_eur,
+                COALESCE(SUM(CASE WHEN COALESCE(l.request_source, 'unclassified') IN ('live_user', 'staging_user', 'qa_user', 'admin_tool') THEN l.cost ELSE 0 END), 0) as interactive_usage_month_eur,
+                COALESCE(SUM(CASE WHEN l.status = 'quota_blocked' THEN 1 ELSE 0 END), 0) as blocked_requests_month,
+                COALESCE(SUM(CASE WHEN l.status = 'quota_blocked' THEN COALESCE(l.estimated_cost_if_full, 0) ELSE 0 END), 0) as blocked_estimated_cost_month_eur,
+                MAX(l.timestamp) as last_ai_activity_at
             FROM users u
             LEFT JOIN ai_usage_logs l ON l.user_id = u.id AND l.timestamp >= date_trunc('month', current_date)
             WHERE u.is_active = TRUE
             GROUP BY u.id
-            ORDER BY usage_month_eur DESC
+            ORDER BY (COALESCE(SUM(l.cost), 0) + COALESCE(SUM(CASE WHEN l.status = 'quota_blocked' THEN COALESCE(l.estimated_cost_if_full, 0) ELSE 0 END), 0)) DESC, MAX(l.timestamp) DESC
             LIMIT 10
         """)
         res_heavy = await self.db.execute(stmt_heavy_users)
@@ -81,8 +93,13 @@ class AdminAiService:
                 "requests_limit": row['requests_limit'] or 0,
                 "usage_month_eur": u_cost,
                 "usage_today_eur": float(row['usage_today_eur'] or 0),
+                "interactive_usage_month_eur": float(row['interactive_usage_month_eur'] or 0),
+                "background_usage_month_eur": float(row['background_usage_month_eur'] or 0),
+                "blocked_requests_month": int(row['blocked_requests_month'] or 0),
+                "blocked_estimated_cost_month_eur": float(row['blocked_estimated_cost_month_eur'] or 0),
                 "revenue_month_eur": rev,
-                "profit_month_eur": rev - u_cost
+                "profit_month_eur": rev - u_cost,
+                "last_ai_activity_at": row['last_ai_activity_at'].isoformat() if row['last_ai_activity_at'] else None,
             })
 
         # 4. Feature Breakdown
@@ -106,6 +123,99 @@ class AdminAiService:
                 "avg_cost": float(row['total_cost'] or 0) / (row['total_requests'] or 1) if row['total_requests'] else 0
             })
 
+        stmt_sources = text("""
+            SELECT
+                COALESCE(request_source, 'unclassified') as source,
+                COUNT(*)::int as total_requests,
+                COALESCE(SUM(cost), 0) as total_cost,
+                COALESCE(SUM(CASE WHEN status = 'quota_blocked' THEN 1 ELSE 0 END), 0)::int as blocked_requests,
+                COALESCE(SUM(CASE WHEN status = 'quota_blocked' THEN COALESCE(estimated_cost_if_full, 0) ELSE 0 END), 0) as blocked_estimated_cost,
+                COUNT(DISTINCT user_id)::int as unique_users
+            FROM ai_usage_logs
+            WHERE timestamp >= date_trunc('month', current_date)
+            GROUP BY COALESCE(request_source, 'unclassified')
+            ORDER BY total_cost DESC, blocked_estimated_cost DESC, total_requests DESC
+        """)
+        res_sources = await self.db.execute(stmt_sources)
+        source_breakdown = []
+        for row in res_sources.mappings():
+            source_breakdown.append({
+                "source": row["source"],
+                "total_requests": row["total_requests"] or 0,
+                "total_cost": float(row["total_cost"] or 0),
+                "blocked_requests": row["blocked_requests"] or 0,
+                "blocked_estimated_cost": float(row["blocked_estimated_cost"] or 0),
+                "unique_users": row["unique_users"] or 0,
+                "percentage": (float(row["total_requests"] or 0) / total_logs) * 100,
+            })
+
+        stmt_entry_points = text("""
+            SELECT
+                COALESCE(entry_point, 'unclassified') as entry_point,
+                COALESCE(request_source, 'unclassified') as source,
+                COUNT(*)::int as total_requests,
+                COALESCE(SUM(cost), 0) as total_cost,
+                COALESCE(AVG(cost), 0) as avg_cost,
+                COALESCE(SUM(CASE WHEN status = 'quota_blocked' THEN 1 ELSE 0 END), 0)::int as blocked_requests,
+                COALESCE(SUM(CASE WHEN status = 'quota_blocked' THEN COALESCE(estimated_cost_if_full, 0) ELSE 0 END), 0) as blocked_estimated_cost
+            FROM ai_usage_logs
+            WHERE timestamp >= date_trunc('month', current_date)
+            GROUP BY COALESCE(entry_point, 'unclassified'), COALESCE(request_source, 'unclassified')
+            ORDER BY total_cost DESC, blocked_estimated_cost DESC, total_requests DESC
+            LIMIT 12
+        """)
+        res_entry_points = await self.db.execute(stmt_entry_points)
+        top_entry_points = []
+        for row in res_entry_points.mappings():
+            top_entry_points.append({
+                "entry_point": row["entry_point"],
+                "source": row["source"],
+                "total_requests": row["total_requests"] or 0,
+                "total_cost": float(row["total_cost"] or 0),
+                "avg_cost": float(row["avg_cost"] or 0),
+                "blocked_requests": row["blocked_requests"] or 0,
+                "blocked_estimated_cost": float(row["blocked_estimated_cost"] or 0),
+            })
+
+        stmt_distribution = text("""
+            WITH user_costs AS (
+                SELECT
+                    u.id,
+                    COALESCE(SUM(l.cost) FILTER (WHERE l.timestamp >= date_trunc('month', current_date)), 0) as usage_month_eur
+                FROM users u
+                LEFT JOIN ai_usage_logs l ON l.user_id = u.id
+                WHERE u.is_active = TRUE
+                GROUP BY u.id
+            ),
+            bucketed AS (
+                SELECT
+                    CASE
+                        WHEN usage_month_eur < 1 THEN '<1'
+                        WHEN usage_month_eur < 5 THEN '1-5'
+                        WHEN usage_month_eur < 25 THEN '5-25'
+                        ELSE '25+'
+                    END AS bucket
+                FROM user_costs
+            )
+            SELECT
+                bucket,
+                COUNT(*)::int AS count
+            FROM bucketed
+            GROUP BY bucket
+            ORDER BY
+                CASE bucket
+                    WHEN '<1' THEN 1
+                    WHEN '1-5' THEN 2
+                    WHEN '5-25' THEN 3
+                    ELSE 4
+                END
+        """)
+        res_distribution = await self.db.execute(stmt_distribution)
+        user_distribution = [
+            {"bucket": row["bucket"], "count": row["count"] or 0}
+            for row in res_distribution.mappings()
+        ]
+
         # 5. Mode Distribution
         stmt_modes = text("""
             SELECT 
@@ -117,7 +227,6 @@ class AdminAiService:
             GROUP BY status
         """)
         res_modes = await self.db.execute(stmt_modes)
-        total_logs = (logs_stats['total_requests'] or 0) or 1
         mode_distribution = []
         latency_stats = []
         for row in res_modes.mappings():
@@ -250,15 +359,23 @@ class AdminAiService:
                 "cache_hit_rate": ((float(logs_stats['exact_hits'] or 0) + float(logs_stats['semantic_hits'] or 0)) / total_logs) * 100,
                 "avg_latency_ms": float(logs_stats['avg_latency'] or 0),
                 "avg_cost_per_full_request": float(logs_stats['avg_cost_full'] or 0),
+                "qa_cost_month_eur": float(logs_stats['qa_cost_month'] or 0),
+                "background_cost_month_eur": float(logs_stats['background_cost_month'] or 0),
+                "live_user_cost_month_eur": float(logs_stats['live_user_cost_month'] or 0),
+                "staging_cost_month_eur": float(logs_stats['staging_cost_month'] or 0),
+                "blocked_requests_month": int(logs_stats['blocked_requests_month'] or 0),
+                "blocked_estimated_cost_month_eur": float(logs_stats['blocked_estimated_cost_month'] or 0),
                 "exact_hits": int(logs_stats['exact_hits'] or 0),
                 "semantic_hits": int(logs_stats['semantic_hits'] or 0),
                 "rejection_breakdown": rejection_breakdown
             },
             "top_users": heavy_users,
             "feature_breakdown": feature_breakdown,
+            "source_breakdown": source_breakdown,
+            "top_entry_points": top_entry_points,
             "mode_distribution": mode_distribution,
             "latency_stats": latency_stats,
-            "user_distribution": [], # we can add if needed
+            "user_distribution": user_distribution,
             "heavy_user_impact_pct": float(heavy_user_impact),
             "anomalies": anomalies
         }

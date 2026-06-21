@@ -67,22 +67,16 @@ export const fetchFinnState = () => {
 };
 
 export const fetchFinnMissionControl = () => {
-  const cacheBust = typeof window !== 'undefined' ? `?_=${Date.now()}` : '';
-  return fetchAuth(`/api/assistant/mission-control${cacheBust}`, {
+  return fetchAuth(`/api/assistant/mission-control`, {
     method: 'GET',
-    forceFresh: true,
   }).then(async (res) => {
     if (res) return res;
 
-    const fallback = await fetch(`${API_BASE_URL}/api/assistant/mission-control${cacheBust}`, {
+    const fallback = await fetch(`${API_BASE_URL}/api/assistant/mission-control`, {
       method: 'GET',
       credentials: 'include',
-      cache: 'no-store',
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        Pragma: 'no-cache',
-        Expires: '0',
       },
     });
 

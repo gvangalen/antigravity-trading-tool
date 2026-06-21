@@ -65,15 +65,23 @@ class AssistantActionExecuteResponse(BaseModel):
     draft: Optional[Dict[str, Any]] = None
 
 class AssistantPreferenceUpdate(BaseModel):
-    report_style: Optional[str]
-    tone: Optional[str]
-    detail_level: Optional[str]
-    coaching_style: Optional[str]
-    experience_level: Optional[str]
-    risk_profile: Optional[str]
+    report_style: Optional[str] = None
+    tone: Optional[str] = None
+    detail_level: Optional[str] = None
+    coaching_style: Optional[str] = None
+    experience_level: Optional[str] = None
+    experience_levels: Optional[List[str]] = None
+    risk_profile: Optional[str] = None
+    risk_profiles: Optional[List[str]] = None
+    trader_type: Optional[str] = None
+    trader_types: Optional[List[str]] = None
+    primary_timeframes: Optional[List[str]] = None
+    asset_focus: Optional[List[str]] = None
+    investment_goals: Optional[str] = None
+    investment_goals_list: Optional[List[str]] = None
 
 class AssistantPreferences(BaseModel):
-    preferences: Dict[str, str]
+    preferences: Dict[str, Any]
 
 class AssistantInsightResponse(BaseModel):
     greeting: str

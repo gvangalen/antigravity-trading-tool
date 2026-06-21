@@ -84,8 +84,8 @@ export function useAgentData(category) {
     load();
   }, {
     enabled: Boolean(category && isAuthenticated),
-    intervalMs: 10000,
-    backgroundIntervalMs: 60000,
+    intervalMs: 45000,
+    backgroundIntervalMs: 180000,
     runImmediately: true,
     deps: [category, isAuthenticated],
   });

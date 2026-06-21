@@ -1,4 +1,13 @@
-# ✅ main.tf — Oracle Cloud Infrastructure (OCI) Terraform setup
+terraform {
+  required_version = ">= 1.5.0"
+
+  required_providers {
+    oci = {
+      source  = "oracle/oci"
+      version = ">= 6.0.0"
+    }
+  }
+}
 
 provider "oci" {
   tenancy_ocid     = var.tenancy_ocid
@@ -8,99 +17,135 @@ provider "oci" {
   region           = var.region
 }
 
-# ✅ VCN (Virtual Cloud Network)
+locals {
+  environments = {
+    production = {
+      cidr_block       = "10.40.10.0/24"
+      display_name     = "tradamind-production"
+      frontend_port    = 5002
+      backend_port     = 8000
+      assign_public_ip = true
+    }
+    staging = {
+      cidr_block       = "10.40.20.0/24"
+      display_name     = "tradamind-staging"
+      frontend_port    = 5102
+      backend_port     = 8100
+      assign_public_ip = true
+    }
+  }
+
+  ingress_rules = flatten([
+    for env_name, env in local.environments : [
+      {
+        environment = env_name
+        description = "${env_name} ssh"
+        port        = 22
+      },
+      {
+        environment = env_name
+        description = "${env_name} http"
+        port        = 80
+      },
+      {
+        environment = env_name
+        description = "${env_name} https"
+        port        = 443
+      },
+    ]
+  ])
+}
+
 resource "oci_core_vcn" "trading_vcn" {
-  cidr_block = "10.0.0.0/16"
+  cidr_block     = var.vcn_cidr_block
   compartment_id = var.compartment_ocid
-  display_name = "trading_vcn"
+  display_name   = "tradamind-vcn"
+  dns_label      = "tradamind"
 }
 
-# ✅ Public subnet
-resource "oci_core_subnet" "public_subnet" {
-  cidr_block = "10.0.1.0/24"
-  compartment_id = var.compartment_ocid
-  vcn_id = oci_core_vcn.trading_vcn.id
-  display_name = "public_subnet"
-  prohibit_public_ip_on_vnic = false
-}
-
-# ✅ Internet Gateway
 resource "oci_core_internet_gateway" "igw" {
   compartment_id = var.compartment_ocid
-  vcn_id = oci_core_vcn.trading_vcn.id
-  display_name = "trading_igw"
-  enabled = true
+  vcn_id         = oci_core_vcn.trading_vcn.id
+  display_name   = "tradamind-igw"
+  enabled        = true
 }
 
-# ✅ Route table for internet access
 resource "oci_core_route_table" "public_rt" {
   compartment_id = var.compartment_ocid
-  vcn_id = oci_core_vcn.trading_vcn.id
-  display_name = "public_rt"
+  vcn_id         = oci_core_vcn.trading_vcn.id
+  display_name   = "tradamind-public-rt"
 
   route_rules {
-    destination = "0.0.0.0/0"
-    destination_type = "CIDR_BLOCK"
+    destination       = "0.0.0.0/0"
+    destination_type  = "CIDR_BLOCK"
     network_entity_id = oci_core_internet_gateway.igw.id
   }
 }
 
-# ✅ NSG (Network Security Group)
-resource "oci_core_network_security_group" "nsg" {
+resource "oci_core_subnet" "public_subnet" {
+  for_each = local.environments
+
+  cidr_block                 = each.value.cidr_block
+  compartment_id             = var.compartment_ocid
+  vcn_id                     = oci_core_vcn.trading_vcn.id
+  display_name               = "${each.key}-public-subnet"
+  dns_label                  = each.key == "production" ? "prodsubnet" : "stgsubnet"
+  route_table_id             = oci_core_route_table.public_rt.id
+  prohibit_public_ip_on_vnic = false
+}
+
+resource "oci_core_network_security_group" "env_nsg" {
+  for_each = local.environments
+
   compartment_id = var.compartment_ocid
-  vcn_id = oci_core_vcn.trading_vcn.id
-  display_name = "trading_nsg"
+  vcn_id         = oci_core_vcn.trading_vcn.id
+  display_name   = "${each.key}-nsg"
 }
 
-# ✅ NSG Rules (Allow HTTP, HTTPS, PostgreSQL)
-resource "oci_core_network_security_group_security_rule" "allow_http" {
-  network_security_group_id = oci_core_network_security_group.nsg.id
-  direction = "INGRESS"
-  protocol = "6" # TCP
-  source = "0.0.0.0/0"
-  source_type = "CIDR_BLOCK"
+resource "oci_core_network_security_group_security_rule" "allow_ingress" {
+  for_each = {
+    for rule in local.ingress_rules :
+    "${rule.environment}-${rule.port}" => rule
+  }
+
+  network_security_group_id = oci_core_network_security_group.env_nsg[each.value.environment].id
+  direction                 = "INGRESS"
+  protocol                  = "6"
+  source                    = "0.0.0.0/0"
+  source_type               = "CIDR_BLOCK"
+  description               = each.value.description
+
   tcp_options {
     destination_port_range {
-      min = 80
-      max = 80
+      min = each.value.port
+      max = each.value.port
     }
   }
 }
 
-resource "oci_core_network_security_group_security_rule" "allow_https" {
-  network_security_group_id = oci_core_network_security_group.nsg.id
-  direction = "INGRESS"
-  protocol = "6"
-  source = "0.0.0.0/0"
-  source_type = "CIDR_BLOCK"
-  tcp_options {
-    destination_port_range {
-      min = 443
-      max = 443
-    }
-  }
+resource "oci_core_network_security_group_security_rule" "allow_egress_all" {
+  for_each = local.environments
+
+  network_security_group_id = oci_core_network_security_group.env_nsg[each.key].id
+  direction                 = "EGRESS"
+  protocol                  = "all"
+  destination               = "0.0.0.0/0"
+  destination_type          = "CIDR_BLOCK"
+  description               = "${each.key} all egress"
 }
 
-resource "oci_core_network_security_group_security_rule" "allow_postgres" {
-  network_security_group_id = oci_core_network_security_group.nsg.id
-  direction = "INGRESS"
-  protocol = "6"
-  source = "0.0.0.0/0"
-  source_type = "CIDR_BLOCK"
-  tcp_options {
-    destination_port_range {
-      min = 5432
-      max = 5432
-    }
-  }
-}
+resource "oci_core_instance" "environment_vm" {
+  for_each = local.environments
 
-# ✅ VM Instance (Ubuntu voor app + database)
-resource "oci_core_instance" "trading_vm" {
-  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
-  compartment_id = var.compartment_ocid
-  shape = "VM.Standard.E2.1.Micro"
-  display_name = "trading-vm"
+  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[var.availability_domain_index].name
+  compartment_id      = var.compartment_ocid
+  shape               = var.instance_shape
+  display_name        = each.value.display_name
+
+  shape_config {
+    memory_in_gbs = var.instance_memory_gbs
+    ocpus         = var.instance_ocpus
+  }
 
   source_details {
     source_type = "image"
@@ -108,27 +153,31 @@ resource "oci_core_instance" "trading_vm" {
   }
 
   create_vnic_details {
-    subnet_id              = oci_core_subnet.public_subnet.id
-    assign_public_ip       = true
-    nsg_ids                = [oci_core_network_security_group.nsg.id]
+    subnet_id        = oci_core_subnet.public_subnet[each.key].id
+    assign_public_ip = each.value.assign_public_ip
+    nsg_ids          = [oci_core_network_security_group.env_nsg[each.key].id]
   }
 
   metadata = {
     ssh_authorized_keys = file(var.ssh_public_key_path)
+    user_data = base64encode(templatefile("${path.module}/cloud-init.yaml.tpl", {
+      environment   = each.key
+      app_env       = each.key == "production" ? "production" : "staging"
+      frontend_port = each.value.frontend_port
+      backend_port  = each.value.backend_port
+    }))
   }
 }
-
-# ✅ Data sources
 
 data "oci_identity_availability_domains" "ads" {
   compartment_id = var.compartment_ocid
 }
 
 data "oci_core_images" "ubuntu_image" {
-  compartment_id = var.compartment_ocid
-  operating_system = "Canonical Ubuntu"
+  compartment_id           = var.compartment_ocid
+  operating_system         = "Canonical Ubuntu"
   operating_system_version = "22.04"
-  shape = "VM.Standard.E2.1.Micro"
-  sort_by = "TIMECREATED"
-  sort_order = "DESC"
+  shape                    = var.instance_shape
+  sort_by                  = "TIMECREATED"
+  sort_order               = "DESC"
 }

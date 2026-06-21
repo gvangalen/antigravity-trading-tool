@@ -11,7 +11,8 @@ const inflightLatestPriceRequests = new Map();
 // =======================================================
 //
 
-export const fetchMarketData7d = (symbol = "BTC") => fetchWithRetry(`/api/market_data/7d?symbol=${symbol}`, "GET");
+export const fetchMarketData7d = (symbol = "BTC") =>
+  fetchWithRetry(`/api/market_data/7d?symbol=${symbol}`, "GET", null, 1, 250, { silent: true });
 export const fetchLatestPrice = (symbol = "BTC", options = {}) => {
   const requestKey = `${String(symbol || "BTC").toUpperCase()}:${options.forceFresh === false ? "cached" : "fresh"}`;
   const existing = inflightLatestPriceRequests.get(requestKey);
@@ -21,9 +22,12 @@ export const fetchLatestPrice = (symbol = "BTC", options = {}) => {
     `/api/market_data/${symbol}/latest`,
     "GET",
     null,
-    3,
-    2000,
-    options.forceFresh === false ? {} : { cache: "no-store" }
+    1,
+    options.forceFresh === false ? 150 : 300,
+    {
+      ...(options.forceFresh === false ? {} : { cache: "no-store" }),
+      silent: true,
+    }
   ).finally(() => {
     inflightLatestPriceRequests.delete(requestKey);
   });
@@ -37,13 +41,13 @@ export const syncMarketData7d = (symbol = "BTC", overwrite = false) =>
   fetchAuth(`/api/market_data/7d/fill?symbol=${symbol}&overwrite=${overwrite}`, { method: "POST" });
 
 export const fetchForwardReturnsWeek = (symbol = "BTC") =>
-  fetchWithRetry(`/api/market_data/forward/week?symbol=${symbol}`, "GET");
+  fetchWithRetry(`/api/market_data/forward/week?symbol=${symbol}`, "GET", null, 1, 250, { silent: true });
 export const fetchForwardReturnsMonth = (symbol = "BTC") =>
-  fetchWithRetry(`/api/market_data/forward/maand?symbol=${symbol}`, "GET");
+  fetchWithRetry(`/api/market_data/forward/maand?symbol=${symbol}`, "GET", null, 1, 250, { silent: true });
 export const fetchForwardReturnsQuarter = (symbol = "BTC") =>
-  fetchWithRetry(`/api/market_data/forward/kwartaal?symbol=${symbol}`, "GET");
+  fetchWithRetry(`/api/market_data/forward/kwartaal?symbol=${symbol}`, "GET", null, 1, 250, { silent: true });
 export const fetchForwardReturnsYear = (symbol = "BTC") =>
-  fetchWithRetry(`/api/market_data/forward/jaar?symbol=${symbol}`, "GET");
+  fetchWithRetry(`/api/market_data/forward/jaar?symbol=${symbol}`, "GET", null, 1, 250, { silent: true });
 
 //
 // =======================================================

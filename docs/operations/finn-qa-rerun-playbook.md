@@ -13,6 +13,10 @@ Run a clean FINN quality rerun without getting blocked by:
 
 This playbook is intentionally small and operational.
 
+Use the preflight first:
+
+- [FINN QA Preflight Checklist](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-qa-preflight-checklist.md)
+
 ## Preconditions
 
 Before running a full rerun, confirm:

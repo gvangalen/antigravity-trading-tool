@@ -6,6 +6,7 @@ from celery import shared_task
 
 from backend.utils.db import get_db_connection
 from backend.ai_agents.quarterly_report_agent import generate_quarterly_report_sections
+from backend.services.ai_usage_observability_service import ai_usage_context, get_user_email_snapshot
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -40,7 +41,16 @@ def generate_quarterly_report(user_id: int):
     period_start, period_end = _get_quarter_period(today)
 
     # 1️⃣ AI agent
-    report = generate_quarterly_report_sections(user_id=user_id)
+    with ai_usage_context(
+        user_id=user_id,
+        user_email=get_user_email_snapshot(user_id),
+        purpose="quarterly_report_generation",
+        request_source="background_job",
+        run_kind="scheduled",
+        entry_point="quarterly_report_task",
+        symbol="WATCHLIST",
+    ):
+        report = generate_quarterly_report_sections(user_id=user_id)
     if not isinstance(report, dict):
         raise RuntimeError("Quarterly report agent failed")
 

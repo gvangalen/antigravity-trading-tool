@@ -7536,6 +7536,15 @@ class FinnPlanService:
     ) -> Dict[str, Any]:
         context = context or {}
         decision_id = self._extract_id_after_words(query, ["bot-decision", "decision", "beslissing", "proposal", "voorstel"])
+        if not decision_id:
+            try:
+                decision_id = int(context.get("decision_id") or 0) or None
+            except (TypeError, ValueError):
+                decision_id = None
+        try:
+            requested_bot_id = int(context.get("bot_id") or 0) or None
+        except (TypeError, ValueError):
+            requested_bot_id = None
         asset = self._asset_from_query_or_context(query, context)
         bot_today = await BotService(self.session).get_bot_today(user_id, symbol=asset) if self.session else {"decisions": []}
         decisions = bot_today.get("decisions") or []
@@ -7543,6 +7552,10 @@ class FinnPlanService:
         selected = None
         if decision_id:
             selected = next((decision for decision in decisions if int(decision.get("id") or 0) == decision_id), None)
+        elif requested_bot_id:
+            bot_decisions = [decision for decision in decisions if int(decision.get("bot_id") or 0) == requested_bot_id]
+            if len(bot_decisions) == 1:
+                selected = bot_decisions[0]
         elif len(decisions) == 1:
             selected = decisions[0]
 
@@ -7584,12 +7597,13 @@ class FinnPlanService:
             if isinstance(review.get("confidence"), (int, float))
             else "onbekend"
         )
+        bot_label = review.get("friendly_bot_name") or review.get("bot_name") or f"{review.get('asset')} bot"
         lines = [
-            f"Bot-decision #{review['decision_id']} voor {review.get('asset')}: {review.get('action')} ({review.get('review_status')}).",
+            f"{bot_label} staat nu op {review.get('action')} en wacht op review.",
             f"Risico: {review.get('risk_level')}. Confidence: {confidence_label}.",
         ]
         if review.get("action") == "hold":
-            lines.append("Uitvoering: hold-decision; geen orderbedrag, alleen monitoren.")
+            lines.append(f"Uitvoering: {bot_label} houdt nu positie vast; er staat geen orderbedrag klaar.")
         elif review.get("amount_eur") is not None:
             lines.append(f"Bedrag: EUR {review.get('amount_eur')}.")
         if review.get("guardrail_reason"):
@@ -15025,6 +15039,7 @@ class FinnPlanService:
         lane = self._mission_coaching_lane(item)
         action = item.get("next_best_action") or item.get("resolve_action")
         freshness = item.get("freshness") or {}
+        source_ids = item.get("source_ids") or {}
         signals = []
         if item.get("asset"):
             signals.append(item.get("asset"))
@@ -15050,6 +15065,12 @@ class FinnPlanService:
             "asset": item.get("asset"),
             "title": item.get("title"),
             "reason": item.get("reason"),
+            "bot_id": item.get("bot_id") or source_ids.get("bot_id"),
+            "decision_id": item.get("decision_id") or source_ids.get("decision_id"),
+            "bot_name": item.get("bot_name"),
+            "friendly_bot_name": item.get("friendly_bot_name"),
+            "setup_name": item.get("setup_name"),
+            "setup_type": item.get("setup_type"),
             "priority": item.get("priority"),
             "priority_rank": item.get("priority_rank"),
             "lane": lane,
@@ -15393,6 +15414,10 @@ class FinnPlanService:
         asset = decision.get("symbol") or item.get("asset") or "BTC"
         setup = item.get("setup") or {}
         decision_id = decision.get("id")
+        bot_id = decision.get("bot_id")
+        bot_name = decision.get("bot_name")
+        setup_name = decision.get("setup_name") or setup.get("name")
+        setup_type = decision.get("setup_type") or setup.get("setup_type")
         status = str(decision.get("status") or "planned").lower()
         action = str(decision.get("action") or "hold").lower()
         confidence = self._to_float(decision.get("confidence"))
@@ -15414,6 +15439,22 @@ class FinnPlanService:
 
         review_status = "handled" if status in {"executed", "skipped", "cancelled", "filled"} else "needs_review"
         amount_label = amount if amount is not None else requested_amount
+        raw_bot_name = str(bot_name or "").strip()
+        generated_bot_name = (
+            self._is_generated_bot_name(raw_bot_name)
+            or bool(re.match(rf"^(Finn\\s+)?{re.escape(asset)}(?:[-\\s]?bot)?$", raw_bot_name, re.IGNORECASE))
+        )
+        if raw_bot_name and not generated_bot_name:
+            friendly_bot_name = raw_bot_name
+        elif str(setup_type or "").lower() == "dca":
+            friendly_bot_name = f"je {asset} DCA-bot"
+        elif str(setup_type or "").lower() == "trade":
+            friendly_bot_name = f"je {asset} trade-bot"
+        elif setup_name:
+            friendly_bot_name = f"je {asset} bot voor {setup_name}"
+        else:
+            friendly_bot_name = f"je {asset} bot"
+        title = f"Review {friendly_bot_name}"
         summary = f"{asset}: {action}"
         if action == "hold":
             summary += " - geen orderbedrag"
@@ -15421,6 +15462,26 @@ class FinnPlanService:
             summary += f" voor EUR {amount_label:g}"
         if guardrail_reason:
             summary += " - guardrail aandacht"
+        reason = (
+            f"Je {friendly_bot_name} staat nu op hold zonder order. Controleer of wachten nog klopt."
+            if action == "hold"
+            else f"Controleer de voorgestelde {action}-stap voor {friendly_bot_name}."
+        )
+        if guardrail_reason:
+            reason += " Finn ziet extra guardrail-aandacht."
+
+        action_payload = {
+            "current_flow": "bot_decision_review",
+            "asset": asset,
+            "bot_id": bot_id,
+            "decision_id": decision_id,
+            "bot_name": friendly_bot_name,
+            "setup_id": setup.get("id") or decision.get("setup_id"),
+            "setup_name": setup_name,
+            "setup_type": setup_type,
+            "decision_action": action,
+            "decision_status": review_status,
+        }
 
         review_actions = [
             {
@@ -15429,13 +15490,15 @@ class FinnPlanService:
                 "prompt": f"Leg bot-decision {decision_id} uit",
                 "handoff": "bot_decision_review",
                 "requires_confirmation": False,
+                "payload": action_payload,
             },
             {
                 "type": "chat_prompt",
                 "label": "Bot-decision opnieuw maken",
-                "prompt": f"Maak bot-decision voor bot #{decision.get('bot_id')}",
+                "prompt": f"Maak bot-decision voor bot #{bot_id}",
                 "handoff": "bot_decision",
                 "requires_confirmation": True,
+                "payload": action_payload,
             },
         ]
         if review_status == "needs_review" and action in {"buy", "sell"}:
@@ -15446,6 +15509,7 @@ class FinnPlanService:
                     "prompt": f"Voer bot-decision {decision_id} paper uit",
                     "handoff": "bot_execution_decision",
                     "requires_confirmation": True,
+                    "payload": action_payload,
                 },
                 {
                     "type": "chat_prompt",
@@ -15453,6 +15517,7 @@ class FinnPlanService:
                     "prompt": f"Doe live preflight voor bot-decision {decision_id}",
                     "handoff": "bot_execution_decision",
                     "requires_confirmation": True,
+                    "payload": action_payload,
                 },
             ])
         if review_status == "needs_review":
@@ -15462,14 +15527,17 @@ class FinnPlanService:
                 "prompt": f"Sla bot-decision {decision_id} over",
                 "handoff": "bot_execution_decision",
                 "requires_confirmation": True,
+                "payload": action_payload,
             })
 
         return {
             "asset": asset,
             "setup_id": setup.get("id") or decision.get("setup_id"),
             "strategy_id": decision.get("strategy_id"),
-            "bot_id": decision.get("bot_id"),
-            "bot_name": decision.get("bot_name"),
+            "bot_id": bot_id,
+            "bot_name": bot_name,
+            "setup_name": setup_name,
+            "setup_type": setup_type,
             "decision_id": decision_id,
             "action": action,
             "status": status,
@@ -15478,6 +15546,9 @@ class FinnPlanService:
             "confidence": confidence,
             "amount_eur": amount,
             "requested_amount_eur": requested_amount,
+            "title": title,
+            "reason": reason,
+            "friendly_bot_name": friendly_bot_name,
             "summary": summary,
             "guardrails_result": guardrails_result,
             "guardrail_reason": guardrail_reason,
@@ -15810,6 +15881,10 @@ class FinnPlanService:
             "requires_confirmation": bool(action.get("requires_confirmation")),
             "asset": asset,
             "setup_id": setup.get("id") if isinstance(setup, dict) else None,
+            "bot_id": action.get("bot_id") or (action.get("payload") or {}).get("bot_id"),
+            "decision_id": action.get("decision_id") or (action.get("payload") or {}).get("decision_id"),
+            "bot_name": action.get("bot_name") or (action.get("payload") or {}).get("bot_name"),
+            "payload": deepcopy(action.get("payload")) if isinstance(action.get("payload"), dict) else None,
             "plan_status": plan_status,
             "priority_rank": priority_rank,
         }
@@ -15852,8 +15927,12 @@ class FinnPlanService:
             "status": "stale" if freshness.get("status") == "stale" else "review_ready",
             "resolve_state": resolve_state,
             "asset": item.get("asset"),
-            "title": f"Review bot-decision #{item.get('decision_id')}",
-            "reason": item.get("summary") or "Bot-decision vraagt review.",
+            "bot_id": item.get("bot_id"),
+            "bot_name": item.get("bot_name"),
+            "decision_id": item.get("decision_id"),
+            "action": item.get("action"),
+            "title": item.get("title") or f"Review {item.get('friendly_bot_name') or item.get('asset') or 'bot'}",
+            "reason": item.get("reason") or item.get("summary") or "Bot-decision vraagt review.",
             "next_best_action": next_action,
             "resolve_action": None,
             "freshness": freshness,

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { TrendingUp, Globe2, Coins, Bot } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
@@ -12,10 +12,18 @@ export default function TableTabs({
   technicalTable, 
   macroTable, 
   marketTable,
-  botsTable
+  botsTable,
+  onActiveTabChange,
 }) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("technical");
+
+  useEffect(() => {
+    onActiveTabChange?.(activeTab);
+  }, [activeTab, onActiveTabChange]);
+
+  const renderTabContent = (content) =>
+    typeof content === "function" ? content() : content;
 
   const tabs = [
     { id: "technical", label: t.dashboard.tabs.technical, icon: <TrendingUp size={16} /> },
@@ -53,10 +61,10 @@ export default function TableTabs({
 
       {/* Tab Content */}
       <div className="animate-fade-in">
-        {activeTab === "technical" && technicalTable}
-        {activeTab === "macro" && macroTable}
-        {activeTab === "market" && marketTable}
-        {activeTab === "bots" && botsTable}
+        {activeTab === "technical" && renderTabContent(technicalTable)}
+        {activeTab === "macro" && renderTabContent(macroTable)}
+        {activeTab === "market" && renderTabContent(marketTable)}
+        {activeTab === "bots" && renderTabContent(botsTable)}
       </div>
       
       {/* Footer Info */}

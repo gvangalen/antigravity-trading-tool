@@ -43,6 +43,7 @@ export default function AuthGuard({ children }) {
       
       // ✅ Use explicit master flag from backend if available, fallback to manual check
       const isComplete = status?.onboarding_complete ?? (
+        status?.has_profile &&
         status?.has_setup &&
         status?.has_technical &&
         status?.has_macro &&
