@@ -1593,19 +1593,38 @@ class AiAssistantService:
         start_insight = time.perf_counter()
         symbol = context_data.get("symbol", "BTC")
         page_type = context_data.get("page_type") or context_data.get("page") or "Dashboard"
+        trader_profile_context: Dict[str, Any] = {}
+        user = None
 
         if self.context_repo:
             finn_session = self.context_repo.session
         else:
             finn_session = getattr(self.score_repo, "db", None)
 
+        try:
+            if self.context_repo:
+                user = await self.context_repo.user_repo.get_by_id(user_id)
+            else:
+                user = await self.user_repo.get_by_id(user_id)
+        except Exception:
+            user = None
+
+        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+        user_name = getattr(user, "first_name", "Trader") if user else "Trader"
+        trader_profile_context = build_trader_profile_context(
+            preferences,
+            request_context=context_data,
+            query=f"Wat moet ik vandaag doen met mijn {symbol} setup?",
+        )
+
         if finn_session:
             try:
                 finn = FinnPlanService(finn_session)
+                daily_context = {"symbol": symbol, "page": page_type, **trader_profile_context}
                 daily = await finn.build_daily_coach_response(
                     user_id,
                     f"Wat moet ik vandaag doen met mijn {symbol} setup?",
-                    {"symbol": symbol, "page": page_type},
+                    daily_context,
                 )
                 analysis = (daily.get("state") or {}).get("analysis") or {}
                 briefing = self._assistant_insight_from_daily_coach(
@@ -1613,6 +1632,7 @@ class AiAssistantService:
                     page_type=str(page_type),
                     daily_response=daily,
                     analysis=analysis,
+                    context=daily_context,
                 )
                 if briefing:
                     insight_total_duration = (time.perf_counter() - start_insight) * 1000
@@ -1645,8 +1665,6 @@ class AiAssistantService:
             )
         
         # 2. Get User Preferences & Name
-        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
-        user_name = getattr(user, "first_name", "Trader") if user else "Trader"
         adaptive_profile_str = _build_adaptive_profile_str(preferences, None, user_name)
 
         # 3. Build System Prompt (Combined role for speed/brevity)
@@ -1725,6 +1743,7 @@ class AiAssistantService:
         page_type: str,
         daily_response: Dict[str, Any],
         analysis: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         if not analysis:
             return None
@@ -1750,16 +1769,44 @@ class AiAssistantService:
             conclusion = f"{symbol} is vandaag geblokkeerd volgens je eigen planregels."
             action = "Niet forceren; wacht tot de blocker-scores binnen je ranges vallen."
 
+        profile_used = bool((context or {}).get("trader_profile_used"))
+        trader_types = set(((context or {}).get("trader_profile") or {}).get("trader_types") or [])
+        experience_levels = set(((context or {}).get("trader_profile") or {}).get("experience_levels") or [])
+        risk_profiles = set(((context or {}).get("trader_profile") or {}).get("risk_profiles") or [])
+        if profile_used:
+            if trader_types & {"investor", "dca_investor"}:
+                action = f"Voor jouw langere horizon hoef je {symbol} nu niet te forceren; toets eerst of dit je plan echt verandert."
+            elif "swing_trader" in trader_types:
+                action = f"Voor jouw swing-profiel telt nu vooral of {symbol} op 4H/Daily bevestiging terugpakt."
+            elif trader_types & {"day_trader", "scalper"}:
+                action = f"Voor jouw kortere horizon wil je voor {symbol} eerst timing- en momentumbevestiging zien."
+            if "beginner" in experience_levels:
+                why_prefix = "Kort gezegd: "
+            else:
+                why_prefix = ""
+            if "conservative" in risk_profiles and stance != "plan_is_active":
+                conclusion = f"{symbol} vraagt nu extra geduld voor jouw risicoprofiel."
+                if trader_types & {"investor", "dca_investor"}:
+                    action = f"Voor jouw langere horizon hoef je {symbol} nu niet te forceren; wacht tot de sterkste blocker echt weg is."
+                elif "swing_trader" in trader_types:
+                    action = f"Voor jouw swing-profiel wacht je met nieuwe actie in {symbol} tot bevestiging en blockers beter liggen."
+                elif trader_types & {"day_trader", "scalper"}:
+                    action = f"Voor jouw kortere horizon stap je nu niet in {symbol} tot timing en blockers weer meewerken."
+                else:
+                    action = f"Wacht met nieuwe actie in {symbol} tot de sterkste blocker echt weg is."
+        else:
+            why_prefix = ""
+
         if blockers:
             blocker_text = "; ".join(
                 f"{b.get('category')} {b.get('score')} buiten {b.get('range')}"
                 for b in blockers[:3]
             )
-            why = f"Blockers: {blocker_text}."
+            why = f"{why_prefix}Blockers: {blocker_text}."
         elif not analysis.get("has_scores"):
-            why = "Er is onvoldoende scoredata; Finn geeft daarom geen fake actief/inactief conclusie."
+            why = f"{why_prefix}Er is onvoldoende scoredata; Finn geeft daarom geen fake actief/inactief conclusie."
         else:
-            why = "Macro, technical en market passen bij je setup-ranges."
+            why = f"{why_prefix}Macro, technical en market passen bij je setup-ranges."
 
         if setup:
             why += f" Setup: {setup.get('name')} (#{setup.get('id')}), match {analysis.get('setup_match_percentage')}%."

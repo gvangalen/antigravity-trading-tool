@@ -6170,13 +6170,20 @@ def test_behavioral_insight_waits_for_evidence_when_empty():
     service = _service()
 
     insight = service._build_behavioral_insight_from_activity([])
-    message = service._behavioral_intelligence_message(insight)
+    message = service._behavioral_intelligence_message(
+        insight,
+        {
+            "trader_profile_used": True,
+            "trader_profile": {"trader_types": ["investor"], "risk_profiles": ["conservative"]},
+        },
+    )
 
     assert insight["status"] == "not_enough_data"
     assert insight["advice_only"] is True
     assert insight["signals"] == []
     assert "te weinig" in insight["coaching"]["primary_reflection"].lower()
     assert "alleen" in message.lower()
+    assert "planvast" in message.lower()
 
 
 def test_weekly_reflection_waits_for_enough_evidence():
@@ -7854,6 +7861,32 @@ def test_daily_coach_message_is_advice_only_and_mentions_bot_decisions():
     assert "Ik voer niets automatisch uit" in message
 
 
+def test_portfolio_daily_coach_message_adds_profile_guidance_when_context_used():
+    service = _service()
+    analysis = {
+        "asset_count": 1,
+        "actionable_assets": [],
+        "blocked_assets": [{"asset": "BTC"}],
+        "scoreless_assets": [],
+        "top_priorities": [{"asset": "BTC", "priority": "niet forceren", "reason": "macro buiten range", "setup": {"name": "BTC Swing"}}],
+        "data_readiness": {"status": "ready"},
+        "portfolio_risk": {"status": "balanced"},
+        "agent_verdicts": [],
+        "suggested_actions": [],
+    }
+
+    message = service._portfolio_daily_coach_message(
+        analysis,
+        {
+            "trader_profile_used": True,
+            "trader_profile": {"trader_types": ["swing_trader"], "risk_profiles": ["conservative"]},
+        },
+    )
+
+    assert "4H/Daily" in message
+    assert "Houd het klein" in message
+
+
 def test_assistant_insight_from_daily_coach_is_structured_morning_brief():
     assistant = AiAssistantService(
         score_repo=None,
@@ -7882,10 +7915,15 @@ def test_assistant_insight_from_daily_coach_is_structured_morning_brief():
             "indicator_summary": {"warnings": ["macro: geen actieve indicator-data gevonden"]},
             "suggested_actions": ["Niet forceren"],
         },
+        context={
+            "trader_profile_used": True,
+            "trader_profile": {"trader_types": ["investor"], "risk_profiles": ["conservative"]},
+        },
     )
 
     assert insight["context_detected"]["flow"] == "daily_coach"
     assert insight["context_detected"]["posture"] == "Defensive Posture"
-    assert "geblokkeerd" in insight["market_insight"]["conclusion"]
+    assert "risicoprofiel" in insight["market_insight"]["conclusion"]
     assert "macro 10.0 buiten [30.0, 70.0]" in insight["market_insight"]["why"]
+    assert "langere horizon" in insight["market_insight"]["action"]
     assert insight["suggested_actions"] == ["Niet forceren"]
