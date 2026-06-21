@@ -167,6 +167,12 @@ def build_trader_profile_context(
     if not used:
         match_mode = "profile_missing_fallback"
         match_reason = "No stored trader profile; FINN should fall back to page and entity context."
+    elif conflict:
+        match_mode = "profile_conflict_detected"
+        match_reason = (
+            f"Current {request_style} context conflicts with the stored trader profile; "
+            "FINN should acknowledge the mismatch and prioritize the immediate page and action context."
+        )
     elif multiple_styles and request_style:
         match_mode = "mixed_profile_page_context_priority"
         match_reason = f"Multiple trader styles selected; current {request_style} context gets priority."

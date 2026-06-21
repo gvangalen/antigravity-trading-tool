@@ -35,5 +35,6 @@ def test_build_trader_profile_context_detects_profile_conflict_for_intraday_requ
     )
 
     assert context["trader_profile_used"] is True
-    assert context["profile_match_mode"] == "mixed_profile_page_context_priority"
+    assert context["profile_match_mode"] == "profile_conflict_detected"
     assert context["profile_conflict_detected"] is True
+    assert "conflicts with the stored trader profile" in context["profile_match_reason"]

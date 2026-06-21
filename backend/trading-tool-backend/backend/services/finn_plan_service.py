@@ -1757,8 +1757,6 @@ class FinnPlanService:
 
     def looks_like_daily_coach_request(self, query: str) -> bool:
         q = (query or "").lower()
-        if self.looks_like_decision_review_request(query, {}):
-            return False
         portfolio_risk_terms = [
             "grootste portfolio risico", "grootste risico", "portfolio risico",
             "portefeuille risico", "portfolio exposure", "te veel exposure",
@@ -1767,13 +1765,16 @@ class FinnPlanService:
             "welke assets laat ik vandaag liggen", "welke asset laat ik vandaag liggen",
             "welke assets negeren", "assets negeren", "assets laten liggen",
             "welke live bots botsen", "live bots botsen", "live bots conflict",
-            "live bot conflict", "welke live bots vragen review",
+            "live bot conflict", "welke live bots vragen review", "live bots vragen vandaag review",
+            "welke live bots vragen vandaag review", "live bots review",
             "welke bots stapelen", "welke plannen stapelen", "stapelen risico",
             "welke setups conflicteren", "conflicterende setups", "bots met overlappende budgetten",
             "overlappende budgetten", "dca en trade",
         ]
         if any(term in q for term in portfolio_risk_terms):
             return True
+        if self.looks_like_decision_review_request(query, {}):
+            return False
         has_today = any(word in q for word in [
             "vandaag", "today", "nu", "daily", "dagelijkse", "dagcheck", "cockpit",
             "brief", "briefing", "dagstart", "morning", "mijn dag",
@@ -4066,10 +4067,15 @@ class FinnPlanService:
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         context = context or {}
-        explain_cache_key = f"{int(user_id)}:{self._normalized_query(query)}:{str(context.get('page') or context.get('scope') or 'mission_control')}"
-        cached = _cache_get(_mission_control_explain_cache, explain_cache_key)
-        if cached is not None:
-            return cached
+        allow_cached_response = bool(context.get("allow_cached_mission_control"))
+        explain_cache_key = (
+            f"{int(user_id)}:{self._normalized_query(query)}:"
+            f"{str(context.get('page') or context.get('scope') or 'mission_control')}"
+        )
+        if allow_cached_response:
+            cached = _cache_get(_mission_control_explain_cache, explain_cache_key)
+            if cached is not None:
+                return cached
         daily = await self.build_portfolio_daily_coach_response(
             user_id,
             "Geef mijn daily brief",
@@ -4177,12 +4183,13 @@ class FinnPlanService:
         review_reason="Mission Control helpt je het verschil zien tussen direct handelen, reviewen en bewust laten liggen.",
         resolution_status="review",
         resolution_title="Wat Mission Control hier nu mee bedoelt")
-        _cache_set(
-            _mission_control_explain_cache,
-            explain_cache_key,
-            response,
-            MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS,
-        )
+        if allow_cached_response:
+            _cache_set(
+                _mission_control_explain_cache,
+                explain_cache_key,
+                response,
+                MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS,
+            )
         return response
 
     async def build_education_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

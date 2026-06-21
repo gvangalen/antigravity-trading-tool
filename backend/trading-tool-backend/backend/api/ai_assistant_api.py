@@ -1035,6 +1035,7 @@ async def assistant_chat(
             context_payload,
             route_source="legacy",
         )
+        legacy_response = _attach_trader_profile_metadata(legacy_response, context_payload)
         legacy_response = _normalize_finn_response_contract(legacy_response)
         _log_finn_prompt_audit(
             trace_id=trace_id,
