@@ -42,6 +42,7 @@ from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.finn_product_analytics_service import finn_product_analytics
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.ai_gateway import AiGateway
+from backend.services.trader_profile_service import build_trader_profile_context
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.infrastructure.repositories.report_repository import ReportRepository
@@ -73,7 +74,21 @@ def _audit_context_summary(context: Optional[dict]) -> Dict[str, Any]:
         "setup_type": payload.get("setup_type"),
         "setup_name": payload.get("setup_name"),
         "current_flow": payload.get("current_flow"),
+        "trader_profile_used": payload.get("trader_profile_used"),
+        "trader_profile_summary": payload.get("trader_profile_summary"),
     }
+
+
+async def _enrich_with_trader_profile(
+    db: AsyncSession,
+    user_id: int,
+    payload: Optional[dict] = None,
+) -> dict:
+    context_payload = dict(payload or {})
+    user = await UserRepository(db).get_by_id(user_id)
+    preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+    context_payload.update(build_trader_profile_context(preferences))
+    return context_payload
 
 
 def _audit_draft_summary(draft: Optional[dict]) -> Optional[Dict[str, Any]]:
@@ -116,6 +131,15 @@ def _audit_response_type(response: Optional[dict]) -> str:
     if response.get("state"):
         return "stateful_response"
     return "text_response"
+
+
+def _attach_trader_profile_metadata(response: Optional[dict], context_payload: Optional[dict]) -> dict:
+    payload = dict(response or {})
+    analysis = payload.get("analysis") if isinstance(payload.get("analysis"), dict) else {}
+    analysis["trader_profile_used"] = bool((context_payload or {}).get("trader_profile_used"))
+    analysis["trader_profile_summary"] = (context_payload or {}).get("trader_profile_summary") or ""
+    payload["analysis"] = analysis
+    return payload
 
 
 def _audit_success_label(response: Optional[dict]) -> str:
@@ -519,6 +543,7 @@ async def _finalize_finn_response(
 ) -> AssistantChatResponse:
     response["trace_id"] = trace_id
     response = finn._build_response_analysis_metadata(response, context_payload, route_source=route_source)
+    response = _attach_trader_profile_metadata(response, context_payload)
     response = _normalize_finn_response_contract(response)
     _redact_assistant_reasoning(response)
     await finn.issue_response_actions(user_id, response)
@@ -558,7 +583,11 @@ async def _finalize_finn_response(
         strategy_id=(response.get("state") or {}).get("strategy_id") or (context_payload or {}).get("strategy_id"),
         trace_id=trace_id,
         next_best_action=response.get("next_best_action"),
-        metadata={"intent": response.get("intent")},
+        metadata={
+            "intent": response.get("intent"),
+            "trader_profile_used": bool((context_payload or {}).get("trader_profile_used")),
+            "trader_profile_summary": (context_payload or {}).get("trader_profile_summary") or "",
+        },
     )
     return AssistantChatResponse(**response)
 
@@ -578,6 +607,7 @@ async def _prepare_finn_envelope(
 ) -> dict:
     envelope["trace_id"] = trace_id
     envelope = finn._build_response_analysis_metadata(envelope, context_payload, route_source=route_source)
+    envelope = _attach_trader_profile_metadata(envelope, context_payload)
     envelope = _normalize_finn_response_contract(envelope)
     _redact_assistant_reasoning(envelope)
     await finn.issue_response_actions(user_id, envelope)
@@ -617,7 +647,11 @@ async def _prepare_finn_envelope(
         strategy_id=(envelope.get("state") or {}).get("strategy_id") or (context_payload or {}).get("strategy_id"),
         trace_id=trace_id,
         next_best_action=envelope.get("next_best_action"),
-        metadata={"intent": envelope.get("intent")},
+        metadata={
+            "intent": envelope.get("intent"),
+            "trader_profile_used": bool((context_payload or {}).get("trader_profile_used")),
+            "trader_profile_summary": (context_payload or {}).get("trader_profile_summary") or "",
+        },
     )
     return envelope
 
@@ -638,6 +672,7 @@ async def assistant_chat(
         finn = FinnPlanService(db)
         context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
         context_payload = finn.sanitize_context_for_query(request.query, context_payload)
+        context_payload = await _enrich_with_trader_profile(db, user_id, context_payload)
         if request.session_id:
             context_payload["session_id"] = request.session_id
         _apply_assistant_rate_limit(
@@ -1101,6 +1136,7 @@ async def assistant_chat_stream(
             finn = FinnPlanService(db)
             context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
             context_payload = finn.sanitize_context_for_query(request.query, context_payload)
+            context_payload = await _enrich_with_trader_profile(db, user_id, context_payload)
             if request.session_id:
                 context_payload["session_id"] = request.session_id
             _apply_assistant_rate_limit(
@@ -1531,7 +1567,8 @@ async def get_finn_state(
     db: AsyncSession = Depends(get_db),
 ):
     finn = FinnPlanService(db)
-    return await finn.get_open_plan_state(current_user["id"])
+    response = await finn.get_open_plan_state(current_user["id"])
+    return await _enrich_with_trader_profile(db, current_user["id"], response)
 
 
 @router.get("/assistant/mission-control")
@@ -1550,5 +1587,6 @@ async def get_finn_mission_control(
         {"page": "assistant", "scope": "mission_control"},
     )
     await finn.issue_response_actions(current_user["id"], response)
+    response = await _enrich_with_trader_profile(db, current_user["id"], response)
     _store_cached_mission_control(current_user["id"], response)
     return response

@@ -21,6 +21,7 @@ from backend.infrastructure.repositories.conversation_state_repository import Co
 from backend.services.platform_metrics import record_latency_sample
 from backend.services.setup_service import SetupService
 from backend.services.finn_plan_service import FinnPlanService
+from backend.services.trader_profile_service import build_trader_profile_context
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,57 @@ def _store_cached_assistant_context(cache_key: str, context: str) -> None:
         "expires_at": time.time() + max(1, ASSISTANT_CONTEXT_CACHE_TTL_SECONDS),
         "value": str(context),
     }
+
+
+def _build_adaptive_profile_str(
+    preferences: Optional[dict],
+    behavioral_signals: Optional[dict],
+    user_name: str,
+) -> str:
+    prefs = preferences or {}
+    profile_context = build_trader_profile_context(prefs)
+    profile = profile_context.get("trader_profile") or {}
+    stated_exp = str(prefs.get("experience_level", "beginner"))
+    stated_risk = str(prefs.get("risk_profile", "balanced"))
+
+    def _join(values: Optional[List[str]]) -> str:
+        payload = values or []
+        return ", ".join(payload) if payload else "not_set"
+
+    return (
+        f"ADAPTIVE PERSONALIZATION PROFILE:\n"
+        f"- Stated Experience Level (Preference): {stated_exp.upper()}\n"
+        f"- Stated Risk Profile (Preference): {stated_risk.upper()}\n"
+        f"- Trader Types: {_join(profile.get('trader_types'))}\n"
+        f"- Preferred Timeframes: {_join(profile.get('primary_timeframes'))}\n"
+        f"- Asset Focus: {_join(profile.get('asset_focus'))}\n"
+        f"- Investment Goals: {_join(profile.get('investment_goals'))}\n"
+        f"- Experience Levels: {_join(profile.get('experience_levels'))}\n"
+        f"- Risk Profiles: {_join(profile.get('risk_profiles'))}\n"
+        f"- Behavioral Trading Signals:\n"
+        f"  * Configured Custom Setups: {behavioral_signals['setups_count'] if behavioral_signals else 0}\n"
+        f"  * Configured Custom Strategies: {behavioral_signals['strategies_count'] if behavioral_signals else 0}\n"
+        f"  * Active Trading Bots: {behavioral_signals['bots_count'] if behavioral_signals else 0}\n"
+        f"  * Cumulative Custom Actions: {behavioral_signals['total_custom_configs'] if behavioral_signals else 0}\n"
+        f"  * Behavioral Maturity Category: {behavioral_signals['behavioral_level'] if behavioral_signals else 'novice'}\n\n"
+        f"ADAPTIVE INTELLIGENCE INSTRUCTIONS:\n"
+        f"1. SUBTLE STYLING (CRITICAL): Under no circumstances greet the user with labels like 'Hallo beginner' or 'Als ervaren handelaar'. Adapt your style completely under the hood to feel premium, natural, and custom-tailored.\n"
+        f"2. BALANCING EXPERIENCES (STATED vs. BEHAVIORAL):\n"
+        f"   - If both Stated Preference and Behavioral signals agree on beginner/novice level: Explain concepts gently, define trading terms (like DCA, RSI, average entry, MACD) using intuitive analogies, and use a supportive, encouraging coaching style.\n"
+        f"   - If both Stated Preference and Behavioral signals agree on advanced/experienced level: Speak using dense, professional, trade-oriented parameters. Skip definitions. Present metrics directly and keep explanations brief and bulleted.\n"
+        f"   - If Stated Preference is 'advanced' but Behavioral signals are 'Novice' (0 setups/bots): Do not use overly basic analogies, but explain setup requirements carefully and step-by-step anyway. Use professional terms but ensure educational clarity.\n"
+        f"3. PROFILE FITTING:\n"
+        f"   - If trader types include investor or dca_investor, reduce short-term urgency and reinforce plan consistency over micro timing.\n"
+        f"   - If trader types include swing_trader, emphasize 4H/1D structure, patience around entries, and clean invalidation logic.\n"
+        f"   - If trader types include day_trader or scalper, acknowledge intraday timing and momentum, but do not let that override the stated risk profile.\n"
+        f"   - If asset focus excludes the current asset class, make that mismatch explicit before recommending action.\n"
+        f"4. CALIBRATING RISK THRESHOLDS & COACHING:\n"
+        f"   - CONSERVATIVE PROFILE: Focus on downside protection and capital preservation. Proactively warn {user_name} if more than 40% of total equity is concentrated in a single volatile coin or if cash is low (<20%).\n"
+        f"   - BALANCED PROFILE: Follow default risk limits (warn at >60% concentration or <10% cash) and recommend balanced asset-matching.\n"
+        f"   - AGGRESSIVE PROFILE: Align with higher exposure allocations, but reinforce trading discipline. Warn only if asset concentration exceeds 80% and emphasize strict take-profit execution limits.\n"
+        f"5. CASUAL PROFILE SIGNALS & CONFIDENCE PROPOSALS:\n"
+        f"   - If {user_name} makes a casual statement indicating a level or risk that does NOT match the active profile: adapt for the current turn, but do not mutate the permanent profile automatically.\n"
+    )
 
 class AiAssistantService:
     def __init__(
@@ -298,33 +350,7 @@ class AiAssistantService:
 
         # Assemble Adaptive Intelligence Profile
         stated_exp = preferences.get("experience_level", "beginner")
-        stated_risk = preferences.get("risk_profile", "balanced")
-        
-        adaptive_profile_str = (
-            f"ADAPTIVE PERSONALIZATION PROFILE:\n"
-            f"- Stated Experience Level (Preference): {stated_exp.upper()}\n"
-            f"- Stated Risk Profile (Preference): {stated_risk.upper()}\n"
-            f"- Behavioral Trading Signals:\n"
-            f"  * Configured Custom Setups: {behavioral_signals['setups_count'] if behavioral_signals else 0}\n"
-            f"  * Configured Custom Strategies: {behavioral_signals['strategies_count'] if behavioral_signals else 0}\n"
-            f"  * Active Trading Bots: {behavioral_signals['bots_count'] if behavioral_signals else 0}\n"
-            f"  * Cumulative Custom Actions: {behavioral_signals['total_custom_configs'] if behavioral_signals else 0}\n"
-            f"  * Behavioral Maturity Category: {behavioral_signals['behavioral_level'] if behavioral_signals else 'novice'}\n\n"
-            f"ADAPTIVE INTELLIGENCE INSTRUCTIONS:\n"
-            f"1. SUBTLE STYLING (CRITICAL): Under no circumstances greet the user with labels like 'Hallo beginner' or 'Als ervaren handelaar'. Adapt your style completely under the hood to feel premium, natural, and custom-tailored.\n"
-            f"2. BALANCING EXPERIENCES (STATED vs. BEHAVIORAL):\n"
-            f"   - If both Stated Preference and Behavioral signals agree on beginner/novice level: Explain concepts gently, define trading terms (like DCA, RSI, average entry, MACD) using intuitive analogies, and use a supportive, encouraging coaching style.\n"
-            f"   - If both Stated Preference and Behavioral signals agree on advanced/experienced level: Speak using dense, professional, trade-oriented parameters. Skip definitions. Present metrics directly and keep explanations brief and bulleted.\n"
-            f"   - If Stated Preference is 'advanced' but Behavioral signals are 'Novice' (0 setups/bots): Do not use overly basic analogies, but explain setup requirements carefully and step-by-step anyway. Use professional terms but ensure educational clarity.\n"
-            f"3. CALIBRATING RISK THRESHOLDS & COACHING:\n"
-            f"   - CONSERVATIVE PROFILE: Focus on downside protection and capital preservation. Proactively warn {user_name} if more than 40% of total equity is concentrated in a single volatile coin or if cash is low (<20%).\n"
-            f"   - BALANCED PROFILE: Follow default risk limits (warn at >60% concentration or <10% cash) and recommend balanced asset-matching.\n"
-            f"   - AGGRESSIVE PROFILE: Align with higher exposure allocations, but reinforce trading discipline. Warn only if asset concentration exceeds 80% and emphasize strict take-profit execution limits.\n"
-            f"4. CASUAL PROFILE SIGNALS & CONFIDENCE PROPOSALS:\n"
-            f"   - If {user_name} makes a casual statement indicating a level or risk that does NOT match his active Stated Preference (e.g. says 'vol gas' while on conservative, or says 'ik snap DCA niet' while on advanced):\n"
-            f"     * Adapt your current response to his statement (e.g., be supportive or trade-focused for this turn).\n"
-            f"     * DO NOT mutate his permanent profile behind his back. Instead, conversationally offer a polite proposal to update his settings: e.g. 'Ik merk dat je vaker agressievere setups bespreekt. Wil je dat ik je risicoprofiel aanpas naar agressief?'"
-        )
+        adaptive_profile_str = _build_adaptive_profile_str(preferences, behavioral_signals, user_name)
 
         # 5. Build System Prompt
         system_role = get_role_prompt(role_key, preferences, intent=intent, user_name=user_name)
@@ -825,33 +851,7 @@ class AiAssistantService:
 
         # Assemble Adaptive Intelligence Profile
         stated_exp = preferences.get("experience_level", "beginner")
-        stated_risk = preferences.get("risk_profile", "balanced")
-        
-        adaptive_profile_str = (
-            f"ADAPTIVE PERSONALIZATION PROFILE:\n"
-            f"- Stated Experience Level (Preference): {stated_exp.upper()}\n"
-            f"- Stated Risk Profile (Preference): {stated_risk.upper()}\n"
-            f"- Behavioral Trading Signals:\n"
-            f"  * Configured Custom Setups: {behavioral_signals['setups_count'] if behavioral_signals else 0}\n"
-            f"  * Configured Custom Strategies: {behavioral_signals['strategies_count'] if behavioral_signals else 0}\n"
-            f"  * Active Trading Bots: {behavioral_signals['bots_count'] if behavioral_signals else 0}\n"
-            f"  * Cumulative Custom Actions: {behavioral_signals['total_custom_configs'] if behavioral_signals else 0}\n"
-            f"  * Behavioral Maturity Category: {behavioral_signals['behavioral_level'] if behavioral_signals else 'novice'}\n\n"
-            f"ADAPTIVE INTELLIGENCE INSTRUCTIONS:\n"
-            f"1. SUBTLE STYLING (CRITICAL): Under no circumstances greet the user with labels like 'Hallo beginner' or 'Als ervaren handelaar'. Adapt your style completely under the hood to feel premium, natural, and custom-tailored.\n"
-            f"2. BALANCING EXPERIENCES (STATED vs. BEHAVIORAL):\n"
-            f"   - If both Stated Preference and Behavioral signals agree on beginner/novice level: Explain concepts gently, define trading terms (like DCA, RSI, average entry, MACD) using intuitive analogies, and use a supportive, encouraging coaching style.\n"
-            f"   - If both Stated Preference and Behavioral signals agree on advanced/experienced level: Speak using dense, professional, trade-oriented parameters. Skip definitions. Present metrics directly and keep explanations brief and bulleted.\n"
-            f"   - If Stated Preference is 'advanced' but Behavioral signals are 'Novice' (0 setups/bots): Do not use overly basic analogies, but explain setup requirements carefully and step-by-step anyway. Use professional terms but ensure educational clarity.\n"
-            f"3. CALIBRATING RISK THRESHOLDS & COACHING:\n"
-            f"   - CONSERVATIVE PROFILE: Focus on downside protection and capital preservation. Proactively warn {user_name} if more than 40% of total equity is concentrated in a single volatile coin or if cash is low (<20%).\n"
-            f"   - BALANCED PROFILE: Follow default risk limits (warn at >60% concentration or <10% cash) and recommend balanced asset-matching.\n"
-            f"   - AGGRESSIVE PROFILE: Align with higher exposure allocations, but reinforce trading discipline. Warn only if asset concentration exceeds 80% and emphasize strict take-profit execution limits.\n"
-            f"4. CASUAL PROFILE SIGNALS & CONFIDENCE PROPOSALS:\n"
-            f"   - If {user_name} makes a casual statement indicating a level or risk that does NOT match his active Stated Preference (e.g. says 'vol gas' while on conservative, or says 'ik snap DCA niet' while on advanced):\n"
-            f"     * Adapt your current response to his statement (e.g., be supportive or trade-focused for this turn).\n"
-            f"     * DO NOT mutate his permanent profile behind his back. Instead, conversationally offer a polite proposal to update his settings: e.g. 'Ik merk dat je vaker agressievere setups bespreekt. Wil je dat ik je risicoprofiel aanpas naar agressief?'"
-        )
+        adaptive_profile_str = _build_adaptive_profile_str(preferences, behavioral_signals, user_name)
 
         # 5. Build System Prompt
         system_role = get_role_prompt(role_key, preferences, intent=intent, user_name=user_name)
@@ -1647,15 +1647,19 @@ class AiAssistantService:
         # 2. Get User Preferences & Name
         preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
         user_name = getattr(user, "first_name", "Trader") if user else "Trader"
+        adaptive_profile_str = _build_adaptive_profile_str(preferences, None, user_name)
 
         # 3. Build System Prompt (Combined role for speed/brevity)
         raw_system_role = get_role_prompt("combined_insight", preferences)
         timeframe = context_data.get("timeframe", "Snapshot")
         
         # Manually replace placeholders in the system role task description
-        system_role = raw_system_role.replace("{user_name}", user_name) \
-                                     .replace("{page}", page_type) \
-                                     .replace("{symbol}", symbol)
+        system_role = (
+            raw_system_role.replace("{user_name}", user_name)
+            .replace("{page}", page_type)
+            .replace("{symbol}", symbol)
+            + f"\n\nTRADER PROFILE CONTEXT:\n{adaptive_profile_str}\n"
+        )
 
         # 4. Generate Insight via GATEWAY (Single Call)
         prompt = (

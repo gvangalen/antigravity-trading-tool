@@ -99,6 +99,7 @@ The sequence should now be:
 One of the clearest next-value tracks is:
 
 - [FINN Onboarding Trader Profile Plan](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-onboarding-trader-profile-plan.md)
+- [FINN Trader Profile Integration Plan](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-trader-profile-integration-plan.md)
 
 ## Short Version
 

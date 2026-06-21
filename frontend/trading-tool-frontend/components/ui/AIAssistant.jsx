@@ -23,6 +23,7 @@ import StrategyForm from "@/components/strategy/StrategyForm";
 import AddBotForm from "@/components/bot/AddBotForm";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
+import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 
 function AIAssistantContent({ isOpen, setIsOpen }) {
   const pathname = usePathname();
@@ -55,6 +56,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   const loadedFinnStateRef = useRef(false);
   const missionControlCacheKeyRef = useRef("");
   const activeStreamIdRef = useRef(null);
+  const profileTelemetryKeyRef = useRef("");
   const [showReasoning, setShowReasoning] = useState(false);
 
   useEffect(() => {
@@ -175,6 +177,93 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     return count;
   };
 
+  const traderProfile = normalizeTraderProfilePreferences(preferences || {});
+  const traderTypes = traderProfile.trader_types || [];
+  const profileTimeframes = traderProfile.primary_timeframes || [];
+  const profileAssetFocus = traderProfile.asset_focus || [];
+  const profileGoals = traderProfile.investment_goals_list || [];
+  const profileExperience = traderProfile.experience_levels || [];
+  const profileRisk = traderProfile.risk_profiles || [];
+  const hasTraderProfile = [
+    traderTypes,
+    profileTimeframes,
+    profileAssetFocus,
+    profileGoals,
+    profileExperience,
+    profileRisk,
+  ].some((list) => Array.isArray(list) && list.length > 0);
+
+  const traderTypeLabelMap = {
+    investor: "Investeerder",
+    dca_investor: "DCA-investeerder",
+    swing_trader: "Swing trader",
+    day_trader: "Day trader",
+    scalper: "Scalper",
+    hybrid: "Hybride",
+  };
+
+  const riskLabelMap = {
+    conservative: "Conservatief risico",
+    balanced: "Gematigd risico",
+    aggressive: "Agressiever risico",
+  };
+
+  const assetFocusLabelMap = {
+    bitcoin: "BTC-focus",
+    crypto_general: "Crypto-breed",
+    stocks: "Aandelen",
+    etfs: "ETF's",
+    forex: "Forex",
+    commodities: "Grondstoffen",
+  };
+
+  const normalizeListValue = (value) => {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (typeof value === "string" && value.trim()) return [value];
+    return [];
+  };
+
+  const isInvestorLike = traderTypes.some((type) => ["investor", "dca_investor"].includes(type));
+  const isSwingLike = traderTypes.includes("swing_trader");
+  const isIntradayLike = traderTypes.some((type) => ["day_trader", "scalper"].includes(type));
+  const isConservative = profileRisk.includes("conservative");
+  const isBeginner = profileExperience.includes("beginner");
+
+  const buildTraderProfileUiSummary = () => {
+    if (!hasTraderProfile) return "";
+    const leadType = traderTypes.map((type) => traderTypeLabelMap[type]).filter(Boolean).slice(0, 2).join(" + ");
+    const leadTimeframes = profileTimeframes.map((tf) => String(tf).toUpperCase()).slice(0, 2).join("/");
+    const leadRisk = profileRisk.map((risk) => riskLabelMap[risk]).filter(Boolean)[0];
+    const leadAsset = profileAssetFocus.map((asset) => assetFocusLabelMap[asset]).filter(Boolean)[0];
+    return [leadType, leadTimeframes, leadRisk || leadAsset].filter(Boolean).join(" • ");
+  };
+
+  const profileSummaryLabel = buildTraderProfileUiSummary();
+
+  const scoreMissionForProfile = (item) => {
+    if (!item) return 0;
+    let score = 0;
+    const asset = String(item.asset || item.symbol || "").toLowerCase();
+    const setupType = String(item.setup_type || item.setupType || item.type || "").toLowerCase();
+    const timeframe = String(item.setup_timeframe || item.timeframe || item.tf || "").toLowerCase();
+    const title = String(item.title || "").toLowerCase();
+    const reason = String(item.reason || item.summary || "").toLowerCase();
+
+    if (profileAssetFocus.includes("bitcoin") && asset === "btc") score += 3;
+    if (profileAssetFocus.includes("crypto_general") && ["btc", "eth", "sol"].includes(asset)) score += 2;
+    if (profileTimeframes.length > 0 && timeframe) {
+      if (profileTimeframes.includes(timeframe)) score += 3;
+      else if (profileTimeframes.map((tf) => tf.replace("1", "")).includes(timeframe.replace("1", ""))) score += 2;
+    }
+    if (traderTypes.includes("dca_investor") && (setupType.includes("dca") || title.includes("dca") || reason.includes("dca"))) score += 4;
+    if (isSwingLike && (timeframe.includes("4h") || timeframe.includes("1d") || title.includes("swing"))) score += 3;
+    if (isIntradayLike && (timeframe.includes("5m") || timeframe.includes("15m") || timeframe.includes("1h"))) score += 3;
+    if (isInvestorLike && (timeframe.includes("1w") || timeframe.includes("1m"))) score += 2;
+    if (isConservative && (String(item.status || "").toLowerCase().includes("blocked") || reason.includes("risico"))) score += 2;
+    if (isBeginner && isReviewCandidate(item)) score += 1;
+    return score;
+  };
+
   const buildBriefingText = (sourceInsight) => {
     const openReviews = countUniqueReviewCandidates(missionControl);
     const blockedCount = Number(missionControl?.summary?.blocked_count || 0);
@@ -198,8 +287,20 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const greetingLine =
       `${nowHour < 12 ? "Goedemorgen" : nowHour < 18 ? "Goedemiddag" : "Goedenavond"} ${greetingName}.`;
 
-    let marketLine = `${symbol} vraagt vandaag extra geduld. Nieuwe posities forceren wordt afgeraden.`;
-    if (cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")) {
+    let marketLine = `${symbol} vraagt vandaag extra geduld. Nieuwe posities forceren wordt vandaag afgeraden.`;
+    if (isInvestorLike) {
+      marketLine = cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")
+        ? `Voor jouw langere horizon zit ${symbol} in een correctiefase, maar je plan hoeft niet om. Nieuwe posities forceren wordt vandaag afgeraden.`
+        : `Voor jouw langere horizon is dit vooral een moment om plantrouw te blijven. Nieuwe posities forceren is vandaag niet nodig.`;
+    } else if (isSwingLike) {
+      marketLine = cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")
+        ? `Voor jouw swing-profiel zit ${symbol} in een correctiefase. Nieuwe posities forceren wordt vandaag afgeraden.`
+        : `Voor jouw swing-profiel is timing nu belangrijker dan snelheid. Wacht liever op een schonere setup.`;
+    } else if (isIntradayLike) {
+      marketLine = cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")
+        ? `Voor jouw kortere handelsstijl is ${symbol} nu te fragiel om nieuwe posities te forceren.`
+        : `Voor jouw kortere handelsstijl is timing nu belangrijker dan overtuiging. Neem alleen schone entries.`;
+    } else if (cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")) {
       marketLine = `${symbol} zit momenteel in een correctiefase. Nieuwe posities forceren wordt vandaag afgeraden.`;
     } else if (cycleLabel.includes("recovery") || postureLabel.includes("stable")) {
       marketLine = `${symbol} oogt vandaag rustiger. Nieuwe posities kun je pas overwegen als je reviewpad schoon is.`;
@@ -2188,10 +2289,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           "waiting_for_data",
         ].includes(state);
       }),
-    ].filter(Boolean);
+    ].filter(Boolean).sort((a, b) => scoreMissionForProfile(b) - scoreMissionForProfile(a));
     const todayItems = dedupeMissionItems(priorityCandidates, seen, 3);
 
-    const reviewCandidates = getOpenReviewCandidates(missionControl).filter(Boolean);
+    const reviewCandidates = getOpenReviewCandidates(missionControl).filter(Boolean).sort((a, b) => scoreMissionForProfile(b) - scoreMissionForProfile(a));
     const totalReviewCount = countUniqueReviewCandidates(missionControl);
     const allReviewItems = dedupeMissionItems(reviewCandidates, new Set(), 6);
     const todayReviewKeys = new Set(
@@ -2259,7 +2360,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       })) || []),
     ];
 
-    const riskCandidates = [...blockedPlans, ...portfolioRiskItems, ...verdictRiskItems].filter(Boolean);
+    const riskCandidates = [...blockedPlans, ...portfolioRiskItems, ...verdictRiskItems]
+      .filter(Boolean)
+      .sort((a, b) => scoreMissionForProfile(b) - scoreMissionForProfile(a));
     const riskItems = buildRiskClusters(dedupeMissionItems(riskCandidates, seen, 8));
 
     const performanceCards = [];
@@ -3968,6 +4071,21 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     primaryCoachingItem,
   ]);
 
+  useEffect(() => {
+    if (!isOpen || !hasTraderProfile) return;
+    const key = `${pathname || "/assistant"}:${globalSymbol || context.symbol || "BTC"}:${profileSummaryLabel}`;
+    if (profileTelemetryKeyRef.current === key) return;
+    profileTelemetryKeyRef.current = key;
+    trackAssistantEvent({
+      event_name: "finn_profile_context_used",
+      page: pathname || "/assistant",
+      surface: "finn_overlay",
+      asset: globalSymbol || context.symbol || null,
+      flow_type: "profile_context",
+      next_best_action: profileSummaryLabel,
+    });
+  }, [isOpen, hasTraderProfile, pathname, globalSymbol, context.symbol, profileSummaryLabel]);
+
   if (!isOpen) return null;
 
   return (
@@ -4028,11 +4146,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         )}
         {/* SECTION 1 — FINN POSTURE & BRIEFING */}
         <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20 space-y-2.5 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Shield size={12} className="text-blue-600" />
-              <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Actieve Briefing</span>
-            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Shield size={12} className="text-blue-600" />
+                <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Actieve Briefing</span>
+              </div>
             <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-200/50 dark:border-emerald-800/50">Defensieve Posture</span>
           </div>
           {isOnboarding ? (
@@ -4061,6 +4179,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             </div>
           ) : (
             <div className="space-y-3">
+              {profileSummaryLabel && (
+                <div className="rounded-full border border-blue-100 bg-blue-50/60 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300 inline-flex max-w-full">
+                  Afgestemd op: {profileSummaryLabel}
+                </div>
+              )}
               <div className="min-h-[52px]">
                 {stableBriefingText ? (
                   <p className="whitespace-pre-line text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
