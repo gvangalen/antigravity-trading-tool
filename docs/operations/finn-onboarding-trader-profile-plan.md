@@ -72,6 +72,10 @@ This plan does not yet include:
 - full per-strategy personalization engine
 - automatic migration of old users into fully completed profiles
 
+Technical follow-up:
+
+- [FINN Trader Profile Integration Plan](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-trader-profile-integration-plan.md)
+
 ## Proposed profile model
 
 Store a trader profile as a user-owned structured object.
