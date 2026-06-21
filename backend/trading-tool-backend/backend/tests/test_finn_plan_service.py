@@ -19,6 +19,40 @@ def _service():
     return FinnPlanService(db_session=None)
 
 
+def test_profile_focus_line_mentions_mixed_profile_page_context_priority():
+    service = _service()
+
+    line = service._profile_focus_line(
+        {
+            "trader_profile_used": True,
+            "trader_profile": {"trader_types": ["investor", "swing_trader"]},
+            "profile_match_mode": "mixed_profile_page_context_priority",
+            "profile_conflict_detected": False,
+        },
+        "BTC",
+        mode="general",
+    )
+
+    assert "gemengd" in line.lower()
+    assert "pagina-" in line.lower()
+
+
+def test_profile_next_step_mentions_profile_conflict():
+    service = _service()
+
+    line = service._profile_next_step(
+        {
+            "trader_profile_used": True,
+            "trader_profile": {"trader_types": ["investor"]},
+            "profile_conflict_detected": True,
+        },
+        "BTC",
+        default_step="Default step",
+    )
+
+    assert "past minder goed bij je ingestelde stijl" in line.lower()
+
+
 class _MemoryStateRepo:
     store = {}
 

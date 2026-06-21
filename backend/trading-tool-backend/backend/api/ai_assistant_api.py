@@ -81,6 +81,9 @@ def _audit_context_summary(context: Optional[dict]) -> Dict[str, Any]:
         "current_flow": payload.get("current_flow"),
         "trader_profile_used": payload.get("trader_profile_used"),
         "trader_profile_summary": payload.get("trader_profile_summary"),
+        "profile_match_mode": payload.get("profile_match_mode"),
+        "profile_match_reason": payload.get("profile_match_reason"),
+        "profile_conflict_detected": payload.get("profile_conflict_detected"),
     }
 
 
@@ -88,11 +91,13 @@ async def _enrich_with_trader_profile(
     db: AsyncSession,
     user_id: int,
     payload: Optional[dict] = None,
+    *,
+    query: Optional[str] = None,
 ) -> dict:
     context_payload = dict(payload or {})
     user = await UserRepository(db).get_by_id(user_id)
     preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
-    context_payload.update(build_trader_profile_context(preferences))
+    context_payload.update(build_trader_profile_context(preferences, request_context=context_payload, query=query))
     return context_payload
 
 
@@ -143,8 +148,22 @@ def _attach_trader_profile_metadata(response: Optional[dict], context_payload: O
     analysis = payload.get("analysis") if isinstance(payload.get("analysis"), dict) else {}
     analysis["trader_profile_used"] = bool((context_payload or {}).get("trader_profile_used"))
     analysis["trader_profile_summary"] = (context_payload or {}).get("trader_profile_summary") or ""
+    analysis["profile_match_mode"] = (context_payload or {}).get("profile_match_mode") or "profile_missing_fallback"
+    analysis["profile_match_reason"] = (context_payload or {}).get("profile_match_reason") or ""
+    analysis["profile_conflict_detected"] = bool((context_payload or {}).get("profile_conflict_detected"))
     payload["analysis"] = analysis
     return payload
+
+
+def _trader_profile_event_metadata(context_payload: Optional[dict]) -> Dict[str, Any]:
+    payload = context_payload or {}
+    return {
+        "trader_profile_used": bool(payload.get("trader_profile_used")),
+        "trader_profile_summary": payload.get("trader_profile_summary") or "",
+        "profile_match_mode": payload.get("profile_match_mode") or "profile_missing_fallback",
+        "profile_match_reason": payload.get("profile_match_reason") or "",
+        "profile_conflict_detected": bool(payload.get("profile_conflict_detected")),
+    }
 
 
 def _audit_success_label(response: Optional[dict]) -> str:
@@ -590,10 +609,41 @@ async def _finalize_finn_response(
         next_best_action=response.get("next_best_action"),
         metadata={
             "intent": response.get("intent"),
-            "trader_profile_used": bool((context_payload or {}).get("trader_profile_used")),
-            "trader_profile_summary": (context_payload or {}).get("trader_profile_summary") or "",
+            **_trader_profile_event_metadata(context_payload),
         },
     )
+    if (context_payload or {}).get("trader_profile_used"):
+        _record_finn_product_event(
+            user_id=user_id,
+            event_name="finn_profile_context_used",
+            session_id=(context_payload or {}).get("session_id"),
+            surface=route_source,
+            page=(context_payload or {}).get("page"),
+            asset=(context_payload or {}).get("symbol") or (context_payload or {}).get("asset"),
+            flow_type=response.get("flow") or (response.get("state") or {}).get("current_flow"),
+            bot_id=(response.get("state") or {}).get("bot_id") or (context_payload or {}).get("bot_id"),
+            setup_id=(response.get("state") or {}).get("setup_id") or (context_payload or {}).get("setup_id"),
+            strategy_id=(response.get("state") or {}).get("strategy_id") or (context_payload or {}).get("strategy_id"),
+            trace_id=trace_id,
+            next_best_action=response.get("next_best_action"),
+            metadata=_trader_profile_event_metadata(context_payload),
+        )
+    if (context_payload or {}).get("profile_conflict_detected"):
+        _record_finn_product_event(
+            user_id=user_id,
+            event_name="finn_profile_conflict_detected",
+            session_id=(context_payload or {}).get("session_id"),
+            surface=route_source,
+            page=(context_payload or {}).get("page"),
+            asset=(context_payload or {}).get("symbol") or (context_payload or {}).get("asset"),
+            flow_type=response.get("flow") or (response.get("state") or {}).get("current_flow"),
+            bot_id=(response.get("state") or {}).get("bot_id") or (context_payload or {}).get("bot_id"),
+            setup_id=(response.get("state") or {}).get("setup_id") or (context_payload or {}).get("setup_id"),
+            strategy_id=(response.get("state") or {}).get("strategy_id") or (context_payload or {}).get("strategy_id"),
+            trace_id=trace_id,
+            next_best_action=response.get("next_best_action"),
+            metadata=_trader_profile_event_metadata(context_payload),
+        )
     return AssistantChatResponse(**response)
 
 
@@ -654,10 +704,41 @@ async def _prepare_finn_envelope(
         next_best_action=envelope.get("next_best_action"),
         metadata={
             "intent": envelope.get("intent"),
-            "trader_profile_used": bool((context_payload or {}).get("trader_profile_used")),
-            "trader_profile_summary": (context_payload or {}).get("trader_profile_summary") or "",
+            **_trader_profile_event_metadata(context_payload),
         },
     )
+    if (context_payload or {}).get("trader_profile_used"):
+        _record_finn_product_event(
+            user_id=user_id,
+            event_name="finn_profile_context_used",
+            session_id=(context_payload or {}).get("session_id"),
+            surface=route_source,
+            page=(context_payload or {}).get("page"),
+            asset=(context_payload or {}).get("symbol") or (context_payload or {}).get("asset"),
+            flow_type=envelope.get("flow") or (envelope.get("state") or {}).get("current_flow"),
+            bot_id=(envelope.get("state") or {}).get("bot_id") or (context_payload or {}).get("bot_id"),
+            setup_id=(envelope.get("state") or {}).get("setup_id") or (context_payload or {}).get("setup_id"),
+            strategy_id=(envelope.get("state") or {}).get("strategy_id") or (context_payload or {}).get("strategy_id"),
+            trace_id=trace_id,
+            next_best_action=envelope.get("next_best_action"),
+            metadata=_trader_profile_event_metadata(context_payload),
+        )
+    if (context_payload or {}).get("profile_conflict_detected"):
+        _record_finn_product_event(
+            user_id=user_id,
+            event_name="finn_profile_conflict_detected",
+            session_id=(context_payload or {}).get("session_id"),
+            surface=route_source,
+            page=(context_payload or {}).get("page"),
+            asset=(context_payload or {}).get("symbol") or (context_payload or {}).get("asset"),
+            flow_type=envelope.get("flow") or (envelope.get("state") or {}).get("current_flow"),
+            bot_id=(envelope.get("state") or {}).get("bot_id") or (context_payload or {}).get("bot_id"),
+            setup_id=(envelope.get("state") or {}).get("setup_id") or (context_payload or {}).get("setup_id"),
+            strategy_id=(envelope.get("state") or {}).get("strategy_id") or (context_payload or {}).get("strategy_id"),
+            trace_id=trace_id,
+            next_best_action=envelope.get("next_best_action"),
+            metadata=_trader_profile_event_metadata(context_payload),
+        )
     return envelope
 
 
@@ -677,7 +758,7 @@ async def assistant_chat(
         finn = FinnPlanService(db)
         context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
         context_payload = finn.sanitize_context_for_query(request.query, context_payload)
-        context_payload = await _enrich_with_trader_profile(db, user_id, context_payload)
+        context_payload = await _enrich_with_trader_profile(db, user_id, context_payload, query=request.query)
         if request.session_id:
             context_payload["session_id"] = request.session_id
         _apply_assistant_rate_limit(
@@ -700,6 +781,7 @@ async def assistant_chat(
             strategy_id=context_payload.get("strategy_id"),
             trace_id=trace_id,
             prompt_text=request.query,
+            metadata=_trader_profile_event_metadata(context_payload),
         )
         if finn.looks_like_daily_score_refresh_request(request.query):
             finn_response = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
@@ -986,7 +1068,10 @@ async def assistant_chat(
             strategy_id=(state or {}).get("strategy_id") or context_payload.get("strategy_id"),
             trace_id=trace_id,
             next_best_action=legacy_response.get("next_best_action"),
-            metadata={"intent": intent},
+            metadata={
+                "intent": intent,
+                **_trader_profile_event_metadata(context_payload),
+            },
         )
         return AssistantChatResponse(
             response=response,
@@ -1141,7 +1226,7 @@ async def assistant_chat_stream(
             finn = FinnPlanService(db)
             context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
             context_payload = finn.sanitize_context_for_query(request.query, context_payload)
-            context_payload = await _enrich_with_trader_profile(db, user_id, context_payload)
+            context_payload = await _enrich_with_trader_profile(db, user_id, context_payload, query=request.query)
             if request.session_id:
                 context_payload["session_id"] = request.session_id
             _apply_assistant_rate_limit(

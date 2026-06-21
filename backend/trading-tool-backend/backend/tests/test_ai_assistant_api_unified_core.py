@@ -7,6 +7,8 @@ from backend.api.ai_assistant_api import (
     _finalize_finn_response,
     _prepare_finn_envelope,
     _build_finn_core_rescue_envelope,
+    _audit_context_summary,
+    _attach_trader_profile_metadata,
     _legacy_response_is_generic_failure,
     _legacy_response_needs_finn_rescue,
 )
@@ -16,6 +18,41 @@ from backend.services.finn_plan_service import FinnPlanService
 
 def _finn():
     return FinnPlanService(db_session=None)
+
+
+def test_audit_context_summary_includes_profile_match_metadata():
+    summary = _audit_context_summary(
+        {
+            "page": "/dashboard",
+            "symbol": "BTC",
+            "trader_profile_used": True,
+            "trader_profile_summary": "investor | 1w",
+            "profile_match_mode": "direct_match",
+            "profile_match_reason": "Stored trader profile aligns directly.",
+            "profile_conflict_detected": False,
+        }
+    )
+
+    assert summary["trader_profile_used"] is True
+    assert summary["profile_match_mode"] == "direct_match"
+    assert "aligns directly" in summary["profile_match_reason"]
+
+
+def test_attach_trader_profile_metadata_adds_conflict_fields():
+    payload = _attach_trader_profile_metadata(
+        {"analysis": {}},
+        {
+            "trader_profile_used": True,
+            "trader_profile_summary": "investor | 1w",
+            "profile_match_mode": "mixed_profile_page_context_priority",
+            "profile_match_reason": "Current intraday context gets priority.",
+            "profile_conflict_detected": True,
+        },
+    )
+
+    assert payload["analysis"]["trader_profile_used"] is True
+    assert payload["analysis"]["profile_match_mode"] == "mixed_profile_page_context_priority"
+    assert payload["analysis"]["profile_conflict_detected"] is True
 
 
 def test_legacy_response_is_generic_failure_detects_default_failures():

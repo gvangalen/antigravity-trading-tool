@@ -29,6 +29,9 @@ GOAL_VALUES = [
 ]
 EXPERIENCE_LEVEL_VALUES = ["beginner", "intermediate", "advanced", "professional"]
 RISK_PROFILE_VALUES = ["conservative", "balanced", "aggressive"]
+INTRADAY_TIMEFRAMES = {"5m", "15m", "1h"}
+SWING_TIMEFRAMES = {"4h", "1d"}
+INVESTOR_TIMEFRAMES = {"1w", "1m"}
 
 
 def _ensure_array(value: Any) -> List[str]:
@@ -95,12 +98,87 @@ def build_trader_profile_summary(profile: Optional[Dict[str, List[str]]]) -> str
     return " | ".join(segments)
 
 
-def build_trader_profile_context(preferences: Optional[dict]) -> Dict[str, Any]:
+def _normalized_text(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _profile_style(profile: Dict[str, List[str]]) -> Optional[str]:
+    trader_types = set(profile.get("trader_types") or [])
+    if trader_types & {"day_trader", "scalper"}:
+        return "intraday"
+    if "swing_trader" in trader_types:
+        return "swing"
+    if trader_types & {"investor", "dca_investor"}:
+        return "investor"
+    return None
+
+
+def _infer_request_style(request_context: Optional[dict], query: Optional[str]) -> Optional[str]:
+    payload = request_context or {}
+    timeframe = _normalized_text(payload.get("timeframe") or payload.get("setup_timeframe"))
+    if timeframe in INTRADAY_TIMEFRAMES:
+        return "intraday"
+    if timeframe in SWING_TIMEFRAMES:
+        return "swing"
+    if timeframe in INVESTOR_TIMEFRAMES:
+        return "investor"
+
+    page = _normalized_text(payload.get("page") or payload.get("page_type") or payload.get("current_flow"))
+    if any(token in page for token in ("scalp", "day", "intraday")):
+        return "intraday"
+    if any(token in page for token in ("swing", "setup", "strategy")):
+        return "swing"
+    if any(token in page for token in ("invest", "portfolio", "dca")):
+        return "investor"
+
+    query_text = _normalized_text(query)
+    if any(token in query_text for token in ("scalp", "day trade", "daytrader", "intraday", "5m", "15m")):
+        return "intraday"
+    if any(token in query_text for token in ("swing", "4h", "daily", "1d")):
+        return "swing"
+    if any(token in query_text for token in ("dca", "invest", "lange termijn", "long term", "weekly", "monthly", "1w", "1m")):
+        return "investor"
+    return None
+
+
+def _profile_conflicts_with_request(profile: Dict[str, List[str]], request_style: Optional[str]) -> bool:
+    if not request_style:
+        return False
+    trader_types = set(profile.get("trader_types") or [])
+    if request_style == "intraday":
+        return bool(trader_types & {"investor", "dca_investor"}) and not bool(trader_types & {"day_trader", "scalper"})
+    if request_style == "investor":
+        return bool(trader_types & {"day_trader", "scalper"}) and not bool(trader_types & {"investor", "dca_investor"})
+    if request_style == "swing":
+        return False
+    return False
+
+
+def build_trader_profile_context(
+    preferences: Optional[dict],
+    request_context: Optional[dict] = None,
+    query: Optional[str] = None,
+) -> Dict[str, Any]:
     profile = normalize_trader_profile_preferences(preferences)
     used = has_trader_profile(profile)
+    request_style = _infer_request_style(request_context, query)
+    multiple_styles = len(set(profile.get("trader_types") or [])) > 1
+    conflict = used and _profile_conflicts_with_request(profile, request_style)
+    if not used:
+        match_mode = "profile_missing_fallback"
+        match_reason = "No stored trader profile; FINN should fall back to page and entity context."
+    elif multiple_styles and request_style:
+        match_mode = "mixed_profile_page_context_priority"
+        match_reason = f"Multiple trader styles selected; current {request_style} context gets priority."
+    else:
+        match_mode = "direct_match"
+        match_reason = "Stored trader profile aligns directly with the current page and action context."
     return {
         "trader_profile": profile,
         "trader_profile_summary": build_trader_profile_summary(profile) if used else "",
         "trader_profile_used": used,
-        "profile_match_mode": "stored_profile" if used else "none",
+        "profile_match_mode": match_mode,
+        "profile_match_reason": match_reason,
+        "profile_conflict_detected": conflict,
+        "profile_request_style": request_style,
     }

@@ -16318,6 +16318,23 @@ class FinnPlanService:
             "is_conservative": "conservative" in risk_profiles,
         }
 
+    def _profile_match_line(self, context: Optional[Dict[str, Any]], asset: Optional[str] = None) -> str:
+        payload = context or {}
+        if not payload.get("trader_profile_used"):
+            return ""
+        asset_label = asset or "dit asset"
+        if payload.get("profile_conflict_detected"):
+            return (
+                f"Dit wijkt wat af van je ingestelde profiel, dus ik laat voor {asset_label} "
+                "de huidige pagina- en actiecontext zwaarder wegen."
+            )
+        if payload.get("profile_match_mode") == "mixed_profile_page_context_priority":
+            return (
+                f"Je profiel is gemengd, dus voor {asset_label} prioriteer ik nu de actuele pagina- "
+                "en timeframe-context."
+            )
+        return ""
+
     def _profile_focus_line(
         self,
         context: Optional[Dict[str, Any]],
@@ -16329,6 +16346,7 @@ class FinnPlanService:
         if not flags["used"]:
             return ""
         asset_label = asset or "dit asset"
+        match_line = self._profile_match_line(context, asset_label)
         line = ""
         if mode == "review":
             if flags["is_investor"] or flags["is_dca"]:
@@ -16358,6 +16376,10 @@ class FinnPlanService:
             suffixes.append("Houd het simpel en forceer niets.")
         if line and suffixes:
             line = f"{line} {' '.join(suffixes)}"
+        if match_line and line:
+            return f"{match_line} {line}"
+        if match_line:
+            return match_line
         return line
 
     def _profile_next_step(
@@ -16371,6 +16393,11 @@ class FinnPlanService:
         if not flags["used"]:
             return default_step
         asset_label = asset or "dit asset"
+        if (context or {}).get("profile_conflict_detected"):
+            return (
+                f"Dit past minder goed bij je ingestelde stijl voor {asset_label}; "
+                "toets eerst of je hier bewust van afwijkt voordat je iets forceert."
+            )
         if flags["is_conservative"]:
             return f"Houd {asset_label} klein of sla over tot de sterkste blocker weg is."
         if flags["is_investor"] or flags["is_dca"]:
