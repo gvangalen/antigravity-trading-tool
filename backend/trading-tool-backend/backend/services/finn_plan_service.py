@@ -7308,7 +7308,7 @@ class FinnPlanService:
                     MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS,
                 )
         analysis["question_focus"] = self._portfolio_question_focus(query)
-        response = self._portfolio_daily_coach_message(analysis)
+        response = self._portfolio_daily_coach_message(analysis, context)
 
         return {
             "response": response,
@@ -11900,7 +11900,7 @@ class FinnPlanService:
             "what_not_to_do": insight["what_not_to_do"],
             "plan_anchor": insight.get("plan_anchor"),
         }
-        response = self._behavioral_intelligence_message(insight)
+        response = self._behavioral_intelligence_message(insight, context)
         return {
             "response": response,
             "intent": "behavioral_intelligence",
@@ -14905,14 +14905,22 @@ class FinnPlanService:
             "evidence_source": "ai_pending_actions",
         }
 
-    def _behavioral_intelligence_message(self, insight: Dict[str, Any]) -> str:
+    def _behavioral_intelligence_message(
+        self,
+        insight: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> str:
         coaching = insight.get("coaching") or {}
         metrics = insight.get("metrics") or {}
         signals = insight.get("signals") or []
+        profile_line = self._profile_behavior_line(context, mode="behavioral")
+        match_line = self._profile_match_line(context)
         if insight.get("variant") == "plan_adherence_coach":
             lines = [
                 "Stop hier even en laat je plan weer leiden.",
                 "Je dreigt nu een planregel te breken; check die eerst opnieuw.",
+                match_line,
+                profile_line,
                 insight.get("what_i_notice") or "Ik zie dat je buiten je strategie wilt bewegen.",
                 f"Waarom dit risicovol is: {insight.get('why_this_is_risky')}",
                 f"Wat nu doen: {insight.get('what_to_do_now')}",
@@ -14925,6 +14933,8 @@ class FinnPlanService:
             lines = [
                 "Stop even en vertraag direct.",
                 "Doe nu niets nieuws tot je plan weer leidend is.",
+                match_line,
+                profile_line,
                 insight.get("what_i_notice") or coaching.get("primary_reflection") or "Ik zie emotionele of impulsieve druk.",
                 f"Waarom dit risicovol is: {insight.get('why_this_is_risky')}",
                 f"Wat nu doen: {insight.get('what_to_do_now')}",
@@ -14935,6 +14945,8 @@ class FinnPlanService:
             return "\n".join([line for line in lines if line])
         lines = [
             "Ik kijk hier alleen naar je recente Finn-gedrag, niet naar marktvoorspellingen.",
+            match_line,
+            profile_line,
             coaching.get("primary_reflection") or "Ik heb nog geen harde gedragsconclusie.",
         ]
         profile = insight.get("behavioral_profile") or {}
@@ -14961,17 +14973,12 @@ class FinnPlanService:
             "Vandaag: "
             f"{metrics.get('actions_today', 0)} acties, "
             f"{metrics.get('skipped_today', 0)} skips, "
-            f"{metrics.get('snoozed_today', 0)} later gezet, "
-            f"{metrics.get('bot_decisions_generated', 0)} bot-decisions."
+            f"{metrics.get('snoozed_today', 0)} later gezet."
         )
         lines.append(
             "Laatste 7 dagen: "
             f"{metrics.get('actions_7d', 0)} acties, "
-            f"{metrics.get('bot_decisions_generated_7d', 0)} bot-decisions, "
-            f"{metrics.get('configuration_changes_7d', 0)} configuratiewijzigingen, "
-            f"{metrics.get('possible_overrides_7d', 0)} mogelijke override-/druksignalen, "
-            f"{metrics.get('plan_deviation_events_7d', 0)} plan-afwijking events, "
-            f"{metrics.get('decision_churn_events_7d', 0)} decision-churn events."
+            f"{metrics.get('possible_overrides_7d', 0)} momenten met druk of override-neiging."
         )
         if coaching.get("focus_now"):
             lines.append(f"Focus nu: {coaching.get('focus_now')}")
@@ -16410,6 +16417,42 @@ class FinnPlanService:
             return f"Houd het voor {asset_label} simpel: los eerst de grootste blocker op en review daarna opnieuw."
         return default_step
 
+    def _profile_behavior_line(
+        self,
+        context: Optional[Dict[str, Any]],
+        *,
+        asset: Optional[str] = None,
+        mode: str = "behavioral",
+    ) -> str:
+        flags = self._trader_profile_flags(context)
+        if not flags["used"]:
+            return ""
+        asset_label = asset or "dit"
+        if mode == "portfolio":
+            if flags["is_investor"] or flags["is_dca"]:
+                line = f"Voor jouw profiel telt nu vooral of {asset_label} je plan of allocatie wezenlijk verandert."
+            elif flags["is_swing"]:
+                line = f"Voor jouw profiel telt nu vooral of {asset_label} op 4H/Daily opnieuw bevestiging verdient."
+            elif flags["is_intraday"]:
+                line = f"Voor jouw profiel telt nu vooral of timing en invalidatie voor {asset_label} nog strak genoeg zijn."
+            else:
+                line = f"Voor jouw profiel telt nu vooral wat je eerst veilig moet afronden rond {asset_label}."
+        else:
+            if flags["is_investor"] or flags["is_dca"]:
+                line = "Voor jouw profiel telt nu vooral planvast blijven en niet op korte ruis reageren."
+            elif flags["is_swing"]:
+                line = "Voor jouw profiel telt nu vooral of je geduldig op bevestiging blijft wachten."
+            elif flags["is_intraday"]:
+                line = "Voor jouw profiel telt nu vooral of je niet uit timingdruk buiten je regels stapt."
+            else:
+                line = "Voor jouw profiel telt nu vooral dat je regels eerst weer leidend worden."
+
+        if flags["is_conservative"]:
+            line += " Houd het klein en forceer niets."
+        elif flags["is_beginner"]:
+            line += " Houd het simpel en neem geen extra stappen tegelijk."
+        return line
+
     def _daily_coach_message(self, analysis: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
         asset = analysis.get("asset") or "BTC"
         stance = analysis.get("stance")
@@ -16487,7 +16530,11 @@ class FinnPlanService:
         lines.append("Ik voer niets automatisch uit vanuit deze check; dit is advies-only.")
         return "\n".join(lines)
 
-    def _portfolio_daily_coach_message(self, analysis: Dict[str, Any]) -> str:
+    def _portfolio_daily_coach_message(
+        self,
+        analysis: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> str:
         asset_count = analysis.get("asset_count", 0)
         if not asset_count:
             return (
@@ -16503,6 +16550,13 @@ class FinnPlanService:
             f"Portfolio daily brief: ik heb {asset_count} setup-assets gecontroleerd.",
             f"Status: {active_count} actief, {blocked_count} geblokkeerd, {scoreless_count} zonder daily scores.",
         ]
+        focus_asset = (analysis.get("top_priorities") or [{}])[0].get("asset") or analysis.get("question_asset")
+        match_line = self._profile_match_line(context, focus_asset)
+        profile_line = self._profile_behavior_line(context, asset=focus_asset, mode="portfolio")
+        if match_line:
+            lines.append(match_line)
+        if profile_line:
+            lines.append(profile_line)
 
         priorities = analysis.get("top_priorities") or []
         if priorities:
