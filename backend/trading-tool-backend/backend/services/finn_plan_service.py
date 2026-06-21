@@ -3592,12 +3592,19 @@ class FinnPlanService:
             "governance_signals": governance_signals,
         }
 
-    def _priority_engine_message(self, analysis: Dict[str, Any]) -> str:
+    def _priority_engine_message(self, analysis: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
         question_focus = str(analysis.get("question_focus") or "headline")
         lines = [
             analysis.get("headline") or "Hier is je prioriteitenmotor voor vandaag.",
             analysis.get("why_now") or "",
         ]
+        profile_line = analysis.get("profile_guidance") or self._profile_focus_line(
+            context,
+            ((analysis.get("top_priorities") or [{}])[0].get("asset") if isinstance((analysis.get("top_priorities") or [{}])[0], dict) else None),
+            mode="general",
+        )
+        if profile_line:
+            lines.append(str(profile_line))
         if analysis.get("focus_guidance"):
             lines.append(str(analysis.get("focus_guidance")))
         top_priorities = analysis.get("top_priorities") or []
@@ -3668,6 +3675,11 @@ class FinnPlanService:
             self._priority_engine_governance_signals(governance_events),
             question_focus=question_focus,
         )
+        priority_engine["profile_guidance"] = self._profile_focus_line(
+            context,
+            ((priority_engine.get("top_priorities") or [{}])[0].get("asset") if isinstance((priority_engine.get("top_priorities") or [{}])[0], dict) else None),
+            mode="general",
+        )
         await self._record_governance_event(
             user_id,
             event_type="finn_priority_engine_summary",
@@ -3688,7 +3700,7 @@ class FinnPlanService:
             cooldown_hours=2,
         )
         return self._enrich_operator_contract({
-            "response": self._priority_engine_message(priority_engine),
+            "response": self._priority_engine_message(priority_engine, context),
             "intent": "priority_engine",
             "flow": "priority_engine",
             "draft": None,
@@ -4107,6 +4119,13 @@ class FinnPlanService:
         response_lines = ["Mission Control zegt nu in het kort:"]
         if summary.get("headline"):
             response_lines.append(summary["headline"])
+        profile_line = self._profile_focus_line(
+            context,
+            ((summary.get("top_3") or [{}])[0].get("asset") if isinstance((summary.get("top_3") or [{}])[0], dict) else None),
+            mode="general",
+        )
+        if profile_line:
+            response_lines.append(profile_line)
         if summary.get("top_3"):
             response_lines.append("Topprioriteiten voor vandaag:")
             for item in summary["top_3"]:
@@ -4260,6 +4279,9 @@ class FinnPlanService:
                         f"terwijl {strongest['category']} je meeste steun geeft met {strongest['score']:.1f}. "
                         f"Operator-implicatie: focus eerst op {weakest['category']} voordat je zwaarder leunt op de sterkere scoreblokken."
                     )
+                    profile_line = self._profile_focus_line(context, asset, mode="score")
+                    if profile_line:
+                        response = f"{response} {profile_line}"
                     return self._context_explain_payload(
                         response=response,
                         confidence=score_confidence,
@@ -6293,6 +6315,12 @@ class FinnPlanService:
             if decision_status == "block" else
             "Je kunt dit verder beoordelen tegen entry, invalidatie en execution timing."
         )
+        operator_next_step = self._profile_next_step(
+            context,
+            asset,
+            default_step=operator_next_step,
+        )
+        profile_review_line = self._profile_focus_line(context, asset, mode="review")
         review_reason = (
             top_blockers[0]
             if top_blockers else
@@ -6318,6 +6346,8 @@ class FinnPlanService:
             },
             asset=asset,
         )
+        if profile_review_line:
+            operator_summary = f"{operator_summary} {profile_review_line}"
         analysis = {
             "review_type": review_type,
             "decision_status": decision_status,
@@ -7104,7 +7134,7 @@ class FinnPlanService:
             indicator_analysis=indicator_analysis,
             onboarding_status=onboarding_status,
         )
-        response = self._daily_coach_message(analysis)
+        response = self._daily_coach_message(analysis, context)
 
         return {
             "response": response,
@@ -16272,7 +16302,88 @@ class FinnPlanService:
             unique.append(item)
         return unique
 
-    def _daily_coach_message(self, analysis: Dict[str, Any]) -> str:
+    def _trader_profile_flags(self, context: Optional[Dict[str, Any]]) -> Dict[str, bool]:
+        profile = ((context or {}).get("trader_profile") if isinstance(context, dict) else {}) or {}
+        trader_types = {str(item) for item in (profile.get("trader_types") or [])}
+        experience_levels = {str(item) for item in (profile.get("experience_levels") or [])}
+        risk_profiles = {str(item) for item in (profile.get("risk_profiles") or [])}
+        used = bool((context or {}).get("trader_profile_used")) and bool(profile)
+        return {
+            "used": used,
+            "is_investor": "investor" in trader_types,
+            "is_dca": "dca_investor" in trader_types,
+            "is_swing": "swing_trader" in trader_types,
+            "is_intraday": bool({"day_trader", "scalper"} & trader_types),
+            "is_beginner": "beginner" in experience_levels,
+            "is_conservative": "conservative" in risk_profiles,
+        }
+
+    def _profile_focus_line(
+        self,
+        context: Optional[Dict[str, Any]],
+        asset: Optional[str] = None,
+        *,
+        mode: str = "general",
+    ) -> str:
+        flags = self._trader_profile_flags(context)
+        if not flags["used"]:
+            return ""
+        asset_label = asset or "dit asset"
+        line = ""
+        if mode == "review":
+            if flags["is_investor"] or flags["is_dca"]:
+                line = f"Voor jouw profiel telt nu vooral of dit echt iets verandert aan je plan voor {asset_label}."
+            elif flags["is_swing"]:
+                line = f"Voor jouw profiel weegt vooral of {asset_label} op 4H/Daily weer bevestiging krijgt."
+            elif flags["is_intraday"]:
+                line = f"Voor jouw profiel is dit vooral een timing- en momentumvraag voor {asset_label}."
+        elif mode == "score":
+            if flags["is_investor"] or flags["is_dca"]:
+                line = f"Voor jouw profiel telt vooral of deze score je langetermijnplan voor {asset_label} echt verandert."
+            elif flags["is_swing"]:
+                line = f"Voor jouw profiel telt vooral of {asset_label} op 4H/Daily sterk genoeg blijft."
+            elif flags["is_intraday"]:
+                line = f"Voor jouw profiel telt vooral of de timing in {asset_label} nu klopt."
+        else:
+            if flags["is_investor"] or flags["is_dca"]:
+                line = f"Voor jouw profiel telt vooral of {asset_label} je langetermijnplan verandert."
+            elif flags["is_swing"]:
+                line = f"Voor jouw profiel telt vooral of {asset_label} op 4H/Daily bevestiging geeft."
+            elif flags["is_intraday"]:
+                line = f"Voor jouw profiel telt vooral of de timing in {asset_label} nu klopt."
+        suffixes = []
+        if flags["is_conservative"]:
+            suffixes.append("Blijf liever klein en selectief.")
+        if flags["is_beginner"]:
+            suffixes.append("Houd het simpel en forceer niets.")
+        if line and suffixes:
+            line = f"{line} {' '.join(suffixes)}"
+        return line
+
+    def _profile_next_step(
+        self,
+        context: Optional[Dict[str, Any]],
+        asset: Optional[str],
+        *,
+        default_step: str,
+    ) -> str:
+        flags = self._trader_profile_flags(context)
+        if not flags["used"]:
+            return default_step
+        asset_label = asset or "dit asset"
+        if flags["is_conservative"]:
+            return f"Houd {asset_label} klein of sla over tot de sterkste blocker weg is."
+        if flags["is_investor"] or flags["is_dca"]:
+            return f"Toets eerst of dit echt iets verandert aan je plan voor {asset_label}; zo niet, forceer geen nieuwe timing."
+        if flags["is_swing"]:
+            return f"Wacht eerst op 4H/Daily bevestiging voor {asset_label} voordat je iets versnelt."
+        if flags["is_intraday"]:
+            return f"Check eerst of timing en momentum voor {asset_label} nog kloppen voordat je uitvoert."
+        if flags["is_beginner"]:
+            return f"Houd het voor {asset_label} simpel: los eerst de grootste blocker op en review daarna opnieuw."
+        return default_step
+
+    def _daily_coach_message(self, analysis: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
         asset = analysis.get("asset") or "BTC"
         stance = analysis.get("stance")
         if stance == "plan_is_active":
@@ -16283,6 +16394,9 @@ class FinnPlanService:
             headline = f"Voor {asset}: ik zou vandaag wachten; je setup is nog niet actief volgens je eigen ranges."
 
         lines = [headline]
+        profile_line = self._profile_focus_line(context, asset, mode="general")
+        if profile_line:
+            lines.append(profile_line)
         setup = analysis.get("setup") or {}
         if setup:
             lines.append(

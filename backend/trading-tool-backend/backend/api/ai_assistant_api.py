@@ -42,7 +42,12 @@ from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.finn_product_analytics_service import finn_product_analytics
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.ai_gateway import AiGateway
-from backend.services.trader_profile_service import build_trader_profile_context
+from backend.services.trader_profile_service import (
+    build_trader_profile_context,
+    build_trader_profile_summary,
+    has_trader_profile,
+    normalize_trader_profile_preferences,
+)
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.infrastructure.repositories.report_repository import ReportRepository
@@ -1466,8 +1471,40 @@ async def update_preferences(
     db: AsyncSession = Depends(get_db)
 ):
     user_repo = UserRepository(db)
+    existing_user = await user_repo.get_by_id(current_user["id"])
+    existing_preferences = getattr(existing_user, "ai_preferences", {}) or {}
+    old_profile = normalize_trader_profile_preferences(existing_preferences)
+    old_has_profile = has_trader_profile(old_profile)
     updates = {k: v for k, v in request.dict().items() if v is not None}
     user = await user_repo.update_ai_preferences(current_user["id"], updates)
+    new_preferences = getattr(user, "ai_preferences", {}) or {}
+    new_profile = normalize_trader_profile_preferences(new_preferences)
+    new_has_profile = has_trader_profile(new_profile)
+
+    if not old_has_profile and new_has_profile:
+        _record_finn_product_event(
+            user_id=current_user["id"],
+            event_name="trader_profile_created",
+            surface="assistant_preferences",
+            flow_type="trader_profile",
+            metadata={
+                "profile_summary": build_trader_profile_summary(new_profile),
+                "trader_profile": new_profile,
+            },
+        )
+    elif old_profile != new_profile:
+        _record_finn_product_event(
+            user_id=current_user["id"],
+            event_name="trader_profile_updated",
+            surface="assistant_preferences",
+            flow_type="trader_profile",
+            metadata={
+                "previous_profile_summary": build_trader_profile_summary(old_profile),
+                "profile_summary": build_trader_profile_summary(new_profile),
+                "trader_profile": new_profile,
+            },
+        )
+
     return AssistantPreferences(preferences=user.ai_preferences)
 
 @router.post("/assistant/insight", response_model=AssistantInsightResponse)
