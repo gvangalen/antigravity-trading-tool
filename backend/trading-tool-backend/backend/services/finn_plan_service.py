@@ -4614,7 +4614,12 @@ class FinnPlanService:
 
         if target == "setup" and setup_id and self.session:
             service = SetupService(self.session)
-            setup = await service.get_setup_by_id(int(setup_id), user_id)
+            try:
+                setup = await service.get_setup_by_id(int(setup_id), user_id)
+            except HTTPException as exc:
+                if exc.status_code != 404:
+                    raise
+                setup = None
             if setup:
                 behavioral_coaching = self._profile_behavioral_coaching(context, asset=setup.get("symbol"), mode="review")
                 response = (

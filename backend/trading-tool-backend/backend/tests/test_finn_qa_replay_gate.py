@@ -135,6 +135,97 @@ def test_operational_errors_are_bucketed_without_crashing():
     assert "http_status:599" in result["failures"]
 
 
+def test_run_suite_retries_transient_429_until_success(monkeypatch):
+    module = _load_script_module()
+    attempts = {"count": 0}
+
+    def fake_chat_request(**kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            return {"detail": "Te veel verzoeken"}, 120.0, 429
+        return {"intent": "general_help", "flow": "general_help", "response": "ok"}, 140.0, 200
+
+    sleep_calls = []
+    monkeypatch.setattr(module, "perform_chat_request", fake_chat_request)
+    monkeypatch.setattr(module.time, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    results, summary = module.run_suite(
+        opener=None,
+        default_headers={},
+        base_url="https://example.com",
+        promptset={
+            "name": "demo",
+            "cases": [
+                {
+                    "id": "general-help",
+                    "query": "Hoi FINN, wat kun je voor mij doen?",
+                    "expected_intents": ["general_help"],
+                    "expected_mode": None,
+                }
+            ],
+        },
+        timeout_seconds=10.0,
+        delay_seconds=0.0,
+        max_attempts=3,
+        retry_backoff_seconds=2.5,
+    )
+
+    assert attempts["count"] == 2
+    assert results[0]["passed"] is True
+    assert results[0]["attempts"] == 2
+    assert summary["failed_cases"] == 0
+    assert sleep_calls == [2.5]
+
+
+def test_prepare_promptset_contexts_repairs_stale_setup_id_by_name():
+    module = _load_script_module()
+    calls = []
+
+    def fake_request_json(**kwargs):
+        calls.append(kwargs["url"])
+        if kwargs["url"].endswith("/api/setups/62"):
+            return {"detail": "Setup niet gevonden"}, 404
+        if kwargs["url"].endswith("/api/setups"):
+            return [
+                {"id": 99, "name": "Breakout long test", "symbol": "BTC", "timeframe": "1W"},
+                {"id": 100, "name": "Other setup", "symbol": "ETH", "timeframe": "4H"},
+            ], 200
+        raise AssertionError(f"Unexpected URL: {kwargs['url']}")
+
+    module._request_json = fake_request_json
+
+    promptset = {
+        "name": "demo",
+        "cases": [
+            {
+                "id": "context-setup-open",
+                "query": "Welke setup heb ik nu open?",
+                "context": {
+                    "setup_id": 62,
+                    "setup_name": "Breakout long test",
+                    "setup_symbol": "BTC",
+                    "setup_timeframe": "1W",
+                    "symbol": "BTC",
+                },
+            }
+        ],
+    }
+
+    prepared = module.prepare_promptset_contexts(
+        opener=None,
+        default_headers={},
+        base_url="https://example.com",
+        promptset=promptset,
+        timeout_seconds=10.0,
+    )
+
+    context = prepared["cases"][0]["context"]
+    assert context["setup_id"] == 99
+    assert context["setup_name"] == "Breakout long test"
+    assert context["setup_symbol"] == "BTC"
+    assert calls == ["https://example.com/api/setups/62", "https://example.com/api/setups"]
+
+
 def test_evaluate_case_checks_variant_context_resolution_and_summary_quality():
     module = _load_script_module()
 

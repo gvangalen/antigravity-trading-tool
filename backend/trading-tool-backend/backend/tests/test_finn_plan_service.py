@@ -906,6 +906,33 @@ def test_context_explain_reuses_recent_setup_entity_in_mixed_session():
     assert "geen zekere setup-entiteit" not in result["response"]
 
 
+def test_build_context_explain_response_gracefully_falls_back_when_setup_row_is_missing(monkeypatch):
+    class _MissingSetupService:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_setup_by_id(self, setup_id, user_id):
+            raise HTTPException(404, "Setup niet gevonden")
+
+    monkeypatch.setattr("backend.services.finn_plan_service.SetupService", _MissingSetupService)
+    service = FinnPlanService(db_session=object())
+
+    result = asyncio.run(service.build_context_explain_response(30, "Leg mijn setup uit", {
+        "page": "/setup",
+        "page_type": "Setup",
+        "setup_id": 62,
+        "setup_name": "Breakout long test",
+        "setup_symbol": "BTC",
+        "setup_timeframe": "1W",
+        "symbol": "BTC",
+    }))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "setup"
+    assert result["analysis"]["entity"]["id"] == 62
+    assert "setup #62" in result["response"]
+
+
 def test_context_explain_prefers_latest_compatible_recent_entity_and_ignores_conflict():
     service = _service()
     context = {
