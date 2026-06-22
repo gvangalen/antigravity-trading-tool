@@ -105,6 +105,34 @@ def test_finn_product_analytics_snapshot_counts_prompts_screens_and_funnel():
     service.record_event(
         user_id=7,
         event={
+            "event_name": "behavioral_intervention_seen",
+            "session_id": "sess-b",
+            "surface": "report_governance",
+            "page": "/report",
+            "flow_type": "behavioral_intervention",
+            "metadata": {
+                "behavior_flag": "fomo",
+                "behavior_label": "FOMO",
+            },
+        },
+    )
+    service.record_event(
+        user_id=7,
+        event={
+            "event_name": "behavioral_intervention_acknowledged",
+            "session_id": "sess-b",
+            "surface": "live_preflight",
+            "page": "/bot",
+            "flow_type": "behavioral_intervention",
+            "metadata": {
+                "behavior_flag": "fomo",
+                "behavior_label": "FOMO",
+            },
+        },
+    )
+    service.record_event(
+        user_id=7,
+        event={
             "event_name": "screen_view",
             "session_id": "sess-c",
             "surface": "web",
@@ -171,6 +199,10 @@ def test_finn_product_analytics_snapshot_counts_prompts_screens_and_funnel():
     assert snapshot["top_cta_actions"][0]["action"] in {"market", "activate_dashboard"}
     assert snapshot["decision_review_usage_count"] == 1
     assert snapshot["priority_engine_usage_count"] == 1
+    assert snapshot["behavioral_intervention_seen_count"] == 1
+    assert snapshot["behavioral_intervention_ack_count"] == 1
+    assert snapshot["top_behavioral_flags"][0] == {"flag": "fomo", "count": 2}
+    assert snapshot["top_behavioral_surfaces"][0]["surface"] in {"report_governance", "live_preflight"}
     assert snapshot["repeated_user_signal"]["users_with_multiple_sessions"] == 1
 
 

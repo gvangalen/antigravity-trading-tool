@@ -461,6 +461,58 @@ def test_build_behavioral_intelligence_response_exposes_safe_coaching_contract(m
     assert "Stop even en vertraag direct." in result["response"]
 
 
+def test_build_behavioral_intelligence_response_uses_confirmed_profile_alignment(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    now = _utc_now()
+    service._get_recent_finn_activity = AsyncMock(return_value=[
+        service._mission_activity_item({
+            "id": "fomo-1",
+            "status": "executed",
+            "created_at": now - timedelta(days=1),
+            "payload": {"action": {"type": "generate_bot_decision"}, "result": {"ok": True}},
+        }),
+    ])
+    service._mission_day_log = lambda activity_feed: {"handled_count": 1, "skipped_count": 0, "snoozed_count": 0}
+    service._build_behavioral_insight_from_activity = lambda activity_feed, day_log: {
+        "status": "attention",
+        "trend": {"summary": "Je drukt wat hard op nieuwe acties."},
+        "coaching": {
+            "primary_reflection": "Ik zie druk om sneller te handelen dan je plan vraagt.",
+            "safe_next_step": "Wacht tot je plan weer helder actief is.",
+            "do_not_do": "Ga nu niet forceren of all-in.",
+        },
+        "risk_flags": [{"id": "fomo_pressure", "summary": "Je zoekt versnelling zonder extra duidelijkheid."}],
+    }
+    service._fetch_recent_governance_events = AsyncMock(return_value=[
+        {
+            "type": "finn_outcome_tracking_summary",
+            "payload": {
+                "behavior_pattern": "fomo_outcomes",
+                "sample_size": 5,
+                "historical_result_summary": "FOMO-momenten eindigden vaker in verlies.",
+                "net_effect": "FOMO-momenten eindigden vaker in verlies.",
+            },
+        },
+        {
+            "type": "finn_trade_journal_intelligence_summary",
+            "payload": {
+                "journal_pattern": "emotion_led_entries",
+                "decision_gap": "Je reviewtaal mengt objectieve checks met emotionele druk.",
+            },
+        },
+    ])
+
+    result = asyncio.run(service.build_behavioral_intelligence_response(30, "Ik voel FOMO, wat moet ik doen?", {
+        "trader_profile_used": True,
+        "trader_profile": {"behavior_flags": ["fomo"]},
+    }))
+
+    analysis = result["state"]["analysis"]
+    assert analysis["behavioral_intelligence"]["profile_habit_alignment"]["confirmed"] is True
+    assert "niet alleen een profielvoorkeur" in analysis["why_this_is_risky"]
+    assert "Laat Finn" in analysis["what_to_do_now"] or "Geen entry" in analysis["what_to_do_now"]
+
+
 def test_build_context_explain_response_prioritizes_score_explain_when_asset_context_is_present(monkeypatch):
     class ScoreRepo:
         def __init__(self, session):
@@ -499,6 +551,39 @@ def test_build_context_explain_response_prioritizes_score_explain_when_asset_con
     assert "Macro is 50.0" in result["response"]
 
 
+def test_build_context_explain_response_adds_behavioral_coaching_to_score(monkeypatch):
+    class ScoreRepo:
+        def __init__(self, session):
+            self.session = session
+
+        async def fetch_daily_scores(self, user_id, symbol):
+            return {
+                "macro_score": 42,
+                "technical_score": 38,
+                "market_score": 61,
+                "setup_score": 55,
+            }
+
+    monkeypatch.setattr("backend.services.finn_plan_service.ScoreRepository", ScoreRepo)
+    service = FinnPlanService(db_session=object())
+    service._fetch_daily_scores_with_runtime_refresh = AsyncMock(return_value={
+        "macro_score": 42,
+        "technical_score": 38,
+        "market_score": 61,
+        "setup_score": 55,
+    })
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welke score zie ik nu?", {
+        "symbol": "BTC",
+        "trader_profile_used": True,
+        "trader_profile": {"behavior_flags": ["fomo"]},
+    }))
+
+    assert "haast-beslissing" in result["response"]
+    assert "FOMO maakt timing sneller fragiel" in result["analysis"]["risk_summary"]
+    assert "bevestiging" in result["analysis"]["next_best_action"]
+
+
 def test_build_context_explain_response_can_summarize_report_entity(monkeypatch):
     class Repo:
         def __init__(self, session):
@@ -527,6 +612,76 @@ def test_build_context_explain_response_can_summarize_report_entity(monkeypatch)
     assert result["analysis"]["context_confidence"]["level"] == "high"
     assert "weekrapport" in result["response"].lower()
     assert "BTC bleef onder druk" in result["response"]
+
+
+def test_build_context_explain_response_adds_behavioral_coaching_to_report(monkeypatch):
+    class Repo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_latest_report(self, user_id, table_name, symbol=None):
+            return {
+                "id": 7,
+                "report_date": "2026-05-30",
+                "summary": "BTC bleef onder druk en vroeg vooral om geduld.",
+                "behavioral_summary": "Je wisselde vaak van context.",
+                "recommended_action": "Open Mission Control.",
+            }
+
+    monkeypatch.setattr("backend.services.finn_plan_service.ReportRepository", Repo)
+    service = FinnPlanService(db_session=object())
+
+    result = asyncio.run(service.build_context_explain_response(30, "Leg mijn weekrapport uit", {
+        "page": "/report",
+        "page_type": "Report",
+        "trader_profile_used": True,
+        "trader_profile": {"behavior_flags": ["overtrades"]},
+    }))
+
+    assert "actiedichtheid" in result["response"]
+    assert "edge van onrust te onderscheiden" in result["analysis"]["risk_summary"]
+    assert "minder, maar scherpere vervolgacties" in result["analysis"]["next_best_action"]
+
+
+def test_build_context_explain_response_adds_behavioral_coaching_to_strategy(monkeypatch):
+    class _Repo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_raw_strategy_with_setup(self, strategy_id, user_id):
+            return {
+                "id": strategy_id,
+                "symbol": "ETH",
+                "setup_id": 233,
+                "name": "ETH Weekly Breakout",
+                "status": "active",
+                "timeframe": "1W",
+                "setup_name": "ETH Weekly Breakout",
+            }
+
+    class _StrategySvc:
+        def __init__(self, session):
+            self.session = session
+
+        def _format_strategy_row(self, row):
+            return row
+
+    monkeypatch.setattr("backend.services.finn_plan_service.StrategyRepository", _Repo)
+    monkeypatch.setattr("backend.services.finn_plan_service.StrategyService", _StrategySvc)
+    service = FinnPlanService(db_session=object())
+
+    result = asyncio.run(service.build_context_explain_response(30, "Welke strategie bekijk ik nu?", {
+        "page": "/strategy/257",
+        "page_type": "Strategy",
+        "symbol": "ETH",
+        "strategy_id": 257,
+        "trader_profile_used": True,
+        "trader_profile": {"behavior_flags": ["takes_profit_too_early"]},
+    }))
+
+    assert "winst te vroeg afkapt" in result["response"]
+    assert "risk/reward" in result["analysis"]["risk_summary"]
+    assert "winstdeel en runner-objectief" in result["analysis"]["next_best_action"]
 
 
 def test_build_context_explain_response_enriches_bot_entity_from_repository(monkeypatch):
@@ -575,6 +730,49 @@ def test_build_context_explain_response_enriches_bot_entity_from_repository(monk
     assert "Breakout long test" in result["response"]
     assert "open bot-decision review" in result["response"]
     assert "Review eerst de open bot-decisions" in result["response"]
+
+
+def test_build_context_explain_response_adds_behavioral_coaching_to_bot(monkeypatch):
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            return {
+                "id": bot_id,
+                "name": "BTC Review Bot",
+                "symbol": "BTC",
+                "is_active": True,
+                "is_live": False,
+                "strategy_id": 257,
+                "strategy_name": "ETH Live QA Strategy 542357",
+                "setup_id": 62,
+                "setup_name": "Breakout long test",
+                "mode": "manual",
+            }
+
+    class FakeBotService:
+        def __init__(self, session):
+            self.repository = Repo()
+
+        async def get_bot_today(self, user_id, symbol=None, lean=False):
+            return {
+                "decisions": [
+                    {"id": 121110, "bot_id": 17, "status": "needs_review"},
+                ]
+            }
+
+    monkeypatch.setattr("backend.services.finn_plan_service.BotService", FakeBotService)
+    service = FinnPlanService(db_session=object())
+
+    result = asyncio.run(service.build_context_explain_response(30, "Leg mijn bot uit", {
+        "page": "/bot/17",
+        "page_type": "Bot",
+        "bot_id": 17,
+        "trader_profile_used": True,
+        "trader_profile": {"behavior_flags": ["leverage_seeking"]},
+    }))
+
+    assert "leverage" in result["response"].lower()
+    assert "Leverage vergroot hier vooral fouten" in result["analysis"]["risk_summary"]
+    assert "spot- of kleinere sizing" in result["analysis"]["next_best_action"]
 
 
 def test_entity_explain_detects_asset_and_bot_context_without_drifting_to_daily_coach():
@@ -1780,6 +1978,78 @@ def test_finn_report_response_exposes_top_level_state_contract(monkeypatch):
     assert "memory_v2" in result["state"]
     assert "portfolio_operating_system" in result["state"]
     assert result["analysis"]["governance_events_summary"]["decision_review_count"] == 0
+
+
+def test_finn_report_response_includes_profile_behavioral_coaching(monkeypatch):
+    async def activity(user_id, limit=200):
+        return []
+
+    async def governance_events(user_id, event_types=None, limit=80):
+        return []
+
+    service = _service()
+    monkeypatch.setattr(service, "_get_recent_finn_activity", activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", governance_events)
+
+    result = asyncio.run(service.build_finn_report_response(1, "Geef mijn Finn rapport van vandaag", {
+        "trader_profile_used": True,
+        "trader_profile": {"behavior_flags": ["leverage_seeking"]},
+    }))
+
+    assert result["analysis"]["profile_behavioral_coaching"]["priority_flag"] == "leverage_seeking"
+    assert "Coachingsfocus:" in result["response"]
+    assert "leverage" in result["response"].lower()
+    assert "kwaliteit van je plan te verhogen" in result["suggested_actions"][0]
+
+
+def test_finn_report_response_confirms_profile_habit_alignment_with_evidence(monkeypatch):
+    service = _service()
+    now = _utc_now()
+
+    async def activity(user_id, limit=200):
+        return [
+            service._mission_activity_item({
+                "id": "report-fomo",
+                "status": "executed",
+                "created_at": now - timedelta(days=2),
+                "payload": {
+                    "action": {"type": "generate_bot_decision"},
+                    "result": {"ok": True},
+                },
+            }),
+        ]
+
+    async def governance_events(user_id, event_types=None, limit=80):
+        return [
+            {
+                "type": "finn_outcome_tracking_summary",
+                "payload": {
+                    "behavior_pattern": "fomo_outcomes",
+                    "sample_size": 5,
+                    "historical_result_summary": "FOMO-momenten eindigden vaker in verlies.",
+                    "net_effect": "FOMO-momenten eindigden vaker in verlies.",
+                },
+            },
+            {
+                "type": "finn_trade_journal_intelligence_summary",
+                "payload": {
+                    "journal_pattern": "emotion_led_entries",
+                    "decision_gap": "Je reviewtaal mengt objectieve checks met emotionele druk.",
+                },
+            },
+        ]
+
+    monkeypatch.setattr(service, "_get_recent_finn_activity", activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", governance_events)
+
+    result = asyncio.run(service.build_finn_report_response(1, "Geef mijn Finn rapport van vandaag", {
+        "trader_profile_used": True,
+        "trader_profile": {"behavior_flags": ["fomo"]},
+    }))
+
+    assert result["analysis"]["profile_habit_alignment"]["confirmed"] is True
+    assert result["analysis"]["profile_habit_alignment"]["primary_alignment"]["flag"] == "fomo"
+    assert "niet alleen een profielvoorkeur" in result["analysis"]["profile_behavioral_coaching"]["risk"]
 
 
 def test_mission_control_exposes_richer_behavioral_surface(monkeypatch):
@@ -5425,6 +5695,27 @@ def test_build_decision_review_response_can_approve_contextual_trade():
     assert "trade review" in result["response"].lower()
 
 
+def test_build_decision_review_response_surfaces_behavioral_coaching():
+    service = _service()
+
+    result = asyncio.run(service.build_decision_review_response(30, "Beoordeel deze trade", {
+        "page": "/setup",
+        "page_type": "setup",
+        "symbol": "BTC",
+        "setup_id": 62,
+        "strategy_id": 257,
+        "trader_profile_used": True,
+        "trader_profile": {
+            "trader_types": ["swing_trader"],
+            "behavior_flags": ["holds_losers_too_long"],
+        },
+    }))
+
+    assert "invalidatie zwaarder wegen dan hoop" in result["analysis"]["summary"]
+    assert "Verliezers te lang laten lopen vervormt je review" in result["analysis"]["review_reason"]
+    assert result["analysis"]["behavioral_coaching"]["priority_flag"] == "holds_losers_too_long"
+
+
 def test_build_decision_review_response_blocks_extreme_risk_and_exposure():
     service = _service()
 
@@ -6055,6 +6346,69 @@ def test_build_priority_engine_response_keeps_item_reason_when_governance_signal
     assert "extra governance-frictie" in result["analysis"]["top_priorities"][1]["why_now"].lower()
 
 
+def test_build_priority_engine_response_reorders_for_confirmed_profile_habit(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "workqueue": [
+            {
+                "id": "new-decision",
+                "title": "Nieuwe BTC bot-decision openen",
+                "type": "bot_decision_request",
+                "priority": "high",
+                "priority_rank": 4,
+                "reason": "Nieuwe actie openen.",
+                "asset": "BTC",
+            },
+            {
+                "id": "risk-review",
+                "title": "BTC exposure reviewen",
+                "type": "portfolio_risk_stack",
+                "priority": "medium",
+                "priority_rank": 18,
+                "reason": "BTC risico stapelt.",
+                "asset": "BTC",
+            },
+        ],
+        "summary": {"workqueue_count": 2, "open_action_count": 1},
+    })
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_get_recent_finn_activity", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_profile_habit_alignment", lambda *args, **kwargs: {
+        "active_flags": ["fomo"],
+        "alignments": [{
+            "flag": "fomo",
+            "label": "FOMO / najagen",
+            "evidence_strength": "high",
+            "matched_sources": ["memory_v2", "outcome_memory"],
+            "summary": "FOMO is bevestigd.",
+            "behavioral_cost": "Impulsdruk neemt de reviewvolgorde over.",
+            "recommended_rule": "Laat eerst review en cooldown voorgaan.",
+        }],
+        "confirmed": True,
+        "primary_alignment": {
+            "flag": "fomo",
+            "label": "FOMO / najagen",
+            "evidence_strength": "high",
+            "matched_sources": ["memory_v2", "outcome_memory"],
+            "summary": "FOMO is bevestigd.",
+            "behavioral_cost": "Impulsdruk neemt de reviewvolgorde over.",
+            "recommended_rule": "Laat eerst review en cooldown voorgaan.",
+        },
+    })
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_priority_engine_response(1, "Wat is vandaag mijn hoogste prioriteit?", {
+        "page": "/dashboard",
+        "trader_profile_used": True,
+        "trader_profile": {"behavior_flags": ["fomo"]},
+    }))
+
+    assert result["analysis"]["top_priorities"][0]["title"] == "BTC exposure reviewen"
+    assert result["analysis"]["top_priorities"][0]["behavioral_priority_bias"] == "up"
+    assert "profielrem actief" in str(result["analysis"]["top_priorities"][0]["why_now"]).lower()
+
+
 def test_build_mission_control_explain_response_exposes_priority_engine_contract(monkeypatch):
     service = FinnPlanService(db_session=object())
     monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
@@ -6164,6 +6518,78 @@ def test_build_portfolio_operating_system_response_exposes_control_plane(monkeyp
     assert result["analysis"]["subsystems"]["personal_performance"]["status"] in {"active", "early"}
     assert result["analysis"]["subsystems"]["trade_journal_intelligence"]["status"] in {"active", "early"}
     assert result["analysis"]["portfolio_layer"]["top_asset"] == "BTC"
+
+
+def test_build_mission_control_response_reorders_priority_stack_for_confirmed_profile_habit(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", AsyncMock(return_value={"state": {"analysis": {"portfolio_risk": {}}}}))
+    monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {
+        "summary": {"open_action_count": 2, "blocked_count": 0},
+        "plan_health": [],
+        "portfolio_risk": {},
+        "workqueue": [
+            {
+                "id": "new-decision",
+                "title": "Nieuwe BTC bot-decision openen",
+                "type": "bot_decision_request",
+                "priority": "high",
+                "priority_rank": 4,
+                "reason": "Nieuwe actie openen.",
+                "asset": "BTC",
+                "next_best_action": {"prompt": "Maak bot-decision voor BTC", "handoff": "bot_decision"},
+            },
+            {
+                "id": "live-review",
+                "title": "BTC live bots vragen review",
+                "type": "portfolio_live_hotspot",
+                "priority": "medium",
+                "priority_rank": 18,
+                "reason": "Er staat live reviewdruk op BTC bots.",
+                "asset": "BTC",
+            },
+        ],
+        "workqueue_groups": [],
+        "workqueue_labels": {},
+        "open_actions": [],
+        "bot_review_queue": [],
+    })
+    monkeypatch.setattr(service, "_get_recent_finn_activity", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_get_today_resolved_mission_item_ids", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[]))
+    monkeypatch.setattr(service, "_build_agent_controller", lambda *args, **kwargs: {})
+    monkeypatch.setattr(service, "_apply_agent_controller_to_mission", lambda mission, agent_controller, activity_feed=None: mission)
+    monkeypatch.setattr(service, "_profile_habit_alignment", lambda *args, **kwargs: {
+        "active_flags": ["overtrades"],
+        "alignments": [{
+            "flag": "overtrades",
+            "label": "Overtrading",
+            "evidence_strength": "high",
+            "matched_sources": ["memory_v2", "behavioral_memory"],
+            "summary": "Overtrading is bevestigd.",
+            "behavioral_cost": "Te veel nieuwe acties concurreren met reviews.",
+            "recommended_rule": "Rond eerst open reviews af.",
+        }],
+        "confirmed": True,
+        "primary_alignment": {
+            "flag": "overtrades",
+            "label": "Overtrading",
+            "evidence_strength": "high",
+            "matched_sources": ["memory_v2", "behavioral_memory"],
+            "summary": "Overtrading is bevestigd.",
+            "behavioral_cost": "Te veel nieuwe acties concurreren met reviews.",
+            "recommended_rule": "Rond eerst open reviews af.",
+        },
+    })
+
+    result = asyncio.run(service.build_mission_control_response(1, {
+        "page": "mission_control",
+        "trader_profile_used": True,
+        "trader_profile": {"behavior_flags": ["overtrades"]},
+    }))
+
+    assert result["coaching_loop"]["daily_priority_stack"][0]["title"] == "BTC live bots vragen review"
+    assert result["priority_engine"]["top_priorities"][0]["title"] == "BTC live bots vragen review"
+    assert result["portfolio_operating_system"]["do_now"][0] == "BTC live bots vragen review"
 
 
 def test_behavioral_insight_waits_for_evidence_when_empty():
@@ -6497,6 +6923,54 @@ def test_build_behavioral_memory_response_includes_memory_v2_contract(monkeypatc
     assert result["analysis"]["recommended_rule"]
     assert result["analysis"]["confidence_level"] in {"medium", "high"}
     assert "Memory V2 patroon" in result["response"]
+
+
+def test_build_behavioral_memory_response_aligns_profile_with_recent_evidence(monkeypatch):
+    service = _service()
+    now = _utc_now()
+    activity = [
+        service._mission_activity_item({
+            "id": "memory-churn-1",
+            "status": "executed",
+            "created_at": now - timedelta(days=2),
+            "payload": {
+                "action": {"type": "generate_bot_decision"},
+                "result": {
+                    "ok": True,
+                    "behavioral_event": {"type": "decision_churn", "severity": "medium"},
+                },
+            },
+        }),
+    ]
+
+    async def _fake_activity(user_id, limit=180):
+        return activity
+
+    async def _fake_events(user_id, *, event_types, limit=80):
+        return [
+            {
+                "type": "finn_outcome_tracking_summary",
+                "payload": {
+                    "behavior_pattern": "overtrading_outcomes",
+                    "sample_size": 4,
+                    "historical_result_summary": "Te vaak opnieuw handelen gaf slechtere follow-through.",
+                    "net_effect": "Te vaak opnieuw handelen gaf slechtere follow-through.",
+                },
+            }
+        ]
+
+    monkeypatch.setattr(service, "_get_recent_finn_activity", _fake_activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", _fake_events)
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+
+    result = asyncio.run(service.build_behavioral_memory_response(30, "Wat onthoudt Finn van mijn gedrag?", {
+        "trader_profile_used": True,
+        "trader_profile": {"behavior_flags": ["overtrades"]},
+    }))
+
+    assert result["analysis"]["profile_habit_alignment"]["confirmed"] is True
+    assert result["analysis"]["profile_habit_alignment"]["primary_alignment"]["flag"] == "overtrades"
+    assert "Profiel + bewijs aligneren" in result["response"]
 
 
 def test_build_outcome_memory_response_extracts_repeating_negative_pattern(monkeypatch):
@@ -6869,6 +7343,63 @@ def test_build_personal_coach_response_chooses_interruptive_mode(monkeypatch):
     assert "Stop even" in result["response"]
 
 
+def test_build_personal_coach_response_uses_profile_habit_alignment_when_confirmed(monkeypatch):
+    service = _service()
+
+    async def _fake_activity(user_id, limit=180):
+        now = _utc_now()
+        return [
+            service._mission_activity_item({
+                "id": "coach-churn",
+                "status": "executed",
+                "created_at": now - timedelta(days=2),
+                "payload": {
+                    "action": {"type": "generate_bot_decision"},
+                    "result": {
+                        "ok": True,
+                        "behavioral_event": {"type": "decision_churn", "severity": "medium"},
+                    },
+                },
+            }),
+        ]
+
+    async def _fake_events(user_id, *, event_types, limit=90):
+        return [
+            {
+                "type": "finn_outcome_tracking_summary",
+                "description": "Te vaak opnieuw handelen gaf slechtere follow-through.",
+                "payload": {
+                    "behavior_pattern": "overtrading_outcomes",
+                    "sample_size": 4,
+                    "historical_result_summary": "Te vaak opnieuw handelen gaf slechtere follow-through.",
+                    "net_effect": "Te vaak opnieuw handelen gaf slechtere follow-through.",
+                },
+            },
+        ]
+
+    monkeypatch.setattr(service, "_get_recent_finn_activity", _fake_activity)
+    monkeypatch.setattr(service, "_fetch_recent_governance_events", _fake_events)
+    monkeypatch.setattr(service, "_record_governance_event", AsyncMock())
+    monkeypatch.setattr(service, "build_mission_control_response", AsyncMock(return_value={
+        "analysis": {
+            "portfolio_operating_system": {
+                "operating_posture": "risk_first",
+                "portfolio_pressure": {"source": "Open review-backlog."},
+                "do_now": ["Rond eerst open reviews af."],
+            }
+        }
+    }))
+
+    result = asyncio.run(service.build_personal_coach_response(30, "Coach me op basis van mijn laatste fouten", {
+        "trader_profile_used": True,
+        "trader_profile": {"behavior_flags": ["overtrades"]},
+    }))
+
+    assert result["analysis"]["profile_habit_alignment"]["confirmed"] is True
+    assert result["analysis"]["profile_habit_alignment"]["primary_alignment"]["flag"] == "overtrades"
+    assert "overtrading" in result["analysis"]["current_pattern"].lower() or "actiedruk" in result["analysis"]["current_pattern"].lower()
+
+
 def test_build_personal_coach_response_uses_lightweight_path_for_evolution_prompts(monkeypatch):
     service = _service()
 
@@ -6935,6 +7466,50 @@ def test_behavioral_memory_friction_slows_repeated_bot_decisions():
     assert friction["type"] == "decision_churn"
     assert friction["source"] == "behavioral_memory"
     assert "review" in friction["safe_alternative"]
+
+
+def test_behavioral_memory_friction_uses_confirmed_profile_alignment_for_new_decisions():
+    service = _service()
+    friction = service._profile_habit_friction_from_alignment(
+        {
+            "primary_alignment": {
+                "flag": "overtrades",
+                "label": "Overtrading",
+                "evidence_strength": "high",
+                "matched_sources": ["outcome_memory", "memory_card"],
+                "summary": "Je profiel noemt overtrading en je recente activity laat dezelfde actiedruk zien.",
+                "behavioral_cost": "Dit is dus niet alleen een profielvoorkeur.",
+                "recommended_rule": "Rond eerst open reviews af voordat je nieuwe decisions opent.",
+            }
+        },
+        "generate_bot_decision",
+    )
+
+    assert friction["source"] == "profile_habit_alignment"
+    assert friction["severity"] == "high"
+    assert "overtrading" in friction["message"].lower()
+
+
+def test_behavioral_memory_friction_uses_confirmed_profile_alignment_for_execution_steps():
+    service = _service()
+    friction = service._profile_habit_friction_from_alignment(
+        {
+            "primary_alignment": {
+                "flag": "leverage_seeking",
+                "label": "Leverage-neiging",
+                "evidence_strength": "high",
+                "matched_sources": ["memory_v2", "performance"],
+                "summary": "Je profiel noemt leverage-drang en recente evidence bevestigt exposuredruk.",
+                "behavioral_cost": "Execution-momenten worden hierdoor risicovoller.",
+                "recommended_rule": "Gebruik eerst spot of kleinere sizing.",
+            }
+        },
+        "live_preflight_bot_decision",
+    )
+
+    assert friction["source"] == "profile_habit_alignment"
+    assert friction["severity"] == "high"
+    assert "execution-momenten" in friction["message"]
 
 
 def test_behavioral_memory_ack_blocks_bot_decision_until_ack():
@@ -7770,7 +8345,7 @@ def test_bot_decision_memory_friction_blocks_even_with_open_reviews(monkeypatch)
     async def open_reviews(user_id, asset, bot_id):
         return [{"decision_id": 22, "bot_id": bot_id, "review_status": "needs_review"}]
 
-    async def memory_friction(user_id, action_type):
+    async def memory_friction(user_id, action_type, context=None):
         return {
             "type": "decision_churn",
             "message": "je recente memory laat decision-churn zien.",
@@ -7861,6 +8436,35 @@ def test_daily_coach_message_is_advice_only_and_mentions_bot_decisions():
     assert "Ik voer niets automatisch uit" in message
 
 
+def test_daily_coach_message_adds_behavioral_coaching_lines():
+    service = _service()
+    analysis = {
+        "asset": "BTC",
+        "stance": "wait_for_plan",
+        "has_scores": True,
+        "setup": {"id": 12, "name": "BTC Plan"},
+        "setup_match_percentage": 65.0,
+        "blockers": [{"category": "macro", "score": 10.0, "range": [30.0, 70.0]}],
+        "active_strategy": {"active": False},
+        "bot_today": {"decision_count": 0, "decisions": []},
+        "indicator_summary": {"warnings": []},
+        "agent_verdicts": [],
+        "suggested_actions": ["Niet forceren"],
+    }
+
+    message = service._daily_coach_message(
+        analysis,
+        {
+            "trader_profile_used": True,
+            "trader_profile": {"behavior_flags": ["fomo"]},
+        },
+    )
+
+    assert "haast-beslissing" in message
+    assert "Coachingsrisico:" in message
+    assert "Profielvolgende stap:" in message
+
+
 def test_portfolio_daily_coach_message_adds_profile_guidance_when_context_used():
     service = _service()
     analysis = {
@@ -7885,6 +8489,33 @@ def test_portfolio_daily_coach_message_adds_profile_guidance_when_context_used()
 
     assert "4H/Daily" in message
     assert "Houd het klein" in message
+
+
+def test_portfolio_daily_coach_message_adds_behavioral_coaching_lines():
+    service = _service()
+    analysis = {
+        "asset_count": 1,
+        "actionable_assets": [],
+        "blocked_assets": [{"asset": "BTC"}],
+        "scoreless_assets": [],
+        "top_priorities": [{"asset": "BTC", "priority": "niet forceren", "reason": "macro buiten range", "setup": {"name": "BTC Swing"}}],
+        "data_readiness": {"status": "ready"},
+        "portfolio_risk": {"status": "balanced"},
+        "agent_verdicts": [],
+        "suggested_actions": [],
+    }
+
+    message = service._portfolio_daily_coach_message(
+        analysis,
+        {
+            "trader_profile_used": True,
+            "trader_profile": {"behavior_flags": ["overtrades"]},
+        },
+    )
+
+    assert "niet uit activiteit gaat stapelen" in message
+    assert "Coachingsrisico:" in message
+    assert "Profielvolgende stap:" in message
 
 
 def test_assistant_insight_from_daily_coach_is_structured_morning_brief():
@@ -7927,3 +8558,42 @@ def test_assistant_insight_from_daily_coach_is_structured_morning_brief():
     assert "macro 10.0 buiten [30.0, 70.0]" in insight["market_insight"]["why"]
     assert "langere horizon" in insight["market_insight"]["action"]
     assert insight["suggested_actions"] == ["Niet forceren"]
+
+
+def test_assistant_insight_from_daily_coach_adds_behavioral_profile_copy():
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=None,
+        ai_gateway=None,
+    )
+
+    insight = assistant._assistant_insight_from_daily_coach(
+        symbol="BTC",
+        page_type="FINN",
+        daily_response={"response": "Daily coach text"},
+        analysis={
+            "asset": "BTC",
+            "stance": "wait_for_plan",
+            "has_scores": True,
+            "setup": {"id": 12, "name": "BTC Plan"},
+            "setup_match_percentage": 0.0,
+            "blockers": [{"category": "macro", "score": 10.0, "range": [30.0, 70.0]}],
+            "bot_today": {"decision_count": 0},
+            "indicator_summary": {"warnings": ["macro: geen actieve indicator-data gevonden"]},
+            "suggested_actions": ["Niet forceren"],
+        },
+        context={
+            "trader_profile_used": True,
+            "trader_profile": {"behavior_flags": ["fomo"]},
+        },
+    )
+
+    assert "extra rust" in insight["market_insight"]["conclusion"]
+    assert "FOMO maakt timing fragieler" in insight["market_insight"]["why"]
+    assert "haast of FOMO" in insight["market_insight"]["action"]

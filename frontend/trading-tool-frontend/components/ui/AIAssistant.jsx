@@ -239,6 +239,26 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   };
 
   const profileSummaryLabel = buildTraderProfileUiSummary();
+  const behaviorFlagLabelMap = {
+    fomo: "FOMO",
+    overtrades: "Overtrading",
+    leverage_seeking: "Leverage-neiging",
+    holds_losers_too_long: "Verliezers te lang laten lopen",
+    takes_profit_too_early: "Winst te vroeg nemen",
+  };
+
+  const humanizeBehaviorFlagLabel = (flag, fallbackLabel = "") =>
+    fallbackLabel || behaviorFlagLabelMap[String(flag || "").trim()] || String(flag || "").replace(/_/g, " ");
+
+  const pickPrimaryProfileHabitAlignment = (sourceMissionControl = null) => {
+    if (!sourceMissionControl || typeof sourceMissionControl !== "object") return null;
+    return (
+      sourceMissionControl?.profile_habit_alignment?.primary_alignment ||
+      sourceMissionControl?.priority_engine?.profile_habit_alignment?.primary_alignment ||
+      sourceMissionControl?.portfolio_operating_system?.governance_layer?.profile_habit_alignment?.primary_alignment ||
+      null
+    );
+  };
 
   const scoreMissionForProfile = (item) => {
     if (!item) return 0;
@@ -658,6 +678,24 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       return `Controleer de open stap voor ${botName}.`;
     }
     return summary || `Controleer de open stap voor ${botName}.`;
+  };
+
+  const humanizeBehavioralPriorityBadge = (item = {}) => {
+    const bias = String(item?.behavioral_priority_bias || "").toLowerCase();
+    if (bias === "up") return "extra reviewgewicht";
+    if (bias === "down") return "impuls geremd";
+    return "";
+  };
+
+  const behavioralPriorityBadgeTone = (item = {}) => {
+    const bias = String(item?.behavioral_priority_bias || "").toLowerCase();
+    if (bias === "up") {
+      return "bg-amber-50 text-amber-700 border-amber-200/80 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-900/50";
+    }
+    if (bias === "down") {
+      return "bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-900/50";
+    }
+    return "";
   };
 
   const humanizeActionLabel = (action = {}, sourceItem = null) => {
@@ -1363,6 +1401,12 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             <p className="mt-1 text-[11px] font-black text-slate-900 dark:text-slate-100 leading-snug">
               {portfolioOS?.control_plane?.headline || priorityEngine?.headline || "Finn laat hier zien hoe prioriteit, discipline en portfolio-overzicht samenkomen."}
             </p>
+            {primaryProfileHabitAlignment && (
+              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-200/80 bg-amber-50 px-2.5 py-1 text-[7px] font-black uppercase tracking-widest text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-300">
+                <Shield size={10} />
+                Behavioral rem: {primaryBehaviorLabel}
+              </div>
+            )}
           </div>
           {portfolioOS?.operating_posture && (
             <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">
@@ -1399,6 +1443,16 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 {priorityEngine.open_counts?.high_priority_count || 0} high
               </span>
             </div>
+            {primaryBehaviorRule && (
+              <div className="mt-2 rounded-lg border border-amber-200/80 bg-white/80 px-2.5 py-2 dark:border-amber-900/40 dark:bg-slate-950/35">
+                <div className="text-[7px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
+                  Waarom Finn remt
+                </div>
+                <p className="mt-1 text-[9px] font-semibold leading-snug text-slate-600 dark:text-slate-300">
+                  {primaryBehaviorRule}
+                </p>
+              </div>
+            )}
             {priorityEngine.why_now && (
               <p className="mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
                 {priorityEngine.why_now}
@@ -1410,9 +1464,16 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                   <div key={`${item.id || item.title}-${index}`} className="rounded-lg bg-white/80 dark:bg-slate-950/40 px-2.5 py-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[10px] font-black text-slate-900 dark:text-slate-100 leading-tight">{item.title}</span>
-                      <span className="text-[7px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-                        {item.lane || item.priority}
-                      </span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[7px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
+                          {item.lane || item.priority}
+                        </span>
+                        {humanizeBehavioralPriorityBadge(item) && (
+                          <span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-widest ${behavioralPriorityBadgeTone(item)}`}>
+                            {humanizeBehavioralPriorityBadge(item)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {(item.why_now || item.source_reason) && (
                       <p className="mt-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
@@ -1487,6 +1548,16 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                   <p className="mt-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
                     {portfolioOS.control_plane.why_now}
                   </p>
+                )}
+                {portfolioOS.control_plane?.habit_override && (
+                  <div className="mt-2 rounded-lg bg-white/80 dark:bg-slate-950/40 px-2.5 py-2">
+                    <div className="text-[7px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">
+                      Gedragsregel nu
+                    </div>
+                    <p className="mt-1 text-[9px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
+                      {portfolioOS.control_plane.habit_override}
+                    </p>
+                  </div>
                 )}
                 {Array.isArray(portfolioOS.next_best_actions) && portfolioOS.next_best_actions.length > 0 && (
                   <div className="mt-2 space-y-1">
@@ -2479,6 +2550,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       : section === "reviews"
         ? "border-violet-100 dark:border-violet-900/50 bg-violet-50/45 dark:bg-violet-950/15"
         : "border-rose-100 dark:border-rose-900/50 bg-rose-50/45 dark:bg-rose-950/15";
+    const behavioralBadge = humanizeBehavioralPriorityBadge(item);
 
     return (
       <div key={missionIdentityKey(item) || item.id || item.title} className={`rounded-xl border px-3 py-3 ${tone}`}>
@@ -2495,17 +2567,24 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 : humanizeMissionReason(item)}
             </p>
           </div>
-          {humanizeMissionBadge(item, section) && (
-            <span className={`text-[8px] font-black uppercase tracking-widest ${
-              String(item.priority || item.status).toLowerCase().includes("high") || String(item.status || "").toLowerCase().includes("block")
-                ? "text-rose-600"
-                : String(item.priority || item.status).toLowerCase().includes("medium") || String(item.status || "").toLowerCase().includes("wait")
-                  ? "text-amber-600"
-                  : "text-emerald-600"
-            }`}>
-              {humanizeMissionBadge(item, section)}
-            </span>
-          )}
+          <div className="flex flex-col items-end gap-1">
+            {humanizeMissionBadge(item, section) && (
+              <span className={`text-[8px] font-black uppercase tracking-widest ${
+                String(item.priority || item.status).toLowerCase().includes("high") || String(item.status || "").toLowerCase().includes("block")
+                  ? "text-rose-600"
+                  : String(item.priority || item.status).toLowerCase().includes("medium") || String(item.status || "").toLowerCase().includes("wait")
+                    ? "text-amber-600"
+                    : "text-emerald-600"
+              }`}>
+                {humanizeMissionBadge(item, section)}
+              </span>
+            )}
+            {behavioralBadge && (
+              <span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-widest ${behavioralPriorityBadgeTone(item)}`}>
+                {behavioralBadge}
+              </span>
+            )}
+          </div>
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {item.asset && (
@@ -2529,6 +2608,16 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             </span>
           )}
         </div>
+        {item.behavioral_priority_reason && (
+          <div className="mt-2 rounded-lg border border-white/80 dark:border-slate-900/40 bg-white/70 dark:bg-slate-950/35 px-2.5 py-2">
+            <div className="text-[7px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              Finn remt hierom
+            </div>
+            <p className="mt-1 text-[9px] font-semibold leading-snug text-slate-600 dark:text-slate-300">
+              {item.behavioral_priority_reason}
+            </p>
+          </div>
+        )}
         {renderMissionActionRow(item, section)}
       </div>
     );
@@ -3987,6 +4076,12 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   const shouldCondenseMissionControl = pathname === "/dashboard" && !isOnboarding;
   const showFullMissionControl = !shouldCondenseMissionControl;
   const overlayMissionSections = buildMissionOverlaySections();
+  const primaryProfileHabitAlignment = pickPrimaryProfileHabitAlignment(missionControl);
+  const primaryBehaviorLabel = primaryProfileHabitAlignment
+    ? humanizeBehaviorFlagLabel(primaryProfileHabitAlignment.flag, primaryProfileHabitAlignment.label)
+    : "";
+  const primaryBehaviorRule = String(primaryProfileHabitAlignment?.recommended_rule || "").trim();
+  const primaryBehaviorCost = String(primaryProfileHabitAlignment?.behavioral_cost || "").trim();
   const primaryCoachingItem =
     overlayMissionSections.todayItems?.[0] ||
     missionControl?.coaching_loop?.daily_priority_stack?.[0] ||
@@ -4010,6 +4105,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     missionControl?.behavioral_insight?.coaching?.primary_reflection ||
     missionControl?.summary?.headline ||
     null;
+  const compactBehavioralReason =
+    String(primaryCoachingItem?.behavioral_priority_reason || "").trim() ||
+    primaryBehaviorCost ||
+    primaryBehaviorRule ||
+    "";
   const missionDetailSections = [
     {
       key: "today",
@@ -4248,6 +4348,16 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                         <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Waarom</div>
                         <p className="mt-1 text-[10px] font-semibold leading-snug text-slate-600 dark:text-slate-300">
                           {compactMissionReason}
+                        </p>
+                      </div>
+                    )}
+                    {primaryProfileHabitAlignment && compactBehavioralReason && (
+                      <div className="mt-2 rounded-lg border border-amber-200/80 bg-amber-50/70 px-2.5 py-2 dark:border-amber-900/40 dark:bg-amber-950/20">
+                        <div className="text-[7px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
+                          FINN remt op {primaryBehaviorLabel}
+                        </div>
+                        <p className="mt-1 text-[9px] font-semibold leading-snug text-slate-700 dark:text-slate-200">
+                          {compactBehavioralReason}
                         </p>
                       </div>
                     )}

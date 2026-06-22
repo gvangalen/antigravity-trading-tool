@@ -1,13 +1,49 @@
 "use client";
 
 import { Shield, AlertTriangle } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
+
+const BEHAVIOR_FLAG_LABELS = {
+  fomo: "FOMO",
+  overtrades: "Overtrading",
+  leverage_seeking: "Leverage-neiging",
+  holds_losers_too_long: "Verlies te lang laten lopen",
+  takes_profit_too_early: "Winst te vroeg nemen",
+};
+
+const humanizeBehaviorLabel = (flag, fallbackLabel = "") =>
+  fallbackLabel || BEHAVIOR_FLAG_LABELS[String(flag || "").trim()] || String(flag || "").replaceAll("_", " ");
+
+const extractBehavioralFriction = (decision = {}, result = {}) => {
+  const direct =
+    decision?.pending_behavioral_memory_friction ||
+    decision?.memory_friction ||
+    result?.pending_behavioral_memory_friction ||
+    result?.memory_friction ||
+    null;
+  if (direct && typeof direct === "object") return direct;
+  const alignment =
+    decision?.profile_habit_alignment?.primary_alignment ||
+    result?.profile_habit_alignment?.primary_alignment ||
+    null;
+  if (alignment) {
+    return {
+      source: "profile_habit_alignment",
+      message: alignment.behavioral_cost || alignment.summary,
+      safe_alternative: alignment.recommended_rule,
+      label: humanizeBehaviorLabel(alignment.flag, alignment.label),
+    };
+  }
+  return null;
+};
 
 export default function GuardrailsPanel({
   decision = {},
   bot = {},
   onRefresh,
 }) {
+  const telemetryKeyRef = useRef("");
 
   const result = decision?.guardrails_result || {};
   const guardrails = result?.guardrails || {};
@@ -48,6 +84,34 @@ export default function GuardrailsPanel({
     warnings?.[0] ||
     blockedBy ||
     "within risk limits";
+  const behavioralFriction = extractBehavioralFriction(decision, result);
+
+  useEffect(() => {
+    if (!behavioralFriction?.message) return;
+    const nextKey = [
+      decision?.decision_id || decision?.bot_id || bot?.id || "guardrails",
+      behavioralFriction?.label || behavioralFriction?.source || "friction",
+      behavioralFriction?.message || "",
+    ].join(":");
+    if (telemetryKeyRef.current === nextKey) return;
+    telemetryKeyRef.current = nextKey;
+    trackAssistantEvent({
+      event_name: "behavioral_intervention_seen",
+      page: "/bot",
+      surface: "bot_guardrails",
+      asset: decision?.symbol || bot?.symbol || null,
+      flow_type: "behavioral_intervention",
+      action_type: "guardrail_panel_visible",
+      decision_id: decision?.decision_id || null,
+      bot_id: decision?.bot_id || bot?.id || null,
+      next_best_action: behavioralFriction?.safe_alternative || null,
+      metadata: {
+        behavior_flag: decision?.profile_habit_alignment?.primary_alignment?.flag || null,
+        behavior_label: behavioralFriction?.label || null,
+        source: behavioralFriction?.source || null,
+      },
+    });
+  }, [behavioralFriction, bot?.id, bot?.symbol, decision?.bot_id, decision?.decision_id, decision?.profile_habit_alignment, decision?.symbol]);
 
   /* ============================
      GUARDRAIL SETTINGS
@@ -154,6 +218,24 @@ export default function GuardrailsPanel({
            {reason === "within risk limits" ? "✓ All safety parameters nominal" : reason}
         </div>
       </div>
+
+      {behavioralFriction && (
+        <div className="rounded-xl border border-amber-200/70 bg-amber-50/70 p-3 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+          <div className="text-[9px] font-black uppercase tracking-widest">
+            Behavioral friction{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
+          </div>
+          {behavioralFriction?.message && (
+            <p className="mt-2 text-xs font-semibold leading-relaxed">
+              {behavioralFriction.message}
+            </p>
+          )}
+          {behavioralFriction?.safe_alternative && (
+            <div className="mt-2 rounded-lg border border-white/70 bg-white/70 px-2.5 py-2 text-[11px] font-semibold leading-relaxed text-slate-700 dark:border-slate-900/40 dark:bg-slate-950/35 dark:text-slate-200">
+              {behavioralFriction.safe_alternative}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* WARNINGS STACK */}
       {warnings.length > 1 && (

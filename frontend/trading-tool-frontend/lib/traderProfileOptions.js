@@ -31,6 +31,14 @@ export const EXPERIENCE_LEVEL_VALUES = ["beginner", "intermediate", "advanced", 
 
 export const RISK_PROFILE_VALUES = ["conservative", "balanced", "aggressive"];
 
+export const BEHAVIOR_FLAG_VALUES = [
+  "fomo",
+  "takes_profit_too_early",
+  "holds_losers_too_long",
+  "overtrades",
+  "leverage_seeking",
+];
+
 function createOptions(values, labels = {}) {
   return values.map((value) => ({
     value,
@@ -62,6 +70,10 @@ export function getRiskProfileOptions(t) {
   return createOptions(RISK_PROFILE_VALUES, t?.traderProfile?.options?.riskProfiles);
 }
 
+export function getBehaviorFlagOptions(t) {
+  return createOptions(BEHAVIOR_FLAG_VALUES, t?.traderProfile?.options?.behaviorFlags);
+}
+
 export function createOptionLabelMap(options) {
   return options.reduce((acc, option) => {
     acc[option.value] = option.label;
@@ -84,6 +96,7 @@ export function normalizeTraderProfilePreferences(preferences = {}) {
   const investmentGoals = ensureArray(preferences.investment_goals_list ?? preferences.investment_goals);
   const experienceLevels = ensureArray(preferences.experience_levels ?? preferences.experience_level);
   const riskProfiles = ensureArray(preferences.risk_profiles ?? preferences.risk_profile);
+  const behaviorFlags = ensureArray(preferences.behavior_flags ?? preferences.behavior_flag);
 
   return {
     trader_types: traderTypes,
@@ -92,6 +105,7 @@ export function normalizeTraderProfilePreferences(preferences = {}) {
     investment_goals_list: investmentGoals,
     experience_levels: experienceLevels,
     risk_profiles: riskProfiles,
+    behavior_flags: behaviorFlags,
   };
 }
 
@@ -100,6 +114,7 @@ export function serializeTraderProfilePreferences(form = {}) {
   const investmentGoals = ensureArray(form.investment_goals_list);
   const experienceLevels = ensureArray(form.experience_levels);
   const riskProfiles = ensureArray(form.risk_profiles);
+  const behaviorFlags = ensureArray(form.behavior_flags);
 
   return {
     trader_types: traderTypes,
@@ -112,5 +127,6 @@ export function serializeTraderProfilePreferences(form = {}) {
     experience_level: experienceLevels[0] || "",
     risk_profiles: riskProfiles,
     risk_profile: riskProfiles[0] || "",
+    behavior_flags: behaviorFlags,
   };
 }

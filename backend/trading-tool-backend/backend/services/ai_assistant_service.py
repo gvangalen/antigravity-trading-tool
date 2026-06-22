@@ -72,6 +72,7 @@ def _build_adaptive_profile_str(
         f"- Investment Goals: {_join(profile.get('investment_goals'))}\n"
         f"- Experience Levels: {_join(profile.get('experience_levels'))}\n"
         f"- Risk Profiles: {_join(profile.get('risk_profiles'))}\n"
+        f"- Behavior Flags: {_join(profile.get('behavior_flags'))}\n"
         f"- Behavioral Trading Signals:\n"
         f"  * Configured Custom Setups: {behavioral_signals['setups_count'] if behavioral_signals else 0}\n"
         f"  * Configured Custom Strategies: {behavioral_signals['strategies_count'] if behavioral_signals else 0}\n"
@@ -1773,6 +1774,7 @@ class AiAssistantService:
         trader_types = set(((context or {}).get("trader_profile") or {}).get("trader_types") or [])
         experience_levels = set(((context or {}).get("trader_profile") or {}).get("experience_levels") or [])
         risk_profiles = set(((context or {}).get("trader_profile") or {}).get("risk_profiles") or [])
+        behavior_flags = set(((context or {}).get("trader_profile") or {}).get("behavior_flags") or [])
         if profile_used:
             if trader_types & {"investor", "dca_investor"}:
                 action = f"Voor jouw langere horizon hoef je {symbol} nu niet te forceren; toets eerst of dit je plan echt verandert."
@@ -1794,6 +1796,17 @@ class AiAssistantService:
                     action = f"Voor jouw kortere horizon stap je nu niet in {symbol} tot timing en blockers weer meewerken."
                 else:
                     action = f"Wacht met nieuwe actie in {symbol} tot de sterkste blocker echt weg is."
+            if "fomo" in behavior_flags:
+                action = f"Wacht bij {symbol} eerst op bevestiging; laat geen haast of FOMO je timing overnemen."
+                conclusion = f"{conclusion} Je coachingsprofiel vraagt hier extra rust."
+            elif "overtrades" in behavior_flags:
+                action = f"Voeg voor {symbol} nu alleen iets toe als deze stap duidelijk beter is dan je laatste actie."
+            elif "holds_losers_too_long" in behavior_flags:
+                action = f"Check voor {symbol} eerst je invalidatie en exitgrens voordat je iets laat doorlopen."
+            elif "takes_profit_too_early" in behavior_flags:
+                action = f"Leg voor {symbol} eerst je exitplan vast zodat je een winnaar niet te vroeg dichtzet."
+            elif "leverage_seeking" in behavior_flags:
+                action = f"Gebruik voor {symbol} eerst de minst agressieve uitvoering; leverage is hier geen shortcut."
         else:
             why_prefix = ""
 
@@ -1810,6 +1823,11 @@ class AiAssistantService:
 
         if setup:
             why += f" Setup: {setup.get('name')} (#{setup.get('id')}), match {analysis.get('setup_match_percentage')}%."
+        if profile_used:
+            if "fomo" in behavior_flags:
+                why += " FOMO maakt timing fragieler als bevestiging nog ontbreekt."
+            elif "overtrades" in behavior_flags:
+                why += " Extra activiteit voelt snel als controle, maar kan hier vooral ruis toevoegen."
 
         bot_count = int(bot_today.get("decision_count") or 0)
         bot_conclusion = f"{bot_count} bot-beslissing(en) voor vandaag."

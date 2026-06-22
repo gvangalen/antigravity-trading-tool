@@ -108,6 +108,14 @@ const FINN_REPORT_OPTIONS = [
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const BEHAVIOR_FLAG_LABELS = {
+  fomo: 'FOMO',
+  overtrades: 'Overtrading',
+  leverage_seeking: 'Leverage-neiging',
+  holds_losers_too_long: 'Verliezers te lang laten lopen',
+  takes_profit_too_early: 'Winst te vroeg nemen',
+};
+
 /* =====================================================
 HELPERS
 ===================================================== */
@@ -115,6 +123,34 @@ HELPERS
 function sortDatesDesc(list) {
   if (!Array.isArray(list)) return [];
   return [...list].sort((a, b) => (a < b ? 1 : -1));
+}
+
+function humanizeBehaviorFlagLabel(flag, fallbackLabel = '') {
+  return fallbackLabel || BEHAVIOR_FLAG_LABELS[String(flag || '').trim()] || String(flag || '').replaceAll('_', ' ');
+}
+
+function pickPrimaryProfileHabitAlignment(source = null) {
+  if (!source || typeof source !== 'object') return null;
+  return (
+    source?.profile_habit_alignment?.primary_alignment ||
+    source?.priority_engine?.profile_habit_alignment?.primary_alignment ||
+    source?.portfolio_operating_system?.governance_layer?.profile_habit_alignment?.primary_alignment ||
+    null
+  );
+}
+
+function humanizeBehavioralPriorityBadge(item = {}) {
+  const bias = String(item?.behavioral_priority_bias || '').toLowerCase();
+  if (bias === 'up') return 'extra reviewgewicht';
+  if (bias === 'down') return 'impuls geremd';
+  return '';
+}
+
+function behavioralPriorityBadgeTone(item = {}) {
+  const bias = String(item?.behavioral_priority_bias || '').toLowerCase();
+  if (bias === 'up') return 'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300';
+  if (bias === 'down') return 'border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300';
+  return 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300';
 }
 
 function getReportSignature(report) {
@@ -735,6 +771,35 @@ function FinnGovernanceSurface({ analysis }) {
   const memoryV2 = analysis?.memory_v2 || null;
   const portfolioOS = analysis?.portfolio_operating_system || null;
   const governanceSummary = analysis?.governance_events_summary || null;
+  const primaryProfileHabitAlignment = pickPrimaryProfileHabitAlignment(analysis);
+  const behaviorLabel = primaryProfileHabitAlignment
+    ? humanizeBehaviorFlagLabel(primaryProfileHabitAlignment.flag, primaryProfileHabitAlignment.label)
+    : '';
+  const telemetryKeyRef = useRef('');
+
+  useEffect(() => {
+    if (!primaryProfileHabitAlignment) return;
+    const nextKey = [
+      primaryProfileHabitAlignment.flag || 'unknown',
+      primaryProfileHabitAlignment.evidence_strength || 'unknown',
+      priorityEngine?.headline || portfolioOS?.operating_posture || 'report',
+    ].join(':');
+    if (telemetryKeyRef.current === nextKey) return;
+    telemetryKeyRef.current = nextKey;
+    trackAssistantEvent({
+      event_name: 'behavioral_intervention_seen',
+      page: '/report',
+      surface: 'report_governance',
+      flow_type: 'behavioral_intervention',
+      action_type: 'report_alignment_visible',
+      next_best_action: primaryProfileHabitAlignment.recommended_rule || null,
+      metadata: {
+        behavior_flag: primaryProfileHabitAlignment.flag,
+        behavior_label: behaviorLabel,
+        evidence_strength: primaryProfileHabitAlignment.evidence_strength,
+      },
+    });
+  }, [behaviorLabel, portfolioOS?.operating_posture, primaryProfileHabitAlignment, priorityEngine?.headline]);
 
   if (!priorityEngine && !memoryV2 && !portfolioOS && !governanceSummary) {
     return null;
@@ -791,6 +856,12 @@ function FinnGovernanceSurface({ analysis }) {
             <p className="mt-2 text-sm font-black leading-relaxed text-slate-900 dark:text-slate-100">
               {portfolioOS?.control_plane?.headline || priorityEngine?.headline || 'Finn laat hier zien hoe decision review, discipline, prioriteit en portfolio-control samen werken.'}
             </p>
+            {primaryProfileHabitAlignment && (
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-300">
+                <Shield size={12} />
+                Behavioral rem: {behaviorLabel}
+              </div>
+            )}
           </div>
           {portfolioOS?.operating_posture && (
             <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">
@@ -843,6 +914,16 @@ function FinnGovernanceSurface({ analysis }) {
             {priorityEngine.why_now && (
               <p className="mt-3 text-sm font-semibold leading-relaxed">{priorityEngine.why_now}</p>
             )}
+            {primaryProfileHabitAlignment?.recommended_rule && (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-white/80 p-3 dark:border-amber-900/40 dark:bg-slate-950/35">
+                <div className="text-[9px] font-black uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">
+                  Waarom Finn remt
+                </div>
+                <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
+                  {primaryProfileHabitAlignment.recommended_rule}
+                </p>
+              </div>
+            )}
             {topPriorities.length > 0 && (
               <div className="mt-3 space-y-2">
                 {topPriorities.map((item, index) => (
@@ -851,12 +932,29 @@ function FinnGovernanceSurface({ analysis }) {
                       <span className="text-[10px] font-black uppercase tracking-[0.14em] text-violet-900 dark:text-violet-100">
                         {item.title}
                       </span>
-                      <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
-                        {item.lane || item.priority}
-                      </span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                          {item.lane || item.priority}
+                        </span>
+                        {humanizeBehavioralPriorityBadge(item) && (
+                          <span className={`rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${behavioralPriorityBadgeTone(item)}`}>
+                            {humanizeBehavioralPriorityBadge(item)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {(item.why_now || item.source_reason) && (
                       <p className="mt-2 text-xs font-semibold leading-relaxed">{item.why_now || item.source_reason}</p>
+                    )}
+                    {item.behavioral_priority_reason && (
+                      <div className="mt-2 rounded-lg border border-white/60 dark:border-slate-900/50 bg-white/80 dark:bg-slate-950/35 p-2.5">
+                        <div className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                          Finn remt hierom
+                        </div>
+                        <p className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
+                          {item.behavioral_priority_reason}
+                        </p>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -908,6 +1006,16 @@ function FinnGovernanceSurface({ analysis }) {
             </div>
             {portfolioOS.control_plane?.why_now && (
               <p className="mt-3 text-sm font-semibold leading-relaxed">{portfolioOS.control_plane.why_now}</p>
+            )}
+            {portfolioOS.control_plane?.habit_override && (
+              <div className="mt-3 rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
+                <div className="text-[9px] font-black uppercase tracking-[0.14em] opacity-80">
+                  Gedragsregel nu
+                </div>
+                <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
+                  {portfolioOS.control_plane.habit_override}
+                </p>
+              </div>
             )}
             {nextActions.length > 0 && (
               <div className="mt-3 space-y-2">

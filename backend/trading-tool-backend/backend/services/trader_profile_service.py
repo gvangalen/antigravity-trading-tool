@@ -29,6 +29,13 @@ GOAL_VALUES = [
 ]
 EXPERIENCE_LEVEL_VALUES = ["beginner", "intermediate", "advanced", "professional"]
 RISK_PROFILE_VALUES = ["conservative", "balanced", "aggressive"]
+BEHAVIOR_FLAG_VALUES = [
+    "fomo",
+    "takes_profit_too_early",
+    "holds_losers_too_long",
+    "overtrades",
+    "leverage_seeking",
+]
 INTRADAY_TIMEFRAMES = {"5m", "15m", "1h"}
 SWING_TIMEFRAMES = {"4h", "1d"}
 INVESTOR_TIMEFRAMES = {"1w", "1m"}
@@ -75,6 +82,10 @@ def normalize_trader_profile_preferences(preferences: Optional[dict]) -> Dict[st
             _ensure_array(prefs.get("risk_profiles")) or _ensure_array(prefs.get("risk_profile")),
             RISK_PROFILE_VALUES,
         ),
+        "behavior_flags": _normalize(
+            _ensure_array(prefs.get("behavior_flags")) or _ensure_array(prefs.get("behavior_flag")),
+            BEHAVIOR_FLAG_VALUES,
+        ),
     }
 
 
@@ -95,6 +106,8 @@ def build_trader_profile_summary(profile: Optional[Dict[str, List[str]]]) -> str
         segments.append(payload["experience_levels"][0])
     if payload.get("risk_profiles"):
         segments.append(payload["risk_profiles"][0])
+    if payload.get("behavior_flags"):
+        segments.append(f"behavior:{','.join(payload['behavior_flags'][:2])}")
     return " | ".join(segments)
 
 

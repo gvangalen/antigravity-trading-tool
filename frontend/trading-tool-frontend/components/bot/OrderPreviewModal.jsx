@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { assistantChat } from "@/lib/api/ai";
+import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import {
   AlertCircle,
   ArrowRight,
@@ -42,6 +43,42 @@ const detailValue = (value) => {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "Ja" : "Nee";
   return String(value);
+};
+
+const BEHAVIOR_FLAG_LABELS = {
+  fomo: "FOMO",
+  overtrades: "Overtrading",
+  leverage_seeking: "Leverage-neiging",
+  holds_losers_too_long: "Verlies te lang laten lopen",
+  takes_profit_too_early: "Winst te vroeg nemen",
+};
+
+const humanizeBehaviorLabel = (flag, fallbackLabel = "") =>
+  fallbackLabel || BEHAVIOR_FLAG_LABELS[String(flag || "").trim()] || String(flag || "").replaceAll("_", " ");
+
+const extractBehavioralFriction = (preview = {}, review = null, adherence = null) => {
+  const direct =
+    preview?.pending_behavioral_memory_friction ||
+    preview?.memory_friction ||
+    preview?.behavioral_memory_friction ||
+    review?.pending_behavioral_memory_friction ||
+    adherence?.pending_behavioral_memory_friction ||
+    null;
+  if (direct && typeof direct === "object") return direct;
+  const alignment =
+    review?.profile_habit_alignment?.primary_alignment ||
+    adherence?.profile_habit_alignment?.primary_alignment ||
+    preview?.profile_habit_alignment?.primary_alignment ||
+    null;
+  if (alignment) {
+    return {
+      source: "profile_habit_alignment",
+      message: alignment.behavioral_cost || alignment.summary,
+      safe_alternative: alignment.recommended_rule,
+      label: humanizeBehaviorLabel(alignment.flag, alignment.label),
+    };
+  }
+  return null;
 };
 
 function DetailRow({ label, value, emphasis = false }) {
@@ -124,6 +161,8 @@ export default function OrderPreviewModal({
   const [finnAdherence, setFinnAdherence] = useState(null);
   const [finnLoading, setFinnLoading] = useState(false);
   const [finnError, setFinnError] = useState("");
+  const telemetryKeyRef = useRef("");
+  const ackTelemetryKeyRef = useRef("");
 
   useEffect(() => {
     if (loading) {
@@ -234,6 +273,67 @@ export default function OrderPreviewModal({
     Number.isFinite(Number(liveMarketPrice?.age_seconds)) ? ["Market prijs leeftijd", `${liveMarketPrice.age_seconds} sec`] : null,
     liveMarketPrice?.market_timestamp ? ["Market timestamp", liveMarketPrice.market_timestamp] : null,
   ].filter(Boolean);
+  const behavioralFriction = extractBehavioralFriction(preview, finnReview, finnAdherence);
+
+  useEffect(() => {
+    if (!behavioralFriction?.message) return;
+    const nextKey = [
+      preview?.trace_id || preview?.bot_id || preview?.symbol || "preflight",
+      behavioralFriction?.label || behavioralFriction?.source || "friction",
+      behavioralFriction?.message || "",
+    ].join(":");
+    if (telemetryKeyRef.current === nextKey) return;
+    telemetryKeyRef.current = nextKey;
+    trackAssistantEvent({
+      event_name: "behavioral_intervention_seen",
+      page: "/bot",
+      surface: isLive ? "live_preflight" : "order_preview",
+      asset: preview?.symbol || null,
+      flow_type: "behavioral_intervention",
+      action_type: isLive ? "preflight_friction_visible" : "preview_friction_visible",
+      decision_id: preview?.decision_id || null,
+      bot_id: preview?.bot_id || null,
+      trace_id: preview?.trace_id || null,
+      next_best_action: behavioralFriction?.safe_alternative || null,
+      metadata: {
+        behavior_flag:
+          finnReview?.profile_habit_alignment?.primary_alignment?.flag ||
+          finnAdherence?.profile_habit_alignment?.primary_alignment?.flag ||
+          preview?.profile_habit_alignment?.primary_alignment?.flag ||
+          null,
+        behavior_label: behavioralFriction?.label || null,
+        source: behavioralFriction?.source || null,
+      },
+    });
+  }, [behavioralFriction, finnAdherence?.profile_habit_alignment, finnReview?.profile_habit_alignment, isLive, preview?.bot_id, preview?.decision_id, preview?.symbol, preview?.trace_id, preview?.profile_habit_alignment]);
+
+  useEffect(() => {
+    if (!liveIntentConfirmed || !behavioralFriction?.message || !isLive) return;
+    const nextKey = `${preview?.trace_id || preview?.bot_id || "live"}:${behavioralFriction?.label || behavioralFriction?.source || "ack"}`;
+    if (ackTelemetryKeyRef.current === nextKey) return;
+    ackTelemetryKeyRef.current = nextKey;
+    trackAssistantEvent({
+      event_name: "behavioral_intervention_acknowledged",
+      page: "/bot",
+      surface: "live_preflight",
+      asset: preview?.symbol || null,
+      flow_type: "behavioral_intervention",
+      action_type: "live_behavioral_ack",
+      decision_id: preview?.decision_id || null,
+      bot_id: preview?.bot_id || null,
+      trace_id: preview?.trace_id || null,
+      next_best_action: behavioralFriction?.safe_alternative || null,
+      metadata: {
+        behavior_flag:
+          finnReview?.profile_habit_alignment?.primary_alignment?.flag ||
+          finnAdherence?.profile_habit_alignment?.primary_alignment?.flag ||
+          preview?.profile_habit_alignment?.primary_alignment?.flag ||
+          null,
+        behavior_label: behavioralFriction?.label || null,
+        source: behavioralFriction?.source || null,
+      },
+    });
+  }, [behavioralFriction, finnAdherence?.profile_habit_alignment, finnReview?.profile_habit_alignment, isLive, liveIntentConfirmed, preview?.bot_id, preview?.decision_id, preview?.symbol, preview?.trace_id, preview?.profile_habit_alignment]);
 
   const canConfirm = !loading && !isBlocked && (!isLive || liveIntentConfirmed);
   const primaryButtonLabel = loading
@@ -365,6 +465,17 @@ export default function OrderPreviewModal({
                             {item}
                           </div>
                         ))}
+                      </div>
+                    )}
+                    {behavioralFriction?.message && (
+                      <div className="mt-3 rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
+                        <div className="text-[9px] font-black uppercase tracking-widest opacity-70">
+                          Behavioral friction{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
+                        </div>
+                        <p className="mt-2 text-xs font-semibold leading-relaxed">{behavioralFriction.message}</p>
+                        {behavioralFriction?.safe_alternative && (
+                          <p className="mt-2 text-[11px] font-black leading-relaxed">{behavioralFriction.safe_alternative}</p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -514,7 +625,7 @@ export default function OrderPreviewModal({
                 </div>
               </div>
 
-              {isLive && !isBlocked && (
+                {isLive && !isBlocked && (
                 <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50/80 p-5 dark:border-amber-900/40 dark:bg-amber-950/20">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
                     <ShieldAlert size={13} />
@@ -531,6 +642,11 @@ export default function OrderPreviewModal({
                       Ik begrijp dat deze bevestiging een echte live order kan plaatsen en dat de preflight alleen advies- en safety-context gaf.
                     </span>
                   </label>
+                  {behavioralFriction?.safe_alternative && (
+                    <div className="mt-4 rounded-xl border border-white/70 bg-white/70 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-900 dark:border-slate-900/40 dark:bg-slate-950/30 dark:text-amber-100">
+                      Extra gedragsrem: {behavioralFriction.safe_alternative}
+                    </div>
+                  )}
                 </div>
               )}
 

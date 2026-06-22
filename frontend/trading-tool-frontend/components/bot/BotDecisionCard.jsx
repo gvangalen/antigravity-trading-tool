@@ -12,6 +12,38 @@ import {
   TrendingUp,
 } from "lucide-react";
 
+const BEHAVIOR_FLAG_LABELS = {
+  fomo: "FOMO",
+  overtrades: "Overtrading",
+  leverage_seeking: "Leverage-neiging",
+  holds_losers_too_long: "Verlies te lang laten lopen",
+  takes_profit_too_early: "Winst te vroeg nemen",
+};
+
+const humanizeBehaviorLabel = (flag, fallbackLabel = "") =>
+  fallbackLabel || BEHAVIOR_FLAG_LABELS[String(flag || "").trim()] || String(flag || "").replaceAll("_", " ");
+
+const extractBehavioralFriction = (decision = {}) => {
+  const direct =
+    decision?.pending_behavioral_memory_friction ||
+    decision?.memory_friction ||
+    decision?.guardrails_result?.pending_behavioral_memory_friction ||
+    decision?.guardrails_result?.memory_friction ||
+    decision?.payload?.memory_friction ||
+    null;
+  if (direct && typeof direct === "object") return direct;
+  const alignment = decision?.profile_habit_alignment?.primary_alignment || null;
+  if (alignment) {
+    return {
+      source: "profile_habit_alignment",
+      message: alignment.behavioral_cost || alignment.summary,
+      safe_alternative: alignment.recommended_rule,
+      label: humanizeBehaviorLabel(alignment.flag, alignment.label),
+    };
+  }
+  return null;
+};
+
 export default function BotTodayProposal({
   bot = null,
   portfolio = null,
@@ -146,6 +178,7 @@ export default function BotTodayProposal({
   const budgetTotal = Number(portfolio?.budget?.total_eur ?? 0);
   const positionValue = Number(portfolio?.stats?.position_value_eur ?? 0);
   const guardrails = decision?.guardrails_result || decision?.guardrails || {};
+  const behavioralFriction = extractBehavioralFriction(decision);
 
   /* =====================================================
      TRADE DETECTIE (🔥 BELANGRIJK FIX)
@@ -305,6 +338,23 @@ export default function BotTodayProposal({
         <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Next Safe Step</div>
         <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">{nextStepMessage}</p>
       </div>
+      {behavioralFriction && (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-white/85 p-3 text-amber-700">
+          <div className="text-[8px] font-black uppercase tracking-widest">
+            Behavioral friction{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
+          </div>
+          {behavioralFriction?.message && (
+            <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">
+              {behavioralFriction.message}
+            </p>
+          )}
+          {behavioralFriction?.safe_alternative && (
+            <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-amber-700">
+              {behavioralFriction.safe_alternative}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 

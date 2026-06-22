@@ -98,6 +98,19 @@ class FinnProductAnalyticsService:
             events = list(self._events)
 
         event_counts = Counter(event["event_name"] for event in events)
+        behavioral_flag_counts = Counter()
+        behavioral_surface_counts = Counter()
+        for event in events:
+            metadata = event.get("metadata") or {}
+            behavior_flag = (
+                metadata.get("behavior_flag")
+                or metadata.get("primary_flag")
+                or metadata.get("behavior_label")
+            )
+            if behavior_flag:
+                behavioral_flag_counts[str(behavior_flag)] += 1
+            if event.get("event_name") in {"behavioral_intervention_seen", "behavioral_intervention_acknowledged"}:
+                behavioral_surface_counts[str(event.get("surface") or event.get("page") or "unknown")] += 1
         prompt_counts = Counter(
             event["prompt_text"]
             for event in events
@@ -223,6 +236,16 @@ class FinnProductAnalyticsService:
                 for event in events
                 if event["event_name"] == "priority_engine_used" or event.get("flow_type") == "priority_engine"
             ),
+            "behavioral_intervention_seen_count": event_counts.get("behavioral_intervention_seen", 0),
+            "behavioral_intervention_ack_count": event_counts.get("behavioral_intervention_acknowledged", 0),
+            "top_behavioral_flags": [
+                {"flag": flag, "count": count}
+                for flag, count in behavioral_flag_counts.most_common(8)
+            ],
+            "top_behavioral_surfaces": [
+                {"surface": surface, "count": count}
+                for surface, count in behavioral_surface_counts.most_common(8)
+            ],
             "repeated_user_signal": {
                 "users_seen": len(repeated_user_sessions),
                 "users_with_multiple_sessions": repeated_users,
@@ -407,11 +430,50 @@ class FinnProductAnalyticsService:
                         )::int,
                         COUNT(*) FILTER (
                             WHERE event_name = 'priority_engine_used' OR flow_type = 'priority_engine'
+                        )::int,
+                        COUNT(*) FILTER (
+                            WHERE event_name = 'behavioral_intervention_seen'
+                        )::int,
+                        COUNT(*) FILTER (
+                            WHERE event_name = 'behavioral_intervention_acknowledged'
                         )::int
                     FROM {PERSISTED_EVENTS_TABLE}
                     """
                 )
-                decision_review_usage_count, priority_engine_usage_count = cur.fetchone()
+                (
+                    decision_review_usage_count,
+                    priority_engine_usage_count,
+                    behavioral_intervention_seen_count,
+                    behavioral_intervention_ack_count,
+                ) = cur.fetchone()
+
+                cur.execute(
+                    f"""
+                    SELECT
+                        COALESCE(NULLIF(metadata->>'behavior_flag', ''), NULLIF(metadata->>'primary_flag', ''), NULLIF(metadata->>'behavior_label', '')) AS flag,
+                        COUNT(*)::int AS count
+                    FROM {PERSISTED_EVENTS_TABLE}
+                    WHERE COALESCE(NULLIF(metadata->>'behavior_flag', ''), NULLIF(metadata->>'primary_flag', ''), NULLIF(metadata->>'behavior_label', '')) IS NOT NULL
+                    GROUP BY flag
+                    ORDER BY count DESC, flag ASC
+                    LIMIT 8
+                    """
+                )
+                top_behavioral_flags = [{"flag": flag, "count": count} for flag, count in cur.fetchall()]
+
+                cur.execute(
+                    f"""
+                    SELECT
+                        COALESCE(NULLIF(surface, ''), NULLIF(page, ''), 'unknown') AS surface_name,
+                        COUNT(*)::int AS count
+                    FROM {PERSISTED_EVENTS_TABLE}
+                    WHERE event_name IN ('behavioral_intervention_seen', 'behavioral_intervention_acknowledged')
+                    GROUP BY surface_name
+                    ORDER BY count DESC, surface_name ASC
+                    LIMIT 8
+                    """
+                )
+                top_behavioral_surfaces = [{"surface": surface, "count": count} for surface, count in cur.fetchall()]
 
                 cur.execute(
                     f"""
@@ -502,6 +564,10 @@ class FinnProductAnalyticsService:
             "top_cta_actions": top_cta_actions,
             "decision_review_usage_count": decision_review_usage_count,
             "priority_engine_usage_count": priority_engine_usage_count,
+            "behavioral_intervention_seen_count": behavioral_intervention_seen_count,
+            "behavioral_intervention_ack_count": behavioral_intervention_ack_count,
+            "top_behavioral_flags": top_behavioral_flags,
+            "top_behavioral_surfaces": top_behavioral_surfaces,
             "repeated_user_signal": {
                 "users_seen": users_seen,
                 "users_with_multiple_sessions": users_with_multiple_sessions,
