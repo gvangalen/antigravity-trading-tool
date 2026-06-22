@@ -3691,6 +3691,8 @@ class FinnPlanService:
         )
         if profile_line:
             lines.append(str(profile_line))
+        if analysis.get("behavioral_warning"):
+            lines.append(str(analysis.get("behavioral_warning")))
         if analysis.get("focus_guidance"):
             lines.append(str(analysis.get("focus_guidance")))
         top_priorities = analysis.get("top_priorities") or []
@@ -3784,6 +3786,11 @@ class FinnPlanService:
             ((priority_engine.get("top_priorities") or [{}])[0].get("asset") if isinstance((priority_engine.get("top_priorities") or [{}])[0], dict) else None),
             mode="general",
         )
+        priority_engine["behavioral_warning"] = self._profile_next_step(
+            context,
+            ((priority_engine.get("top_priorities") or [{}])[0].get("asset") if isinstance((priority_engine.get("top_priorities") or [{}])[0], dict) else None),
+            default_step="Werk vandaag van boven naar beneden en forceer geen extra actie zonder duidelijke reviewreden.",
+        ) if context.get("trader_profile_used") else ""
         await self._record_governance_event(
             user_id,
             event_type="finn_priority_engine_summary",
@@ -3801,6 +3808,8 @@ class FinnPlanService:
                 "ignore_today": priority_engine.get("ignore_today"),
                 "suppression_reasons": priority_engine.get("suppression_reasons"),
                 "profile_habit_alignment": self._profile_habit_alignment_event_payload(profile_habit_alignment),
+                "profile_guidance": priority_engine.get("profile_guidance"),
+                "behavioral_warning": priority_engine.get("behavioral_warning"),
             },
             cooldown_hours=2,
         )
@@ -6120,6 +6129,10 @@ class FinnPlanService:
             "block": f"Deze {action_type} blokkeer ik nu op governance-gronden.",
         }
         lines = [labels.get(status, labels["recommend"])]
+        if analysis.get("profile_guidance"):
+            lines.append(str(analysis.get("profile_guidance")))
+        if analysis.get("behavioral_warning"):
+            lines.append(str(analysis.get("behavioral_warning")))
         if analysis.get("blocking_reason"):
             lines.append(f"Waarom: {analysis.get('blocking_reason')}")
         warnings = analysis.get("warnings") or []
@@ -6251,6 +6264,12 @@ class FinnPlanService:
             **governance,
             "policy": policy,
             "action_subject": action,
+            "profile_guidance": self._profile_focus_line(context, context.get("symbol") or context.get("asset"), mode="review"),
+            "behavioral_warning": self._profile_next_step(
+                context,
+                context.get("symbol") or context.get("asset"),
+                default_step="Check eerst welke bevestiging, guardrail en ontbrekende context nog openstaan voordat je verder gaat.",
+            ),
             "required_agents": required_agents,
             "agent_orchestration": {
                 "required_agents": required_agents,

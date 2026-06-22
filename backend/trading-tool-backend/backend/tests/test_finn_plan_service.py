@@ -5460,6 +5460,33 @@ def test_build_governed_action_review_response_requires_confirmation_for_bot_act
     assert result["analysis"]["portfolio_conflict_level"] == "medium"
 
 
+def test_build_governed_action_review_response_adds_profile_behavior_copy():
+    service = _service()
+    service.build_decision_review_response = AsyncMock(return_value={
+        "analysis": {"decision_status": "modify", "risk_summary": "context present"},
+        "state": {"analysis": {"decision_status": "modify", "risk_summary": "context present"}},
+    })
+    service.build_plan_adherence_review_response = AsyncMock(return_value={"analysis": {}, "state": {"analysis": {}}})
+    service.build_portfolio_intelligence_response = AsyncMock(return_value={"analysis": {}, "state": {"analysis": {}}})
+
+    result = asyncio.run(service.build_governed_action_review_response(
+        user_id=30,
+        query="Mag FINN deze bot activeren?",
+        context={
+            "bot_id": 19,
+            "symbol": "BTC",
+            "trader_profile_used": True,
+            "trader_profile": {"trader_types": ["swing_trader"], "behavior_flags": ["fomo"]},
+            "profile_match_mode": "direct_match",
+            "profile_conflict_detected": False,
+        },
+    ))
+
+    assert "Voor jouw profiel" in result["response"]
+    assert "Wacht bij BTC eerst op bevestiging" in result["response"]
+    assert "fear of missing out" in str(result["analysis"]["behavioral_warning"]).lower()
+
+
 def test_build_governed_action_review_response_routes_trade_permission_and_agent_orchestration():
     service = _service()
     service.build_decision_review_response = AsyncMock(return_value={
@@ -5613,6 +5640,29 @@ def test_build_governed_action_review_response_lightweight_extra_risk_prompt_ski
     service.build_decision_review_response.assert_not_awaited()
     service.build_plan_adherence_review_response.assert_not_awaited()
     service.build_portfolio_intelligence_response.assert_not_awaited()
+
+
+def test_priority_engine_message_adds_behavioral_warning_for_profile_context():
+    service = _service()
+
+    message = service._priority_engine_message(
+        {
+            "headline": "Vandaag eerst review boven nieuwe actie.",
+            "why_now": "Er staat nog genoeg open werk.",
+            "profile_guidance": "Voor jouw profiel telt vooral of BTC op 4H/Daily bevestiging geeft.",
+            "behavioral_warning": "Wacht bij BTC eerst op bevestiging en stap niet in uit haast of fear of missing out.",
+            "top_priorities": [{"title": "Review BTC setup", "why_now": "Open blocker"}],
+            "review_queue": [],
+            "ignore_today": [],
+        },
+        {
+            "trader_profile_used": True,
+            "trader_profile": {"trader_types": ["swing_trader"], "behavior_flags": ["fomo"]},
+        },
+    )
+
+    assert "Voor jouw profiel" in message
+    assert "fear of missing out" in message
 
 
 def test_discipline_leak_prompt_prefers_personal_performance_over_personal_coach():

@@ -1,17 +1,24 @@
 import asyncio
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from starlette.requests import Request
+
 from backend.api.ai_assistant_api import (
+    assistant_chat,
     _finalize_finn_response,
     _prepare_finn_envelope,
     _build_finn_core_rescue_envelope,
     _audit_context_summary,
     _attach_trader_profile_metadata,
+    _trader_profile_event_metadata,
+    _record_behavioral_response_events,
     _legacy_response_is_generic_failure,
     _legacy_response_needs_finn_rescue,
 )
+from backend.schemas.assistant_schema import AssistantChatRequest
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.services.finn_plan_service import FinnPlanService
 
@@ -53,6 +60,111 @@ def test_attach_trader_profile_metadata_adds_conflict_fields():
     assert payload["analysis"]["trader_profile_used"] is True
     assert payload["analysis"]["profile_match_mode"] == "mixed_profile_page_context_priority"
     assert payload["analysis"]["profile_conflict_detected"] is True
+
+
+def test_trader_profile_event_metadata_includes_behavior_flags():
+    metadata = _trader_profile_event_metadata(
+        {
+            "trader_profile_used": True,
+            "trader_profile_summary": "swing_trader | 4h",
+            "trader_profile": {
+                "behavior_flags": ["fomo", "overtrades"],
+            },
+        }
+    )
+
+    assert metadata["trader_profile_used"] is True
+    assert metadata["behavior_flags"] == ["fomo", "overtrades"]
+    assert metadata["behavior_flag"] == "fomo"
+
+
+def test_record_behavioral_response_events_tracks_profile_guidance_and_friction(monkeypatch):
+    recorded = []
+
+    def fake_record_event(*, user_id, event):
+        recorded.append((user_id, event))
+        return event
+
+    monkeypatch.setattr("backend.api.ai_assistant_api.finn_product_analytics.record_event", fake_record_event)
+
+    _record_behavioral_response_events(
+        user_id=30,
+        response={
+            "intent": "priority_engine",
+            "flow": "priority_engine",
+            "next_best_action": "Review BTC setup",
+            "analysis": {"profile_guidance": "Voor jouw profiel telt vooral discipline."},
+            "state": {
+                "current_flow": "priority_engine",
+                "pending_behavioral_memory_friction": {
+                    "type": "profile_fomo",
+                    "message": "Je profiel en recente evidence bevestigen FOMO als actief patroon.",
+                    "requires_ack": True,
+                    "source": "profile_habit_alignment",
+                },
+            },
+        },
+        context_payload={
+            "session_id": "sess-1",
+            "page": "/report",
+            "symbol": "BTC",
+            "trader_profile_used": True,
+            "trader_profile_summary": "swing_trader | 4h | behavior:fomo",
+            "trader_profile": {"behavior_flags": ["fomo"]},
+        },
+        route_source="finn",
+        trace_id="trace-1",
+    )
+
+    assert len(recorded) == 2
+    assert all(event["event_name"] == "behavioral_intervention_seen" for _, event in recorded)
+    assert recorded[0][1]["metadata"]["intervention_type"] == "profile_guidance"
+    assert recorded[1][1]["metadata"]["intervention_type"] == "pending_behavioral_memory_friction"
+    assert recorded[1][1]["metadata"]["requires_ack"] is True
+
+
+def test_assistant_chat_passes_enriched_profile_context_into_legacy_service(monkeypatch):
+    captured = {}
+
+    async def fake_enrich_with_trader_profile(db, user_id, payload=None, *, query=None):
+        enriched = dict(payload or {})
+        enriched.update({
+            "page": "/dashboard",
+            "symbol": "BTC",
+            "trader_profile_used": True,
+            "trader_profile_summary": "swing_trader | 4h | behavior:fomo",
+            "trader_profile": {"trader_types": ["swing_trader"], "behavior_flags": ["fomo"]},
+        })
+        return enriched
+
+    async def fake_get_chat_response(user_id, query, history, context, trace_id=None, session_id=None):
+        captured["context"] = context
+        return ("Legacy antwoord", None, None, {"current_flow": "free_chat"}, None, None, "sess-legacy")
+
+    monkeypatch.setattr("backend.api.ai_assistant_api._enrich_with_trader_profile", fake_enrich_with_trader_profile)
+    monkeypatch.setattr("backend.api.ai_assistant_api._apply_assistant_rate_limit", lambda **kwargs: None)
+    monkeypatch.setattr("backend.api.ai_assistant_api._record_finn_product_event", lambda **kwargs: {})
+
+    service = SimpleNamespace(
+        get_chat_response=AsyncMock(side_effect=fake_get_chat_response),
+        _classify_intent=lambda query: "general_help",
+    )
+    raw_request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
+
+    response = asyncio.run(
+        assistant_chat(
+            AssistantChatRequest(query="vrije vraag", history=[], context={"page": "/dashboard"}, session_id="sess-legacy"),
+            raw_request,
+            None,
+            {"id": 30},
+            service,
+            None,
+        )
+    )
+
+    assert captured["context"]["trader_profile_used"] is True
+    assert captured["context"]["trader_profile"]["behavior_flags"] == ["fomo"]
+    assert response.session_id == "sess-legacy"
 
 
 def test_legacy_response_is_generic_failure_detects_default_failures():

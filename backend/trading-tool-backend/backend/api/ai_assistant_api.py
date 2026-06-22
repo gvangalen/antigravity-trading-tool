@@ -157,12 +157,16 @@ def _attach_trader_profile_metadata(response: Optional[dict], context_payload: O
 
 def _trader_profile_event_metadata(context_payload: Optional[dict]) -> Dict[str, Any]:
     payload = context_payload or {}
+    trader_profile = payload.get("trader_profile") if isinstance(payload.get("trader_profile"), dict) else {}
+    behavior_flags = trader_profile.get("behavior_flags") if isinstance(trader_profile.get("behavior_flags"), list) else []
     return {
         "trader_profile_used": bool(payload.get("trader_profile_used")),
         "trader_profile_summary": payload.get("trader_profile_summary") or "",
         "profile_match_mode": payload.get("profile_match_mode") or "profile_missing_fallback",
         "profile_match_reason": payload.get("profile_match_reason") or "",
         "profile_conflict_detected": bool(payload.get("profile_conflict_detected")),
+        "behavior_flags": [str(flag) for flag in behavior_flags[:5]],
+        "behavior_flag": str(behavior_flags[0]) if behavior_flags else "",
     }
 
 
@@ -269,6 +273,63 @@ def _record_finn_product_event(
             "metadata": metadata or {},
         },
     )
+
+
+def _record_behavioral_response_events(
+    *,
+    user_id: int,
+    response: dict,
+    context_payload: Optional[dict],
+    route_source: str,
+    trace_id: str,
+) -> None:
+    payload = context_payload or {}
+    analysis = response.get("analysis") if isinstance(response.get("analysis"), dict) else {}
+    state = response.get("state") if isinstance(response.get("state"), dict) else {}
+    base_metadata = {
+        "intent": response.get("intent"),
+        **_trader_profile_event_metadata(payload),
+    }
+    base_event = {
+        "user_id": user_id,
+        "session_id": payload.get("session_id"),
+        "surface": route_source,
+        "page": payload.get("page"),
+        "asset": payload.get("symbol") or payload.get("asset"),
+        "flow_type": response.get("flow") or state.get("current_flow"),
+        "bot_id": state.get("bot_id") or payload.get("bot_id"),
+        "setup_id": state.get("setup_id") or payload.get("setup_id"),
+        "strategy_id": state.get("strategy_id") or payload.get("strategy_id"),
+        "trace_id": trace_id,
+        "next_best_action": response.get("next_best_action"),
+    }
+    profile_guidance = analysis.get("profile_guidance")
+    if profile_guidance:
+        _record_finn_product_event(
+            event_name="behavioral_intervention_seen",
+            metadata={
+                **base_metadata,
+                "behavior_label": "profile_guidance",
+                "intervention_type": "profile_guidance",
+                "intervention_copy": str(profile_guidance),
+            },
+            **base_event,
+        )
+    pending_friction = state.get("pending_behavioral_memory_friction")
+    if isinstance(pending_friction, dict):
+        _record_finn_product_event(
+            event_name="behavioral_intervention_seen",
+            metadata={
+                **base_metadata,
+                "behavior_flag": str((pending_friction.get("type") or "").replace("profile_", "")),
+                "behavior_label": str(pending_friction.get("type") or "behavioral_memory_friction"),
+                "intervention_type": "pending_behavioral_memory_friction",
+                "intervention_copy": str(pending_friction.get("message") or ""),
+                "requires_ack": bool(pending_friction.get("requires_ack")),
+                "source": pending_friction.get("source"),
+            },
+            **base_event,
+        )
 
 
 def _legacy_response_is_generic_failure(response_text: Optional[str]) -> bool:
@@ -644,6 +705,13 @@ async def _finalize_finn_response(
             next_best_action=response.get("next_best_action"),
             metadata=_trader_profile_event_metadata(context_payload),
         )
+    _record_behavioral_response_events(
+        user_id=user_id,
+        response=response,
+        context_payload=context_payload,
+        route_source=route_source,
+        trace_id=trace_id,
+    )
     return AssistantChatResponse(**response)
 
 
@@ -739,6 +807,13 @@ async def _prepare_finn_envelope(
             next_best_action=envelope.get("next_best_action"),
             metadata=_trader_profile_event_metadata(context_payload),
         )
+    _record_behavioral_response_events(
+        user_id=user_id,
+        response=envelope,
+        context_payload=context_payload,
+        route_source=route_source,
+        trace_id=trace_id,
+    )
     return envelope
 
 
@@ -965,7 +1040,7 @@ async def assistant_chat(
 
         try:
             response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
-                user_id, request.query, request.history, request.context, trace_id=trace_id, session_id=request.session_id
+                user_id, request.query, request.history, context_payload, trace_id=trace_id, session_id=request.session_id
             )
         except Exception as legacy_exc:
             logger.warning("⚠️ Legacy assistant failed; trying FINN core rescue | Trace: %s | Error: %s", trace_id, legacy_exc)
@@ -1045,8 +1120,8 @@ async def assistant_chat(
             detected_intent=intent,
             intent_confidence=None,
             selected_flow=(state or {}).get("current_flow"),
-            selected_entity=_audit_selected_entity(legacy_response, _assistant_context_payload(request.context)),
-            context_payload=_assistant_context_payload(request.context),
+            selected_entity=_audit_selected_entity(legacy_response, context_payload),
+            context_payload=context_payload,
             used_draft=bool(draft),
             draft_summary=_audit_draft_summary(draft),
             response_type=_audit_response_type(legacy_response),
@@ -1073,6 +1148,13 @@ async def assistant_chat(
                 "intent": intent,
                 **_trader_profile_event_metadata(context_payload),
             },
+        )
+        _record_behavioral_response_events(
+            user_id=user_id,
+            response=legacy_response,
+            context_payload=context_payload,
+            route_source="legacy_assistant",
+            trace_id=trace_id,
         )
         return AssistantChatResponse(
             response=response,
@@ -1250,6 +1332,7 @@ async def assistant_chat_stream(
                 strategy_id=context_payload.get("strategy_id"),
                 trace_id=trace_id,
                 prompt_text=request.query,
+                metadata=_trader_profile_event_metadata(context_payload),
             )
             if finn.looks_like_daily_score_refresh_request(request.query):
                 envelope = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
@@ -1467,7 +1550,7 @@ async def assistant_chat_stream(
 
             try:
                 async for chunk in service.get_chat_response_stream(
-                    user_id, request.query, request.history, request.context,
+                    user_id, request.query, request.history, context_payload,
                     trace_id=trace_id, background_tasks=background_tasks
                 ):
                     if await raw_request.is_disconnected():
