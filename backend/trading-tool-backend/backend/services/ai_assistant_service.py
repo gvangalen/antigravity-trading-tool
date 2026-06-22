@@ -585,6 +585,12 @@ class AiAssistantService:
 
         # Apply deterministic safety post-processing guardrail to text response
         chat_text = self._apply_safety_guardrails(chat_text)
+        chat_text = self._apply_legacy_profile_overlay(
+            chat_text,
+            intent=intent,
+            context_data=context_data,
+            resolved_symbol=resolved_symbol,
+        )
 
         # Manage DB conversation state transitions
         if state:
@@ -997,6 +1003,12 @@ class AiAssistantService:
 
         # Apply safety guardrails to streamed text
         chat_text = self._apply_safety_guardrails(chat_text)
+        chat_text = self._apply_legacy_profile_overlay(
+            chat_text,
+            intent=intent,
+            context_data=context_data,
+            resolved_symbol=resolved_symbol,
+        )
 
         # Manage DB conversation state transitions
         if state:
@@ -1118,6 +1130,89 @@ class AiAssistantService:
         pass
             
         return softened_text
+
+    def _legacy_general_profile_line(
+        self,
+        context_data: Optional[Dict[str, Any]],
+        resolved_symbol: Optional[str] = None,
+    ) -> str:
+        payload = context_data or {}
+        if not payload.get("trader_profile_used"):
+            return ""
+
+        profile = payload.get("trader_profile") if isinstance(payload.get("trader_profile"), dict) else {}
+        trader_types = set(profile.get("trader_types") or [])
+        risk_profiles = set(profile.get("risk_profiles") or [])
+        behavior_flags = set(profile.get("behavior_flags") or [])
+        asset_label = resolved_symbol or payload.get("symbol") or payload.get("asset") or "dit asset"
+
+        if payload.get("profile_conflict_detected"):
+            return (
+                f"Voor jouw profiel geldt nu: deze vraag wijkt af van je normale stijl rond {asset_label}, "
+                "dus toets eerst of je hier bewust van je eigen plan afwijkt."
+            )
+        if "fomo" in behavior_flags:
+            return (
+                f"Voor jouw profiel geldt nu: wacht bij {asset_label} eerst op bevestiging "
+                "en laat haast of fear of missing out je timing niet overnemen."
+            )
+        if "overtrades" in behavior_flags:
+            return (
+                f"Voor jouw profiel geldt nu: voeg rond {asset_label} alleen iets toe "
+                "als dit aantoonbaar beter is dan je laatste actie."
+            )
+        if {"takes_profit_too_early", "holds_losers_too_long"} <= behavior_flags:
+            return (
+                f"Voor jouw profiel geldt nu: leg voor {asset_label} vooraf je exitplan vast "
+                "en bewaak je invalidatie strakker, zodat je winnaars niet te vroeg afsnijdt "
+                "en verliezers niet te lang laat rekken."
+            )
+        if "holds_losers_too_long" in behavior_flags:
+            return (
+                f"Voor jouw profiel geldt nu: bewaak bij {asset_label} eerst je invalidatie, "
+                "zodat je verliezers niet langer laat rekken dan je plan toelaat."
+            )
+        if "takes_profit_too_early" in behavior_flags:
+            return (
+                f"Voor jouw profiel geldt nu: leg voor {asset_label} vooraf je exitplan vast, "
+                "zodat je winnaars niet te vroeg afsnijdt."
+            )
+        if "leverage_seeking" in behavior_flags:
+            return (
+                f"Voor jouw profiel geldt nu: houd {asset_label} eerst zo simpel mogelijk "
+                "en gebruik leverage niet als versneller van twijfel."
+            )
+        if "swing_trader" in trader_types:
+            return f"Voor jouw profiel geldt nu: laat {asset_label} vooral tellen als 4H/Daily bevestiging terugkomt."
+        if trader_types & {"investor", "dca_investor"}:
+            return f"Voor jouw profiel geldt nu: forceer bij {asset_label} geen korte-termijn timing als je langetermijnplan niet echt verandert."
+        if trader_types & {"day_trader", "scalper"}:
+            return f"Voor jouw profiel geldt nu: behandel {asset_label} vooral als timing- en momentumvraag, niet als iets om blind te forceren."
+        if "conservative" in risk_profiles:
+            return f"Voor jouw profiel geldt nu: houd {asset_label} klein en selectief tot de sterkste twijfel weg is."
+        return ""
+
+    def _apply_legacy_profile_overlay(
+        self,
+        response_text: str,
+        *,
+        intent: str,
+        context_data: Optional[Dict[str, Any]],
+        resolved_symbol: Optional[str] = None,
+    ) -> str:
+        if intent not in {"general", "chat"}:
+            return response_text
+        profile_line = self._legacy_general_profile_line(context_data, resolved_symbol)
+        if not profile_line:
+            return response_text
+        normalized = str(response_text or "").strip()
+        if not normalized:
+            return profile_line
+        if profile_line.lower() in normalized.lower():
+            return normalized
+        if "voor jouw profiel" in normalized.lower():
+            return normalized
+        return f"{normalized}\n\n{profile_line}"
 
     async def _deterministic_pre_parse_slots(self, user_query: str, conv_state: Optional[dict], resolved_symbol: str, user_id: int) -> Optional[dict]:
         """

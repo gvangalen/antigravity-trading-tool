@@ -8674,3 +8674,81 @@ def test_assistant_insight_from_daily_coach_adds_behavioral_profile_copy():
     assert "extra rust" in insight["market_insight"]["conclusion"]
     assert "FOMO maakt timing fragieler" in insight["market_insight"]["why"]
     assert "haast of FOMO" in insight["market_insight"]["action"]
+
+
+def test_legacy_general_profile_overlay_differs_between_profile_types():
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=None,
+        ai_gateway=None,
+    )
+
+    calm = assistant._apply_legacy_profile_overlay(
+        "Ik help je met BTC.",
+        intent="general",
+        context_data={
+            "trader_profile_used": True,
+            "symbol": "BTC",
+            "trader_profile": {"trader_types": ["swing_trader"]},
+        },
+        resolved_symbol="BTC",
+    )
+    fomo = assistant._apply_legacy_profile_overlay(
+        "Ik help je met BTC.",
+        intent="general",
+        context_data={
+            "trader_profile_used": True,
+            "symbol": "BTC",
+            "trader_profile": {"behavior_flags": ["fomo"]},
+        },
+        resolved_symbol="BTC",
+    )
+    exit_discipline = assistant._apply_legacy_profile_overlay(
+        "Ik help je met BTC.",
+        intent="general",
+        context_data={
+            "trader_profile_used": True,
+            "symbol": "BTC",
+            "trader_profile": {"behavior_flags": ["takes_profit_too_early", "holds_losers_too_long"]},
+        },
+        resolved_symbol="BTC",
+    )
+
+    assert "4H/Daily bevestiging" in calm
+    assert "fear of missing out" in fomo
+    assert "exitplan" in exit_discipline
+    assert calm != fomo != exit_discipline
+
+
+def test_legacy_general_profile_overlay_mentions_profile_conflict_when_present():
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=None,
+        ai_gateway=None,
+    )
+
+    text = assistant._apply_legacy_profile_overlay(
+        "Ik help je met BTC.",
+        intent="general",
+        context_data={
+            "trader_profile_used": True,
+            "symbol": "BTC",
+            "profile_conflict_detected": True,
+            "trader_profile": {"trader_types": ["investor"]},
+        },
+        resolved_symbol="BTC",
+    )
+
+    assert "wijkt af van je normale stijl" in text
