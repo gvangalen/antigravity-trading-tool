@@ -1,6 +1,7 @@
 import inspect
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
@@ -54,6 +55,48 @@ def test_ai_usage_update_is_atomic_increment_sql():
     assert "ai_usage_current" in sql
     assert "ai_tokens_used_month" in sql
     assert session.commits == 1
+
+
+def test_ai_preferences_update_reassigns_jsonb_payload_for_persistence():
+    class _FakeAsyncSessionWithRefresh:
+        def __init__(self):
+            self.commits = 0
+            self.refreshes = 0
+
+        async def commit(self):
+            self.commits += 1
+
+        async def refresh(self, user):
+            self.refreshes += 1
+
+    session = _FakeAsyncSessionWithRefresh()
+    repo = UserRepository(session)
+    original_prefs = {
+        "tone": "balanced",
+        "trader_types": ["investor"],
+    }
+    user = SimpleNamespace(ai_preferences=original_prefs)
+
+    async def _get_by_id(_user_id):
+        return user
+
+    repo.get_by_id = _get_by_id
+
+    updated = asyncio.run(repo.update_ai_preferences(7, {
+        "trader_types": ["swing_trader"],
+        "behavior_flags": ["fomo"],
+    }))
+
+    assert updated is user
+    assert session.commits == 1
+    assert session.refreshes == 1
+    assert user.ai_preferences["trader_types"] == ["swing_trader"]
+    assert user.ai_preferences["behavior_flags"] == ["fomo"]
+    assert user.ai_preferences is not original_prefs
+    assert original_prefs == {
+        "tone": "balanced",
+        "trader_types": ["investor"],
+    }
 
 
 def test_ai_cache_save_uses_context_composite_conflict_key():

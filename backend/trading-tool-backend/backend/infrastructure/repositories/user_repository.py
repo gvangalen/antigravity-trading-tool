@@ -1,4 +1,5 @@
 from datetime import datetime
+from copy import deepcopy
 from typing import Optional
 
 from sqlalchemy import select, func, update
@@ -45,8 +46,9 @@ class UserRepository:
     async def update_ai_preferences(self, user_id: int, preferences: dict) -> Optional[User]:
         user = await self.get_by_id(user_id)
         if user:
-            # Merge existing preferences with new ones
-            current_prefs = user.ai_preferences or {}
+            # Reassign a fresh JSON object so SQLAlchemy/Postgres JSONB persistence
+            # reliably detects trader-profile preference updates.
+            current_prefs = deepcopy(user.ai_preferences or {})
             current_prefs.update(preferences)
             user.ai_preferences = current_prefs
             await self.db.commit()
