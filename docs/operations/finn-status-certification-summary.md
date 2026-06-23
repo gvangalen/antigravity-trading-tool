@@ -1,6 +1,6 @@
 # FINN Status + Certification Summary
 
-Last updated: 2026-06-09
+Last updated: 2026-06-23
 
 ## Snapshot
 
@@ -12,6 +12,38 @@ This document captures the current combined FINN status across the active QA lay
 4. FINN Governance
 
 ## Current best references
+
+### FINN Trader Profile full-run reference
+
+Latest strongest trader-profile certification reference:
+
+- commit: `df4e308`
+- full run date: `2026-06-23`
+
+Scores:
+
+- Trader Profile rollout: `91.5`
+- Profile Context Use: `5/5`
+- Behavioral Coaching Quality: `4.5/5`
+- Cross-Surface Consistency: `4.5/5`
+- Memory / Habit Awareness: `4.5/5`
+- Governance Safety / Friction Quality: `4/5`
+- Telemetry / Observability Signal: `4.5/5`
+
+Run quality:
+
+- preflight: green
+- `41/41` replay cases passed
+- `0` generic failures
+- `0` transactional misroutes
+- trader-profile verdict: `go`
+
+Interpretation:
+
+- the FINN trader-profile rollout now clears the `90+` release-strong bar
+- the legacy/general-help lane is no longer a visible carryover gap
+- memory / habit-aware interventions now feel evidence-based and telemetry-backed
+- this scope is now staging-certified as product-complete for tranches 1-4
 
 ### FINN 2.0 / 3.0 full-run reference
 
@@ -199,13 +231,17 @@ This is the practical combined reading across the current strongest references:
 - **FINN 5.0 Governance**
   - content-certified on the dedicated suite
   - still latency-polish-sensitive on the strict replay budget
+- **FINN Trader Profile rollout**
+  - certified on staging at `91.5/100`
+  - replay-clean and visibly profile-aware across both current and legacy/help surfaces
 
 In plain language:
 
 - Core is now across the certification line
 - Performance Intelligence is across the certification line
 - Governance is across the content-quality line
-- the remaining broad-stack certification gap is now mainly an **Operator polish gap**, not a routing or safety gap
+- Trader Profile personalization is across the certification line
+- the remaining broad-stack certification gap is no longer the trader-profile rollout; it remains separate Operator / broader platform polish where relevant
 
 Active follow-up plan:
 
@@ -219,6 +255,7 @@ Use these as the current reference points unless a newer fully valid run superse
 - **Operator baseline:** `85`
 - **Performance Intelligence baseline:** `91`
 - **Governance baseline:** `91`
+- **Trader Profile baseline:** `91.5`
 
 Supporting references:
 
@@ -235,6 +272,12 @@ Supporting references:
   - `24/24` passed
   - no product or operational failures
   - strict replay gate still tracks latency separately
+- strongest trader-profile rollout run:
+  - commit: `df4e308`
+  - `41/41` replay passed
+  - preflight green
+  - weighted score: `91.5`
+  - verdict: `go`
 
 ## Practical reading
 

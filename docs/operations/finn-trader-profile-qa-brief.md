@@ -1,6 +1,6 @@
 # FINN Trader Profile QA Brief
 
-Last updated: 2026-06-22
+Last updated: 2026-06-23
 
 ## Purpose
 
@@ -31,7 +31,7 @@ Use this rule:
 
 Current staging truth from the latest preflight:
 
-- confirmed live staging commit: `caec1c9`
+- confirmed live staging commit: `df4e308`
 
 Record this at the top of the QA output:
 
@@ -45,9 +45,15 @@ Example for the current staging environment if unchanged:
 
 ```text
 branch: codex/finn-product-sprint1-staging-candidate
-commit: caec1c9
+commit: df4e308
 feature scope: FINN trader profile rollout tranches 1-4
 ```
+
+Latest fully valid staging certification reference:
+
+- commit: `df4e308`
+- weighted score: `91.5/100`
+- verdict: `go`
 
 ## Required Preflight
 
