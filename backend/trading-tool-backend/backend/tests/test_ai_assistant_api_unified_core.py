@@ -167,6 +167,54 @@ def test_assistant_chat_passes_enriched_profile_context_into_legacy_service(monk
     assert response.session_id == "sess-legacy"
 
 
+def test_assistant_chat_returns_legacy_response_text_after_profile_overlay(monkeypatch):
+    async def fake_enrich_with_trader_profile(db, user_id, payload=None, *, query=None):
+        enriched = dict(payload or {})
+        enriched.update({
+            "page": "/assistant",
+            "symbol": "BTC",
+            "trader_profile_used": True,
+            "trader_profile_summary": "swing_trader | 4h | behavior:fomo",
+            "trader_profile": {"behavior_flags": ["fomo"]},
+        })
+        return enriched
+
+    async def fake_get_chat_response(user_id, query, history, context, trace_id=None, session_id=None):
+        return (
+            "Ik help je hier vooral met uitleg, coaching en review in assistant rond BTC.\n\n"
+            "Voor jouw profiel geldt nu: wacht bij BTC eerst op bevestiging en laat haast of fear of missing out je timing niet overnemen.",
+            None,
+            None,
+            {"current_flow": "free_chat"},
+            None,
+            None,
+            "sess-legacy",
+        )
+
+    monkeypatch.setattr("backend.api.ai_assistant_api._enrich_with_trader_profile", fake_enrich_with_trader_profile)
+    monkeypatch.setattr("backend.api.ai_assistant_api._apply_assistant_rate_limit", lambda **kwargs: None)
+    monkeypatch.setattr("backend.api.ai_assistant_api._record_finn_product_event", lambda **kwargs: {})
+
+    service = SimpleNamespace(
+        get_chat_response=AsyncMock(side_effect=fake_get_chat_response),
+        _classify_intent=lambda query: "general_help",
+    )
+    raw_request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
+
+    response = asyncio.run(
+        assistant_chat(
+            AssistantChatRequest(query="legacy check", history=[], context={"page": "/assistant"}, session_id="sess-legacy"),
+            raw_request,
+            None,
+            {"id": 30},
+            service,
+            None,
+        )
+    )
+
+    assert "fear of missing out" in response.response
+
+
 def test_legacy_response_is_generic_failure_detects_default_failures():
     assert _legacy_response_is_generic_failure("⚠️ Kon geen analyse ophalen. Probeer opnieuw.")
     assert _legacy_response_is_generic_failure("Interne authenticatiefout")

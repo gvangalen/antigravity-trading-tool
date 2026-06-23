@@ -1157,7 +1157,7 @@ async def assistant_chat(
             trace_id=trace_id,
         )
         return AssistantChatResponse(
-            response=response,
+            response=legacy_response.get("response") or response,
             intent=intent,
             action=action,
             draft=draft,
