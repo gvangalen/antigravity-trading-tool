@@ -5,6 +5,7 @@ import importlib
 import traceback
 import uuid
 import asyncio
+from urllib.parse import urlparse
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -45,6 +46,23 @@ CSRF_EXEMPT_PATHS = {
 }
 
 
+def _is_trusted_same_origin_request(request) -> bool:
+    request_origin = request.headers.get("origin") or ""
+    request_referer = request.headers.get("referer") or ""
+    expected_origin = f"{request.url.scheme}://{request.url.netloc}"
+
+    if request_origin and request_origin == expected_origin:
+        return True
+
+    if request_referer:
+        parsed = urlparse(request_referer)
+        referer_origin = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else ""
+        if referer_origin == expected_origin:
+            return True
+
+    return False
+
+
 @app.middleware("http")
 async def request_trace_id_middleware(request, call_next):
     trace_id = request.headers.get("x-trace-id") or f"trdm-req-{uuid.uuid4().hex[:12]}"
@@ -68,7 +86,15 @@ async def csrf_protect_cookie_auth_middleware(request, call_next):
         if session_cookie and not using_bearer_auth:
             csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME)
             csrf_header = request.headers.get(CSRF_HEADER_NAME)
-            if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+            trusted_same_origin = _is_trusted_same_origin_request(request)
+            if (
+                not trusted_same_origin
+                and (
+                    not csrf_cookie
+                    or not csrf_header
+                    or csrf_cookie != csrf_header
+                )
+            ):
                 return JSONResponse(status_code=403, content={"detail": "CSRF validation failed."})
 
     return await call_next(request)

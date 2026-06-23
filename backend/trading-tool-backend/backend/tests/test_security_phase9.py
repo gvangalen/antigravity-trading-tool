@@ -27,6 +27,9 @@ def test_main_enforces_csrf_for_cookie_authenticated_unsafe_api_requests():
     source = _read(BACKEND_ROOT / "main.py")
 
     assert 'UNSAFE_HTTP_METHODS = {"POST", "PUT", "PATCH", "DELETE"}' in source
+    assert "def _is_trusted_same_origin_request(request) -> bool:" in source
+    assert 'request.headers.get("origin")' in source
+    assert 'request.headers.get("referer")' in source
     assert "async def csrf_protect_cookie_auth_middleware" in source
     assert "CSRF_EXEMPT_PATHS = {" in source
     assert '"/api/auth/login"' in source
@@ -34,6 +37,7 @@ def test_main_enforces_csrf_for_cookie_authenticated_unsafe_api_requests():
     assert 'request.url.path.startswith("/api/")' in source
     assert 'request.cookies.get("access_token") or request.cookies.get("refresh_token")' in source
     assert 'request.headers.get(CSRF_HEADER_NAME)' in source
+    assert "trusted_same_origin = _is_trusted_same_origin_request(request)" in source
     assert 'detail": "CSRF validation failed."' in source
 
 
