@@ -17,7 +17,7 @@ import {
 } from "@/lib/traderProfileOptions";
 import { User, Mail, Shield, ArrowUpRight, Brain, LogOut, Loader2, Sparkles, Pencil, Save } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useModal } from "@/components/modal/ModalProvider";
 
@@ -61,6 +61,7 @@ export default function ProfilePage() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileError, setProfileError] = useState(null);
+  const traderProfileRef = useRef(null);
   const [profileForm, setProfileForm] = useState({
     trader_types: [],
     primary_timeframes: [],
@@ -182,6 +183,12 @@ export default function ProfilePage() {
     }
   };
 
+  const openTraderProfileEditor = () => {
+    setEditingProfile(true);
+    setProfileError(null);
+    traderProfileRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const summaryChips = [
     ...profileForm.trader_types.map((value) => traderTypeMap[value]).filter(Boolean),
     ...profileForm.investment_goals_list.map((value) => goalsMap[value]).filter(Boolean),
@@ -199,8 +206,11 @@ export default function ProfilePage() {
             Account Laboratory
           </div>
           <h1 className="text-5xl font-black text-foreground tracking-tight leading-none">
-            User Profile
+            Account & Trader Profile
           </h1>
+          <p className="mt-4 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
+            Manage both your account details and the Finn trader profile that shapes coaching, warnings, explanations, and behavioral guidance.
+          </p>
         </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -241,6 +251,23 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
+
+            <div className="rounded-3xl border border-blue-100 bg-blue-50/70 p-5">
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
+                Finn trader profile
+              </div>
+              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
+                Edit your trading style, goals, risk profile, timeframes, and coaching patterns here so Finn stays aligned with how you trade.
+              </p>
+              <button
+                type="button"
+                onClick={openTraderProfileEditor}
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700"
+              >
+                <Pencil size={14} />
+                Edit Finn profile
+              </button>
+            </div>
           </div>
         </div>
 
@@ -278,7 +305,10 @@ export default function ProfilePage() {
 
       </div>
 
-      <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10 space-y-8">
+      <div
+        ref={traderProfileRef}
+        className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10 space-y-8"
+      >
         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div className="max-w-2xl">
             <div className="mb-3 flex items-center gap-3">
@@ -573,8 +603,8 @@ export default function ProfilePage() {
               <Brain size={20} />
             </div>
             <div>
-              <div className="text-sm font-black text-foreground tracking-tight group-hover:text-blue-600 transition-colors">AI Settings Interface</div>
-              <div className="text-[10px] font-bold text-dim uppercase tracking-widest">Adjust intelligence parameters</div>
+              <div className="text-sm font-black text-foreground tracking-tight group-hover:text-blue-600 transition-colors">Open AI Admin</div>
+              <div className="text-[10px] font-bold text-dim uppercase tracking-widest">System-level intelligence settings</div>
             </div>
           </Link>
 
