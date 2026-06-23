@@ -49,7 +49,12 @@ CSRF_EXEMPT_PATHS = {
 def _is_trusted_same_origin_request(request) -> bool:
     request_origin = request.headers.get("origin") or ""
     request_referer = request.headers.get("referer") or ""
-    expected_origin = f"{request.url.scheme}://{request.url.netloc}"
+    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+    forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+    expected_scheme = forwarded_proto or request.url.scheme
+    expected_host = forwarded_host or request.url.netloc
+    expected_origin = f"{expected_scheme}://{expected_host}"
+    sec_fetch_site = (request.headers.get("sec-fetch-site") or "").strip().lower()
 
     if request_origin and request_origin == expected_origin:
         return True
@@ -59,6 +64,9 @@ def _is_trusted_same_origin_request(request) -> bool:
         referer_origin = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else ""
         if referer_origin == expected_origin:
             return True
+
+    if sec_fetch_site in {"same-origin", "same-site"}:
+        return True
 
     return False
 
