@@ -30,6 +30,9 @@ def test_main_enforces_csrf_for_cookie_authenticated_unsafe_api_requests():
     assert "def _is_trusted_same_origin_request(request) -> bool:" in source
     assert 'request.headers.get("origin")' in source
     assert 'request.headers.get("referer")' in source
+    assert 'request.headers.get("x-forwarded-proto")' in source
+    assert 'request.headers.get("x-forwarded-host")' in source
+    assert 'request.headers.get("sec-fetch-site")' in source
     assert "async def csrf_protect_cookie_auth_middleware" in source
     assert "CSRF_EXEMPT_PATHS = {" in source
     assert '"/api/auth/login"' in source
