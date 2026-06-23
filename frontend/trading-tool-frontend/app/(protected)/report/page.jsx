@@ -1034,12 +1034,14 @@ function FinnGovernanceSurface({ analysis }) {
 }
 
 function FinnReportsPanel() {
+  const panelRef = useRef(null);
   const [activeFinnReport, setActiveFinnReport] = useState(FINN_REPORT_OPTIONS[0].key);
   const [finnReportCache, setFinnReportCache] = useState({});
   const [finnReport, setFinnReport] = useState(null);
   const [finnLoading, setFinnLoading] = useState(true);
   const [finnError, setFinnError] = useState('');
   const [expanded, setExpanded] = useState(false);
+  const [shouldLoadFinn, setShouldLoadFinn] = useState(false);
 
   const activeOption = FINN_REPORT_OPTIONS.find((option) => option.key === activeFinnReport) || FINN_REPORT_OPTIONS[0];
 
@@ -1100,8 +1102,40 @@ function FinnReportsPanel() {
   }, []);
 
   useEffect(() => {
+    if (shouldLoadFinn) return;
+
+    const fallback = window.setTimeout(() => {
+      setShouldLoadFinn(true);
+    }, 1800);
+
+    if (typeof IntersectionObserver !== 'undefined' && panelRef.current) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            setShouldLoadFinn(true);
+            observer.disconnect();
+          }
+        },
+        { rootMargin: '320px 0px' }
+      );
+      observer.observe(panelRef.current);
+
+      return () => {
+        window.clearTimeout(fallback);
+        observer.disconnect();
+      };
+    }
+
+    return () => window.clearTimeout(fallback);
+  }, [shouldLoadFinn]);
+
+  useEffect(() => {
+    if (!shouldLoadFinn) {
+      setFinnLoading(false);
+      return;
+    }
     loadFinnReport(activeOption);
-  }, [activeFinnReport]);
+  }, [activeFinnReport, shouldLoadFinn]);
 
   const analysis = finnReport?.state?.analysis || finnReport?.analysis || {};
   const behavioralAnalysis = mergeBehavioralAnalysis(
@@ -1133,7 +1167,7 @@ function FinnReportsPanel() {
   ].filter(([, value]) => value !== undefined && value !== null);
 
   return (
-    <section className="my-8 md:my-10">
+    <section ref={panelRef} className="my-8 md:my-10">
       <div className="flex items-center gap-2 mb-4">
         <Brain size={14} className="text-blue-600 dark:text-blue-400" />
         <span className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
@@ -1189,7 +1223,19 @@ function FinnReportsPanel() {
             </div>
           </div>
 
-          {finnLoading ? (
+          {!shouldLoadFinn ? (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 p-4">
+              <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                Finn rapport wordt pas geladen zodra de pagina zelf staat. Zo blijft Reports sneller bruikbaar.
+              </div>
+              <button
+                onClick={() => setShouldLoadFinn(true)}
+                className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
+              >
+                Laad Finn rapport
+              </button>
+            </div>
+          ) : finnLoading ? (
             <div className="flex items-center gap-3 text-sm font-bold text-slate-500 dark:text-slate-400">
               <Loader2 size={16} className="animate-spin text-blue-600" />
               Finn rapport ophalen...
@@ -1450,13 +1496,14 @@ LOAD
     setSelectedDate(date);
 
     try {
-      const rawDates = await current.getDates();
-      setDates(sortDatesDesc(rawDates || []));
-
-      const data =
+      const [rawDates, data] = await Promise.all([
+        current.getDates(),
         date === 'latest'
-          ? await current.getLatest()
-          : await current.getByDate(date);
+          ? current.getLatest()
+          : current.getByDate(date),
+      ]);
+
+      setDates(sortDatesDesc(rawDates || []));
 
       if (!data && AUTO_GENERATE_IF_EMPTY) {
         setLoading(false);

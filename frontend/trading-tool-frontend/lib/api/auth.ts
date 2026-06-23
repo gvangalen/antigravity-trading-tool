@@ -132,6 +132,7 @@ function withCacheBust(path: string) {
 
 type FetchAuthOptions = RequestInit & {
   _retry?: boolean;
+  _csrfRetry?: boolean;
   forceFresh?: boolean;
 };
 
@@ -165,6 +166,8 @@ async function fetchAuthInternal(
   });
 
   if (!res.ok) {
+    const text = await res.text().catch(() => "");
+
     // 🔁 AUTO-REFRESH LOGIC
     if (res.status === 401 && !options._retry) {
       console.warn(`⚠️ 401 Unauthorized op ${path}. Probeer token te refreshen...`);
@@ -183,7 +186,16 @@ async function fetchAuthInternal(
       }
     }
 
-    const text = await res.text().catch(() => "");
+    if (
+      res.status === 403 &&
+      !options._csrfRetry &&
+      text.includes("CSRF validation failed")
+    ) {
+      console.warn(`⚠️ CSRF retry bootstrap voor ${path}`);
+      await ensureCsrfCookie();
+      return fetchAuthInternal(path, { ...options, _csrfRetry: true });
+    }
+
     const error: any = new Error("API request failed");
     error.status = res.status;
     error.body = text;
