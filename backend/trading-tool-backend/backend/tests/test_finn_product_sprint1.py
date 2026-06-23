@@ -259,6 +259,37 @@ def test_general_capability_response_carries_operator_contract():
     assert payload["analysis"]["operator_resolution"]["summary"] == payload["review_reason"]
 
 
+def test_general_capability_response_becomes_profile_specific():
+    service = FinnPlanService(None)
+
+    fomo = asyncio.run(service.build_general_capability_response(
+        7,
+        "Wat kun je voor mij doen?",
+        {
+            "page": "assistant",
+            "page_type": "assistant",
+            "symbol": "BTC",
+            "trader_profile_used": True,
+            "trader_profile": {"behavior_flags": ["fomo"]},
+        },
+    ))
+    exit_discipline = asyncio.run(service.build_general_capability_response(
+        7,
+        "Wat kun je voor mij doen?",
+        {
+            "page": "assistant",
+            "page_type": "assistant",
+            "symbol": "BTC",
+            "trader_profile_used": True,
+            "trader_profile": {"behavior_flags": ["takes_profit_too_early", "holds_losers_too_long"]},
+        },
+    ))
+
+    assert "fear of missing out" in fomo["response"]
+    assert "invalidatie" in exit_discipline["response"]
+    assert fomo["response"] != exit_discipline["response"]
+
+
 def test_decision_review_response_carries_operator_summary_and_next_step():
     service = FinnPlanService(None)
 

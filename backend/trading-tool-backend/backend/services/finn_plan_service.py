@@ -2766,11 +2766,17 @@ class FinnPlanService:
         page = context.get("page_type") or context.get("page") or "Tradamind"
         asset = context.get("symbol") or context.get("asset")
         asset_text = f" rond {str(asset).upper()}" if asset else ""
+        profile_line = self._profile_focus_line(context, asset, mode="general")
+        profile_next_step = self._profile_next_step(context, asset, default_step="")
         response = (
             f"Ik help je hier vooral met uitleg, coaching en review in {page}{asset_text}. "
             "Denk aan: je actieve setup of strategie uitleggen, score- en blocker-uitleg geven, "
             "dagcoaching doen, Mission Control samenvatten en bot-decisions reviewen voordat je iets uitvoert."
         )
+        if profile_line:
+            response = f"{response} {profile_line}"
+        if profile_next_step:
+            response = f"{response} {profile_next_step}"
         return self._enrich_operator_contract({
             "response": response,
             "intent": "general_help",
@@ -2791,9 +2797,12 @@ class FinnPlanService:
             },
             "actions": [],
         },
-        summary=f"Ik kan je hier helpen met uitleg, review en veilige vervolgstappen in {page}{asset_text}.",
+        summary=(
+            f"Ik kan je hier helpen met uitleg, review en veilige vervolgstappen in {page}{asset_text}."
+            + (f" {profile_line}" if profile_line else "")
+        ),
         risk_summary="Deze route blijft read-only: ik leg uit, review en stuur je pas daarna naar een concrete vervolgactie.",
-        next_best_action="Vraag Finn om je huidige context, een setup-review of je volgende beste stap.",
+        next_best_action=profile_next_step or "Vraag Finn om je huidige context, een setup-review of je volgende beste stap.",
         review_reason="Begin hier als je eerst wilt begrijpen wat je ziet voordat je iets bevestigt.")
 
     async def build_quick_general_help_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -2801,10 +2810,16 @@ class FinnPlanService:
         page = context.get("page_type") or context.get("page") or "Tradamind"
         asset = context.get("symbol") or context.get("asset")
         asset_text = f" voor {str(asset).upper()}" if asset else ""
+        profile_line = self._profile_focus_line(context, asset, mode="general")
+        profile_next_step = self._profile_next_step(context, asset, default_step="")
         response = (
             f"Ik kan dit kort voor je spiegelen op {page}{asset_text}, maar deze vraag is nog te impliciet om er meteen een harde review van te maken. "
             "Noem de setup, trade of entry die je bedoelt, dan maak ik er direct een concrete review van."
         )
+        if profile_line:
+            response = f"{response} {profile_line}"
+        if profile_next_step:
+            response = f"{response} {profile_next_step}"
         return self._enrich_operator_contract({
             "response": response,
             "intent": "general_help",
@@ -2821,9 +2836,12 @@ class FinnPlanService:
             },
             "actions": [],
         },
-        summary=f"Ik heb nog net te weinig context om hier meteen een harde review van te maken{asset_text}.",
+        summary=(
+            f"Ik heb nog net te weinig context om hier meteen een harde review van te maken{asset_text}."
+            + (f" {profile_line}" if profile_line else "")
+        ),
         risk_summary="Bij een te vage prompt wil ik geen schijnzeker review-oordeel geven zonder duidelijk trade-, setup- of entry-anker.",
-        next_best_action="Noem de setup, trade of entry die je bedoelt, dan review ik die direct.",
+        next_best_action=profile_next_step or "Noem de setup, trade of entry die je bedoelt, dan review ik die direct.",
         review_reason="Deze vraag zit op de grens tussen algemene hulp en decision review, dus ik houd hem eerst compact en veilig.")
 
     def _product_capability_inventory(self, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -2862,6 +2880,7 @@ class FinnPlanService:
     async def build_product_help_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
         page = context.get("page_type") or context.get("page") or "Tradamind"
+        asset = context.get("symbol") or context.get("asset")
         inventory = self._product_capability_inventory(context)
         supported_now = ", ".join([
             "uitleg van je huidige scherm",
@@ -2875,12 +2894,18 @@ class FinnPlanService:
             "bot aanmaken",
             "bot-decisions reviewen",
         ])
+        profile_line = self._profile_focus_line(context, asset, mode="general")
+        profile_next_step = self._profile_next_step(context, asset, default_step="")
         response = (
             f"Je zit nu op {page}. Hier help ik je vooral met begrijpen en veilig beslissen. "
             f"Wat ik nu direct voor je kan doen: {supported_now}. "
             f"Als je echt iets wilt bouwen of wijzigen, kan ik ook helpen met: {mutations}. "
             "Wat ik nog niet breed zelf doet: watchlists aanpassen en vrije portfolio-mutaties."
         )
+        if profile_line:
+            response = f"{response} {profile_line}"
+        if profile_next_step:
+            response = f"{response} {profile_next_step}"
         return self._enrich_operator_contract({
             "response": response,
             "intent": "product_help",
@@ -2900,9 +2925,12 @@ class FinnPlanService:
             },
             "actions": [],
         },
-        summary=f"Op {page} help ik je vooral met begrijpen, reviewen en veilig kiezen wat je hierna doet.",
+        summary=(
+            f"Op {page} help ik je vooral met begrijpen, reviewen en veilig kiezen wat je hierna doet."
+            + (f" {profile_line}" if profile_line else "")
+        ),
         risk_summary="Ik gebruik deze route om je binnen de productgrenzen te houden: uitleg eerst, uitvoering pas via de juiste review-flow.",
-        next_best_action="Vraag Finn om het huidige scherm uit te leggen of om een concrete review van setup, strategie of bot.",
+        next_best_action=profile_next_step or "Vraag Finn om het huidige scherm uit te leggen of om een concrete review van setup, strategie of bot.",
         review_reason="Zo voorkom je dat een productvraag meteen aanvoelt als een uitvoeractie.")
 
     async def build_product_refresh_help_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

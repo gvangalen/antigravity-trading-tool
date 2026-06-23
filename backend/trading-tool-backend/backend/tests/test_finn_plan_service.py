@@ -432,6 +432,21 @@ def test_build_product_help_response_includes_supported_and_not_supported_capabi
     assert "uitleg van je huidige scherm" in result["response"]
 
 
+def test_build_product_help_response_includes_profile_specific_next_step():
+    service = _service()
+
+    result = asyncio.run(service.build_product_help_response(30, "Wat kan ik hier doen?", {
+        "page": "/assistant",
+        "page_type": "Assistant",
+        "symbol": "BTC",
+        "trader_profile_used": True,
+        "trader_profile": {"behavior_flags": ["fomo"]},
+    }))
+
+    assert "fear of missing out" in result["response"]
+    assert "fear of missing out" in result["next_best_action"]
+
+
 def test_build_behavioral_intelligence_response_exposes_safe_coaching_contract(monkeypatch):
     service = FinnPlanService(db_session=object())
     service._get_recent_finn_activity = AsyncMock(return_value=[])
