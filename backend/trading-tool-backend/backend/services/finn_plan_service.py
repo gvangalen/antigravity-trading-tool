@@ -13992,12 +13992,18 @@ class FinnPlanService:
         profile_alignment = memory.get("profile_habit_alignment") or {}
         primary_alignment = profile_alignment.get("primary_alignment") or {}
         if primary_alignment:
+            matched_sources = primary_alignment.get("matched_sources") or []
             lines.append(
                 "Profiel + bewijs aligneren: "
                 f"{primary_alignment.get('label')} "
-                f"({primary_alignment.get('evidence_strength')} confidence via {', '.join(primary_alignment.get('matched_sources') or [])})."
+                f"({primary_alignment.get('evidence_strength')} confidence via {', '.join(matched_sources)})."
+            )
+            lines.append(
+                f"- Bevestigd door {len(matched_sources)} bron(nen) en {memory.get('supporting_evidence_count', 0)} recente signalen in {memory.get('time_window') or 'de laatste periode'}."
             )
             lines.append(f"- {primary_alignment.get('summary')}")
+            if primary_alignment.get("behavioral_cost"):
+                lines.append(f"- Gedragskost nu: {primary_alignment.get('behavioral_cost')}")
             lines.append(f"- {primary_alignment.get('recommended_rule')}")
         evidence = memory.get("supporting_evidence") or []
         if evidence:

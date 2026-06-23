@@ -93,7 +93,18 @@ def test_record_behavioral_response_events_tracks_profile_guidance_and_friction(
             "intent": "priority_engine",
             "flow": "priority_engine",
             "next_best_action": "Review BTC setup",
-            "analysis": {"profile_guidance": "Voor jouw profiel telt vooral discipline."},
+            "analysis": {
+                "profile_guidance": "Voor jouw profiel telt vooral discipline.",
+                "profile_habit_alignment": {
+                    "primary_alignment": {
+                        "flag": "fomo",
+                        "label": "FOMO / najagen",
+                        "summary": "Je profiel noemt FOMO en je recente usage bevestigt datzelfde patroon.",
+                        "evidence_strength": "high",
+                        "matched_sources": ["memory_v2", "outcome_memory"],
+                    }
+                },
+            },
             "state": {
                 "current_flow": "priority_engine",
                 "pending_behavioral_memory_friction": {
@@ -116,11 +127,13 @@ def test_record_behavioral_response_events_tracks_profile_guidance_and_friction(
         trace_id="trace-1",
     )
 
-    assert len(recorded) == 2
+    assert len(recorded) == 3
     assert all(event["event_name"] == "behavioral_intervention_seen" for _, event in recorded)
     assert recorded[0][1]["metadata"]["intervention_type"] == "profile_guidance"
-    assert recorded[1][1]["metadata"]["intervention_type"] == "pending_behavioral_memory_friction"
-    assert recorded[1][1]["metadata"]["requires_ack"] is True
+    assert recorded[1][1]["metadata"]["intervention_type"] == "profile_habit_alignment"
+    assert recorded[1][1]["metadata"]["matched_sources_count"] == 2
+    assert recorded[2][1]["metadata"]["intervention_type"] == "pending_behavioral_memory_friction"
+    assert recorded[2][1]["metadata"]["requires_ack"] is True
 
 
 def test_assistant_chat_passes_enriched_profile_context_into_legacy_service(monkeypatch):

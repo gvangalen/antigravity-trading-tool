@@ -7063,6 +7063,8 @@ def test_build_behavioral_memory_response_aligns_profile_with_recent_evidence(mo
     assert result["analysis"]["profile_habit_alignment"]["confirmed"] is True
     assert result["analysis"]["profile_habit_alignment"]["primary_alignment"]["flag"] == "overtrades"
     assert "Profiel + bewijs aligneren" in result["response"]
+    assert "Bevestigd door" in result["response"]
+    assert "Gedragskost nu" in result["response"]
 
 
 def test_build_outcome_memory_response_extracts_repeating_negative_pattern(monkeypatch):

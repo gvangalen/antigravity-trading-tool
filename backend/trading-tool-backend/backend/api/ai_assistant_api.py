@@ -315,6 +315,24 @@ def _record_behavioral_response_events(
             },
             **base_event,
         )
+    profile_alignment = analysis.get("profile_habit_alignment")
+    if isinstance(profile_alignment, dict):
+        primary_alignment = profile_alignment.get("primary_alignment")
+        if isinstance(primary_alignment, dict) and primary_alignment.get("flag"):
+            _record_finn_product_event(
+                event_name="behavioral_intervention_seen",
+                metadata={
+                    **base_metadata,
+                    "behavior_flag": str(primary_alignment.get("flag")),
+                    "behavior_label": str(primary_alignment.get("label") or primary_alignment.get("flag")),
+                    "intervention_type": "profile_habit_alignment",
+                    "intervention_copy": str(primary_alignment.get("summary") or ""),
+                    "evidence_strength": primary_alignment.get("evidence_strength"),
+                    "matched_sources": list(primary_alignment.get("matched_sources") or []),
+                    "matched_sources_count": len(primary_alignment.get("matched_sources") or []),
+                },
+                **base_event,
+            )
     pending_friction = state.get("pending_behavioral_memory_friction")
     if isinstance(pending_friction, dict):
         _record_finn_product_event(
