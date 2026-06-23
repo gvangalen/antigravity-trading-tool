@@ -151,11 +151,20 @@ export function useOnboarding() {
   // 4️⃣ Onboarding & pipeline status
   // =====================================================
   const onboardingComplete = useMemo(() => {
-    if (!stepStatus) return false;
-    const done = Object.values(stepStatus).every(Boolean);
+    if (!status && !stepStatus) return false;
+    const done = Boolean(
+      status?.onboarding_complete ?? (
+        stepStatus &&
+        stepStatus.market &&
+        stepStatus.macro &&
+        stepStatus.technical &&
+        stepStatus.setup &&
+        stepStatus.strategy
+      )
+    );
     console.log("🧭 [Onboarding] onboardingComplete =", done);
     return done;
-  }, [stepStatus]);
+  }, [status, stepStatus]);
 
   const pipelineStarted = !!status?.pipeline_started;
 

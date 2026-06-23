@@ -105,3 +105,37 @@ def test_get_status_dict_only_backfills_missing_legacy_steps():
     assert status.has_setup is True
     assert status.has_strategy is False
     assert status.onboarding_complete is False
+
+
+def test_get_status_dict_marks_legacy_user_complete_without_profile_if_core_steps_exist():
+    repo = FakeOnboardingRepository(
+        steps=[
+            SimpleNamespace(step_key="profile", completed=False, pipeline_started=False),
+            SimpleNamespace(step_key="market", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="macro", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="technical", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="setup", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="strategy", completed=True, pipeline_started=False),
+        ],
+        inferred_completed={
+            "profile": False,
+            "market": True,
+            "macro": True,
+            "technical": True,
+            "setup": True,
+            "strategy": True,
+        },
+    )
+
+    service = OnboardingService(repo)
+
+    status = asyncio.run(service.get_status_dict(user_id=2))
+
+    assert repo.marked_steps == []
+    assert status.has_profile is False
+    assert status.has_market is True
+    assert status.has_macro is True
+    assert status.has_technical is True
+    assert status.has_setup is True
+    assert status.has_strategy is True
+    assert status.onboarding_complete is True

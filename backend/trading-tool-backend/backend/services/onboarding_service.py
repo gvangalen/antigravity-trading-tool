@@ -28,6 +28,14 @@ STEP_FLAG_MAP = {
     "strategy": "has_strategy",
 }
 
+REQUIRED_COMPLETION_STEPS: List[str] = [
+    "market",
+    "macro",
+    "technical",
+    "setup",
+    "strategy",
+]
+
 class OnboardingService:
     def __init__(self, repository: OnboardingRepository):
         self.repository = repository
@@ -67,7 +75,9 @@ class OnboardingService:
             STEP_FLAG_MAP[s]: completed.get(s, False)
             for s in DEFAULT_STEPS
         }
-        status_kwargs["onboarding_complete"] = all(completed.get(s, False) for s in DEFAULT_STEPS)
+        status_kwargs["onboarding_complete"] = all(
+            completed.get(step_key, False) for step_key in REQUIRED_COMPLETION_STEPS
+        )
         status_kwargs["pipeline_started"] = pipeline_started
 
         logger.info(
@@ -91,7 +101,7 @@ class OnboardingService:
         pipeline_started = strategy_step.pipeline_started
         
         completed_map = {s.step_key: s.completed for s in steps}
-        all_completed = all(completed_map.get(s, False) for s in DEFAULT_STEPS)
+        all_completed = all(completed_map.get(s, False) for s in REQUIRED_COMPLETION_STEPS)
 
         logger.info(
             f"[Onboarding] Pipeline check user_id={user_id} "
