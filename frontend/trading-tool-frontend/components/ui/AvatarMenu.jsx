@@ -141,7 +141,7 @@ export default function AvatarMenu() {
             )}
 
             <DropdownItem href="/profile" icon={<User size={16} />}>
-              {locale === 'nl' ? "Profiel" : "Profile"}
+              {locale === 'nl' ? "Profiel & trader-profiel" : "Profile & trader profile"}
             </DropdownItem>
 
             <div className="h-px bg-[var(--color-border-subtle)] dark:bg-slate-800 my-1 mx-4" />
