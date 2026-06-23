@@ -5,11 +5,12 @@ import asyncio
 import os
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional, AsyncGenerator
-from sqlalchemy import select, update, and_, desc
+from sqlalchemy import select, update, and_, desc, text
 from backend.infrastructure.models import AiCategoryInsight, ChatSession, ChatMessage, AiIntelligenceEvent, AiPendingAction
 
 from backend.ai_agents.ai_assistant_prompts import get_role_prompt
 from backend.services.ai_gateway import AiGateway
+from backend.services.ai_usage_log_compat import AI_USAGE_LOG_COLUMN_ORDER, filter_ai_usage_log_values
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.infrastructure.repositories.report_repository import ReportRepository
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 ASSISTANT_CONTEXT_CACHE_TTL_SECONDS = int(os.getenv("ASSISTANT_CONTEXT_CACHE_TTL_SECONDS", "20"))
 _assistant_context_cache: Dict[str, Dict[str, Any]] = {}
+_ai_usage_log_supported_columns: Optional[set[str]] = None
 
 
 def _get_cached_assistant_context(cache_key: str) -> Optional[str]:
@@ -1200,7 +1202,7 @@ class AiAssistantService:
         context_data: Optional[Dict[str, Any]],
         resolved_symbol: Optional[str] = None,
     ) -> str:
-        if intent not in {"general", "chat"}:
+        if intent not in {"general", "chat", "general_help", "product_help", "analysis", "report", "coach"}:
             return response_text
         profile_line = self._legacy_general_profile_line(context_data, resolved_symbol)
         if not profile_line:
@@ -2331,6 +2333,30 @@ class AiAssistantService:
             return "CHRONOLOGISCHE CONTINUÏTEIT: Tijdelijk niet beschikbaar door een interne service fout."
 
 
+async def _get_supported_ai_usage_log_columns(db_session) -> set[str]:
+    global _ai_usage_log_supported_columns
+    if _ai_usage_log_supported_columns:
+        return _ai_usage_log_supported_columns
+
+    try:
+        result = await db_session.execute(text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'ai_usage_logs'
+        """))
+        rows = result.fetchall()
+        columns = {str(row[0]) for row in rows if row and row[0]}
+        if columns:
+            _ai_usage_log_supported_columns = columns
+            return columns
+    except Exception as exc:
+        logger.warning("⚠️ Kon ai_usage_logs schema niet inspecteren in background logger; gebruik volledige kolomset: %s", exc)
+
+    _ai_usage_log_supported_columns = set(AI_USAGE_LOG_COLUMN_ORDER)
+    return _ai_usage_log_supported_columns
+
+
 async def record_ai_usage_background(
     user_id: int,
     user_query: str,
@@ -2364,7 +2390,6 @@ async def record_ai_usage_background(
             from backend.utils.ai_cost_calculator import calculate_cost
             cost = calculate_cost("gpt-4o-mini", p_tokens, c_tokens)
             
-            from sqlalchemy import text
             from backend.services.ai_usage_observability_service import classify_request_source
 
             user = await user_repo.get_by_id(user_id)
@@ -2375,25 +2400,38 @@ async def record_ai_usage_background(
                 app_env=app_env,
                 run_kind="interactive",
             )
-            stmt = text("""
-                INSERT INTO ai_usage_logs (
-                    user_id, model, prompt_tokens, completion_tokens, cost, purpose, status, 
-                    response_time_ms, estimated_cost_if_full, symbol, trace_id, 
-                    completion_status, parser_recovery_triggered, confidence_score, safety_guardrail_triggered,
-                    request_source, app_env, run_kind, entry_point, user_email_snapshot
-                ) VALUES (
-                    :u, :m, :p, :c, :co, :pur, :s, 
-                    :rt, :ec, :sym, :tid, 
-                    :c_stat, :p_rec, :conf, :s_grd,
-                    :src, :env, :run_kind, :entry, :email
-                )
-            """)
-            await db.execute(stmt, {
-                "u": user_id, "m": "gpt-4o-mini", "p": p_tokens, "c": c_tokens, "co": cost, "pur": f"chat_{intent}", "s": "full_ai",
-                "rt": duration_ms, "ec": cost, "sym": resolved_symbol, "tid": trace_id,
-                "c_stat": completion_status, "p_rec": parser_recovery_triggered, "conf": confidence_score, "s_grd": safety_guardrail_triggered,
-                "src": request_source, "env": app_env, "run_kind": "interactive", "entry": f"assistant_service:{intent}", "email": user_email
-            })
+            supported_columns = await _get_supported_ai_usage_log_columns(db)
+            values = {
+                "user_id": user_id,
+                "model": "gpt-4o-mini",
+                "prompt_tokens": p_tokens,
+                "completion_tokens": c_tokens,
+                "cost": cost,
+                "purpose": f"chat_{intent}",
+                "status": "full_ai",
+                "response_time_ms": duration_ms,
+                "estimated_cost_if_full": cost,
+                "symbol": resolved_symbol,
+                "trace_id": trace_id,
+                "completion_status": completion_status,
+                "parser_recovery_triggered": parser_recovery_triggered,
+                "confidence_score": confidence_score,
+                "safety_guardrail_triggered": safety_guardrail_triggered,
+                "request_source": request_source,
+                "app_env": app_env,
+                "run_kind": "interactive",
+                "entry_point": f"assistant_service:{intent}",
+                "user_email_snapshot": user_email,
+            }
+            columns, params = filter_ai_usage_log_values(values, supported_columns=supported_columns)
+            stmt = text(
+                "INSERT INTO ai_usage_logs ("
+                + ", ".join(columns)
+                + ") VALUES ("
+                + ", ".join(f":{column}" for column in columns)
+                + ")"
+            )
+            await db.execute(stmt, params)
             
             # Increment request counter and cost statistics
             await user_repo.update_ai_usage(user_id, 1, cost, p_tokens + c_tokens)

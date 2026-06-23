@@ -10,12 +10,15 @@ from backend.utils.openai_client import ask_gpt_text_async, ask_gpt_json_async
 from backend.utils.ai_cost_calculator import calculate_cost
 from backend.utils.embedding_client import get_embedding
 from backend.infrastructure.vector_store import get_vector_store
+from backend.infrastructure.database import async_session_factory
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.repositories.score_repository import ScoreRepository
+from backend.services.ai_usage_log_compat import AI_USAGE_LOG_COLUMN_ORDER, filter_ai_usage_log_values
 from backend.services.ai_usage_observability_service import classify_request_source
 from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
+_AI_USAGE_LOG_SUPPORTED_COLUMNS: Optional[set[str]] = None
 
 # TTL Config (in minutes)
 TTL_CONFIG = {
@@ -293,29 +296,61 @@ class AiGateway:
         run_kind: Optional[str] = None, entry_point: Optional[str] = None,
         user_email_snapshot: Optional[str] = None
     ):
+        values = {
+            "user_id": user_id,
+            "model": model,
+            "prompt_tokens": p_tokens,
+            "completion_tokens": c_tokens,
+            "cost": cost,
+            "purpose": purpose,
+            "status": status,
+            "response_time_ms": response_time_ms,
+            "estimated_cost_if_full": estimated_cost_if_full,
+            "similarity_score": similarity_score,
+            "cache_age_seconds": cache_age_seconds,
+            "rejected_reason": rejected_reason,
+            "symbol": symbol,
+            "request_source": request_source or "unclassified",
+            "app_env": app_env,
+            "run_kind": run_kind,
+            "entry_point": entry_point,
+            "user_email_snapshot": user_email_snapshot,
+        }
         try:
-            stmt = text("""
-                INSERT INTO ai_usage_logs (
-                    user_id, model, prompt_tokens, completion_tokens, cost, purpose, status,
-                    response_time_ms, estimated_cost_if_full, similarity_score, cache_age_seconds,
-                    rejected_reason, symbol, request_source, app_env, run_kind, entry_point, user_email_snapshot
+            async with async_session_factory() as log_db:
+                supported_columns = await self._get_supported_ai_usage_log_columns(log_db)
+                columns, params = filter_ai_usage_log_values(values, supported_columns=supported_columns)
+                stmt = text(
+                    "INSERT INTO ai_usage_logs ("
+                    + ", ".join(columns)
+                    + ") VALUES ("
+                    + ", ".join(f":{column}" for column in columns)
+                    + ")"
                 )
-                VALUES (
-                    :u, :m, :p, :c, :co, :pur, :s,
-                    :rt, :ec, :ss, :cas,
-                    :rr, :sym, :src, :env, :run_kind, :entry, :email
-                )
-            """)
-            await self.user_repo.db.execute(stmt, {
-                "u": user_id, "m": model, "p": p_tokens, "c": c_tokens, "co": cost, "pur": purpose, "s": status,
-                "rt": response_time_ms, "ec": estimated_cost_if_full, "ss": similarity_score, "cas": cache_age_seconds, "rr": rejected_reason,
-                "sym": symbol, "src": request_source or "unclassified", "env": app_env, "run_kind": run_kind,
-                "entry": entry_point, "email": user_email_snapshot
-            })
-            await self.user_repo.db.commit()
+                await log_db.execute(stmt, params)
+                await log_db.commit()
         except Exception as e:
             logger.error(f"❌ AI usage logging error (non-blocking fallback): {e}")
-            try:
-                await self.user_repo.db.rollback()
-            except Exception:
-                pass
+
+    async def _get_supported_ai_usage_log_columns(self, db_session) -> set[str]:
+        global _AI_USAGE_LOG_SUPPORTED_COLUMNS
+        if _AI_USAGE_LOG_SUPPORTED_COLUMNS:
+            return _AI_USAGE_LOG_SUPPORTED_COLUMNS
+
+        try:
+            result = await db_session.execute(text("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'ai_usage_logs'
+            """))
+            rows = result.fetchall()
+            columns = {str(row[0]) for row in rows if row and row[0]}
+            if columns:
+                _AI_USAGE_LOG_SUPPORTED_COLUMNS = columns
+                return columns
+        except Exception as exc:
+            logger.warning("⚠️ Kon ai_usage_logs schema niet inspecteren; gebruik volledige kolomset: %s", exc)
+
+        _AI_USAGE_LOG_SUPPORTED_COLUMNS = set(AI_USAGE_LOG_COLUMN_ORDER)
+        return _AI_USAGE_LOG_SUPPORTED_COLUMNS

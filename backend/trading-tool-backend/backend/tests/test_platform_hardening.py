@@ -29,6 +29,42 @@ class _FakeAsyncSession:
         self.commits += 1
 
 
+class _FakeColumnResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def fetchall(self):
+        return list(self._rows)
+
+
+class _FakeIsolatedUsageSession:
+    def __init__(self, supported_columns):
+        self.supported_columns = supported_columns
+        self.executed = []
+        self.commits = 0
+
+    async def execute(self, query, params=None):
+        sql = str(query)
+        self.executed.append({"sql": sql, "params": params or {}})
+        if "information_schema.columns" in sql:
+            return _FakeColumnResult([(column,) for column in self.supported_columns])
+        return _ExecResult()
+
+    async def commit(self):
+        self.commits += 1
+
+
+class _FakeAsyncSessionFactory:
+    def __init__(self, session):
+        self.session = session
+
+    async def __aenter__(self):
+        return self.session
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
 def test_conversation_state_save_uses_single_user_upsert():
     session = _FakeAsyncSession()
     repo = ConversationStateRepository(session)
@@ -123,6 +159,60 @@ def test_ai_cache_save_uses_context_composite_conflict_key():
     assert session.executed[0]["params"]["s"] == "BTC"
     assert session.executed[0]["params"]["tf"] == "1D"
     assert session.executed[0]["params"]["cat"] == "assistant"
+
+
+def test_ai_usage_logging_uses_isolated_compat_session(monkeypatch):
+    class _MainSession:
+        async def execute(self, query, params=None):
+            raise AssertionError("shared request session should not be used for ai usage logging")
+
+    main_session = _MainSession()
+    isolated_session = _FakeIsolatedUsageSession(
+        supported_columns={
+            "user_id",
+            "model",
+            "prompt_tokens",
+            "completion_tokens",
+            "cost",
+            "purpose",
+            "status",
+            "response_time_ms",
+            "estimated_cost_if_full",
+            "similarity_score",
+            "cache_age_seconds",
+            "rejected_reason",
+            "symbol",
+        }
+    )
+
+    monkeypatch.setattr("backend.services.ai_gateway.async_session_factory", lambda: _FakeAsyncSessionFactory(isolated_session))
+
+    user_repo = type("UserRepo", (), {"db": main_session})()
+    gateway = AiGateway(user_repo, object())
+
+    asyncio.run(
+        gateway._log_usage(
+            user_id=7,
+            model="gpt-4o-mini",
+            p_tokens=10,
+            c_tokens=5,
+            cost=0.02,
+            purpose="assistant",
+            status="full_ai",
+            response_time_ms=123,
+            estimated_cost_if_full=0.02,
+            request_source="staging_user",
+            app_env="staging",
+            run_kind="interactive",
+            entry_point="ai_gateway:assistant",
+            user_email_snapshot="qa@example.com",
+        )
+    )
+
+    insert_sql = isolated_session.executed[-1]["sql"].lower()
+    assert "insert into ai_usage_logs" in insert_sql
+    assert "request_source" not in insert_sql
+    assert isolated_session.commits == 1
 
 
 def test_mobile_overview_does_not_parallelize_shared_session_work():

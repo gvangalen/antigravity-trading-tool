@@ -8752,3 +8752,30 @@ def test_legacy_general_profile_overlay_mentions_profile_conflict_when_present()
     )
 
     assert "wijkt af van je normale stijl" in text
+
+
+def test_legacy_general_profile_overlay_supports_general_help_alias():
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=None,
+        ai_gateway=None,
+    )
+
+    text = assistant._apply_legacy_profile_overlay(
+        "Ik help je hier vooral met uitleg, coaching en review in assistant rond BTC.",
+        intent="general_help",
+        context_data={
+            "trader_profile_used": True,
+            "symbol": "BTC",
+            "trader_profile": {"behavior_flags": ["fomo"]},
+        },
+        resolved_symbol="BTC",
+    )
+
+    assert "fear of missing out" in text
