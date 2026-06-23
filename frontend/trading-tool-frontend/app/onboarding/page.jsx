@@ -36,7 +36,7 @@ const ICONS = {
 export default function OnboardingPage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { status, loading, onboardingComplete, allowedSteps } = useOnboarding();
+  const { status, loading, onboardingComplete, allowedSteps, finish, saving } = useOnboarding();
 
   useEffect(() => {
     if (loading || !status) return;
@@ -412,7 +412,7 @@ export default function OnboardingPage() {
             </div>
             <div className="flex flex-wrap gap-3">
               <button
-                onClick={() => {
+                onClick={async () => {
                   trackAssistantEvent({
                     event_name: "onboarding_dashboard_activated",
                     page: "/onboarding",
@@ -420,8 +420,10 @@ export default function OnboardingPage() {
                     flow_type: "first_session",
                     action_type: "activate_dashboard",
                   });
+                  await finish();
                   router.push("/dashboard");
                 }}
+                disabled={saving}
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-md transition hover:bg-slate-800"
               >
                 <LayoutDashboard size={14} />

@@ -5,12 +5,14 @@ import { CheckCircle2, ArrowRight, LayoutDashboard, FileText, Sparkles } from "l
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import useBootstrapAgents from "@/hooks/useBootstrapAgents";
+import { useOnboarding } from "@/hooks/useOnboarding";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 export default function OnboardingCompletePage() {
   const router = useRouter();
   const { t } = useTranslation();
   const { runBootstrap, loading } = useBootstrapAgents();
+  const { finish, saving } = useOnboarding();
 
   useEffect(() => {
     trackAssistantEvent({
@@ -31,6 +33,7 @@ export default function OnboardingCompletePage() {
     });
 
     try {
+      await finish();
       await runBootstrap();
     } catch (err) {
       console.error("Bootstrap agents error:", err);
@@ -79,10 +82,10 @@ export default function OnboardingCompletePage() {
 
       <button
         onClick={handleGoToDashboard}
-        disabled={loading}
+        disabled={loading || saving}
         className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-3 font-semibold text-white shadow-md transition hover:bg-[var(--primary-dark)] hover:shadow-lg disabled:opacity-60"
       >
-        {loading
+        {loading || saving
           ? t?.traderProfile?.onboardingComplete?.loading
           : t?.traderProfile?.onboardingComplete?.cta}
         <ArrowRight size={18} />

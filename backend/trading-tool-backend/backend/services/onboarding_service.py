@@ -46,6 +46,21 @@ class OnboardingService:
         
         steps = await self.repository.get_user_steps(user_id, DEFAULT_FLOW)
         completed = {s.step_key: s.completed for s in steps}
+        inferred_completed = await self.repository.infer_completed_steps(user_id)
+        missing_completed_steps = [
+            step_key
+            for step_key, is_completed in inferred_completed.items()
+            if is_completed and not completed.get(step_key, False)
+        ]
+
+        if missing_completed_steps:
+            await self.repository.mark_steps_completed(user_id, DEFAULT_FLOW, missing_completed_steps)
+            completed.update({step_key: True for step_key in missing_completed_steps})
+            logger.info(
+                f"[Onboarding] Legacy completion backfill user_id={user_id} "
+                f"steps={missing_completed_steps}"
+            )
+
         pipeline_started = any(s.pipeline_started for s in steps if s.step_key == PIPELINE_STEP)
 
         status_kwargs = {
