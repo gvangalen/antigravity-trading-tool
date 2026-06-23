@@ -156,6 +156,13 @@
         "conservative": "Conservatief",
         "balanced": "Normaal",
         "aggressive": "Agressief"
+      },
+      "behaviorFlags": {
+        "fomo": "FOMO / najagen",
+        "takes_profit_too_early": "Winst te vroeg nemen",
+        "holds_losers_too_long": "Verliezers te lang laten lopen",
+        "overtrades": "Overtraden",
+        "leverage_seeking": "Leverage opzoeken"
       }
     },
     "groups": {
@@ -182,6 +189,10 @@
       "risk": {
         "title": "Wat is je risicoprofiel?",
         "subtitle": "Zo kan Finn beter kiezen tussen remmen, waarschuwen of juist ruimte geven. Je kunt combineren als je per context verschilt."
+      },
+      "behavior": {
+        "title": "Op welke coachingspatronen moet Finn letten?",
+        "subtitle": "Selecteer het gedrag waar je het vaakst op vastloopt. Zo kan Finn directer coachen zonder governance te veranderen."
       }
     },
     "onboardingStep": {

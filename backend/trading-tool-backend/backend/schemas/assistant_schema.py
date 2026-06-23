@@ -73,6 +73,7 @@ class AssistantPreferenceUpdate(BaseModel):
     experience_levels: Optional[List[str]] = None
     risk_profile: Optional[str] = None
     risk_profiles: Optional[List[str]] = None
+    behavior_flags: Optional[List[str]] = None
     trader_type: Optional[str] = None
     trader_types: Optional[List[str]] = None
     primary_timeframes: Optional[List[str]] = None

@@ -6,6 +6,7 @@ import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/a
 import {
   createOptionLabelMap,
   getAssetFocusOptions,
+  getBehaviorFlagOptions,
   getExperienceLevelOptions,
   getGoalOptions,
   getRiskProfileOptions,
@@ -67,6 +68,7 @@ export default function ProfilePage() {
     investment_goals_list: [],
     experience_levels: [],
     risk_profiles: [],
+    behavior_flags: [],
   });
 
   if (!user) {
@@ -94,12 +96,14 @@ export default function ProfilePage() {
   const goalOptions = useMemo(() => getGoalOptions(t), [t]);
   const experienceOptions = useMemo(() => getExperienceLevelOptions(t), [t]);
   const riskOptions = useMemo(() => getRiskProfileOptions(t), [t]);
+  const behaviorOptions = useMemo(() => getBehaviorFlagOptions(t), [t]);
   const traderTypeMap = useMemo(() => createOptionLabelMap(traderTypeOptions), [traderTypeOptions]);
   const timeframeMap = useMemo(() => createOptionLabelMap(timeframeOptions), [timeframeOptions]);
   const assetFocusMap = useMemo(() => createOptionLabelMap(assetFocusOptions), [assetFocusOptions]);
   const goalsMap = useMemo(() => createOptionLabelMap(goalOptions), [goalOptions]);
   const experienceMap = useMemo(() => createOptionLabelMap(experienceOptions), [experienceOptions]);
   const riskMap = useMemo(() => createOptionLabelMap(riskOptions), [riskOptions]);
+  const behaviorMap = useMemo(() => createOptionLabelMap(behaviorOptions), [behaviorOptions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -183,6 +187,7 @@ export default function ProfilePage() {
     ...profileForm.investment_goals_list.map((value) => goalsMap[value]).filter(Boolean),
     ...profileForm.experience_levels.map((value) => experienceMap[value]).filter(Boolean),
     ...profileForm.risk_profiles.map((value) => riskMap[value]).filter(Boolean),
+    ...profileForm.behavior_flags.map((value) => behaviorMap[value]).filter(Boolean),
   ].filter(Boolean);
 
   return (
@@ -381,6 +386,14 @@ export default function ProfilePage() {
                 values={profileForm.risk_profiles}
                 onToggle={(value) => toggleMulti("risk_profiles", value)}
               />
+
+              <MultiChoiceGroup
+                title={t?.traderProfile?.groups?.behavior?.title || "Which coaching patterns should Finn watch for?"}
+                subtitle={t?.traderProfile?.groups?.behavior?.subtitle || "Select the behaviors that most often trip you up. This helps Finn coach more directly without changing governance."}
+                options={behaviorOptions}
+                values={profileForm.behavior_flags}
+                onToggle={(value) => toggleMulti("behavior_flags", value)}
+              />
             </div>
 
             {profileError ? (
@@ -458,6 +471,23 @@ export default function ProfilePage() {
                           className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
                         >
                           {riskMap[value]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.behavior?.title || "Coaching patterns"}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profileForm.behavior_flags.length > 0 ? (
+                      profileForm.behavior_flags.map((value) => (
+                        <span
+                          key={value}
+                          className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                          {behaviorMap[value]}
                         </span>
                       ))
                     ) : (

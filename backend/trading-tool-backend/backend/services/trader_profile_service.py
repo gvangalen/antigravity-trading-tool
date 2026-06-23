@@ -29,6 +29,13 @@ GOAL_VALUES = [
 ]
 EXPERIENCE_LEVEL_VALUES = ["beginner", "intermediate", "advanced", "professional"]
 RISK_PROFILE_VALUES = ["conservative", "balanced", "aggressive"]
+BEHAVIOR_FLAG_VALUES = [
+    "fomo",
+    "takes_profit_too_early",
+    "holds_losers_too_long",
+    "overtrades",
+    "leverage_seeking",
+]
 INTRADAY_TIMEFRAMES = {"5m", "15m", "1h"}
 SWING_TIMEFRAMES = {"4h", "1d"}
 INVESTOR_TIMEFRAMES = {"1w", "1m"}
@@ -75,6 +82,10 @@ def normalize_trader_profile_preferences(preferences: Optional[dict]) -> Dict[st
             _ensure_array(prefs.get("risk_profiles")) or _ensure_array(prefs.get("risk_profile")),
             RISK_PROFILE_VALUES,
         ),
+        "behavior_flags": _normalize(
+            _ensure_array(prefs.get("behavior_flags")) or _ensure_array(prefs.get("behavior_flag")),
+            BEHAVIOR_FLAG_VALUES,
+        ),
     }
 
 
@@ -95,6 +106,8 @@ def build_trader_profile_summary(profile: Optional[Dict[str, List[str]]]) -> str
         segments.append(payload["experience_levels"][0])
     if payload.get("risk_profiles"):
         segments.append(payload["risk_profiles"][0])
+    if payload.get("behavior_flags"):
+        segments.append(f"behavior:{','.join(payload['behavior_flags'][:2])}")
     return " | ".join(segments)
 
 
@@ -167,6 +180,12 @@ def build_trader_profile_context(
     if not used:
         match_mode = "profile_missing_fallback"
         match_reason = "No stored trader profile; FINN should fall back to page and entity context."
+    elif conflict:
+        match_mode = "profile_conflict_detected"
+        match_reason = (
+            f"Current {request_style} context conflicts with the stored trader profile; "
+            "FINN should acknowledge the mismatch and prioritize the immediate page and action context."
+        )
     elif multiple_styles and request_style:
         match_mode = "mixed_profile_page_context_priority"
         match_reason = f"Multiple trader styles selected; current {request_style} context gets priority."

@@ -1,6 +1,7 @@
 import inspect
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
@@ -26,6 +27,42 @@ class _FakeAsyncSession:
 
     async def commit(self):
         self.commits += 1
+
+
+class _FakeColumnResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def fetchall(self):
+        return list(self._rows)
+
+
+class _FakeIsolatedUsageSession:
+    def __init__(self, supported_columns):
+        self.supported_columns = supported_columns
+        self.executed = []
+        self.commits = 0
+
+    async def execute(self, query, params=None):
+        sql = str(query)
+        self.executed.append({"sql": sql, "params": params or {}})
+        if "information_schema.columns" in sql:
+            return _FakeColumnResult([(column,) for column in self.supported_columns])
+        return _ExecResult()
+
+    async def commit(self):
+        self.commits += 1
+
+
+class _FakeAsyncSessionFactory:
+    def __init__(self, session):
+        self.session = session
+
+    async def __aenter__(self):
+        return self.session
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
 
 
 def test_conversation_state_save_uses_single_user_upsert():
@@ -56,6 +93,48 @@ def test_ai_usage_update_is_atomic_increment_sql():
     assert session.commits == 1
 
 
+def test_ai_preferences_update_reassigns_jsonb_payload_for_persistence():
+    class _FakeAsyncSessionWithRefresh:
+        def __init__(self):
+            self.commits = 0
+            self.refreshes = 0
+
+        async def commit(self):
+            self.commits += 1
+
+        async def refresh(self, user):
+            self.refreshes += 1
+
+    session = _FakeAsyncSessionWithRefresh()
+    repo = UserRepository(session)
+    original_prefs = {
+        "tone": "balanced",
+        "trader_types": ["investor"],
+    }
+    user = SimpleNamespace(ai_preferences=original_prefs)
+
+    async def _get_by_id(_user_id):
+        return user
+
+    repo.get_by_id = _get_by_id
+
+    updated = asyncio.run(repo.update_ai_preferences(7, {
+        "trader_types": ["swing_trader"],
+        "behavior_flags": ["fomo"],
+    }))
+
+    assert updated is user
+    assert session.commits == 1
+    assert session.refreshes == 1
+    assert user.ai_preferences["trader_types"] == ["swing_trader"]
+    assert user.ai_preferences["behavior_flags"] == ["fomo"]
+    assert user.ai_preferences is not original_prefs
+    assert original_prefs == {
+        "tone": "balanced",
+        "trader_types": ["investor"],
+    }
+
+
 def test_ai_cache_save_uses_context_composite_conflict_key():
     session = _FakeAsyncSession()
     user_repo = type("UserRepo", (), {"db": session})()
@@ -80,6 +159,60 @@ def test_ai_cache_save_uses_context_composite_conflict_key():
     assert session.executed[0]["params"]["s"] == "BTC"
     assert session.executed[0]["params"]["tf"] == "1D"
     assert session.executed[0]["params"]["cat"] == "assistant"
+
+
+def test_ai_usage_logging_uses_isolated_compat_session(monkeypatch):
+    class _MainSession:
+        async def execute(self, query, params=None):
+            raise AssertionError("shared request session should not be used for ai usage logging")
+
+    main_session = _MainSession()
+    isolated_session = _FakeIsolatedUsageSession(
+        supported_columns={
+            "user_id",
+            "model",
+            "prompt_tokens",
+            "completion_tokens",
+            "cost",
+            "purpose",
+            "status",
+            "response_time_ms",
+            "estimated_cost_if_full",
+            "similarity_score",
+            "cache_age_seconds",
+            "rejected_reason",
+            "symbol",
+        }
+    )
+
+    monkeypatch.setattr("backend.services.ai_gateway.async_session_factory", lambda: _FakeAsyncSessionFactory(isolated_session))
+
+    user_repo = type("UserRepo", (), {"db": main_session})()
+    gateway = AiGateway(user_repo, object())
+
+    asyncio.run(
+        gateway._log_usage(
+            user_id=7,
+            model="gpt-4o-mini",
+            p_tokens=10,
+            c_tokens=5,
+            cost=0.02,
+            purpose="assistant",
+            status="full_ai",
+            response_time_ms=123,
+            estimated_cost_if_full=0.02,
+            request_source="staging_user",
+            app_env="staging",
+            run_kind="interactive",
+            entry_point="ai_gateway:assistant",
+            user_email_snapshot="qa@example.com",
+        )
+    )
+
+    insert_sql = isolated_session.executed[-1]["sql"].lower()
+    assert "insert into ai_usage_logs" in insert_sql
+    assert "request_source" not in insert_sql
+    assert isolated_session.commits == 1
 
 
 def test_mobile_overview_does_not_parallelize_shared_session_work():

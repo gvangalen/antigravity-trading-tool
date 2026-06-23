@@ -5,11 +5,12 @@ import asyncio
 import os
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional, AsyncGenerator
-from sqlalchemy import select, update, and_, desc
+from sqlalchemy import select, update, and_, desc, text
 from backend.infrastructure.models import AiCategoryInsight, ChatSession, ChatMessage, AiIntelligenceEvent, AiPendingAction
 
 from backend.ai_agents.ai_assistant_prompts import get_role_prompt
 from backend.services.ai_gateway import AiGateway
+from backend.services.ai_usage_log_compat import AI_USAGE_LOG_COLUMN_ORDER, filter_ai_usage_log_values
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.infrastructure.repositories.report_repository import ReportRepository
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 ASSISTANT_CONTEXT_CACHE_TTL_SECONDS = int(os.getenv("ASSISTANT_CONTEXT_CACHE_TTL_SECONDS", "20"))
 _assistant_context_cache: Dict[str, Dict[str, Any]] = {}
+_ai_usage_log_supported_columns: Optional[set[str]] = None
 
 
 def _get_cached_assistant_context(cache_key: str) -> Optional[str]:
@@ -72,6 +74,7 @@ def _build_adaptive_profile_str(
         f"- Investment Goals: {_join(profile.get('investment_goals'))}\n"
         f"- Experience Levels: {_join(profile.get('experience_levels'))}\n"
         f"- Risk Profiles: {_join(profile.get('risk_profiles'))}\n"
+        f"- Behavior Flags: {_join(profile.get('behavior_flags'))}\n"
         f"- Behavioral Trading Signals:\n"
         f"  * Configured Custom Setups: {behavioral_signals['setups_count'] if behavioral_signals else 0}\n"
         f"  * Configured Custom Strategies: {behavioral_signals['strategies_count'] if behavioral_signals else 0}\n"
@@ -584,6 +587,12 @@ class AiAssistantService:
 
         # Apply deterministic safety post-processing guardrail to text response
         chat_text = self._apply_safety_guardrails(chat_text)
+        chat_text = self._apply_legacy_profile_overlay(
+            chat_text,
+            intent=intent,
+            context_data=context_data,
+            resolved_symbol=resolved_symbol,
+        )
 
         # Manage DB conversation state transitions
         if state:
@@ -996,6 +1005,12 @@ class AiAssistantService:
 
         # Apply safety guardrails to streamed text
         chat_text = self._apply_safety_guardrails(chat_text)
+        chat_text = self._apply_legacy_profile_overlay(
+            chat_text,
+            intent=intent,
+            context_data=context_data,
+            resolved_symbol=resolved_symbol,
+        )
 
         # Manage DB conversation state transitions
         if state:
@@ -1117,6 +1132,89 @@ class AiAssistantService:
         pass
             
         return softened_text
+
+    def _legacy_general_profile_line(
+        self,
+        context_data: Optional[Dict[str, Any]],
+        resolved_symbol: Optional[str] = None,
+    ) -> str:
+        payload = context_data or {}
+        if not payload.get("trader_profile_used"):
+            return ""
+
+        profile = payload.get("trader_profile") if isinstance(payload.get("trader_profile"), dict) else {}
+        trader_types = set(profile.get("trader_types") or [])
+        risk_profiles = set(profile.get("risk_profiles") or [])
+        behavior_flags = set(profile.get("behavior_flags") or [])
+        asset_label = resolved_symbol or payload.get("symbol") or payload.get("asset") or "dit asset"
+
+        if payload.get("profile_conflict_detected"):
+            return (
+                f"Voor jouw profiel geldt nu: deze vraag wijkt af van je normale stijl rond {asset_label}, "
+                "dus toets eerst of je hier bewust van je eigen plan afwijkt."
+            )
+        if "fomo" in behavior_flags:
+            return (
+                f"Voor jouw profiel geldt nu: wacht bij {asset_label} eerst op bevestiging "
+                "en laat haast of fear of missing out je timing niet overnemen."
+            )
+        if "overtrades" in behavior_flags:
+            return (
+                f"Voor jouw profiel geldt nu: voeg rond {asset_label} alleen iets toe "
+                "als dit aantoonbaar beter is dan je laatste actie."
+            )
+        if {"takes_profit_too_early", "holds_losers_too_long"} <= behavior_flags:
+            return (
+                f"Voor jouw profiel geldt nu: leg voor {asset_label} vooraf je exitplan vast "
+                "en bewaak je invalidatie strakker, zodat je winnaars niet te vroeg afsnijdt "
+                "en verliezers niet te lang laat rekken."
+            )
+        if "holds_losers_too_long" in behavior_flags:
+            return (
+                f"Voor jouw profiel geldt nu: bewaak bij {asset_label} eerst je invalidatie, "
+                "zodat je verliezers niet langer laat rekken dan je plan toelaat."
+            )
+        if "takes_profit_too_early" in behavior_flags:
+            return (
+                f"Voor jouw profiel geldt nu: leg voor {asset_label} vooraf je exitplan vast, "
+                "zodat je winnaars niet te vroeg afsnijdt."
+            )
+        if "leverage_seeking" in behavior_flags:
+            return (
+                f"Voor jouw profiel geldt nu: houd {asset_label} eerst zo simpel mogelijk "
+                "en gebruik leverage niet als versneller van twijfel."
+            )
+        if "swing_trader" in trader_types:
+            return f"Voor jouw profiel geldt nu: laat {asset_label} vooral tellen als 4H/Daily bevestiging terugkomt."
+        if trader_types & {"investor", "dca_investor"}:
+            return f"Voor jouw profiel geldt nu: forceer bij {asset_label} geen korte-termijn timing als je langetermijnplan niet echt verandert."
+        if trader_types & {"day_trader", "scalper"}:
+            return f"Voor jouw profiel geldt nu: behandel {asset_label} vooral als timing- en momentumvraag, niet als iets om blind te forceren."
+        if "conservative" in risk_profiles:
+            return f"Voor jouw profiel geldt nu: houd {asset_label} klein en selectief tot de sterkste twijfel weg is."
+        return ""
+
+    def _apply_legacy_profile_overlay(
+        self,
+        response_text: str,
+        *,
+        intent: str,
+        context_data: Optional[Dict[str, Any]],
+        resolved_symbol: Optional[str] = None,
+    ) -> str:
+        if intent not in {"general", "chat", "general_help", "product_help", "analysis", "report", "coach"}:
+            return response_text
+        profile_line = self._legacy_general_profile_line(context_data, resolved_symbol)
+        if not profile_line:
+            return response_text
+        normalized = str(response_text or "").strip()
+        if not normalized:
+            return profile_line
+        if profile_line.lower() in normalized.lower():
+            return normalized
+        if "voor jouw profiel" in normalized.lower():
+            return normalized
+        return f"{normalized}\n\n{profile_line}"
 
     async def _deterministic_pre_parse_slots(self, user_query: str, conv_state: Optional[dict], resolved_symbol: str, user_id: int) -> Optional[dict]:
         """
@@ -1773,6 +1871,7 @@ class AiAssistantService:
         trader_types = set(((context or {}).get("trader_profile") or {}).get("trader_types") or [])
         experience_levels = set(((context or {}).get("trader_profile") or {}).get("experience_levels") or [])
         risk_profiles = set(((context or {}).get("trader_profile") or {}).get("risk_profiles") or [])
+        behavior_flags = set(((context or {}).get("trader_profile") or {}).get("behavior_flags") or [])
         if profile_used:
             if trader_types & {"investor", "dca_investor"}:
                 action = f"Voor jouw langere horizon hoef je {symbol} nu niet te forceren; toets eerst of dit je plan echt verandert."
@@ -1794,6 +1893,17 @@ class AiAssistantService:
                     action = f"Voor jouw kortere horizon stap je nu niet in {symbol} tot timing en blockers weer meewerken."
                 else:
                     action = f"Wacht met nieuwe actie in {symbol} tot de sterkste blocker echt weg is."
+            if "fomo" in behavior_flags:
+                action = f"Wacht bij {symbol} eerst op bevestiging; laat geen haast of FOMO je timing overnemen."
+                conclusion = f"{conclusion} Je coachingsprofiel vraagt hier extra rust."
+            elif "overtrades" in behavior_flags:
+                action = f"Voeg voor {symbol} nu alleen iets toe als deze stap duidelijk beter is dan je laatste actie."
+            elif "holds_losers_too_long" in behavior_flags:
+                action = f"Check voor {symbol} eerst je invalidatie en exitgrens voordat je iets laat doorlopen."
+            elif "takes_profit_too_early" in behavior_flags:
+                action = f"Leg voor {symbol} eerst je exitplan vast zodat je een winnaar niet te vroeg dichtzet."
+            elif "leverage_seeking" in behavior_flags:
+                action = f"Gebruik voor {symbol} eerst de minst agressieve uitvoering; leverage is hier geen shortcut."
         else:
             why_prefix = ""
 
@@ -1810,6 +1920,11 @@ class AiAssistantService:
 
         if setup:
             why += f" Setup: {setup.get('name')} (#{setup.get('id')}), match {analysis.get('setup_match_percentage')}%."
+        if profile_used:
+            if "fomo" in behavior_flags:
+                why += " FOMO maakt timing fragieler als bevestiging nog ontbreekt."
+            elif "overtrades" in behavior_flags:
+                why += " Extra activiteit voelt snel als controle, maar kan hier vooral ruis toevoegen."
 
         bot_count = int(bot_today.get("decision_count") or 0)
         bot_conclusion = f"{bot_count} bot-beslissing(en) voor vandaag."
@@ -2218,6 +2333,30 @@ class AiAssistantService:
             return "CHRONOLOGISCHE CONTINUÏTEIT: Tijdelijk niet beschikbaar door een interne service fout."
 
 
+async def _get_supported_ai_usage_log_columns(db_session) -> set[str]:
+    global _ai_usage_log_supported_columns
+    if _ai_usage_log_supported_columns:
+        return _ai_usage_log_supported_columns
+
+    try:
+        result = await db_session.execute(text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'ai_usage_logs'
+        """))
+        rows = result.fetchall()
+        columns = {str(row[0]) for row in rows if row and row[0]}
+        if columns:
+            _ai_usage_log_supported_columns = columns
+            return columns
+    except Exception as exc:
+        logger.warning("⚠️ Kon ai_usage_logs schema niet inspecteren in background logger; gebruik volledige kolomset: %s", exc)
+
+    _ai_usage_log_supported_columns = set(AI_USAGE_LOG_COLUMN_ORDER)
+    return _ai_usage_log_supported_columns
+
+
 async def record_ai_usage_background(
     user_id: int,
     user_query: str,
@@ -2251,7 +2390,6 @@ async def record_ai_usage_background(
             from backend.utils.ai_cost_calculator import calculate_cost
             cost = calculate_cost("gpt-4o-mini", p_tokens, c_tokens)
             
-            from sqlalchemy import text
             from backend.services.ai_usage_observability_service import classify_request_source
 
             user = await user_repo.get_by_id(user_id)
@@ -2262,25 +2400,38 @@ async def record_ai_usage_background(
                 app_env=app_env,
                 run_kind="interactive",
             )
-            stmt = text("""
-                INSERT INTO ai_usage_logs (
-                    user_id, model, prompt_tokens, completion_tokens, cost, purpose, status, 
-                    response_time_ms, estimated_cost_if_full, symbol, trace_id, 
-                    completion_status, parser_recovery_triggered, confidence_score, safety_guardrail_triggered,
-                    request_source, app_env, run_kind, entry_point, user_email_snapshot
-                ) VALUES (
-                    :u, :m, :p, :c, :co, :pur, :s, 
-                    :rt, :ec, :sym, :tid, 
-                    :c_stat, :p_rec, :conf, :s_grd,
-                    :src, :env, :run_kind, :entry, :email
-                )
-            """)
-            await db.execute(stmt, {
-                "u": user_id, "m": "gpt-4o-mini", "p": p_tokens, "c": c_tokens, "co": cost, "pur": f"chat_{intent}", "s": "full_ai",
-                "rt": duration_ms, "ec": cost, "sym": resolved_symbol, "tid": trace_id,
-                "c_stat": completion_status, "p_rec": parser_recovery_triggered, "conf": confidence_score, "s_grd": safety_guardrail_triggered,
-                "src": request_source, "env": app_env, "run_kind": "interactive", "entry": f"assistant_service:{intent}", "email": user_email
-            })
+            supported_columns = await _get_supported_ai_usage_log_columns(db)
+            values = {
+                "user_id": user_id,
+                "model": "gpt-4o-mini",
+                "prompt_tokens": p_tokens,
+                "completion_tokens": c_tokens,
+                "cost": cost,
+                "purpose": f"chat_{intent}",
+                "status": "full_ai",
+                "response_time_ms": duration_ms,
+                "estimated_cost_if_full": cost,
+                "symbol": resolved_symbol,
+                "trace_id": trace_id,
+                "completion_status": completion_status,
+                "parser_recovery_triggered": parser_recovery_triggered,
+                "confidence_score": confidence_score,
+                "safety_guardrail_triggered": safety_guardrail_triggered,
+                "request_source": request_source,
+                "app_env": app_env,
+                "run_kind": "interactive",
+                "entry_point": f"assistant_service:{intent}",
+                "user_email_snapshot": user_email,
+            }
+            columns, params = filter_ai_usage_log_values(values, supported_columns=supported_columns)
+            stmt = text(
+                "INSERT INTO ai_usage_logs ("
+                + ", ".join(columns)
+                + ") VALUES ("
+                + ", ".join(f":{column}" for column in columns)
+                + ")"
+            )
+            await db.execute(stmt, params)
             
             # Increment request counter and cost statistics
             await user_repo.update_ai_usage(user_id, 1, cost, p_tokens + c_tokens)

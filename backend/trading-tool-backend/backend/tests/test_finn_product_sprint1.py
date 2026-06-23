@@ -105,6 +105,34 @@ def test_finn_product_analytics_snapshot_counts_prompts_screens_and_funnel():
     service.record_event(
         user_id=7,
         event={
+            "event_name": "behavioral_intervention_seen",
+            "session_id": "sess-b",
+            "surface": "report_governance",
+            "page": "/report",
+            "flow_type": "behavioral_intervention",
+            "metadata": {
+                "behavior_flag": "fomo",
+                "behavior_label": "FOMO",
+            },
+        },
+    )
+    service.record_event(
+        user_id=7,
+        event={
+            "event_name": "behavioral_intervention_acknowledged",
+            "session_id": "sess-b",
+            "surface": "live_preflight",
+            "page": "/bot",
+            "flow_type": "behavioral_intervention",
+            "metadata": {
+                "behavior_flag": "fomo",
+                "behavior_label": "FOMO",
+            },
+        },
+    )
+    service.record_event(
+        user_id=7,
+        event={
             "event_name": "screen_view",
             "session_id": "sess-c",
             "surface": "web",
@@ -171,6 +199,10 @@ def test_finn_product_analytics_snapshot_counts_prompts_screens_and_funnel():
     assert snapshot["top_cta_actions"][0]["action"] in {"market", "activate_dashboard"}
     assert snapshot["decision_review_usage_count"] == 1
     assert snapshot["priority_engine_usage_count"] == 1
+    assert snapshot["behavioral_intervention_seen_count"] == 1
+    assert snapshot["behavioral_intervention_ack_count"] == 1
+    assert snapshot["top_behavioral_flags"][0] == {"flag": "fomo", "count": 2}
+    assert snapshot["top_behavioral_surfaces"][0]["surface"] in {"report_governance", "live_preflight"}
     assert snapshot["repeated_user_signal"]["users_with_multiple_sessions"] == 1
 
 
@@ -225,6 +257,37 @@ def test_general_capability_response_carries_operator_contract():
     assert payload["review_reason"]
     assert payload["analysis"]["summary"] == payload["summary"]
     assert payload["analysis"]["operator_resolution"]["summary"] == payload["review_reason"]
+
+
+def test_general_capability_response_becomes_profile_specific():
+    service = FinnPlanService(None)
+
+    fomo = asyncio.run(service.build_general_capability_response(
+        7,
+        "Wat kun je voor mij doen?",
+        {
+            "page": "assistant",
+            "page_type": "assistant",
+            "symbol": "BTC",
+            "trader_profile_used": True,
+            "trader_profile": {"behavior_flags": ["fomo"]},
+        },
+    ))
+    exit_discipline = asyncio.run(service.build_general_capability_response(
+        7,
+        "Wat kun je voor mij doen?",
+        {
+            "page": "assistant",
+            "page_type": "assistant",
+            "symbol": "BTC",
+            "trader_profile_used": True,
+            "trader_profile": {"behavior_flags": ["takes_profit_too_early", "holds_losers_too_long"]},
+        },
+    ))
+
+    assert "fear of missing out" in fomo["response"]
+    assert "invalidatie" in exit_discipline["response"]
+    assert fomo["response"] != exit_discipline["response"]
 
 
 def test_decision_review_response_carries_operator_summary_and_next_step():

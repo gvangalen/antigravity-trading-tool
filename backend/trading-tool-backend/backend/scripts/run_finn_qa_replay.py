@@ -36,6 +36,9 @@ GENERIC_FAILURE_SNIPPETS = (
 
 DEFAULT_CHAT_LATENCY_BUDGET_MS = 8000.0
 DEFAULT_MISSION_CONTROL_LATENCY_BUDGET_MS = 20000.0
+DEFAULT_DELAY_SECONDS = 2.6
+DEFAULT_MAX_ATTEMPTS = 3
+DEFAULT_RETRY_BACKOFF_SECONDS = 5.0
 
 
 def load_promptset(path: Path) -> Dict[str, Any]:
@@ -81,6 +84,126 @@ def _safe_json(response: bytes) -> Dict[str, Any]:
         return json.loads(response.decode("utf-8"))
     except Exception as exc:  # pragma: no cover - defensive
         raise ValueError(f"Invalid JSON response: {exc}") from exc
+
+
+def _request_json(
+    *,
+    opener: urllib.request.OpenerDirector,
+    url: str,
+    method: str,
+    headers: Dict[str, str],
+    timeout_seconds: float,
+    body: Optional[Dict[str, Any]] = None,
+) -> Tuple[Dict[str, Any], int]:
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    request = urllib.request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with opener.open(request, timeout=timeout_seconds) as response:
+            return _safe_json(response.read()), int(response.status)
+    except urllib.error.HTTPError as exc:
+        raw = exc.read()
+        payload = _safe_json(raw) if raw else {"detail": str(exc)}
+        return payload, int(exc.code)
+
+
+def _pick_best_setup_candidate(candidates: List[Dict[str, Any]], context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not candidates:
+        return None
+    target_name = str(context.get("setup_name") or "").strip().lower()
+    target_symbol = str(context.get("setup_symbol") or context.get("symbol") or "").strip().upper()
+    target_timeframe = str(context.get("setup_timeframe") or context.get("timeframe") or "").strip().upper()
+
+    exact_name_matches = [
+        item for item in candidates
+        if str(item.get("name") or "").strip().lower() == target_name and target_name
+    ]
+    if target_symbol:
+        exact_name_matches = [
+            item for item in exact_name_matches
+            if str(item.get("symbol") or "").strip().upper() == target_symbol
+        ] or exact_name_matches
+    if target_timeframe:
+        exact_name_matches = [
+            item for item in exact_name_matches
+            if str(item.get("timeframe") or "").strip().upper() == target_timeframe
+        ] or exact_name_matches
+    if exact_name_matches:
+        return exact_name_matches[0]
+
+    filtered = candidates
+    if target_symbol:
+        filtered = [item for item in filtered if str(item.get("symbol") or "").strip().upper() == target_symbol] or filtered
+    if target_timeframe:
+        filtered = [item for item in filtered if str(item.get("timeframe") or "").strip().upper() == target_timeframe] or filtered
+    return filtered[0] if filtered else None
+
+
+def prepare_promptset_contexts(
+    *,
+    opener: urllib.request.OpenerDirector,
+    default_headers: Dict[str, str],
+    base_url: str,
+    promptset: Dict[str, Any],
+    timeout_seconds: float,
+) -> Dict[str, Any]:
+    prepared = json.loads(json.dumps(promptset))
+    cached_setups: Optional[List[Dict[str, Any]]] = None
+
+    for case in prepared.get("cases", []):
+        context = case.get("context")
+        if not isinstance(context, dict):
+            continue
+        setup_id = context.get("setup_id")
+        if not setup_id:
+            continue
+
+        payload, status = _request_json(
+            opener=opener,
+            url=f"{base_url.rstrip('/')}/api/setups/{int(setup_id)}",
+            method="GET",
+            headers=default_headers,
+            timeout_seconds=timeout_seconds,
+        )
+        if status == 200 and isinstance(payload, dict):
+            resolved = payload
+        else:
+            if cached_setups is None:
+                setup_list_payload, setup_list_status = _request_json(
+                    opener=opener,
+                    url=f"{base_url.rstrip('/')}/api/setups",
+                    method="GET",
+                    headers=default_headers,
+                    timeout_seconds=timeout_seconds,
+                )
+                cached_setups = setup_list_payload if setup_list_status == 200 and isinstance(setup_list_payload, list) else []
+            resolved = _pick_best_setup_candidate(cached_setups or [], context)
+
+            if resolved is None:
+                last_payload, last_status = _request_json(
+                    opener=opener,
+                    url=f"{base_url.rstrip('/')}/api/setups/last",
+                    method="GET",
+                    headers=default_headers,
+                    timeout_seconds=timeout_seconds,
+                )
+                if last_status == 200 and isinstance(last_payload, dict) and isinstance(last_payload.get("setup"), dict):
+                    resolved = last_payload["setup"]
+
+        if not isinstance(resolved, dict):
+            continue
+
+        resolved_id = resolved.get("id") or resolved.get("setup_id")
+        if resolved_id:
+            context["setup_id"] = int(resolved_id)
+        if resolved.get("name"):
+            context["setup_name"] = resolved.get("name")
+        if resolved.get("symbol"):
+            context["setup_symbol"] = resolved.get("symbol")
+            context["symbol"] = context.get("symbol") or resolved.get("symbol")
+        if resolved.get("timeframe"):
+            context["setup_timeframe"] = resolved.get("timeframe")
+
+    return prepared
 
 
 def build_http_client(
@@ -388,9 +511,17 @@ def render_markdown_report(summary: Dict[str, Any], results: List[Dict[str, Any]
             f"- `{result['id']}` [{status}] intent=`{result.get('intent')}` flow=`{result.get('flow')}` "
             f"mode=`{result.get('mode')}` variant=`{result.get('analysis_variant')}` "
             f"entity=`{result.get('context_entity_type')}` latency=`{result.get('latency_ms')}ms` "
+            f"attempts=`{result.get('attempts', 1)}` "
             f"failures=`{', '.join(result.get('failures') or []) or 'none'}`"
         )
     return "\n".join(lines) + "\n"
+
+
+def _should_retry(http_status: int, payload: Dict[str, Any]) -> bool:
+    if http_status in {429, 599}:
+        return True
+    detail = str((payload or {}).get("detail") or "").lower()
+    return any(snippet in detail for snippet in ("rate limit", "te veel verzoeken", "timed out", "timeout"))
 
 
 def run_suite(
@@ -401,6 +532,8 @@ def run_suite(
     promptset: Dict[str, Any],
     timeout_seconds: float,
     delay_seconds: float,
+    max_attempts: int,
+    retry_backoff_seconds: float,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     session_map: Dict[str, str] = {}
     results: List[Dict[str, Any]] = []
@@ -408,18 +541,26 @@ def run_suite(
     for case in promptset["cases"]:
         conversation = case.get("conversation")
         session_id = session_map.get(conversation) if conversation else None
-        response, latency_ms, http_status = perform_chat_request(
-            opener=opener,
-            default_headers=default_headers,
-            base_url=base_url,
-            query=case["query"],
-            context=case.get("context"),
-            session_id=session_id,
-            timeout_seconds=timeout_seconds,
-        )
+        attempts = 0
+        while True:
+            attempts += 1
+            response, latency_ms, http_status = perform_chat_request(
+                opener=opener,
+                default_headers=default_headers,
+                base_url=base_url,
+                query=case["query"],
+                context=case.get("context"),
+                session_id=session_id,
+                timeout_seconds=timeout_seconds,
+            )
+            if attempts >= max_attempts or not _should_retry(http_status, response):
+                break
+            time.sleep(max(delay_seconds, retry_backoff_seconds * attempts))
         if conversation and response.get("session_id"):
             session_map[conversation] = response["session_id"]
-        results.append(evaluate_case(case, response, latency_ms, http_status))
+        result = evaluate_case(case, response, latency_ms, http_status)
+        result["attempts"] = attempts
+        results.append(result)
         if delay_seconds > 0:
             time.sleep(delay_seconds)
 
@@ -444,8 +585,11 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument("--login-email", help="Optional web login email for cookie-based replay")
     parser.add_argument("--password-env", default="FINN_QA_PASSWORD", help="Env var containing the login password")
     parser.add_argument("--timeout-seconds", type=float, default=45.0, help="Per-request timeout")
-    parser.add_argument("--delay-seconds", type=float, default=0.0, help="Sleep between prompts to avoid noisy rate-limit false negatives")
+    parser.add_argument("--delay-seconds", type=float, default=DEFAULT_DELAY_SECONDS, help="Sleep between prompts to avoid noisy rate-limit false negatives")
     parser.add_argument("--no-delay", action="store_true", help="Override any configured pacing and run without delay between prompts")
+    parser.add_argument("--max-attempts", type=int, default=DEFAULT_MAX_ATTEMPTS, help="Maximum attempts per case for transient operational failures like 429/timeouts")
+    parser.add_argument("--retry-backoff-seconds", type=float, default=DEFAULT_RETRY_BACKOFF_SECONDS, help="Base backoff between retry attempts for transient operational failures")
+    parser.add_argument("--skip-context-prepare", action="store_true", help="Skip promptset context preparation and use prompt contexts exactly as authored")
     parser.add_argument("--insecure", action="store_true", help="Disable TLS certificate verification for environments with broken local CA trust")
     parser.add_argument("--strict", action="store_true", help="Exit non-zero when the release gate fails")
     return parser.parse_args(list(argv) if argv is not None else None)
@@ -469,6 +613,14 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         return 2
 
     promptset = load_promptset(Path(args.promptset))
+    if not args.skip_context_prepare:
+        promptset = prepare_promptset_contexts(
+            opener=opener,
+            default_headers=default_headers,
+            base_url=args.base_url,
+            promptset=promptset,
+            timeout_seconds=args.timeout_seconds,
+        )
     results, summary = run_suite(
         opener=opener,
         default_headers=default_headers,
@@ -476,6 +628,8 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         promptset=promptset,
         timeout_seconds=args.timeout_seconds,
         delay_seconds=0.0 if args.no_delay else args.delay_seconds,
+        max_attempts=max(1, int(args.max_attempts)),
+        retry_backoff_seconds=max(0.0, float(args.retry_backoff_seconds)),
     )
 
     report_payload = {

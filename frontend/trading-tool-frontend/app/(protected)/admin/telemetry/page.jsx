@@ -232,6 +232,8 @@ export default function AdminTelemetryPage() {
     const topPrompt = analytics?.top_prompts?.[0]?.prompt || null;
     const topFirstScreen = analytics?.top_first_screens?.[0]?.page || null;
     const topScreen = analytics?.top_screens?.[0]?.page || null;
+    const topBehavioralFlag = analytics?.top_behavioral_flags?.[0] || null;
+    const topBehavioralSurface = analytics?.top_behavioral_surfaces?.[0] || null;
 
     const summaryNotes = [
       queueTotal > 0
@@ -278,6 +280,17 @@ export default function AdminTelemetryPage() {
             icon: Activity,
             text: "Screen-telemetry is nog leeg. De volgende live sessie vult meteen first landings en screengebruik.",
           },
+      topBehavioralFlag
+        ? {
+            tone: "amber",
+            icon: ShieldCheck,
+            text: `Behavioral rem rond ${toSentenceCase(topBehavioralFlag.flag)} is ${topBehavioralFlag.count} keer zichtbaar geweest, vooral op ${topBehavioralSurface?.surface || "bekende surfaces"}.`,
+          }
+        : {
+            tone: "slate",
+            icon: ShieldCheck,
+            text: "Nog geen behavioral intervention-events zichtbaar. Zodra report of preflight deze remmen tonen, verschijnen ze hier.",
+          },
     ];
 
     return {
@@ -297,6 +310,8 @@ export default function AdminTelemetryPage() {
       reportRate,
       dashboardRate,
       totalSessions,
+      topBehavioralFlag,
+      topBehavioralSurface,
       summaryNotes,
     };
   }, [telemetry]);
@@ -340,6 +355,8 @@ export default function AdminTelemetryPage() {
     reportRate,
     dashboardRate,
     totalSessions,
+    topBehavioralFlag,
+    topBehavioralSurface,
     summaryNotes,
   } = derived;
 
@@ -425,12 +442,77 @@ export default function AdminTelemetryPage() {
           tone="slate"
         />
         <TelemetryMetricCard
+          title="Behavioral rem"
+          value={analytics?.behavioral_intervention_seen_count ?? 0}
+          subtitle={`${analytics?.behavioral_intervention_ack_count ?? 0} acknowledgements`}
+          icon={<ShieldCheck size={18} className="text-amber-600" />}
+          tone="amber"
+        />
+        <TelemetryMetricCard
           title="Nieuwe sessies"
           value={firstSessionSummary?.sessions_seen ?? 0}
           subtitle={`Meerdere sessies: ${repeatedUserSignal?.users_with_multiple_sessions ?? 0}`}
           icon={<UserPlus size={18} className="text-amber-600" />}
           tone="amber"
         />
+      </div>
+
+      <div className="mb-10 grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <SectionCard
+          title="Behavioral Flags"
+          subtitle="Welke gedragsremmen Finn nu het vaakst zichtbaar maakt."
+        >
+          <div className="space-y-3">
+            {(analytics?.top_behavioral_flags || []).length ? (
+              analytics.top_behavioral_flags.map((item) => (
+                <div key={item.flag} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{toSentenceCase(item.flag)}</p>
+                      <p className="mt-1 text-xs font-medium text-slate-500">
+                        {topBehavioralFlag?.flag === item.flag && topBehavioralSurface?.surface
+                          ? `Vaakst zichtbaar op ${topBehavioralSurface.surface}.`
+                          : "Komt terug in behavioral interventions."}
+                      </p>
+                    </div>
+                    <span className="text-xs font-black uppercase tracking-[0.2em] text-amber-600">{item.count}x</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm font-semibold text-slate-500">
+                Nog geen behavioral flags geregistreerd in producttelemetry.
+              </div>
+            )}
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          title="Behavioral Surfaces"
+          subtitle="Waar de behavioral remmen nu vooral aan users getoond worden."
+        >
+          <div className="space-y-3">
+            {(analytics?.top_behavioral_surfaces || []).length ? (
+              analytics.top_behavioral_surfaces.map((item) => (
+                <div key={item.surface} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{toSentenceCase(item.surface)}</p>
+                      <p className="mt-1 text-xs font-medium text-slate-500">
+                        Surface waar behavioral interventions zijn gezien of bewust erkend.
+                      </p>
+                    </div>
+                    <span className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">{item.count}x</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm font-semibold text-slate-500">
+                Nog geen behavioral surfaces vastgelegd.
+              </div>
+            )}
+          </div>
+        </SectionCard>
       </div>
 
       <div className="mb-10 grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_1fr]">

@@ -9,6 +9,7 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
 import {
   getAssetFocusOptions,
+  getBehaviorFlagOptions,
   getExperienceLevelOptions,
   getGoalOptions,
   getRiskProfileOptions,
@@ -63,6 +64,7 @@ export default function OnboardingProfilePage() {
     investment_goals_list: [],
     experience_levels: [],
     risk_profiles: [],
+    behavior_flags: [],
   });
 
   useEffect(() => {
@@ -108,6 +110,7 @@ export default function OnboardingProfilePage() {
   const goalOptions = useMemo(() => getGoalOptions(t), [t]);
   const experienceOptions = useMemo(() => getExperienceLevelOptions(t), [t]);
   const riskOptions = useMemo(() => getRiskProfileOptions(t), [t]);
+  const behaviorOptions = useMemo(() => getBehaviorFlagOptions(t), [t]);
 
   const toggleMulti = (field, value) => {
     setForm((current) => {
@@ -228,6 +231,14 @@ export default function OnboardingProfilePage() {
           options={riskOptions}
           values={form.risk_profiles}
           onToggle={(value) => toggleMulti("risk_profiles", value)}
+        />
+
+        <MultiChoiceGroup
+          title={t?.traderProfile?.groups?.behavior?.title}
+          subtitle={t?.traderProfile?.groups?.behavior?.subtitle}
+          options={behaviorOptions}
+          values={form.behavior_flags}
+          onToggle={(value) => toggleMulti("behavior_flags", value)}
         />
       </div>
 

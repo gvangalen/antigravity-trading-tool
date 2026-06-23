@@ -1757,8 +1757,6 @@ class FinnPlanService:
 
     def looks_like_daily_coach_request(self, query: str) -> bool:
         q = (query or "").lower()
-        if self.looks_like_decision_review_request(query, {}):
-            return False
         portfolio_risk_terms = [
             "grootste portfolio risico", "grootste risico", "portfolio risico",
             "portefeuille risico", "portfolio exposure", "te veel exposure",
@@ -1767,13 +1765,16 @@ class FinnPlanService:
             "welke assets laat ik vandaag liggen", "welke asset laat ik vandaag liggen",
             "welke assets negeren", "assets negeren", "assets laten liggen",
             "welke live bots botsen", "live bots botsen", "live bots conflict",
-            "live bot conflict", "welke live bots vragen review",
+            "live bot conflict", "welke live bots vragen review", "live bots vragen vandaag review",
+            "welke live bots vragen vandaag review", "live bots review",
             "welke bots stapelen", "welke plannen stapelen", "stapelen risico",
             "welke setups conflicteren", "conflicterende setups", "bots met overlappende budgetten",
             "overlappende budgetten", "dca en trade",
         ]
         if any(term in q for term in portfolio_risk_terms):
             return True
+        if self.looks_like_decision_review_request(query, {}):
+            return False
         has_today = any(word in q for word in [
             "vandaag", "today", "nu", "daily", "dagelijkse", "dagcheck", "cockpit",
             "brief", "briefing", "dagstart", "morning", "mijn dag",
@@ -2765,11 +2766,17 @@ class FinnPlanService:
         page = context.get("page_type") or context.get("page") or "Tradamind"
         asset = context.get("symbol") or context.get("asset")
         asset_text = f" rond {str(asset).upper()}" if asset else ""
+        profile_line = self._profile_focus_line(context, asset, mode="general")
+        profile_next_step = self._profile_next_step(context, asset, default_step="")
         response = (
             f"Ik help je hier vooral met uitleg, coaching en review in {page}{asset_text}. "
             "Denk aan: je actieve setup of strategie uitleggen, score- en blocker-uitleg geven, "
             "dagcoaching doen, Mission Control samenvatten en bot-decisions reviewen voordat je iets uitvoert."
         )
+        if profile_line:
+            response = f"{response} {profile_line}"
+        if profile_next_step:
+            response = f"{response} {profile_next_step}"
         return self._enrich_operator_contract({
             "response": response,
             "intent": "general_help",
@@ -2790,9 +2797,12 @@ class FinnPlanService:
             },
             "actions": [],
         },
-        summary=f"Ik kan je hier helpen met uitleg, review en veilige vervolgstappen in {page}{asset_text}.",
+        summary=(
+            f"Ik kan je hier helpen met uitleg, review en veilige vervolgstappen in {page}{asset_text}."
+            + (f" {profile_line}" if profile_line else "")
+        ),
         risk_summary="Deze route blijft read-only: ik leg uit, review en stuur je pas daarna naar een concrete vervolgactie.",
-        next_best_action="Vraag Finn om je huidige context, een setup-review of je volgende beste stap.",
+        next_best_action=profile_next_step or "Vraag Finn om je huidige context, een setup-review of je volgende beste stap.",
         review_reason="Begin hier als je eerst wilt begrijpen wat je ziet voordat je iets bevestigt.")
 
     async def build_quick_general_help_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -2800,10 +2810,16 @@ class FinnPlanService:
         page = context.get("page_type") or context.get("page") or "Tradamind"
         asset = context.get("symbol") or context.get("asset")
         asset_text = f" voor {str(asset).upper()}" if asset else ""
+        profile_line = self._profile_focus_line(context, asset, mode="general")
+        profile_next_step = self._profile_next_step(context, asset, default_step="")
         response = (
             f"Ik kan dit kort voor je spiegelen op {page}{asset_text}, maar deze vraag is nog te impliciet om er meteen een harde review van te maken. "
             "Noem de setup, trade of entry die je bedoelt, dan maak ik er direct een concrete review van."
         )
+        if profile_line:
+            response = f"{response} {profile_line}"
+        if profile_next_step:
+            response = f"{response} {profile_next_step}"
         return self._enrich_operator_contract({
             "response": response,
             "intent": "general_help",
@@ -2820,9 +2836,12 @@ class FinnPlanService:
             },
             "actions": [],
         },
-        summary=f"Ik heb nog net te weinig context om hier meteen een harde review van te maken{asset_text}.",
+        summary=(
+            f"Ik heb nog net te weinig context om hier meteen een harde review van te maken{asset_text}."
+            + (f" {profile_line}" if profile_line else "")
+        ),
         risk_summary="Bij een te vage prompt wil ik geen schijnzeker review-oordeel geven zonder duidelijk trade-, setup- of entry-anker.",
-        next_best_action="Noem de setup, trade of entry die je bedoelt, dan review ik die direct.",
+        next_best_action=profile_next_step or "Noem de setup, trade of entry die je bedoelt, dan review ik die direct.",
         review_reason="Deze vraag zit op de grens tussen algemene hulp en decision review, dus ik houd hem eerst compact en veilig.")
 
     def _product_capability_inventory(self, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -2861,6 +2880,7 @@ class FinnPlanService:
     async def build_product_help_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
         page = context.get("page_type") or context.get("page") or "Tradamind"
+        asset = context.get("symbol") or context.get("asset")
         inventory = self._product_capability_inventory(context)
         supported_now = ", ".join([
             "uitleg van je huidige scherm",
@@ -2874,12 +2894,18 @@ class FinnPlanService:
             "bot aanmaken",
             "bot-decisions reviewen",
         ])
+        profile_line = self._profile_focus_line(context, asset, mode="general")
+        profile_next_step = self._profile_next_step(context, asset, default_step="")
         response = (
             f"Je zit nu op {page}. Hier help ik je vooral met begrijpen en veilig beslissen. "
             f"Wat ik nu direct voor je kan doen: {supported_now}. "
             f"Als je echt iets wilt bouwen of wijzigen, kan ik ook helpen met: {mutations}. "
             "Wat ik nog niet breed zelf doet: watchlists aanpassen en vrije portfolio-mutaties."
         )
+        if profile_line:
+            response = f"{response} {profile_line}"
+        if profile_next_step:
+            response = f"{response} {profile_next_step}"
         return self._enrich_operator_contract({
             "response": response,
             "intent": "product_help",
@@ -2899,9 +2925,12 @@ class FinnPlanService:
             },
             "actions": [],
         },
-        summary=f"Op {page} help ik je vooral met begrijpen, reviewen en veilig kiezen wat je hierna doet.",
+        summary=(
+            f"Op {page} help ik je vooral met begrijpen, reviewen en veilig kiezen wat je hierna doet."
+            + (f" {profile_line}" if profile_line else "")
+        ),
         risk_summary="Ik gebruik deze route om je binnen de productgrenzen te houden: uitleg eerst, uitvoering pas via de juiste review-flow.",
-        next_best_action="Vraag Finn om het huidige scherm uit te leggen of om een concrete review van setup, strategie of bot.",
+        next_best_action=profile_next_step or "Vraag Finn om het huidige scherm uit te leggen of om een concrete review van setup, strategie of bot.",
         review_reason="Zo voorkom je dat een productvraag meteen aanvoelt als een uitvoeractie.")
 
     async def build_product_refresh_help_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -3433,6 +3462,84 @@ class FinnPlanService:
             return f"{item_reason} Extra governance-frictie: {signal_reason}"
         return item_reason
 
+    def _profile_habit_priority_adjustment(
+        self,
+        profile_habit_alignment: Optional[Dict[str, Any]],
+        item: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        primary_alignment = (profile_habit_alignment or {}).get("primary_alignment") or {}
+        if not primary_alignment:
+            return {"score_delta": 0, "bias": None, "reason": None}
+
+        item_type = str(item.get("type") or "").lower()
+        lane = str(self._mission_coaching_lane(item) or "")
+        flag = str(primary_alignment.get("flag") or "")
+        label = str(primary_alignment.get("label") or "gedragspatroon")
+        review_types = {"bot_decision", "portfolio_live_hotspot", "portfolio_risk_stack", "blocked_plan", "blocker_explanation"}
+        impulse_types = {"bot_decision_request", "open_action", "score_refresh"}
+        planning_types = {"data_gap", "indicator_gap"}
+        score_delta = 0
+
+        if flag in {"fomo", "overtrades", "leverage_seeking", "holds_losers_too_long"}:
+            if item_type in review_types:
+                score_delta += 18
+            elif lane == "review_then_act":
+                score_delta += 10
+            if item_type in impulse_types:
+                score_delta -= 16
+            elif lane == "monitor_only":
+                score_delta -= 6
+        elif flag == "takes_profit_too_early":
+            if item_type in {"bot_decision", "blocker_explanation", "portfolio_live_hotspot"}:
+                score_delta += 14
+            elif item_type in impulse_types:
+                score_delta -= 8
+            elif item_type in planning_types:
+                score_delta += 4
+
+        if score_delta > 0:
+            return {
+                "score_delta": score_delta,
+                "bias": "up",
+                "reason": f"Profielrem actief: bevestigd patroon '{label}' maakt review en risicocontrole nu belangrijker.",
+            }
+        if score_delta < 0:
+            return {
+                "score_delta": score_delta,
+                "bias": "down",
+                "reason": f"Profielrem actief: bevestigd patroon '{label}' duwt impulsgevoelige acties bewust naar beneden.",
+            }
+        return {"score_delta": 0, "bias": None, "reason": None}
+
+    def _priority_item_behavioral_rationale(
+        self,
+        rationale: str,
+        adjustment: Dict[str, Any],
+    ) -> str:
+        reason = str((adjustment or {}).get("reason") or "").strip()
+        if not reason:
+            return rationale
+        if not rationale:
+            return reason
+        return f"{rationale} {reason}"
+
+    def _profile_habit_alignment_event_payload(
+        self,
+        profile_habit_alignment: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        primary = (profile_habit_alignment or {}).get("primary_alignment") or {}
+        if not primary:
+            return {"confirmed": False, "active_flags": list((profile_habit_alignment or {}).get("active_flags") or [])[:5]}
+        return {
+            "confirmed": True,
+            "active_flags": list((profile_habit_alignment or {}).get("active_flags") or [])[:5],
+            "primary_flag": primary.get("flag"),
+            "primary_label": primary.get("label"),
+            "evidence_strength": primary.get("evidence_strength"),
+            "matched_sources": list(primary.get("matched_sources") or [])[:4],
+            "recommended_rule": primary.get("recommended_rule"),
+        }
+
     def _priority_engine_payload(
         self,
         mission: Dict[str, Any],
@@ -3440,6 +3547,7 @@ class FinnPlanService:
         governance_signals: Dict[str, Any],
         *,
         question_focus: str = "headline",
+        profile_habit_alignment: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         workqueue = mission.get("workqueue") or []
         counts = mission.get("summary") or {}
@@ -3478,11 +3586,14 @@ class FinnPlanService:
             elif global_signals and item_type in {"portfolio_live_hotspot", "portfolio_risk_stack", "blocked_plan"}:
                 base += int(global_signals[0].get("weight") or 0) // 2
                 signal_reason = global_signals[0].get("reason")
+            behavioral_adjustment = self._profile_habit_priority_adjustment(profile_habit_alignment, item)
+            base += int(behavioral_adjustment.get("score_delta") or 0)
             rationale = self._priority_item_rationale(
                 item_type=item_type,
                 item_reason=item.get("reason"),
                 signal_reason=signal_reason,
             )
+            rationale = self._priority_item_behavioral_rationale(rationale, behavioral_adjustment)
             ranked_items.append({
                 "id": item.get("id"),
                 "title": title,
@@ -3494,6 +3605,8 @@ class FinnPlanService:
                 "why_now": rationale,
                 "source_reason": item.get("reason"),
                 "governance_reason": signal_reason or None,
+                "behavioral_priority_bias": behavioral_adjustment.get("bias"),
+                "behavioral_priority_reason": behavioral_adjustment.get("reason"),
                 "next_action": item.get("next_best_action") or item.get("resolve_action"),
             })
 
@@ -3581,6 +3694,7 @@ class FinnPlanService:
             "focus_guidance": focus_guidance,
             "suppression_reasons": suppression_reasons,
             "question_focus": question_focus,
+            "profile_habit_alignment": profile_habit_alignment or {"active_flags": [], "alignments": [], "confirmed": False},
             "open_counts": {
                 "workqueue_count": counts.get("workqueue_count", 0),
                 "open_action_count": counts.get("open_action_count", 0),
@@ -3605,6 +3719,8 @@ class FinnPlanService:
         )
         if profile_line:
             lines.append(str(profile_line))
+        if analysis.get("behavioral_warning"):
+            lines.append(str(analysis.get("behavioral_warning")))
         if analysis.get("focus_guidance"):
             lines.append(str(analysis.get("focus_guidance")))
         top_priorities = analysis.get("top_priorities") or []
@@ -3646,6 +3762,7 @@ class FinnPlanService:
         query: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        context = context or {}
         question_focus = self._priority_question_focus(query)
         daily = await self.build_portfolio_daily_coach_response(
             user_id,
@@ -3669,17 +3786,39 @@ class FinnPlanService:
             ],
             limit=30,
         )
+        profile_habit_alignment = {"active_flags": [], "alignments": [], "confirmed": False}
+        profile = (context.get("trader_profile") if isinstance(context, dict) else {}) or {}
+        if context.get("trader_profile_used") and profile.get("behavior_flags"):
+            activity_feed = await self._get_recent_finn_activity(user_id, limit=120)
+            day_log = self._mission_day_log(activity_feed)
+            behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+            behavioral_memory = self._build_behavioral_memory_report(activity_feed, behavioral)
+            memory_v2 = self._build_memory_v2_summary(activity_feed, governance_events)
+            profile_habit_alignment = self._profile_habit_alignment(
+                context,
+                memory_v2=memory_v2,
+                outcome_memory=self._build_outcome_memory_summary(governance_events, activity_feed),
+                personal_performance=self._build_personal_performance_summary(activity_feed, governance_events, behavioral),
+                trade_journal_intelligence=self._build_trade_journal_intelligence_summary(activity_feed, governance_events),
+                behavioral_memory=behavioral_memory,
+            )
         priority_engine = self._priority_engine_payload(
             mission,
             analysis,
             self._priority_engine_governance_signals(governance_events),
             question_focus=question_focus,
+            profile_habit_alignment=profile_habit_alignment,
         )
         priority_engine["profile_guidance"] = self._profile_focus_line(
             context,
             ((priority_engine.get("top_priorities") or [{}])[0].get("asset") if isinstance((priority_engine.get("top_priorities") or [{}])[0], dict) else None),
             mode="general",
         )
+        priority_engine["behavioral_warning"] = self._profile_next_step(
+            context,
+            ((priority_engine.get("top_priorities") or [{}])[0].get("asset") if isinstance((priority_engine.get("top_priorities") or [{}])[0], dict) else None),
+            default_step="Werk vandaag van boven naar beneden en forceer geen extra actie zonder duidelijke reviewreden.",
+        ) if context.get("trader_profile_used") else ""
         await self._record_governance_event(
             user_id,
             event_type="finn_priority_engine_summary",
@@ -3696,6 +3835,9 @@ class FinnPlanService:
                 "review_queue": priority_engine.get("review_queue"),
                 "ignore_today": priority_engine.get("ignore_today"),
                 "suppression_reasons": priority_engine.get("suppression_reasons"),
+                "profile_habit_alignment": self._profile_habit_alignment_event_payload(profile_habit_alignment),
+                "profile_guidance": priority_engine.get("profile_guidance"),
+                "behavioral_warning": priority_engine.get("behavioral_warning"),
             },
             cooldown_hours=2,
         )
@@ -3747,6 +3889,7 @@ class FinnPlanService:
         memory: Dict[str, Any],
         personal_performance: Optional[Dict[str, Any]] = None,
         trade_journal_intelligence: Optional[Dict[str, Any]] = None,
+        profile_habit_alignment: Optional[Dict[str, Any]] = None,
         governance_events: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         personal_performance = personal_performance or {}
@@ -3762,12 +3905,15 @@ class FinnPlanService:
         performance_score = personal_performance.get("performance_score")
         performance_flags = personal_performance.get("performance_risk_flags") or []
         journal_pattern = trade_journal_intelligence.get("journal_pattern")
+        primary_alignment = (profile_habit_alignment or {}).get("primary_alignment") or {}
         governance_types = [str(event.get("type") or "") for event in governance_events or []]
         recent_override_signals = len([t for t in governance_types if t == "finn_plan_adherence_review"])
         recent_review_signals = len([t for t in governance_types if t == "finn_decision_review"])
 
         if portfolio_risk.get("status") in {"high_attention", "concentrated"} or blocked_count > 0:
             posture = "risk_first"
+        elif primary_alignment and str(primary_alignment.get("flag") or "") in {"fomo", "overtrades", "leverage_seeking", "holds_losers_too_long"}:
+            posture = "review_first"
         elif high_priority_count > 0 or action_count >= 3:
             posture = "review_first"
         elif performance_score is not None and performance_score < 65:
@@ -3812,6 +3958,7 @@ class FinnPlanService:
                 (performance_flags[0] if performance_flags else None),
                 trade_journal_intelligence.get("decision_gap"),
                 priority_engine.get("why_now"),
+                primary_alignment.get("behavioral_cost"),
             ]
             if item
         ][:4]
@@ -3823,6 +3970,7 @@ class FinnPlanService:
             "memory_confidence": memory_confidence,
             "performance_score": performance_score,
             "journal_pattern": journal_pattern,
+            "profile_habit_alignment": profile_habit_alignment or {"active_flags": [], "alignments": [], "confirmed": False},
             "priority_headline": priority_engine.get("headline"),
         }
         subsystems = {
@@ -3871,13 +4019,16 @@ class FinnPlanService:
                 "Portfolio Operating System draait nu stabiel zonder harde escalatie."
             ),
             "why_now": (
-                priority_engine.get("why_now")
+                primary_alignment.get("summary")
+                or primary_alignment.get("behavioral_cost")
+                or priority_engine.get("why_now")
                 or portfolio_risk.get("message")
                 or personal_performance.get("next_growth_target")
                 or trade_journal_intelligence.get("decision_gap")
                 or memory.get("behavioral_cost")
                 or "Er is nu geen enkele subsystem-laag die alle andere overstemt."
             ),
+            "habit_override": primary_alignment.get("recommended_rule"),
             "next_best_actions": [
                 item.get("title")
                 for item in (priority_engine.get("top_priorities") or [])
@@ -3885,11 +4036,15 @@ class FinnPlanService:
             ][:3],
         }
         do_now = control_plane.get("next_best_actions") or []
+        if primary_alignment.get("recommended_rule"):
+            do_now = [*do_now[:2], primary_alignment.get("recommended_rule")][:3]
         do_next = [
             item.get("title")
             for item in (priority_engine.get("review_queue") or [])
             if item.get("title")
         ][:3]
+        if primary_alignment.get("recommended_rule") and primary_alignment.get("recommended_rule") not in do_next and primary_alignment.get("recommended_rule") not in do_now:
+            do_next = [primary_alignment.get("recommended_rule"), *do_next][:3]
         ignore_today = priority_engine.get("ignore_today") or capital_focus.get("ignore_today_assets") or []
         return {
             "operating_posture": posture,
@@ -3988,11 +4143,6 @@ class FinnPlanService:
             ],
             limit=80,
         )
-        priority_engine = self._priority_engine_payload(
-            mission,
-            daily_analysis,
-            self._priority_engine_governance_signals(governance_events),
-        )
         memory_v2 = self._build_memory_v2_summary(activity_feed, governance_events)
         personal_performance = self._build_personal_performance_summary(activity_feed, governance_events, behavioral)
         trade_journal_intelligence = self._build_trade_journal_intelligence_summary(activity_feed, governance_events)
@@ -4000,6 +4150,20 @@ class FinnPlanService:
             **self._build_behavioral_memory_report(activity_feed, behavioral),
             **memory_v2,
         }
+        profile_habit_alignment = self._profile_habit_alignment(
+            context,
+            memory_v2=memory_v2,
+            outcome_memory=self._build_outcome_memory_summary(governance_events, activity_feed),
+            personal_performance=personal_performance,
+            trade_journal_intelligence=trade_journal_intelligence,
+            behavioral_memory=memory,
+        )
+        priority_engine = self._priority_engine_payload(
+            mission,
+            daily_analysis,
+            self._priority_engine_governance_signals(governance_events),
+            profile_habit_alignment=profile_habit_alignment,
+        )
         analysis = self._portfolio_operating_system_contract(
             daily_analysis=daily_analysis,
             mission=mission,
@@ -4007,6 +4171,7 @@ class FinnPlanService:
             memory=memory,
             personal_performance=personal_performance,
             trade_journal_intelligence=trade_journal_intelligence,
+            profile_habit_alignment=profile_habit_alignment,
             governance_events=governance_events,
         )
         await self._record_governance_event(
@@ -4031,6 +4196,7 @@ class FinnPlanService:
                 "ignore_today": analysis.get("ignore_today"),
                 "subsystems": analysis.get("subsystems"),
                 "next_best_actions": analysis.get("next_best_actions"),
+                "profile_habit_alignment": self._profile_habit_alignment_event_payload(profile_habit_alignment),
             },
             cooldown_hours=2,
         )
@@ -4066,10 +4232,15 @@ class FinnPlanService:
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         context = context or {}
-        explain_cache_key = f"{int(user_id)}:{self._normalized_query(query)}:{str(context.get('page') or context.get('scope') or 'mission_control')}"
-        cached = _cache_get(_mission_control_explain_cache, explain_cache_key)
-        if cached is not None:
-            return cached
+        allow_cached_response = bool(context.get("allow_cached_mission_control"))
+        explain_cache_key = (
+            f"{int(user_id)}:{self._normalized_query(query)}:"
+            f"{str(context.get('page') or context.get('scope') or 'mission_control')}"
+        )
+        if allow_cached_response:
+            cached = _cache_get(_mission_control_explain_cache, explain_cache_key)
+            if cached is not None:
+                return cached
         daily = await self.build_portfolio_daily_coach_response(
             user_id,
             "Geef mijn daily brief",
@@ -4096,10 +4267,27 @@ class FinnPlanService:
             ],
             limit=30,
         )
+        profile_habit_alignment = {"active_flags": [], "alignments": [], "confirmed": False}
+        profile = (context.get("trader_profile") if isinstance(context, dict) else {}) or {}
+        if context.get("trader_profile_used") and profile.get("behavior_flags"):
+            activity_feed = await self._get_recent_finn_activity(user_id, limit=120)
+            day_log = self._mission_day_log(activity_feed)
+            behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+            behavioral_memory = self._build_behavioral_memory_report(activity_feed, behavioral)
+            memory_v2 = self._build_memory_v2_summary(activity_feed, governance_events)
+            profile_habit_alignment = self._profile_habit_alignment(
+                context,
+                memory_v2=memory_v2,
+                outcome_memory=self._build_outcome_memory_summary(governance_events, activity_feed),
+                personal_performance=self._build_personal_performance_summary(activity_feed, governance_events, behavioral),
+                trade_journal_intelligence=self._build_trade_journal_intelligence_summary(activity_feed, governance_events),
+                behavioral_memory=behavioral_memory,
+            )
         priority_engine = self._priority_engine_payload(
             mission,
             analysis,
             self._priority_engine_governance_signals(governance_events),
+            profile_habit_alignment=profile_habit_alignment,
         )
         summary = {
             "headline": priority_engine.get("headline"),
@@ -4177,12 +4365,13 @@ class FinnPlanService:
         review_reason="Mission Control helpt je het verschil zien tussen direct handelen, reviewen en bewust laten liggen.",
         resolution_status="review",
         resolution_title="Wat Mission Control hier nu mee bedoelt")
-        _cache_set(
-            _mission_control_explain_cache,
-            explain_cache_key,
-            response,
-            MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS,
-        )
+        if allow_cached_response:
+            _cache_set(
+                _mission_control_explain_cache,
+                explain_cache_key,
+                response,
+                MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS,
+            )
         return response
 
     async def build_education_response(self, user_id: int, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -4280,8 +4469,15 @@ class FinnPlanService:
                         f"Operator-implicatie: focus eerst op {weakest['category']} voordat je zwaarder leunt op de sterkere scoreblokken."
                     )
                     profile_line = self._profile_focus_line(context, asset, mode="score")
+                    behavioral_coaching = self._profile_behavioral_coaching(context, asset=asset, mode="explain")
                     if profile_line:
                         response = f"{response} {profile_line}"
+                    if behavioral_coaching.get("summary"):
+                        response = f"{response} {behavioral_coaching['summary']}"
+                    risk_summary = f"Zolang {weakest['category']} achterblijft, blijft opschalen of versnellen fragiel."
+                    if behavioral_coaching.get("risk"):
+                        risk_summary = f"{risk_summary} {behavioral_coaching['risk']}"
+                    next_step = behavioral_coaching.get("next_step") or f"Focus eerst op {weakest['category']} voordat je zwaarder leunt op de sterkere scoreblokken."
                     return self._context_explain_payload(
                         response=response,
                         confidence=score_confidence,
@@ -4297,8 +4493,8 @@ class FinnPlanService:
                         },
                         state_overrides={"asset": asset},
                         summary=f"{asset} wordt nu vooral afgeremd door {weakest['category']} en gesteund door {strongest['category']}.",
-                        risk_summary=f"Zolang {weakest['category']} achterblijft, blijft opschalen of versnellen fragiel.",
-                        next_best_action=f"Focus eerst op {weakest['category']} voordat je zwaarder leunt op de sterkere scoreblokken.",
+                        risk_summary=risk_summary,
+                        next_best_action=next_step,
                         review_reason="De daily score laat nu zien welk blok je eerst moet oplossen of opnieuw toetsen.",
                         resolution_title="Wat deze score nu voor je betekent",
                     )
@@ -4347,11 +4543,18 @@ class FinnPlanService:
                     ] if item][:3]
                     risk_or_behavior = report.get("risk_summary") or report.get("behavioral_summary")
                     follow_up = report.get("recommended_action") or "Gebruik dit rapport als startpunt voor Mission Control of een score-uitleg."
+                    behavioral_coaching = self._profile_behavioral_coaching(context, mode="report")
                     if key_takeaways:
                         response += f" Belangrijkste punten: {' | '.join(key_takeaways[:2])}."
                     if risk_or_behavior:
                         response += f" Let extra op: {risk_or_behavior}."
+                    if behavioral_coaching.get("summary"):
+                        response += f" {behavioral_coaching['summary']}"
                     response += f" Volgende stap: {follow_up}"
+                    risk_summary = risk_or_behavior
+                    if behavioral_coaching.get("risk"):
+                        risk_summary = f"{risk_summary}. {behavioral_coaching['risk']}" if risk_summary else behavioral_coaching["risk"]
+                    next_step = behavioral_coaching.get("next_step") or follow_up
                     return self._context_explain_payload(
                         response=response,
                         confidence=report_confidence,
@@ -4368,8 +4571,8 @@ class FinnPlanService:
                         },
                         state_overrides={"report_type": table_name},
                         summary=f"Je {period_label} geeft nu vooral één terugblik: {summary if summary else 'de kern van je recente markt- of gedragscontext.'}",
-                        risk_summary=risk_or_behavior,
-                        next_best_action=follow_up,
+                        risk_summary=risk_summary,
+                        next_best_action=next_step,
                         review_reason="Gebruik dit rapport als terugblik en vertaal het pas daarna naar een concrete review of vervolgstap.",
                         resolution_title="Wat dit rapport nu voor je betekent",
                     )
@@ -4395,10 +4598,17 @@ class FinnPlanService:
             row = await repo.get_raw_strategy_with_setup(int(strategy_id), user_id)
             strategy = service._format_strategy_row(row) if row else None
             if strategy:
+                behavioral_coaching = self._profile_behavioral_coaching(context, asset=strategy.get("symbol"), mode="review")
                 response = (
                     f"Je bekijkt nu strategie #{strategy['id']} '{strategy.get('name')}' voor {strategy.get('symbol')} "
                     f"op {strategy.get('timeframe')}, gekoppeld aan setup #{strategy.get('setup_id')} '{strategy.get('setup_name')}'."
                 )
+                if behavioral_coaching.get("summary"):
+                    response = f"{response} {behavioral_coaching['summary']}"
+                risk_summary = "Een strategie is pas sterk als de onderliggende setup en timing nog steeds kloppen."
+                if behavioral_coaching.get("risk"):
+                    risk_summary = f"{risk_summary} {behavioral_coaching['risk']}"
+                next_step = behavioral_coaching.get("next_step") or "Toets entry, stop en targets tegen de huidige setup voordat je activeert of automatiseert."
                 return self._context_explain_payload(
                     response=response,
                     confidence=self._context_confidence_for_target(context, "strategy", query=query),
@@ -4413,8 +4623,8 @@ class FinnPlanService:
                         "asset": strategy.get("symbol"),
                     },
                     summary=f"Strategie #{strategy['id']} vertaalt je setup voor {strategy.get('symbol')} naar entry-, stop- en targetregels.",
-                    risk_summary="Een strategie is pas sterk als de onderliggende setup en timing nog steeds kloppen.",
-                    next_best_action="Toets entry, stop en targets tegen de huidige setup voordat je activeert of automatiseert.",
+                    risk_summary=risk_summary,
+                    next_best_action=next_step,
                     review_reason="Hier bepaal je niet óf je een idee hebt, maar hoe je dat idee concreet en disciplinevast uitvoert.",
                     resolution_title="Wat deze strategie nu voor je betekent",
                 )
@@ -4441,12 +4651,24 @@ class FinnPlanService:
 
         if target == "setup" and setup_id and self.session:
             service = SetupService(self.session)
-            setup = await service.get_setup_by_id(int(setup_id), user_id)
+            try:
+                setup = await service.get_setup_by_id(int(setup_id), user_id)
+            except HTTPException as exc:
+                if exc.status_code != 404:
+                    raise
+                setup = None
             if setup:
+                behavioral_coaching = self._profile_behavioral_coaching(context, asset=setup.get("symbol"), mode="review")
                 response = (
                     f"Je hebt nu setup #{setup['id']} '{setup.get('name')}' open voor {setup.get('symbol')} "
                     f"op {setup.get('timeframe')}. Type: {setup.get('setup_type')}."
                 )
+                if behavioral_coaching.get("summary"):
+                    response = f"{response} {behavioral_coaching['summary']}"
+                risk_summary = "Zonder heldere setup-validiteit wordt strategie- of botwerk sneller los van context."
+                if behavioral_coaching.get("risk"):
+                    risk_summary = f"{risk_summary} {behavioral_coaching['risk']}"
+                next_step = behavioral_coaching.get("next_step") or "Review eerst blockers, scorebereik en setup-logica voordat je een strategie of bot bouwt."
                 return self._context_explain_payload(
                     response=response,
                     confidence=self._context_confidence_for_target(context, "setup", query=query),
@@ -4457,8 +4679,8 @@ class FinnPlanService:
                         "asset": setup.get("symbol"),
                     },
                     summary=f"Setup #{setup['id']} is je toetslaag voor {setup.get('symbol')} op {setup.get('timeframe')}.",
-                    risk_summary="Zonder heldere setup-validiteit wordt strategie- of botwerk sneller los van context.",
-                    next_best_action="Review eerst blockers, scorebereik en setup-logica voordat je een strategie of bot bouwt.",
+                    risk_summary=risk_summary,
+                    next_best_action=next_step,
                     review_reason="De setup vertelt je of dit idee überhaupt stevig genoeg is om verder te vertalen.",
                     resolution_title="Wat deze setup nu voor je betekent",
                 )
@@ -4498,6 +4720,7 @@ class FinnPlanService:
                     except Exception:
                         bot_today = {}
             if bot:
+                behavioral_coaching = self._profile_behavioral_coaching(context, asset=bot.get("symbol"), mode="review")
                 status_bits = []
                 if bot.get("is_active"):
                     status_bits.append("actief")
@@ -4544,6 +4767,12 @@ class FinnPlanService:
                     f"Waarom deze bot bestaat: hij voert de strategie niet autonoom blind uit, maar bewaakt juist de vertaalslag van setup naar concrete review- of execution-momenten. "
                     f"Volgende logische stap: {next_step}"
                 )
+                if behavioral_coaching.get("summary"):
+                    response = f"{response} {behavioral_coaching['summary']}"
+                risk_summary = f"Status nu: {status_text}. Zolang de bot in state '{operating_state}' zit, wil je vooral snappen waarop hij wacht."
+                if behavioral_coaching.get("risk"):
+                    risk_summary = f"{risk_summary} {behavioral_coaching['risk']}"
+                next_step = behavioral_coaching.get("next_step") or next_step
                 return self._context_explain_payload(
                     response=response,
                     confidence=self._context_confidence_for_target(context, "bot", query=query),
@@ -4567,7 +4796,7 @@ class FinnPlanService:
                         "asset": bot.get("symbol"),
                     },
                     summary=f"Bot #{bot['id']} bewaakt nu de vertaalslag van strategie naar review- of execution-momenten voor {bot.get('symbol')}.",
-                    risk_summary=f"Status nu: {status_text}. Zolang de bot in state '{operating_state}' zit, wil je vooral snappen waarop hij wacht.",
+                    risk_summary=risk_summary,
                     next_best_action=next_step,
                     review_reason="Deze bot hoort niet blind uit te voeren, maar juist de veilige hand-off tussen context, review en uitvoering te bewaken.",
                     resolution_title="Wat deze bot nu voor je betekent",
@@ -5501,6 +5730,7 @@ class FinnPlanService:
         checks = analysis.get("checks") or []
         top_blockers = analysis.get("top_blockers") or []
         recommended_changes = analysis.get("recommended_changes") or []
+        behavioral_coaching = analysis.get("behavioral_coaching") or {}
         lines = [
             analysis.get("headline") or "Hier is mijn review van je volgende trading-beslissing.",
             f"Status: {analysis.get('decision_status')}.",
@@ -5518,6 +5748,12 @@ class FinnPlanService:
         if recommended_changes:
             lines.append("Aanpassingen:")
             lines.extend(f"- {item}" for item in recommended_changes[:3])
+        if behavioral_coaching.get("summary") or behavioral_coaching.get("risk"):
+            lines.append("Coachingsfocus:")
+            if behavioral_coaching.get("summary"):
+                lines.append(f"- {behavioral_coaching.get('summary')}")
+            if behavioral_coaching.get("risk"):
+                lines.append(f"- {behavioral_coaching.get('risk')}")
         if analysis.get("operator_next_step"):
             lines.append(f"Volgende stap: {analysis.get('operator_next_step')}")
         return "\n".join([line for line in lines if line])
@@ -5921,6 +6157,10 @@ class FinnPlanService:
             "block": f"Deze {action_type} blokkeer ik nu op governance-gronden.",
         }
         lines = [labels.get(status, labels["recommend"])]
+        if analysis.get("profile_guidance"):
+            lines.append(str(analysis.get("profile_guidance")))
+        if analysis.get("behavioral_warning"):
+            lines.append(str(analysis.get("behavioral_warning")))
         if analysis.get("blocking_reason"):
             lines.append(f"Waarom: {analysis.get('blocking_reason')}")
         warnings = analysis.get("warnings") or []
@@ -6052,6 +6292,12 @@ class FinnPlanService:
             **governance,
             "policy": policy,
             "action_subject": action,
+            "profile_guidance": self._profile_focus_line(context, context.get("symbol") or context.get("asset"), mode="review"),
+            "behavioral_warning": self._profile_next_step(
+                context,
+                context.get("symbol") or context.get("asset"),
+                default_step="Check eerst welke bevestiging, guardrail en ontbrekende context nog openstaan voordat je verder gaat.",
+            ),
             "required_agents": required_agents,
             "agent_orchestration": {
                 "required_agents": required_agents,
@@ -6321,6 +6567,7 @@ class FinnPlanService:
             default_step=operator_next_step,
         )
         profile_review_line = self._profile_focus_line(context, asset, mode="review")
+        behavioral_review = self._profile_behavioral_coaching(context, asset=asset, mode="review")
         review_reason = (
             top_blockers[0]
             if top_blockers else
@@ -6328,6 +6575,8 @@ class FinnPlanService:
             if recommended_changes else
             "Deze review toetst context, risico, strategie-fit en portfolio-impact in dezelfde operator-pass."
         )
+        if behavioral_review.get("risk"):
+            review_reason = f"{review_reason} {behavioral_review['risk']}"
 
         portfolio_contract = self._portfolio_intelligence_contract(
             risk={
@@ -6348,6 +6597,10 @@ class FinnPlanService:
         )
         if profile_review_line:
             operator_summary = f"{operator_summary} {profile_review_line}"
+        if behavioral_review.get("summary"):
+            operator_summary = f"{operator_summary} {behavioral_review['summary']}"
+        if behavioral_review.get("next_step") and behavioral_review.get("next_step") not in recommended_changes:
+            recommended_changes.append(behavioral_review["next_step"])
         analysis = {
             "review_type": review_type,
             "decision_status": decision_status,
@@ -6360,6 +6613,7 @@ class FinnPlanService:
             "operator_next_step": operator_next_step,
             "next_best_action": operator_next_step,
             "review_reason": review_reason,
+            "behavioral_coaching": behavioral_review,
             "subject": {
                 "type": subject.get("entity_type"),
                 "id": subject.get("entity_id"),
@@ -7482,7 +7736,7 @@ class FinnPlanService:
             },
         }
         open_reviews = await self._open_bot_reviews_for_bot(user_id, asset, int(selected["id"]))
-        memory_friction = await self._behavioral_memory_friction_for_action(user_id, "generate_bot_decision")
+        memory_friction = await self._behavioral_memory_friction_for_action(user_id, "generate_bot_decision", context)
         memory_acknowledged = bool(context.get("behavioral_memory_ack")) or self._is_behavioral_memory_ack((query or "").lower())
         if memory_friction and not memory_acknowledged:
             return self._blocked_behavioral_memory_ack_response(asset, int(selected["id"]), memory_friction)
@@ -7721,6 +7975,18 @@ class FinnPlanService:
         response = ""
         next_question = None
         operator_resolution_preview = None
+        pending_friction = context.get("pending_behavioral_memory_friction")
+        if pending_friction:
+            if self._is_behavioral_memory_ack((query or "").lower()):
+                context["behavioral_memory_ack"] = True
+            else:
+                return self._blocked_behavioral_guardrail_ack_response(
+                    intent="bot_execution_decision",
+                    flow="bot_execution_decision",
+                    asset=asset,
+                    bot_id=int(review["bot_id"]),
+                    memory_friction=pending_friction,
+                )
 
         if execution_choice == "monitor":
             response = (
@@ -7779,6 +8045,23 @@ class FinnPlanService:
                 )
 
         actions = [action] if action else []
+        friction_action_type = action.get("type") if action else None
+        execution_friction = None
+        if friction_action_type:
+            execution_friction = await self._behavioral_memory_friction_for_action(user_id, friction_action_type, context)
+        memory_acknowledged = bool(context.get("behavioral_memory_ack")) or self._is_behavioral_memory_ack((query or "").lower())
+        if execution_friction and not memory_acknowledged and can_confirm:
+            return self._blocked_behavioral_guardrail_ack_response(
+                intent="bot_execution_decision",
+                flow="bot_execution_decision",
+                asset=asset,
+                bot_id=int(review["bot_id"]),
+                memory_friction=execution_friction,
+            )
+        if action and execution_friction:
+            action["guardrails"]["behavioral_memory_friction"] = True
+            action["guardrails"]["behavioral_memory_acknowledged"] = memory_acknowledged
+            action["payload"]["memory_friction"] = {**execution_friction, "acknowledged": memory_acknowledged}
         return {
             "response": response,
             "intent": "bot_execution_decision",
@@ -7800,6 +8083,7 @@ class FinnPlanService:
                     "name": (bot or {}).get("name"),
                     "is_live": is_live,
                 },
+                "memory_friction": execution_friction,
                 "autonomy_level": "confirm_required" if can_confirm else "advice_only",
                 "analysis": {
                     "operator_resolution": operator_resolution_preview,
@@ -8875,8 +9159,11 @@ class FinnPlanService:
             "ga door",
         ])
 
-    def _blocked_behavioral_memory_ack_response(
+    def _blocked_behavioral_guardrail_ack_response(
         self,
+        *,
+        intent: str,
+        flow: str,
         asset: str,
         bot_id: int,
         memory_friction: Dict[str, Any],
@@ -8889,13 +9176,13 @@ class FinnPlanService:
         }
         response = (
             f"Memory check: {friction.get('message')} "
-            "Je vroeg eerder opnieuw bot-decisions aan terwijl review nog openstond. "
+            "Dit patroon vraagt om een expliciete pauze voordat Finn deze bevestigbare stap klaarzet. "
             "Wil je dit bewust toch doen? Antwoord met 'bewust doorgaan' om pas daarna een nieuwe bot-decision klaar te zetten."
         )
         return {
             "response": response,
-            "intent": "bot_decision",
-            "flow": "bot_decision",
+            "intent": intent,
+            "flow": flow,
             "draft": None,
             "missing_fields": ["behavioral_memory_ack"],
             "invalid_fields": [],
@@ -8904,7 +9191,7 @@ class FinnPlanService:
             "actions": [],
             "state": {
                 "status": "blocked_by_behavioral_memory",
-                "current_flow": "bot_decision",
+                "current_flow": flow,
                 "asset": asset,
                 "bot_id": bot_id,
                 "memory_friction": friction,
@@ -8918,20 +9205,103 @@ class FinnPlanService:
                 "coaching_level": "behavioral_memory_guardrail",
             },
             "suggested_actions": [
-                "Review of skip eerst de open bot-decisions.",
-                "Antwoord 'bewust doorgaan' als je toch een nieuwe bot-decision wilt.",
+                friction.get("safe_alternative") or "Review of skip eerst de open bot-decisions.",
+                "Antwoord 'bewust doorgaan' als je toch wilt doorgaan.",
             ],
         }
 
-    async def _behavioral_memory_friction_for_action(self, user_id: int, action_type: str) -> Optional[Dict[str, Any]]:
-        if not self.session or action_type != "generate_bot_decision":
+    def _blocked_behavioral_memory_ack_response(
+        self,
+        asset: str,
+        bot_id: int,
+        memory_friction: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return self._blocked_behavioral_guardrail_ack_response(
+            intent="bot_decision",
+            flow="bot_decision",
+            asset=asset,
+            bot_id=bot_id,
+            memory_friction=memory_friction,
+        )
+
+    def _profile_habit_friction_from_alignment(
+        self,
+        alignment: Dict[str, Any],
+        action_type: str,
+    ) -> Optional[Dict[str, Any]]:
+        primary = (alignment or {}).get("primary_alignment") or {}
+        if not primary:
+            return None
+        flag = str(primary.get("flag") or "")
+        strength = str(primary.get("evidence_strength") or "medium")
+        if action_type == "generate_bot_decision" and flag in {"overtrades", "fomo"}:
+            return {
+                "type": f"profile_{flag}",
+                "severity": "high" if strength == "high" else "medium",
+                "message": f"je profiel en recente evidence bevestigen nu {primary.get('label').lower()} als actief patroon.",
+                "source": "profile_habit_alignment",
+                "evidence": [
+                    f"bronnen: {', '.join(primary.get('matched_sources') or [])}",
+                    primary.get("summary") or "",
+                ],
+                "safe_alternative": primary.get("recommended_rule") or "Rond eerst open reviews af voordat je nieuwe decisions maakt.",
+                "requires_ack": True,
+                "ack_phrase": "bewust doorgaan",
+            }
+        if action_type in {"live_preflight_bot_decision", "paper_execute_bot_decision", "live_manual_order"} and flag in {"fomo", "leverage_seeking", "holds_losers_too_long"}:
+            return {
+                "type": f"profile_{flag}",
+                "severity": "high",
+                "message": f"je profiel en recente evidence bevestigen {primary.get('label').lower()} juist op execution-momenten.",
+                "source": "profile_habit_alignment",
+                "evidence": [
+                    f"bronnen: {', '.join(primary.get('matched_sources') or [])}",
+                    primary.get("behavioral_cost") or "",
+                ],
+                "safe_alternative": primary.get("recommended_rule") or "Doe eerst een rustiger reviewstap voordat je execution bevestigt.",
+                "requires_ack": True,
+                "ack_phrase": "bewust doorgaan",
+            }
+        return None
+
+    async def _behavioral_memory_friction_for_action(
+        self,
+        user_id: int,
+        action_type: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        if not self.session or action_type not in {"generate_bot_decision", "live_preflight_bot_decision", "paper_execute_bot_decision", "live_manual_order"}:
             return None
         activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
         if not activity_feed:
             return None
         behavioral = self._build_behavioral_insight_from_activity(activity_feed)
         memory = self._build_behavioral_memory_report(activity_feed, behavioral)
-        return self._behavioral_memory_friction_from_report(memory, action_type)
+        report_friction = self._behavioral_memory_friction_from_report(memory, action_type)
+        governance_events = await self._fetch_recent_governance_events(
+            user_id,
+            event_types=[
+                "finn_decision_review",
+                "finn_plan_adherence_review",
+                "finn_outcome_tracking_summary",
+                "finn_portfolio_intelligence",
+                "finn_trade_journal_intelligence_summary",
+                "finn_memory_v2_summary",
+            ],
+            limit=80,
+        )
+        alignment = self._profile_habit_alignment(
+            context or {},
+            memory_v2=self._build_memory_v2_summary(activity_feed, governance_events),
+            outcome_memory=self._build_outcome_memory_summary(governance_events, activity_feed),
+            personal_performance=self._build_personal_performance_summary(activity_feed, governance_events, behavioral),
+            trade_journal_intelligence=self._build_trade_journal_intelligence_summary(activity_feed, governance_events),
+            behavioral_memory=memory,
+        )
+        alignment_friction = self._profile_habit_friction_from_alignment(alignment, action_type)
+        if alignment_friction:
+            return alignment_friction
+        return report_friction
 
     def _behavioral_memory_friction_from_report(self, memory: Dict[str, Any], action_type: str) -> Optional[Dict[str, Any]]:
         if action_type != "generate_bot_decision":
@@ -11216,22 +11586,37 @@ class FinnPlanService:
             ],
             limit=80,
         )
+        memory_v2 = self._build_memory_v2_summary(activity_window, governance_events)
+        behavioral_memory = memory or self._build_behavioral_memory_report(activity_window, behavioral_insight)
+        personal_performance = self._build_personal_performance_summary(activity_window, governance_events, behavioral_insight)
+        trade_journal_intelligence = self._build_trade_journal_intelligence_summary(activity_window, governance_events)
+        profile_habit_alignment = self._profile_habit_alignment(
+            context,
+            memory_v2=memory_v2,
+            outcome_memory=self._build_outcome_memory_summary(governance_events, activity_window),
+            personal_performance=personal_performance,
+            trade_journal_intelligence=trade_journal_intelligence,
+            behavioral_memory=behavioral_memory,
+        )
         agent_verdicts = self._merge_mission_agent_verdicts(
             analysis.get("agent_verdicts") or mission.get("agent_verdicts") or [],
             behavioral_insight,
         )
         agent_controller = self._build_agent_controller(agent_verdicts, context="mission_control")
         mission = self._apply_agent_controller_to_mission(mission, agent_controller, activity_feed=activity_feed)
-        coaching_loop = self._build_mission_coaching_loop(mission, analysis, behavioral_insight)
+        coaching_loop = self._build_mission_coaching_loop(
+            mission,
+            analysis,
+            behavioral_insight,
+            profile_habit_alignment=profile_habit_alignment,
+        )
         mission["coaching_loop"] = coaching_loop
         priority_engine = self._priority_engine_payload(
             mission,
             analysis,
             self._priority_engine_governance_signals(governance_events),
+            profile_habit_alignment=profile_habit_alignment,
         )
-        memory_v2 = self._build_memory_v2_summary(activity_window, governance_events)
-        personal_performance = self._build_personal_performance_summary(activity_window, governance_events, behavioral_insight)
-        trade_journal_intelligence = self._build_trade_journal_intelligence_summary(activity_window, governance_events)
         portfolio_operating_system = self._portfolio_operating_system_contract(
             daily_analysis=analysis,
             mission=mission,
@@ -11239,6 +11624,7 @@ class FinnPlanService:
             memory={**(memory or {}), **memory_v2},
             personal_performance=personal_performance,
             trade_journal_intelligence=trade_journal_intelligence,
+            profile_habit_alignment=profile_habit_alignment,
             governance_events=governance_events,
         )
         personal_coach = self._build_personal_coach_summary(
@@ -11247,6 +11633,7 @@ class FinnPlanService:
             personal_performance=personal_performance,
             trade_journal_intelligence=trade_journal_intelligence,
             portfolio_operating_system=portfolio_operating_system,
+            profile_habit_alignment=profile_habit_alignment,
         )
         governance_events_summary = {
             "decision_review_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_decision_review"]),
@@ -11301,6 +11688,7 @@ class FinnPlanService:
             "personal_coach": personal_coach,
             "trade_journal_intelligence": trade_journal_intelligence,
             "portfolio_operating_system": portfolio_operating_system,
+            "profile_habit_alignment": profile_habit_alignment,
             "governance_events_summary": governance_events_summary,
             "data_readiness": analysis.get("data_readiness") or {},
             "portfolio_risk": mission.get("portfolio_risk") or analysis.get("portfolio_risk") or {},
@@ -11313,6 +11701,7 @@ class FinnPlanService:
                 "personal_coach": personal_coach,
                 "trade_journal_intelligence": trade_journal_intelligence,
                 "portfolio_operating_system": portfolio_operating_system,
+                "profile_habit_alignment": profile_habit_alignment,
                 "governance_events_summary": governance_events_summary,
                 "context_confidence": {
                     "level": "high",
@@ -11847,9 +12236,22 @@ class FinnPlanService:
         query: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        context = context or {}
         activity_feed = await self._get_recent_finn_activity(user_id, limit=50)
         day_log = self._mission_day_log(activity_feed)
         insight = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        governance_events = await self._fetch_recent_governance_events(
+            user_id,
+            event_types=[
+                "finn_decision_review",
+                "finn_plan_adherence_review",
+                "finn_outcome_tracking_summary",
+                "finn_portfolio_intelligence",
+                "finn_trade_journal_intelligence_summary",
+                "finn_memory_v2_summary",
+            ],
+            limit=60,
+        )
         coaching = insight.get("coaching") or {}
         risk_flags = insight.get("risk_flags") or []
         primary_flag = risk_flags[0] if risk_flags else {}
@@ -11890,6 +12292,22 @@ class FinnPlanService:
             insight["why_this_is_risky"] = primary_flag.get("summary") or "Frustratie na een gemiste move trekt je snel in een hersteltrade die niet uit je plan komt."
             insight["what_to_do_now"] = coaching.get("safe_next_step") or "Open nu geen nieuwe trade. Laat de move los, check je setup-criteria opnieuw en wacht op een verse valide trigger."
             insight["what_not_to_do"] = coaching.get("do_not_do") or "Ga nu niets terugpakken, jaag de markt niet na en vergroot je risico niet uit frustratie."
+        alignment = self._profile_habit_alignment(
+            context,
+            memory_v2=self._build_memory_v2_summary(activity_feed, governance_events),
+            outcome_memory=self._build_outcome_memory_summary(governance_events, activity_feed),
+            personal_performance=self._build_personal_performance_summary(activity_feed, governance_events, insight),
+            trade_journal_intelligence=self._build_trade_journal_intelligence_summary(activity_feed, governance_events),
+            behavioral_memory=self._build_behavioral_memory_report(activity_feed, insight),
+        )
+        primary_alignment = alignment.get("primary_alignment") or {}
+        if primary_alignment and variant == "direct_coach":
+            insight["what_i_notice"] = primary_alignment.get("summary") or insight["what_i_notice"]
+            insight["why_this_is_risky"] = primary_alignment.get("behavioral_cost") or insight["why_this_is_risky"]
+            insight["what_to_do_now"] = primary_alignment.get("recommended_rule") or insight["what_to_do_now"]
+            insight["what_not_to_do"] = (
+                "Doe nu niets dat dit bevestigde patroon verder versnelt; laat Finn eerst remmen, reviewen of vertragen."
+            )
         insight["plan_anchor"] = "Volg eerst je planstatus en guardrails voordat je iets nieuws forceert." if variant in {"direct_coach", "plan_adherence_coach"} else None
         insight["behavioral_intelligence"] = {
             "variant": variant,
@@ -11899,6 +12317,7 @@ class FinnPlanService:
             "what_to_do_now": insight["what_to_do_now"],
             "what_not_to_do": insight["what_not_to_do"],
             "plan_anchor": insight.get("plan_anchor"),
+            "profile_habit_alignment": alignment,
         }
         response = self._behavioral_intelligence_message(insight, context)
         return {
@@ -11961,6 +12380,7 @@ class FinnPlanService:
         query: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        context = context or {}
         activity_feed = await self._get_recent_finn_activity(user_id, limit=180)
         day_log = self._mission_day_log(activity_feed)
         behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
@@ -11979,6 +12399,14 @@ class FinnPlanService:
         outcome_memory = self._build_outcome_memory_summary(governance_events, activity_feed)
         personal_performance = self._build_personal_performance_summary(activity_feed, governance_events, behavioral)
         trade_journal_intelligence = self._build_trade_journal_intelligence_summary(activity_feed, governance_events)
+        profile_habit_alignment = self._profile_habit_alignment(
+            context,
+            memory_v2=memory_v2,
+            outcome_memory=outcome_memory,
+            personal_performance=personal_performance,
+            trade_journal_intelligence=trade_journal_intelligence,
+            behavioral_memory=memory,
+        )
         memory = {
             **memory,
             **memory_v2,
@@ -11986,6 +12414,7 @@ class FinnPlanService:
             "outcome_memory": outcome_memory,
             "personal_performance": personal_performance,
             "trade_journal_intelligence": trade_journal_intelligence,
+            "profile_habit_alignment": profile_habit_alignment,
         }
         await self._record_governance_event(
             user_id,
@@ -12003,6 +12432,7 @@ class FinnPlanService:
                 "behavioral_cost": memory_v2.get("behavioral_cost"),
                 "recommended_rule": memory_v2.get("recommended_rule"),
                 "confidence_level": memory_v2.get("confidence_level"),
+                "profile_habit_alignment": self._profile_habit_alignment_event_payload(profile_habit_alignment),
             },
             cooldown_hours=6,
         )
@@ -12024,6 +12454,7 @@ class FinnPlanService:
                 "outcome_memory": outcome_memory,
                 "personal_performance": personal_performance,
                 "trade_journal_intelligence": trade_journal_intelligence,
+                "profile_habit_alignment": profile_habit_alignment,
                 "advice_only": True,
             },
             "analysis": memory,
@@ -12707,6 +13138,7 @@ class FinnPlanService:
         personal_performance: Dict[str, Any],
         trade_journal_intelligence: Dict[str, Any],
         portfolio_operating_system: Dict[str, Any],
+        profile_habit_alignment: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         q = self._normalized_query(query)
         posture = str(portfolio_operating_system.get("operating_posture") or "")
@@ -12803,6 +13235,20 @@ class FinnPlanService:
                 portfolio_operating_system.get("portfolio_pressure", {}).get("source"),
             ] if item
         ]
+        primary_alignment = (profile_habit_alignment or {}).get("primary_alignment") or {}
+        if primary_alignment:
+            current_pattern = primary_alignment.get("summary") or current_pattern
+            what_it_costs = primary_alignment.get("behavioral_cost") or what_it_costs
+            what_to_interrupt_now = (
+                primary_alignment.get("recommended_rule")
+                or what_to_interrupt_now
+            )
+            next_best_rule = primary_alignment.get("recommended_rule") or next_best_rule
+            supporting_signals = [
+                f"Profielvlag: {primary_alignment.get('label')}",
+                f"Bewijsbronnen: {', '.join(primary_alignment.get('matched_sources') or [])}",
+                *supporting_signals,
+            ][:4]
         return {
             "coach_mode": coach_mode,
             "current_pattern": current_pattern,
@@ -12811,6 +13257,7 @@ class FinnPlanService:
             "next_best_rule": next_best_rule,
             "coach_follow_up": coach_follow_up,
             "supporting_signals": supporting_signals[:4],
+            "profile_habit_alignment": profile_habit_alignment or {"active_flags": [], "alignments": [], "confirmed": False},
             "headline": "Ik combineer nu je uitkomstgeheugen, performance, journal-signalen en portfolio-posture tot één persoonlijke coachlaag.",
             "source_layers": {
                 "outcome_memory": outcome_memory.get("memory_pattern"),
@@ -12853,6 +13300,15 @@ class FinnPlanService:
         outcome_memory = self._build_outcome_memory_summary(governance_events, activity_feed)
         personal_performance = self._build_personal_performance_summary(activity_feed, governance_events, behavioral)
         trade_journal_intelligence = self._build_trade_journal_intelligence_summary(activity_feed, governance_events)
+        behavioral_memory = self._build_behavioral_memory_report(activity_feed, behavioral)
+        profile_habit_alignment = self._profile_habit_alignment(
+            context,
+            memory_v2=self._build_memory_v2_summary(activity_feed, governance_events),
+            outcome_memory=outcome_memory,
+            personal_performance=personal_performance,
+            trade_journal_intelligence=trade_journal_intelligence,
+            behavioral_memory=behavioral_memory,
+        )
 
         mission_context = {}
         if not lightweight_prompt:
@@ -12882,6 +13338,7 @@ class FinnPlanService:
             personal_performance=personal_performance,
             trade_journal_intelligence=trade_journal_intelligence,
             portfolio_operating_system=portfolio_operating_system,
+            profile_habit_alignment=profile_habit_alignment,
         )
         await self._record_governance_event(
             user_id,
@@ -12899,6 +13356,7 @@ class FinnPlanService:
                 "what_to_interrupt_now": analysis.get("what_to_interrupt_now"),
                 "next_best_rule": analysis.get("next_best_rule"),
                 "coach_follow_up": analysis.get("coach_follow_up"),
+                "profile_habit_alignment": self._profile_habit_alignment_event_payload(profile_habit_alignment),
             },
             cooldown_hours=4,
         )
@@ -12919,6 +13377,7 @@ class FinnPlanService:
                 "personal_performance": personal_performance,
                 "trade_journal_intelligence": trade_journal_intelligence,
                 "portfolio_operating_system": portfolio_operating_system,
+                "profile_habit_alignment": profile_habit_alignment,
                 "advice_only": True,
             },
             "analysis": analysis,
@@ -13028,9 +13487,11 @@ class FinnPlanService:
         query: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        context = context or {}
         activity_feed = await self._get_recent_finn_activity(user_id, limit=200)
         day_log = self._mission_day_log(activity_feed)
         behavioral = self._build_behavioral_insight_from_activity(activity_feed, day_log)
+        behavioral_memory = self._build_behavioral_memory_report(activity_feed, behavioral)
         report = self._build_finn_reflection_report(activity_feed, behavioral, query)
         governance_events = await self._fetch_recent_governance_events(
             user_id,
@@ -13050,15 +13511,24 @@ class FinnPlanService:
         )
         mission_analysis = report.get("mission_control_analysis") or {}
         mission = self._build_mission_control_from_daily_analysis(mission_analysis)
-        priority_engine = self._priority_engine_payload(
-            mission,
-            mission_analysis,
-            self._priority_engine_governance_signals(governance_events),
-        )
         memory_v2 = self._build_memory_v2_summary(activity_feed, governance_events)
         outcome_memory = self._build_outcome_memory_summary(governance_events, activity_feed)
         personal_performance = self._build_personal_performance_summary(activity_feed, governance_events, behavioral)
         trade_journal_intelligence = self._build_trade_journal_intelligence_summary(activity_feed, governance_events)
+        profile_habit_alignment = self._profile_habit_alignment(
+            context,
+            memory_v2=memory_v2,
+            outcome_memory=outcome_memory,
+            personal_performance=personal_performance,
+            trade_journal_intelligence=trade_journal_intelligence,
+            behavioral_memory=behavioral_memory,
+        )
+        priority_engine = self._priority_engine_payload(
+            mission,
+            mission_analysis,
+            self._priority_engine_governance_signals(governance_events),
+            profile_habit_alignment=profile_habit_alignment,
+        )
         portfolio_operating_system = self._portfolio_operating_system_contract(
             daily_analysis=mission_analysis,
             mission=mission,
@@ -13066,6 +13536,7 @@ class FinnPlanService:
             memory={**behavioral, **memory_v2},
             personal_performance=personal_performance,
             trade_journal_intelligence=trade_journal_intelligence,
+            profile_habit_alignment=profile_habit_alignment,
             governance_events=governance_events,
         )
         personal_coach = self._build_personal_coach_summary(
@@ -13074,7 +13545,18 @@ class FinnPlanService:
             personal_performance=personal_performance,
             trade_journal_intelligence=trade_journal_intelligence,
             portfolio_operating_system=portfolio_operating_system,
+            profile_habit_alignment=profile_habit_alignment,
         )
+        profile_behavioral_coaching = self._profile_behavioral_coaching(context, mode="report")
+        primary_alignment = profile_habit_alignment.get("primary_alignment") or {}
+        if primary_alignment:
+            profile_behavioral_coaching = {
+                **profile_behavioral_coaching,
+                "summary": primary_alignment.get("summary") or profile_behavioral_coaching.get("summary"),
+                "risk": primary_alignment.get("behavioral_cost") or profile_behavioral_coaching.get("risk"),
+                "next_step": primary_alignment.get("recommended_rule") or profile_behavioral_coaching.get("next_step"),
+                "evidence_strength": primary_alignment.get("evidence_strength"),
+            }
         governance_events_summary = {
             "decision_review_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_decision_review"]),
             "plan_adherence_count": len([event for event in governance_events if str(event.get("type") or "") == "finn_plan_adherence_review"]),
@@ -13098,6 +13580,8 @@ class FinnPlanService:
             "trade_journal_intelligence": trade_journal_intelligence,
             "portfolio_operating_system": portfolio_operating_system,
             "governance_events_summary": governance_events_summary,
+            "profile_behavioral_coaching": profile_behavioral_coaching,
+            "profile_habit_alignment": profile_habit_alignment,
         }
         response = self._finn_reflection_report_message(report)
         return {
@@ -13134,7 +13618,7 @@ class FinnPlanService:
             },
             "analysis": report,
             "suggested_actions": [
-                "Vraag: geef mijn weekreflectie",
+                f"Vraag: {profile_behavioral_coaching['next_step']}" if profile_behavioral_coaching.get("next_step") else "Vraag: geef mijn weekreflectie",
                 "Vraag: geef mijn gedragsrapport van de laatste 30 dagen",
                 "Vraag: open Mission Control",
             ],
@@ -13505,6 +13989,22 @@ class FinnPlanService:
             lines.append(f"Geschatte gedragskost: {memory.get('behavioral_cost')}")
         if memory.get("recommended_rule"):
             lines.append(f"Aanbevolen regel: {memory.get('recommended_rule')}")
+        profile_alignment = memory.get("profile_habit_alignment") or {}
+        primary_alignment = profile_alignment.get("primary_alignment") or {}
+        if primary_alignment:
+            matched_sources = primary_alignment.get("matched_sources") or []
+            lines.append(
+                "Profiel + bewijs aligneren: "
+                f"{primary_alignment.get('label')} "
+                f"({primary_alignment.get('evidence_strength')} confidence via {', '.join(matched_sources)})."
+            )
+            lines.append(
+                f"- Bevestigd door {len(matched_sources)} bron(nen) en {memory.get('supporting_evidence_count', 0)} recente signalen in {memory.get('time_window') or 'de laatste periode'}."
+            )
+            lines.append(f"- {primary_alignment.get('summary')}")
+            if primary_alignment.get("behavioral_cost"):
+                lines.append(f"- Gedragskost nu: {primary_alignment.get('behavioral_cost')}")
+            lines.append(f"- {primary_alignment.get('recommended_rule')}")
         evidence = memory.get("supporting_evidence") or []
         if evidence:
             lines.append("Waarom Finn dit onthoudt:")
@@ -14287,6 +14787,7 @@ class FinnPlanService:
     def _finn_reflection_report_message(self, report: Dict[str, Any]) -> str:
         metrics = report.get("metrics") or {}
         period = report.get("period") or {}
+        profile_behavioral_coaching = report.get("profile_behavioral_coaching") or {}
         lines = [
             f"Finn rapport ({period.get('label', 'periode')}).",
             "Dit is een Finn operator-/disciplinerapport, los van je dagelijkse trading report.",
@@ -14313,6 +14814,10 @@ class FinnPlanService:
                 f"{metrics.get('execution_pressure_events', 0)} execution-pressure."
             ),
         ]
+        if profile_behavioral_coaching.get("summary"):
+            lines.append(f"Coachingsfocus: {profile_behavioral_coaching['summary']}")
+        if profile_behavioral_coaching.get("risk"):
+            lines.append(f"Coachingsrisico: {profile_behavioral_coaching['risk']}")
         interventions = report.get("risk_officer_interventions") or []
         if interventions:
             lines.append("Wat Finn heeft afgeremd of vastgelegd:")
@@ -15072,7 +15577,11 @@ class FinnPlanService:
             return "review_then_act"
         return "monitor_only"
 
-    def _mission_coaching_priority_entry(self, item: Dict[str, Any]) -> Dict[str, Any]:
+    def _mission_coaching_priority_entry(
+        self,
+        item: Dict[str, Any],
+        profile_habit_alignment: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         lane = self._mission_coaching_lane(item)
         action = item.get("next_best_action") or item.get("resolve_action")
         freshness = item.get("freshness") or {}
@@ -15090,6 +15599,13 @@ class FinnPlanService:
             signals.append(item.get("health_grade"))
         if item.get("risk_score") is not None:
             signals.append(f"risk {int(self._to_float(item.get('risk_score')) or 0)}")
+        base_score = max(0, 120 - int(item.get("priority_rank") or 99))
+        if lane == "act_now":
+            base_score += 16
+        elif lane == "review_then_act":
+            base_score += 8
+        behavioral_adjustment = self._profile_habit_priority_adjustment(profile_habit_alignment, item)
+        base_score += int(behavioral_adjustment.get("score_delta") or 0)
         why_now = (
             "Nu uitvoeren voorkomt extra drift of gemiste review."
             if lane == "act_now"
@@ -15097,6 +15613,7 @@ class FinnPlanService:
             if lane == "review_then_act"
             else "Niet escaleren; alleen volgen zolang het signaal niet verslechtert."
         )
+        why_now = self._priority_item_behavioral_rationale(why_now, behavioral_adjustment)
         return {
             "id": item.get("id"),
             "asset": item.get("asset"),
@@ -15110,9 +15627,12 @@ class FinnPlanService:
             "setup_type": item.get("setup_type"),
             "priority": item.get("priority"),
             "priority_rank": item.get("priority_rank"),
+            "priority_score": base_score,
             "lane": lane,
             "status": item.get("resolve_state") or item.get("status"),
             "why_now": why_now,
+            "behavioral_priority_bias": behavioral_adjustment.get("bias"),
+            "behavioral_priority_reason": behavioral_adjustment.get("reason"),
             "supporting_signals": signals[:4],
             "action": action if isinstance(action, dict) else None,
         }
@@ -15207,9 +15727,22 @@ class FinnPlanService:
         mission: Dict[str, Any],
         analysis: Dict[str, Any],
         behavioral_insight: Dict[str, Any],
+        profile_habit_alignment: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         workqueue = mission.get("workqueue") or []
-        priorities = [self._mission_coaching_priority_entry(item) for item in workqueue[:6]]
+        priorities = [
+            self._mission_coaching_priority_entry(item, profile_habit_alignment=profile_habit_alignment)
+            for item in workqueue[:8]
+        ]
+        lane_order = {"act_now": 0, "review_then_act": 1, "monitor_only": 2}
+        priorities = sorted(
+            priorities,
+            key=lambda item: (
+                lane_order.get(str(item.get("lane") or ""), 9),
+                -int(item.get("priority_score") or 0),
+                str(item.get("title") or ""),
+            ),
+        )
         act_now = [item for item in priorities if item.get("lane") == "act_now"][:3]
         review_then_act = [item for item in priorities if item.get("lane") == "review_then_act"][:3]
         monitor_only = [item for item in priorities if item.get("lane") == "monitor_only"][:3]
@@ -16314,6 +16847,7 @@ class FinnPlanService:
         trader_types = {str(item) for item in (profile.get("trader_types") or [])}
         experience_levels = {str(item) for item in (profile.get("experience_levels") or [])}
         risk_profiles = {str(item) for item in (profile.get("risk_profiles") or [])}
+        behavior_flags = {str(item) for item in (profile.get("behavior_flags") or [])}
         used = bool((context or {}).get("trader_profile_used")) and bool(profile)
         return {
             "used": used,
@@ -16323,6 +16857,11 @@ class FinnPlanService:
             "is_intraday": bool({"day_trader", "scalper"} & trader_types),
             "is_beginner": "beginner" in experience_levels,
             "is_conservative": "conservative" in risk_profiles,
+            "has_fomo": "fomo" in behavior_flags,
+            "takes_profit_too_early": "takes_profit_too_early" in behavior_flags,
+            "holds_losers_too_long": "holds_losers_too_long" in behavior_flags,
+            "overtrades": "overtrades" in behavior_flags,
+            "leverage_seeking": "leverage_seeking" in behavior_flags,
         }
 
     def _profile_match_line(self, context: Optional[Dict[str, Any]], asset: Optional[str] = None) -> str:
@@ -16407,6 +16946,16 @@ class FinnPlanService:
             )
         if flags["is_conservative"]:
             return f"Houd {asset_label} klein of sla over tot de sterkste blocker weg is."
+        if flags["has_fomo"]:
+            return f"Wacht bij {asset_label} eerst op bevestiging en stap niet in uit haast of fear of missing out."
+        if flags["overtrades"]:
+            return f"Voeg bij {asset_label} nu geen extra trade toe tot duidelijk is waarom deze echt beter is dan je laatste actie."
+        if flags["holds_losers_too_long"]:
+            return f"Check bij {asset_label} eerst je invalidatie en uitstapgrens voordat je iets nieuws opent of laat doorlopen."
+        if flags["takes_profit_too_early"]:
+            return f"Bepaal voor {asset_label} eerst vooraf je exit- en take-profitplan zodat je niet te vroeg snijdt."
+        if flags["leverage_seeking"]:
+            return f"Houd {asset_label} eerst spot- of low-risk-denken aan; vergroot niet via leverage voordat je plan echt sterk staat."
         if flags["is_investor"] or flags["is_dca"]:
             return f"Toets eerst of dit echt iets verandert aan je plan voor {asset_label}; zo niet, forceer geen nieuwe timing."
         if flags["is_swing"]:
@@ -16447,11 +16996,246 @@ class FinnPlanService:
             else:
                 line = "Voor jouw profiel telt nu vooral dat je regels eerst weer leidend worden."
 
+        behavior_suffixes = []
+        if flags["has_fomo"]:
+            behavior_suffixes.append("Let extra op FOMO: geen haast-entry zonder bevestiging.")
+        if flags["overtrades"]:
+            behavior_suffixes.append("Beperk het aantal nieuwe acties en voorkom dat je uit activiteit gaat stapelen.")
+        if flags["takes_profit_too_early"]:
+            behavior_suffixes.append("Laat winnaars niet te vroeg los zonder vooraf bepaald exitplan.")
+        if flags["holds_losers_too_long"]:
+            behavior_suffixes.append("Respecteer je invalidatie sneller en laat verliezers niet uitrekken.")
+        if flags["leverage_seeking"]:
+            behavior_suffixes.append("Gebruik leverage alleen als laatste gevolg van een sterk plan, niet als versneller van twijfel.")
+
         if flags["is_conservative"]:
             line += " Houd het klein en forceer niets."
         elif flags["is_beginner"]:
             line += " Houd het simpel en neem geen extra stappen tegelijk."
+        if behavior_suffixes:
+            line = f"{line} {' '.join(behavior_suffixes[:2])}"
         return line
+
+    def _profile_behavioral_coaching(
+        self,
+        context: Optional[Dict[str, Any]],
+        *,
+        asset: Optional[str] = None,
+        mode: str = "general",
+    ) -> Dict[str, str]:
+        flags = self._trader_profile_flags(context)
+        if not flags["used"]:
+            return {}
+
+        asset_label = asset or "dit asset"
+        priority = None
+        summary = ""
+        risk = ""
+        next_step = ""
+
+        if flags["has_fomo"]:
+            priority = "fomo"
+            if mode == "review":
+                summary = f"Voor jouw coachingsprofiel wil je bij {asset_label} extra voorkomen dat haast of FOMO deze review overneemt."
+                risk = "Als je hier uit haast versnelt, ga je sneller voorbij aan bevestiging, invalidatie en sizing."
+                next_step = f"Wacht bij {asset_label} eerst op expliciete bevestiging voordat je deze review vertaalt naar actie."
+            elif mode == "report":
+                summary = "Je profiel vraagt nu extra bescherming tegen FOMO of najagen."
+                risk = "Dat maakt snelle contextwissels en te vroege entries duurder dan ze op het moment voelen."
+                next_step = "Gebruik dit rapport eerst om rust en bevestiging te zoeken, niet om haastig te versnellen."
+            else:
+                summary = f"Voor jouw coachingsprofiel is het belangrijk dat {asset_label} geen haast-beslissing wordt."
+                risk = "FOMO maakt timing sneller fragiel en trekt je weg van bevestiging."
+                next_step = f"Zoek bij {asset_label} eerst bevestiging, dan pas tempo."
+        elif flags["overtrades"]:
+            priority = "overtrades"
+            if mode == "review":
+                summary = f"Voor jouw coachingsprofiel wil je bij {asset_label} voorkomen dat je weer een extra actie stapelt zonder nieuwe edge."
+                risk = "Overtraden zorgt ervoor dat activiteit voelt als controle, terwijl je feitelijk ruis toevoegt."
+                next_step = f"Open bij {asset_label} alleen een nieuwe stap als die duidelijk beter is dan je laatste actie."
+            elif mode == "report":
+                summary = "Je profiel vraagt nu extra discipline rond actiedichtheid."
+                risk = "Te veel nieuwe acties achter elkaar maken het moeilijker om edge van onrust te onderscheiden."
+                next_step = "Gebruik dit rapport om minder, maar scherpere vervolgacties te kiezen."
+            else:
+                summary = f"Voor jouw coachingsprofiel telt bij {asset_label} nu vooral dat je niet uit activiteit gaat stapelen."
+                risk = "Te veel acties kort op elkaar vervagen het verschil tussen overtuiging en onrust."
+                next_step = f"Beperk nieuwe acties in {asset_label} tot de duidelijkste setup."
+        elif flags["holds_losers_too_long"]:
+            priority = "holds_losers_too_long"
+            if mode == "review":
+                summary = f"Voor jouw coachingsprofiel moet bij {asset_label} je invalidatie zwaarder wegen dan hoop."
+                risk = "Verliezers te lang laten lopen vervormt je review, omdat je pijn uitstelt in plaats van risico begrenst."
+                next_step = f"Toets bij {asset_label} eerst je exit- of invalidatiegrens voordat je iets laat doorlopen."
+            elif mode == "report":
+                summary = "Je profiel vraagt nu scherpere aandacht voor verliesdiscipline."
+                risk = "Als verliezers te lang blijven staan, wordt schade vaak groter dan de oorspronkelijke fout."
+                next_step = "Gebruik dit rapport om je invalidaties en exitgrenzen opnieuw strak te maken."
+            else:
+                summary = f"Voor jouw coachingsprofiel telt bij {asset_label} vooral dat je verliesdiscipline niet uitstelt."
+                risk = "Te lang blijven zitten maakt je volgende beslissing minder objectief."
+                next_step = f"Controleer bij {asset_label} eerst of je invalidatie nog eerlijk wordt gerespecteerd."
+        elif flags["takes_profit_too_early"]:
+            priority = "takes_profit_too_early"
+            if mode == "review":
+                summary = f"Voor jouw coachingsprofiel wil je bij {asset_label} voorkomen dat je winst te vroeg afkapt uit spanning."
+                risk = "Te snel winst nemen verstoort je risk/reward en maakt goede setups kleiner dan nodig."
+                next_step = f"Leg voor {asset_label} eerst vast waar je winstdeel en runner-objectief horen te liggen."
+            elif mode == "report":
+                summary = "Je profiel vraagt nu extra aandacht voor exitdiscipline aan de winnaarskant."
+                risk = "Als je winnaars te vroeg afkapt, blijft je asymmetrie achter op de kwaliteit van je setups."
+                next_step = "Gebruik dit rapport om exits vooraf te plannen in plaats van ze onderweg uit spanning af te kappen."
+            else:
+                summary = f"Voor jouw coachingsprofiel telt bij {asset_label} nu vooral dat je een winnaar niet te snel dichtdrukt."
+                risk = "Te vroege winstneming ondermijnt goede asymmetrie."
+                next_step = f"Bepaal bij {asset_label} eerst je exitplan voordat spanning de timing overneemt."
+        elif flags["leverage_seeking"]:
+            priority = "leverage_seeking"
+            if mode == "review":
+                summary = f"Voor jouw coachingsprofiel moet leverage bij {asset_label} een gevolg van kwaliteit zijn, niet van ongeduld."
+                risk = "Leverage vergroot hier vooral fouten als context, sizing of timing nog niet hard genoeg staan."
+                next_step = f"Toets bij {asset_label} eerst of spot- of kleinere sizing al genoeg is voordat je leverage toevoegt."
+            elif mode == "report":
+                summary = "Je profiel vraagt nu extra rem op versnelling via leverage."
+                risk = "Leverage maakt timingfouten, planafwijkingen en sizingfouten meteen duurder."
+                next_step = "Gebruik dit rapport om eerst de kwaliteit van je plan te verhogen, pas daarna eventuele versnelling."
+            else:
+                summary = f"Voor jouw coachingsprofiel telt bij {asset_label} nu vooral dat leverage geen shortcut wordt."
+                risk = "Versnellen zonder extra kwaliteit vergroot vooral fouten."
+                next_step = f"Gebruik bij {asset_label} eerst de minst agressieve uitvoering die je plan nog steeds respecteert."
+
+        payload = {}
+        if priority:
+            payload["priority_flag"] = priority
+        if summary:
+            payload["summary"] = summary
+        if risk:
+            payload["risk"] = risk
+        if next_step:
+            payload["next_step"] = next_step
+        return payload
+
+    def _profile_habit_alignment(
+        self,
+        context: Optional[Dict[str, Any]],
+        *,
+        memory_v2: Optional[Dict[str, Any]] = None,
+        outcome_memory: Optional[Dict[str, Any]] = None,
+        personal_performance: Optional[Dict[str, Any]] = None,
+        trade_journal_intelligence: Optional[Dict[str, Any]] = None,
+        behavioral_memory: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        profile = ((context or {}).get("trader_profile") if isinstance(context, dict) else {}) or {}
+        flags = [str(item) for item in (profile.get("behavior_flags") or []) if str(item)]
+        if not bool((context or {}).get("trader_profile_used")) or not flags:
+            return {"active_flags": [], "alignments": [], "confirmed": False}
+
+        memory_pattern = str((memory_v2 or {}).get("memory_pattern") or "")
+        outcome_pattern = str((outcome_memory or {}).get("memory_pattern") or "")
+        journal_pattern = str((trade_journal_intelligence or {}).get("journal_pattern") or "")
+        performance_flags = [str(item) for item in ((personal_performance or {}).get("performance_risk_flags") or []) if item]
+        memory_cards = behavioral_memory.get("memory_cards") or [] if isinstance(behavioral_memory, dict) else []
+        risk_flags = behavioral_memory.get("risk_flags") or [] if isinstance(behavioral_memory, dict) else []
+        card_types = {str(card.get("type") or "") for card in memory_cards if isinstance(card, dict)}
+        risk_ids = {str(flag.get("id") or "") for flag in risk_flags if isinstance(flag, dict)}
+
+        flag_specs = {
+            "fomo": {
+                "label": "FOMO / najagen",
+                "matches": [
+                    ("outcome_memory", outcome_pattern == "fomo_outcomes"),
+                    ("memory_v2", memory_pattern == "emotional_pattern"),
+                    ("journal", journal_pattern == "emotion_led_entries"),
+                    ("risk_flag", "fomo_pressure" in risk_ids or "frustration_pressure" in risk_ids),
+                ],
+                "summary": "Je profiel noemt FOMO en je recente usage bevestigt datzelfde patroon.",
+                "cost": "Dit is dus niet alleen een profielvoorkeur; Finn ziet echte druksignalen terug in gedrag en uitkomsten.",
+                "rule": "Laat Finn bij haast of gemiste-move druk eerst review en cooldown afdwingen.",
+            },
+            "overtrades": {
+                "label": "Overtrading",
+                "matches": [
+                    ("outcome_memory", outcome_pattern == "overtrading_outcomes"),
+                    ("memory_v2", memory_pattern == "hesitation_pattern"),
+                    ("memory_card", "decision_churn" in card_types),
+                    ("risk_flag", "overtrading_pressure" in risk_ids),
+                ],
+                "summary": "Je profiel noemt overtrading en je recente activity laat dezelfde actiedruk zien.",
+                "cost": "Finn ziet dus niet alleen een voorkeur, maar terugkerende bewijslaag voor te veel nieuwe acties in korte tijd.",
+                "rule": "Rond eerst open reviews af voordat je nieuwe decisions of execution-routes opent.",
+            },
+            "leverage_seeking": {
+                "label": "Leverage-neiging",
+                "matches": [
+                    ("outcome_memory", outcome_pattern == "concentration_outcomes"),
+                    ("memory_v2", memory_pattern == "exposure_pattern"),
+                    ("performance", any("concentratie" in item.lower() for item in performance_flags)),
+                ],
+                "summary": "Je profiel noemt leverage-drang en de recente evidence wijst ook op exposure- of concentratiedruk.",
+                "cost": "Daardoor moet Finn leverage nog minder als stijlkeuze lezen en meer als risicopatronen-rem.",
+                "rule": "Gebruik eerst spot of kleinere sizing tot exposure- en concentratiedruk aantoonbaar lager zijn.",
+            },
+            "holds_losers_too_long": {
+                "label": "Verliezers te lang laten lopen",
+                "matches": [
+                    ("outcome_memory", outcome_pattern == "plan_override_outcomes"),
+                    ("memory_v2", memory_pattern == "plan_break_pattern"),
+                    ("journal", journal_pattern == "rule_conflict_entries"),
+                ],
+                "summary": "Je profiel noemt verliesdiscipline als zwak punt en je recente history laat ook regelconflict of override-druk zien.",
+                "cost": "Finn moet dit dus eerder behandelen als terugkerend disciplineprobleem dan als incidentele twijfel.",
+                "rule": "Maak invalidatie en exitgrenzen hard voordat je een verliezer laat doorlopen of verdedigen.",
+            },
+            "takes_profit_too_early": {
+                "label": "Winst te vroeg nemen",
+                "matches": [
+                    ("journal", journal_pattern == "structured_review_entries"),
+                    ("performance", any("selectiviteit" in item.lower() or "kwaliteit" in item.lower() for item in performance_flags)),
+                ],
+                "summary": "Je profiel noemt te vroege winstname; Finn heeft nog beperkte maar bruikbare signalen dat exitdiscipline aandacht vraagt.",
+                "cost": "Dit patroon is minder hard bewezen dan FOMO of overtrading, maar sterk genoeg om je exits explicieter te laten plannen.",
+                "rule": "Werk vooraf met winstdeel, runner en exitregels in plaats van spontane winstneming.",
+            },
+        }
+
+        alignments = []
+        for flag in flags:
+            spec = flag_specs.get(flag)
+            if not spec:
+                continue
+            matched_sources = [label for label, ok in spec["matches"] if ok]
+            if len(matched_sources) >= 2:
+                strength = "high"
+                intervention = "confirmed_pattern"
+            elif len(matched_sources) == 1:
+                strength = "medium"
+                intervention = "partial_confirmation"
+            else:
+                continue
+            alignments.append({
+                "flag": flag,
+                "label": spec["label"],
+                "evidence_strength": strength,
+                "intervention_level": intervention,
+                "matched_sources": matched_sources,
+                "summary": spec["summary"],
+                "behavioral_cost": spec["cost"],
+                "recommended_rule": spec["rule"],
+            })
+
+        primary = None
+        if alignments:
+            primary = sorted(
+                alignments,
+                key=lambda item: (1 if item["evidence_strength"] == "high" else 0, len(item["matched_sources"])),
+                reverse=True,
+            )[0]
+        return {
+            "active_flags": flags,
+            "alignments": alignments,
+            "confirmed": bool(primary),
+            "primary_alignment": primary,
+        }
 
     def _daily_coach_message(self, analysis: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
         asset = analysis.get("asset") or "BTC"
@@ -16465,8 +17249,13 @@ class FinnPlanService:
 
         lines = [headline]
         profile_line = self._profile_focus_line(context, asset, mode="general")
+        behavioral_coaching = self._profile_behavioral_coaching(context, asset=asset, mode="general")
         if profile_line:
             lines.append(profile_line)
+        if behavioral_coaching.get("summary"):
+            lines.append(behavioral_coaching["summary"])
+        if behavioral_coaching.get("risk"):
+            lines.append(f"Coachingsrisico: {behavioral_coaching['risk']}")
         setup = analysis.get("setup") or {}
         if setup:
             lines.append(
@@ -16526,6 +17315,8 @@ class FinnPlanService:
             lines.append("Veilige volgende stap:")
             for action in actions[:4]:
                 lines.append(f"- {action}")
+        if behavioral_coaching.get("next_step"):
+            lines.append(f"Profielvolgende stap: {behavioral_coaching['next_step']}")
 
         lines.append("Ik voer niets automatisch uit vanuit deze check; dit is advies-only.")
         return "\n".join(lines)
@@ -16553,10 +17344,15 @@ class FinnPlanService:
         focus_asset = (analysis.get("top_priorities") or [{}])[0].get("asset") or analysis.get("question_asset")
         match_line = self._profile_match_line(context, focus_asset)
         profile_line = self._profile_behavior_line(context, asset=focus_asset, mode="portfolio")
+        behavioral_coaching = self._profile_behavioral_coaching(context, asset=focus_asset, mode="general")
         if match_line:
             lines.append(match_line)
         if profile_line:
             lines.append(profile_line)
+        if behavioral_coaching.get("summary"):
+            lines.append(behavioral_coaching["summary"])
+        if behavioral_coaching.get("risk"):
+            lines.append(f"Coachingsrisico: {behavioral_coaching['risk']}")
 
         priorities = analysis.get("top_priorities") or []
         if priorities:
@@ -16626,6 +17422,8 @@ class FinnPlanService:
             lines.append("Veilige volgende stappen:")
             for action in actions[:4]:
                 lines.append(f"- {action}")
+        if behavioral_coaching.get("next_step"):
+            lines.append(f"Profielvolgende stap: {behavioral_coaching['next_step']}")
 
         lines.append("Ik voer niets automatisch uit vanuit deze portfolio-briefing; dit is advies-only.")
         return "\n".join(lines)

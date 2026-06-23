@@ -156,6 +156,13 @@
         "conservative": "Conservative",
         "balanced": "Balanced",
         "aggressive": "Aggressive"
+      },
+      "behaviorFlags": {
+        "fomo": "FOMO / chasing",
+        "takes_profit_too_early": "Take profit too early",
+        "holds_losers_too_long": "Hold losers too long",
+        "overtrades": "Overtrade",
+        "leverage_seeking": "Reach for leverage"
       }
     },
     "groups": {
@@ -182,6 +189,10 @@
       "risk": {
         "title": "What is your risk profile?",
         "subtitle": "This helps Finn decide when to slow you down, warn you, or give you more room. Combine options if it changes by context."
+      },
+      "behavior": {
+        "title": "Which coaching patterns should Finn watch for?",
+        "subtitle": "Select the behaviors that most often trip you up. This helps Finn coach more directly without changing governance."
       }
     },
     "onboardingStep": {
