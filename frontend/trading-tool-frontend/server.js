@@ -28,9 +28,20 @@ http.createServer((req, res) => {
   // Strip query string from URL to correctly find static files (e.g. macro.txt?_rsc=...)
   const cleanUrl = req.url.split('?')[0];
   let filePath = path.join(PUBLIC_DIR, cleanUrl === '/' ? 'index.html' : cleanUrl);
-  
-  // Handige fallback voor Next.js static export (zonder .html in URL)
-  if (!fs.existsSync(filePath) && !path.extname(filePath)) {
+
+  if (fs.existsSync(filePath)) {
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      const nestedIndex = path.join(filePath, 'index.html');
+      const flatHtml = `${filePath}.html`;
+      if (fs.existsSync(nestedIndex)) {
+        filePath = nestedIndex;
+      } else if (fs.existsSync(flatHtml)) {
+        filePath = flatHtml;
+      }
+    }
+  } else if (!path.extname(filePath)) {
+    // Handige fallback voor Next.js static export (zonder .html in URL)
     filePath += '.html';
   }
 
