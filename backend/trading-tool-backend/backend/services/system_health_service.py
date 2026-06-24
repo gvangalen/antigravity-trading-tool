@@ -486,7 +486,7 @@ class SystemHealthService:
                 ),
                 None,
             )
-            status = ((process or {}).get("pm2_env") or {}).get("status")
+            status = ((process or {}).get("pm2_env") or {}).get("status") or (process or {}).get("status")
             if status != "online":
                 continue
             workers.append(process_name)
