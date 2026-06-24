@@ -1,8 +1,6 @@
 import asyncio
 import json
 import os
-import shutil
-import subprocess
 import time
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Optional
@@ -465,39 +463,11 @@ class SystemHealthService:
 
     @staticmethod
     def _pm2_celery_workers_snapshot() -> Dict[str, Any]:
-        pm2_bin_candidates = [
-            os.getenv("PM2_BIN"),
-            "/home/ubuntu/.nvm/versions/node/v18.20.8/bin/pm2",
-            "/home/ubuntu/.nvm/versions/node/v20.19.5/bin/pm2",
-            shutil.which("pm2"),
-        ]
-        pm2_bin = next((candidate for candidate in pm2_bin_candidates if candidate), None)
-        if not pm2_bin:
-            return {}
-
+        pm2_dump_path = os.getenv("PM2_DUMP_PATH", "/home/ubuntu/.pm2/dump.pm2")
         try:
-            result = subprocess.run(
-                [pm2_bin, "jlist"],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-        except (FileNotFoundError, subprocess.SubprocessError):
-            return {}
-
-        json_payload = None
-        for line_index, line in enumerate(result.stdout.splitlines()):
-            stripped = line.lstrip()
-            if stripped == "[" or stripped.startswith("[{"):
-                json_payload = "\n".join(result.stdout.splitlines()[line_index:])
-                break
-        if not json_payload:
-            return {}
-
-        try:
-            processes = json.loads(json_payload)
-        except json.JSONDecodeError:
+            with open(pm2_dump_path, "r", encoding="utf-8") as handle:
+                processes = json.load(handle)
+        except (OSError, json.JSONDecodeError):
             return {}
         if not isinstance(processes, list):
             return {}
