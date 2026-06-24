@@ -11,14 +11,6 @@ import {
 } from "@/lib/api/onboarding";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
-/**
- * =====================================================
- * 🧭 useOnboarding (OFFICIËLE VERSIE + DEBUG LOGGING)
- * - Praat ALLEEN met lib/api/onboarding
- * - Pipeline-aware
- * - EXTRA logging voor debugging
- * =====================================================
- */
 export function useOnboarding() {
   const pathname = usePathname();
   const [status, setStatus] = useState(null);
@@ -31,15 +23,11 @@ export function useOnboarding() {
   // =====================================================
   const fetchStatus = useCallback(async () => {
     try {
-      console.log("🧭 [Onboarding] Fetch status...");
       setLoading(true);
       setError(null);
 
       const data = await getOnboardingStatus();
-
-      console.log("🧭 [Onboarding] Status ontvangen:", data);
       setStatus(data);
-
     } catch (err) {
       console.error("❌ [Onboarding] Failed to load status:", err);
       setError("Kon onboarding-status niet laden.");
@@ -57,13 +45,10 @@ export function useOnboarding() {
   // =====================================================
   const completeStep = async (step) => {
     try {
-      console.log(`🧭 [Onboarding] completeStep("${step}") gestart`);
       setSaving(true);
       setError(null);
 
       await completeOnboardingStep(step);
-
-      console.log(`✅ [Onboarding] Step "${step}" succesvol gemarkeerd`);
       trackAssistantEvent({
         event_name: "onboarding_step_completed",
         page: pathname || "/onboarding",
@@ -86,13 +71,10 @@ export function useOnboarding() {
 
   const finish = async () => {
     try {
-      console.log("🧭 [Onboarding] finishOnboarding gestart");
       setSaving(true);
       setError(null);
 
       await finishOnboarding();
-
-      console.log("✅ [Onboarding] finishOnboarding succesvol");
       trackAssistantEvent({
         event_name: "onboarding_completed",
         page: pathname || "/onboarding",
@@ -111,15 +93,11 @@ export function useOnboarding() {
 
   const reset = async () => {
     try {
-      console.log("🧭 [Onboarding] resetOnboarding gestart");
       setSaving(true);
       setError(null);
 
       await resetOnboarding();
-
-      console.log("🔁 [Onboarding] Onboarding gereset");
       await fetchStatus();
-
     } catch (err) {
       console.error("❌ [Onboarding] Reset onboarding failed:", err);
       setError("Onboarding reset mislukt.");
@@ -142,8 +120,6 @@ export function useOnboarding() {
       setup: !!status.has_setup,
       strategy: !!status.has_strategy,
     };
-
-    console.log("🧭 [Onboarding] stepStatus:", steps);
     return steps;
   }, [status]);
 
@@ -162,7 +138,6 @@ export function useOnboarding() {
         stepStatus.strategy
       )
     );
-    console.log("🧭 [Onboarding] onboardingComplete =", done);
     return done;
   }, [status, stepStatus]);
 
@@ -185,8 +160,6 @@ export function useOnboarding() {
     setup: stepStatus?.technical ?? false,
     strategy: stepStatus?.setup ?? false,
   };
-
-  console.log("🧭 [Onboarding] allowedSteps:", allowedSteps);
 
   // =====================================================
   // 6️⃣ Export

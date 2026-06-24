@@ -73,12 +73,6 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
     }[phase?.toLowerCase()] ?? 1;
 
   /* ======================================
-     DEBUG (BELANGRIJK)
-  ====================================== */
-
-  console.log("MARKET API DATA", data);
-
-  /* ======================================
      RENDER
   ====================================== */
 

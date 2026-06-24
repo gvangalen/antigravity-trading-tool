@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, UserPlus, LogIn, User, ShieldCheck } from "lucide-react";
+import { Mail, Lock, UserPlus, User, ShieldCheck } from "lucide-react";
 
 import { API_BASE_URL } from "@/lib/config";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -11,7 +11,7 @@ import { useModal } from "@/components/modal/ModalProvider";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { login, isAuthenticated, loading: authLoading, sessionChecked } = useAuth();
+  const { login, isAuthenticated, sessionChecked } = useAuth();
   const { showSnackbar } = useModal();
 
   const [name, setName] = useState(""); 
@@ -50,20 +50,20 @@ export default function RegisterPage() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         showSnackbar(
-          data.detail || "Account aanmaken mislukt. Bestaat dit e-mailadres al?",
+          data.detail || "Could not create the account. This email address may already exist.",
           "danger"
         );
         setLoading(false);
         return;
       }
 
-      showSnackbar("Account aangemaakt ✔ Je wordt nu ingelogd…", "success");
+      showSnackbar("Account created ✔ Signing you in now…", "success");
 
       // 2️⃣ Automatisch inloggen
       const loginRes = await login(email, password);
 
       if (!loginRes.success) {
-        showSnackbar("Account gemaakt — log nu handmatig in", "info");
+        showSnackbar("Account created. Please sign in manually.", "info");
         router.replace("/login");
         return;
       }
@@ -74,8 +74,8 @@ export default function RegisterPage() {
       console.error("❌ Register fout:", err);
       showSnackbar(
         typeof navigator !== "undefined" && !navigator.onLine
-          ? "Je lijkt offline. Controleer je internetverbinding."
-          : "Kan de server niet bereiken. Probeer opnieuw.",
+          ? "You appear to be offline. Check your internet connection."
+          : "Could not reach the server. Please try again.",
         "danger"
       );
     } finally {
@@ -113,12 +113,12 @@ export default function RegisterPage() {
               </div>
             </div>
           </div>
-          <div className="page-label mb-3">Welkom bij Tradamind</div>
+          <div className="page-label mb-3">Welcome to Tradamind</div>
           <h1 className="text-3xl font-bold text-foreground dark:text-slate-100 tracking-tighter text-center">
-            Je AI Trading Coach
+            Your AI Trading Coach
           </h1>
           <p className="page-subtitle mx-auto mt-4">
-            Maak je professionele Tradamind-account aan
+            Create your professional Tradamind account
           </p>
         </div>
 
@@ -127,7 +127,7 @@ export default function RegisterPage() {
           {/* Naam */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              Volledige Naam
+              Full Name
             </label>
             <div className="relative group">
               <User 
@@ -138,7 +138,7 @@ export default function RegisterPage() {
                 type="text"
                 required
                 className="trade-input pr-14"
-                placeholder="Je naam"
+                placeholder="Your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -148,7 +148,7 @@ export default function RegisterPage() {
           {/* E-mail */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              E-mail Adres
+              Email Address
             </label>
             <div className="relative group">
               <Mail 
@@ -159,7 +159,7 @@ export default function RegisterPage() {
                 type="email"
                 required
                 className="trade-input pr-14"
-                placeholder="naam@voorraad.com"
+                placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -169,7 +169,7 @@ export default function RegisterPage() {
           {/* Wachtwoord */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              Wachtwoord
+              Password
             </label>
             <div className="relative group">
               <Lock 
@@ -195,11 +195,11 @@ export default function RegisterPage() {
             className="btn-primary w-full flex items-center justify-center gap-3 py-5 text-[13px] mt-4"
           >
             {loading ? (
-              <>Aanmaken...</>
+              <>Creating account...</>
             ) : (
               <>
                 <UserPlus size={18} />
-                ACCOUNT AANMAKEN
+                CREATE ACCOUNT
               </>
             )}
           </button>
@@ -207,12 +207,12 @@ export default function RegisterPage() {
 
         <div className="text-center mt-10 pt-8 border-t-2 border-slate-50">
           <p className="metric-label text-slate-400 mb-0 lowercase normal-case tracking-normal">
-            Heb je al een account? 
+            Already have an account?
             <Link
               href="/login"
               className="text-blue-600 font-bold hover:underline ml-2 uppercase tracking-widest text-[10px]"
             >
-              Log in →
+              Sign in →
             </Link>
           </p>
         </div>

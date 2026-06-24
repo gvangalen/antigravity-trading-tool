@@ -15,8 +15,7 @@ import {
   normalizeTraderProfilePreferences,
   serializeTraderProfilePreferences,
 } from "@/lib/traderProfileOptions";
-import { User, Mail, Shield, ArrowUpRight, Brain, LogOut, Loader2, Sparkles, Pencil, Save } from "lucide-react";
-import Link from "next/link";
+import { Mail, Shield, ArrowUpRight, Loader2, Sparkles, Pencil, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useModal } from "@/components/modal/ModalProvider";
@@ -82,14 +81,11 @@ export default function ProfilePage() {
   const handleLogout = async () => {
     setLoadingLogout(true);
     await logout();
-    showSnackbar("You have been safely logged out ✔", "success");
+    showSnackbar("Je bent veilig uitgelogd ✔", "success");
     router.push("/login");
   };
 
   const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email;
-  const requestsUsed = user.ai_requests_used_day || 0;
-  const requestsLimit = user.ai_requests_limit_day || 25;
-  const usagePct = Math.min((requestsUsed / requestsLimit) * 100, 100);
   const traderTypeOptions = useMemo(() => getTraderTypeOptions(t), [t]);
   const timeframeOptions = useMemo(() => getTimeframeOptions(t), [t]);
   const assetFocusOptions = useMemo(() => getAssetFocusOptions(t), [t]);
@@ -196,13 +192,14 @@ export default function ProfilePage() {
         {/* HEADER */}
         <div className="border-l-4 border-blue-600 pl-8 mb-12">
           <div className="text-[11px] font-black text-blue-600 uppercase tracking-[0.3em] mb-2 opacity-80">
-            Account Laboratory
+            {t?.traderProfile?.profilePage?.pageEyebrow || "Accountlaboratorium"}
           </div>
           <h1 className="text-5xl font-black text-foreground tracking-tight leading-none">
-            Account & Trader Profile
+            {t?.traderProfile?.profilePage?.pageTitle || "Account & traderprofiel"}
           </h1>
           <p className="mt-4 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
-            Manage both your account details and the Finn trader profile that shapes coaching, warnings, explanations, and behavioral guidance.
+            {t?.traderProfile?.profilePage?.pageDescription ||
+              "Beheer je accountgegevens en het Finn traderprofiel dat coaching, waarschuwingen, uitleg en gedragsbegeleiding aanstuurt."}
           </p>
         </div>
 
@@ -216,7 +213,9 @@ export default function ProfilePage() {
                 {fullName.charAt(0).toUpperCase()}
               </div>
               <div>
-                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Trader Identity</div>
+                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">
+                  {t?.traderProfile?.profilePage?.identityLabel || "Traderidentiteit"}
+                </div>
                 <div className="text-2xl font-black text-foreground tracking-tight">{fullName}</div>
               </div>
             </div>
@@ -227,7 +226,9 @@ export default function ProfilePage() {
                   <Mail size={18} />
                 </div>
                 <div>
-                  <div className="text-[9px] font-black text-dim uppercase tracking-widest mb-0.5">Contact Port</div>
+                  <div className="text-[9px] font-black text-dim uppercase tracking-widest mb-0.5">
+                    {t?.traderProfile?.profilePage?.contactLabel || "E-mailadres"}
+                  </div>
                   <div className="text-sm font-bold text-foreground">{user.email}</div>
                 </div>
               </div>
@@ -237,7 +238,9 @@ export default function ProfilePage() {
                   <Shield size={18} />
                 </div>
                 <div>
-                  <div className="text-[9px] font-black text-dim uppercase tracking-widest mb-0.5">Authorization Level</div>
+                  <div className="text-[9px] font-black text-dim uppercase tracking-widest mb-0.5">
+                    {t?.traderProfile?.profilePage?.roleLabel || "Autorisatieniveau"}
+                  </div>
                   <div className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase tracking-tighter border border-blue-200 dark:border-blue-800">
                     {user.role || 'PRO'}
                   </div>
@@ -247,13 +250,14 @@ export default function ProfilePage() {
 
             <div className="rounded-3xl border border-blue-100 bg-blue-50/70 p-5">
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
-                Finn trader profile
+                {t?.traderProfile?.profilePage?.summaryEyebrow || "Finn traderprofiel"}
               </div>
               <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
-                Your trading style, goals, risk profile, timeframes, and coaching patterns live in the trading profile section below.
+                {t?.traderProfile?.profilePage?.summaryDescription ||
+                  "Je tradingstijl, doelen, risicoprofiel, timeframes en coachingspatronen staan in het tradingprofiel hieronder."}
               </p>
               <p className="mt-3 text-[11px] font-black uppercase tracking-[0.18em] text-blue-600">
-                Use the profile editor below to update it.
+                {t?.traderProfile?.profilePage?.summaryHelper || "Gebruik hieronder de profiel-editor om dit bij te werken."}
               </p>
             </div>
           </div>
@@ -267,25 +271,28 @@ export default function ProfilePage() {
           <div className="relative z-10 space-y-12">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Service Tier</div>
+                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">
+                  {t?.traderProfile?.profilePage?.serviceTierLabel || "Abonnement"}
+                </div>
                 <div className="text-3xl font-black text-foreground tracking-tighter uppercase italic">
                   {user.ai_plan || 'Basis'} Plan
                 </div>
               </div>
               <div className="px-3 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Active
+                {t?.traderProfile?.profilePage?.serviceTierActive || "Actief"}
               </div>
             </div>
 
             <div className="py-6 border-y border-[var(--color-border-subtle)]">
                <p className="text-[11px] font-bold text-dim leading-relaxed uppercase tracking-widest">
-                 Professional access enabled. All intelligence nodes are fully synchronized with your account.
+                 {t?.traderProfile?.profilePage?.serviceTierBody ||
+                   "Professionele toegang staat aan. Alle intelligentielagen zijn gesynchroniseerd met je account."}
                </p>
             </div>
 
             <button className="w-full bg-foreground text-card hover:bg-slate-800 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 group/btn active:scale-95 shadow-xl">
-              Upgrade to Pro Level
+              {t?.traderProfile?.profilePage?.upgradeCta || "Upgrade naar Pro"}
               <ArrowUpRight size={14} className="group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
             </button>
           </div>

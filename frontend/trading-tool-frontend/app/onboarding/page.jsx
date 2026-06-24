@@ -182,7 +182,7 @@ export default function OnboardingPage() {
             {!onboardingComplete && (
               <div className="absolute top-[180px] w-max animate-pulse">
                 <p className="text-[9px] font-black uppercase tracking-[0.3em] text-blue-600/60">
-                  {t?.traderProfile?.onboardingOverview?.nextStep}{" "}
+                  {t?.traderProfile?.onboardingOverview?.nextStepPrefix}{" "}
                   <span className="text-blue-500">{nextStep?.title || "Dashboard"}</span>
                 </p>
               </div>
@@ -194,7 +194,7 @@ export default function OnboardingPage() {
           <div className="mb-4 flex items-center justify-center gap-3 md:justify-start">
             <Sparkles size={14} className="text-blue-600" />
             <span className="text-[12px] font-black uppercase tracking-[0.3em] text-blue-600">
-              {t?.traderProfile?.onboardingOverview?.finnLabel}
+              {t?.traderProfile?.onboardingOverview?.finnSays}
             </span>
           </div>
           <h2 className="mb-4 text-4xl font-black tracking-tight text-slate-900">
@@ -211,18 +211,18 @@ export default function OnboardingPage() {
             </span>
             <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 shadow-sm">
               <Shield size={12} />
-              {t?.traderProfile?.onboardingOverview?.chips?.noLiveTrades}
+              {t?.traderProfile?.onboardingOverview?.chips?.safe}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 shadow-sm">
               <Sparkles size={12} />
-              {t?.traderProfile?.onboardingOverview?.chips?.finnHelps}
+              {t?.traderProfile?.onboardingOverview?.chips?.guided}
             </span>
           </div>
 
           <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 text-left shadow-sm">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
               <Sparkles size={14} />
-              {t?.traderProfile?.onboardingOverview?.finnLabel}
+              {t?.traderProfile?.onboardingOverview?.finnSays}
             </div>
             <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700">
               {onboardingComplete

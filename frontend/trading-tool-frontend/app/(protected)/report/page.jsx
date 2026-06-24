@@ -1183,13 +1183,13 @@ function FinnReportsPanel() {
                 Persoonlijke Finn rapportage
               </h2>
               <p className="mt-3 text-sm md:text-[15px] leading-relaxed text-slate-500 dark:text-slate-400 max-w-2xl">
-                Read-only rapportage over je Finn-activiteit, risicochecks en beslisflows.
-                Los van trading reports. Dit rapport analyseert je gebruik van Finn, niet de markt.
+                Alleen-lezen rapportage over je Finn-activiteit, risicochecks en beslisflows.
+                Los van marktrapporten. Dit rapport analyseert je gebruik van Finn, niet de markt.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {['READ-ONLY', 'AUDITDATA', 'LOS VAN TRADING REPORTS'].map((label) => (
+              {["Alleen lezen", "Auditspoor", "Los van marktrapporten"].map((label) => (
                 <span
                   key={label}
                   className="px-3 py-1.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400"

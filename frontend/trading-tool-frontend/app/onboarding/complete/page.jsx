@@ -59,7 +59,7 @@ export default function OnboardingCompletePage() {
       <div className="mx-auto mb-10 max-w-2xl rounded-3xl border border-blue-100 bg-blue-50 p-6 text-left shadow-sm">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
           <Sparkles size={14} />
-          {t?.traderProfile?.onboardingComplete?.finnLabel}
+          {t?.traderProfile?.onboardingComplete?.finnSays}
         </div>
         <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-700">
           {t?.traderProfile?.onboardingComplete?.finnBody}
@@ -86,8 +86,8 @@ export default function OnboardingCompletePage() {
         className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-3 font-semibold text-white shadow-md transition hover:bg-[var(--primary-dark)] hover:shadow-lg disabled:opacity-60"
       >
         {loading || saving
-          ? t?.traderProfile?.onboardingComplete?.loading
-          : t?.traderProfile?.onboardingComplete?.cta}
+          ? t?.traderProfile?.onboardingComplete?.preparingDashboard
+          : t?.traderProfile?.onboardingComplete?.openDashboard}
         <ArrowRight size={18} />
       </button>
 
