@@ -1,6 +1,8 @@
 import asyncio
 import json
 import os
+import shutil
+import subprocess
 import time
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Optional
@@ -11,6 +13,14 @@ from backend.celery_task.legacy_queue_drain import summarize_legacy_queue_messag
 from backend.celery_task.queue_policy import DEFAULT_QUEUE, NAMED_QUEUES, rate_limit_summary_by_queue
 from backend.infrastructure.database import async_session_factory
 from backend.services.platform_metrics import process_metrics_snapshot
+
+
+PM2_CELERY_WORKER_QUEUE_MAP = {
+    "celery-worker-default": [DEFAULT_QUEUE],
+    "celery-worker-market-portfolio": ["market_data", "portfolio"],
+    "celery-worker-scoring-execution": ["scoring", "execution_critical"],
+    "celery-worker-ai-reporting": ["ai_generation"],
+}
 
 
 def _utcnow() -> datetime:
@@ -307,7 +317,7 @@ class SystemHealthService:
                 rate_limit = rate_limits[queue_name].get("rate_limit")
             metric["workers"] = workers
             metric["rate_limit"] = rate_limit
-            metric["worker_mapping_source"] = "celery_active_queues_inspect"
+            metric["worker_mapping_source"] = celery.get("worker_mapping_source") or "celery_active_queues_inspect"
             metric["rate_limit_source"] = "queue_policy_static"
             metric["depth_source"] = "redis_llen"
 
@@ -352,19 +362,35 @@ class SystemHealthService:
                 active_queues=active_queues or {},
                 stats_result=stats_result or {},
             )
+            workers_by_queue = SystemHealthService._workers_by_queue(active_queues or {})
+            worker_mapping_source = "celery_active_queues_inspect"
+
+            if not workers:
+                pm2_snapshot = await asyncio.to_thread(SystemHealthService._pm2_celery_workers_snapshot)
+                workers = pm2_snapshot.get("workers", []) if isinstance(pm2_snapshot, dict) else []
+                workers_by_queue = (
+                    pm2_snapshot.get("workers_by_queue", {})
+                    if isinstance(pm2_snapshot, dict)
+                    else {}
+                )
+                worker_mapping_source = (
+                    pm2_snapshot.get("worker_mapping_source")
+                    if isinstance(pm2_snapshot, dict)
+                    else worker_mapping_source
+                ) or worker_mapping_source
             if not workers:
                 return _component("unknown", worker_count=0, workers=[], workers_by_queue={})
-
-            workers_by_queue = SystemHealthService._workers_by_queue(active_queues or {})
             return _component(
                 "ok",
                 worker_count=len(workers),
                 workers=workers,
                 workers_by_queue=workers_by_queue,
+                worker_mapping_source=worker_mapping_source,
                 worker_discovery_sources=SystemHealthService._worker_discovery_sources(
                     ping_result=ping_result or {},
                     active_queues=active_queues or {},
                     stats_result=stats_result or {},
+                    worker_mapping_source=worker_mapping_source,
                 ),
                 rate_limits_by_queue=rate_limit_summary_by_queue(),
             )
@@ -418,6 +444,7 @@ class SystemHealthService:
         ping_result: Dict[str, Any],
         active_queues: Dict[str, Any],
         stats_result: Dict[str, Any],
+        worker_mapping_source: Optional[str] = None,
     ) -> list[str]:
         sources = []
         if ping_result:
@@ -426,6 +453,8 @@ class SystemHealthService:
             sources.append("active_queues")
         if stats_result:
             sources.append("stats")
+        if worker_mapping_source == "pm2_process_list_static_queue_map":
+            sources.append("pm2")
         return sources
 
     @staticmethod
@@ -433,6 +462,78 @@ class SystemHealthService:
         if not isinstance(value, dict):
             return []
         return [key for key in value.keys() if isinstance(key, str)]
+
+    @staticmethod
+    def _pm2_celery_workers_snapshot() -> Dict[str, Any]:
+        pm2_bin_candidates = [
+            os.getenv("PM2_BIN"),
+            "/home/ubuntu/.nvm/versions/node/v18.20.8/bin/pm2",
+            "/home/ubuntu/.nvm/versions/node/v20.19.5/bin/pm2",
+            shutil.which("pm2"),
+        ]
+        pm2_bin = next((candidate for candidate in pm2_bin_candidates if candidate), None)
+        if not pm2_bin:
+            return {}
+
+        try:
+            result = subprocess.run(
+                [pm2_bin, "jlist"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return {}
+
+        json_payload = None
+        for line_index, line in enumerate(result.stdout.splitlines()):
+            stripped = line.lstrip()
+            if stripped == "[" or stripped.startswith("[{"):
+                json_payload = "\n".join(result.stdout.splitlines()[line_index:])
+                break
+        if not json_payload:
+            return {}
+
+        try:
+            processes = json.loads(json_payload)
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(processes, list):
+            return {}
+
+        suffix = "-staging" if os.getenv("APP_ENV") == "staging" else ""
+        workers = []
+        workers_by_queue = {queue_name: [] for queue_name in NAMED_QUEUES}
+
+        for base_name, queue_names in PM2_CELERY_WORKER_QUEUE_MAP.items():
+            process_name = f"{base_name}{suffix}"
+            process = next(
+                (
+                    item
+                    for item in processes
+                    if isinstance(item, dict) and item.get("name") == process_name
+                ),
+                None,
+            )
+            status = ((process or {}).get("pm2_env") or {}).get("status")
+            if status != "online":
+                continue
+            workers.append(process_name)
+            for queue_name in queue_names:
+                workers_by_queue.setdefault(queue_name, []).append(process_name)
+
+        if not workers:
+            return {}
+
+        return {
+            "workers": sorted(workers),
+            "workers_by_queue": {
+                queue_name: sorted(queue_workers)
+                for queue_name, queue_workers in workers_by_queue.items()
+            },
+            "worker_mapping_source": "pm2_process_list_static_queue_map",
+        }
 
     @staticmethod
     def _workers_by_queue(active_queues: Dict[str, Any]) -> Dict[str, Any]:

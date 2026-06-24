@@ -229,6 +229,36 @@ def test_check_celery_falls_back_to_active_queues_and_stats_when_ping_is_empty(m
     assert result["workers_by_queue"]["execution_critical"] == ["worker-b"]
 
 
+def test_check_celery_falls_back_to_pm2_snapshot_when_inspect_is_empty(monkeypatch):
+    monkeypatch.setattr(SystemHealthService, "_celery_ping", staticmethod(lambda: None))
+    monkeypatch.setattr(SystemHealthService, "_celery_active_queues", staticmethod(lambda: None))
+    monkeypatch.setattr(SystemHealthService, "_celery_stats", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        SystemHealthService,
+        "_pm2_celery_workers_snapshot",
+        staticmethod(
+            lambda: {
+                "workers": ["celery-worker-default", "celery-worker-scoring-execution"],
+                "workers_by_queue": {
+                    "celery": ["celery-worker-default"],
+                    "scoring": ["celery-worker-scoring-execution"],
+                    "execution_critical": ["celery-worker-scoring-execution"],
+                },
+                "worker_mapping_source": "pm2_process_list_static_queue_map",
+            }
+        ),
+    )
+
+    result = asyncio.run(SystemHealthService._check_celery())
+
+    assert result["status"] == "ok"
+    assert result["worker_count"] == 2
+    assert result["workers"] == ["celery-worker-default", "celery-worker-scoring-execution"]
+    assert result["worker_discovery_sources"] == ["pm2"]
+    assert result["worker_mapping_source"] == "pm2_process_list_static_queue_map"
+    assert result["workers_by_queue"]["celery"] == ["celery-worker-default"]
+
+
 def test_queue_sample_summary_reports_legacy_breakdown():
     class _FakeRedis:
         async def llen(self, queue_name):
