@@ -186,13 +186,47 @@ def test_check_celery_includes_rate_limit_summary(monkeypatch):
         "_celery_active_queues",
         staticmethod(lambda: {"worker-a": [{"name": "market_data"}]}),
     )
+    monkeypatch.setattr(
+        SystemHealthService,
+        "_celery_stats",
+        staticmethod(lambda: {"worker-a": {"pid": 123}}),
+    )
 
     result = asyncio.run(SystemHealthService._check_celery())
 
     assert result["status"] == "ok"
+    assert result["worker_discovery_sources"] == ["ping", "active_queues", "stats"]
     assert result["workers_by_queue"]["market_data"] == ["worker-a"]
     assert result["rate_limits_by_queue"]["market_data"]["rate_limit"] == "20/m"
     assert result["rate_limits_by_queue"]["portfolio"]["rate_limit"] is None
+
+
+def test_check_celery_falls_back_to_active_queues_and_stats_when_ping_is_empty(monkeypatch):
+    monkeypatch.setattr(SystemHealthService, "_celery_ping", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        SystemHealthService,
+        "_celery_active_queues",
+        staticmethod(
+            lambda: {
+                "worker-a": [{"name": "market_data"}],
+                "worker-b": [{"name": "execution_critical"}],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        SystemHealthService,
+        "_celery_stats",
+        staticmethod(lambda: {"worker-b": {"pid": 456}}),
+    )
+
+    result = asyncio.run(SystemHealthService._check_celery())
+
+    assert result["status"] == "ok"
+    assert result["worker_count"] == 2
+    assert result["workers"] == ["worker-a", "worker-b"]
+    assert result["worker_discovery_sources"] == ["active_queues", "stats"]
+    assert result["workers_by_queue"]["market_data"] == ["worker-a"]
+    assert result["workers_by_queue"]["execution_critical"] == ["worker-b"]
 
 
 def test_queue_sample_summary_reports_legacy_breakdown():
