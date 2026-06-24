@@ -29,6 +29,7 @@ email-validator
 
 # ✅ AI
 openai>=1.0
+faiss-cpu
 
 # ✅ Logging & Utils
 loguru
