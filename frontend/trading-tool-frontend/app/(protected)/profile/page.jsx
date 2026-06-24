@@ -17,7 +17,7 @@ import {
 } from "@/lib/traderProfileOptions";
 import { User, Mail, Shield, ArrowUpRight, Brain, LogOut, Loader2, Sparkles, Pencil, Save } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useModal } from "@/components/modal/ModalProvider";
 
@@ -61,7 +61,6 @@ export default function ProfilePage() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileError, setProfileError] = useState(null);
-  const traderProfileRef = useRef(null);
   const [profileForm, setProfileForm] = useState({
     trader_types: [],
     primary_timeframes: [],
@@ -183,12 +182,6 @@ export default function ProfilePage() {
     }
   };
 
-  const openTraderProfileEditor = () => {
-    setEditingProfile(true);
-    setProfileError(null);
-    traderProfileRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   const summaryChips = [
     ...profileForm.trader_types.map((value) => traderTypeMap[value]).filter(Boolean),
     ...profileForm.investment_goals_list.map((value) => goalsMap[value]).filter(Boolean),
@@ -257,16 +250,11 @@ export default function ProfilePage() {
                 Finn trader profile
               </div>
               <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
-                Edit your trading style, goals, risk profile, timeframes, and coaching patterns here so Finn stays aligned with how you trade.
+                Your trading style, goals, risk profile, timeframes, and coaching patterns live in the trading profile section below.
               </p>
-              <button
-                type="button"
-                onClick={openTraderProfileEditor}
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700"
-              >
-                <Pencil size={14} />
-                Edit Finn profile
-              </button>
+              <p className="mt-3 text-[11px] font-black uppercase tracking-[0.18em] text-blue-600">
+                Use the profile editor below to update it.
+              </p>
             </div>
           </div>
         </div>
@@ -305,10 +293,7 @@ export default function ProfilePage() {
 
       </div>
 
-      <div
-        ref={traderProfileRef}
-        className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10 space-y-8"
-      >
+      <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10 space-y-8">
         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div className="max-w-2xl">
             <div className="mb-3 flex items-center gap-3">
