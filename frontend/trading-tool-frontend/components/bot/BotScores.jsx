@@ -18,19 +18,19 @@ export default function BotScores({
           <BarChart3 size={18} />
         </div>
         <div>
-          <div className="text-[10px] font-black text-muted uppercase tracking-widest">Environment Analytics</div>
-          <div className="text-sm font-bold text-foreground tracking-tight">System Health & Market Scopes</div>
+          <div className="text-[10px] font-black text-muted uppercase tracking-widest">Omgevingsanalyse</div>
+          <div className="text-sm font-bold text-foreground tracking-tight">Systeemstatus en marktdomeinen</div>
         </div>
       </div>
 
       {loading && (
-        <CardLoader text="SYNCING SENSORS..." />
+        <CardLoader text="SIGNALEN LADEN..." />
       )}
 
       {!loading && !hasScores && (
         <div className="p-8 rounded-2xl bg-[var(--color-border-subtle)] border border-[var(--color-border)] border-dashed text-center">
           <p className="text-xs font-black text-muted uppercase tracking-widest">
-            NO TELEMETRY DATA AVAILABLE FOR CURRENT SESSION
+            Nog geen meetdata beschikbaar voor deze sessie
           </p>
         </div>
       )}
@@ -62,7 +62,7 @@ export default function BotScores({
                 `}
               >
                 <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-1">
-                  {key} INDEX
+                  {key} score
                 </div>
 
                 <div className={`text-2xl font-black font-mono tracking-tighter ${colorClass}`}>

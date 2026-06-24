@@ -30,7 +30,8 @@ class AuthService:
             last_name=user.last_name,
             ai_plan=user.ai_plan,
             ai_requests_limit_day=user.ai_requests_limit_day,
-            ai_requests_used_day=user.ai_requests_used_day
+            ai_requests_used_day=user.ai_requests_used_day,
+            ai_preferences=user.ai_preferences or {},
         )
 
     @staticmethod

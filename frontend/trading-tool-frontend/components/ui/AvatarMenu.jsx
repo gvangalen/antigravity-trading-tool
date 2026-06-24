@@ -152,7 +152,9 @@ export default function AvatarMenu() {
             >
               <div className="flex flex-col items-start leading-none">
                 <span className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">{t.common.language}</span>
-                <span className="font-bold">{t.common.switch_to}</span>
+                <span className="font-bold">
+                  {locale === "nl" ? "Nederlands actief -> switch to English" : "English active -> wissel naar Nederlands"}
+                </span>
               </div>
             </DropdownButton>
 

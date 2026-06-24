@@ -289,7 +289,7 @@ export default function PortfolioBalanceCard({
       <div className="mt-8 h-[260px] w-full min-w-0 relative">
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-[1px] z-10 text-[10px] font-black text-secondary uppercase tracking-[0.2em] animate-pulse">
-            Syncing Terminal Data...
+            Portefeuilledata laden...
           </div>
         )}
 

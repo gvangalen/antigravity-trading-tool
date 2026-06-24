@@ -65,21 +65,21 @@ export default function StrategyPage() {
   const handleDeleteStrategy = async (id) => {
     try {
       await deleteStrategy(id);
-      showSnackbar("Strategy removed", "success");
+      showSnackbar("Strategie verwijderd", "success");
       refreshEverything();
     } catch {
-      showSnackbar("Failed to remove strategy", "danger");
+      showSnackbar("Verwijderen van de strategie mislukt", "danger");
     }
   };
 
   const handleUpdateStrategy = async (id, data) => {
     try {
       await updateStrategy(id, data);
-      showSnackbar("Strategy updated", "success");
+      showSnackbar("Strategie bijgewerkt", "success");
       setEditingStrategy(null);
       refreshEverything();
     } catch {
-      showSnackbar("Failed to update strategy", "danger");
+      showSnackbar("Bijwerken van de strategie mislukt", "danger");
     }
   };
 
@@ -89,7 +89,7 @@ export default function StrategyPage() {
         (s) => String(s.id) === String(strategy.setup_id)
       );
       if (!setup) {
-        showSnackbar("No valid setup selected.", "danger");
+        showSnackbar("Kies eerst een geldige setup", "danger");
         return;
       }
       await createStrategy({
@@ -97,10 +97,10 @@ export default function StrategyPage() {
         setup_id: setup.id,
         setup_type: setup.setup_type,
       });
-      showSnackbar("Strategy saved ✔", "success");
+      showSnackbar("Strategie opgeslagen ✔", "success");
       refreshEverything();
     } catch {
-      showSnackbar("Failed to save strategy.", "danger");
+      showSnackbar("Opslaan van de strategie mislukt", "danger");
     }
   };
 
@@ -112,24 +112,24 @@ export default function StrategyPage() {
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
         <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Activity size={12} />
-           Execution
+           Uitvoering
         </div>
-        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Strategies</h1>
+        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Strategieën</h1>
         <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">
-          Translate your plans into actions and maintain discipline
+          Zet je setups om in duidelijke uitvoering en houd je handelsdiscipline strak.
         </p>
       </header>
 
       {/* 🚀 QUICK STATS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-8">
         <div className="card p-8 flex flex-col items-center justify-center text-center bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl shadow-sm transition-all">
-            <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] mb-4">Active Plans</div>
+            <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] mb-4">Actieve plannen</div>
             <div className="text-5xl font-black text-blue-600 dark:text-blue-400 tracking-tighter tabular-nums">
               {safeStrategies.filter(s => s.is_active).length}
             </div>
         </div>
         <div className="card p-8 flex flex-col items-center justify-center text-center bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl shadow-sm transition-all">
-            <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] mb-4">Total</div>
+            <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] mb-4">Totaal</div>
             <div className="text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tighter tabular-nums">
               {safeStrategies.length}
             </div>
@@ -157,14 +157,14 @@ export default function StrategyPage() {
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6 flex items-center justify-between">
              <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                <ClipboardList size={16} className="text-blue-600" />
-               Overview
+               Overzicht
              </div>
              
              <div className="flex items-center bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl focus-within:ring-4 focus-within:ring-blue-600/5 transition-all">
                 <Search size={14} className="text-slate-400 dark:text-slate-500 mr-2" />
                 <input
                   type="text"
-                  placeholder="Search plans..."
+                  placeholder="Zoek strategieën..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="bg-transparent outline-none text-[11px] font-bold text-slate-700 dark:text-slate-300 w-40"
@@ -193,13 +193,13 @@ export default function StrategyPage() {
            <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
               <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                 <PlusCircle size={16} className="text-blue-600" />
-                New Strategy
+                Nieuwe strategie
               </div>
            </div>
 
            <div className="card-p p-8">
              <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6 border-b border-slate-50 dark:border-slate-800/50 pb-4">
-               Add a new trading plan to your arsenal
+               Voeg een nieuwe strategie toe die past bij je setup en uitvoeringsstijl
              </p>
              <StrategyForm
                key={refreshKey}
@@ -214,8 +214,8 @@ export default function StrategyPage() {
       <Drawer
         isOpen={!!editingStrategy}
         onClose={() => setEditingStrategy(null)}
-        title={editingStrategy?.name || "Modify"}
-        subtitle="Configuration"
+        title={editingStrategy?.name || "Strategie aanpassen"}
+        subtitle="Configuratie"
       >
         {editingStrategy && (
           <StrategyForm
@@ -229,10 +229,10 @@ export default function StrategyPage() {
 
       <footer className="flex items-center justify-center gap-12 py-16 border-t border-slate-100 dark:border-slate-800 opacity-60">
          <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-            <Zap size={14} className="text-blue-500" /> Fast Execution
+            <Zap size={14} className="text-blue-500" /> Snelle uitvoering
          </div>
          <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-            <ShieldCheck size={14} className="text-blue-600" /> Secured System
+            <ShieldCheck size={14} className="text-blue-600" /> Beveiligd systeem
          </div>
       </footer>
     </div>

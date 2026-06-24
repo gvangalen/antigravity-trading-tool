@@ -66,7 +66,6 @@ export default function TechnicalPage() {
       status &&
       status.has_technical === false
     ) {
-      console.log("🧭 Onboarding: technical step completed");
       completeStep("technical");
     }
   }, [technicalData, status, completeStep]);
@@ -80,7 +79,7 @@ export default function TechnicalPage() {
 
     openConfirm({
       title: `Bekijk chart: ${name}`,
-      statusLabel: "Read-only",
+      statusLabel: "Alleen lezen",
       context: `Je bekijkt de live chart van ${name} binnen Technical.`,
       impact: "Er verandert niets aan je indicatoren of analyse. Dit opent alleen een visuele controlelaag.",
       safety: "Veilig om te gebruiken tijdens review. Er worden geen datafeeds aangepast.",
@@ -135,11 +134,11 @@ export default function TechnicalPage() {
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
         <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Activity size={12} />
-           System Status
+           Marktcontext
         </div>
-        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Technical</h1>
+        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Technisch overzicht</h1>
         <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">
-          Analysis of trends and technical indicators for {selectedAsset}
+          Analyse van trends en technische indicatoren voor {selectedAsset}
         </p>
       </header>
 
@@ -160,7 +159,7 @@ export default function TechnicalPage() {
       <div className="space-y-4 py-8">
         <div className="flex items-center gap-2 mb-2">
            <Brain size={14} className="text-slate-400 dark:text-slate-500" />
-           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Analysis</span>
+           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Analyse</span>
         </div>
         <DashboardErrorBoundary>
           <AgentInsightPanel category="technical" symbol={selectedAsset} />
@@ -172,7 +171,7 @@ export default function TechnicalPage() {
          <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
                <Activity size={14} className="text-slate-400 dark:text-slate-500" />
-               <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Configuration</span>
+               <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Configuratie</span>
             </div>
             <TechnicalIndicatorScoreView
                addTechnicalIndicator={addTechnicalIndicator}

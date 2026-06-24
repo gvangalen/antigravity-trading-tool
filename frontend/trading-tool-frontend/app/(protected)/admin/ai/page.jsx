@@ -38,10 +38,10 @@ import {
 } from "recharts";
 
 const MODE_LABELS = {
-  "cache_exact": "Exact Hit",
-  "cache_semantic": "Semantic Hit",
-  "full_ai": "Full AI Call",
-  "fallback": "Platform Fallback"
+  "cache_exact": "Exacte hit",
+  "cache_semantic": "Semantische hit",
+  "full_ai": "Volledige AI-call",
+  "fallback": "Platformfallback"
 };
 
 const MODE_COLORS = {
@@ -52,11 +52,11 @@ const MODE_COLORS = {
 };
 
 const SOURCE_LABELS = {
-  live_user: "Live user",
+  live_user: "Live gebruiker",
   qa_user: "QA / smoke",
-  staging_user: "Staging user",
-  background_job: "Background job",
-  system: "System",
+  staging_user: "Staging gebruiker",
+  background_job: "Achtergrondtaak",
+  system: "Systeem",
   unclassified: "Legacy / old logs",
 };
 
@@ -75,12 +75,12 @@ function formatSourceLabel(source) {
 
 function formatEntryPointLabel(entryPoint) {
   const value = String(entryPoint || "unclassified");
-  if (value === "unclassified") return "Legacy / old logs";
-  if (value === "scheduled_job") return "Scheduled job";
+  if (value === "unclassified") return "Legacy / oude logs";
+  if (value === "scheduled_job") return "Geplande taak";
   return value
     .replaceAll("assistant_service:", "Finn / ")
-    .replaceAll("report_service:", "Reports / ")
-    .replaceAll("_task", " task")
+    .replaceAll("report_service:", "Rapporten / ")
+    .replaceAll("_task", " taak")
     .replaceAll("_", " ");
 }
 
@@ -109,7 +109,7 @@ export default function AdminAiDashboard() {
   if (loading) return (
     <div className="p-10 flex flex-col items-center justify-center min-h-[60vh]">
       <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-4" />
-      <p className="text-slate-400 font-bold uppercase tracking-widest text-xs italic">Syncing Vector Intelligence...</p>
+      <p className="text-slate-400 font-bold uppercase tracking-widest text-xs italic">AI-statistieken laden...</p>
     </div>
   );
 
@@ -118,7 +118,7 @@ export default function AdminAiDashboard() {
       <div className="inline-flex p-4 bg-rose-50 rounded-full text-rose-500 mb-4">
         <ShieldCheck size={32} />
       </div>
-      <h1 className="text-2xl font-black text-slate-900 mb-2 italic">Access Denied</h1>
+      <h1 className="text-2xl font-black text-slate-900 mb-2 italic">Geen toegang</h1>
       <p className="text-slate-500 max-w-md mx-auto">{error}</p>
     </div>
   );
@@ -150,24 +150,24 @@ export default function AdminAiDashboard() {
               <BrainCircuit size={22} />
             </div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight italic">
-              AI Gateway <span className="text-blue-600">Phase 3 Infrastructure</span>
+              AI-gebruik <span className="text-blue-600">en prestaties</span>
             </h1>
           </div>
           <p className="text-slate-500 font-medium max-w-2xl text-sm">
-            Semantic Intelligence enabled. Using FAISS Vector Engine with text-embedding-3-small (1536 dims).
+            Overzicht van AI-verbruik, cachegedrag, latency en opvallende afwijkingen in productie.
           </p>
         </div>
         
         <div className="flex items-center gap-4">
           <div className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl flex items-center gap-3 shadow-lg shadow-blue-600/20">
              <div className="w-2.5 h-2.5 rounded-full bg-blue-200 animate-pulse" />
-             <span className="text-[11px] font-black uppercase tracking-widest italic">Semantic Engine Online</span>
+             <span className="text-[11px] font-black uppercase tracking-widest italic">AI-monitoring actief</span>
           </div>
           <button 
             onClick={loadStats}
             className="px-6 py-3 bg-white border border-slate-200 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-600 hover:border-blue-600 hover:text-blue-600 transition-all shadow-sm active:scale-95"
           >
-            Refresh Intel
+            Vernieuwen
           </button>
         </div>
       </div>
@@ -176,62 +176,62 @@ export default function AdminAiDashboard() {
       {/* 📊 SUMMARY RIBBON */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7 gap-6 mb-10">
         <MetricCard 
-          title="MTD Profit" 
+          title="MTD resultaat" 
           value={`€${overview.total_profit_month_eur.toFixed(2)}`} 
           icon={<DollarSign size={18} className="text-green-500" />}
           trend="positive"
-          subtitle={`${((overview.total_profit_month_eur / (overview.total_revenue_month_eur || 1)) * 100).toFixed(1)}% Gross Margin`}
+          subtitle={`${((overview.total_profit_month_eur / (overview.total_revenue_month_eur || 1)) * 100).toFixed(1)}% brutomarge`}
         />
         <MetricCard 
-          title="Exact Hits" 
+          title="Exacte hits" 
           value={overview.exact_hits} 
           icon={<Hash size={18} className="text-emerald-500" />}
-          subtitle="Query Hash match"
+          subtitle="Query-hash match"
           trend="positive"
         />
         <MetricCard 
-          title="Semantic Hits" 
+          title="Semantische hits" 
           value={overview.semantic_hits} 
           icon={<BrainCircuit size={18} className="text-blue-500" />}
-          subtitle="Vector Similarity match"
+          subtitle="Vector-overeenkomst"
           trend="positive"
         />
         <MetricCard 
-          title="Avg Latency" 
+          title="Gem. latency" 
           value={`${overview.avg_latency_ms.toFixed(0)} ms`} 
           icon={<Clock size={18} className="text-amber-500" />}
-          subtitle="Full platform average"
+          subtitle="Platformgemiddelde"
           trend={overview.avg_latency_ms < 500 ? "positive" : "negative"}
         />
         <MetricCard 
-          title="Avg Cost / AI Call" 
+          title="Gem. kosten / AI-call" 
           value={`€${overview.avg_cost_per_full_request.toFixed(4)}`} 
           icon={<Zap size={18} className="text-violet-500" />}
-          subtitle="Non-cached only"
+          subtitle="Alleen niet-gecachede calls"
           trend="neutral"
         />
         <MetricCard 
-          title="Blocked AI Spend" 
+          title="Geblokkeerde AI-kosten" 
           value={`€${overview.blocked_estimated_cost_month_eur.toFixed(2)}`} 
           icon={<AlertOctagon size={18} className="text-rose-500" />}
-          subtitle={`${overview.blocked_requests_month} quota-blocked attempts`}
+          subtitle={`${overview.blocked_requests_month} quota-geblokkeerde pogingen`}
           trend={overview.blocked_requests_month > 0 ? "negative" : "positive"}
         />
         <MetricCard 
-          title="Total Savings" 
+          title="Totale besparing" 
           value={`€${overview.total_savings_month_eur.toFixed(2)}`} 
           icon={<PiggyBank size={18} className="text-blue-600" />}
-          subtitle="Saved AI Costs"
+          subtitle="Bespaarde AI-kosten"
           trend="positive"
           isHighlight
         />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
-        <MiniSourceCard label="Live users" value={`€${overview.live_user_cost_month_eur.toFixed(2)}`} tone="emerald" />
+        <MiniSourceCard label="Live gebruikers" value={`€${overview.live_user_cost_month_eur.toFixed(2)}`} tone="emerald" />
         <MiniSourceCard label="QA / smoke" value={`€${overview.qa_cost_month_eur.toFixed(2)}`} tone="amber" />
-        <MiniSourceCard label="Background jobs" value={`€${overview.background_cost_month_eur.toFixed(2)}`} tone="violet" />
-        <MiniSourceCard label="Staging users" value={`€${overview.staging_cost_month_eur.toFixed(2)}`} tone="blue" />
+        <MiniSourceCard label="Achtergrondtaken" value={`€${overview.background_cost_month_eur.toFixed(2)}`} tone="violet" />
+        <MiniSourceCard label="Staging gebruikers" value={`€${overview.staging_cost_month_eur.toFixed(2)}`} tone="blue" />
       </div>
 
       <div className="mb-10 p-5 bg-slate-50 border border-slate-100 rounded-[28px]">
@@ -254,9 +254,9 @@ export default function AdminAiDashboard() {
             </div>
             <div>
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider italic">
-                Real-Time AI Anomaly Radar
+                AI-afwijkingen
               </h3>
-              <p className="text-slate-400 text-xs">Aangedreven door de Tradamind Streaming Observability Engine</p>
+              <p className="text-slate-400 text-xs">Signalen die extra aandacht vragen in het huidige AI-gebruik.</p>
             </div>
           </div>
           <span className="px-4 py-1.5 bg-slate-100 rounded-xl text-[10px] font-black uppercase text-slate-500 tracking-widest">
@@ -406,7 +406,7 @@ export default function AdminAiDashboard() {
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
               <XCircle size={14} className="text-rose-500" />
-              Rejection Safety Analytics
+              Afwijzingsanalyse
             </h3>
           </div>
           {rejectionData.length > 0 ? (

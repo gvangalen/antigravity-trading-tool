@@ -105,7 +105,6 @@ export default function MacroPage() {
       status &&
       status.has_macro === false
     ) {
-      console.log("🧭 Onboarding: macro step completed");
       completeStep("macro");
     }
   }, [activeMacroIndicatorNames, status, completeStep]);
@@ -115,12 +114,12 @@ export default function MacroPage() {
   // ===============================
   const safeMacro = {
     score: macro?.score ?? null,
-    trend: macro?.trend ?? "Unknown",
-    bias: macro?.bias ?? "Neutral",
-    risk: macro?.risk ?? "Unknown",
+    trend: macro?.trend ?? "Onbekend",
+    bias: macro?.bias ?? "Neutraal",
+    risk: macro?.risk ?? "Onbekend",
     summary:
       macro?.summary ??
-      "No macro insights available. Add indicators or wait for the first AI analysis.",
+      "Nog geen macro-inzichten beschikbaar. Voeg indicatoren toe of wacht op de eerste analyse.",
   };
 
   // ===============================
@@ -132,7 +131,7 @@ export default function MacroPage() {
 
     openConfirm({
       title: `Bekijk chart: ${name}`,
-      statusLabel: "Read-only",
+      statusLabel: "Alleen lezen",
       context: `Je bekijkt de live chart van ${name} binnen Macro.`,
       impact: "Er verandert niets aan je macroset of analyse. Dit is alleen een extra controlemoment.",
       safety: "Veilig om te openen tijdens review. Er worden geen indicatoren aangepast.",
@@ -186,11 +185,11 @@ export default function MacroPage() {
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
         <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Globe size={12} />
-           System Status
+           Marktcontext
         </div>
-        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Macro Dashboard</h1>
+        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Macro-overzicht</h1>
         <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">
-          Analysis of global economic trends and market conditions for {selectedAsset}
+          Analyse van economische trends en marktomstandigheden voor {selectedAsset}
         </p>
       </header>
 
@@ -211,7 +210,7 @@ export default function MacroPage() {
       <div className="space-y-4 py-8">
         <div className="flex items-center gap-2 mb-2">
            <Brain size={14} className="text-slate-400 dark:text-slate-500" />
-           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Analysis</span>
+           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Analyse</span>
         </div>
         <DashboardErrorBoundary>
           <AgentInsightPanel category="macro" symbol={selectedAsset} />
@@ -223,7 +222,7 @@ export default function MacroPage() {
          <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
                <Activity size={14} className="text-slate-400 dark:text-slate-500" />
-               <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Configuration</span>
+               <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Configuratie</span>
             </div>
             <MacroIndicatorScoreView
                addMacroIndicator={addMacroIndicator}

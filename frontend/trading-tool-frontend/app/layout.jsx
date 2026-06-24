@@ -4,6 +4,7 @@ import AuthGuard from "@/components/auth/AuthGuard";
 import InstallPWA from "@/components/ui/InstallPWA";
 import CacheKiller from "@/components/ui/CacheKiller";
 import { BRANDING } from "@/lib/branding";
+import { getLocaleBootScript, resolveServerFallbackLocale } from "@/lib/i18n";
 
 export const metadata = {
   title: `${BRANDING.APP_NAME} — ${BRANDING.APP_SLOGAN} Trading Discipline Engine`,
@@ -28,10 +29,13 @@ export const viewport = {
 };
 
 export default function RootLayout({ children }) {
+  const fallbackLocale = resolveServerFallbackLocale();
+
   return (
-    <html lang="nl">
+    <html lang={fallbackLocale} suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
+        <script dangerouslySetInnerHTML={{ __html: getLocaleBootScript() }} />
       </head>
       <body className="bg-background text-foreground transition-colors duration-300 selection:bg-blue-600/30">
         <CacheKiller />

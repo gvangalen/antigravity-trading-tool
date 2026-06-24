@@ -50,20 +50,20 @@ export default function RegisterPage() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         showSnackbar(
-          data.detail || "Could not create the account. This email address may already exist.",
+          data.detail || "Account aanmaken mislukt. Dit e-mailadres bestaat mogelijk al.",
           "danger"
         );
         setLoading(false);
         return;
       }
 
-      showSnackbar("Account created ✔ Signing you in now…", "success");
+      showSnackbar("Account aangemaakt. Je wordt nu ingelogd…", "success");
 
       // 2️⃣ Automatisch inloggen
       const loginRes = await login(email, password);
 
       if (!loginRes.success) {
-        showSnackbar("Account created. Please sign in manually.", "info");
+        showSnackbar("Account aangemaakt. Log nu handmatig in.", "info");
         router.replace("/login");
         return;
       }
@@ -74,8 +74,8 @@ export default function RegisterPage() {
       console.error("❌ Register fout:", err);
       showSnackbar(
         typeof navigator !== "undefined" && !navigator.onLine
-          ? "You appear to be offline. Check your internet connection."
-          : "Could not reach the server. Please try again.",
+          ? "Je lijkt offline te zijn. Controleer je internetverbinding."
+          : "Server niet bereikbaar. Probeer het opnieuw.",
         "danger"
       );
     } finally {
@@ -113,12 +113,12 @@ export default function RegisterPage() {
               </div>
             </div>
           </div>
-          <div className="page-label mb-3">Welcome to Tradamind</div>
+          <div className="page-label mb-3">Welkom bij Tradamind</div>
           <h1 className="text-3xl font-bold text-foreground dark:text-slate-100 tracking-tighter text-center">
-            Your AI Trading Coach
+            Jouw AI tradingcoach
           </h1>
           <p className="page-subtitle mx-auto mt-4">
-            Create your professional Tradamind account
+            Maak je professionele Tradamind-account aan
           </p>
         </div>
 
@@ -127,7 +127,7 @@ export default function RegisterPage() {
           {/* Naam */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              Full Name
+              Naam
             </label>
             <div className="relative group">
               <User 
@@ -138,7 +138,7 @@ export default function RegisterPage() {
                 type="text"
                 required
                 className="trade-input pr-14"
-                placeholder="Your name"
+                placeholder="Jouw naam"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -148,7 +148,7 @@ export default function RegisterPage() {
           {/* E-mail */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              Email Address
+              E-mailadres
             </label>
             <div className="relative group">
               <Mail 
@@ -159,7 +159,7 @@ export default function RegisterPage() {
                 type="email"
                 required
                 className="trade-input pr-14"
-                placeholder="you@example.com"
+                placeholder="naam@voorbeeld.nl"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -169,7 +169,7 @@ export default function RegisterPage() {
           {/* Wachtwoord */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              Password
+              Wachtwoord
             </label>
             <div className="relative group">
               <Lock 
@@ -195,11 +195,11 @@ export default function RegisterPage() {
             className="btn-primary w-full flex items-center justify-center gap-3 py-5 text-[13px] mt-4"
           >
             {loading ? (
-              <>Creating account...</>
+              <>Account aanmaken...</>
             ) : (
               <>
                 <UserPlus size={18} />
-                CREATE ACCOUNT
+                ACCOUNT AANMAKEN
               </>
             )}
           </button>

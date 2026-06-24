@@ -13,7 +13,7 @@ import { useModal } from "@/components/modal/ModalProvider";
 
 /**
  * 🛠️ TechnicalIndicatorScoreView — V2 PRO
- * Redesigned as a 'System Configuration' terminal.
+ * Redesigned as a technical configuration terminal.
  */
 export default function TechnicalIndicatorScoreView({
   addTechnicalIndicator,
@@ -84,8 +84,8 @@ export default function TechnicalIndicatorScoreView({
             <Terminal size={20} />
           </div>
           <div>
-            <div className="text-[10px] font-black text-secondary uppercase tracking-widest">Logic Engine</div>
-            <h2 className="text-xl font-black text-foreground tracking-tight uppercase">System Configuration</h2>
+            <div className="text-[10px] font-black text-secondary uppercase tracking-widest">Indicatoroverzicht</div>
+            <h2 className="text-xl font-black text-foreground tracking-tight uppercase">Technische configuratie</h2>
           </div>
         </div>
         <div className="text-[9px] font-black text-blue-500 bg-blue-50 px-3 py-1 rounded-lg uppercase tracking-widest border border-blue-100">
@@ -97,13 +97,13 @@ export default function TechnicalIndicatorScoreView({
         {/* 🔍 SEARCH NODES */}
         <div className="space-y-2">
           <label className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">
-             Alpha_Search_Terminal
+             Zoek indicator
           </label>
           <UniversalSearchDropdown
             items={allIndicators}
             selected={selected}
             onSelect={handleSelect}
-            placeholder="Search Indicator Logics..."
+            placeholder="Zoek indicatorlogica..."
           />
         </div>
 
@@ -112,7 +112,7 @@ export default function TechnicalIndicatorScoreView({
           <div className="py-12 border-2 border-dashed border-slate-100 rounded-[2rem] flex flex-col items-center justify-center text-center">
              <BarChart2 className="w-10 h-10 text-slate-100 mb-3" />
              <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
-                SELECT_NODE_TO_EDIT
+                Kies een indicator om te bewerken
              </p>
           </div>
         )}

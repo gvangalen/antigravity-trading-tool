@@ -65,6 +65,7 @@ class AssistantActionExecuteResponse(BaseModel):
     draft: Optional[Dict[str, Any]] = None
 
 class AssistantPreferenceUpdate(BaseModel):
+    locale: Optional[str] = None
     report_style: Optional[str] = None
     tone: Optional[str] = None
     detail_level: Optional[str] = None

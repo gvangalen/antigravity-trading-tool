@@ -102,7 +102,7 @@ function LoginPageContent() {
           {/* Email */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              Email Address
+              E-mailadres
             </label>
             <div className="relative group">
               <Mail 
@@ -113,7 +113,7 @@ function LoginPageContent() {
                 type="email"
                 required
                 className="trade-input pr-14"
-                placeholder="user@example.com"
+                placeholder="naam@voorbeeld.nl"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -123,7 +123,7 @@ function LoginPageContent() {
           {/* Password */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              Password
+              Wachtwoord
             </label>
             <div className="relative group">
               <button 
@@ -151,11 +151,11 @@ function LoginPageContent() {
             className="btn-primary w-full flex items-center justify-center gap-3 py-5 text-[13px]"
           >
             {submitting ? (
-              <>Signing in...</>
+              <>Inloggen...</>
             ) : (
               <>
                 <LogIn size={18} />
-                ACCESS ACCOUNT
+                INLOGGEN
               </>
             )}
           </button>
@@ -164,12 +164,12 @@ function LoginPageContent() {
         {/* Registratie link */}
         <div className="text-center mt-10 pt-8 border-t-2 border-slate-50">
           <p className="metric-label text-slate-400 mb-0 lowercase normal-case tracking-normal">
-            No account yet?
+            Nog geen account?
             <Link
               href="/register"
               className="text-blue-600 font-bold hover:underline ml-2 uppercase tracking-widest text-[10px]"
             >
-              Create one →
+              Maak er een aan →
             </Link>
           </p>
         </div>

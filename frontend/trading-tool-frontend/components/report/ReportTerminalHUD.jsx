@@ -1,15 +1,9 @@
 "use client";
 
-import { Calendar, FileText, Globe, Zap, Activity, Target, Clock, Info } from "lucide-react";
+import { Calendar, Globe, Zap, Activity, Target, Info } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { HUDSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
-/**
- * 📄 ReportTerminalHUD (Clean Professional Edition)
- * - Minimalist financial report header
- * - No industrial terminology
- * - Focused on readability and clean whitespace
- */
 export default function ReportTerminalHUD({ report, type = "daily", loading = false }) {
   const { user } = useAuth();
 
@@ -53,14 +47,13 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
     <div className="card p-10 mb-12 animate-fade-in relative overflow-hidden">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-10 relative z-10">
         
-        {/* LEFT: REPORT IDENTITY (INDUSTRIAL) */}
         <div className="border-l-4 border-blue-600 pl-8">
            <div className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-2 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-              Systeem Rapportage
+              Rapportoverzicht
            </div>
            <h1 className="text-4xl font-black text-foreground tracking-tighter uppercase leading-none">
-             {labels[type] || "Rapport"} <span className="text-blue-600/20">—</span> 01
+             {labels[type] || "Rapport"}
            </h1>
            <div className="flex items-center gap-3 mt-4 text-slate-400">
              <Calendar size={14} className="text-blue-600/40" />
@@ -70,7 +63,6 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
            </div>
         </div>
 
-        {/* RIGHT: CORE SCORES (BLUEPRINT HUB) */}
         <div className="bg-blue-50/20 border-2 border-blue-600/5 rounded-[2rem] p-6 flex flex-wrap items-center gap-4">
           <ScoreItem label="Macro" value={macro_score} icon={Globe} colorClass="bg-blue-600" />
           <ScoreItem label="Technisch" value={technical_score} icon={Zap} colorClass="bg-amber-500" />
@@ -80,16 +72,15 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
 
       </div>
 
-      {/* FOOTER METADATA */}
       <footer className="mt-10 pt-6 border-t-2 border-slate-50 flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-slate-400">
          <div className="flex items-center gap-2">
             <Info size={12} className="text-blue-600" />
-            Integrity Check Voltooid
+            Gecontroleerd
          </div>
          <div className="flex items-center gap-4">
-            <span>Auth: {user?.name || "System"}</span>
+            <span>Gebruiker: {user?.name || "Systeem"}</span>
             <span className="w-1 h-1 rounded-full bg-slate-300" />
-            <span>Update: {generated_at ? new Date(generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
+            <span>Bijgewerkt: {generated_at ? new Date(generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
          </div>
       </footer>
     </div>

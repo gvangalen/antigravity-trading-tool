@@ -77,7 +77,7 @@ export default function AdminLogsPage() {
       const result = await analyzeAdminLogs();
       setAnalysis(result);
     } catch (err) {
-      alert("AI analysis failed. Check terminal.");
+      alert("Analyse uitvoeren mislukt. Controleer de logs.");
     } finally {
       setAnalyzing(false);
     }
@@ -93,11 +93,11 @@ export default function AdminLogsPage() {
               <FileText size={22} />
             </div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight italic">
-              System <span className="text-blue-600">Observability Logs</span>
+              Systeem <span className="text-blue-600">logs</span>
             </h1>
           </div>
           <p className="text-slate-500 font-medium max-w-2xl text-sm">
-            Real-time audit trail of all platform activities, security events and internal system signals.
+            Realtime overzicht van platformactiviteiten, beveiligingsmeldingen en interne systeemsignalen.
           </p>
         </div>
         
@@ -108,14 +108,14 @@ export default function AdminLogsPage() {
             className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center gap-2 active:scale-95 disabled:opacity-50"
           >
             {analyzing ? <RefreshCcw size={14} className="animate-spin" /> : <BrainCircuit size={14} />}
-            Analyze Errors (AI)
+            Analyseer fouten
           </button>
           <button 
             onClick={loadLogs}
             className="px-6 py-3 bg-white border border-slate-200 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-600 hover:border-slate-900 hover:text-slate-900 transition-all shadow-sm flex items-center gap-2 active:scale-95"
           >
             <RefreshCcw size={14} />
-            Refresh
+            Vernieuwen
           </button>
         </div>
       </div>
@@ -132,7 +132,7 @@ export default function AdminLogsPage() {
             <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg">
               <BrainCircuit size={20} />
             </div>
-            <h2 className="text-lg font-black italic tracking-tight">AI Diagnostic Intelligence Report</h2>
+            <h2 className="text-lg font-black italic tracking-tight">AI-diagnoserapport</h2>
             <span className={`ml-4 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.2em] ${
               analysis.severity === 'critical' ? 'bg-rose-500 text-white' : 
               analysis.severity === 'high' ? 'bg-orange-500 text-white' : 'bg-blue-500 text-white'
@@ -143,7 +143,7 @@ export default function AdminLogsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             <div className="space-y-2">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Root Cause</p>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Hoofdoorzaak</p>
               <p className="text-sm font-bold text-slate-200 leading-relaxed">{analysis.root_cause}</p>
             </div>
             <div className="space-y-2">
@@ -151,7 +151,7 @@ export default function AdminLogsPage() {
               <p className="text-sm font-bold text-slate-200 leading-relaxed">{analysis.what_is_broken}</p>
             </div>
             <div className="space-y-2 col-span-2">
-              <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Suggested Fix</p>
+              <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Voorgestelde fix</p>
               <div className="p-4 bg-slate-800/50 rounded-2xl border border-slate-700/50">
                 <p className="text-sm font-mono text-blue-100">{analysis.suggested_fix}</p>
               </div>
@@ -159,11 +159,11 @@ export default function AdminLogsPage() {
           </div>
           <div className="mt-6 pt-6 border-t border-slate-800 flex items-center gap-6">
              <div className="flex items-center gap-2">
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Category:</span>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Categorie:</span>
                 <span className="text-[10px] font-black text-white uppercase tracking-widest">{analysis.category}</span>
              </div>
              <div className="flex items-center gap-2">
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Action:</span>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Actie:</span>
                 <span className="text-[10px] font-black text-white uppercase tracking-widest">{analysis.action_type}</span>
              </div>
           </div>
@@ -176,7 +176,7 @@ export default function AdminLogsPage() {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
             type="text" 
-            placeholder="Search log messages or content..."
+            placeholder="Zoek op logregel of inhoud..."
             className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all shadow-sm"
             value={filters.search}
             onChange={(e) => setFilters({...filters, search: e.target.value})}
@@ -189,11 +189,11 @@ export default function AdminLogsPage() {
             value={filters.level}
             onChange={(e) => setFilters({...filters, level: e.target.value})}
           >
-            <option value="">All Severities</option>
-            <option value="info">Information</option>
-            <option value="warning">Warnings</option>
-            <option value="error">Errors Only</option>
-            <option value="critical">Critical Only</option>
+            <option value="">Alle niveaus</option>
+            <option value="info">Info</option>
+            <option value="warning">Waarschuwingen</option>
+            <option value="error">Alleen fouten</option>
+            <option value="critical">Alleen kritiek</option>
           </select>
         </div>
         <div className="relative">
@@ -203,11 +203,11 @@ export default function AdminLogsPage() {
             value={filters.source}
             onChange={(e) => setFilters({...filters, source: e.target.value})}
           >
-            <option value="">All Sources</option>
-            <option value="auth">Auth System</option>
-            <option value="api">API Layer</option>
-            <option value="ai">AI Engine</option>
-            <option value="market_data">Market Data</option>
+            <option value="">Alle bronnen</option>
+            <option value="auth">Auth</option>
+            <option value="api">API</option>
+            <option value="ai">AI</option>
+            <option value="market_data">Marktdata</option>
             <option value="db">Database</option>
           </select>
         </div>
@@ -218,10 +218,10 @@ export default function AdminLogsPage() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-slate-50 bg-slate-50/30">
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Timestamp</th>
-              <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Source</th>
-              <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Severity</th>
-              <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Message</th>
+              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Tijdstip</th>
+              <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Bron</th>
+              <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Niveau</th>
+              <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Melding</th>
               <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Endpoint</th>
             </tr>
           </thead>
@@ -262,7 +262,7 @@ export default function AdminLogsPage() {
                         {log.endpoint}
                       </code>
                     ) : (
-                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Internal Service</span>
+                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Interne service</span>
                     )}
                   </td>
                 </tr>
@@ -275,13 +275,13 @@ export default function AdminLogsPage() {
              <div className="inline-flex p-4 bg-slate-50 rounded-full text-slate-300 mb-4">
                 <Search size={32} />
              </div>
-             <p className="text-slate-400 font-black uppercase tracking-widest text-xs italic">No Sytem Activity Recorded</p>
+             <p className="text-slate-400 font-black uppercase tracking-widest text-xs italic">Geen systeemactiviteit gevonden</p>
           </div>
         )}
         {loading && (
            <div className="p-20 text-center flex flex-col items-center">
               <div className="w-10 h-10 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin mb-4" />
-              <p className="text-slate-400 font-black uppercase tracking-widest text-[9px] italic">Synchronizing Logs...</p>
+              <p className="text-slate-400 font-black uppercase tracking-widest text-[9px] italic">Logs synchroniseren...</p>
            </div>
         )}
       </div>

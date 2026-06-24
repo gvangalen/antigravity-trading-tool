@@ -126,7 +126,7 @@ export default function MarketForwardReturnTabs({ data = {} }) {
                 <div className="text-[10px] font-black text-muted uppercase tracking-widest leading-none">Matrix: {active.toUpperCase()}</div>
              </div>
              <div className="text-[8px] font-black text-slate-300 uppercase tracking-[0.2em] whitespace-nowrap">
-                CALC_OK
+                BEREKEND
              </div>
           </div>
 
@@ -137,11 +137,11 @@ export default function MarketForwardReturnTabs({ data = {} }) {
                   <th className="px-6 py-4 w-12 text-center">
                      <CalendarRange className="w-3.5 h-3.5 mx-auto" />
                   </th>
-                  <th className="px-6 py-4">Node_Year</th>
+                  <th className="px-6 py-4">Jaar</th>
                   {labels.map((label) => (
                     <th key={label} className="px-1 py-4 text-center">{label}</th>
                   ))}
-                  <th className="px-6 py-4 text-center">Avg_Node</th>
+                  <th className="px-6 py-4 text-center">Gem. jaar</th>
                 </tr>
               </thead>
 
@@ -179,7 +179,7 @@ export default function MarketForwardReturnTabs({ data = {} }) {
                 {/* FOOTER: COLUMN AVERAGES */}
                 <tr className="bg-slate-50/80 font-black border-t border-slate-200">
                   <td className="px-6 py-5 text-center">—</td>
-                  <td className="px-6 py-5 text-[10px] uppercase tracking-widest text-muted whitespace-nowrap">Global_Avg</td>
+                  <td className="px-6 py-5 text-[10px] uppercase tracking-widest text-muted whitespace-nowrap">Gem. totaal</td>
                   {colAverages.map((val, i) => (
                     <td key={i} className="px-0.5 py-5 text-center">
                        <div className={`py-1.5 rounded-[4px] font-mono text-[10px] font-black ${heatmapColor(val)}`}>
@@ -199,7 +199,7 @@ export default function MarketForwardReturnTabs({ data = {} }) {
           <div className="px-8 py-5 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
              <BarChart3 size={16} className="text-[var(--primary)]" />
              <h3 className="text-[10px] font-black uppercase tracking-widest text-muted truncate">
-                Forward_Return_Intelligence (Selected_Nodes)
+                Forward return overzicht (geselecteerde jaren)
              </h3>
           </div>
 
@@ -207,7 +207,7 @@ export default function MarketForwardReturnTabs({ data = {} }) {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 text-[9px] font-black text-secondary uppercase tracking-widest">
-                  <th className="px-8 py-4">Telemetry_Metric</th>
+                  <th className="px-8 py-4">Metriek</th>
                   {labels.map((l) => (
                     <th key={l} className="px-1 py-4 text-center">{l}</th>
                   ))}
@@ -216,25 +216,25 @@ export default function MarketForwardReturnTabs({ data = {} }) {
 
               <tbody className="divide-y divide-slate-50">
                 <tr className="group hover:bg-slate-50/30">
-                  <td className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Node_Count</td>
+                  <td className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Aantal jaren</td>
                   {forwardStats.map((s, i) => (
                     <td key={i} className="px-1 py-4 text-center font-mono text-[10px] font-bold text-slate-600">{s.total}</td>
                   ))}
                 </tr>
                 <tr className="group hover:bg-slate-50/30">
-                  <td className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-green-500">Win_Events</td>
+                  <td className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-green-500">Positieve periodes</td>
                   {forwardStats.map((s, i) => (
                     <td key={i} className="px-1 py-4 text-center font-mono text-[10px] font-bold text-green-600">{s.wins}</td>
                   ))}
                 </tr>
                 <tr className="group hover:bg-slate-50/30">
-                  <td className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-red-500">Loss_Events</td>
+                  <td className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-red-500">Negatieve periodes</td>
                   {forwardStats.map((s, i) => (
                     <td key={i} className="px-1 py-4 text-center font-mono text-[10px] font-bold text-red-600">{s.losses}</td>
                   ))}
                 </tr>
                 <tr className="group hover:bg-slate-50/30 bg-slate-50/50">
-                  <td className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-foreground italic">Success_Probability</td>
+                  <td className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-foreground italic">Kans op positief resultaat</td>
                   {forwardStats.map((s, i) => (
                     <td key={i} className="px-1 py-5 text-center font-mono text-xs font-black text-foreground border-t border-slate-100/50">
                       {s.rate !== null ? `${s.rate.toFixed(1)}%` : "—"}

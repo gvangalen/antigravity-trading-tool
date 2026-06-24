@@ -65,7 +65,6 @@ export default function MarketPage() {
       status && 
       status.has_market === false
     ) {
-      console.log("🧭 Onboarding: market step completed");
       completeStep("market");
     }
   }, [availableIndicators, status, completeStep]);
@@ -93,10 +92,10 @@ export default function MarketPage() {
         <div className="flex-1">
           <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
              <Activity size={12} />
-             Status: Connected
+             Status: verbonden
           </div>
-          <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Market</h1>
-          <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">Analysis of market sentiment and price action for {activeSymbol}</p>
+          <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Marktoverzicht</h1>
+          <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">Analyse van marktsentiment en prijsactie voor {activeSymbol}</p>
         </div>
       </header>
 
@@ -115,7 +114,7 @@ export default function MarketPage() {
       <div className="space-y-8 px-4">
          <div className="flex items-center gap-4 mb-2">
             <div className="w-8 h-0.5 bg-blue-600/30" />
-            <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] opacity-90">{activeSymbol} Analysis</span>
+            <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] opacity-90">{activeSymbol} analyse</span>
          </div>
          <DashboardErrorBoundary>
            <AgentInsightPanel category="market" symbol={activeSymbol} />
@@ -128,7 +127,7 @@ export default function MarketPage() {
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
              <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                <LayoutGrid size={16} className="text-blue-600" />
-               Configuration ({activeSymbol})
+               Configuratie ({activeSymbol})
              </div>
           </div>
           <div className="card-p p-8">

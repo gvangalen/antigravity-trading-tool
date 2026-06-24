@@ -222,7 +222,7 @@ export default function GuardrailsPanel({
       {behavioralFriction && (
         <div className="rounded-xl border border-amber-200/70 bg-amber-50/70 p-3 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
           <div className="text-[9px] font-black uppercase tracking-widest">
-            Behavioral friction{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
+            Gedragsrem{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
           </div>
           {behavioralFriction?.message && (
             <p className="mt-2 text-xs font-semibold leading-relaxed">
