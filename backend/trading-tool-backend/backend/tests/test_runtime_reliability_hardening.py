@@ -57,9 +57,19 @@ def test_runtime_bootstrap_covers_backend_frontend_and_playwright_dependencies()
     assert 'python3 -m pip install -r "${BACKEND_REQUIREMENTS}"' in source
     assert 'npm ci --no-audit --no-fund' in source
     assert 'python3 -m playwright install chromium' in source
-    assert 'required = ("email_validator", "playwright")' in source
+    assert 'required = ("email_validator", "playwright", "faiss")' in source
     assert "email-validator" in requirements
     assert "playwright" in requirements
+    assert "faiss-cpu" in requirements
+
+
+def test_deploy_env_applies_mobile_push_token_migration():
+    source = (REPO_ROOT / "ops" / "deploy" / "deploy_env.sh").read_text(encoding="utf-8")
+    migration = (BACKEND_ROOT / "scripts" / "migrations" / "2026_06_24_mobile_push_tokens.py").read_text(encoding="utf-8")
+
+    assert "2026_06_24_mobile_push_tokens.py" in source
+    assert "CREATE TABLE IF NOT EXISTS mobile_push_tokens" in migration
+    assert "push_token VARCHAR NOT NULL UNIQUE" in migration
 
 
 def test_mission_control_api_uses_short_ttl_cache_and_invalidates_after_finn_execute():

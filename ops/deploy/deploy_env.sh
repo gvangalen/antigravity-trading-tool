@@ -123,6 +123,7 @@ if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_24_runtime_ddl_to_migrations.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_26_auth_refresh_sessions.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_10_finn_product_events.py
+  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_24_mobile_push_tokens.py
 
   cd ../..
   if [ ! -f \"$PM2_CONFIG\" ]; then
