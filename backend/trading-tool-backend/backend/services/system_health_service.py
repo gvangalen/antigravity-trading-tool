@@ -73,6 +73,7 @@ class SystemHealthService:
     """Best-effort deep health checks for ops dashboards and deploy gates."""
 
     _last_queue_depths_snapshot: Optional[Dict[str, Any]] = None
+    _celery_inspect_timeout_seconds: float = 2.5
 
     @classmethod
     async def deep_health(cls) -> Dict[str, Any]:
@@ -351,9 +352,11 @@ class SystemHealthService:
     @staticmethod
     async def _check_celery() -> Dict[str, Any]:
         try:
-            ping_result = await asyncio.to_thread(SystemHealthService._celery_ping)
-            active_queues = await asyncio.to_thread(SystemHealthService._celery_active_queues)
-            stats_result = await asyncio.to_thread(SystemHealthService._celery_stats)
+            ping_result = await SystemHealthService._safe_celery_inspect(SystemHealthService._celery_ping)
+            active_queues = await SystemHealthService._safe_celery_inspect(
+                SystemHealthService._celery_active_queues
+            )
+            stats_result = await SystemHealthService._safe_celery_inspect(SystemHealthService._celery_stats)
 
             workers = SystemHealthService._visible_workers(
                 ping_result=ping_result or {},
@@ -401,6 +404,16 @@ class SystemHealthService:
                 workers_by_queue={},
                 rate_limits_by_queue=rate_limit_summary_by_queue(),
             )
+
+    @staticmethod
+    async def _safe_celery_inspect(callback: Any) -> Optional[Dict[str, Any]]:
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(callback),
+                timeout=SystemHealthService._celery_inspect_timeout_seconds,
+            )
+        except (asyncio.TimeoutError, TimeoutError):
+            return None
 
     @staticmethod
     def _celery_ping() -> Optional[Dict[str, Any]]:
