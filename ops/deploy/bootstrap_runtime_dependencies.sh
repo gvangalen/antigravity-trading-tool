@@ -22,7 +22,7 @@ python_modules_ok() {
 import importlib.util
 import sys
 
-required = ("email_validator", "playwright")
+required = ("email_validator", "playwright", "faiss")
 missing = [name for name in required if importlib.util.find_spec(name) is None]
 sys.exit(1 if missing else 0)
 PY
@@ -70,4 +70,3 @@ if [ "${playwright_needs_install}" = "true" ]; then
   python3 -m playwright install chromium
   printf '%s\n' "${backend_hash}" > "${playwright_hash_file}"
 fi
-
