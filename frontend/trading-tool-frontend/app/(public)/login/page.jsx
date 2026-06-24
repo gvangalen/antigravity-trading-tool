@@ -10,7 +10,7 @@ import Link from "next/link";
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, isAuthenticated, loading, sessionChecked } = useAuth();
+  const { login, isAuthenticated, sessionChecked } = useAuth();
   const { showSnackbar } = useModal();
   const nextPath = searchParams.get("next") || "/dashboard";
 
@@ -45,12 +45,12 @@ function LoginPageContent() {
     const res = await login(email, password);
 
     if (!res.success) {
-      showSnackbar(res.message || "Login mislukt", "danger");
+      showSnackbar(res.message || "Login failed", "danger");
       setSubmitting(false);
       return;
     }
 
-    showSnackbar("Welkom terug! ✔", "success");
+    showSnackbar("Welcome back! ✔", "success");
 
     // 🔥 HARD REDIRECT: Zorgt dat middleware direct de nieuwe cookies ziet
     router.push(nextPath);
@@ -87,12 +87,12 @@ function LoginPageContent() {
               </div>
             </div>
           </div>
-          <div className="page-label mb-3">Welkom bij Tradamind</div>
+          <div className="page-label mb-3">Welcome to Tradamind</div>
           <h1 className="text-3xl font-bold text-foreground dark:text-slate-100 tracking-tighter text-center">
-            Je AI Trading Coach
+            Your AI Trading Coach
           </h1>
           <p className="page-subtitle mx-auto mt-4">
-            Log in op je pro-dashboard
+            Log in to your professional dashboard
           </p>
         </div>
 
@@ -102,7 +102,7 @@ function LoginPageContent() {
           {/* Email */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              E-mail Adres
+              E-mailadres
             </label>
             <div className="relative group">
               <Mail 
@@ -113,7 +113,7 @@ function LoginPageContent() {
                 type="email"
                 required
                 className="trade-input pr-14"
-                placeholder="user@example.com"
+                placeholder="naam@voorbeeld.nl"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -155,7 +155,7 @@ function LoginPageContent() {
             ) : (
               <>
                 <LogIn size={18} />
-                ACCOUNT TOEGANG
+                INLOGGEN
               </>
             )}
           </button>
@@ -164,12 +164,12 @@ function LoginPageContent() {
         {/* Registratie link */}
         <div className="text-center mt-10 pt-8 border-t-2 border-slate-50">
           <p className="metric-label text-slate-400 mb-0 lowercase normal-case tracking-normal">
-            Nog geen account? 
+            Nog geen account?
             <Link
               href="/register"
               className="text-blue-600 font-bold hover:underline ml-2 uppercase tracking-widest text-[10px]"
             >
-              Registreer Nu →
+              Maak er een aan →
             </Link>
           </p>
         </div>

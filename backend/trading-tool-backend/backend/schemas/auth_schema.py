@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, Dict, Any
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -24,3 +24,4 @@ class UserOut(BaseModel):
     ai_plan: Optional[str]
     ai_requests_limit_day: Optional[int]
     ai_requests_used_day: Optional[int]
+    ai_preferences: Optional[Dict[str, Any]] = None

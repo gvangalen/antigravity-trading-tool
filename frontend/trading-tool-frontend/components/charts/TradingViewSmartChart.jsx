@@ -236,7 +236,7 @@ export default function TradingViewSmartChart({
           <div className="flex items-center gap-2 pr-4 border-r border-slate-200">
             <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center text-[10px] text-white font-bold italic">₿</div>
             <span className="text-sm font-bold text-slate-700">{symbol.split(":")[1] || symbol}</span>
-            <span className="text-xs font-medium text-slate-400">Bot Mode</span>
+            <span className="text-xs font-medium text-slate-400">Botmodus</span>
           </div>
           
           <div className="flex items-center gap-3">
@@ -299,15 +299,15 @@ export default function TradingViewSmartChart({
             <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-4 text-blue-600">
               <BotIcon size={32} />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No History Found</h3>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Nog geen historie gevonden</h3>
             <p className="text-sm text-slate-500 max-w-xs">
-              This bot hasn't recorded any trades yet. Run a cycle or enable paper trading to see its execution path here.
+              Deze bot heeft nog geen trades vastgelegd. Start een cyclus of gebruik simulatie om hier de uitvoer terug te zien.
             </p>
             <button 
               onClick={() => setFocusedBotId(null)}
               className="mt-6 text-xs font-bold text-blue-600 hover:underline uppercase tracking-widest"
             >
-              Back to analysis
+              Terug naar analyse
             </button>
           </div>
         )}

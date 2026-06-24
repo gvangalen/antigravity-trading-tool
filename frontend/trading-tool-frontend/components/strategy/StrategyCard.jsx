@@ -292,7 +292,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
                       : "border-emerald-200 bg-emerald-50 text-emerald-700"
                 }`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[9px] font-black uppercase tracking-widest">Decision Review</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">Beslischeck</span>
                     <span className="text-[8px] font-black uppercase tracking-widest">{finnReview.decision_status}</span>
                   </div>
                   <p className="mt-2 text-xs font-semibold leading-relaxed">{finnReview.risk_summary}</p>
@@ -311,7 +311,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
                       : "border-rose-200 bg-rose-50 text-rose-700"
                 }`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[9px] font-black uppercase tracking-widest">Plan Adherence</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">Plantrouw</span>
                     <span className="text-[8px] font-black uppercase tracking-widest">{finnAdherence.adherence_status}</span>
                   </div>
                   <p className="mt-2 text-xs font-semibold leading-relaxed">{finnAdherence.adherence_reason}</p>

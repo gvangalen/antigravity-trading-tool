@@ -308,7 +308,7 @@ export default function BotTodayProposal({
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-black uppercase tracking-[0.18em] opacity-75">
-            FINN 3.0 Decision Layer
+            Finn beslislaag
           </div>
           <p className="mt-2 text-sm font-black leading-snug text-slate-900">
             {governanceHeadline}
@@ -320,28 +320,28 @@ export default function BotTodayProposal({
       </div>
       <div className="mt-4 grid gap-2 md:grid-cols-3">
         <div className="rounded-xl border border-white/70 bg-white/75 p-3">
-          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Decision Review</div>
+          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Beslischeck</div>
           <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">{setupFitText}</p>
         </div>
         <div className="rounded-xl border border-white/70 bg-white/75 p-3">
-          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Plan Fit</div>
+          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Planfit</div>
           <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">
             {score >= 60 ? "Deze actie volgt de huidige setup-logica redelijk goed." : "Deze actie vraagt eerst betere setupbevestiging."}
           </p>
         </div>
         <div className="rounded-xl border border-white/70 bg-white/75 p-3">
-          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Portfolio Fit</div>
+          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Portfoliofit</div>
           <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">{portfolioMessage}</p>
         </div>
       </div>
       <div className="mt-3 rounded-xl border border-white/70 bg-white/75 p-3">
-        <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Next Safe Step</div>
+        <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Veilige volgende stap</div>
         <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">{nextStepMessage}</p>
       </div>
       {behavioralFriction && (
         <div className="mt-3 rounded-xl border border-amber-200 bg-white/85 p-3 text-amber-700">
           <div className="text-[8px] font-black uppercase tracking-widest">
-            Behavioral friction{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
+            Gedragsrem{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
           </div>
           {behavioralFriction?.message && (
             <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">
@@ -364,7 +364,7 @@ export default function BotTodayProposal({
       <div className="bg-[var(--color-border-subtle)] border border-[var(--color-border)] rounded-2xl p-5 space-y-4 transition-colors">
         <div className="flex justify-between items-start">
           <div>
-            <div className="text-[10px] font-black text-muted uppercase tracking-widest mb-1">Logic Payload</div>
+            <div className="text-[10px] font-black text-muted uppercase tracking-widest mb-1">Setupbasis</div>
             <div className="text-sm font-black text-foreground tracking-tight">{setupName}</div>
           </div>
           <div className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/40 px-2 py-1 rounded border border-blue-100 dark:border-blue-800 font-mono">
@@ -380,8 +380,8 @@ export default function BotTodayProposal({
              <div className="text-[11px] font-black text-slate-700 uppercase">{confidence}</div>
           </div>
           <div className="bg-white/80 p-2 rounded-lg border border-slate-200/50">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-0.5">Telemetry</div>
-             <div className="text-[11px] font-black text-muted font-mono">{formattedDecisionTime?.split(',')[1] || "READY"}</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-0.5">Tijdstip</div>
+             <div className="text-[11px] font-black text-muted font-mono">{formattedDecisionTime?.split(',')[1] || "KLAAR"}</div>
           </div>
         </div>
 
@@ -393,28 +393,28 @@ export default function BotTodayProposal({
       {/* POSITION SIZING INSTRUMENT */}
       <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
         <div>
-           <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Exposure Module</div>
+           <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Blootstelling</div>
            <div className="text-sm font-black text-foreground tracking-tight">{executionLabel}</div>
         </div>
 
         <div className="space-y-2.5">
            <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-slate-200/40">
-              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">Market Sizing</span>
+              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">Marktweging</span>
               <span className="text-xs font-black text-slate-700 font-mono">{safeMarketMultiplier.toFixed(2)}x</span>
            </div>
            <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-slate-200/40">
-              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">Logic Sizing</span>
+              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">Setupweging</span>
               <span className="text-xs font-black text-[var(--primary)] font-mono">{safeStrategyMultiplier.toFixed(2)}x</span>
            </div>
            <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-slate-200/40">
-              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">Variance Status</span>
+              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">Afwijking</span>
               <span className={`text-[10px] font-black uppercase ${deviationColor}`}>{deviationLabel} ({deviation >= 0 ? "+" : ""}{deviation.toFixed(2)})</span>
            </div>
         </div>
 
         {allocationPreview && (
           <div className="bg-[var(--primary)] p-3 rounded-xl shadow-sm flex items-center justify-between">
-             <div className="text-[9px] font-black text-white/70 uppercase tracking-widest">Net Cash Outlay</div>
+             <div className="text-[9px] font-black text-white/70 uppercase tracking-widest">Netto inzet</div>
              <div className="text-sm font-black text-white font-mono">{allocationPreview}</div>
           </div>
         )}
@@ -434,7 +434,7 @@ export default function BotTodayProposal({
            {governancePanel}
            <div className="flex items-center gap-2 text-muted mb-6">
               <div className="w-1.5 h-1.5 rounded-full bg-muted/30" />
-              <div className="text-xs font-black uppercase tracking-widest">No Active Entry Conditions Found</div>
+              <div className="text-xs font-black uppercase tracking-widest">Geen actieve instapcondities gevonden</div>
            </div>
            {proposalGrid}
            {tacticalCommandBar}
@@ -456,7 +456,7 @@ export default function BotTodayProposal({
                </div>
             </div>
             <div className="px-3 py-1 rounded-lg bg-green-50 border border-green-100 text-green-600 text-[10px] font-black uppercase tracking-widest">
-               Execution Required
+               Uitvoering nodig
             </div>
          </div>
          {proposalGrid}

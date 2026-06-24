@@ -806,8 +806,8 @@ function FinnGovernanceSurface({ analysis }) {
   }
 
   const phaseCards = [
-    ['Decision Review', governanceSummary?.decision_review_count || 0, 'text-blue-600 dark:text-blue-300', <FileText size={11} className="text-blue-500" />],
-    ['Plan Adherence', governanceSummary?.plan_adherence_count || 0, 'text-rose-600 dark:text-rose-300', <Shield size={11} className="text-rose-500" />],
+    ['Beslischeck', governanceSummary?.decision_review_count || 0, 'text-blue-600 dark:text-blue-300', <FileText size={11} className="text-blue-500" />],
+    ['Plantrouw', governanceSummary?.plan_adherence_count || 0, 'text-rose-600 dark:text-rose-300', <Shield size={11} className="text-rose-500" />],
     ['Outcome Tracking', governanceSummary?.outcome_tracking_count || 0, 'text-emerald-600 dark:text-emerald-300', <BarChart3 size={11} className="text-emerald-500" />],
     ['Portfolio Intelligence', governanceSummary?.portfolio_intelligence_count || 0, 'text-amber-700 dark:text-amber-300', <Activity size={11} className="text-amber-500" />],
     ['Priority Engine', governanceSummary?.priority_engine_count || 0, 'text-violet-600 dark:text-violet-300', <Target size={11} className="text-violet-500" />],
@@ -819,20 +819,20 @@ function FinnGovernanceSurface({ analysis }) {
   const nextActions = Array.isArray(portfolioOS?.next_best_actions) ? portfolioOS.next_best_actions.slice(0, 3) : [];
   const reviewSummary = [
     {
-      label: 'Decision Review',
+      label: 'Beslischeck',
       tone: 'border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300',
       summary:
         governanceSummary?.decision_review_count > 0
           ? `${governanceSummary.decision_review_count} beslismomenten zijn vooraf door FINN beoordeeld voordat er actie volgde.`
-          : 'Nog geen decision-review spoor in deze periode; FINN heeft hier nog weinig tegenspraak hoeven geven.',
+          : 'Nog geen beslischeck-spoor in deze periode; Finn heeft hier nog weinig tegenspraak hoeven geven.',
     },
     {
-      label: 'Plan Adherence',
+      label: 'Plantrouw',
       tone: 'border-rose-200 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300',
       summary:
         governanceSummary?.plan_adherence_count > 0
           ? `${governanceSummary.plan_adherence_count} momenten zijn langs je planlat gelegd. ${memoryV2?.recommended_rule || 'Gebruik dit om afwijking sneller te herkennen.'}`
-          : 'Nog weinig expliciete adherence-signalen; dit venster wordt sterker zodra meer keuzes tegen je plan worden gehouden.',
+          : 'Nog weinig expliciete plantrouw-signalen; dit venster wordt sterker zodra meer keuzes tegen je plan worden gehouden.',
     },
     {
       label: 'Outcome Tracking',
@@ -1183,13 +1183,13 @@ function FinnReportsPanel() {
                 Persoonlijke Finn rapportage
               </h2>
               <p className="mt-3 text-sm md:text-[15px] leading-relaxed text-slate-500 dark:text-slate-400 max-w-2xl">
-                Read-only rapportage over je Finn-activiteit, risicochecks en beslisflows.
-                Los van trading reports. Dit rapport analyseert je gebruik van Finn, niet de markt.
+                Alleen-lezen rapportage over je Finn-activiteit, risicochecks en beslisflows.
+                Los van marktrapporten. Dit rapport analyseert je gebruik van Finn, niet de markt.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {['READ-ONLY', 'AUDITDATA', 'LOS VAN TRADING REPORTS'].map((label) => (
+              {["Alleen lezen", "Auditspoor", "Los van marktrapporten"].map((label) => (
                 <span
                   key={label}
                   className="px-3 py-1.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400"
@@ -1561,20 +1561,20 @@ GENERATE
 
   const handleGenerate = async (fromAuto = false, preferDate = 'latest') => {
     setGenerating(true);
-    setLoading(true); // 🔥 Toon skeleton achter de overlay
+    setLoading(true);
     setGenerateInfo(
       fromAuto
-        ? `No ${fallbackLabel.toLowerCase()} report found. Creating…`
-        : `Generating new ${fallbackLabel.toLowerCase()} report…`
+        ? `Geen ${fallbackLabel.toLowerCase()} gevonden. We maken nu een nieuwe versie voor je klaar.`
+        : `We genereren nu een nieuw ${fallbackLabel.toLowerCase()}.`
     );
 
     try {
       await current.generate();
       await pollUntilNewReport(preferDate);
-      showSnackbar(`${fallbackLabel} report is ready`, 'success');
+      showSnackbar(`${fallbackLabel} staat klaar`, 'success');
     } catch (err) {
       console.error(err);
-      setError('Failed to generate report.');
+      setError('Genereren van het rapport mislukt. Probeer het zo opnieuw.');
     } finally {
       setGenerating(false);
       setLoading(false);
@@ -1587,7 +1587,7 @@ GENERATE
 
   const handleDownload = async () => {
     if (!report?.report_date) {
-      showSnackbar('Report not yet loaded', 'warning');
+      showSnackbar('Het rapport is nog niet volledig geladen', 'warning');
       return;
     }
 
@@ -1600,11 +1600,11 @@ GENERATE
           : selectedDate;
 
       await current.pdf(date);
-      showSnackbar('Download started', 'success');
+      showSnackbar('PDF-download gestart', 'success');
 
     } catch (err) {
       console.error(err);
-      showSnackbar('Error downloading PDF', 'error');
+      showSnackbar('Downloaden van de PDF mislukt', 'error');
     } finally {
       setPdfLoading(false);
     }

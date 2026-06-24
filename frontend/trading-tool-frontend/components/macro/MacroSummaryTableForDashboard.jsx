@@ -44,7 +44,7 @@ export default function MacroSummaryTableForDashboard({
 
     openConfirm({
       title: `Bekijk chart: ${name}`,
-      statusLabel: "Read-only",
+      statusLabel: "Alleen lezen",
       context: `Je bekijkt de live chart van ${name} binnen Macro.`,
       impact: "Er verandert niets aan je indicatoren of macro-overzicht.",
       safety: "Veilig om te gebruiken tijdens review. Er worden geen instellingen aangepast.",

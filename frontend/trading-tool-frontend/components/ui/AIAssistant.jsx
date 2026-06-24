@@ -377,30 +377,30 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
   const getContext = () => {
     const pageMap = {
-      "/dashboard": "Dashboard",
-      "/": "Dashboard",
-      "/market": "Market",
+      "/dashboard": "Overzicht",
+      "/": "Overzicht",
+      "/market": "Markt",
       "/macro": "Macro",
-      "/technical": "Technical",
+      "/technical": "Technisch",
       "/setup": "Setups",
-      "/strategy": "Strategies",
-      "/onboarding": "Onboarding",
+      "/strategy": "Strategieën",
+      "/onboarding": "Startgids",
       "/bot": "Bots",
-      "/report": "Reports",
+      "/report": "Rapporten",
     };
 
     return {
       page: pathname,
-      page_type: pageMap[pathname] || "Unknown",
+      page_type: pageMap[pathname] || "Onbekend",
       symbol: searchParams.get("symbol") || searchParams.get("asset") || globalSymbol || "BTC",
-      timeframe: searchParams.get("tf") || searchParams.get("interval") || (pathname.includes("dashboard") || pathname === "/" ? "Weekly" : "Daily"),
+      timeframe: searchParams.get("tf") || searchParams.get("interval") || (pathname.includes("dashboard") || pathname === "/" ? "Week" : "Dag"),
       setup_id: activeSetup?.id || activeSetup?.setup_id || null,
       setup_type: activeSetup?.setup_type || activeSetup?.type || null,
       setup_symbol: activeSetup?.symbol || null,
       setup_timeframe: activeSetup?.timeframe || null,
       bot_id: activeBot?.id || activeBot?.bot_id || focusedBotId || null,
       strategy_id: activeSetup?.strategy_id || null,
-      setup_name: searchParams.get("name") || activeSetup?.name || "No specific setup",
+      setup_name: searchParams.get("name") || activeSetup?.name || "Geen specifieke setup",
       finn_draft: finnDraft,
     };
   };
@@ -1334,7 +1334,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const phaseCards = [
       {
         key: "p1",
-        label: "Decision Review",
+        label: "Beslischeck",
         value: governanceSummary?.decision_review_count || 0,
         tone: "text-blue-600 dark:text-blue-300",
         status: (governanceSummary?.decision_review_count || 0) > 0 ? "active" : "quiet",
@@ -1342,7 +1342,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       },
       {
         key: "p2",
-        label: "Plan Adherence",
+        label: "Plantrouw",
         value: governanceSummary?.plan_adherence_count || 0,
         tone: "text-rose-600 dark:text-rose-300",
         status: (governanceSummary?.plan_adherence_count || 0) > 0 ? "active" : "quiet",
@@ -1802,7 +1802,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
               <FileText size={11} />
-              Decision Review
+              Beslischeck
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
               {analysis.headline || "Finn reviewt deze beslissing."}
@@ -1888,7 +1888,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
               <Shield size={11} />
-              Plan Adherence
+              Plantrouw
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
               {analysis.headline || "Finn checkt of dit binnen je plan valt."}
@@ -3259,7 +3259,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         if (msgIndex >= 0 && copy[msgIndex].role === "assistant") {
           copy[msgIndex] = {
             ...copy[msgIndex],
-            text: "⚠️ Failed to retrieve analysis. Please try again.",
+            text: "⚠️ Analyse ophalen mislukt. Probeer het opnieuw.",
             isError: true,
             isComplete: true,
           };
@@ -4071,7 +4071,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       ? "Concept"
       : pathname?.includes("/portfolio")
       ? "Paper"
-      : "Read-only";
+      : "Alleen lezen";
 
   const shouldCondenseMissionControl = pathname === "/dashboard" && !isOnboarding;
   const showFullMissionControl = !shouldCondenseMissionControl;
@@ -4151,8 +4151,8 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     overlayMissionSections.todayItems.length > 0 &&
     overlayMissionSections.todayItems.every((item) => isReviewCandidate(item));
   const compactOpenLabel = openItemsAreReviews
-    ? (openSummaryCount === 1 ? "1 review open" : `${openSummaryCount} reviews open`)
-    : (openSummaryCount === 1 ? "1 aandachtspunt open" : `${openSummaryCount} aandachtspunten open`);
+      ? (openSummaryCount === 1 ? "1 review open" : `${openSummaryCount} reviews open`)
+      : (openSummaryCount === 1 ? "1 aandachtspunt open" : `${openSummaryCount} aandachtspunten open`);
   const showMissionSection = (key) => (showFullMissionControl || shouldCondenseMissionControl) && missionDetailSection === key;
 
   useEffect(() => {
@@ -4251,7 +4251,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 <Shield size={12} className="text-blue-600" />
                 <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Actieve Briefing</span>
               </div>
-            <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-200/50 dark:border-emerald-800/50">Defensieve Posture</span>
+            <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-200/50 dark:border-emerald-800/50">Defensieve houding</span>
           </div>
           {isOnboarding ? (
             <div className="p-4 bg-blue-600/5 dark:bg-blue-600/10 border-2 border-blue-600/20 rounded-2xl animate-in slide-in-from-right-4 duration-500">
@@ -4259,7 +4259,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                   <div className="p-1.5 bg-blue-600 rounded-lg shadow-lg shadow-blue-600/20">
                     <ListChecks size={14} className="text-white" />
                   </div>
-                  <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 tracking-widest uppercase">Setup Guide</span>
+                  <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 tracking-widest uppercase">Startgids</span>
                </div>
                <div className="space-y-3">
                   <p className="text-sm font-bold text-foreground dark:text-slate-100 leading-snug">
@@ -4267,12 +4267,12 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                     {stepStatus?.[`has_${pathname.split('/').pop()}`] ? (
                       `Mooi. De ${pathname.split('/').pop()}-stroom draait nu stabiel. Ga terug naar het startoverzicht voor de volgende stap.`
                     ) : (
-                      pathname.includes("market") ? "Market data is required to monitor live price action. Search for BTC and add it to your monitor." :
-                      pathname.includes("macro") ? "Macro indicators track global liquidity and dollar strength. Search for DXY and add it to your monitor." :
-                      pathname.includes("technical") ? "Technical signals identify price momentum and trends. Search for RSI and add it to your monitor." :
-                      pathname.includes("setup") ? "Setups define your specific entry and exit rules. Click the 'New Setup' button to create your first rule-set." :
+                      pathname.includes("market") ? "Marktdata is nodig om live prijsactie te volgen. Zoek BTC en voeg het toe aan je monitor." :
+                      pathname.includes("macro") ? "Macro-indicatoren helpen Finn liquiditeit, dollarsterkte en regime te wegen. Voeg bijvoorbeeld DXY toe aan je monitor." :
+                      pathname.includes("technical") ? "Technische signalen helpen Finn momentum en trend te beoordelen. Zoek bijvoorbeeld RSI en voeg het toe." :
+                      pathname.includes("setup") ? "Setups leggen je instap-, uitstap- en risicoregels vast. Klik op 'Nieuwe setup' om je eerste set regels te maken." :
                       pathname.includes("strategy") ? "De strategielaag bouwt je uitvoeringsmodel. Klik op 'Strategie genereren' om je volgende stap klaar te zetten." :
-                      "I will guide you through the 5 steps to activate your system. Once initialized, your dashboard will be fully operational with live data and AI insights."
+                      "Ik begeleid je stap voor stap totdat je werkplek klaarstaat. Daarna wordt je dashboard gevuld met live data en relevante Finn-context."
                     )}
                   </p>
                </div>
@@ -5066,23 +5066,23 @@ function ActionCard({ action, onAction }) {
 
   const getActionLabel = (act = action) => {
     switch (act.type) {
-      case "add_to_watchlist": return `Add ${act.symbol || ""} to Watchlist`;
-      case "remove_from_watchlist": return `Remove ${act.symbol || ""} from Watchlist`;
-      case "open_setup_page": return `Configure Setup for ${act.symbol || ""}`;
-      case "generate_strategy": return `Generate ${act.symbol || ""} Strategy`;
+      case "add_to_watchlist": return `Voeg ${act.symbol || ""} toe aan watchlist`;
+      case "remove_from_watchlist": return `Verwijder ${act.symbol || ""} uit watchlist`;
+      case "open_setup_page": return `Open setup voor ${act.symbol || ""}`;
+      case "generate_strategy": return `Genereer strategie voor ${act.symbol || ""}`;
       case "open_bot_draft": return `Zet ${act.symbol || ""} paper bot klaar`;
       case "navigate_to_page": return `Ga naar ${act.params?.label || "Pagina"}`;
-      default: return "Execute Action";
+      default: return "Voer actie uit";
     }
   };
 
   const getActionDescription = (act = action) => {
     switch (act.type) {
-      case "add_to_watchlist": return `Add ${act.symbol || ""} to the live tracking engine.`;
-      case "remove_from_watchlist": return `Remove ${act.symbol || ""} from the live tracking engine.`;
-      case "open_setup_page": return `Open setups tab to create custom macro rules for ${act.symbol || ""}.`;
-      case "generate_strategy": return `Use AI to build a customized algorithmic strategy for ${act.symbol || ""}.`;
-      case "open_bot_draft": return `Open bot configuration modal with recommended pre-filled parameters.`;
+      case "add_to_watchlist": return `Voeg ${act.symbol || ""} toe aan je live volglijst.`;
+      case "remove_from_watchlist": return `Verwijder ${act.symbol || ""} uit je live volglijst.`;
+      case "open_setup_page": return `Open de setup-pagina om regels voor ${act.symbol || ""} vast te leggen.`;
+      case "generate_strategy": return `Laat Finn een strategievoorstel opbouwen voor ${act.symbol || ""}.`;
+      case "open_bot_draft": return `Open het botconcept met alvast ingevulde aanbevolen parameters.`;
       case "navigate_to_page": return `Navigeer direct naar de ${act.params?.label || "pagina"} in het dashboard.`;
       default: return "";
     }
@@ -5102,7 +5102,7 @@ function ActionCard({ action, onAction }) {
               Actiecontrole
             </h4>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-1">
-              Approve and deploy the suggested pipeline
+              Controleer en voer de voorgestelde reeks acties stap voor stap uit.
             </p>
           </div>
         </div>

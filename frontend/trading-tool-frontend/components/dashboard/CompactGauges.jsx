@@ -123,7 +123,7 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
       <div className="flex items-center justify-between px-2">
          <div className="flex items-center gap-2">
             <div className="w-1 h-4 bg-blue-600 rounded-full" />
-            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-secondary">System Status</h3>
+            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-secondary">Systeemstatus</h3>
          </div>
          <button 
             onClick={() => setIsEditing(!isEditing)}

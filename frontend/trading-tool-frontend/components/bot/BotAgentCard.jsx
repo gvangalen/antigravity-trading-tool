@@ -112,16 +112,6 @@ export default function BotAgentCard({
         })
       : null;
 
-  /* ================= DEBUG ================= */
-  useEffect(() => {
-    console.log("🤖 BOT", bot);
-    console.log("📊 DECISION RAW", decision);
-    console.log("📦 SCORES_JSON", decision?.scores_json);
-    console.log("🛡 GUARDRAILS RAW", decision?.guardrails_result);
-    console.log("🧭 TRADE PLAN RAW", decision?.trade_plan);
-  }, [bot, decision]);
-
-
   /* ================= NORMALIZE DECISION ================= */
   const normalizedDecision = useMemo(() => {
   const scores = safeDecision?.scores_json || {};

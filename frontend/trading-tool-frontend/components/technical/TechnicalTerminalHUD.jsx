@@ -15,14 +15,35 @@ export default function TechnicalTerminalHUD({ score, bias, trend, risk, loading
   
   /* ---------------- COLORS & LABELS ---------------- */
   const getBiasConfig = (s) => {
-    if (s >= 80) return { label: "EXTREME BULLISH", color: "text-green-500", bg: "bg-green-500", dot: "bg-green-500", border: "border-green-200" };
-    if (s >= 60) return { label: "BULLISH", color: "text-blue-500", bg: "bg-blue-500", dot: "bg-blue-500", border: "border-blue-200" };
-    if (s >= 40) return { label: "NEUTRAL", color: "text-secondary", bg: "bg-slate-400", dot: "bg-slate-400", border: "border-slate-200" };
-    if (s >= 20) return { label: "BEARISH", color: "text-red-400", bg: "bg-red-400", dot: "bg-red-400", border: "border-red-200" };
-    return { label: "EXTREME BEARISH", color: "text-red-600", bg: "bg-red-600", dot: "bg-red-600", border: "border-red-300" };
+    if (s >= 80) return { label: "Sterk positief", color: "text-green-500", bg: "bg-green-500", dot: "bg-green-500", border: "border-green-200" };
+    if (s >= 60) return { label: "Positief", color: "text-blue-500", bg: "bg-blue-500", dot: "bg-blue-500", border: "border-blue-200" };
+    if (s >= 40) return { label: "Neutraal", color: "text-secondary", bg: "bg-slate-400", dot: "bg-slate-400", border: "border-slate-200" };
+    if (s >= 20) return { label: "Negatief", color: "text-red-400", bg: "bg-red-400", dot: "bg-red-400", border: "border-red-200" };
+    return { label: "Sterk negatief", color: "text-red-600", bg: "bg-red-600", dot: "bg-red-600", border: "border-red-300" };
   };
 
   const config = getBiasConfig(scoreNum);
+  const biasLabel = {
+    bullish: "Positief",
+    bearish: "Negatief",
+    neutral: "Neutraal",
+    ranging: "Zijwaarts",
+    stable: "Stabiel",
+  }[String(bias || "").toLowerCase()] || bias || "Stabiel";
+  const trendLabel = {
+    bullish: "Opwaarts",
+    bearish: "Neerwaarts",
+    ranging: "Zijwaarts",
+    range: "Zijwaarts",
+    neutral: "Neutraal",
+    stable: "Stabiel",
+  }[String(trend || "").toLowerCase()] || trend || "Stabiel";
+  const riskLabel = {
+    high: "Hoog",
+    medium: "Gemiddeld",
+    low: "Laag",
+    stable: "Stabiel",
+  }[String(risk || "").toLowerCase()] || risk || "Stabiel";
 
   return (
     <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -37,8 +58,8 @@ export default function TechnicalTerminalHUD({ score, bias, trend, risk, loading
                   <Target size={20} className="sm:size-6" strokeWidth={1.5} />
                </div>
                <div>
-                  <div className="text-[10px] sm:text-[11px] font-bold text-secondary/60 uppercase tracking-[0.2em] mb-0.5">Price Action Intelligence</div>
-                  <div className="text-xl sm:text-2xl font-black text-foreground tracking-tight uppercase leading-none">Technical Context</div>
+                  <div className="text-[10px] sm:text-[11px] font-bold text-secondary/60 uppercase tracking-[0.2em] mb-0.5">Technisch beeld</div>
+                  <div className="text-xl sm:text-2xl font-black text-foreground tracking-tight uppercase leading-none">Technische context</div>
                </div>
             </div>
             
@@ -54,8 +75,8 @@ export default function TechnicalTerminalHUD({ score, bias, trend, risk, loading
                   <span className="text-xl sm:text-2xl text-secondary ml-2 font-medium opacity-30 tracking-tight">/ 100</span>
                </div>
                <div className="text-left sm:text-right">
-                  <div className="text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em] mb-1 sm:mb-2 leading-none">Current Bias</div>
-                  <div className={`text-2xl sm:text-3xl font-black ${config.color} tracking-tighter uppercase leading-none drop-shadow-sm`}>{bias || "STABLE"}</div>
+                  <div className="text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em] mb-1 sm:mb-2 leading-none">Huidige richting</div>
+                  <div className={`text-2xl sm:text-3xl font-black ${config.color} tracking-tighter uppercase leading-none drop-shadow-sm`}>{biasLabel}</div>
                </div>
             </div>
 
@@ -79,18 +100,18 @@ export default function TechnicalTerminalHUD({ score, bias, trend, risk, loading
                <div className="w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shadow-inner">
                   <Activity size={20} className="text-blue-500" strokeWidth={1.5} />
                </div>
-               <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-secondary/60 leading-none">Execution Flow</div>
+               <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-secondary/60 leading-none">Signaalflow</div>
             </div>
          </div>
 
          <div className="relative z-10 space-y-3">
-            <div className="text-[10px] sm:text-[11px] font-black text-blue-500 uppercase tracking-[0.25em]">Dominant Trend</div>
+            <div className="text-[10px] sm:text-[11px] font-black text-blue-500 uppercase tracking-[0.25em]">Dominante trend</div>
             <div className="text-2xl sm:text-4xl font-black tracking-tighter uppercase leading-none text-foreground">
-               {trend || "RANGING"}
+               {trendLabel}
             </div>
             <div className="py-3 px-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-[var(--color-border-subtle)]">
                <p className="text-[9px] sm:text-[10px] text-secondary/70 leading-relaxed font-bold uppercase tracking-wider">
-                  Technical analysis confirms a dominant {trend || "RANGING"} phase with synchronized indicator verification.
+                  De technische signalen wijzen nu vooral op een {String(trendLabel).toLowerCase()} fase waarin meerdere indicatoren hetzelfde beeld geven.
                </p>
             </div>
          </div>
@@ -98,12 +119,12 @@ export default function TechnicalTerminalHUD({ score, bias, trend, risk, loading
          <div className="mt-10 relative z-10 border-t border-[var(--color-border-subtle)] pt-6">
             <div className="flex justify-between items-center gap-2">
                <div className="flex flex-col">
-                  <span className="text-[8px] sm:text-[9px] font-black tracking-[0.2em] text-secondary/40 uppercase leading-none mb-2">Risk Profile</span>
-                  <span className="text-xs sm:text-sm font-black text-foreground tracking-tight leading-none uppercase">{risk || "STABLE"}</span>
+                  <span className="text-[8px] sm:text-[9px] font-black tracking-[0.2em] text-secondary/40 uppercase leading-none mb-2">Risicoprofiel</span>
+                  <span className="text-xs sm:text-sm font-black text-foreground tracking-tight leading-none uppercase">{riskLabel}</span>
                </div>
                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/5 border border-blue-500/10">
                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
-                  <span className="text-[9px] font-black tracking-widest text-blue-500/80 uppercase whitespace-nowrap">Live Monitoring</span>
+                  <span className="text-[9px] font-black tracking-widest text-blue-500/80 uppercase whitespace-nowrap">Live update</span>
                </div>
             </div>
          </div>

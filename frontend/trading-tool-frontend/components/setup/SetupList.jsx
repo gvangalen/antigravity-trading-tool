@@ -435,7 +435,7 @@ export default function SetupList({
                           : "border-rose-200 bg-rose-50 text-rose-700"
                     }`}>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[9px] font-black uppercase tracking-widest">Plan Adherence</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest">Plantrouw</span>
                         <span className="text-[8px] font-black uppercase tracking-widest">{finnPanel.adherence.adherence_status}</span>
                       </div>
                       <p className="mt-2 text-xs font-semibold leading-relaxed">{finnPanel.adherence.adherence_reason}</p>

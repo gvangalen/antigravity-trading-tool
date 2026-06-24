@@ -47,10 +47,10 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
   const formatTrend = (t) => {
     const v = String(t).toLowerCase();
 
-    if (v === "bullish") return "Bullish";
-    if (v === "bearish") return "Bearish";
+    if (v === "bullish") return "Positief";
+    if (v === "bearish") return "Negatief";
 
-    return "Trading range";
+    return "Zijwaarts";
   };
 
   /* ======================================
@@ -73,12 +73,6 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
     }[phase?.toLowerCase()] ?? 1;
 
   /* ======================================
-     DEBUG (BELANGRIJK)
-  ====================================== */
-
-  console.log("MARKET API DATA", data);
-
-  /* ======================================
      RENDER
   ====================================== */
 
@@ -91,13 +85,13 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
             <Activity size={18} />
           </div>
           <div>
-            <div className="text-[10px] font-black text-muted uppercase tracking-widest mb-0.5">Terminal Intelligence</div>
-            <div className="text-sm font-bold text-foreground tracking-tight">Market Context & Global Analysis</div>
+            <div className="text-[10px] font-black text-muted uppercase tracking-widest mb-0.5">Marktanalyse</div>
+            <div className="text-sm font-bold text-foreground tracking-tight">Marktcontext en globale analyse</div>
           </div>
         </div>
 
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border shadow-sm ${macroData.badgeClass}`}>
-          <span className="text-[9px] font-black uppercase tracking-tighter opacity-70">Risk State:</span>
+          <span className="text-[9px] font-black uppercase tracking-tighter opacity-70">Risicostatus:</span>
           <span className="text-[10px] font-black uppercase tracking-widest">
             {macroData.riskState}
           </span>
@@ -110,7 +104,7 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Structural Cycle Phase</div>
+            <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Structurele fase</div>
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -122,11 +116,11 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
               }}
               className="opacity-0 group-hover/cycle:opacity-100 flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all hover:scale-105 active:scale-95 shadow-sm"
             >
-              <Sparkles size={10} /> Ask FINN
+              <Sparkles size={10} /> Vraag Finn
             </button>
           </div>
           <div className="text-[10px] font-black text-[var(--primary)] uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-md border border-blue-100 dark:border-blue-800">
-             Active: {macroData.regime}
+             Actief: {macroData.regime}
           </div>
         </div>
 
@@ -164,9 +158,9 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
       {/* 📊 TREND TELEMETRY */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
         {[
-          { label: "Short Term", value: trendShort },
-          { label: "Mid Term", value: trendMid },
-          { label: "Long Term", value: trendLong }
+          { label: "Korte termijn", value: trendShort },
+          { label: "Middellange termijn", value: trendMid },
+          { label: "Lange termijn", value: trendLong }
         ].map((t) => {
           const val = String(t.value || "trading range").toLowerCase();
           const colorClass = val === 'bullish' ? 'text-green-600' : val === 'bearish' ? 'text-red-600' : 'text-slate-600';
@@ -175,7 +169,7 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
           return (
             <div key={t.label} className="p-4 rounded-2xl bg-[var(--color-border-subtle)] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-center">
               <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">
-                {t.label} Trend
+                {t.label}
               </div>
               <div className={`text-xs font-black uppercase tracking-tight flex items-center gap-2 ${colorClass}`}>
                 <div className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />

@@ -3,6 +3,7 @@
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
+import Link from "next/link";
 import {
   createOptionLabelMap,
   getAssetFocusOptions,
@@ -15,8 +16,7 @@ import {
   normalizeTraderProfilePreferences,
   serializeTraderProfilePreferences,
 } from "@/lib/traderProfileOptions";
-import { User, Mail, Shield, ArrowUpRight, Brain, LogOut, Loader2, Sparkles, Pencil, Save } from "lucide-react";
-import Link from "next/link";
+import { Mail, Shield, ArrowUpRight, Loader2, Sparkles, Pencil, Save, Languages, Check, Brain, LogOut } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useModal } from "@/components/modal/ModalProvider";
@@ -52,7 +52,7 @@ function MultiChoiceGroup({ title, subtitle, options, values, onToggle }) {
 }
 
 export default function ProfilePage() {
-  const { t } = useTranslation();
+  const { t, locale, setLocale } = useTranslation();
   const { user, logout } = useAuth();
   const { showSnackbar } = useModal();
   const router = useRouter();
@@ -82,14 +82,11 @@ export default function ProfilePage() {
   const handleLogout = async () => {
     setLoadingLogout(true);
     await logout();
-    showSnackbar("You have been safely logged out ✔", "success");
+    showSnackbar("Je bent veilig uitgelogd ✔", "success");
     router.push("/login");
   };
 
   const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email;
-  const requestsUsed = user.ai_requests_used_day || 0;
-  const requestsLimit = user.ai_requests_limit_day || 25;
-  const usagePct = Math.min((requestsUsed / requestsLimit) * 100, 100);
   const traderTypeOptions = useMemo(() => getTraderTypeOptions(t), [t]);
   const timeframeOptions = useMemo(() => getTimeframeOptions(t), [t]);
   const assetFocusOptions = useMemo(() => getAssetFocusOptions(t), [t]);
@@ -191,32 +188,39 @@ export default function ProfilePage() {
   ].filter(Boolean);
 
   return (
-    <div className="min-h-screen bg-background text-foreground transition-colors duration-300 p-8 pt-12">
-      <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
+    <div className="min-h-screen bg-background text-foreground transition-colors duration-300 px-6 py-10 md:px-8 md:pt-12">
+      <div className="mx-auto max-w-5xl space-y-8 animate-fade-in">
         {/* HEADER */}
-        <div className="border-l-4 border-blue-600 pl-8 mb-12">
+        <div className="border-l-4 border-blue-600 pl-6 md:pl-8">
           <div className="text-[11px] font-black text-blue-600 uppercase tracking-[0.3em] mb-2 opacity-80">
-            Account Laboratory
+            {t?.traderProfile?.profilePage?.pageEyebrow || "Accountlaboratorium"}
           </div>
-          <h1 className="text-5xl font-black text-foreground tracking-tight leading-none">
-            Account & Trader Profile
+          <h1 className="text-4xl font-black text-foreground tracking-tight leading-none md:text-5xl">
+            {t?.traderProfile?.profilePage?.pageTitle || "Account & traderprofiel"}
           </h1>
           <p className="mt-4 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
-            Manage both your account details and the Finn trader profile that shapes coaching, warnings, explanations, and behavioral guidance.
+            {t?.traderProfile?.profilePage?.pageDescription ||
+              "Beheer je accountgegevens en het Finn traderprofiel dat coaching, waarschuwingen, uitleg en gedragsbegeleiding aanstuurt."}
           </p>
         </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <section className="space-y-4">
+        <div className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">
+          {t?.traderProfile?.profilePage?.accountSection || "Accountbasis"}
+        </div>
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
         
         {/* 1. USER INFO BLOK */}
-        <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10 flex flex-col justify-between transition-all hover:border-blue-600/20 group">
+        <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-8 md:p-10 flex flex-col justify-between transition-all hover:border-blue-600/20 group">
           <div className="space-y-8">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-xl shadow-lg shadow-blue-900/20">
                 {fullName.charAt(0).toUpperCase()}
               </div>
               <div>
-                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Trader Identity</div>
+                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">
+                  {t?.traderProfile?.profilePage?.identityLabel || "Traderidentiteit"}
+                </div>
                 <div className="text-2xl font-black text-foreground tracking-tight">{fullName}</div>
               </div>
             </div>
@@ -227,7 +231,9 @@ export default function ProfilePage() {
                   <Mail size={18} />
                 </div>
                 <div>
-                  <div className="text-[9px] font-black text-dim uppercase tracking-widest mb-0.5">Contact Port</div>
+                  <div className="text-[9px] font-black text-dim uppercase tracking-widest mb-0.5">
+                    {t?.traderProfile?.profilePage?.contactLabel || "E-mailadres"}
+                  </div>
                   <div className="text-sm font-bold text-foreground">{user.email}</div>
                 </div>
               </div>
@@ -237,7 +243,9 @@ export default function ProfilePage() {
                   <Shield size={18} />
                 </div>
                 <div>
-                  <div className="text-[9px] font-black text-dim uppercase tracking-widest mb-0.5">Authorization Level</div>
+                  <div className="text-[9px] font-black text-dim uppercase tracking-widest mb-0.5">
+                    {t?.traderProfile?.profilePage?.roleLabel || "Autorisatieniveau"}
+                  </div>
                   <div className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase tracking-tighter border border-blue-200 dark:border-blue-800">
                     {user.role || 'PRO'}
                   </div>
@@ -247,53 +255,107 @@ export default function ProfilePage() {
 
             <div className="rounded-3xl border border-blue-100 bg-blue-50/70 p-5">
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
-                Finn trader profile
+                {t?.traderProfile?.profilePage?.summaryEyebrow || "Finn traderprofiel"}
               </div>
               <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
-                Your trading style, goals, risk profile, timeframes, and coaching patterns live in the trading profile section below.
+                {t?.traderProfile?.profilePage?.summaryDescription ||
+                  "Je tradingstijl, doelen, risicoprofiel, timeframes en coachingspatronen staan in het tradingprofiel hieronder."}
               </p>
               <p className="mt-3 text-[11px] font-black uppercase tracking-[0.18em] text-blue-600">
-                Use the profile editor below to update it.
+                {t?.traderProfile?.profilePage?.summaryHelper || "Gebruik hieronder de profiel-editor om dit bij te werken."}
               </p>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-2xl bg-slate-100 p-3 text-slate-600">
+                    <Languages className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                      {t?.traderProfile?.profilePage?.languageEyebrow || "Taalvoorkeur"}
+                    </div>
+                    <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
+                      {t?.traderProfile?.profilePage?.languageDescription ||
+                        "Deze taal bewaren we voor je account, zodat Tradamind en Finn op elk device dezelfde voorkeur gebruiken."}
+                    </p>
+                    <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                      {t?.traderProfile?.profilePage?.languageMenuHint || "Snelle wissel blijft ook beschikbaar in het avatar-menu."}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {[
+                    { value: "nl", label: t?.traderProfile?.profilePage?.languageDutch || "Nederlands" },
+                    { value: "en", label: t?.traderProfile?.profilePage?.languageEnglish || "English" },
+                  ].map((option) => {
+                    const active = locale === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setLocale(option.value)}
+                        className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                          active
+                            ? "border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                            : "border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-200 hover:bg-white"
+                        }`}
+                      >
+                        {active ? <Check className="h-4 w-4" /> : null}
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* 2. SUBSCRIPTION BLOK */}
-        <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10 flex flex-col justify-between transition-all hover:border-blue-600/20 group relative overflow-hidden">
+        <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-8 md:p-10 flex flex-col justify-between transition-all hover:border-blue-600/20 group relative overflow-hidden">
           {/* Subtle Accent Background */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/5 blur-3xl rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-1000" />
           
           <div className="relative z-10 space-y-12">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Service Tier</div>
+                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">
+                  {t?.traderProfile?.profilePage?.serviceTierLabel || "Abonnement"}
+                </div>
                 <div className="text-3xl font-black text-foreground tracking-tighter uppercase italic">
                   {user.ai_plan || 'Basis'} Plan
                 </div>
               </div>
               <div className="px-3 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Active
+                {t?.traderProfile?.profilePage?.serviceTierActive || "Actief"}
               </div>
             </div>
 
             <div className="py-6 border-y border-[var(--color-border-subtle)]">
                <p className="text-[11px] font-bold text-dim leading-relaxed uppercase tracking-widest">
-                 Professional access enabled. All intelligence nodes are fully synchronized with your account.
+                 {t?.traderProfile?.profilePage?.serviceTierBody ||
+                   "Professionele toegang staat aan. Alle intelligentielagen zijn gesynchroniseerd met je account."}
                </p>
             </div>
 
             <button className="w-full bg-foreground text-card hover:bg-slate-800 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 group/btn active:scale-95 shadow-xl">
-              Upgrade to Pro Level
+              {t?.traderProfile?.profilePage?.upgradeCta || "Upgrade naar Pro"}
               <ArrowUpRight size={14} className="group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
             </button>
           </div>
         </div>
 
       </div>
+      </section>
 
-      <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10 space-y-8">
+      <section className="space-y-4">
+        <div className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">
+          {t?.traderProfile?.profilePage?.traderSection || "Traderprofiel"}
+        </div>
+      <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-8 md:p-10 space-y-8">
         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div className="max-w-2xl">
             <div className="mb-3 flex items-center gap-3">
@@ -315,12 +377,12 @@ export default function ProfilePage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 md:gap-3">
             {summaryChips.length > 0 ? (
               summaryChips.map((chip) => (
                 <span
                   key={chip}
-                  className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600"
+                  className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-blue-600"
                 >
                   {chip}
                 </span>
@@ -574,10 +636,14 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+      </section>
 
       {/* 3. ACTIONS */}
-      <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10">
-        <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-6">Strategic Terminal Actions</div>
+      <section className="space-y-4">
+        <div className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">
+          {t?.traderProfile?.profilePage?.actionsSection || "Accountacties"}
+        </div>
+      <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-8 md:p-10">
         
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link 
@@ -588,8 +654,8 @@ export default function ProfilePage() {
               <Brain size={20} />
             </div>
             <div>
-              <div className="text-sm font-black text-foreground tracking-tight group-hover:text-blue-600 transition-colors">Open AI Admin</div>
-              <div className="text-[10px] font-bold text-dim uppercase tracking-widest">System-level intelligence settings</div>
+              <div className="text-sm font-black text-foreground tracking-tight group-hover:text-blue-600 transition-colors">Open AI-beheer</div>
+              <div className="text-[10px] font-bold text-dim uppercase tracking-widest">Systeeminstellingen voor AI en monitoring</div>
             </div>
           </Link>
 
@@ -602,12 +668,13 @@ export default function ProfilePage() {
               {loadingLogout ? <Loader2 size={20} className="animate-spin" /> : <LogOut size={20} />}
             </div>
             <div>
-              <div className="text-sm font-black text-foreground tracking-tight group-hover:text-rose-600 transition-colors">Sign Out Securely</div>
-              <div className="text-[10px] font-bold text-dim uppercase tracking-widest">Terminate current session</div>
+              <div className="text-sm font-black text-foreground tracking-tight group-hover:text-rose-600 transition-colors">Veilig uitloggen</div>
+              <div className="text-[10px] font-bold text-dim uppercase tracking-widest">Sluit je huidige sessie af</div>
             </div>
           </button>
         </div>
       </div>
+      </section>
       </div>
     </div>
   );

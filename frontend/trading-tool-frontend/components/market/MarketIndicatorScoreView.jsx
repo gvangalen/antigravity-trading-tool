@@ -71,8 +71,8 @@ export default function MarketIndicatorScoreView({
              <Coins size={20} className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">Logic Manifest</div>
-            <h2 className="text-xl font-black text-foreground tracking-tight uppercase leading-none mt-1">Market Indicator Configuration</h2>
+            <div className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">Indicatoroverzicht</div>
+            <h2 className="text-xl font-black text-foreground tracking-tight uppercase leading-none mt-1">Marktindicatoren</h2>
           </div>
         </div>
         <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] bg-card px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
@@ -85,7 +85,7 @@ export default function MarketIndicatorScoreView({
         <div className="max-w-xl">
           <UniversalSearchDropdown
             label="SELECT_MARKET_NODE"
-            placeholder="Search indicators (Price, Volume, Change 24h)..."
+            placeholder="Zoek indicatoren (prijs, volume, 24u-verandering)..."
             items={availableIndicators}
             selected={indicator}
             onSelect={handleSelect}
@@ -108,7 +108,7 @@ export default function MarketIndicatorScoreView({
                   {displayName}
                 </span>
                 <span className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">
-                  Live_Parameter_Tuning
+                  Live parameterafstemming
                 </span>
               </div>
 
@@ -118,7 +118,7 @@ export default function MarketIndicatorScoreView({
                 className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white text-[10px] font-black uppercase tracking-[0.2em] hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg active:scale-95"
               >
                 <Plus size={14} />
-                {isAdded ? "NODE_ACTIVE" : "SYNC_TO_MARKET_TERMINAL"}
+                {isAdded ? "ACTIEF" : "KOPPEL AAN MARKTOVERZICHT"}
               </button>
             </div>
 

@@ -15,7 +15,7 @@ export default function GlobalMarketDecisionCard({
     return (
       <div className="flex items-center gap-3 text-xs font-black text-secondary uppercase tracking-widest p-12 justify-center">
         <div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-[var(--primary)] animate-spin" />
-        Syncing Global Market Telemetry...
+        Marktcontext laden...
       </div>
     );
   }

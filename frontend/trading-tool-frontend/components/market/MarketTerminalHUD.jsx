@@ -16,14 +16,21 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
   const ChangeIcon = positive ? TrendingUp : TrendingDown;
   
   const getBiasConfig = (s) => {
-    if (s >= 80) return { label: "EXTREME BULLISH", color: "text-green-500", bg: "bg-green-500", border: "border-green-200" };
-    if (s >= 60) return { label: "BULLISH", color: "text-blue-500", bg: "bg-blue-500", border: "border-blue-200" };
-    if (s >= 40) return { label: "NEUTRAL", color: "text-secondary", bg: "bg-slate-400", border: "border-slate-200" };
-    if (s >= 20) return { label: "BEARISH", color: "text-red-400", bg: "bg-red-400", border: "border-red-200" };
-    return { label: "EXTREME BEARISH", color: "text-red-600", bg: "bg-red-600", border: "border-red-300" };
+    if (s >= 80) return { label: "Sterk positief", color: "text-green-500", bg: "bg-green-500", border: "border-green-200" };
+    if (s >= 60) return { label: "Positief", color: "text-blue-500", bg: "bg-blue-500", border: "border-blue-200" };
+    if (s >= 40) return { label: "Neutraal", color: "text-secondary", bg: "bg-slate-400", border: "border-slate-200" };
+    if (s >= 20) return { label: "Negatief", color: "text-red-400", bg: "bg-red-400", border: "border-red-200" };
+    return { label: "Sterk negatief", color: "text-red-600", bg: "bg-red-600", border: "border-red-300" };
   };
 
   const config = getBiasConfig(scoreNum);
+  const biasLabel = {
+    bullish: "Positief",
+    bearish: "Negatief",
+    neutral: "Neutraal",
+    ranging: "Zijwaarts",
+    stable: "Stabiel",
+  }[String(bias || "").toLowerCase()] || bias || "Neutraal";
 
   return (
     <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -38,7 +45,7 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
                   <Gauge size={20} className="sm:size-6" strokeWidth={1.5} />
                </div>
                <div>
-                  <div className="text-[10px] sm:text-[11px] font-bold text-secondary/60 uppercase tracking-[0.2em] mb-0.5">Intelligence Consensus</div>
+                  <div className="text-[10px] sm:text-[11px] font-bold text-secondary/60 uppercase tracking-[0.2em] mb-0.5">Marktconsensus</div>
                   <div className="text-xl sm:text-2xl font-black text-foreground tracking-tight uppercase leading-none">Marktbeeld</div>
                </div>
             </div>
@@ -55,8 +62,8 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
                   <span className="text-xl sm:text-2xl text-secondary ml-2 font-medium opacity-30 tracking-tight">/ 100</span>
                </div>
                <div className="text-left sm:text-right">
-                  <div className="text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em] mb-1 sm:mb-2 leading-none">Market Bias</div>
-                  <div className={`text-2xl sm:text-3xl font-black ${config.color} tracking-tighter uppercase leading-none drop-shadow-sm`}>{bias || "NEUTRAL"}</div>
+                  <div className="text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em] mb-1 sm:mb-2 leading-none">Marktrichting</div>
+                  <div className={`text-2xl sm:text-3xl font-black ${config.color} tracking-tighter uppercase leading-none drop-shadow-sm`}>{biasLabel}</div>
                </div>
             </div>
 
@@ -80,18 +87,18 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
                <div className="w-10 h-10 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shadow-inner">
                   <Activity size={20} className="text-orange-500" strokeWidth={1.5} />
                </div>
-               <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-secondary/60 leading-none">Asset Tracking</div>
+               <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-secondary/60 leading-none">Assetstatus</div>
             </div>
             <div className="flex items-center gap-2 text-[9px] sm:text-[10px] font-black text-secondary/40">
                <Clock size={12} strokeWidth={2} />
                <span suppressHydrationWarning className="uppercase tracking-[0.1em] leading-none">
-                 {btc?.timestamp ? new Date(btc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "OFFLINE"}
+                 {btc?.timestamp ? new Date(btc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Offline"}
                </span>
             </div>
          </div>
 
          <div className="relative z-10 space-y-2">
-            <div className="text-[10px] sm:text-[11px] font-black text-secondary/40 uppercase tracking-[0.25em]">{symbol} Price</div>
+            <div className="text-[10px] sm:text-[11px] font-black text-secondary/40 uppercase tracking-[0.25em]">{symbol} prijs</div>
             <div suppressHydrationWarning className="text-3xl sm:text-5xl font-black tracking-tighter uppercase leading-none text-foreground font-mono tabular-nums">
                ${btc?.price ? Number(btc.price).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : "—"}
             </div>
@@ -101,7 +108,7 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
                   <ChangeIcon size={16} strokeWidth={2.5} />
                </div>
                <span className="text-base sm:text-lg tabular-nums">{positive ? "+" : ""}{Number(priceChange).toFixed(2)}%</span>
-               <span className="text-[9px] sm:text-[10px] text-secondary/40 font-bold ml-1 sm:ml-2">24h Delta</span>
+               <span className="text-[9px] sm:text-[10px] text-secondary/40 font-bold ml-1 sm:ml-2">24u verandering</span>
             </div>
          </div>
 
@@ -113,7 +120,7 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
                </div>
                <div className="flex items-center gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-orange-500/5 border border-orange-500/10">
                   <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-orange-500 animate-pulse shadow-[0_0_8px_rgba(249,115,22,0.5)]" />
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-orange-500/80 uppercase whitespace-nowrap">Live Feed</span>
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-orange-500/80 uppercase whitespace-nowrap">Live feed</span>
                </div>
             </div>
          </div>

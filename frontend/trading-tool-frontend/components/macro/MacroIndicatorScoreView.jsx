@@ -84,8 +84,8 @@ export default function MacroIndicatorScoreView({
              <BarChart2 className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-[10px] font-black text-secondary uppercase tracking-widest">Logic Manifest</div>
-            <h2 className="text-xl font-black text-foreground tracking-tight uppercase">Macro Indicator Configuration</h2>
+            <div className="text-[10px] font-black text-secondary uppercase tracking-widest">Indicatoroverzicht</div>
+            <h2 className="text-xl font-black text-foreground tracking-tight uppercase">Macro-indicatoren</h2>
           </div>
         </div>
         <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] bg-card px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
@@ -98,7 +98,7 @@ export default function MacroIndicatorScoreView({
         <div className="max-w-xl">
           <UniversalSearchDropdown
             label="SELECT_MACRO_NODE"
-            placeholder="Search indicators (DXY, CPI, GDP, etc)..."
+            placeholder="Zoek indicatoren (DXY, CPI, GDP, enz.)..."
             items={allIndicators}
             selected={selected}
             onSelect={handleSelect}
@@ -107,7 +107,7 @@ export default function MacroIndicatorScoreView({
           {!selected && (
             <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-secondary uppercase tracking-widest italic opacity-60">
                <div className="w-1 h-1 rounded-full bg-slate-400 animate-pulse" />
-               Awaiting node selection for signal configuration...
+               Kies eerst een indicator om de instellingen te bekijken...
             </div>
           )}
         </div>
@@ -121,7 +121,7 @@ export default function MacroIndicatorScoreView({
                   {displayName}
                 </span>
                 <span className="text-[10px] font-black text-secondary uppercase tracking-widest">
-                  Live_Parameter_Tuning
+                  Live parameterafstemming
                 </span>
               </div>
 

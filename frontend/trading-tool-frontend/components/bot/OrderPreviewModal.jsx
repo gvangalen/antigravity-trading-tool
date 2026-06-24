@@ -451,7 +451,7 @@ export default function OrderPreviewModal({
                     <div className="flex items-center justify-between gap-3">
                       <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
                         <Target size={13} />
-                        Decision Review
+                        Beslischeck
                       </span>
                       <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
                         {finnReview.decision_status}
@@ -470,7 +470,7 @@ export default function OrderPreviewModal({
                     {behavioralFriction?.message && (
                       <div className="mt-3 rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
                         <div className="text-[9px] font-black uppercase tracking-widest opacity-70">
-                          Behavioral friction{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
+                          Gedragsrem{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
                         </div>
                         <p className="mt-2 text-xs font-semibold leading-relaxed">{behavioralFriction.message}</p>
                         {behavioralFriction?.safe_alternative && (
@@ -492,7 +492,7 @@ export default function OrderPreviewModal({
                     <div className="flex items-center justify-between gap-3">
                       <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
                         <ShieldCheck size={13} />
-                        Plan Adherence
+                        Plantrouw
                       </span>
                       <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
                         {finnAdherence.adherence_status}

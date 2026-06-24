@@ -67,7 +67,6 @@ export default function SetupPage() {
       status &&
       status.has_setup === false
     ) {
-      console.log("🧭 Onboarding: setup step completed");
       completeStep("setup");
     }
   }, [setups, status, completeStep]);
@@ -92,11 +91,11 @@ export default function SetupPage() {
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
         <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Settings size={12} />
-           Configuration
+           Configuratie
         </div>
         <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Setups</h1>
         <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">
-          Manage your trading strategies and market models
+          Beheer je setups, handelslogica en marktkaders
         </p>
       </header>
 
@@ -124,7 +123,7 @@ export default function SetupPage() {
               <Search size={14} className="text-slate-400 dark:text-slate-500" />
               <input
                 type="text"
-                placeholder="Search setups..."
+                placeholder="Zoek setups..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="bg-transparent outline-none text-[11px] font-bold text-slate-700 dark:text-slate-300 w-40"

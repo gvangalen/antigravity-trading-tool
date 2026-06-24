@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 export default function PageLoader({
-  text = "Loading Intelligent Dashboard…",
+  text = "Dashboard laden…",
   minDuration = 600,   // Minimum duration for smooth transition
   maxDuration = 2500,  // Fallback max duration
   active = true,       // Controlled by parent state

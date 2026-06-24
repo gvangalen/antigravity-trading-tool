@@ -214,7 +214,7 @@ function BotPageInner() {
       showSnackbar(`New proposal for ${bot.name}`, "success"); 
     }
     catch { 
-      showSnackbar("Error generating proposal", "danger"); 
+      showSnackbar("Voorstel genereren mislukt", "danger"); 
     }
     finally { 
       setGeneratingBotId(null); 
@@ -227,7 +227,7 @@ function BotPageInner() {
       title: "Bot aanmaken",
       statusLabel: "Concept aanmaken",
       description: <BotForm strategies={strategies} initialValues={initialValues} onChange={(v) => (formRef.current = v)} />,
-      context: <p>{initialValues.symbol || formRef.current?.symbol || "Nieuwe bot"} · {(initialValues.is_live || formRef.current?.is_live) ? "Live" : "Paper"}</p>,
+      context: <p>{initialValues.symbol || formRef.current?.symbol || "Nieuwe bot"} · {(initialValues.is_live || formRef.current?.is_live) ? "Live" : "Simulatie"}</p>,
       impact: <p>Je maakt een nieuwe botconfig aan met een eigen strategie, budget en review-lane.</p>,
       safety: <p>Controleer modus, budget en strategie. Live-activiteit blijft pas na expliciete review mogelijk.</p>,
       consequence: <p>Na opslaan verversen we de botlijst en kun je Finn direct laten controleren of de bot goed is ingericht.</p>,

@@ -636,14 +636,14 @@ export default function AdminTelemetryPage() {
         />
 
         <SectionCard
-          title="Confirm & CTA readout"
+          title="Confirm- en CTA-overzicht"
           subtitle="Waar users doorpakken en waar ze nog twijfelen."
         >
           <div className="grid grid-cols-3 gap-4">
             {[
-              ["Opened", confirmFunnel.opened ?? 0],
-              ["Confirmed", confirmFunnel.confirmed ?? 0],
-              ["Canceled", confirmFunnel.canceled ?? 0],
+              ["Geopend", confirmFunnel.opened ?? 0],
+              ["Bevestigd", confirmFunnel.confirmed ?? 0],
+              ["Geannuleerd", confirmFunnel.canceled ?? 0],
             ].map(([label, value]) => (
               <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-center">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{label}</p>
@@ -656,7 +656,7 @@ export default function AdminTelemetryPage() {
             <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
                 <BrainCircuit size={14} />
-                Decision review
+                Beslischeck
               </div>
               <p className="mt-2 text-2xl font-black tracking-tight text-slate-900">
                 {analytics?.decision_review_usage_count ?? 0}
@@ -665,7 +665,7 @@ export default function AdminTelemetryPage() {
             <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
                 <Clock3 size={14} />
-                Priority engine
+                Prioriteitenmotor
               </div>
               <p className="mt-2 text-2xl font-black tracking-tight text-slate-900">
                 {analytics?.priority_engine_usage_count ?? 0}

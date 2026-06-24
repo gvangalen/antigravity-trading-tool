@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
-import { User, Brain, LogOut, Loader2, Moon, Sun, Languages, Bell, BellOff } from "lucide-react";
+import { User, LogOut, Loader2, Moon, Sun, Languages } from "lucide-react";
 import NotificationToggle from "@/components/NotificationToggle";
 
 export default function AvatarMenu() {
@@ -76,7 +76,6 @@ export default function AvatarMenu() {
 
     showSnackbar(locale === 'nl' ? "Je bent veilig uitgelogd ✔" : "You have been safely logged out ✔", "success");
 
-    // 🔥 HARD RESET: Forceer herlaad naar de login page
     window.location.href = "/login";
   };
 
@@ -126,7 +125,7 @@ export default function AvatarMenu() {
             {/* User info (Industrial Header) */}
             {user && (
               <li className="px-5 py-4 bg-[var(--color-border-subtle)] dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
-                <p className="text-[10px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-widest mb-1">{locale === 'nl' ? "Geindentificeerd als" : "Identified as"}</p>
+                <p className="text-[10px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-widest mb-1">{locale === 'nl' ? "Geïdentificeerd als" : "Identified as"}</p>
                 <p className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">
                   {user.first_name
                     ? `${user.first_name} ${user.last_name || ""}`
@@ -134,14 +133,14 @@ export default function AvatarMenu() {
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                    <span className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[9px] font-black uppercase tracking-tighter border border-blue-200 dark:border-blue-800">
-                     Level: {user.role || 'PRO'}
+                     {locale === 'nl' ? "Rol" : "Role"}: {user.role || 'PRO'}
                    </span>
                 </div>
               </li>
             )}
 
             <DropdownItem href="/profile" icon={<User size={16} />}>
-              {locale === 'nl' ? "Profiel & trader-profiel" : "Profile & trader profile"}
+              {locale === 'nl' ? "Account en Finn-profiel" : "Account & trader profile"}
             </DropdownItem>
 
             <div className="h-px bg-[var(--color-border-subtle)] dark:bg-slate-800 my-1 mx-4" />
@@ -153,7 +152,9 @@ export default function AvatarMenu() {
             >
               <div className="flex flex-col items-start leading-none">
                 <span className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">{t.common.language}</span>
-                <span className="font-bold">{t.common.switch_to}</span>
+                <span className="font-bold">
+                  {locale === "nl" ? "Nederlands actief -> switch to English" : "English active -> wissel naar Nederlands"}
+                </span>
               </div>
             </DropdownButton>
 
