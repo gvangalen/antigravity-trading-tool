@@ -343,17 +343,29 @@ class SystemHealthService:
     @staticmethod
     async def _check_celery() -> Dict[str, Any]:
         try:
-            result = await asyncio.to_thread(SystemHealthService._celery_ping)
-            workers = result or {}
+            ping_result = await asyncio.to_thread(SystemHealthService._celery_ping)
+            active_queues = await asyncio.to_thread(SystemHealthService._celery_active_queues)
+            stats_result = await asyncio.to_thread(SystemHealthService._celery_stats)
+
+            workers = SystemHealthService._visible_workers(
+                ping_result=ping_result or {},
+                active_queues=active_queues or {},
+                stats_result=stats_result or {},
+            )
             if not workers:
                 return _component("unknown", worker_count=0, workers=[], workers_by_queue={})
-            active_queues = await asyncio.to_thread(SystemHealthService._celery_active_queues)
+
             workers_by_queue = SystemHealthService._workers_by_queue(active_queues or {})
             return _component(
                 "ok",
                 worker_count=len(workers),
-                workers=sorted(workers.keys()),
+                workers=workers,
                 workers_by_queue=workers_by_queue,
+                worker_discovery_sources=SystemHealthService._worker_discovery_sources(
+                    ping_result=ping_result or {},
+                    active_queues=active_queues or {},
+                    stats_result=stats_result or {},
+                ),
                 rate_limits_by_queue=rate_limit_summary_by_queue(),
             )
         except Exception as exc:
@@ -370,15 +382,57 @@ class SystemHealthService:
     def _celery_ping() -> Optional[Dict[str, Any]]:
         from backend.celery_task.celery_app import celery_app
 
-        inspector = celery_app.control.inspect(timeout=1.0)
+        inspector = celery_app.control.inspect(timeout=3.0)
         return inspector.ping()
 
     @staticmethod
     def _celery_active_queues() -> Optional[Dict[str, Any]]:
         from backend.celery_task.celery_app import celery_app
 
-        inspector = celery_app.control.inspect(timeout=1.0)
+        inspector = celery_app.control.inspect(timeout=3.0)
         return inspector.active_queues()
+
+    @staticmethod
+    def _celery_stats() -> Optional[Dict[str, Any]]:
+        from backend.celery_task.celery_app import celery_app
+
+        inspector = celery_app.control.inspect(timeout=3.0)
+        return inspector.stats()
+
+    @staticmethod
+    def _visible_workers(
+        *,
+        ping_result: Dict[str, Any],
+        active_queues: Dict[str, Any],
+        stats_result: Dict[str, Any],
+    ) -> list[str]:
+        workers = set()
+        workers.update(SystemHealthService._dict_keys(ping_result))
+        workers.update(SystemHealthService._dict_keys(active_queues))
+        workers.update(SystemHealthService._dict_keys(stats_result))
+        return sorted(worker for worker in workers if isinstance(worker, str) and worker.strip())
+
+    @staticmethod
+    def _worker_discovery_sources(
+        *,
+        ping_result: Dict[str, Any],
+        active_queues: Dict[str, Any],
+        stats_result: Dict[str, Any],
+    ) -> list[str]:
+        sources = []
+        if ping_result:
+            sources.append("ping")
+        if active_queues:
+            sources.append("active_queues")
+        if stats_result:
+            sources.append("stats")
+        return sources
+
+    @staticmethod
+    def _dict_keys(value: Any) -> list[str]:
+        if not isinstance(value, dict):
+            return []
+        return [key for key in value.keys() if isinstance(key, str)]
 
     @staticmethod
     def _workers_by_queue(active_queues: Dict[str, Any]) -> Dict[str, Any]:
