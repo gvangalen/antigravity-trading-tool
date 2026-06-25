@@ -8,11 +8,13 @@ import { Mail, Lock, UserPlus, User, ShieldCheck } from "lucide-react";
 import { API_BASE_URL } from "@/lib/config";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useModal } from "@/components/modal/ModalProvider";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function RegisterPage() {
   const router = useRouter();
   const { login, isAuthenticated, sessionChecked } = useAuth();
   const { showSnackbar } = useModal();
+  const { t } = useTranslation();
 
   const [name, setName] = useState(""); 
   const [email, setEmail] = useState("");
@@ -50,20 +52,20 @@ export default function RegisterPage() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         showSnackbar(
-          data.detail || "Account aanmaken mislukt. Dit e-mailadres bestaat mogelijk al.",
+          data.detail || t?.auth?.registerFailed,
           "danger"
         );
         setLoading(false);
         return;
       }
 
-      showSnackbar("Account aangemaakt. Je wordt nu ingelogd…", "success");
+      showSnackbar(t?.auth?.registerSuccess, "success");
 
       // 2️⃣ Automatisch inloggen
       const loginRes = await login(email, password);
 
       if (!loginRes.success) {
-        showSnackbar("Account aangemaakt. Log nu handmatig in.", "info");
+        showSnackbar(t?.auth?.registerManualLogin, "info");
         router.replace("/login");
         return;
       }
@@ -74,8 +76,8 @@ export default function RegisterPage() {
       console.error("❌ Register fout:", err);
       showSnackbar(
         typeof navigator !== "undefined" && !navigator.onLine
-          ? "Je lijkt offline te zijn. Controleer je internetverbinding."
-          : "Server niet bereikbaar. Probeer het opnieuw.",
+          ? t?.auth?.offline
+          : t?.auth?.serverUnreachable,
         "danger"
       );
     } finally {
@@ -113,12 +115,12 @@ export default function RegisterPage() {
               </div>
             </div>
           </div>
-          <div className="page-label mb-3">Welkom bij Tradamind</div>
+          <div className="page-label mb-3">{t?.auth?.brandEyebrow}</div>
           <h1 className="text-3xl font-bold text-foreground dark:text-slate-100 tracking-tighter text-center">
-            Jouw AI tradingcoach
+            {t?.auth?.brandTitle}
           </h1>
           <p className="page-subtitle mx-auto mt-4">
-            Maak je professionele Tradamind-account aan
+            {t?.auth?.brandRegisterDescription}
           </p>
         </div>
 
@@ -127,7 +129,7 @@ export default function RegisterPage() {
           {/* Naam */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              Naam
+              {t?.auth?.fullName}
             </label>
             <div className="relative group">
               <User 
@@ -138,7 +140,7 @@ export default function RegisterPage() {
                 type="text"
                 required
                 className="trade-input pr-14"
-                placeholder="Jouw naam"
+                placeholder={t?.auth?.fullNamePlaceholder}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -148,7 +150,7 @@ export default function RegisterPage() {
           {/* E-mail */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              E-mailadres
+              {t?.auth?.email}
             </label>
             <div className="relative group">
               <Mail 
@@ -159,7 +161,7 @@ export default function RegisterPage() {
                 type="email"
                 required
                 className="trade-input pr-14"
-                placeholder="naam@voorbeeld.nl"
+                placeholder={t?.auth?.emailPlaceholder}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -169,7 +171,7 @@ export default function RegisterPage() {
           {/* Wachtwoord */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              Wachtwoord
+              {t?.auth?.password}
             </label>
             <div className="relative group">
               <Lock 
@@ -195,11 +197,11 @@ export default function RegisterPage() {
             className="btn-primary w-full flex items-center justify-center gap-3 py-5 text-[13px] mt-4"
           >
             {loading ? (
-              <>Account aanmaken...</>
+              <>{t?.auth?.creatingAccount}</>
             ) : (
               <>
                 <UserPlus size={18} />
-                ACCOUNT AANMAKEN
+                {t?.auth?.createAccount?.toUpperCase?.() || t?.auth?.createAccount}
               </>
             )}
           </button>
@@ -207,12 +209,12 @@ export default function RegisterPage() {
 
         <div className="text-center mt-10 pt-8 border-t-2 border-slate-50">
           <p className="metric-label text-slate-400 mb-0 lowercase normal-case tracking-normal">
-            Already have an account?
+            {t?.auth?.alreadyHaveAccount}
             <Link
               href="/login"
               className="text-blue-600 font-bold hover:underline ml-2 uppercase tracking-widest text-[10px]"
             >
-              Sign in →
+              {t?.auth?.signInLink}
             </Link>
           </p>
         </div>

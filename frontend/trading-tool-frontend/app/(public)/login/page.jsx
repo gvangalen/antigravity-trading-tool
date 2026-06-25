@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Mail, Lock, LogIn, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
+import { useTranslation } from "@/app/providers/I18nProvider";
 import Link from "next/link";
 
 function LoginPageContent() {
@@ -12,6 +13,7 @@ function LoginPageContent() {
   const searchParams = useSearchParams();
   const { login, isAuthenticated, sessionChecked } = useAuth();
   const { showSnackbar } = useModal();
+  const { t } = useTranslation();
   const nextPath = searchParams.get("next") || "/dashboard";
 
   const [email, setEmail] = useState("");
@@ -45,12 +47,12 @@ function LoginPageContent() {
     const res = await login(email, password);
 
     if (!res.success) {
-      showSnackbar(res.message || "Login failed", "danger");
+      showSnackbar(res.message || t?.auth?.loginFailed, "danger");
       setSubmitting(false);
       return;
     }
 
-    showSnackbar("Welcome back! ✔", "success");
+    showSnackbar(t?.auth?.welcomeBack, "success");
 
     // 🔥 HARD REDIRECT: Zorgt dat middleware direct de nieuwe cookies ziet
     router.push(nextPath);
@@ -87,12 +89,12 @@ function LoginPageContent() {
               </div>
             </div>
           </div>
-          <div className="page-label mb-3">Welcome to Tradamind</div>
+          <div className="page-label mb-3">{t?.auth?.brandEyebrow}</div>
           <h1 className="text-3xl font-bold text-foreground dark:text-slate-100 tracking-tighter text-center">
-            Your AI Trading Coach
+            {t?.auth?.brandTitle}
           </h1>
           <p className="page-subtitle mx-auto mt-4">
-            Log in to your professional dashboard
+            {t?.auth?.brandLoginDescription}
           </p>
         </div>
 
@@ -102,7 +104,7 @@ function LoginPageContent() {
           {/* Email */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              E-mailadres
+              {t?.auth?.email}
             </label>
             <div className="relative group">
               <Mail 
@@ -113,7 +115,7 @@ function LoginPageContent() {
                 type="email"
                 required
                 className="trade-input pr-14"
-                placeholder="naam@voorbeeld.nl"
+                placeholder={t?.auth?.emailPlaceholder}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -123,7 +125,7 @@ function LoginPageContent() {
           {/* Password */}
           <div className="space-y-3">
             <label className="metric-label ml-1">
-              Wachtwoord
+              {t?.auth?.password}
             </label>
             <div className="relative group">
               <button 
@@ -151,11 +153,11 @@ function LoginPageContent() {
             className="btn-primary w-full flex items-center justify-center gap-3 py-5 text-[13px]"
           >
             {submitting ? (
-              <>Inloggen...</>
+              <>{t?.auth?.signingIn}</>
             ) : (
               <>
                 <LogIn size={18} />
-                INLOGGEN
+                {t?.auth?.signIn?.toUpperCase?.() || t?.auth?.signIn}
               </>
             )}
           </button>
@@ -164,12 +166,12 @@ function LoginPageContent() {
         {/* Registratie link */}
         <div className="text-center mt-10 pt-8 border-t-2 border-slate-50">
           <p className="metric-label text-slate-400 mb-0 lowercase normal-case tracking-normal">
-            Nog geen account?
+            {t?.auth?.noAccount}
             <Link
               href="/register"
               className="text-blue-600 font-bold hover:underline ml-2 uppercase tracking-widest text-[10px]"
             >
-              Maak er een aan →
+              {t?.auth?.createOne}
             </Link>
           </p>
         </div>

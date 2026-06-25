@@ -3,11 +3,13 @@
 import { useState } from "react";
 import AIAssistant from "@/components/ui/AIAssistant";
 import AIFloatingButton from "@/components/ui/AIFloatingButton";
+import { useTranslation } from "@/app/providers/I18nProvider";
 import Link from "next/link";
 import { Rocket } from "lucide-react";
 
 export default function OnboardingLayout({ children }) {
   const [isAIOpen, setIsAIOpen] = useState(false);
+  const { t } = useTranslation();
 
   return (
     <>
@@ -37,10 +39,10 @@ export default function OnboardingLayout({ children }) {
                 </div>
                 <div>
                   <h1 className="text-sm font-black uppercase tracking-[0.2em] leading-none mb-1">
-                    Launch Protocol
+                    {t?.onboardingShell?.title}
                   </h1>
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none">
-                    V1.1.0 Initializing
+                    {t?.onboardingShell?.status}
                   </span>
                 </div>
               </Link>
@@ -49,7 +51,7 @@ export default function OnboardingLayout({ children }) {
             <div className="flex items-center gap-6">
               <div className="hidden md:flex items-center gap-2 px-4 py-1.5 bg-slate-900 border border-slate-800 rounded-full">
                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Assistant Online</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t?.onboardingShell?.assistantOnline}</span>
               </div>
             </div>
           </header>

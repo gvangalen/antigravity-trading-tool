@@ -111,6 +111,37 @@
       "login_required": "Log in to enable notifications"
     }
   },
+  "auth": {
+    "brandEyebrow": "Welcome to Tradamind",
+    "brandTitle": "Your AI Trading Coach",
+    "brandLoginDescription": "Log in to your professional dashboard",
+    "brandRegisterDescription": "Create your professional Tradamind account",
+    "fullName": "Full name",
+    "fullNamePlaceholder": "Your name",
+    "email": "Email address",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "createAccount": "Create account",
+    "creatingAccount": "Creating account...",
+    "noAccount": "No account yet?",
+    "createOne": "Create one →",
+    "alreadyHaveAccount": "Already have an account?",
+    "signInLink": "Sign in →",
+    "loginFailed": "Login failed",
+    "welcomeBack": "Welcome back! ✔",
+    "registerFailed": "Could not create the account. This email address may already exist.",
+    "registerSuccess": "Account created. Signing you in now…",
+    "registerManualLogin": "Account created. Please sign in manually.",
+    "offline": "You appear to be offline. Check your internet connection.",
+    "serverUnreachable": "Could not reach the server. Please try again."
+  },
+  "onboardingShell": {
+    "title": "Launch Protocol",
+    "status": "V1.1.0 Initializing",
+    "assistantOnline": "Assistant Online"
+  },
   "traderProfile": {
     "options": {
       "traderTypes": {
