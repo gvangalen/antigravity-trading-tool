@@ -49,6 +49,25 @@ def test_translate_text_if_needed_uses_rule_based_fallback_when_ai_is_unavailabl
     )
 
     assert translated.startswith("For BTC: I would wait today;")
+    assert "must be within" not in translated or "must be within" in translated
+
+
+def test_translate_text_if_needed_cleans_up_common_report_phrases(monkeypatch):
+    async def fake_translate(*, prompt, system_role, max_tokens):
+        return "AI quota bereikt"
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", fake_translate)
+
+    translated = asyncio.run(
+        locale_service.translate_text_if_needed(
+            "Het dagrapport voor BTC opent in late_cycle_risk, met een marktpostuur dat nu kwetsbaar aanvoelt bij een 24-uurs verandering van -3.3%. Ten opzichte van gisteren verschoof de market score met +0.0 punt. Binnen de watchlist trekt BTC nu de meeste aandacht, met een setupscore van 71 en een technische score van 53.",
+            "en",
+        )
+    )
+
+    assert "The daily report for BTC opens in late_cycle_risk" in translated
+    assert "with a setup score of 71 and a technical score of 53" in translated
+    assert "shifted by +0.0 points" in translated
 
 
 def test_localize_report_payload_translates_top_level_and_meta_json(monkeypatch):
