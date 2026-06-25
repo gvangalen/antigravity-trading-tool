@@ -9,6 +9,8 @@ from datetime import datetime
 from fastapi.responses import StreamingResponse
 
 from backend.infrastructure.repositories.report_repository import ReportRepository
+from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.services.locale_service import localize_report_payload, resolve_locale
 from backend.utils.pdf_playwright import render_report_pdf_via_playwright
 from backend.ai_agents.report_ai_agent import generate_daily_report_sections
 from backend.celery_task.daily_report_task import generate_daily_report
@@ -67,6 +69,11 @@ class ReportService:
             return datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
             raise ValueError("Invalid date")
+
+    async def _get_user_locale(self, user_id: int) -> str:
+        user = await UserRepository(self.repository.db).get_by_id(user_id)
+        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+        return resolve_locale(preferences)
 
     # =================
     # FETCH REPORTS
@@ -277,6 +284,7 @@ class ReportService:
         return {key: value for key, value in preview.items() if value is not None}
 
     async def get_latest_report(self, user_id: int, table_name: str, symbol: Optional[str] = None, format_type: Optional[str] = None) -> Dict[str, Any]:
+        locale = await self._get_user_locale(user_id)
         row = await self.repository.get_latest_report(user_id, table_name, symbol=symbol)
         if not row:
             if table_name == "daily_reports":
@@ -297,13 +305,14 @@ class ReportService:
 
         # Format for mobile if requested
         if format_type == "mobile":
-            return self.format_report_for_mobile(row)
+            return await localize_report_payload(self.format_report_for_mobile(row), locale)
 
         if table_name != "daily_reports":
-            return {"_status": "ready", **row}
-        return row
+            return await localize_report_payload({"_status": "ready", **row}, locale)
+        return await localize_report_payload(row, locale)
 
     async def get_report_by_date(self, user_id: int, table_name: str, date_str: str, format_type: Optional[str] = None) -> Dict[str, Any]:
+        locale = await self._get_user_locale(user_id)
         parsed_date = self._parse_date(date_str)
         row = await self.repository.get_report_by_date(user_id, table_name, parsed_date)
         if not row:
@@ -321,9 +330,9 @@ class ReportService:
 
         # Format for mobile if requested
         if format_type == "mobile":
-            return self.format_report_for_mobile(row)
+            return await localize_report_payload(self.format_report_for_mobile(row), locale)
 
-        return row
+        return await localize_report_payload(row, locale)
 
     async def get_report_history(self, user_id: int, table_name: str) -> List[str]:
         return await self.repository.get_report_history(user_id, table_name)
@@ -333,9 +342,10 @@ class ReportService:
     # =================
 
     async def preview_daily_report(self, user_id: int) -> Dict[str, Any]:
+        locale = await self._get_user_locale(user_id)
         cached = self._get_cached_daily_preview(user_id)
         if cached is not None:
-            return cached
+            return await localize_report_payload(cached, locale)
         latest_report = None
         if hasattr(self.repository, "get_latest_report"):
             latest_report = await self.repository.get_latest_report(user_id, "daily_reports")
@@ -349,7 +359,7 @@ class ReportService:
                 "source": "latest_daily_report",
             }
             self._store_cached_daily_preview(user_id, response)
-            return response
+            return await localize_report_payload(response, locale)
         try:
             with ai_usage_context(
                 user_id=user_id,
@@ -379,7 +389,7 @@ class ReportService:
             "source": "generated_preview",
         }
         self._store_cached_daily_preview(user_id, response)
-        return response
+        return await localize_report_payload(response, locale)
 
     async def generate_report(self, user_id: int, period: str) -> Dict[str, Any]:
         if period == "daily" and hasattr(self.repository, "get_latest_report"):

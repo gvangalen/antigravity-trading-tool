@@ -42,6 +42,7 @@ from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.finn_product_analytics_service import finn_product_analytics
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.ai_gateway import AiGateway
+from backend.services.locale_service import localize_finn_payload, resolve_locale
 from backend.services.trader_profile_service import (
     build_trader_profile_context,
     build_trader_profile_summary,
@@ -98,6 +99,7 @@ async def _enrich_with_trader_profile(
     user = await UserRepository(db).get_by_id(user_id)
     preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
     context_payload.update(build_trader_profile_context(preferences, request_context=context_payload, query=query))
+    context_payload["locale"] = resolve_locale(preferences, context_payload)
     return context_payload
 
 
@@ -648,6 +650,7 @@ async def _finalize_finn_response(
     response = finn._build_response_analysis_metadata(response, context_payload, route_source=route_source)
     response = _attach_trader_profile_metadata(response, context_payload)
     response = _normalize_finn_response_contract(response)
+    response = await localize_finn_payload(response, (context_payload or {}).get("locale") or "nl")
     _redact_assistant_reasoning(response)
     await finn.issue_response_actions(user_id, response)
     if persist_state:
@@ -750,6 +753,7 @@ async def _prepare_finn_envelope(
     envelope = finn._build_response_analysis_metadata(envelope, context_payload, route_source=route_source)
     envelope = _attach_trader_profile_metadata(envelope, context_payload)
     envelope = _normalize_finn_response_contract(envelope)
+    envelope = await localize_finn_payload(envelope, (context_payload or {}).get("locale") or "nl")
     _redact_assistant_reasoning(envelope)
     await finn.issue_response_actions(user_id, envelope)
     if persist_state:
