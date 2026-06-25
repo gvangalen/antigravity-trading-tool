@@ -299,6 +299,7 @@ function WatchlistItem({ symbol, isActive, onSelect, onRemove }) {
 }
 
 function WatchlistSidebar({ onNavigate, pathname }) {
+  const { t } = require("@/app/providers/I18nProvider").useTranslation();
   const router = require("next/navigation").useRouter();
   const { watchlist, remove, loading } = useWatchlist();
   const { selectedAsset: activeSymbol, setSelectedAsset } = useAsset();
@@ -309,7 +310,7 @@ function WatchlistSidebar({ onNavigate, pathname }) {
     <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80">
       <p className="px-5 text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-3 flex items-center gap-2">
         <Star size={10} className="text-amber-400 fill-amber-400 animate-pulse" />
-        Marktcontext
+        {t?.nav?.marketContext || "Market context"}
       </p>
       {loading ? (
         <div className="space-y-2.5 px-1.5">
@@ -322,10 +323,11 @@ function WatchlistSidebar({ onNavigate, pathname }) {
         <div className="px-1.5">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 px-4 py-4">
             <p className="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">
-              Nog geen watchlist
+              {t?.nav?.watchlistEmptyTitle || "No watchlist yet"}
             </p>
             <p className="mt-2 text-[11px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
-              Voeg assets toe via de zoekbalk of laat Finn een asset aan je watchlist toevoegen. Dan verschijnt je marktcontext hier.
+              {t?.nav?.watchlistEmptyBody ||
+                "Add assets through the search bar or let Finn add one to your watchlist. Your market context will appear here."}
             </p>
           </div>
         </div>
@@ -352,18 +354,30 @@ function WatchlistSidebar({ onNavigate, pathname }) {
                 }}
                 onRemove={() => {
                   openConfirm({
-                    title: "Asset verwijderen?",
-                    context: `${symbol} verdwijnt uit je actieve watchlist.`,
-                    impact: "De asset blijft bestaan, maar verdwijnt uit je huidige tracking en snelle context-switches.",
-                    safety: "Dit start geen orders of datawijzigingen. Alleen je persoonlijke watchlist verandert.",
-                    consequence: "Na bevestigen vernieuwt je watchlist en focust Finn op je overgebleven assets.",
+                    title: t?.nav?.watchlistRemoveTitle || "Remove asset?",
+                    context:
+                      t?.nav?.watchlistRemoveContext?.replace("{symbol}", symbol) ||
+                      `${symbol} will be removed from your active watchlist.`,
+                    impact:
+                      t?.nav?.watchlistRemoveImpact ||
+                      "The asset stays available, but disappears from your current tracking and quick context switches.",
+                    safety:
+                      t?.nav?.watchlistRemoveSafety ||
+                      "This does not trigger orders or data changes. Only your personal watchlist changes.",
+                    consequence:
+                      t?.nav?.watchlistRemoveConsequence ||
+                      "After confirming, your watchlist refreshes and Finn focuses on your remaining assets.",
                     tone: "danger",
-                    confirmText: "Verwijder",
-                    cancelText: "Annuleer",
+                    confirmText: t?.common?.delete || "Delete",
+                    cancelText: t?.common?.cancel || "Cancel",
                     icon: <AlertTriangle size={20} />,
                     onConfirm: async () => {
                       await remove(symbol);
-                      showSnackbar(`${symbol} verwijderd van watchlist`, "success");
+                      showSnackbar(
+                        t?.nav?.watchlistRemoveSuccess?.replace("{symbol}", symbol) ||
+                          `${symbol} removed from watchlist`,
+                        "success"
+                      );
                     }
                   });
                 }}

@@ -36,7 +36,16 @@
     "admin_ai": "Admin AI",
     "users": "Users",
     "logs": "System Logs",
-    "command_center": "Command Center"
+    "command_center": "Command Center",
+    "marketContext": "Market context",
+    "watchlistEmptyTitle": "No watchlist yet",
+    "watchlistEmptyBody": "Add assets through the search bar or let Finn add one to your watchlist. Your market context will appear here.",
+    "watchlistRemoveTitle": "Remove asset?",
+    "watchlistRemoveContext": "{symbol} will be removed from your active watchlist.",
+    "watchlistRemoveImpact": "The asset stays available, but disappears from your current tracking and quick context switches.",
+    "watchlistRemoveSafety": "This does not trigger orders or data changes. Only your personal watchlist changes.",
+    "watchlistRemoveConsequence": "After confirming, your watchlist refreshes and Finn focuses on your remaining assets.",
+    "watchlistRemoveSuccess": "{symbol} removed from watchlist"
   },
   "dashboard": {
     "title": "Intelligence",
@@ -276,7 +285,12 @@
       "saveSuccess": "Trading profile saved",
       "styleAndGoal": "Style & goal",
       "finnContext": "Context for Finn",
-      "helper": "Update this profile whenever your style changes. That keeps Finn relevant and reduces signals that do not fit how you trade."
+      "helper": "Update this profile whenever your style changes. That keeps Finn relevant and reduces signals that do not fit how you trade.",
+      "adminTitle": "Open AI admin",
+      "adminDescription": "System settings for AI and monitoring",
+      "logoutTitle": "Sign out safely",
+      "logoutDescription": "End your current session",
+      "logoutSuccess": "You have been signed out safely ✔"
     },
     "banner": {
       "completeLabel": "Step completed",

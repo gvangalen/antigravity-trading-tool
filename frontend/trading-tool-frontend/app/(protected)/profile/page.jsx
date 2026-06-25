@@ -82,7 +82,7 @@ export default function ProfilePage() {
   const handleLogout = async () => {
     setLoadingLogout(true);
     await logout();
-    showSnackbar("Je bent veilig uitgelogd ✔", "success");
+    showSnackbar(t?.traderProfile?.profilePage?.logoutSuccess || "You have been signed out safely ✔", "success");
     router.push("/login");
   };
 
@@ -654,8 +654,12 @@ export default function ProfilePage() {
               <Brain size={20} />
             </div>
             <div>
-              <div className="text-sm font-black text-foreground tracking-tight group-hover:text-blue-600 transition-colors">Open AI-beheer</div>
-              <div className="text-[10px] font-bold text-dim uppercase tracking-widest">Systeeminstellingen voor AI en monitoring</div>
+              <div className="text-sm font-black text-foreground tracking-tight group-hover:text-blue-600 transition-colors">
+                {t?.traderProfile?.profilePage?.adminTitle || "Open AI admin"}
+              </div>
+              <div className="text-[10px] font-bold text-dim uppercase tracking-widest">
+                {t?.traderProfile?.profilePage?.adminDescription || "System settings for AI and monitoring"}
+              </div>
             </div>
           </Link>
 
@@ -668,8 +672,12 @@ export default function ProfilePage() {
               {loadingLogout ? <Loader2 size={20} className="animate-spin" /> : <LogOut size={20} />}
             </div>
             <div>
-              <div className="text-sm font-black text-foreground tracking-tight group-hover:text-rose-600 transition-colors">Veilig uitloggen</div>
-              <div className="text-[10px] font-bold text-dim uppercase tracking-widest">Sluit je huidige sessie af</div>
+              <div className="text-sm font-black text-foreground tracking-tight group-hover:text-rose-600 transition-colors">
+                {t?.traderProfile?.profilePage?.logoutTitle || "Sign out safely"}
+              </div>
+              <div className="text-[10px] font-bold text-dim uppercase tracking-widest">
+                {t?.traderProfile?.profilePage?.logoutDescription || "End your current session"}
+              </div>
             </div>
           </button>
         </div>
