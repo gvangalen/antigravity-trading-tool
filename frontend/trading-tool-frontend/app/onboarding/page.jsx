@@ -333,12 +333,12 @@ export default function OnboardingPage() {
                   {step.description}
                 </p>
                 <p className="mb-8 text-[13px] font-semibold leading-relaxed text-slate-600">
-                  <span className="text-blue-600">Finn helpt:</span> {step.finnHelp}
+                  <span className="text-blue-600">{copy.finnHelpsLabel || "Finn helps:"}</span> {step.finnHelp}
                 </p>
 
                 <div className="mb-8 flex flex-wrap gap-2">
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">
-                    Ontgrendelt
+                    {copy.unlocksLabel || "Then you unlock"}
                   </span>
                   <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700">
                     {step.unlocks}
@@ -349,12 +349,16 @@ export default function OnboardingPage() {
                   {isDone ? (
                     <div className="flex items-center gap-2 text-emerald-500">
                       <CheckCircle2 size={16} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Stap afgerond</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest">
+                        {copy.stepCompleted || "Step completed"}
+                      </span>
                     </div>
                   ) : isUnlocked ? (
                     <div className="rounded-xl bg-blue-600 px-5 py-3 text-white shadow-md transition group-hover:bg-blue-700">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest">Open stap</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">
+                          {copy.openStep || "Open step"}
+                        </span>
                         <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
                       </div>
                     </div>
@@ -362,7 +366,11 @@ export default function OnboardingPage() {
                     <div className="flex items-center gap-2 text-slate-500">
                       <Lock size={14} />
                       <span className="text-[10px] font-black uppercase tracking-widest leading-none">
-                        Rond eerst {steps[idx - 1]?.title || "de vorige stap"} af
+                        {(copy.completePreviousPrefix || "Complete")
+                          + " "
+                          + (steps[idx - 1]?.title || copy.previousStepFallback || "the previous step")
+                          + " "
+                          + (copy.completePreviousSuffix || "first")}
                       </span>
                     </div>
                   )}
