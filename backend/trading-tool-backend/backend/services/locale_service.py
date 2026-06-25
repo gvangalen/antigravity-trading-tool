@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Optional
 
@@ -7,6 +8,56 @@ from backend.utils.openai_client import ask_gpt_text_async
 
 
 _translation_cache: Dict[str, str] = {}
+
+_DUTCH_TO_ENGLISH_REPLACEMENTS = [
+    ("Voor de komende 24 tot 48 uur ligt de focus op", "For the next 24 to 48 hours, the focus is on"),
+    ("Het dagrapport voor", "The daily report for"),
+    ("opent in", "opens in"),
+    ("met een marktpostuur dat nu kwetsbaar aanvoelt bij een 24-uurs verandering van", "with a market posture that currently feels fragile on a 24-hour move of"),
+    ("Ten opzichte van gisteren verschoof de market score met", "Versus yesterday, the market score shifted by"),
+    ("Binnen de watchlist trekt", "Within the watchlist,"),
+    ("nu de meeste aandacht", "currently draws the most attention"),
+    ("Er is geen harde regimebreuk zichtbaar", "There is no hard regime break visible"),
+    ("waardoor bevestiging belangrijker blijft dan anticiperen", "so confirmation remains more important than anticipation"),
+    ("De best bruikbare setup is nu", "The most usable setup right now is"),
+    ("maar alleen zolang de interne bevestiging in de watchlist overeind blijft", "but only as long as the internal confirmation in the watchlist holds up"),
+    ("Macro blijft vandaag kwetsbaar en ondersteunt daarmee", "Macro remains fragile today and therefore supports"),
+    ("zonder al een nieuw risicoklimaat af te dwingen", "without already forcing a new risk climate"),
+    ("Binnen de macro-laag springt", "Within the macro layer,"),
+    ("eruit", "stands out"),
+    ("Dat betekent dat", "That means"),
+    ("de speelruimte voor agressie nog steeds afhangt van bevestiging op markt- en technieklaag, niet alleen van een macro-meewind", "the room for aggression still depends on confirmation from the market and technical layers, not only on macro tailwind"),
+    ("Zolang macro niet duidelijk versnelt of verslechtert", "As long as macro does not clearly accelerate or deteriorate"),
+    ("is de juiste lezing dat de markt vooral moet bewijzen dat de recente beweging meer is dan tijdelijke opluchting", "the correct read is that the market still has to prove the recent move is more than temporary relief"),
+    ("Voor BTC: ik zou vandaag wachten;", "For BTC: I would wait today;"),
+    ("je setup is nog niet actief volgens je eigen ranges", "your setup is not active yet according to your own ranges"),
+    ("Setup:", "Setup:"),
+    ("match", "match"),
+    ("Blokkeert nu:", "Blocked now:"),
+    ("Strategie vandaag:", "Strategy today:"),
+    ("geen actieve DCA-strategie gevonden", "no active DCA strategy found"),
+    ("Bot vandaag:", "Bot today:"),
+    ("beslissing(en)", "decision(s)"),
+    ("Data/indicator aandacht:", "Data/indicator focus:"),
+    ("zwakke indicatoren", "weak indicators"),
+    ("Agent-verdicts:", "Agent verdicts:"),
+    ("Macro blokkeert: score", "Macro blocks: score"),
+    ("Technical blokkeert: score", "Technical blocks: score"),
+    ("buiten range", "outside range"),
+    ("Setup blokkeert volgens je eigen ranges", "The setup is blocked by your own ranges"),
+    ("Geen actieve strategie voor vandaag gevonden", "No active strategy found for today"),
+    ("bot-decision(s) staan klaar", "bot decision(s) are ready"),
+    ("eerst Risk Agent volgen", "follow the Risk Agent first"),
+    ("Veilige volgende stap:", "Safe next step:"),
+    ("Niet forceren: wacht tot de blocker-scores binnen je ranges vallen", "Do not force it: wait until the blocker scores move back inside your ranges"),
+    ("Je kunt macro uitbreiden met", "You can expand macro with"),
+    ("Controleer of de hoge weging bewust is voor technical", "Check whether the high weighting is intentional for technical"),
+    ("Ik voer niets automatisch uit vanuit deze check; dit is advies-only.", "I am not executing anything automatically from this check; this is advice only."),
+    ("moet binnen", "must be within"),
+    ("vallen", "be"),
+    ("vandaag", "today"),
+    ("geen", "no"),
+]
 
 _FINN_TEXT_KEYS = {
     "response",
@@ -57,6 +108,19 @@ def response_language_name(locale: str) -> str:
     return "English" if resolve_locale({"locale": locale}) == "en" else "Dutch"
 
 
+def _rule_based_translate_to_english(text: str) -> str:
+    translated = text
+    for source, target in _DUTCH_TO_ENGLISH_REPLACEMENTS:
+        translated = translated.replace(source, target)
+
+    translated = re.sub(r"\bscore ([0-9.]+) valt buiten je range\b", r"score \1 falls outside your range", translated)
+    translated = re.sub(r"\bmoet binnen \[", "must be within [", translated)
+    translated = re.sub(r"\bGeen actieve strategie\b", "No active strategy", translated)
+    translated = re.sub(r"\bgeen actieve\b", "no active", translated)
+    translated = re.sub(r"\bgeen actieve .*? gevonden\b", lambda m: m.group(0).replace("geen actieve", "no active").replace("gevonden", "found"), translated)
+    return translated
+
+
 async def translate_text_if_needed(text: Any, target_locale: str) -> Any:
     if not isinstance(text, str):
         return text
@@ -68,6 +132,11 @@ async def translate_text_if_needed(text: Any, target_locale: str) -> Any:
     cached = _translation_cache.get(cache_key)
     if cached:
         return cached
+
+    rule_based = _rule_based_translate_to_english(stripped)
+    if rule_based != stripped and any(token in rule_based for token in ("The ", "For ", "Blocked", "Strategy", "Macro", "Safe next step", "Within the")):
+        _translation_cache[cache_key] = rule_based
+        return rule_based
 
     prompt = (
         "Translate the following Tradamind/Finn trading product text from Dutch to natural English.\n"
@@ -90,7 +159,7 @@ async def translate_text_if_needed(text: Any, target_locale: str) -> Any:
         return text
     translated = translated.strip()
     if not translated or translated in {"AI quota bereikt", "Gebruiker niet gevonden."}:
-        return text
+        return rule_based if rule_based != stripped else text
 
     _translation_cache[cache_key] = translated
     return translated

@@ -35,6 +35,22 @@ def test_localize_finn_payload_translates_user_visible_fields(monkeypatch):
     assert localized["response"] == "For BTC: I would wait today."
 
 
+def test_translate_text_if_needed_uses_rule_based_fallback_when_ai_is_unavailable(monkeypatch):
+    async def fake_translate(*, prompt, system_role, max_tokens):
+        return "AI quota bereikt"
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", fake_translate)
+
+    translated = asyncio.run(
+        locale_service.translate_text_if_needed(
+            "Voor BTC: ik zou vandaag wachten; je setup is nog niet actief volgens je eigen ranges.",
+            "en",
+        )
+    )
+
+    assert translated.startswith("For BTC: I would wait today;")
+
+
 def test_localize_report_payload_translates_top_level_and_meta_json(monkeypatch):
     async def fake_translate(*, prompt, system_role, max_tokens):
         if "Dagrapport opent voorzichtig." in prompt:
