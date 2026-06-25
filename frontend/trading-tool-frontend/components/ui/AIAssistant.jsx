@@ -24,6 +24,7 @@ import AddBotForm from "@/components/bot/AddBotForm";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 function AIAssistantContent({ isOpen, setIsOpen }) {
   const pathname = usePathname();
@@ -32,6 +33,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   const router = useRouter();
   const watchlist = useWatchlist();
   const { openConfirm, showSnackbar } = useModal();
+  const { locale } = useTranslation();
   const { events, loading: eventsLoading, archiveEvent } = useIntelligenceEvents();
   
   const [query, setQuery] = useState("");
@@ -58,6 +60,40 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   const activeStreamIdRef = useRef(null);
   const profileTelemetryKeyRef = useRef("");
   const [showReasoning, setShowReasoning] = useState(false);
+
+  const uiText = locale === "en" ? {
+    activeBriefing: "Active briefing",
+    defensivePosture: "Defensive posture",
+    alignedTo: "Aligned to",
+    workspaceOverview: "Workspace overview",
+    loadingWorkspace: "Finn is loading your workspace",
+    todayFirst: "Today first",
+    why: "Why",
+    noActions: "No direct actions are open right now. As soon as something needs attention, Finn will place it here first.",
+    noReviews: "No extra reviews right now. Anything that needs review already appears in Today first.",
+    noPerformance: "No day-status or discipline signal is available yet.",
+    noHistory: "No recent Finn history yet. Once you complete, postpone, or review actions with Finn, it will appear here.",
+    retry: "Retry",
+    inputPlaceholder: "Ask Finn for context, risk, or the next step...",
+    setupWizard: "Setup wizard",
+    startGuide: "Start guide",
+  } : {
+    activeBriefing: "Actieve briefing",
+    defensivePosture: "Defensieve houding",
+    alignedTo: "Afgestemd op",
+    workspaceOverview: "Werkoverzicht",
+    loadingWorkspace: "Finn haalt je werkoverzicht op",
+    todayFirst: "Vandaag eerst",
+    why: "Waarom",
+    noActions: "Geen directe acties open. Zodra er weer iets nu aandacht vraagt, zet Finn het hier bovenaan.",
+    noReviews: "Geen extra reviews op dit moment. Alles wat nu jouw review vraagt staat al in Vandaag.",
+    noPerformance: "Nog geen dagstatus of discipline-signaal om te tonen.",
+    noHistory: "Nog geen recente Finn-historie. Zodra je dingen afrondt, uitstelt of met Finn terugkijkt, verschijnt dat hier.",
+    retry: "Opnieuw",
+    inputPlaceholder: "Vraag Finn om context, risico of een volgende stap...",
+    setupWizard: "Setupwizard",
+    startGuide: "Startgids",
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -105,18 +141,45 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   }, [isOpen, pathname, globalSymbol]);
 
   const getMetricTitle = (metric) => {
-    const titles = {
-      transition_risk: "Transition Risk Analysis",
-      setup_quality: "Setup Quality Assessment",
-      market_pressure: "Market Pressure Analysis",
-      structural_cycle: "Structural Cycle Phase",
-      position_size: "Position Size Telemetry",
-      trend_strength: "Trend Strength Evaluation"
-    };
-    return titles[metric] || "Contextual Intelligence";
+    const titles = locale === "en"
+      ? {
+          transition_risk: "Transition risk analysis",
+          setup_quality: "Setup quality assessment",
+          market_pressure: "Market pressure analysis",
+          structural_cycle: "Structural cycle phase",
+          position_size: "Position size telemetry",
+          trend_strength: "Trend strength evaluation",
+        }
+      : {
+          transition_risk: "Transitierisico-analyse",
+          setup_quality: "Setupkwaliteitscheck",
+          market_pressure: "Marktdrukanalyse",
+          structural_cycle: "Structurele cyclusfase",
+          position_size: "Positiegrootte-telemetrie",
+          trend_strength: "Trendsterkte-evaluatie",
+        };
+    return titles[metric] || (locale === "en" ? "Contextual intelligence" : "Contextuele intelligentie");
   };
 
   const getMetricAnalysisText = (metric, symbol = "BTC", tf = "1W") => {
+    if (locale === "en") {
+      switch (metric) {
+        case "transition_risk":
+          return `FINN detects rising regime instability for ${symbol} through weaker trend strength and higher volatility. New aggressive entries are not recommended on the ${tf} timeframe right now.`;
+        case "setup_quality":
+          return `The setup quality score reflects solid confluence and favorable risk-reward conditions for ${symbol}. It currently meets the core institutional entry requirements.`;
+        case "market_pressure":
+          return `Sell pressure is rising in the ${symbol} order books while volume fades on upward moves. FINN recommends tighter stop-loss levels on ${tf}.`;
+        case "structural_cycle":
+          return `${symbol} is in an early recovery phase structurally. Accumulation around key support levels is backed by stable capital inflow.`;
+        case "position_size":
+          return `The recommended position size for ${symbol} is currently defensive at 50%. Reduce active exposure when volatility rises to protect capital.`;
+        case "trend_strength":
+          return `Trend strength shows weaker short-term momentum for ${symbol}. Expect more consolidation before a clear breakout is confirmed.`;
+        default:
+          return `FINN is currently analyzing the live data streams for ${symbol} (${tf}). Background models and risk parameters are running within normal thresholds.`;
+      }
+    }
     switch (metric) {
       case "transition_risk":
         return `FINN detecteert toenemende regime-instabiliteit door afnemende trend strength en hogere volatiliteit voor ${symbol}. Nieuwe agressieve entries worden momenteel niet aanbevolen op het ${tf} timeframe.`;
@@ -193,29 +256,53 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     profileRisk,
   ].some((list) => Array.isArray(list) && list.length > 0);
 
-  const traderTypeLabelMap = {
-    investor: "Investeerder",
-    dca_investor: "DCA-investeerder",
-    swing_trader: "Swing trader",
-    day_trader: "Day trader",
-    scalper: "Scalper",
-    hybrid: "Hybride",
-  };
+  const traderTypeLabelMap = locale === "en"
+    ? {
+        investor: "Investor",
+        dca_investor: "DCA investor",
+        swing_trader: "Swing trader",
+        day_trader: "Day trader",
+        scalper: "Scalper",
+        hybrid: "Hybrid",
+      }
+    : {
+        investor: "Investeerder",
+        dca_investor: "DCA-investeerder",
+        swing_trader: "Swing trader",
+        day_trader: "Day trader",
+        scalper: "Scalper",
+        hybrid: "Hybride",
+      };
 
-  const riskLabelMap = {
-    conservative: "Conservatief risico",
-    balanced: "Gematigd risico",
-    aggressive: "Agressiever risico",
-  };
+  const riskLabelMap = locale === "en"
+    ? {
+        conservative: "Conservative risk",
+        balanced: "Balanced risk",
+        aggressive: "Higher risk",
+      }
+    : {
+        conservative: "Conservatief risico",
+        balanced: "Gematigd risico",
+        aggressive: "Agressiever risico",
+      };
 
-  const assetFocusLabelMap = {
-    bitcoin: "BTC-focus",
-    crypto_general: "Crypto-breed",
-    stocks: "Aandelen",
-    etfs: "ETF's",
-    forex: "Forex",
-    commodities: "Grondstoffen",
-  };
+  const assetFocusLabelMap = locale === "en"
+    ? {
+        bitcoin: "BTC focus",
+        crypto_general: "Broad crypto",
+        stocks: "Stocks",
+        etfs: "ETFs",
+        forex: "Forex",
+        commodities: "Commodities",
+      }
+    : {
+        bitcoin: "BTC-focus",
+        crypto_general: "Crypto-breed",
+        stocks: "Aandelen",
+        etfs: "ETF's",
+        forex: "Forex",
+        commodities: "Grondstoffen",
+      };
 
   const normalizeListValue = (value) => {
     if (Array.isArray(value)) return value.filter(Boolean);
@@ -239,13 +326,21 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   };
 
   const profileSummaryLabel = buildTraderProfileUiSummary();
-  const behaviorFlagLabelMap = {
-    fomo: "FOMO",
-    overtrades: "Overtrading",
-    leverage_seeking: "Leverage-neiging",
-    holds_losers_too_long: "Verliezers te lang laten lopen",
-    takes_profit_too_early: "Winst te vroeg nemen",
-  };
+  const behaviorFlagLabelMap = locale === "en"
+    ? {
+        fomo: "FOMO",
+        overtrades: "Overtrading",
+        leverage_seeking: "Leverage seeking",
+        holds_losers_too_long: "Holding losers too long",
+        takes_profit_too_early: "Taking profit too early",
+      }
+    : {
+        fomo: "FOMO",
+        overtrades: "Overtrading",
+        leverage_seeking: "Leverage-neiging",
+        holds_losers_too_long: "Verliezers te lang laten lopen",
+        takes_profit_too_early: "Winst te vroeg nemen",
+      };
 
   const humanizeBehaviorFlagLabel = (flag, fallbackLabel = "") =>
     fallbackLabel || behaviorFlagLabelMap[String(flag || "").trim()] || String(flag || "").replace(/_/g, " ");
@@ -305,47 +400,69 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const nowHour = new Date().getHours();
 
     const greetingLine =
-      `${nowHour < 12 ? "Goedemorgen" : nowHour < 18 ? "Goedemiddag" : "Goedenavond"} ${greetingName}.`;
+      `${locale === "en"
+        ? nowHour < 12 ? "Good morning" : nowHour < 18 ? "Good afternoon" : "Good evening"
+        : nowHour < 12 ? "Goedemorgen" : nowHour < 18 ? "Goedemiddag" : "Goedenavond"} ${greetingName}.`;
 
-    let marketLine = `${symbol} vraagt vandaag extra geduld. Nieuwe posities forceren wordt vandaag afgeraden.`;
+    let marketLine = locale === "en"
+      ? `${symbol} needs extra patience today. Forcing new positions is not recommended.`
+      : `${symbol} vraagt vandaag extra geduld. Nieuwe posities forceren wordt vandaag afgeraden.`;
     if (isInvestorLike) {
       marketLine = cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")
-        ? `Voor jouw langere horizon zit ${symbol} in een correctiefase, maar je plan hoeft niet om. Nieuwe posities forceren wordt vandaag afgeraden.`
-        : `Voor jouw langere horizon is dit vooral een moment om plantrouw te blijven. Nieuwe posities forceren is vandaag niet nodig.`;
+        ? (locale === "en"
+            ? `For your longer horizon, ${symbol} is in a corrective phase, but your plan does not need to change. Forcing new positions is not recommended today.`
+            : `Voor jouw langere horizon zit ${symbol} in een correctiefase, maar je plan hoeft niet om. Nieuwe posities forceren wordt vandaag afgeraden.`)
+        : (locale === "en"
+            ? `For your longer horizon, this is mainly a moment to stay loyal to your plan. There is no need to force new positions today.`
+            : `Voor jouw langere horizon is dit vooral een moment om plantrouw te blijven. Nieuwe posities forceren is vandaag niet nodig.`);
     } else if (isSwingLike) {
       marketLine = cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")
-        ? `Voor jouw swing-profiel zit ${symbol} in een correctiefase. Nieuwe posities forceren wordt vandaag afgeraden.`
-        : `Voor jouw swing-profiel is timing nu belangrijker dan snelheid. Wacht liever op een schonere setup.`;
+        ? (locale === "en"
+            ? `For your swing profile, ${symbol} is in a corrective phase. Forcing new positions is not recommended today.`
+            : `Voor jouw swing-profiel zit ${symbol} in een correctiefase. Nieuwe posities forceren wordt vandaag afgeraden.`)
+        : (locale === "en"
+            ? `For your swing profile, timing matters more than speed right now. Wait for a cleaner setup.`
+            : `Voor jouw swing-profiel is timing nu belangrijker dan snelheid. Wacht liever op een schonere setup.`);
     } else if (isIntradayLike) {
       marketLine = cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")
-        ? `Voor jouw kortere handelsstijl is ${symbol} nu te fragiel om nieuwe posities te forceren.`
-        : `Voor jouw kortere handelsstijl is timing nu belangrijker dan overtuiging. Neem alleen schone entries.`;
+        ? (locale === "en"
+            ? `For your shorter trading style, ${symbol} is too fragile right now to force new positions.`
+            : `Voor jouw kortere handelsstijl is ${symbol} nu te fragiel om nieuwe posities te forceren.`)
+        : (locale === "en"
+            ? `For your shorter trading style, timing matters more than conviction right now. Only take clean entries.`
+            : `Voor jouw kortere handelsstijl is timing nu belangrijker dan overtuiging. Neem alleen schone entries.`);
     } else if (cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")) {
-      marketLine = `${symbol} zit momenteel in een correctiefase. Nieuwe posities forceren wordt vandaag afgeraden.`;
+      marketLine = locale === "en"
+        ? `${symbol} is currently in a corrective phase. Forcing new positions is not recommended today.`
+        : `${symbol} zit momenteel in een correctiefase. Nieuwe posities forceren wordt vandaag afgeraden.`;
     } else if (cycleLabel.includes("recovery") || postureLabel.includes("stable")) {
-      marketLine = `${symbol} oogt vandaag rustiger. Nieuwe posities kun je pas overwegen als je reviewpad schoon is.`;
+      marketLine = locale === "en"
+        ? `${symbol} looks calmer today. Only consider new positions once your review path is clean.`
+        : `${symbol} oogt vandaag rustiger. Nieuwe posities kun je pas overwegen als je reviewpad schoon is.`;
     } else if (cycleLabel.includes("distribution")) {
-      marketLine = `${symbol} zit in een twijfelzone. Nieuwe posities forceren wordt vandaag afgeraden.`;
+      marketLine = locale === "en"
+        ? `${symbol} is in a doubt zone. Forcing new positions is not recommended today.`
+        : `${symbol} zit in een twijfelzone. Nieuwe posities forceren wordt vandaag afgeraden.`;
     }
 
     const reviewCount = Math.max(openReviews || 0, isReviewCandidate(primaryItem) ? 1 : 0);
-    let reviewLine = "Er staat nu geen review op aandacht.";
+    let reviewLine = locale === "en" ? "No review needs attention right now." : "Er staat nu geen review op aandacht.";
     if (reviewCount === 1) {
-      reviewLine = "Er wacht 1 review op aandacht.";
+      reviewLine = locale === "en" ? "1 review needs attention." : "Er wacht 1 review op aandacht.";
     } else if (reviewCount > 1) {
-      reviewLine = `Er wachten ${reviewCount} reviews op aandacht.`;
+      reviewLine = locale === "en" ? `${reviewCount} reviews need attention.` : `Er wachten ${reviewCount} reviews op aandacht.`;
     } else if (blockedCount > 0) {
       reviewLine = blockedCount === 1
-        ? "Er staat 1 blokkerend punt open."
-        : `Er staan ${blockedCount} blokkerende punten open.`;
+        ? (locale === "en" ? "1 blocking issue is open." : "Er staat 1 blokkerend punt open.")
+        : (locale === "en" ? `${blockedCount} blocking issues are open.` : `Er staan ${blockedCount} blokkerende punten open.`);
     }
 
     const beginTarget = primaryItem
       ? humanizeMissionTitle(primaryItem).replace(/^Review\s+/i, "Review ")
       : blockedCount > 0
-        ? "het blokkerende punt"
-        : "je eerstvolgende veilige stap";
-    const beginLine = `Begin met: ${beginTarget}.`;
+        ? (locale === "en" ? "the blocking issue" : "het blokkerende punt")
+        : (locale === "en" ? "your next safe step" : "je eerstvolgende veilige stap");
+    const beginLine = locale === "en" ? `Start with: ${beginTarget}.` : `Begin met: ${beginTarget}.`;
 
     return [greetingLine, marketLine, reviewLine, beginLine].filter(Boolean).join("\n");
   };
@@ -4249,9 +4366,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <Shield size={12} className="text-blue-600" />
-                <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Actieve Briefing</span>
+                <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">{uiText.activeBriefing}</span>
               </div>
-            <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-200/50 dark:border-emerald-800/50">Defensieve houding</span>
+            <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-200/50 dark:border-emerald-800/50">{uiText.defensivePosture}</span>
           </div>
           {isOnboarding ? (
             <div className="p-4 bg-blue-600/5 dark:bg-blue-600/10 border-2 border-blue-600/20 rounded-2xl animate-in slide-in-from-right-4 duration-500">
@@ -4259,20 +4376,22 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                   <div className="p-1.5 bg-blue-600 rounded-lg shadow-lg shadow-blue-600/20">
                     <ListChecks size={14} className="text-white" />
                   </div>
-                  <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 tracking-widest uppercase">Startgids</span>
+                  <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 tracking-widest uppercase">{uiText.startGuide}</span>
                </div>
                <div className="space-y-3">
                   <p className="text-sm font-bold text-foreground dark:text-slate-100 leading-snug">
                     {/* 🎖️ CELEBRATION MODE */}
                     {stepStatus?.[`has_${pathname.split('/').pop()}`] ? (
-                      `Mooi. De ${pathname.split('/').pop()}-stroom draait nu stabiel. Ga terug naar het startoverzicht voor de volgende stap.`
+                      locale === "en"
+                        ? `Good. The ${pathname.split('/').pop()} flow is stable now. Go back to the start overview for the next step.`
+                        : `Mooi. De ${pathname.split('/').pop()}-stroom draait nu stabiel. Ga terug naar het startoverzicht voor de volgende stap.`
                     ) : (
-                      pathname.includes("market") ? "Marktdata is nodig om live prijsactie te volgen. Zoek BTC en voeg het toe aan je monitor." :
-                      pathname.includes("macro") ? "Macro-indicatoren helpen Finn liquiditeit, dollarsterkte en regime te wegen. Voeg bijvoorbeeld DXY toe aan je monitor." :
-                      pathname.includes("technical") ? "Technische signalen helpen Finn momentum en trend te beoordelen. Zoek bijvoorbeeld RSI en voeg het toe." :
-                      pathname.includes("setup") ? "Setups leggen je instap-, uitstap- en risicoregels vast. Klik op 'Nieuwe setup' om je eerste set regels te maken." :
-                      pathname.includes("strategy") ? "De strategielaag bouwt je uitvoeringsmodel. Klik op 'Strategie genereren' om je volgende stap klaar te zetten." :
-                      "Ik begeleid je stap voor stap totdat je werkplek klaarstaat. Daarna wordt je dashboard gevuld met live data en relevante Finn-context."
+                      pathname.includes("market") ? (locale === "en" ? "Market data is needed to follow live price action. Search for BTC and add it to your monitor." : "Marktdata is nodig om live prijsactie te volgen. Zoek BTC en voeg het toe aan je monitor.") :
+                      pathname.includes("macro") ? (locale === "en" ? "Macro indicators help Finn weigh liquidity, dollar strength, and regime. Add something like DXY to your monitor." : "Macro-indicatoren helpen Finn liquiditeit, dollarsterkte en regime te wegen. Voeg bijvoorbeeld DXY toe aan je monitor.") :
+                      pathname.includes("technical") ? (locale === "en" ? "Technical signals help Finn judge momentum and trend. Search for something like RSI and add it." : "Technische signalen helpen Finn momentum en trend te beoordelen. Zoek bijvoorbeeld RSI en voeg het toe.") :
+                      pathname.includes("setup") ? (locale === "en" ? "Setups define your entry, exit, and risk rules. Click 'New setup' to create your first rule set." : "Setups leggen je instap-, uitstap- en risicoregels vast. Klik op 'Nieuwe setup' om je eerste set regels te maken.") :
+                      pathname.includes("strategy") ? (locale === "en" ? "The strategy layer builds your execution model. Click 'Generate strategy' to prepare your next step." : "De strategielaag bouwt je uitvoeringsmodel. Klik op 'Strategie genereren' om je volgende stap klaar te zetten.") :
+                      (locale === "en" ? "I will guide you step by step until your workspace is ready. After that, your dashboard will fill with live data and relevant Finn context." : "Ik begeleid je stap voor stap totdat je werkplek klaarstaat. Daarna wordt je dashboard gevuld met live data en relevante Finn-context.")
                     )}
                   </p>
                </div>
@@ -4281,7 +4400,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             <div className="space-y-3">
               {profileSummaryLabel && (
                 <div className="rounded-full border border-blue-100 bg-blue-50/60 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300 inline-flex max-w-full">
-                  Afgestemd op: {profileSummaryLabel}
+                  {uiText.alignedTo}: {profileSummaryLabel}
                 </div>
               )}
               <div className="min-h-[52px]">
@@ -4313,7 +4432,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <Activity size={12} className="text-blue-600" />
-                <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Werkoverzicht</span>
+                <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">{uiText.workspaceOverview}</span>
               </div>
               <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
                 missionControl?.summary?.posture === "stable"
@@ -4328,7 +4447,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
               <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 px-3 py-3 space-y-2 animate-pulse">
                 <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
                   <Sparkles size={11} className="text-blue-500" />
-                  Finn haalt je werkoverzicht op
+                  {uiText.loadingWorkspace}
                 </div>
                 <div className="h-3 w-2/3 rounded-full bg-slate-200 dark:bg-slate-800" />
                 <div className="h-3 w-1/2 rounded-full bg-slate-200 dark:bg-slate-800" />
@@ -4339,13 +4458,13 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
               <div className="space-y-3">
                 <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 px-3 py-3 space-y-3">
                   <div>
-                    <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">Vandaag eerst</div>
+                    <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">{uiText.todayFirst}</div>
                     <p className="mt-1 text-[12px] font-black leading-snug text-slate-900 dark:text-slate-100">
                       {primaryCoachingItem ? humanizeMissionTitle(primaryCoachingItem) : (missionControl?.coaching_loop?.headline || "Kies eerst je eerstvolgende veilige stap.")}
                     </p>
                     {compactMissionReason && (
                       <div className="mt-2">
-                        <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Waarom</div>
+                        <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.why}</div>
                         <p className="mt-1 text-[10px] font-semibold leading-snug text-slate-600 dark:text-slate-300">
                           {compactMissionReason}
                         </p>
@@ -4410,7 +4529,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                       overlayMissionSections.todayItems.map((item) => renderMissionSectionCard(item, "today"))
                     ) : (
                       <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
-                        Geen directe acties open. Zodra er weer iets nu aandacht vraagt, zet Finn het hier bovenaan.
+                        {uiText.noActions}
                       </div>
                     )}
                   </div>
@@ -4427,7 +4546,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                       overlayMissionSections.reviewItems.map((item) => renderMissionSectionCard(item, "reviews"))
                     ) : (
                       <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
-                        Geen extra reviews op dit moment. Alles wat nu jouw review vraagt staat al in Vandaag.
+                        {uiText.noReviews}
                       </div>
                     )}
                   </div>
@@ -4488,7 +4607,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                       </div>
                     ) : (
                       <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
-                        Nog geen dagstatus of discipline-signaal om te tonen.
+                        {uiText.noPerformance}
                       </div>
                     )}
                   </div>
@@ -4504,7 +4623,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                     overlayMissionSections.historyItems.map(renderMissionHistoryEntry)
                   ) : (
                     <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
-                      Nog geen recente Finn-historie. Zodra je dingen afrondt, uitstelt of met Finn terugkijkt, verschijnt dat hier.
+                      {uiText.noHistory}
                     </div>
                   )}
                 </div>
@@ -4590,7 +4709,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                     onClick={() => handleChat(messages[i-1]?.text)} 
                     className="mt-2 text-[10px] font-bold uppercase tracking-widest underline hover:text-rose-900 dark:hover:text-rose-100"
                   >
-                    Retry
+                    {uiText.retry}
                   </button>
                 )}
               </div>
@@ -4662,7 +4781,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {pathname?.includes("/admin") && activeState && activeState.current_flow && activeState.current_flow !== "none" && progress && (
           <div className="mb-4 p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-2xl flex flex-col gap-2.5">
             <div className="flex items-center justify-between text-xs font-medium text-slate-700 dark:text-slate-300">
-              <span className="font-semibold">{progress.flowLabel === "Setup Creation" ? "Setup Wizard" : progress.flowLabel}</span>
+              <span className="font-semibold">{progress.flowLabel === "Setup Creation" ? uiText.setupWizard : progress.flowLabel}</span>
               <span className="text-slate-400 dark:text-slate-500">Stap {activeStep} van {progress.total}</span>
             </div>
             <div className="w-full h-1 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
@@ -4679,7 +4798,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleChat()}
-            placeholder="Vraag Finn om context, risico of een volgende stap..."
+            placeholder={uiText.inputPlaceholder}
             className="w-full pl-6 pr-14 py-4 bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-600/5 focus:bg-white dark:focus:bg-slate-800 focus:border-blue-600/20 transition-all outline-none text-sm text-foreground dark:text-slate-100"
           />
           <button 

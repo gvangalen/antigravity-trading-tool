@@ -67,6 +67,11 @@ ROLES = {
     }
 }
 
+def _response_language_name(preferences: dict) -> str:
+    locale = str((preferences or {}).get("locale") or "nl").lower()
+    return "English" if locale.startswith("en") else "Dutch"
+
+
 def get_role_prompt(role_key: str, preferences: dict, intent: str = "chat", user_name: str = "Handelaar") -> str:
     # Use V1 Coach for demo if role is coach
     effective_role = "coach_v1" if role_key == "coach" else role_key
@@ -78,7 +83,8 @@ def get_role_prompt(role_key: str, preferences: dict, intent: str = "chat", user
         "tone": preferences.get("tone", "balanced"),
         "detail_level": preferences.get("detail_level", "medium"),
         "coaching_style": preferences.get("coaching_style", "constructive"),
-        "user_name": user_name
+        "user_name": user_name,
+        "response_language": _response_language_name(preferences),
     }
     
     base_prompt = BASE_SYSTEM_PROMPT.format(**prefs)
@@ -88,6 +94,7 @@ def get_role_prompt(role_key: str, preferences: dict, intent: str = "chat", user
         base_prompt = (
             f"Je bent FINN, de Tradamind AI Assistant. Je taak is om een GECOMBINEERD INZICHT te geven aan {user_name}.\n"
             f"Gebruik een {prefs['tone']} toon en een {prefs['detail_level']} detailniveau.\n"
+            f"Reageer zichtbaar in {prefs['response_language']}.\n"
         )
     else:
         # CONVERSATIONAL RESPONSE SHAPER: Enforce rigid analytical structure ONLY for deep analytical intents
