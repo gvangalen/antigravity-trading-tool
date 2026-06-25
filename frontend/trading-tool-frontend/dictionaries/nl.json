@@ -111,6 +111,37 @@
       "login_required": "Log in om notificaties in te schakelen"
     }
   },
+  "auth": {
+    "brandEyebrow": "Welkom bij Tradamind",
+    "brandTitle": "Jouw AI tradingcoach",
+    "brandLoginDescription": "Log in op je professionele dashboard",
+    "brandRegisterDescription": "Maak je professionele Tradamind-account aan",
+    "fullName": "Naam",
+    "fullNamePlaceholder": "Jouw naam",
+    "email": "E-mailadres",
+    "emailPlaceholder": "naam@voorbeeld.nl",
+    "password": "Wachtwoord",
+    "signIn": "Inloggen",
+    "signingIn": "Inloggen...",
+    "createAccount": "Account aanmaken",
+    "creatingAccount": "Account aanmaken...",
+    "noAccount": "Nog geen account?",
+    "createOne": "Maak er een aan →",
+    "alreadyHaveAccount": "Heb je al een account?",
+    "signInLink": "Log in →",
+    "loginFailed": "Inloggen mislukt",
+    "welcomeBack": "Welkom terug! ✔",
+    "registerFailed": "Account aanmaken mislukt. Dit e-mailadres bestaat mogelijk al.",
+    "registerSuccess": "Account aangemaakt. Je wordt nu ingelogd…",
+    "registerManualLogin": "Account aangemaakt. Log nu handmatig in.",
+    "offline": "Je lijkt offline te zijn. Controleer je internetverbinding.",
+    "serverUnreachable": "Server niet bereikbaar. Probeer het opnieuw."
+  },
+  "onboardingShell": {
+    "title": "Startprotocol",
+    "status": "V1.1.0 Initialiseren",
+    "assistantOnline": "Finn online"
+  },
   "traderProfile": {
     "options": {
       "traderTypes": {
