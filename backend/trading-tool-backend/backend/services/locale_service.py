@@ -15,6 +15,8 @@ _DUTCH_TO_ENGLISH_REPLACEMENTS = [
     ("opent in", "opens in"),
     ("met een marktpostuur dat nu kwetsbaar aanvoelt bij een 24-uurs verandering van", "with a market posture that currently feels fragile on a 24-hour move of"),
     ("Ten opzichte van gisteren verschoof de market score met", "Versus yesterday, the market score shifted by"),
+    ("Ten opzichte van gisteren verschoof de macro score met", "Versus yesterday, the macro score shifted by"),
+    ("Ten opzichte van gisteren verschoof de technical score met", "Versus yesterday, the technical score shifted by"),
     ("Binnen de watchlist trekt", "Within the watchlist,"),
     ("nu de meeste aandacht", "currently draws the most attention"),
     ("Er is geen harde regimebreuk zichtbaar", "There is no hard regime break visible"),
@@ -29,6 +31,11 @@ _DUTCH_TO_ENGLISH_REPLACEMENTS = [
     ("de speelruimte voor agressie nog steeds afhangt van bevestiging op markt- en technieklaag, niet alleen van een macro-meewind", "the room for aggression still depends on confirmation from the market and technical layers, not only on macro tailwind"),
     ("Zolang macro niet duidelijk versnelt of verslechtert", "As long as macro does not clearly accelerate or deteriorate"),
     ("is de juiste lezing dat de markt vooral moet bewijzen dat de recente beweging meer is dan tijdelijke opluchting", "the correct read is that the market still has to prove the recent move is more than temporary relief"),
+    ("met een setupscore van", "with a setup score of"),
+    ("en een technische score van", "and a technical score of"),
+    ("Zeer lage range", "Very low range"),
+    ("Sentiment/conditie extreem zwak.", "Sentiment/condition extremely weak."),
+    ("Sentiment/conditie extreem zwak..", "Sentiment/condition extremely weak."),
     ("Voor BTC: ik zou vandaag wachten;", "For BTC: I would wait today;"),
     ("je setup is nog niet actief volgens je eigen ranges", "your setup is not active yet according to your own ranges"),
     ("Setup:", "Setup:"),
@@ -43,6 +50,7 @@ _DUTCH_TO_ENGLISH_REPLACEMENTS = [
     ("Agent-verdicts:", "Agent verdicts:"),
     ("Macro blokkeert: score", "Macro blocks: score"),
     ("Technical blokkeert: score", "Technical blocks: score"),
+    ("Market blokkeert: score", "Market blocks: score"),
     ("buiten range", "outside range"),
     ("Setup blokkeert volgens je eigen ranges", "The setup is blocked by your own ranges"),
     ("Geen actieve strategie voor vandaag gevonden", "No active strategy found for today"),
@@ -53,10 +61,7 @@ _DUTCH_TO_ENGLISH_REPLACEMENTS = [
     ("Je kunt macro uitbreiden met", "You can expand macro with"),
     ("Controleer of de hoge weging bewust is voor technical", "Check whether the high weighting is intentional for technical"),
     ("Ik voer niets automatisch uit vanuit deze check; dit is advies-only.", "I am not executing anything automatically from this check; this is advice only."),
-    ("moet binnen", "must be within"),
-    ("vallen", "be"),
-    ("vandaag", "today"),
-    ("geen", "no"),
+    ("punt", "point"),
 ]
 
 _FINN_TEXT_KEYS = {
@@ -114,10 +119,17 @@ def _rule_based_translate_to_english(text: str) -> str:
         translated = translated.replace(source, target)
 
     translated = re.sub(r"\bscore ([0-9.]+) valt buiten je range\b", r"score \1 falls outside your range", translated)
-    translated = re.sub(r"\bmoet binnen \[", "must be within [", translated)
+    translated = re.sub(r"score ([0-9.]+) moet binnen (\[[^\]]+\]) vallen", r"score \1 must be within \2", translated)
+    translated = re.sub(r"Versus yesterday, the ([a-z]+) score shifted by ([+-]?[0-9.]+) point\b", r"Versus yesterday, the \1 score shifted by \2 points", translated)
+    translated = re.sub(r"Versus yesterday, the market score shifted by ([+-]?[0-9.]+) point\b", r"Versus yesterday, the market score shifted by \1 points", translated)
+    translated = re.sub(r"met een setupscore van ([0-9.]+) en een technische score van ([0-9.]+)", r"with a setup score of \1 and a technical score of \2", translated)
+    translated = re.sub(r"Very low range \(([^)]+)\)\.", r"Very low range (\1).", translated)
+    translated = re.sub(r"\.\.", ".", translated)
     translated = re.sub(r"\bGeen actieve strategie\b", "No active strategy", translated)
     translated = re.sub(r"\bgeen actieve\b", "no active", translated)
     translated = re.sub(r"\bgeen actieve .*? gevonden\b", lambda m: m.group(0).replace("geen actieve", "no active").replace("gevonden", "found"), translated)
+    translated = translated.replace(" falls outside your range [", " falls outside your range [")
+    translated = translated.replace("must be within [", "must be within [")
     return translated
 
 
@@ -197,6 +209,9 @@ async def localize_report_payload(payload: Dict[str, Any], target_locale: str) -
     for key in _REPORT_TEXT_KEYS:
         if key in localized:
             localized[key] = await translate_text_if_needed(localized.get(key), locale)
+
+    if isinstance(localized.get("report"), dict):
+        localized["report"] = await localize_report_payload(localized["report"], locale)
 
     meta_json = localized.get("meta_json")
     if isinstance(meta_json, str):
