@@ -100,6 +100,38 @@ def _build_adaptive_profile_str(
         f"   - If {user_name} makes a casual statement indicating a level or risk that does NOT match the active profile: adapt for the current turn, but do not mutate the permanent profile automatically.\n"
     )
 
+
+def _resolve_locale(preferences: Optional[dict]) -> str:
+    locale = str((preferences or {}).get("locale") or "nl").strip().lower()
+    return "en" if locale.startswith("en") else "nl"
+
+
+def _response_language_name(preferences: Optional[dict]) -> str:
+    return "English" if _resolve_locale(preferences) == "en" else "Dutch"
+
+
+def _localized_example_text(preferences: Optional[dict], key: str, symbol: str) -> str:
+    locale = _resolve_locale(preferences)
+    examples = {
+        "no_setup": {
+            "nl": f"Er is nog geen setup voor {symbol}, laten we die eerst maken.",
+            "en": f"There is no setup for {symbol} yet, so let’s create that first.",
+        },
+        "no_strategy": {
+            "nl": f"Er is nog geen strategie voor {symbol}, laten we die eerst ontwerpen.",
+            "en": f"There is no strategy for {symbol} yet, so let’s design that first.",
+        },
+        "no_setup_nor_strategy": {
+            "nl": f"Er is nog geen setup of strategie voor {symbol}, dus we beginnen bij de basis met een setup.",
+            "en": f"There is no setup or strategy for {symbol} yet, so we should start with a setup first.",
+        },
+        "setup_type_question": {
+            "nl": "Wil je een DCA of trade setup?",
+            "en": "Do you want a DCA setup or a trade setup?",
+        },
+    }
+    return examples.get(key, {}).get(locale) or examples.get(key, {}).get("nl") or ""
+
 class AiAssistantService:
     def __init__(
         self,
@@ -124,6 +156,7 @@ class AiAssistantService:
         self.state_repo = state_repo
         self.ai_gateway = ai_gateway
         self.context_repo = context_repo
+        self._active_preferences: Dict[str, Any] = {}
 
     def generate_clean_title(self, query: str) -> str:
         q_lower = query.lower()
@@ -350,6 +383,7 @@ class AiAssistantService:
         # Get User Preferences
         preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
         user_name = user.first_name if (user and getattr(user, "first_name", None)) else "Handelaar"
+        response_language = _response_language_name(preferences)
 
         # Assemble Adaptive Intelligence Profile
         stated_exp = preferences.get("experience_level", "beginner")
@@ -357,6 +391,7 @@ class AiAssistantService:
 
         # 5. Build System Prompt
         system_role = get_role_prompt(role_key, preferences, intent=intent, user_name=user_name)
+        self._active_preferences = preferences
 
         # 5.5 Synthesise Chronological Continuity and Event Memory Context
         continuity_str = await self._build_continuity_context_str(user_id)
@@ -384,7 +419,7 @@ class AiAssistantService:
         system_role_json = (
             system_role + 
             "\n\nIMPORTANT: You must return a JSON object with exactly six fields:\n"
-            "- 'response': (string) your conversational response to the user's message in Dutch.\n"
+            f"- 'response': (string) your conversational response to the user's message in {response_language}.\n"
             "- 'action': (object or null) if the user explicitly asks to add or remove a coin to/from their watchlist, "
             "or open pages, populate this object. Otherwise, set 'action' to null.\n"
             "- 'draft': (object or null) if the user asks to create/generate/setup a DCA setup, trading setup, strategy, or bot, "
@@ -857,6 +892,7 @@ class AiAssistantService:
         # Get User Preferences
         preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
         user_name = user.first_name if (user and getattr(user, "first_name", None)) else "Handelaar"
+        response_language = _response_language_name(preferences)
 
         # Assemble Adaptive Intelligence Profile
         stated_exp = preferences.get("experience_level", "beginner")
@@ -864,6 +900,7 @@ class AiAssistantService:
 
         # 5. Build System Prompt
         system_role = get_role_prompt(role_key, preferences, intent=intent, user_name=user_name)
+        self._active_preferences = preferences
 
         # 5.5 Synthesise Chronological Continuity and Event Memory Context
         continuity_str = await self._build_continuity_context_str(user_id)
@@ -892,7 +929,7 @@ class AiAssistantService:
         system_role_json = (
             system_role + 
             "\n\nIMPORTANT: You must return a JSON object with exactly six fields:\n"
-            "- 'response': (string) your conversational response to the user's message in Dutch.\n"
+            f"- 'response': (string) your conversational response to the user's message in {response_language}.\n"
             "- 'action': (object or null) if the user explicitly asks to add or remove a coin to/from their watchlist, "
             "or open pages, populate this object. Otherwise, set 'action' to null.\n"
             "- 'draft': (object or null) if the user asks to create/generate/setup a DCA setup, trading setup, strategy, or bot, "
@@ -1963,6 +2000,8 @@ class AiAssistantService:
         from backend.ai_agents.flow_registry import FLOW_DEFINITIONS
         import json
 
+        locale = _resolve_locale(getattr(self, "_active_preferences", None))
+        response_language = _response_language_name(getattr(self, "_active_preferences", None))
         active_flow_name = conv_state.get("current_flow") if conv_state else None
         if active_flow_name and active_flow_name in FLOW_DEFINITIONS:
             flow = FLOW_DEFINITIONS[active_flow_name]
@@ -1981,19 +2020,25 @@ class AiAssistantService:
                 redirect_msg = (
                     f"\n[ALERT: REDIRECTED FLOW] The user requested a Strategy for '{symbol}', but there is NO Setup (Blueprint) for this asset yet. "
                     f"You have been redirected to start a 'setup_creation' flow for '{symbol}' first. "
-                    f"Briefly explain this in Dutch (concise, e.g. 'Er is nog geen Setup voor {symbol}, laten we die eerst maken.') and then ask the first question of setup_creation: 'Wil je een DCA of trade setup?'"
+                    f"Briefly explain this in {response_language} "
+                    f"(concise, e.g. '{_localized_example_text(getattr(self, '_active_preferences', None), 'no_setup', symbol)}') "
+                    f"and then ask the first question of setup_creation: '{_localized_example_text(getattr(self, '_active_preferences', None), 'setup_type_question', symbol)}'"
                 )
             elif conv_state.get("redirect_reason") == "no_strategy":
                 redirect_msg = (
                     f"\n[ALERT: REDIRECTED FLOW] The user requested a Bot for '{symbol}', but there is NO Strategy for this asset yet. "
                     f"You have been redirected to start a 'strategy_creation' flow for '{symbol}' first. "
-                    f"Briefly explain this in Dutch (concise, e.g. 'Er is nog geen Strategie voor {symbol}, laten we die eerst ontwerpen.') and then ask the first question of strategy_creation."
+                    f"Briefly explain this in {response_language} "
+                    f"(concise, e.g. '{_localized_example_text(getattr(self, '_active_preferences', None), 'no_strategy', symbol)}') "
+                    f"and then ask the first question of strategy_creation in {response_language}."
                 )
             elif conv_state.get("redirect_reason") == "no_setup_nor_strategy":
                 redirect_msg = (
                     f"\n[ALERT: REDIRECTED FLOW] The user requested a Bot for '{symbol}', but there is NO Setup or Strategy for this asset yet. "
                     f"You have been redirected to start a 'setup_creation' flow for '{symbol}' first. "
-                    f"Briefly explain this in Dutch (concise, e.g. 'Er is nog geen Setup of Strategie voor {symbol}, laten we bij de basis beginnen en een Setup maken.') and then ask the first question of setup_creation: 'Wil je een DCA of trade setup?'"
+                    f"Briefly explain this in {response_language} "
+                    f"(concise, e.g. '{_localized_example_text(getattr(self, '_active_preferences', None), 'no_setup_nor_strategy', symbol)}') "
+                    f"and then ask the first question of setup_creation: '{_localized_example_text(getattr(self, '_active_preferences', None), 'setup_type_question', symbol)}'"
                 )
 
             return (
@@ -2017,7 +2062,7 @@ class AiAssistantService:
                 f"- 'name': string name (e.g., 'SOL Autopilot Bot').\n"
                 f"- 'budget_total_eur': numeric value (e.g., 500).\n\n"
                 f"=== STRICT ACTIVE FLOW CONCISENESS MANDATE ===\n"
-                f"1. OPERATOR TONE (STRICT): Act as a premium, quiet, direct trading assistant. Write at most ONE short, clear, direct sentence per turn. Speak in Dutch.\n"
+                f"1. OPERATOR TONE (STRICT): Act as a premium, quiet, direct trading assistant. Write at most ONE short, clear, direct sentence per turn. Speak in {response_language}.\n"
                 f"2. OPERATOR VOICE EXAMPLES:\n"
                 f"   - Use formats like 'SOL setup voorbereid.' ONLY when ALL required slots are collected and the draft is ready.\n"
                 f"   - NEVER say: 'Perfect! Ik heb de setup voor BTC klaargezet...' or 'Ik heb de parameters voor je ingesteld...'. Keep it extremely short and direct.\n"
@@ -2025,7 +2070,7 @@ class AiAssistantService:
                 f"4. NO REPETITION: Do NOT repeat back any context, existing setups, or fields the user already provided. Just state the next prompt.\n"
                 f"5. ONLY 1 QUESTION: Ask EXACTLY ONE question to gather the next missing slot. Do NOT just say 'voorbeid' if there are still missing slots!\n"
                 f"6. NO DISCLAIMERS: Under no circumstances output any disclaimer, safety note, or 'not financial advice' warning. Keep responses strictly concise and direct.\n"
-                f"7. FALLBACKS: If the user is unsure or gives an invalid answer for a slot (e.g., 'geen idee' or 'weet ik niet'), you MUST suggest a reasonable default and ask for confirmation (e.g., 'Zal ik hem op balanced zetten?').\n\n"
+                f"7. FALLBACKS: If the user is unsure or gives an invalid answer for a slot (e.g., '{'geen idee' if locale == 'nl' else 'not sure'}'), you MUST suggest a reasonable default and ask for confirmation in {response_language}.\n\n"
                 f"CRITICAL INSTRUCTIONS:\n"
                 f"1. You MUST continue this flow. Keep 'draft' as null until ALL required slots (and conditional slots if applicable) are collected.\n"
                 f"2. SLOT EXTRACTION (MANDATORY): You must extract the value for the current missing slot from the user's latest query (USER QUERY) and add/update it in 'state.slots'.\n"
