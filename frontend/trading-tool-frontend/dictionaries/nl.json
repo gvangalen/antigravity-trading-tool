@@ -36,7 +36,16 @@
     "admin_ai": "AI-beheer",
     "users": "Gebruikers",
     "logs": "Systeemlogs",
-    "command_center": "Commandocentrum"
+    "command_center": "Commandocentrum",
+    "marketContext": "Marktcontext",
+    "watchlistEmptyTitle": "Nog geen watchlist",
+    "watchlistEmptyBody": "Voeg assets toe via de zoekbalk of laat Finn een asset aan je watchlist toevoegen. Dan verschijnt je marktcontext hier.",
+    "watchlistRemoveTitle": "Asset verwijderen?",
+    "watchlistRemoveContext": "{symbol} verdwijnt uit je actieve watchlist.",
+    "watchlistRemoveImpact": "De asset blijft bestaan, maar verdwijnt uit je huidige tracking en snelle context-switches.",
+    "watchlistRemoveSafety": "Dit start geen orders of datawijzigingen. Alleen je persoonlijke watchlist verandert.",
+    "watchlistRemoveConsequence": "Na bevestigen vernieuwt je watchlist en focust Finn op je overgebleven assets.",
+    "watchlistRemoveSuccess": "{symbol} verwijderd van watchlist"
   },
   "dashboard": {
     "title": "Intelligentie",
@@ -276,7 +285,12 @@
       "saveSuccess": "Tradingprofiel opgeslagen",
       "styleAndGoal": "Stijl & doel",
       "finnContext": "Context voor Finn",
-      "helper": "Werk dit profiel bij wanneer je stijl verandert. Dan blijft Finn relevant en krijg je minder signalen die niet bij jouw manier van traden passen."
+      "helper": "Werk dit profiel bij wanneer je stijl verandert. Dan blijft Finn relevant en krijg je minder signalen die niet bij jouw manier van traden passen.",
+      "adminTitle": "Open AI-beheer",
+      "adminDescription": "Systeeminstellingen voor AI en monitoring",
+      "logoutTitle": "Veilig uitloggen",
+      "logoutDescription": "Sluit je huidige sessie af",
+      "logoutSuccess": "Je bent veilig uitgelogd ✔"
     },
     "banner": {
       "completeLabel": "Stap afgerond",
