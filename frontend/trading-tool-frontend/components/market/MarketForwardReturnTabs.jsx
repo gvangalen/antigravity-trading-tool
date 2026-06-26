@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import {
   CalendarRange,
@@ -26,13 +26,6 @@ const heatmapColor = (value) => {
 
 const TAB_KEYS = ["week", "month", "quarter", "year"];
 
-const labelsByTab = {
-  week: Array.from({ length: 53 }, (_, i) => `W${i + 1}`),
-  month: ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"],
-  quarter: ["Q1", "Q2", "Q3", "Q4"],
-  year: ["YEAR"],
-};
-
 const formatPercentage = (value) => {
   if (value === null || value === undefined || isNaN(value)) return "–";
   return `${value.toFixed(1)}%`;
@@ -45,11 +38,20 @@ export default function MarketForwardReturnTabs({ data = {} }) {
   const { locale } = useTranslation();
   const isDutch = locale !== "en";
   const [active, setActive] = useState("month");
-  const [selectedYears, setSelectedYears] = useState(() =>
-    (data["maand"] || []).map((row) => row.year)
-  );
+  const [selectedYears, setSelectedYears] = useState([]);
 
   const activeData = data[active] || [];
+  const labelsByTab = useMemo(
+    () => ({
+      week: Array.from({ length: 53 }, (_, i) => `W${i + 1}`),
+      month: isDutch
+        ? ["JAN", "FEB", "MRT", "APR", "MEI", "JUN", "JUL", "AUG", "SEP", "OKT", "NOV", "DEC"]
+        : ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"],
+      quarter: ["Q1", "Q2", "Q3", "Q4"],
+      year: [isDutch ? "JAAR" : "YEAR"],
+    }),
+    [isDutch]
+  );
   const labels = labelsByTab[active] || [];
 
   const tabLabels = {
@@ -76,6 +78,10 @@ export default function MarketForwardReturnTabs({ data = {} }) {
       ? "Kans op positief resultaat"
       : "Chance of positive outcome",
   };
+
+  useEffect(() => {
+    setSelectedYears(activeData.map((row) => row.year));
+  }, [active, activeData]);
 
   const toggleYear = (year) => {
     setSelectedYears((prev) =>
@@ -119,7 +125,7 @@ export default function MarketForwardReturnTabs({ data = {} }) {
 
   const displayData = activeData.length
     ? [...activeData].sort((a, b) => b.year - a.year)
-    : [{ year: "–", values: Array(labels.length).fill(null) }];
+    : [{ year: null, values: Array(labels.length).fill(null) }];
 
   return (
     <div className="space-y-6">
@@ -184,11 +190,11 @@ export default function MarketForwardReturnTabs({ data = {} }) {
                           type="checkbox"
                           checked={selectedYears.includes(row.year)}
                           onChange={() => toggleYear(row.year)}
-                          disabled={row.year === "—"}
+                          disabled={row.year === null}
                           className="w-3.5 h-3.5 rounded border-slate-200 text-[var(--primary)] focus:ring-[var(--primary)]"
                         />
                       </td>
-                      <td className="px-6 py-4 font-mono text-xs font-bold text-slate-800">{row.year}</td>
+                      <td className="px-6 py-4 font-mono text-xs font-bold text-slate-800">{row.year ?? "—"}</td>
                       {row.values.map((val, i) => (
                         <td key={i} className="px-0.5 py-3 text-center">
                           <div className={`py-1.5 rounded-[4px] font-mono text-[10px] font-black ${heatmapColor(val)}`}>

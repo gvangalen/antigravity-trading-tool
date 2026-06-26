@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Activity, LayoutGrid, History, TrendingUp } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
