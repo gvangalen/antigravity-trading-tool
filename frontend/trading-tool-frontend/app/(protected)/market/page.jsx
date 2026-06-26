@@ -40,8 +40,7 @@ export default function MarketPage() {
     forwardReturns, 
     availableIndicators,
     btcLive,
-    loading,
-    syncHistory
+    loading
   } = useMarketData(activeSymbol);
 
   // ===============================
@@ -192,27 +191,6 @@ export default function MarketPage() {
           </div>
         </div>
 
-        {/* ⚙️ SYSTEM MAINTENANCE */}
-        <div className="card bg-slate-50 dark:bg-slate-900/50 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden mb-24">
-          <div className="p-8 flex flex-col md:flex-row items-center justify-between gap-8">
-            <div className="space-y-2">
-              <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight uppercase tracking-widest">{marketT.systemMaintenanceTitle}</h3>
-              <p className="text-sm text-slate-400 font-medium">{marketT.systemMaintenanceDescription}</p>
-            </div>
-            <div className="flex flex-wrap gap-4">
-              {["BTC", "ETH", "SOL"].map(s => (
-                <button
-                  key={s}
-                  onClick={() => syncHistory(s)}
-                  disabled={loading}
-                  className="px-6 py-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-black text-slate-700 dark:text-slate-200 hover:border-blue-500 transition-all shadow-sm active:scale-95 disabled:opacity-50"
-                >
-                  {marketT.syncHistory.replace("{symbol}", s)}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
       </div>
 
       {loading && (
