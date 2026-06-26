@@ -13,7 +13,7 @@ export default function StrategyList({
   loading = false,
 }) {
   const [bots, setBots] = useState([]);
-  const [filter, setFilter] = useState("all"); // 'all', 'active', 'inactive'
+  const [filter, setFilter] = useState("all");
 
   useEffect(() => {
     async function loadBots() {
@@ -94,7 +94,7 @@ export default function StrategyList({
       {sortedStrategies.length === 0 ? (
         <div className="text-center text-muted py-12 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
           <div className="text-2xl mb-2">📭</div>
-          <div className="text-sm font-bold uppercase tracking-widest opacity-40">Geen strategieën gevonden</div>
+          <div className="text-sm font-bold uppercase tracking-widest opacity-40">Geen strategieen gevonden</div>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">

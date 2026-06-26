@@ -1,10 +1,8 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import AvatarMenu from "@/components/ui/AvatarMenu";
-import NotificationToggle from "@/components/NotificationToggle";
-import { Search, ChevronRight } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import AssetSearchBar from "./AssetSearchBar";
@@ -12,7 +10,6 @@ import AssetSearchBar from "./AssetSearchBar";
 export default function TopBar() {
   const { t } = useTranslation();
   const pathname = usePathname();
-  const [query, setQuery] = useState("");
   const { user } = useAuth();
 
   /* ======== Dynamic Greeting (Localized & Safe) ======== */
@@ -42,6 +39,11 @@ export default function TopBar() {
     "/strategy": t.nav.strategies,
     "/bot": t.nav.bots,
     "/report": t.nav.reports,
+    "/profile": localeAware(t?.traderProfile?.profilePage?.title, "Account & trader profile"),
+    "/admin/ai": t.nav.admin_ai,
+    "/admin/telemetry": "Telemetry",
+    "/admin/users": t.nav.users,
+    "/admin/logs": t.nav.logs,
   };
 
   const currentLabel = labels[pathname] || "Tradamind";
@@ -81,4 +83,8 @@ export default function TopBar() {
       </div>
     </header>
   );
+}
+
+function localeAware(value, fallback) {
+  return value || fallback;
 }

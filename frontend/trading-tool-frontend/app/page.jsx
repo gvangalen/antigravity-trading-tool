@@ -36,7 +36,7 @@ export default function LandingPage() {
                   <ShieldCheck size={12} strokeWidth={2.5} className="text-blue-600" />
                 </div>
                 <div className="text-[8px] font-black uppercase tracking-[0.2em]">
-                  Professional
+                  Professioneel
                 </div>
               </div>
             </div>
@@ -46,7 +46,7 @@ export default function LandingPage() {
                 href="/login" 
                 className="px-6 py-2.5 rounded-xl border-2 border-[var(--color-border)] hover:border-blue-600/30 text-[11px] font-black uppercase tracking-widest transition-all"
               >
-                Login
+                Inloggen
               </Link>
             ) : (
               <Link 
@@ -73,12 +73,12 @@ export default function LandingPage() {
               <Zap size={12} className="fill-current" /> Tradamind Professional
             </div>
             <h1 className="text-6xl sm:text-8xl font-black text-foreground tracking-tighter leading-[0.9] mb-8">
-              AI market analysis <br />
-              <span className="text-blue-600 italic">for disciplined traders</span>
+              Marktanalyse met Finn <br />
+              <span className="text-blue-600 italic">voor gedisciplineerde traders</span>
             </h1>
             <p className="text-xl sm:text-2xl font-bold text-secondary max-w-2xl mx-auto mb-12 leading-relaxed">
-              See the market context, follow your plan, and let Finn warn you
-              <br className="hidden sm:block" /> when timing, risk, or behavior starts to drift.
+              Zie eerst de marktcontext, volg je plan en laat Finn je waarschuwen
+              <br className="hidden sm:block" /> zodra timing, risico of gedrag begint af te wijken.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               {!isAuthenticated ? (
@@ -87,14 +87,14 @@ export default function LandingPage() {
                     href="/login" 
                     className="w-full sm:w-auto bg-foreground text-card hover:bg-slate-800 dark:hover:bg-slate-200 px-10 py-5 rounded-2xl text-[12px] font-black uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 shadow-xl shadow-foreground/5 active:scale-95"
                   >
-                    Start free trial
+                    Start gratis proefperiode
                     <ArrowRight size={16} />
                   </Link>
                   <Link 
                     href="/login?next=/dashboard"
                     className="w-full sm:w-auto px-10 py-5 rounded-2xl border-2 border-[var(--color-border)] hover:border-blue-600/30 text-[12px] font-black uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 active:scale-95"
                   >
-                    View dashboard
+                    Bekijk dashboard
                   </Link>
                 </>
               ) : (
@@ -122,9 +122,9 @@ export default function LandingPage() {
                   <Globe size={24} />
                 </div>
                 <div className="space-y-3">
-                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Market Intelligence</h3>
+                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Marktinzichten</h3>
                   <p className="text-sm font-bold text-secondary leading-relaxed">
-                    Read market structure, momentum, and macro context in one place before you act.
+                    Lees marktstructuur, momentum en macrocontext op één plek voordat je handelt.
                   </p>
                 </div>
               </div>
@@ -135,9 +135,9 @@ export default function LandingPage() {
                   <Brain size={24} />
                 </div>
                 <div className="space-y-3">
-                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Finn Coach</h3>
+                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Finn coach</h3>
                   <p className="text-sm font-bold text-secondary leading-relaxed">
-                    Get explanations, behavioral guardrails, and coaching that match your trading profile.
+                    Krijg uitleg, gedragsremmen en coaching die passen bij jouw traderprofiel.
                   </p>
                 </div>
               </div>
@@ -148,9 +148,9 @@ export default function LandingPage() {
                   <LineChart size={24} />
                 </div>
                 <div className="space-y-3">
-                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Strategy Engine</h3>
+                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Strategiemotor</h3>
                   <p className="text-sm font-bold text-secondary leading-relaxed">
-                    Turn analysis into a clear plan with setups, timing, and disciplined execution cues.
+                    Zet analyse om in een helder plan met setups, timing en gedisciplineerde uitvoeringssignalen.
                   </p>
                 </div>
               </div>
@@ -167,7 +167,7 @@ export default function LandingPage() {
               <div className="relative bg-card border-2 border-[var(--color-border)] rounded-[3rem] overflow-hidden shadow-2xl">
                 <Image 
                   src="/dashboard_mockup.png"
-                  alt="Tradamind Live Dashboard Preview"
+                  alt="Tradamind dashboardvoorbeeld"
                   width={1920}
                   height={1080}
                   className="w-full h-auto"
@@ -180,8 +180,8 @@ export default function LandingPage() {
         {/* 5. PRICING SECTION */}
         <section className="px-6 py-24 bg-[var(--color-border-subtle)]/30 border-y border-[var(--color-border-subtle)]">
           <div className="max-w-4xl mx-auto text-center mb-16">
-            <h2 className="text-4xl sm:text-5xl font-black text-foreground tracking-tighter mb-4">Simple pricing. Clear access.</h2>
-            <p className="text-lg font-bold text-secondary uppercase tracking-widest">Choose the plan that fits your workflow</p>
+            <h2 className="text-4xl sm:text-5xl font-black text-foreground tracking-tighter mb-4">Eenvoudige prijzen. Heldere toegang.</h2>
+            <p className="text-lg font-bold text-secondary uppercase tracking-widest">Kies het plan dat bij jouw workflow past</p>
           </div>
 
           <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
@@ -190,17 +190,17 @@ export default function LandingPage() {
               <div className="space-y-10">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="text-2xl font-black text-foreground uppercase tracking-tight italic">Basic</h3>
-                    <p className="text-[10px] font-black text-secondary uppercase tracking-widest mt-1">Core analysis and coaching</p>
+                    <h3 className="text-2xl font-black text-foreground uppercase tracking-tight italic">Basis</h3>
+                    <p className="text-[10px] font-black text-secondary uppercase tracking-widest mt-1">Analyse en coaching als kern</p>
                   </div>
                   <div className="text-4xl font-black text-foreground tracking-tighter">€89<span className="text-sm text-dim align-top mt-2 ml-1">/mo</span></div>
                 </div>
                 <div className="space-y-5">
                   {[
-                    "Finn coaching access",
-                    "Real-time strategy insights",
-                    "Daily performance analysis",
-                    "Technical indicator hub"
+                    "Toegang tot Finn-coaching",
+                    "Realtime strategie-inzichten",
+                    "Dagelijkse performance-analyse",
+                    "Technische indicatorhub"
                   ].map((f) => (
                     <div key={f} className="flex items-center gap-4">
                       <div className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600">
@@ -215,7 +215,7 @@ export default function LandingPage() {
                 href="/login" 
                 className="w-full mt-12 py-5 rounded-2xl border-2 border-[var(--color-border)] hover:bg-foreground hover:text-card hover:border-foreground text-[11px] font-black uppercase tracking-[0.2em] transition-all text-center flex items-center justify-center gap-2 group active:scale-95"
               >
-                Start free trial
+                Start gratis proefperiode
                 <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
               </Link>
             </div>
@@ -227,19 +227,19 @@ export default function LandingPage() {
               <div className="relative z-10 space-y-10">
                 <div className="flex justify-between items-start">
                   <div>
-                    <div className="inline-flex px-2 py-0.5 rounded-md bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest mb-2">Most popular</div>
+                    <div className="inline-flex px-2 py-0.5 rounded-md bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest mb-2">Meest gekozen</div>
                     <h3 className="text-2xl font-black text-card dark:text-slate-900 uppercase tracking-tight italic">Pro</h3>
-                    <p className="text-[10px] font-black opacity-60 uppercase tracking-widest mt-1">Full-speed execution support</p>
+                    <p className="text-[10px] font-black opacity-60 uppercase tracking-widest mt-1">Volledige uitvoeringsondersteuning</p>
                   </div>
                   <div className="text-4xl font-black text-card dark:text-slate-900 tracking-tighter">€149<span className="text-sm opacity-60 align-top mt-2 ml-1">/mo</span></div>
                 </div>
                 <div className="space-y-5">
                   {[
-                    "Everything in Basic",
-                    "Faster signal coverage",
-                    "Deeper Finn context",
-                    "Priority feature access",
-                    "Advanced risk management"
+                    "Alles uit Basis",
+                    "Snellere signaaldekking",
+                    "Diepere Finn-context",
+                    "Voorrang bij nieuwe features",
+                    "Geavanceerd risicobeheer"
                   ].map((f) => (
                     <div key={f} className="flex items-center gap-4">
                       <div className="w-5 h-5 rounded-full bg-slate-800 dark:bg-slate-200 flex items-center justify-center text-white dark:text-slate-900">
@@ -254,7 +254,7 @@ export default function LandingPage() {
                 href="/login" 
                 className="relative z-10 w-full mt-12 py-5 rounded-2xl bg-white dark:bg-slate-100 text-slate-900 hover:bg-blue-600 hover:text-white text-[11px] font-black uppercase tracking-[0.2em] transition-all text-center flex items-center justify-center gap-2 group active:scale-95 border-none shadow-lg"
               >
-                Start free trial
+                Start gratis proefperiode
                 <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
               </Link>
             </div>

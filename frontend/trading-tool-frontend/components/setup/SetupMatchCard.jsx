@@ -32,7 +32,7 @@ export default function SetupMatchCard() {
   const { dailySetups, loading } = useDailySetupScores();
 
   /* -------------------------------
-     Loading
+     Laden
   ------------------------------- */
   if (loading) {
     return <ScoreCardSkeleton />;

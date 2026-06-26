@@ -155,7 +155,7 @@ export default function SetupList({
       }));
     } catch (e) {
       console.error(e);
-      showSnackbar("Finn review mislukt", "danger");
+      showSnackbar("Finn-check mislukt", "danger");
     } finally {
       setFinnLoading((p) => ({ ...p, [setup.id]: false }));
     }
@@ -219,7 +219,7 @@ export default function SetupList({
      LINEAGE & STATUS HELPERS
   --------------------------------------------------------- */
   const getSetupStatus = (setup) => {
-    if (scoresLoading) return { active: false, label: "Loading..." };
+    if (scoresLoading) return { active: false, label: "Laden..." };
     
     const isMacroOk = macro.score >= setup.min_macro_score && macro.score <= setup.max_macro_score;
     const isTechOk = technical.score >= setup.min_technical_score && technical.score <= setup.max_technical_score;
@@ -228,7 +228,7 @@ export default function SetupList({
     const active = isMacroOk && isTechOk && isMarketOk;
     return { 
       active, 
-      label: active ? "ACTIVE" : "STANDBY",
+      label: active ? "ACTIEF" : "STANDBY",
       reasons: { macro: isMacroOk, tech: isTechOk, market: isMarketOk }
     };
   };
@@ -315,8 +315,8 @@ export default function SetupList({
                       if (macro.score > setup.max_macro_score) gaps.push(`Macro (< ${setup.max_macro_score})`);
                       if (technical.score < setup.min_technical_score) gaps.push(`Tech (> ${setup.min_technical_score})`);
                       if (technical.score > setup.max_technical_score) gaps.push(`Tech (< ${setup.max_technical_score})`);
-                      if (market.score < setup.min_market_score) gaps.push(`Market (> ${setup.min_market_score})`);
-                      if (market.score > setup.max_market_score) gaps.push(`Market (< ${setup.max_market_score})`);
+                      if (market.score < setup.min_market_score) gaps.push(`Markt (> ${setup.min_market_score})`);
+                      if (market.score > setup.max_market_score) gaps.push(`Markt (< ${setup.max_market_score})`);
                     }
 
                     return (
@@ -337,7 +337,7 @@ export default function SetupList({
                            ) : (
                               <div className="flex flex-col gap-0.5 items-end opacity-60">
                                  {gaps.map((gap, i) => (
-                                    <span key={i} className="text-secondary">Waiting for {gap}</span>
+                                    <span key={i} className="text-secondary">Wacht op {gap}</span>
                                  ))}
                               </div>
                            )}
@@ -352,7 +352,7 @@ export default function SetupList({
                 <h3 className="font-black text-[var(--text-dark)] leading-tight uppercase text-base tracking-tight">{setup.name}</h3>
                 <p className="text-[10px] text-[var(--text-light)] font-bold uppercase tracking-widest mt-1 flex items-center gap-1">
                   {setup.setup_type === 'dca' ? <Rocket size={10} /> : <Target size={10} />}
-                  {setup.setup_type || 'Custom'} Blueprint
+                  {setup.setup_type || 'Aangepast'} blueprint
                 </p>
               </div>
 
@@ -370,7 +370,7 @@ export default function SetupList({
                 </div>
 
                 <div>
-                  <strong>Technical:</strong>{" "}
+                  <strong>Technisch:</strong>{" "}
                   {setup.min_technical_score}–{setup.max_technical_score}
                   <div className="opacity-70">
                     {rangeText(
@@ -381,7 +381,7 @@ export default function SetupList({
                 </div>
 
                 <div>
-                  <strong>Market:</strong>{" "}
+                  <strong>Markt:</strong>{" "}
                   {setup.min_market_score}–{setup.max_market_score}
                   <div className="opacity-70">
                     {rangeText(
@@ -394,7 +394,7 @@ export default function SetupList({
 
               {/* UITLEG */}
               <div className="mt-4 text-xs font-medium text-dim leading-relaxed bg-slate-50/50 p-5 rounded-2xl border-2 border-slate-50">
-                {setup.explanation || "Geen uitleg beschikbaar."}
+                {setup.explanation || "Nog geen uitleg beschikbaar."}
               </div>
 
               {(finnPanel.review || finnPanel.adherence) && (
@@ -402,7 +402,7 @@ export default function SetupList({
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 text-slate-600">
                       <Brain size={15} className="text-violet-500" />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Finn review</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest">Finn-check</span>
                     </div>
                     {finnBusy && <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Laden…</span>}
                   </div>
@@ -416,7 +416,7 @@ export default function SetupList({
                           : "border-emerald-200 bg-emerald-50 text-emerald-700"
                     }`}>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[9px] font-black uppercase tracking-widest">Setup Review</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest">Setupreview</span>
                         <span className="text-[8px] font-black uppercase tracking-widest">{finnPanel.review.decision_status}</span>
                       </div>
                       <p className="mt-2 text-xs font-semibold leading-relaxed">{finnPanel.review.risk_summary}</p>
@@ -456,10 +456,10 @@ export default function SetupList({
                 >
                   <BotIcon size={16} />
                   {aiLoading[setup.id]
-                    ? "ANALYZING…"
+                    ? "ANALYSEREN…"
                     : setup.explanation
-                    ? "Re-Analyze Blueprint"
-                    : "Analyze Strategy DNA"}
+                    ? "Blueprint opnieuw analyseren"
+                    : "Strategie-DNA analyseren"}
                 </button>
                 <button
                   onClick={() => handleFinnReview(setup)}
@@ -467,7 +467,7 @@ export default function SetupList({
                   className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-violet-600 bg-violet-50 hover:bg-violet-100 transition-all border-2 border-violet-100/50"
                 >
                   <Brain size={16} />
-                  {finnBusy ? "Finn review…" : "Review met Finn"}
+                  {finnBusy ? "Finn-check…" : "Check met Finn"}
                 </button>
               </div>
 
@@ -480,16 +480,16 @@ export default function SetupList({
                     </div>
                     <ChevronRight size={12} className="opacity-30 mt-3" />
                     <div className="flex flex-col items-center gap-1 flex-1">
-                       <span>Strategy</span>
+                       <span>Strategie</span>
                        <span className={lineage.strategy ? "text-green-600 truncate max-w-[60px]" : "opacity-40"}>
-                          {lineage.strategy?.name || "None"}
+                          {lineage.strategy?.name || "Geen"}
                        </span>
                     </div>
                     <ChevronRight size={12} className="opacity-30 mt-3" />
                     <div className="flex flex-col items-center gap-1 flex-1">
                        <span>Bot</span>
                        <span className={lineage.bot?.is_active ? "text-purple-600" : "opacity-40 text-red-400"}>
-                          {lineage.bot ? (lineage.bot.is_active ? "Running" : "Paused") : "None"}
+                          {lineage.bot ? (lineage.bot.is_active ? "Actief" : "Gepauzeerd") : "Geen"}
                        </span>
                     </div>
                  </div>

@@ -215,7 +215,7 @@ export default function StrategyPage() {
         isOpen={!!editingStrategy}
         onClose={() => setEditingStrategy(null)}
         title={editingStrategy?.name || "Strategie aanpassen"}
-        subtitle="Configuratie"
+        subtitle="Instellingen"
       >
         {editingStrategy && (
           <StrategyForm

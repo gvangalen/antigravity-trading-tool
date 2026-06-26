@@ -3,9 +3,12 @@
 import { Calendar, Globe, Zap, Activity, Target, Info } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { HUDSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function ReportTerminalHUD({ report, type = "daily", loading = false }) {
   const { user } = useAuth();
+  const { t, locale } = useTranslation();
+  const reportT = t.pages.report;
 
   if (loading) {
     return <HUDSkeleton />;
@@ -21,13 +24,6 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
     setup_score,
     generated_at
   } = report;
-
-  const labels = {
-    daily: "Dagrapport",
-    weekly: "Weekrapport",
-    monthly: "Maandrapport",
-    quarterly: "Kwartaalrapport"
-  };
 
   const ScoreItem = ({ label, value, icon: Icon, colorClass }) => (
     <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-card border border-blue-600/5 shadow-sm min-w-[120px] transition-all hover:scale-105">
@@ -50,15 +46,15 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
         <div className="border-l-4 border-blue-600 pl-8">
            <div className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-2 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-              Rapportoverzicht
+              {reportT.hudEyebrow}
            </div>
            <h1 className="text-4xl font-black text-foreground tracking-tighter uppercase leading-none">
-             {labels[type] || "Rapport"}
+             {reportT.types[type] || reportT.hudDefaultTitle}
            </h1>
            <div className="flex items-center gap-3 mt-4 text-slate-400">
              <Calendar size={14} className="text-blue-600/40" />
              <span className="text-sm font-bold tracking-tight uppercase">
-               Periode: <span className="text-foreground">{report_date || "—"}</span>
+               {reportT.hudPeriod}: <span className="text-foreground">{report_date || "—"}</span>
              </span>
            </div>
         </div>
@@ -75,12 +71,12 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
       <footer className="mt-10 pt-6 border-t-2 border-slate-50 flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-slate-400">
          <div className="flex items-center gap-2">
             <Info size={12} className="text-blue-600" />
-            Gecontroleerd
+            {reportT.hudValidated}
          </div>
          <div className="flex items-center gap-4">
-            <span>Gebruiker: {user?.name || "Systeem"}</span>
+            <span>{reportT.hudUser}: {user?.name || reportT.hudSystem}</span>
             <span className="w-1 h-1 rounded-full bg-slate-300" />
-            <span>Bijgewerkt: {generated_at ? new Date(generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
+            <span>{reportT.hudUpdated}: {generated_at ? new Date(generated_at).toLocaleTimeString(locale === "nl" ? "nl-NL" : "en-US", { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
          </div>
       </footer>
     </div>

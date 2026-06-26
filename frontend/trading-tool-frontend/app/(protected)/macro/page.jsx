@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 // 🔥 Onboarding
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
@@ -59,6 +60,8 @@ import { useCurrentAsset } from "@/hooks/useCurrentAsset";
 export default function MacroPage() {
   const [activeTab, setActiveTab] = useState("Dag");
   const { symbol: selectedAsset } = useCurrentAsset();
+  const { t } = useTranslation();
+  const macroT = t.pages.macro;
 
   // ===============================
   // 🧭 ONBOARDING HOOK
@@ -114,12 +117,12 @@ export default function MacroPage() {
   // ===============================
   const safeMacro = {
     score: macro?.score ?? null,
-    trend: macro?.trend ?? "Onbekend",
-    bias: macro?.bias ?? "Neutraal",
-    risk: macro?.risk ?? "Onbekend",
+    trend: macro?.trend ?? macroT.unknown,
+    bias: macro?.bias ?? macroT.neutral,
+    risk: macro?.risk ?? macroT.unknown,
     summary:
       macro?.summary ??
-      "Nog geen macro-inzichten beschikbaar. Voeg indicatoren toe of wacht op de eerste analyse.",
+      macroT.noInsights,
   };
 
   // ===============================
@@ -130,19 +133,19 @@ export default function MacroPage() {
     const symbol = SYMBOL_MAP[normalized] || "BINANCE:BTCUSDT";
 
     openConfirm({
-      title: `Bekijk chart: ${name}`,
-      statusLabel: "Alleen lezen",
-      context: `Je bekijkt de live chart van ${name} binnen Macro.`,
-      impact: "Er verandert niets aan je macroset of analyse. Dit is alleen een extra controlemoment.",
-      safety: "Veilig om te openen tijdens review. Er worden geen indicatoren aangepast.",
-      consequence: "Na sluiten keer je terug naar je huidige macro-overzicht.",
+      title: macroT.viewChartTitle.replace("{name}", name),
+      statusLabel: macroT.readOnly,
+      context: macroT.viewChartContext.replace("{name}", name),
+      impact: macroT.viewChartImpact,
+      safety: macroT.viewChartSafety,
+      consequence: macroT.viewChartConsequence,
       description: (
         <div className="w-full h-[400px] mt-4">
           <TradingViewChart symbol={symbol} height={400} />
         </div>
       ),
-      confirmText: "Sluiten",
-      cancelText: "Terug",
+      confirmText: macroT.close,
+      cancelText: macroT.back,
       icon: <LineChart className="w-5 h-5 text-blue-500" />,
       tone: "info"
     });
@@ -155,21 +158,21 @@ export default function MacroPage() {
     if (!name) return;
 
     openConfirm({
-      title: "Indicator verwijderen",
-      context: `Je verwijdert ${name} uit je macro-analyse voor ${selectedAsset}.`,
-      impact: "Deze indicator telt niet meer mee in je macro-overzicht en bijbehorende conclusies.",
-      safety: "Dit raakt geen trades of marktdata. Alleen je analysekader verandert.",
-      consequence: "Na bevestigen wordt je macro-overzicht direct vernieuwd.",
-      confirmText: "Verwijder indicator",
-      cancelText: "Annuleren",
+      title: macroT.removeTitle,
+      context: macroT.removeContext.replace("{name}", name).replace("{symbol}", selectedAsset),
+      impact: macroT.removeImpact,
+      safety: macroT.removeSafety,
+      consequence: macroT.removeConsequence,
+      confirmText: macroT.removeConfirm,
+      cancelText: t.common.cancel,
       tone: "danger",
       onConfirm: async () => {
         try {
           await removeMacroIndicator(name);
-          showSnackbar(`'${name}' verwijderd`, "success");
+          showSnackbar(macroT.removeSuccess.replace("{name}", name), "success");
         } catch (err) {
           console.error("❌ Removal failed:", err);
-          showSnackbar("Verwijderen mislukt", "danger");
+          showSnackbar(macroT.removeError, "danger");
         }
       },
     });
@@ -185,11 +188,11 @@ export default function MacroPage() {
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
         <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Globe size={12} />
-           Marktcontext
+           {macroT.eyebrow}
         </div>
-        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Macro-overzicht</h1>
+        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">{macroT.title}</h1>
         <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">
-          Analyse van economische trends en marktomstandigheden voor {selectedAsset}
+          {macroT.subtitle.replace("{symbol}", selectedAsset)}
         </p>
       </header>
 
@@ -210,7 +213,7 @@ export default function MacroPage() {
       <div className="space-y-4 py-8">
         <div className="flex items-center gap-2 mb-2">
            <Brain size={14} className="text-slate-400 dark:text-slate-500" />
-           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Analyse</span>
+           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{macroT.analysis}</span>
         </div>
         <DashboardErrorBoundary>
           <AgentInsightPanel category="macro" symbol={selectedAsset} />
@@ -222,7 +225,7 @@ export default function MacroPage() {
          <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
                <Activity size={14} className="text-slate-400 dark:text-slate-500" />
-               <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Configuratie</span>
+               <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{macroT.configuration}</span>
             </div>
             <MacroIndicatorScoreView
                addMacroIndicator={addMacroIndicator}
@@ -235,9 +238,9 @@ export default function MacroPage() {
             <div className="flex items-center justify-between mb-2">
                <div className="flex items-center gap-2">
                   <Activity size={14} className="text-slate-400 dark:text-slate-500" />
-                  <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Signals</span>
+                  <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{macroT.signals}</span>
                </div>
-               <div className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest">Scroll for other timeframes</div>
+               <div className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest">{macroT.scrollOtherTimeframes}</div>
             </div>
             <DashboardErrorBoundary>
               <MacroTabs

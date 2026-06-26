@@ -116,7 +116,7 @@ export default function SetupPage() {
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6 flex items-center justify-between">
             <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
               <ClipboardList className="text-blue-600" size={16} />
-              <span>Active Setups</span>
+              <span>Actieve setups</span>
             </div>
             
             <div className="flex items-center px-4 py-2 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl gap-2 focus-within:ring-4 focus-within:ring-blue-600/5 transition-all">
@@ -149,12 +149,12 @@ export default function SetupPage() {
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
             <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
               <PlusCircle className="text-blue-600" size={16} />
-              <span>New Setup</span>
+              <span>Nieuwe setup</span>
             </div>
           </div>
           <div className="card-p p-8">
             <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6 border-b border-slate-50 dark:border-slate-800/50 pb-4">
-              Add a new trading model to the system
+              Voeg een nieuw tradingmodel toe aan het systeem
             </p>
             <SetupForm onSaved={reloadSetups} />
           </div>

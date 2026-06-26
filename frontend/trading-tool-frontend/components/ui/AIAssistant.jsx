@@ -61,6 +61,20 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   const profileTelemetryKeyRef = useRef("");
   const [showReasoning, setShowReasoning] = useState(false);
 
+  const humanizeSurfaceStatus = (value) => {
+    const raw = String(value || "").toLowerCase();
+    if (!raw) return locale === "en" ? "quiet" : "rustig";
+    if (raw.includes("active")) return locale === "en" ? "active" : "actief";
+    if (raw.includes("quiet")) return locale === "en" ? "quiet" : "rustig";
+    if (raw.includes("early")) return locale === "en" ? "early" : "vroeg";
+    if (raw.includes("high")) return locale === "en" ? "high" : "hoog";
+    if (raw.includes("stable")) return locale === "en" ? "stable" : "stabiel";
+    if (raw.includes("guarded")) return locale === "en" ? "guarded" : "waakzaam";
+    if (raw.includes("defensive")) return locale === "en" ? "defensive" : "defensief";
+    if (raw.includes("balanced")) return locale === "en" ? "balanced" : "gebalanceerd";
+    return value;
+  };
+
   const uiText = locale === "en" ? {
     activeBriefing: "Active briefing",
     defensivePosture: "Defensive posture",
@@ -77,6 +91,30 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     inputPlaceholder: "Ask Finn for context, risk, or the next step...",
     setupWizard: "Setup wizard",
     startGuide: "Start guide",
+    decisionReviewFallback: "Finn is reviewing this decision.",
+    missionControlUnavailable: "Finn overview is temporarily unavailable.",
+    chooseSetup: "Choose setup",
+    chooseStrategy: "Choose strategy",
+    chooseIndicatorNode: "Choose indicator node",
+    planDeviation: "Plan deviation",
+    overrideConfirmed: "Override confirmed",
+    overrideRequired: "Override required",
+    planDeviationTitle: "You are not following your own plan right now.",
+    safeRoute: "Safe route",
+    missingStill: "Still missing",
+    invalid: "Invalid",
+    confirm: "Confirm",
+    behavioralMemoryCheck: "Behavioral memory check",
+    consciousConfirmationNeeded: "Conscious confirmation required",
+    consciouslyContinue: "Continue consciously",
+    reviewFirst: "Review first",
+    finnActionNeedsConfirmation: "Finn action awaiting confirmation",
+    context: "Context",
+    impact: "Impact",
+    safety: "Safety",
+    afterThis: "After this",
+    aiCommandCenter: "Finn command center",
+    reasoningChains: "Reasoning chains",
   } : {
     activeBriefing: "Actieve briefing",
     defensivePosture: "Defensieve houding",
@@ -93,6 +131,30 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     inputPlaceholder: "Vraag Finn om context, risico of een volgende stap...",
     setupWizard: "Setupwizard",
     startGuide: "Startgids",
+    decisionReviewFallback: "Finn reviewt deze beslissing.",
+    missionControlUnavailable: "Finn overzicht tijdelijk niet beschikbaar.",
+    chooseSetup: "Kies setup",
+    chooseStrategy: "Kies strategie",
+    chooseIndicatorNode: "Kies indicator-node",
+    planDeviation: "Plan afwijking",
+    overrideConfirmed: "Override bevestigd",
+    overrideRequired: "Override vereist",
+    planDeviationTitle: "Je houdt je nu niet aan je eigen plan.",
+    safeRoute: "Veilige route",
+    missingStill: "Ontbreekt nog",
+    invalid: "Ongeldig",
+    confirm: "Bevestigen",
+    behavioralMemoryCheck: "Behavioral memory check",
+    consciousConfirmationNeeded: "Bewuste bevestiging nodig",
+    consciouslyContinue: "Bewust doorgaan",
+    reviewFirst: "Eerst reviewen",
+    finnActionNeedsConfirmation: "Finn actie ter bevestiging",
+    context: "Context",
+    impact: "Impact",
+    safety: "Veiligheid",
+    afterThis: "Daarna",
+    aiCommandCenter: "Finn command center",
+    reasoningChains: "Reasoning chains",
   };
 
   useEffect(() => {
@@ -1133,14 +1195,14 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         <div className="flex items-center justify-between gap-2">
           <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
             <Brain size={11} />
-            Hoofdconclusie
+            {locale === "en" ? "Main conclusion" : "Hoofdconclusie"}
           </span>
           <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">
             {controller.dominant_label || controller.dominant_agent}
           </span>
         </div>
         <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">
-          {controller.reason || controller.next_action || "Finn heeft de agent-rangorde gewogen."}
+          {controller.reason || controller.next_action || (locale === "en" ? "Finn weighed the agent ranking." : "Finn heeft de agent-rangorde gewogen.")}
         </p>
         {!compact && controller.next_action && (
           <p className="mt-1 text-[8px] font-black uppercase tracking-widest opacity-75">
@@ -1149,7 +1211,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         )}
         {controller.primary_item_id && (
           <p className="mt-1 text-[8px] font-black uppercase tracking-widest opacity-65">
-            Accountability: {controller.primary_item_id}
+            {locale === "en" ? "Accountability" : "Accountability"}: {controller.primary_item_id}
           </p>
         )}
         {controller.primary_action?.prompt && (
@@ -1188,7 +1250,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         <div className="flex items-center justify-between gap-3">
           <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
             <Brain size={13} />
-            Behavioral Intelligence
+            {locale === "en" ? "Behavioral intelligence" : "Behavioral intelligence"}
           </span>
           {balanceScore !== undefined && balanceScore !== null && (
             <span className="rounded-full border border-violet-200 dark:border-violet-900/50 bg-white/80 dark:bg-slate-950/40 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
@@ -1220,7 +1282,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             <div className="flex items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
                 <Activity size={11} />
-                Trend
+                {locale === "en" ? "Trend" : "Trend"}
               </span>
               {(trend.status || trend.momentum) && (
                 <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
@@ -1237,7 +1299,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {signalCards.length > 0 && (
           <div className="space-y-2">
             <div className="text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-              Waar Finn nu op let
+              {locale === "en" ? "What Finn is watching now" : "Waar Finn nu op let"}
             </div>
             {signalCards.slice(0, 3).map((item, index) => (
               <div
@@ -1246,7 +1308,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-                    {item.label || item.type || "Signaal"}
+                    {item.label || item.type || (locale === "en" ? "Signal" : "Signaal")}
                   </span>
                   {(item.severity || item.confidence) && (
                     <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
@@ -1265,7 +1327,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {habitCards.length > 0 && (
           <div className="space-y-2">
             <div className="text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-              Werkstijl die Finn herkent
+              {locale === "en" ? "Work style Finn recognizes" : "Werkstijl die Finn herkent"}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {habitCards.slice(0, 4).map((card) => (
@@ -1360,7 +1422,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         <div className="flex items-center justify-between gap-2">
           <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
             <Shield size={11} />
-            Portfolio Risk
+            {locale === "en" ? "Portfolio risk" : "Portfolio Risk"}
           </span>
           <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
             {portfolioRisk.status}
@@ -1375,7 +1437,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {ignoreToday.length > 0 && (
           <div className="mt-2">
             <div className="text-[8px] font-black uppercase tracking-widest opacity-70">
-              Vandaag liever negeren
+              {locale === "en" ? "Better to ignore today" : "Vandaag liever negeren"}
             </div>
             <div className="mt-1 space-y-1">
               {ignoreToday.map((item) => (
@@ -1383,7 +1445,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[9px] font-black uppercase tracking-widest">{item.asset}</span>
                     <span className="text-[7px] font-black uppercase tracking-widest opacity-70">
-                      score {item.risk_score}
+                      {locale === "en" ? "score" : "score"} {item.risk_score}
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{item.reason}</p>
@@ -1396,7 +1458,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {liveHotspots.length > 0 && (
           <div className="mt-2">
             <div className="text-[8px] font-black uppercase tracking-widest opacity-70">
-              Live bot-hotspots
+              {locale === "en" ? "Live bot hotspots" : "Live bot-hotspots"}
             </div>
             <div className="mt-1 space-y-1">
               {liveHotspots.map((item) => (
@@ -1404,7 +1466,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[9px] font-black uppercase tracking-widest">{item.asset}</span>
                     <span className="text-[7px] font-black uppercase tracking-widest opacity-70">
-                      {item.live_bot_count} live
+                      {item.live_bot_count} {locale === "en" ? "live" : "live"}
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{item.summary}</p>
@@ -1417,15 +1479,15 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {!compact && rankedConflicts.length > 0 && (
           <div className="mt-2">
             <div className="text-[8px] font-black uppercase tracking-widest opacity-70">
-              Topconflicten
+              {locale === "en" ? "Top conflicts" : "Topconflicten"}
             </div>
             <div className="mt-1 space-y-1">
               {rankedConflicts.map((item, index) => (
                 <div key={`conflict-${item.asset || "portfolio"}-${index}`} className="rounded-lg bg-white/70 dark:bg-slate-950/35 px-2.5 py-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[9px] font-black uppercase tracking-widest">{item.asset || "Portfolio"}</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">{item.asset || (locale === "en" ? "Portfolio" : "Portfolio")}</span>
                     <span className="text-[7px] font-black uppercase tracking-widest opacity-70">
-                      {item.severity || item.risk_level || "review"}
+                      {item.severity || item.risk_level || (locale === "en" ? "review" : "review")}
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{item.reason}</p>
@@ -1467,7 +1529,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       },
       {
         key: "p3",
-        label: "Outcome Tracking",
+        label: "Outcome-tracking",
         value: governanceSummary?.outcome_tracking_count || 0,
         tone: "text-emerald-600 dark:text-emerald-300",
         status: (governanceSummary?.outcome_tracking_count || 0) > 0 ? "active" : "early",
@@ -1475,7 +1537,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       },
       {
         key: "p4",
-        label: "Portfolio Intelligence",
+        label: "Portfolio-intelligence",
         value: governanceSummary?.portfolio_intelligence_count || 0,
         tone: "text-amber-700 dark:text-amber-300",
         status: missionControl?.portfolio_risk?.status || "quiet",
@@ -1483,7 +1545,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       },
       {
         key: "p5",
-        label: "Priority Engine",
+        label: "Prioriteitenmotor",
         value: Array.isArray(priorityEngine?.top_priorities) ? priorityEngine.top_priorities.length : 0,
         tone: "text-violet-600 dark:text-violet-300",
         status: priorityEngine?.headline ? "active" : "quiet",
@@ -1491,7 +1553,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       },
       {
         key: "p6",
-        label: "Memory V2",
+        label: "Geheugen V2",
         value: memoryV2?.supporting_evidence_count || 0,
         tone: "text-fuchsia-600 dark:text-fuchsia-300",
         status: memoryV2?.confidence_level || "early",
@@ -1521,13 +1583,13 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             {primaryProfileHabitAlignment && (
               <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-200/80 bg-amber-50 px-2.5 py-1 text-[7px] font-black uppercase tracking-widest text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-300">
                 <Shield size={10} />
-                Behavioral rem: {primaryBehaviorLabel}
+                Gedragsrem: {primaryBehaviorLabel}
               </div>
             )}
           </div>
           {portfolioOS?.operating_posture && (
             <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">
-              {portfolioOS.operating_posture}
+              {humanizeSurfaceStatus(portfolioOS.operating_posture)}
             </span>
           )}
         </div>
@@ -1543,7 +1605,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 <span className={`text-[10px] font-black tabular-nums ${card.tone}`}>{card.value}</span>
               </div>
               <div className="mt-1 text-[7px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                {card.status}
+                {humanizeSurfaceStatus(card.status)}
               </div>
             </div>
           ))}
@@ -1554,10 +1616,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             <div className="flex items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
                 <Target size={11} />
-                Priority Engine
+                Prioriteitenmotor
               </span>
               <span className="text-[7px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-                {priorityEngine.open_counts?.high_priority_count || 0} high
+                {priorityEngine.open_counts?.high_priority_count || 0} hoog
               </span>
             </div>
             {primaryBehaviorRule && (
@@ -1621,10 +1683,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-fuchsia-700 dark:text-fuchsia-300">
                     <Brain size={11} />
-                    Memory V2
+                    Geheugen V2
                   </span>
                   <span className="text-[7px] font-black uppercase tracking-widest text-fuchsia-700 dark:text-fuchsia-300">
-                    {memoryV2.confidence_level || "early"}
+                    {humanizeSurfaceStatus(memoryV2.confidence_level || "early")}
                   </span>
                 </div>
                 {memoryV2.memory_pattern && (
@@ -1658,7 +1720,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                     Portfolio Operating System
                   </span>
                   <span className="text-[7px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">
-                    {portfolioOS.operating_posture}
+                    {humanizeSurfaceStatus(portfolioOS.operating_posture)}
                   </span>
                 </div>
                 {portfolioOS.control_plane?.why_now && (
@@ -1922,7 +1984,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
               Beslischeck
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
-              {analysis.headline || "Finn reviewt deze beslissing."}
+              {analysis.headline || uiText.decisionReviewFallback}
             </p>
           </div>
           <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
@@ -2059,7 +2121,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
               <BarChart3 size={11} />
-              Outcome Tracking
+              Outcome-tracking
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
               {analysis.headline || "Finn koppelt gedrag aan follow-through."}
@@ -2099,7 +2161,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
               <Target size={11} />
-              Priority Engine
+              Prioriteitenmotor
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
               {analysis.headline || "Finn rangschikt je volgende beste acties."}
@@ -2107,7 +2169,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           </div>
           {analysis.open_counts?.high_priority_count !== undefined && (
             <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
-              {analysis.open_counts.high_priority_count} high
+              {analysis.open_counts.high_priority_count} hoog
             </span>
           )}
         </div>
@@ -2141,14 +2203,14 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
               <Brain size={11} />
-              Memory V2
+              Geheugen V2
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
               {analysis.memory_pattern}
             </p>
           </div>
           <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
-            {analysis.confidence_level || "early"}
+            {humanizeSurfaceStatus(analysis.confidence_level || "early")}
           </span>
         </div>
         {analysis.behavioral_cost && (
@@ -2181,7 +2243,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           </div>
           {analysis.operating_posture && (
             <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
-              {analysis.operating_posture}
+              {humanizeSurfaceStatus(analysis.operating_posture)}
             </span>
           )}
         </div>
@@ -3173,7 +3235,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       }
     }
     console.error("Finn overzicht laden mislukt", lastError);
-    setMissionControlLoadError(lastError?.message || "Finn overzicht tijdelijk niet beschikbaar.");
+    setMissionControlLoadError(lastError?.message || uiText.missionControlUnavailable);
     setMissionControlLoading(false);
     return null;
   }
@@ -3809,7 +3871,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         </div>
         {isFinnStrategy && setupOptions.length > 0 && (
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/70 dark:bg-slate-950/30 p-3 space-y-2">
-            <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">Kies setup</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">{uiText.chooseSetup}</div>
             <div className="grid grid-cols-1 gap-2">
               {setupOptions.map((option) => (
                 <button
@@ -3828,7 +3890,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         )}
         {isFinnBot && strategyOptions.length > 0 && (
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/70 dark:bg-slate-950/30 p-3 space-y-2">
-            <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">Kies strategie</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">{uiText.chooseStrategy}</div>
             <div className="grid grid-cols-1 gap-2">
               {strategyOptions.map((option) => (
                 <button
@@ -3847,7 +3909,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         )}
         {isFinnIndicator && indicatorOptions.length > 0 && (
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/70 dark:bg-slate-950/30 p-3 space-y-2">
-            <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">Kies indicator-node</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">{uiText.chooseIndicatorNode}</div>
             <div className="grid grid-cols-1 gap-2">
               {indicatorOptions.map((option) => (
                 <button
@@ -3882,19 +3944,19 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-300">
                 <Shield size={13} />
-                Plan Afwijking
+                {uiText.planDeviation}
               </div>
               <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest border ${
                 planDeviation.acknowledged
                   ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
                   : "border-rose-200 bg-white/80 text-rose-700 dark:border-rose-900/60 dark:bg-slate-950/40 dark:text-rose-300"
               }`}>
-                {planDeviation.acknowledged ? "Override bevestigd" : "Override vereist"}
+                {planDeviation.acknowledged ? uiText.overrideConfirmed : uiText.overrideRequired}
               </span>
             </div>
             <div className="space-y-1">
               <div className="text-sm font-black text-slate-950 dark:text-slate-50">
-                Je houdt je nu niet aan je eigen plan.
+                {uiText.planDeviationTitle}
               </div>
               <p className="text-xs font-semibold leading-relaxed text-rose-800 dark:text-rose-100">
                 {planDeviation.message || "Deze wijziging wijkt af van je huidige setup-context."}
@@ -3914,7 +3976,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             )}
             {planDeviation.safe_alternative && (
               <p className="text-[11px] font-bold leading-snug text-slate-700 dark:text-slate-200">
-                Veilige route: {planDeviation.safe_alternative}
+                {uiText.safeRoute}: {planDeviation.safe_alternative}
               </p>
             )}
             {planDeviationRequiresAck && (
@@ -3943,7 +4005,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-950/20 p-3 space-y-2">
             {visibleMissingFields.length > 0 && (
               <div>
-                <div className="text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Ontbreekt nog</div>
+                <div className="text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">{uiText.missingStill}</div>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {visibleMissingFields.map((field) => (
                     <span key={field} className="px-2 py-1 rounded-lg bg-white/80 dark:bg-slate-950/50 text-[10px] font-bold text-amber-800 dark:text-amber-200 border border-amber-100 dark:border-amber-900/40">
@@ -3955,7 +4017,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             )}
             {message.invalidFields?.length > 0 && (
               <div>
-                <div className="text-[9px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-300">Ongeldig</div>
+                <div className="text-[9px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-300">{uiText.invalid}</div>
                 <div className="mt-1 space-y-1">
                   {message.invalidFields.map((item, index) => (
                     <div key={`${item.field}-${index}`} className="text-[11px] font-semibold text-rose-700 dark:text-rose-200">
@@ -3980,7 +4042,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/15"
           >
             {executingAction ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-            {action.label || "Bevestigen"}
+            {action.label || uiText.confirm}
           </button>
         ))}
       </div>
@@ -4008,10 +4070,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
             <Shield size={14} />
-            Behavioral Memory Check
+            {uiText.behavioralMemoryCheck}
           </div>
           <span className="shrink-0 rounded-full border border-amber-200 dark:border-amber-900/60 bg-white/80 dark:bg-slate-950/40 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
-            Bewuste bevestiging nodig
+            {uiText.consciousConfirmationNeeded}
           </span>
         </div>
 
@@ -4044,7 +4106,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
         {friction.safe_alternative && (
           <p className="text-[11px] font-bold leading-snug text-slate-700 dark:text-slate-200">
-            Veilige route: {friction.safe_alternative}
+            {uiText.safeRoute}: {friction.safe_alternative}
           </p>
         )}
 
@@ -4055,7 +4117,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             className="flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-amber-600/15 transition-colors hover:bg-amber-700 disabled:opacity-60"
           >
             <Shield size={14} />
-            Bewust doorgaan
+            {uiText.consciouslyContinue}
           </button>
           <button
             onClick={() => handleChat("Welke bot-decisions moet ik eerst reviewen?", false, {})}
@@ -4063,7 +4125,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/40 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200 transition-colors hover:border-slate-300 dark:hover:border-slate-700 disabled:opacity-60"
           >
             <ListChecks size={14} />
-            Eerst reviewen
+            {uiText.reviewFirst}
           </button>
         </div>
       </div>
@@ -4088,29 +4150,29 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-3">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-300">
           <ListChecks size={13} />
-          Finn Actie Ter Bevestiging
+          {uiText.finnActionNeedsConfirmation}
         </div>
         <div className="grid gap-2">
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
-            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">Context</div>
+            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">{uiText.context}</div>
             <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
               {context.page_type || "Finn"} · {context.symbol || "BTC"} · {context.timeframe || "1D"}
             </p>
           </div>
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
-            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">Impact</div>
+            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">{uiText.impact}</div>
             <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
               Finn werkt pas iets bij nadat jij expliciet bevestigt welke voorgestelde stap door mag.
             </p>
           </div>
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
-            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">Veiligheid</div>
+            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">{uiText.safety}</div>
             <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
               Er worden vanuit deze kaart geen live trades geplaatst. Gevoelige acties blijven review-first.
             </p>
           </div>
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
-            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">Daarna</div>
+            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">{uiText.afterThis}</div>
             <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
               Na bevestigen geeft Finn een korte statusupdate en de eerstvolgende veilige stap.
             </p>
@@ -4128,7 +4190,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
               })}
             >
               {executingAction ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-              {action.label || "Bevestigen"}
+              {action.label || uiText.confirm}
             </button>
           ))}
         </div>
@@ -4931,7 +4993,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
         <div className="flex items-start justify-between">
           <div className="space-y-0.5">
             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-              AI Command Center
+              {uiText.aiCommandCenter}
             </span>
             <h4 className="text-xs font-black text-foreground dark:text-slate-200 tracking-tight leading-snug">
               {payload.name || (baseType === "add_to_watchlist" ? `Watchlist Activatie: ${payload.symbol}` : baseType === "remove_from_watchlist" ? `Watchlist Deactivatie: ${payload.symbol}` : `${payload.symbol || "Asset"} Concept`)}
@@ -5028,7 +5090,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
           {baseType === "bot" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Safety Profile</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Veiligheidsprofiel</span>
                 <span className="text-xs text-foreground dark:text-slate-200 capitalize">{payload.risk_profile || "balanced"}</span>
               </div>
               <div className="flex flex-col">
@@ -5489,7 +5551,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
           {draft.type === "bot" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Safety Profile</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Veiligheidsprofiel</span>
                 <span className="text-xs text-foreground dark:text-slate-200 capitalize">{draft.payload.risk_profile || "balanced"}</span>
               </div>
               <div className="flex flex-col">
@@ -5676,7 +5738,7 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
                 <span className="text-xs text-foreground dark:text-slate-200">{slots?.name || "SOL Bot"}</span>
               </div>
               <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Safety Profile</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Veiligheidsprofiel</span>
                 <span className="text-xs text-foreground dark:text-slate-200 capitalize">{slots?.risk_profile || "balanced"}</span>
               </div>
               <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
@@ -5773,7 +5835,7 @@ function DebugExplainabilityCard({ reasoning }) {
 
           {reasons && reasons.length > 0 && (
             <div className="space-y-1">
-              <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block">REASONING CHAINS:</span>
+              <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block">{uiText.reasoningChains}:</span>
               <ul className="space-y-1 pl-2">
                 {reasons.map((reason, idx) => (
                   <li key={idx} className="text-[10px] text-slate-600 dark:text-slate-300 flex items-start gap-1.5">

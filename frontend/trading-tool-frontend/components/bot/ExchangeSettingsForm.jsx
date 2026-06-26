@@ -85,7 +85,7 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">API Key</label>
           <input 
             type="text" 
-            placeholder="Paste your API key here"
+            placeholder="Plak hier je API-key"
             className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 outline-none transition-all"
             value={form.api_key}
             onChange={e => setForm({...form, api_key: e.target.value})}
@@ -96,7 +96,7 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">API Secret</label>
           <input 
             type="password" 
-            placeholder="Paste your API secret here"
+            placeholder="Plak hier je API-secret"
             className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 outline-none transition-all"
             value={form.api_secret}
             onChange={e => setForm({...form, api_secret: e.target.value})}
@@ -108,7 +108,7 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Passphrase (Optional)</label>
             <input 
               type="password" 
-              placeholder="API Passphrase if required"
+              placeholder="API-passphrase indien vereist"
               className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 outline-none transition-all"
               value={form.api_passphrase}
               onChange={e => setForm({...form, api_passphrase: e.target.value})}

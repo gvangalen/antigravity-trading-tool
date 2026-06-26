@@ -130,14 +130,14 @@ export default function NavBar() {
                   <img src="/tradamind_icon_v2.png" alt="TM" className="h-12 w-12 object-contain rounded-xl" />
                   <div className="flex flex-col justify-center">
                     <div className="text-lg font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1">
-                      Tradamind
+                      {BRANDING.APP_NAME}
                     </div>
                     <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-500">
                       <div className="animate-pulse-soft">
                         <ShieldCheck size={12} strokeWidth={2.5} />
                       </div>
                       <div className="text-[8px] font-black uppercase tracking-[0.2em] opacity-90">
-                        Professional
+                        {BRANDING.APP_SLOGAN}
                       </div>
                     </div>
                   </div>
@@ -260,7 +260,7 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
   );
 }
 
-function WatchlistItem({ symbol, isActive, onSelect, onRemove }) {
+function WatchlistItem({ symbol, isActive, onSelect, onRemove, helperText }) {
   return (
     <div
       className={`
@@ -291,7 +291,7 @@ function WatchlistItem({ symbol, isActive, onSelect, onRemove }) {
 
       <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60">
         <p className="text-[10px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
-          Open direct de marktcontext voor <span className="font-black text-slate-700 dark:text-slate-200">{symbol}</span>.
+          {helperText} <span className="font-black text-slate-700 dark:text-slate-200">{symbol}</span>.
         </p>
       </div>
     </div>
@@ -323,11 +323,11 @@ function WatchlistSidebar({ onNavigate, pathname }) {
         <div className="px-1.5">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 px-4 py-4">
             <p className="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">
-              {t?.nav?.watchlistEmptyTitle || "No watchlist yet"}
+              {t?.nav?.watchlistEmptyTitle || "Nog geen watchlist"}
             </p>
             <p className="mt-2 text-[11px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
               {t?.nav?.watchlistEmptyBody ||
-                "Add assets through the search bar or let Finn add one to your watchlist. Your market context will appear here."}
+                "Voeg assets toe via de zoekbalk of laat Finn er een aan je watchlist toevoegen. Je marktcontext verschijnt hier."}
             </p>
           </div>
         </div>
@@ -340,6 +340,7 @@ function WatchlistSidebar({ onNavigate, pathname }) {
                 key={symbol}
                 symbol={symbol}
                 isActive={isActive}
+                helperText={t?.nav?.watchlistOpenContext || "Open direct de marktcontext voor"}
                 onSelect={() => {
                   setActiveSetup(null);
                   setFocusedBotId(null);
@@ -354,19 +355,19 @@ function WatchlistSidebar({ onNavigate, pathname }) {
                 }}
                 onRemove={() => {
                   openConfirm({
-                    title: t?.nav?.watchlistRemoveTitle || "Remove asset?",
+                    title: t?.nav?.watchlistRemoveTitle || "Asset verwijderen?",
                     context:
                       t?.nav?.watchlistRemoveContext?.replace("{symbol}", symbol) ||
-                      `${symbol} will be removed from your active watchlist.`,
+                      `${symbol} verdwijnt uit je actieve watchlist.`,
                     impact:
                       t?.nav?.watchlistRemoveImpact ||
-                      "The asset stays available, but disappears from your current tracking and quick context switches.",
+                      "De asset blijft beschikbaar, maar verdwijnt uit je huidige tracking en snelle contextwissels.",
                     safety:
                       t?.nav?.watchlistRemoveSafety ||
-                      "This does not trigger orders or data changes. Only your personal watchlist changes.",
+                      "Dit start geen orders of datawijzigingen. Alleen je persoonlijke watchlist verandert.",
                     consequence:
                       t?.nav?.watchlistRemoveConsequence ||
-                      "After confirming, your watchlist refreshes and Finn focuses on your remaining assets.",
+                      "Na bevestigen vernieuwt je watchlist en focust Finn op je overgebleven assets.",
                     tone: "danger",
                     confirmText: t?.common?.delete || "Delete",
                     cancelText: t?.common?.cancel || "Cancel",
@@ -375,7 +376,7 @@ function WatchlistSidebar({ onNavigate, pathname }) {
                       await remove(symbol);
                       showSnackbar(
                         t?.nav?.watchlistRemoveSuccess?.replace("{symbol}", symbol) ||
-                          `${symbol} removed from watchlist`,
+                          `${symbol} verwijderd van watchlist`,
                         "success"
                       );
                     }

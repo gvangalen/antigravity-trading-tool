@@ -1,22 +1,27 @@
 "use client";
 
+import { useTranslation } from "@/app/providers/I18nProvider";
+
 /**
  * 🛰️ Refined Report Tabs V2 PRO
  * - Industrial minimalist navigation
  * - Monospaced shortcuts (D/W/M/Q)
  * - Professional Dutch labels
  */
-const REPORT_TYPES = {
-  daily: { label: "Dagrapport", id: "D" },
-  weekly: { label: "Weekrapport", id: "W" },
-  monthly: { label: "Maandrapport", id: "M" },
-  quarterly: { label: "Kwartaalrapport", id: "Q" },
+const REPORT_TYPE_IDS = {
+  daily: "D",
+  weekly: "W",
+  monthly: "M",
+  quarterly: "Q",
 };
 
 export default function ReportTabs({ selected, onChange }) {
+  const { t } = useTranslation();
+  const reportTypes = t.pages.report.types;
+
   return (
     <div className="flex items-center gap-1.5 p-1 bg-slate-100/50 rounded-2xl border border-slate-200/60 w-fit shadow-inner-light animate-in fade-in slide-in-from-left-4 duration-700">
-      {Object.entries(REPORT_TYPES).map(([key, { label, id }]) => {
+      {Object.entries(REPORT_TYPE_IDS).map(([key, id]) => {
         const isSelected = selected === key;
         
         return (
@@ -39,7 +44,7 @@ export default function ReportTabs({ selected, onChange }) {
               {id}
             </span>
             <span className={`text-xs font-black uppercase tracking-widest ${isSelected ? "opacity-100" : "opacity-60 group-hover:opacity-100"}`}>
-              {label}
+              {reportTypes[key]}
             </span>
           </button>
         );

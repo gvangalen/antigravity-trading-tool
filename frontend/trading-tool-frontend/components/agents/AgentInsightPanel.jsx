@@ -148,7 +148,7 @@ export default function AgentInsightPanel({ category, className = "" }) {
                ))
              ) : (
                <div className="text-[11px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest text-center py-8">
-                  No reflections recorded yet
+                  Nog geen reflecties vastgelegd
                </div>
              )
            )}

@@ -211,7 +211,7 @@ function BotPageInner() {
     try { 
       setGeneratingBotId(bot.id); 
       await generateDecisionForBot({ bot_id: bot.id }); 
-      showSnackbar(`New proposal for ${bot.name}`, "success"); 
+      showSnackbar(`Nieuw voorstel voor ${bot.name}`, "success"); 
     }
     catch { 
       showSnackbar("Voorstel genereren mislukt", "danger"); 
@@ -250,7 +250,7 @@ function BotPageInner() {
       
       // Auto-prefill the form values
       const initialValues = {
-        name: `AI Bot ${symbol} ${mode === "paper" ? "Paper" : "Live"}`,
+        name: `Finn Bot ${symbol} ${mode === "paper" ? "Paper" : "Live"}`,
         symbol: symbol,
         is_live: mode === "live",
         budget_total_eur: budget ? Number(budget) : 1000,
@@ -369,12 +369,12 @@ function BotPageInner() {
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
         <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Wallet size={12} />
-           System Control
+           Systeemcontrole
         </div>
           <div className="max-w-2xl">
             <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Bots</h1>
             <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 leading-relaxed">
-              Manage your automated trading strategies
+              Beheer je geautomatiseerde tradingstrategieën
             </p>
           </div>
       </header>
@@ -395,11 +395,11 @@ function BotPageInner() {
             
             <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
               <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
-                <div className="card-title text-slate-900 dark:text-white flex items-center gap-3 font-black uppercase tracking-widest text-xs">Portfolio Overview</div>
+                <div className="card-title text-slate-900 dark:text-white flex items-center gap-3 font-black uppercase tracking-widest text-xs">Portfolio-overzicht</div>
               </div>
               <div className="card-p p-8">
                 <PortfolioBalanceCard
-                  title="RECAP"
+                  title="OVERZICHT"
                   defaultRange="1W"
                   is_live={envFilter === "all" ? null : envFilter === "live"}
                 />
@@ -417,16 +417,16 @@ function BotPageInner() {
           <div className="space-y-8 pt-8 border-t border-slate-100 dark:border-slate-800">
             <div className="space-y-6">
               <div>
-                <h2 className="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tighter">My Bots</h2>
+                <h2 className="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tighter">Mijn bots</h2>
                 <p className="text-[13px] font-medium text-slate-400 dark:text-slate-500 mt-1">Overzicht en beheer van al je actieve handelsstrategieën.</p>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-6">
                 <div className="flex gap-4">
                   <div className="flex bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-inner">
-                    <button onClick={() => setStatusFilter("all")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "all" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-slate-600"}`}>All ({bots.length})</button>
-                    <button onClick={() => setStatusFilter("active")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "active" ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-emerald-500"}`}>Active ({bots.filter(b => b.is_active).length})</button>
-                    <button onClick={() => setStatusFilter("paused")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "paused" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-amber-500"}`}>Paused ({bots.filter(b => !b.is_active).length})</button>
+                    <button onClick={() => setStatusFilter("all")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "all" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-slate-600"}`}>Alle ({bots.length})</button>
+                    <button onClick={() => setStatusFilter("active")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "active" ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-emerald-500"}`}>Actief ({bots.filter(b => b.is_active).length})</button>
+                    <button onClick={() => setStatusFilter("paused")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "paused" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-amber-500"}`}>Gepauzeerd ({bots.filter(b => !b.is_active).length})</button>
                   </div>
                   
                   <div className="flex bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-inner items-center">
@@ -435,7 +435,7 @@ function BotPageInner() {
                       onChange={(e) => setAssetFilter(e.target.value)}
                       className="bg-transparent px-4 py-1 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer appearance-none"
                     >
-                      <option value="all">ALL ASSETS</option>
+                      <option value="all">ALLE ASSETS</option>
                       {availableAssets.map((a) => (
                         <option key={a} value={a}>{a}</option>
                       ))}

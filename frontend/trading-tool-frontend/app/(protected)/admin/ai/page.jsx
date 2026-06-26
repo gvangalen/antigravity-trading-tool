@@ -99,7 +99,7 @@ export default function AdminAiDashboard() {
       const data = await fetchAdminAiStats();
       setStats(data);
     } catch (err) {
-      console.error("Failed to load admin AI stats", err);
+      console.error("Admin AI-statistieken laden mislukt", err);
       setError("Je hebt geen admin rechten of de API is offline.");
     } finally {
       setLoading(false);
@@ -430,7 +430,7 @@ export default function AdminAiDashboard() {
           ) : (
              <div className="h-[280px] flex flex-col items-center justify-center text-slate-300">
                <ShieldCheck size={48} strokeWidth={1} />
-               <p className="text-[10px] font-black uppercase tracking-widest mt-4 italic">No Rejections Today</p>
+               <p className="text-[10px] font-black uppercase tracking-widest mt-4 italic">Vandaag geen afwijzingen</p>
              </div>
           )}
         </div>
@@ -476,7 +476,7 @@ export default function AdminAiDashboard() {
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
               <Target size={14} className="text-violet-600" />
-              Most Expensive Entry Points
+              Duurste entry points
             </h3>
           </div>
           <div className="overflow-x-auto">
@@ -484,10 +484,10 @@ export default function AdminAiDashboard() {
               <thead>
                 <tr className="border-b border-slate-50">
                   <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Entry point</th>
-                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Source</th>
-                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">MTD cost</th>
-                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Blocked</th>
-                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Avg / call</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Bron</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">MTD-kosten</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Geblokkeerd</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Gem. / call</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -509,7 +509,7 @@ export default function AdminAiDashboard() {
                     <td className="py-5">
                       <div className="text-[10px] font-black uppercase tracking-widest text-rose-500">
                         <div>{item.blocked_requests} hits</div>
-                        <div>€{item.blocked_estimated_cost.toFixed(2)} est.</div>
+                        <div>€{item.blocked_estimated_cost.toFixed(2)} schatting</div>
                       </div>
                     </td>
                     <td className="py-5">
@@ -581,9 +581,9 @@ export default function AdminAiDashboard() {
                       <div className="flex flex-col">
                         <p className="text-[9px] font-black uppercase text-slate-300 italic">Mnd: €{user.usage_month_eur.toFixed(2)}</p>
                         <p className="text-[9px] font-black uppercase text-blue-400 italic">Vandaag: €{user.usage_today_eur.toFixed(2)}</p>
-                        <p className="text-[9px] font-black uppercase text-violet-400 italic">Background: €{user.background_usage_month_eur.toFixed(2)}</p>
+                        <p className="text-[9px] font-black uppercase text-violet-400 italic">Achtergrond: €{user.background_usage_month_eur.toFixed(2)}</p>
                         <p className="text-[9px] font-black uppercase text-emerald-500 italic">Interactive: €{user.interactive_usage_month_eur.toFixed(2)}</p>
-                        <p className="text-[9px] font-black uppercase text-rose-500 italic">Blocked: {user.blocked_requests_month} / €{user.blocked_estimated_cost_month_eur.toFixed(2)} est.</p>
+                        <p className="text-[9px] font-black uppercase text-rose-500 italic">Geblokkeerd: {user.blocked_requests_month} / €{user.blocked_estimated_cost_month_eur.toFixed(2)} schatting</p>
                       </div>
                     </td>
                     <td className="py-5">
@@ -630,7 +630,7 @@ export default function AdminAiDashboard() {
                 <tr key={idx} className="group hover:bg-slate-50/50 transition-colors">
                   <td className="py-5 pr-4">
                     <p className="text-sm font-black text-slate-900 italic tracking-tight uppercase">{item.purpose.replace('chat_', '').replace('_', ' ')}</p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Active orchestration model</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Actief orchestration-model</p>
                   </td>
                   <td className="py-5">
                     <div className="text-sm font-black text-slate-900 flex items-center gap-2">

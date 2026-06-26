@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Activity, Brain, LayoutGrid, AlertTriangle, LineChart } from "lucide-react";
 import TradingViewChart from "@/components/charts/TradingViewChart";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 import TechnicalTerminalHUD from "@/components/technical/TechnicalTerminalHUD";
 import TechnicalTabs from "@/components/technical/TechnicalTabs";
@@ -32,6 +33,8 @@ export default function TechnicalPage() {
   const [activeTab, setActiveTab] = useState("Dag");
   const { openConfirm, showSnackbar } = useModal();
   const { symbol: selectedAsset } = useCurrentAsset();
+  const { t } = useTranslation();
+  const technicalT = t.pages.technical;
 
   // ===============================
   // ⚙️ TECHNICAL DATA
@@ -78,19 +81,19 @@ export default function TechnicalPage() {
     const symbol = SYMBOL_MAP[normalized] || "BINANCE:BTCUSDT";
 
     openConfirm({
-      title: `Bekijk chart: ${name}`,
-      statusLabel: "Alleen lezen",
-      context: `Je bekijkt de live chart van ${name} binnen Technical.`,
-      impact: "Er verandert niets aan je indicatoren of analyse. Dit opent alleen een visuele controlelaag.",
-      safety: "Veilig om te gebruiken tijdens review. Er worden geen datafeeds aangepast.",
-      consequence: "Na sluiten keer je terug naar je huidige technical context.",
+      title: technicalT.viewChartTitle.replace("{name}", name),
+      statusLabel: technicalT.readOnly,
+      context: technicalT.viewChartContext.replace("{name}", name),
+      impact: technicalT.viewChartImpact,
+      safety: technicalT.viewChartSafety,
+      consequence: technicalT.viewChartConsequence,
       description: (
         <div className="w-full h-[400px] mt-4">
           <TradingViewChart symbol={symbol} height={400} />
         </div>
       ),
-      confirmText: "Sluiten",
-      cancelText: "Terug",
+      confirmText: technicalT.close,
+      cancelText: technicalT.back,
       icon: <LineChart className="w-5 h-5 text-blue-500" />,
       tone: "info"
     });
@@ -103,21 +106,21 @@ export default function TechnicalPage() {
     if (!name) return;
 
     openConfirm({
-      title: "Indicator loskoppelen",
-      context: `Je verwijdert ${name} uit je technische analyse voor ${selectedAsset}.`,
-      impact: "Deze indicator telt niet meer mee in je technische overzicht en bijbehorende conclusies.",
-      safety: "Dit verandert geen marktdata of trades. Alleen je analyse-opbouw wordt bijgewerkt.",
-      consequence: "Na bevestigen wordt de pagina vernieuwd met de aangepaste indicatorenset.",
-      confirmText: "Koppel los",
-      cancelText: "Annuleren",
+      title: technicalT.removeTitle,
+      context: technicalT.removeContext.replace("{name}", name).replace("{symbol}", selectedAsset),
+      impact: technicalT.removeImpact,
+      safety: technicalT.removeSafety,
+      consequence: technicalT.removeConsequence,
+      confirmText: technicalT.removeConfirm,
+      cancelText: t.common.cancel,
       tone: "danger",
       onConfirm: async () => {
         try {
           await removeTechnicalIndicator(name);
-          showSnackbar(`'${name}' losgekoppeld`, "success");
+          showSnackbar(technicalT.removeSuccess.replace("{name}", name), "success");
         } catch (err) {
           console.error("❌ Disconnect failed:", err);
-          showSnackbar("Loskoppelen mislukt", "danger");
+          showSnackbar(technicalT.removeError, "danger");
         }
       },
     });
@@ -134,11 +137,11 @@ export default function TechnicalPage() {
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
         <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Activity size={12} />
-           Marktcontext
+           {technicalT.eyebrow}
         </div>
-        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Technisch overzicht</h1>
+        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">{technicalT.title}</h1>
         <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">
-          Analyse van trends en technische indicatoren voor {selectedAsset}
+          {technicalT.subtitle.replace("{symbol}", selectedAsset)}
         </p>
       </header>
 
@@ -159,7 +162,7 @@ export default function TechnicalPage() {
       <div className="space-y-4 py-8">
         <div className="flex items-center gap-2 mb-2">
            <Brain size={14} className="text-slate-400 dark:text-slate-500" />
-           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Analyse</span>
+           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{technicalT.analysis}</span>
         </div>
         <DashboardErrorBoundary>
           <AgentInsightPanel category="technical" symbol={selectedAsset} />
@@ -171,7 +174,7 @@ export default function TechnicalPage() {
          <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
                <Activity size={14} className="text-slate-400 dark:text-slate-500" />
-               <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Configuratie</span>
+               <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{technicalT.configuration}</span>
             </div>
             <TechnicalIndicatorScoreView
                addTechnicalIndicator={addTechnicalIndicator}
@@ -184,9 +187,9 @@ export default function TechnicalPage() {
             <div className="flex items-center justify-between mb-2">
                <div className="flex items-center gap-2">
                   <Activity size={14} className="text-slate-400 dark:text-slate-500" />
-                  <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Signals</span>
+                  <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{technicalT.signals}</span>
                </div>
-               <div className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest">Scroll for other timeframes</div>
+               <div className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest">{technicalT.scrollOtherTimeframes}</div>
             </div>
             <DashboardErrorBoundary>
               <TechnicalTabs 
@@ -205,7 +208,7 @@ export default function TechnicalPage() {
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 px-6 py-4 rounded-2xl shadow-xl flex items-center gap-4 text-red-700 dark:text-red-300 z-50 transition-colors">
            <AlertTriangle size={24} />
            <div>
-              <div className="text-[11px] font-black uppercase tracking-widest">Error Message</div>
+              <div className="text-[11px] font-black uppercase tracking-widest">{technicalT.errorLabel}</div>
               <div className="text-sm font-medium">{error}</div>
            </div>
         </div>
