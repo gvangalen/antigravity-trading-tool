@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Activity, LayoutGrid, History, TrendingUp } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 // Hooks
 import { useMarketData } from "@/hooks/useMarketData";
@@ -23,6 +24,8 @@ import { useCurrentAsset } from "@/hooks/useCurrentAsset";
 
 export default function MarketPage() {
   const { symbol: activeSymbol } = useCurrentAsset();
+  const { t } = useTranslation();
+  const marketT = t.pages.market;
 
   // ===============================
   // 🧭 ONBOARDING HOOK
@@ -77,8 +80,8 @@ export default function MarketPage() {
   const safeForward = forwardReturns || {};
 
   const biasText = 
-    (safeMarketScore ?? 50) >= 75 ? "Positive" : 
-    (safeMarketScore ?? 50) <= 25 ? "Negative" : "Neutral";
+    (safeMarketScore ?? 50) >= 75 ? marketT.biasPositive : 
+    (safeMarketScore ?? 50) <= 25 ? marketT.biasNegative : marketT.biasNeutral;
 
   // ===============================
   // 🧱 RENDER
@@ -92,10 +95,10 @@ export default function MarketPage() {
         <div className="flex-1">
           <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
              <Activity size={12} />
-             Status: verbonden
+             {marketT.statusConnected}
           </div>
-          <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Marktoverzicht</h1>
-          <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">Analyse van marktsentiment en prijsactie voor {activeSymbol}</p>
+          <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">{marketT.title}</h1>
+          <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">{marketT.subtitle.replace("{symbol}", activeSymbol)}</p>
         </div>
       </header>
 
@@ -114,7 +117,7 @@ export default function MarketPage() {
       <div className="space-y-8 px-4">
          <div className="flex items-center gap-4 mb-2">
             <div className="w-8 h-0.5 bg-blue-600/30" />
-            <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] opacity-90">{activeSymbol} analyse</span>
+            <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] opacity-90">{marketT.analysis.replace("{symbol}", activeSymbol)}</span>
          </div>
          <DashboardErrorBoundary>
            <AgentInsightPanel category="market" symbol={activeSymbol} />
@@ -127,7 +130,7 @@ export default function MarketPage() {
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
              <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                <LayoutGrid size={16} className="text-blue-600" />
-               Configuratie ({activeSymbol})
+               {marketT.configuration.replace("{symbol}", activeSymbol)}
              </div>
           </div>
           <div className="card-p p-8">
@@ -144,13 +147,13 @@ export default function MarketPage() {
            <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
               <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                 <Activity size={16} className="text-blue-600" />
-                Signals
+                {marketT.signals}
               </div>
            </div>
            <div className="card-p p-0">
               <DashboardErrorBoundary>
                 <TechnicalTerminalGrid
-                  title={`${activeSymbol} Signal Monitor`}
+                  title={marketT.signalMonitor.replace("{symbol}", activeSymbol)}
                   onRemoveIndicator={() => {}}
                   loading={loading}
                   symbol={activeSymbol}
@@ -165,7 +168,7 @@ export default function MarketPage() {
              <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
                 <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                   <History size={16} className="text-blue-600" />
-                  {activeSymbol} Price History
+                  {marketT.priceHistory.replace("{symbol}", activeSymbol)}
                 </div>
              </div>
              <div className="card-p p-8">
@@ -180,7 +183,7 @@ export default function MarketPage() {
              <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
                 <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                   <TrendingUp size={16} className="text-blue-600" />
-                  {activeSymbol} Forecast
+                  {marketT.forecast.replace("{symbol}", activeSymbol)}
                 </div>
              </div>
              <div className="card-p p-8">
@@ -193,8 +196,8 @@ export default function MarketPage() {
         <div className="card bg-slate-50 dark:bg-slate-900/50 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden mb-24">
           <div className="p-8 flex flex-col md:flex-row items-center justify-between gap-8">
             <div className="space-y-2">
-              <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight uppercase tracking-widest">System Maintenance</h3>
-              <p className="text-sm text-slate-400 font-medium">Sync historical Coingecko data to enable backtesting for specific assets.</p>
+              <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight uppercase tracking-widest">{marketT.systemMaintenanceTitle}</h3>
+              <p className="text-sm text-slate-400 font-medium">{marketT.systemMaintenanceDescription}</p>
             </div>
             <div className="flex flex-wrap gap-4">
               {["BTC", "ETH", "SOL"].map(s => (
@@ -204,7 +207,7 @@ export default function MarketPage() {
                   disabled={loading}
                   className="px-6 py-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-black text-slate-700 dark:text-slate-200 hover:border-blue-500 transition-all shadow-sm active:scale-95 disabled:opacity-50"
                 >
-                  Sync {s} History
+                  {marketT.syncHistory.replace("{symbol}", s)}
                 </button>
               ))}
             </div>
@@ -215,7 +218,7 @@ export default function MarketPage() {
       {loading && (
         <div className="fixed bottom-8 right-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-bounce z-50 transition-colors">
            <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-           <span className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Processing {activeSymbol}...</span>
+           <span className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">{marketT.processing.replace("{symbol}", activeSymbol)}</span>
         </div>
       )}
     </div>

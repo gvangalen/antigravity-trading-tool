@@ -259,17 +259,17 @@ export default function BotAgentCard({
 
   const riskConfig = {
     conservative: {
-      label: "Risk: Conservative",
+      label: "Risico: Conservatief",
       className: "bg-green-100 text-green-700 border-green-200",
       icon: <Shield size={12} />,
     },
     balanced: {
-      label: "Risk: Balanced",
+      label: "Risico: Gebalanceerd",
       className: "bg-yellow-100 text-yellow-700 border-yellow-200",
       icon: <Layers size={12} />,
     },
     aggressive: {
-      label: "Risk: Aggressive",
+      label: "Risico: Agressief",
       className: "bg-red-100 text-red-700 border-red-200",
       icon: <Rocket size={12} />,
     },
@@ -440,7 +440,7 @@ export default function BotAgentCard({
                   ) : (
                     <RotateCcw size={11} className="opacity-70" />
                   )}
-                  {backtestLoading ? "ANALYZING..." : "RUN BACKTEST"}
+                  {backtestLoading ? "ANALYSEREN..." : "BACKTEST STARTEN"}
                 </button>
 
                 <button
@@ -453,7 +453,7 @@ export default function BotAgentCard({
                   ) : (
                     <Activity size={11} className="opacity-70" />
                   )}
-                  SCENARIOS
+                  SCENARIO'S
                 </button>
               </div>
             </div>
@@ -486,7 +486,7 @@ export default function BotAgentCard({
         {/* 📊 SYSTEM STATUS BAR (UPGRADED PADDING) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-2 bg-[var(--color-border-subtle)] border border-slate-100 rounded-[1.5rem]">
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Status Response</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Statusreactie</div>
              <div className={`text-xs font-black uppercase tracking-tight flex items-center gap-2 ${bot?.is_live ? 'text-emerald-600' : 'text-blue-600'}`}>
                 <div className={`w-2 h-2 rounded-full ${botState === 'live' ? (bot?.is_live ? 'bg-emerald-500' : 'bg-green-500') : 'bg-slate-400'}`} />
                 {bot?.is_live ? 'LIVE' : 'PAPER'} {botState}
@@ -494,7 +494,7 @@ export default function BotAgentCard({
           </div>
 
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Market Action</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Marktactie</div>
              <div className="text-xs font-black text-[var(--primary)] uppercase tracking-tight flex items-center gap-2">
                 <Rocket size={12} strokeWidth={3} />
                 {statusLabel}
@@ -502,7 +502,7 @@ export default function BotAgentCard({
           </div>
 
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Logic Confidence</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Logische zekerheid</div>
              <div className="text-xs font-black text-foreground uppercase tracking-tight flex items-center gap-2">
                 <Layers size={12} strokeWidth={3} />
                 {confidence}
@@ -510,8 +510,8 @@ export default function BotAgentCard({
           </div>
 
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Telemetry Sync</div>
-             <div className="text-xs font-black text-muted tracking-tight font-mono">{lastRun || "SYNCING..."}</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Telemetry-sync</div>
+             <div className="text-xs font-black text-muted tracking-tight font-mono">{lastRun || "SYNCHRONISEREN..."}</div>
           </div>
         </div>
 
@@ -521,7 +521,7 @@ export default function BotAgentCard({
           className="w-full mt-4 py-3 border border-slate-200 dark:border-slate-800 border-dashed rounded-xl text-[10px] font-black text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center justify-center gap-2 uppercase tracking-[0.2em] shadow-sm active:scale-[0.99]"
         >
           {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          {isExpanded ? "Collapse Diagnostics" : "View Full Diagnostics"}
+          {isExpanded ? "Diagnostiek inklappen" : "Volledige diagnostiek bekijken"}
         </button>
 
         {/* 📊 BACKTEST RESULTS SECTION */}
@@ -530,7 +530,7 @@ export default function BotAgentCard({
           <div className="mt-4 p-6 bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl flex items-center justify-center gap-4 animate-pulse">
             <div className="w-5 h-5 border-2 border-slate-300 border-t-[var(--primary)] animate-spin rounded-full" />
             <div className="text-xs font-black text-secondary uppercase tracking-[0.2em]">
-              {scenariosLoading ? "Crunching parallel scenarios..." : "Analyzing last 30 days..."}
+              {scenariosLoading ? "Parallelle scenario's doorrekenen..." : "Laatste 30 dagen analyseren..."}
             </div>
           </div>
         )}
@@ -546,7 +546,7 @@ export default function BotAgentCard({
                   <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
                     <Activity size={16} strokeWidth={3} />
                   </div>
-                  <h3 className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">{symbol} Performance Scan (V2)</h3>
+                  <h3 className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">{symbol} Performancescan (V2)</h3>
                 </div>
                 <button 
                   onClick={() => setBacktestResult(null)}
@@ -666,7 +666,7 @@ export default function BotAgentCard({
                       </div>
                     ))
                   ) : (
-                    <div className="text-[10px] font-bold text-secondary italic">No trades executed in last 30 days.</div>
+                    <div className="text-[10px] font-bold text-secondary italic">Geen trades uitgevoerd in de afgelopen 30 dagen.</div>
                   )}
                 </div>
               </div>

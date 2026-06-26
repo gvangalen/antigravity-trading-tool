@@ -153,7 +153,7 @@ export default function AvatarMenu() {
               <div className="flex flex-col items-start leading-none">
                 <span className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">{t.common.language}</span>
                 <span className="font-bold">
-                  {locale === "nl" ? "Nederlands actief -> wissel naar Engels" : "English active -> switch to Dutch"}
+                  {locale === "nl" ? "Nederlands actief, wissel naar Engels" : "English active, switch to Dutch"}
                 </span>
               </div>
             </DropdownButton>
@@ -163,7 +163,7 @@ export default function AvatarMenu() {
               icon={isDark ? <Sun size={16} /> : <Moon size={16} />}
               onClick={toggleTheme}
             >
-              {isDark ? (locale === 'nl' ? "Lichte Modus" : "Light Mode") : (locale === 'nl' ? "Donkere Modus" : "Dark Mode")}
+              {isDark ? (locale === 'nl' ? "Lichte modus" : "Light mode") : (locale === 'nl' ? "Donkere modus" : "Dark mode")}
             </DropdownButton>
 
             <div className="h-px bg-[var(--color-border-subtle)] dark:bg-slate-800 my-1 mx-4" />
@@ -187,7 +187,7 @@ export default function AvatarMenu() {
               danger
               onClick={loadingLogout ? undefined : handleLogout}
             >
-              {loadingLogout ? (locale === 'nl' ? "Uitloggen…" : "Signing out…") : (locale === 'nl' ? "Uitloggen" : "Sign Out")}
+              {loadingLogout ? (locale === 'nl' ? "Uitloggen…" : "Signing out…") : (locale === 'nl' ? "Uitloggen" : "Sign out")}
             </DropdownButton>
           </ul>
         </div>

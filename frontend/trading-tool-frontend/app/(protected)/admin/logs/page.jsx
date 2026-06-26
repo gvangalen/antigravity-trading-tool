@@ -56,7 +56,7 @@ export default function AdminLogsPage() {
       const data = await fetchAdminLogs(filters, { forceFresh: true });
       setLogs(data);
     } catch (err) {
-      console.error("Failed to load logs", err);
+      console.error("Logs laden mislukt", err);
     } finally {
       setLoading(false);
       isFetchingRef.current = false;
@@ -137,7 +137,7 @@ export default function AdminLogsPage() {
               analysis.severity === 'critical' ? 'bg-rose-500 text-white' : 
               analysis.severity === 'high' ? 'bg-orange-500 text-white' : 'bg-blue-500 text-white'
             }`}>
-              {analysis.severity} Priority
+              {analysis.severity} prioriteit
             </span>
           </div>
 

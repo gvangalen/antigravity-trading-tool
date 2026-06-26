@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 export default function ReportGenerateOverlay({
-  text = 'AI genereert het rapport…',
+  text = 'Finn genereert het rapport…',
   status = 'pending', // ⬅️ nieuw
   onFinished,         // ⬅️ optioneel callback
 }) {

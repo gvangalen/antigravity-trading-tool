@@ -160,7 +160,7 @@ export default function ProfilePage() {
     if (!hasCompleteProfile) {
       setProfileError(
         t?.traderProfile?.profilePage?.validationError ||
-          "Complete all trader profile fields so Finn can guide you properly."
+          "Vul alle onderdelen van je traderprofiel in, zodat Finn je goed kan begeleiden."
       );
       return;
     }
@@ -170,10 +170,10 @@ export default function ProfilePage() {
       setProfileError(null);
       await updateAssistantPreferences(serializeTraderProfilePreferences(profileForm));
       setEditingProfile(false);
-      showSnackbar(t?.traderProfile?.profilePage?.saveSuccess || "Trader profile saved", "success");
+      showSnackbar(t?.traderProfile?.profilePage?.saveSuccess || "Traderprofiel opgeslagen", "success");
     } catch (err) {
       console.error("Trader profile save failed", err);
-      setProfileError(t?.traderProfile?.profilePage?.saveError || "Saving your trader profile failed. Please try again.");
+      setProfileError(t?.traderProfile?.profilePage?.saveError || "Opslaan van je traderprofiel is mislukt. Probeer het opnieuw.");
     } finally {
       setSavingProfile(false);
     }
@@ -364,16 +364,16 @@ export default function ProfilePage() {
               </div>
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-600">
-                  {t?.traderProfile?.profilePage?.eyebrow || "Trading Profile"}
+                  {t?.traderProfile?.profilePage?.eyebrow || "Traderprofiel"}
                 </div>
                 <h2 className="text-3xl font-black tracking-tight text-slate-900">
-                  {t?.traderProfile?.profilePage?.title || "Finn learns who you are as a trader here"}
+                  {t?.traderProfile?.profilePage?.title || "Hier leert Finn wat voor trader jij bent"}
                 </h2>
               </div>
             </div>
             <p className="text-sm font-medium leading-relaxed text-slate-500">
               {t?.traderProfile?.profilePage?.description ||
-                "Finn uses this profile to tailor explanations, warnings, setups, and coaching to your style. Update it whenever your horizon, risk, or focus changes."}
+                "Finn gebruikt dit profiel om uitleg, waarschuwingen, setups en coaching af te stemmen op jouw stijl. Werk het bij zodra je horizon, risico of focus verandert."}
             </p>
           </div>
 
@@ -389,7 +389,7 @@ export default function ProfilePage() {
               ))
             ) : (
               <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
-                {t?.traderProfile?.profilePage?.empty || "Not filled in yet"}
+                {t?.traderProfile?.profilePage?.empty || "Nog niet ingevuld"}
               </span>
             )}
             <button
@@ -402,8 +402,8 @@ export default function ProfilePage() {
             >
               <Pencil size={14} />
               {editingProfile
-                ? t?.traderProfile?.profilePage?.close || "Close"
-                : t?.traderProfile?.profilePage?.edit || "Edit profile"}
+                ? t?.traderProfile?.profilePage?.close || "Sluiten"
+                : t?.traderProfile?.profilePage?.edit || "Profiel bewerken"}
             </button>
           </div>
         </div>
@@ -411,62 +411,62 @@ export default function ProfilePage() {
         {loadingPreferences ? (
           <div className="flex items-center gap-3 rounded-3xl border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500">
             <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-            {t?.traderProfile?.profilePage?.loading || "Loading trader profile..."}
+            {t?.traderProfile?.profilePage?.loading || "Traderprofiel wordt geladen..."}
           </div>
         ) : editingProfile ? (
           <div className="space-y-6">
             <div className="grid grid-cols-1 gap-6">
               <MultiChoiceGroup
-                title={t?.traderProfile?.groups?.traderTypes?.title || "What kind of trader are you?"}
-                subtitle={t?.traderProfile?.groups?.traderTypes?.subtitle || "Choose one or more styles that match how you usually trade or invest."}
+                title={t?.traderProfile?.groups?.traderTypes?.title || "Wat voor trader ben je?"}
+                subtitle={t?.traderProfile?.groups?.traderTypes?.subtitle || "Kies een of meer stijlen die passen bij hoe jij meestal trade of investeert."}
                 options={traderTypeOptions}
                 values={profileForm.trader_types}
                 onToggle={(value) => toggleMulti("trader_types", value)}
               />
 
               <MultiChoiceGroup
-                title={t?.traderProfile?.groups?.timeframes?.title || "Which timeframes do you use?"}
-                subtitle={t?.traderProfile?.groups?.timeframes?.subtitle || "You can select multiple. Finn uses this to filter out irrelevant signals."}
+                title={t?.traderProfile?.groups?.timeframes?.title || "Welke timeframes gebruik je?"}
+                subtitle={t?.traderProfile?.groups?.timeframes?.subtitle || "Je kunt meerdere selecteren. Finn gebruikt dit om irrelevante signalen weg te filteren."}
                 options={timeframeOptions}
                 values={profileForm.primary_timeframes}
                 onToggle={(value) => toggleMulti("primary_timeframes", value)}
               />
 
               <MultiChoiceGroup
-                title={t?.traderProfile?.groups?.assetFocus?.title || "What do you focus on?"}
-                subtitle={t?.traderProfile?.groups?.assetFocus?.subtitle || "Choose the markets or assets Finn should primarily consider in your context."}
+                title={t?.traderProfile?.groups?.assetFocus?.title || "Waar focus je op?"}
+                subtitle={t?.traderProfile?.groups?.assetFocus?.subtitle || "Kies de markten of assets die Finn vooral in jouw context moet meenemen."}
                 options={assetFocusOptions}
                 values={profileForm.asset_focus}
                 onToggle={(value) => toggleMulti("asset_focus", value)}
               />
 
               <MultiChoiceGroup
-                title={t?.traderProfile?.groups?.goals?.title || "What is your goal?"}
-                subtitle={t?.traderProfile?.groups?.goals?.subtitle || "Choose one or more goals. Finn uses this to tailor coaching and warnings to your intent."}
+                title={t?.traderProfile?.groups?.goals?.title || "Wat is je doel?"}
+                subtitle={t?.traderProfile?.groups?.goals?.subtitle || "Kies een of meer doelen. Finn stemt coaching en waarschuwingen hierop af."}
                 options={goalOptions}
                 values={profileForm.investment_goals_list}
                 onToggle={(value) => toggleMulti("investment_goals_list", value)}
               />
 
               <MultiChoiceGroup
-                title={t?.traderProfile?.groups?.experience?.title || "How much experience do you have?"}
-                subtitle={t?.traderProfile?.groups?.experience?.subtitle || "Choose what fits you best right now. You can select multiple levels if you are in between."}
+                title={t?.traderProfile?.groups?.experience?.title || "Hoeveel ervaring heb je?"}
+                subtitle={t?.traderProfile?.groups?.experience?.subtitle || "Kies wat nu het beste bij je past. Je kunt meerdere niveaus selecteren als je ertussenin zit."}
                 options={experienceOptions}
                 values={profileForm.experience_levels}
                 onToggle={(value) => toggleMulti("experience_levels", value)}
               />
 
               <MultiChoiceGroup
-                title={t?.traderProfile?.groups?.risk?.title || "What is your risk profile?"}
-                subtitle={t?.traderProfile?.groups?.risk?.subtitle || "This helps Finn decide whether to slow you down, warn you, or give more room. You can combine options if it varies by context."}
+                title={t?.traderProfile?.groups?.risk?.title || "Wat is je risicoprofiel?"}
+                subtitle={t?.traderProfile?.groups?.risk?.subtitle || "Dit helpt Finn bepalen wanneer hij je moet afremmen, waarschuwen of juist meer ruimte kan geven. Je kunt opties combineren als het per context verschilt."}
                 options={riskOptions}
                 values={profileForm.risk_profiles}
                 onToggle={(value) => toggleMulti("risk_profiles", value)}
               />
 
               <MultiChoiceGroup
-                title={t?.traderProfile?.groups?.behavior?.title || "Which coaching patterns should Finn watch for?"}
-                subtitle={t?.traderProfile?.groups?.behavior?.subtitle || "Select the behaviors that most often trip you up. This helps Finn coach more directly without changing governance."}
+                title={t?.traderProfile?.groups?.behavior?.title || "Welke coachingspatronen moet Finn bewaken?"}
+                subtitle={t?.traderProfile?.groups?.behavior?.subtitle || "Selecteer het gedrag waar je het vaakst op vastloopt. Zo kan Finn directer coachen zonder governance te veranderen."}
                 options={behaviorOptions}
                 values={profileForm.behavior_flags}
                 onToggle={(value) => toggleMulti("behavior_flags", value)}
@@ -482,7 +482,7 @@ export default function ProfilePage() {
             <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:flex-row md:items-center md:justify-between">
               <p className="text-sm font-medium leading-relaxed text-slate-500">
                 {t?.traderProfile?.profilePage?.helper ||
-                  "Update this profile whenever your style changes. That keeps Finn relevant and helps reduce signals that do not fit your way of trading."}
+                  "Werk dit profiel bij zodra je stijl verandert. Zo blijft Finn relevant en krijg je minder signalen die niet passen bij jouw manier van traden."}
               </p>
               <button
                 type="button"
@@ -491,8 +491,8 @@ export default function ProfilePage() {
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {savingProfile
-                  ? t?.traderProfile?.profilePage?.saving || "Saving profile..."
-                  : t?.traderProfile?.profilePage?.save || "Save profile"}
+                  ? t?.traderProfile?.profilePage?.saving || "Profiel opslaan..."
+                  : t?.traderProfile?.profilePage?.save || "Profiel opslaan"}
                 <Save size={14} />
               </button>
             </div>
@@ -501,11 +501,11 @@ export default function ProfilePage() {
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                {t?.traderProfile?.profilePage?.styleAndGoal || "Style & goal"}
+                {t?.traderProfile?.profilePage?.styleAndGoal || "Stijl en doel"}
               </div>
               <div className="mt-4 space-y-4">
                 <div>
-                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.traderTypes?.title || "Trader type"}</div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.traderTypes?.title || "Tradertype"}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {profileForm.trader_types.length > 0 ? (
                       profileForm.trader_types.map((value) => (
@@ -517,12 +517,12 @@ export default function ProfilePage() {
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Nog niet ingevuld"}</span>
                     )}
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.goals?.title || "Goal"}</div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.goals?.title || "Doel"}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {profileForm.investment_goals_list.length > 0 ? (
                       profileForm.investment_goals_list.map((value) => (
@@ -534,12 +534,12 @@ export default function ProfilePage() {
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Nog niet ingevuld"}</span>
                     )}
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.risk?.title || "Risk profile"}</div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.risk?.title || "Risicoprofiel"}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {profileForm.risk_profiles.length > 0 ? (
                       profileForm.risk_profiles.map((value) => (
@@ -551,12 +551,12 @@ export default function ProfilePage() {
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Nog niet ingevuld"}</span>
                     )}
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.behavior?.title || "Coaching patterns"}</div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.behavior?.title || "Coachingspatronen"}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {profileForm.behavior_flags.length > 0 ? (
                       profileForm.behavior_flags.map((value) => (
@@ -568,7 +568,7 @@ export default function ProfilePage() {
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Nog niet ingevuld"}</span>
                     )}
                   </div>
                 </div>
@@ -577,7 +577,7 @@ export default function ProfilePage() {
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                {t?.traderProfile?.profilePage?.finnContext || "Context for Finn"}
+                {t?.traderProfile?.profilePage?.finnContext || "Context voor Finn"}
               </div>
               <div className="mt-4 space-y-4">
                 <div>
@@ -593,12 +593,12 @@ export default function ProfilePage() {
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Nog niet ingevuld"}</span>
                     )}
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.assetFocus?.title || "Asset focus"}</div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.assetFocus?.title || "Assetfocus"}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {profileForm.asset_focus.length > 0 ? (
                       profileForm.asset_focus.map((value) => (
@@ -610,12 +610,12 @@ export default function ProfilePage() {
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Nog niet ingevuld"}</span>
                     )}
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.experience?.title || "Experience"}</div>
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.experience?.title || "Ervaring"}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {profileForm.experience_levels.length > 0 ? (
                       profileForm.experience_levels.map((value) => (
@@ -627,7 +627,7 @@ export default function ProfilePage() {
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Not filled in yet"}</span>
+                      <span className="text-sm font-semibold text-slate-500">{t?.traderProfile?.profilePage?.empty || "Nog niet ingevuld"}</span>
                     )}
                   </div>
                 </div>
@@ -655,10 +655,10 @@ export default function ProfilePage() {
             </div>
             <div>
               <div className="text-sm font-black text-foreground tracking-tight group-hover:text-blue-600 transition-colors">
-                {t?.traderProfile?.profilePage?.adminTitle || "Open AI admin"}
+                {t?.traderProfile?.profilePage?.adminTitle || "Open AI-beheer"}
               </div>
               <div className="text-[10px] font-bold text-dim uppercase tracking-widest">
-                {t?.traderProfile?.profilePage?.adminDescription || "System settings for AI and monitoring"}
+                {t?.traderProfile?.profilePage?.adminDescription || "Systeeminstellingen voor AI en monitoring"}
               </div>
             </div>
           </Link>
@@ -673,10 +673,10 @@ export default function ProfilePage() {
             </div>
             <div>
               <div className="text-sm font-black text-foreground tracking-tight group-hover:text-rose-600 transition-colors">
-                {t?.traderProfile?.profilePage?.logoutTitle || "Sign out safely"}
+                {t?.traderProfile?.profilePage?.logoutTitle || "Veilig uitloggen"}
               </div>
               <div className="text-[10px] font-bold text-dim uppercase tracking-widest">
-                {t?.traderProfile?.profilePage?.logoutDescription || "End your current session"}
+                {t?.traderProfile?.profilePage?.logoutDescription || "Beëindig je huidige sessie"}
               </div>
             </div>
           </button>

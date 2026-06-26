@@ -1,6 +1,6 @@
 'use client';
 
-export default function AILoader({ size = "md", variant = "dots", text = "AI is bezig..." }) {
+export default function AILoader({ size = "md", variant = "dots", text = "Finn verwerkt dit..." }) {
   const sizes = {
     sm: "h-3 w-3",
     md: "h-4 w-4",

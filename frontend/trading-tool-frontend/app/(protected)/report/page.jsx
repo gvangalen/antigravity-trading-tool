@@ -38,6 +38,7 @@ import { useModal } from '@/components/modal/ModalProvider';
 import { waitUntilVisible } from '@/hooks/useVisibilityPolling';
 import { actionButtonStyles } from '@/components/ui/actionButtonStyles';
 import { trackAssistantEvent } from '@/lib/api/assistantAnalytics';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 import {
   Download,
@@ -64,12 +65,7 @@ import {
 CONFIG
 ===================================================== */
 
-const REPORT_TYPES = {
-  daily: 'Daily',
-  weekly: 'Weekly',
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-};
+const REPORT_TYPE_KEYS = ['daily', 'weekly', 'monthly', 'quarterly'];
 
 const AUTO_GENERATE_IF_EMPTY = true;
 const POLL_INTERVAL_MS = 4000;
@@ -115,6 +111,13 @@ const BEHAVIOR_FLAG_LABELS = {
   holds_losers_too_long: 'Verliezers te lang laten lopen',
   takes_profit_too_early: 'Winst te vroeg nemen',
 };
+
+function replaceVars(template, vars = {}) {
+  return Object.entries(vars).reduce(
+    (result, [key, value]) => result.replaceAll(`{${key}}`, String(value ?? '')),
+    template
+  );
+}
 
 /* =====================================================
 HELPERS
@@ -189,9 +192,12 @@ function mergeBehavioralAnalysis(...sources) {
 }
 
 function getFinnReportSummary(report) {
+  const locale = report?.locale === 'en' ? 'en' : 'nl';
   const text = report?.response || '';
   if (!text) {
-    return 'Finn analyseerde je recente interacties, risicochecks en beslisflows.';
+    return locale === 'en'
+      ? 'Finn analyzed your recent interactions, risk checks, and decision flows.'
+      : 'Finn analyseerde je recente interacties, risicochecks en beslisflows.';
   }
 
   const cleaned = text
@@ -200,7 +206,9 @@ function getFinnReportSummary(report) {
     .trim();
 
   if (!cleaned) {
-    return 'Finn analyseerde je recente interacties, risicochecks en beslisflows.';
+    return locale === 'en'
+      ? 'Finn analyzed your recent interactions, risk checks, and decision flows.'
+      : 'Finn analyseerde je recente interacties, risicochecks en beslisflows.';
   }
 
   return cleaned.length > 220 ? `${cleaned.slice(0, 220).trim()}...` : cleaned;
@@ -208,10 +216,11 @@ function getFinnReportSummary(report) {
 
 function formatFinnReportSource(report) {
   const source = getNested(report, 'state.source.primary') || getNested(report, 'state.analysis.source.primary');
-  return source || 'Finn auditdata';
+  return source || (report?.locale === 'en' ? 'Finn audit data' : 'Finn auditdata');
 }
 
 function formatFinnReportTimestamp(report) {
+  const locale = report?.locale === 'en' ? 'en' : 'nl';
   const raw =
     getNested(report, 'state.generated_at') ||
     getNested(report, 'state.updated_at') ||
@@ -219,12 +228,12 @@ function formatFinnReportTimestamp(report) {
     report?.updated_at ||
     null;
 
-  if (!raw) return 'Nog niet beschikbaar';
+  if (!raw) return locale === 'en' ? 'Not available yet' : 'Nog niet beschikbaar';
 
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return String(raw);
 
-  return new Intl.DateTimeFormat('nl-NL', {
+  return new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'nl-NL', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -290,6 +299,8 @@ function FinnAgentVerdicts({ verdicts = [] }) {
 }
 
 function FinnAgentController({ controller }) {
+  const { t } = useTranslation();
+  const controllerT = t.pages.report.finn.controller;
   if (!controller?.dominant_agent) return null;
   const score = Number(controller.dominant_score || 0);
   const tone = score >= 90
@@ -303,14 +314,14 @@ function FinnAgentController({ controller }) {
       <div className="flex items-center justify-between gap-3">
         <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
           <Brain size={13} />
-          Hoofdconclusie
+          {controllerT.headline}
         </span>
         <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
           {controller.dominant_label || controller.dominant_agent}
         </span>
       </div>
       <p className="mt-3 text-sm font-semibold leading-relaxed">
-        {controller.reason || controller.next_action || 'Finn heeft de agent-verdicts gewogen.'}
+        {controller.reason || controller.next_action || controllerT.fallback}
       </p>
       {controller.next_action && (
         <p className="mt-2 text-[10px] font-black uppercase tracking-[0.14em] opacity-75">
@@ -319,12 +330,12 @@ function FinnAgentController({ controller }) {
       )}
       {controller.primary_action?.prompt && (
         <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white/75 dark:bg-slate-950/40 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em]">
-          Primaire handoff: {controller.primary_action.label || controller.primary_action.prompt}
+          {controllerT.primaryHandoff}: {controller.primary_action.label || controller.primary_action.prompt}
         </div>
       )}
       {controller.primary_item_id && (
         <p className="mt-2 text-[9px] font-black uppercase tracking-[0.14em] opacity-65">
-          Accountability item: {controller.primary_item_id}
+          {controllerT.accountabilityItem}: {controller.primary_item_id}
         </p>
       )}
     </div>
@@ -332,6 +343,8 @@ function FinnAgentController({ controller }) {
 }
 
 function FinnPortfolioRisk({ portfolioRisk }) {
+  const { t } = useTranslation();
+  const riskT = t.pages.report.finn.portfolioRisk;
   if (!portfolioRisk?.status || portfolioRisk.status === 'balanced' || portfolioRisk.status === 'no_assets') {
     return null;
   }
@@ -353,7 +366,7 @@ function FinnPortfolioRisk({ portfolioRisk }) {
       <div className="flex items-center justify-between gap-3">
         <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
           <ShieldCheck size={13} />
-          Portfolio Risk
+          {riskT.title}
         </span>
         <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
           {portfolioRisk.status}
@@ -368,7 +381,7 @@ function FinnPortfolioRisk({ portfolioRisk }) {
       {ignoreToday.length > 0 && (
         <div className="mt-4">
           <div className="text-[10px] font-black uppercase tracking-[0.14em] opacity-75">
-            Vandaag liever negeren
+            {riskT.ignoreToday}
           </div>
           <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
             {ignoreToday.map((item) => (
@@ -376,7 +389,7 @@ function FinnPortfolioRisk({ portfolioRisk }) {
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[10px] font-black uppercase tracking-[0.14em]">{item.asset}</span>
                   <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
-                    score {item.risk_score}
+                    {riskT.scoreLabel} {item.risk_score}
                   </span>
                 </div>
                 <p className="mt-2 text-xs font-semibold leading-relaxed">{item.reason}</p>
@@ -389,7 +402,7 @@ function FinnPortfolioRisk({ portfolioRisk }) {
       {liveHotspots.length > 0 && (
         <div className="mt-4">
           <div className="text-[10px] font-black uppercase tracking-[0.14em] opacity-75">
-            Live bot-hotspots
+            {riskT.liveHotspots}
           </div>
           <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
             {liveHotspots.map((item) => (
@@ -397,7 +410,7 @@ function FinnPortfolioRisk({ portfolioRisk }) {
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[10px] font-black uppercase tracking-[0.14em]">{item.asset}</span>
                   <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
-                    {item.live_bot_count} live
+                    {item.live_bot_count} {riskT.liveLabel}
                   </span>
                 </div>
                 <p className="mt-2 text-xs font-semibold leading-relaxed">{item.summary}</p>
@@ -410,15 +423,15 @@ function FinnPortfolioRisk({ portfolioRisk }) {
       {rankedConflicts.length > 0 && (
         <div className="mt-4">
           <div className="text-[10px] font-black uppercase tracking-[0.14em] opacity-75">
-            Topconflicten
+            {riskT.topConflicts}
           </div>
           <div className="mt-2 space-y-2">
             {rankedConflicts.map((item, index) => (
               <div key={`conflict-${item.asset || 'portfolio'}-${index}`} className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-[10px] font-black uppercase tracking-[0.14em]">{item.asset || 'Portfolio'}</span>
+                  <span className="text-[10px] font-black uppercase tracking-[0.14em]">{item.asset || riskT.portfolioFallback}</span>
                   <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
-                    {item.severity || item.risk_level || 'review'}
+                    {item.severity || item.risk_level || riskT.reviewFallback}
                   </span>
                 </div>
                 <p className="mt-2 text-xs font-semibold leading-relaxed">{item.reason}</p>
@@ -432,6 +445,8 @@ function FinnPortfolioRisk({ portfolioRisk }) {
 }
 
 function FinnReflectionSectionCard({ icon: Icon, title, summary, entries = [], accent = 'slate', renderEntry }) {
+  const { t } = useTranslation();
+  const reflectionT = t.pages.report.finn.reflection;
   const tones = {
     slate: 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 text-slate-700 dark:text-slate-300',
     amber: 'border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300',
@@ -466,7 +481,7 @@ function FinnReflectionSectionCard({ icon: Icon, title, summary, entries = [], a
                 <>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[10px] font-black uppercase tracking-[0.14em]">
-                      {entry.label || entry.type || 'Item'}
+                      {entry.label || entry.type || reflectionT.itemFallback}
                     </span>
                     {entry.asset && (
                       <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
@@ -490,6 +505,8 @@ function FinnReflectionSectionCard({ icon: Icon, title, summary, entries = [], a
 }
 
 function FinnReflectionBlocks({ analysis }) {
+  const { t } = useTranslation();
+  const reflectionT = t.pages.report.finn.reflection;
   const sections = analysis?.sections || {};
   const dayClose = analysis?.day_close || {};
 
@@ -503,7 +520,7 @@ function FinnReflectionBlocks({ analysis }) {
     <div className="mt-5 grid grid-cols-1 xl:grid-cols-3 gap-4">
       <FinnReflectionSectionCard
         icon={ClipboardList}
-        title={whatIDid?.title || 'Wat heb ik gedaan?'}
+        title={whatIDid?.title || reflectionT.todayTitle}
         summary={whatIDid?.summary}
         entries={whatIDid?.entries || []}
         accent="slate"
@@ -511,7 +528,7 @@ function FinnReflectionBlocks({ analysis }) {
           <>
             <div className="flex items-center justify-between gap-3">
               <span className="text-[10px] font-black uppercase tracking-[0.14em]">
-                {entry.label || entry.type || 'Finn-actie'}
+                {entry.label || entry.type || reflectionT.actionFallback}
               </span>
               {entry.asset && (
                 <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
@@ -529,7 +546,7 @@ function FinnReflectionBlocks({ analysis }) {
 
       <FinnReflectionSectionCard
         icon={ShieldAlert}
-        title={whatFinnBlocked?.title || 'Wat heeft Finn geblokkeerd?'}
+        title={whatFinnBlocked?.title || reflectionT.blockedTitle}
         summary={whatFinnBlocked?.summary}
         entries={whatFinnBlocked?.entries || []}
         accent="rose"
@@ -537,14 +554,14 @@ function FinnReflectionBlocks({ analysis }) {
           <>
             <div className="flex items-center justify-between gap-3">
               <span className="text-[10px] font-black uppercase tracking-[0.14em]">
-                {entry.label || entry.type || 'Guardrail'}
+                {entry.label || entry.type || reflectionT.guardrailFallback}
               </span>
               <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
                 {entry.asset || entry.severity || 'review'}
               </span>
             </div>
             <p className="mt-2 text-xs font-semibold leading-relaxed">
-              {entry.outcome || 'Geen extra toelichting.'}
+                {entry.outcome || reflectionT.noExtraDetails}
             </p>
           </>
         )}
@@ -552,7 +569,7 @@ function FinnReflectionBlocks({ analysis }) {
 
       <FinnReflectionSectionCard
         icon={Activity}
-        title={whereIDeviated?.title || 'Waar week ik af?'}
+        title={whereIDeviated?.title || reflectionT.deviationTitle}
         summary={whereIDeviated?.summary}
         entries={whereIDeviated?.entries || []}
         accent={whereIDeviated?.status === 'steady' ? 'emerald' : whereIDeviated?.status === 'disciplined' ? 'amber' : 'amber'}
@@ -560,14 +577,14 @@ function FinnReflectionBlocks({ analysis }) {
           <>
             <div className="flex items-center justify-between gap-3">
               <span className="text-[10px] font-black uppercase tracking-[0.14em]">
-                {entry.label || entry.type || 'Afwijking'}
+                {entry.label || entry.type || reflectionT.deviationFallback}
               </span>
               <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
                 {entry.asset || entry.severity || 'review'}
               </span>
             </div>
             <p className="mt-2 text-xs font-semibold leading-relaxed">
-              {entry.message || 'Geen extra toelichting.'}
+                {entry.message || reflectionT.noExtraDetails}
             </p>
           </>
         )}
@@ -578,7 +595,7 @@ function FinnReflectionBlocks({ analysis }) {
           <div className="flex items-center gap-2">
             <CheckCircle2 size={14} />
             <span className="text-[10px] font-black uppercase tracking-[0.16em]">
-              Morgen meenemen
+              {reflectionT.tomorrowFocus}
             </span>
           </div>
           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -598,6 +615,8 @@ function FinnReflectionBlocks({ analysis }) {
 }
 
 function FinnBehavioralIntelligenceBlocks({ analysis, forceVisible = false }) {
+  const { t } = useTranslation();
+  const behaviorT = t.pages.report.finn.behavior;
   const profile = analysis?.behavioral_profile || null;
   const trend = analysis?.trend || analysis?.week_over_week || analysis?.month_over_month || null;
   const riskFlags = Array.isArray(analysis?.risk_flags) ? analysis.risk_flags : [];
@@ -615,18 +634,18 @@ function FinnBehavioralIntelligenceBlocks({ analysis, forceVisible = false }) {
         <div className="flex items-center gap-2">
           <Brain size={14} />
           <span className="text-[10px] font-black uppercase tracking-[0.16em]">
-            Gedragsbeeld
+            {behaviorT.title}
           </span>
         </div>
         <p className="mt-2 text-sm font-semibold leading-relaxed">
-          Finn laat hier je gedragsprofiel, meerweekse trend, remsignalen en werkstijl apart zien in plaats van alleen in prose.
+          {behaviorT.description}
         </p>
         <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
           {[
-            ['Gedragsprofiel', profile?.label || 'Nog opbouwen'],
-            ['Meerweekse trend', trend?.status || trend?.momentum || 'Nog opbouwen'],
-            ['Waar Finn rem houdt', riskFlags[0]?.label || memoryCards[0]?.label || 'Geen extra rem nu'],
-            ['Werkstijl die Finn herkent', habitCards[0]?.label || 'Nog opbouwen'],
+            [behaviorT.profile, profile?.label || behaviorT.building],
+            [behaviorT.trend, trend?.status || trend?.momentum || behaviorT.building],
+            [behaviorT.brake, riskFlags[0]?.label || memoryCards[0]?.label || behaviorT.noBrake],
+            [behaviorT.style, habitCards[0]?.label || behaviorT.building],
           ].map(([label, value]) => (
             <div
               key={label}
@@ -649,7 +668,7 @@ function FinnBehavioralIntelligenceBlocks({ analysis, forceVisible = false }) {
             <div className="flex items-center justify-between gap-3">
               <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                 <Brain size={13} className="text-blue-600 dark:text-blue-400" />
-                Gedragsprofiel
+                {behaviorT.profile}
               </span>
               {profile.confidence && (
                 <span className="rounded-full bg-slate-50 dark:bg-slate-900 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800">
@@ -665,7 +684,7 @@ function FinnBehavioralIntelligenceBlocks({ analysis, forceVisible = false }) {
             </p>
             {profile.watch_for && (
               <p className="mt-3 text-[11px] font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
-                Let op: {profile.watch_for}
+                {behaviorT.watchFor}: {profile.watch_for}
               </p>
             )}
           </div>
@@ -676,7 +695,7 @@ function FinnBehavioralIntelligenceBlocks({ analysis, forceVisible = false }) {
             <div className="flex items-center justify-between gap-3">
               <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
                 <Activity size={13} />
-                Meerweekse trend
+                {behaviorT.trend}
               </span>
               {(trend.status || trend.momentum) && (
                 <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
@@ -690,7 +709,7 @@ function FinnBehavioralIntelligenceBlocks({ analysis, forceVisible = false }) {
             {balanceScore !== undefined && balanceScore !== null && (
               <div className="mt-3 rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
                 <div className="text-[9px] font-black uppercase tracking-[0.14em] opacity-70">
-                  Behavioral balance score
+                  {behaviorT.balanceScore}
                 </div>
                 <div className="mt-1 text-lg font-black">
                   {balanceScore}/100
@@ -704,7 +723,7 @@ function FinnBehavioralIntelligenceBlocks({ analysis, forceVisible = false }) {
           <div className="rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20 p-4 text-rose-700 dark:text-rose-300">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
               <ShieldAlert size={13} />
-              Waar Finn rem houdt
+              {behaviorT.brake}
             </div>
             <div className="mt-3 space-y-2">
               {(riskFlags.length > 0 ? riskFlags : memoryCards).slice(0, 3).map((item) => (
@@ -736,7 +755,7 @@ function FinnBehavioralIntelligenceBlocks({ analysis, forceVisible = false }) {
         <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 p-4 text-emerald-700 dark:text-emerald-300">
           <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
             <CheckCircle2 size={13} />
-            Werkstijl die Finn herkent
+            {behaviorT.style}
           </div>
           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
             {habitCards.slice(0, 4).map((card) => (
@@ -767,6 +786,8 @@ function FinnBehavioralIntelligenceBlocks({ analysis, forceVisible = false }) {
 }
 
 function FinnGovernanceSurface({ analysis }) {
+  const { t } = useTranslation();
+  const governanceT = t.pages.report.finn.governance;
   const priorityEngine = analysis?.priority_engine || null;
   const memoryV2 = analysis?.memory_v2 || null;
   const portfolioOS = analysis?.portfolio_operating_system || null;
@@ -806,41 +827,41 @@ function FinnGovernanceSurface({ analysis }) {
   }
 
   const phaseCards = [
-    ['Beslischeck', governanceSummary?.decision_review_count || 0, 'text-blue-600 dark:text-blue-300', <FileText size={11} className="text-blue-500" />],
-    ['Plantrouw', governanceSummary?.plan_adherence_count || 0, 'text-rose-600 dark:text-rose-300', <Shield size={11} className="text-rose-500" />],
-    ['Outcome Tracking', governanceSummary?.outcome_tracking_count || 0, 'text-emerald-600 dark:text-emerald-300', <BarChart3 size={11} className="text-emerald-500" />],
-    ['Portfolio Intelligence', governanceSummary?.portfolio_intelligence_count || 0, 'text-amber-700 dark:text-amber-300', <Activity size={11} className="text-amber-500" />],
-    ['Priority Engine', governanceSummary?.priority_engine_count || 0, 'text-violet-600 dark:text-violet-300', <Target size={11} className="text-violet-500" />],
-    ['Memory V2', governanceSummary?.memory_v2_count || 0, 'text-fuchsia-600 dark:text-fuchsia-300', <Brain size={11} className="text-fuchsia-500" />],
-    ['Portfolio-overzicht', governanceSummary?.portfolio_operating_system_count || 0, 'text-cyan-600 dark:text-cyan-300', <Bot size={11} className="text-cyan-500" />],
+    [governanceT.decisionReview, governanceSummary?.decision_review_count || 0, 'text-blue-600 dark:text-blue-300', <FileText size={11} className="text-blue-500" />],
+    [governanceT.planAdherence, governanceSummary?.plan_adherence_count || 0, 'text-rose-600 dark:text-rose-300', <Shield size={11} className="text-rose-500" />],
+    [governanceT.outcomeTracking, governanceSummary?.outcome_tracking_count || 0, 'text-emerald-600 dark:text-emerald-300', <BarChart3 size={11} className="text-emerald-500" />],
+    [governanceT.portfolioIntelligence, governanceSummary?.portfolio_intelligence_count || 0, 'text-amber-700 dark:text-amber-300', <Activity size={11} className="text-amber-500" />],
+    [governanceT.priorityEngine, governanceSummary?.priority_engine_count || 0, 'text-violet-600 dark:text-violet-300', <Target size={11} className="text-violet-500" />],
+    [governanceT.memoryV2, governanceSummary?.memory_v2_count || 0, 'text-fuchsia-600 dark:text-fuchsia-300', <Brain size={11} className="text-fuchsia-500" />],
+    [governanceT.portfolioOverview, governanceSummary?.portfolio_operating_system_count || 0, 'text-cyan-600 dark:text-cyan-300', <Bot size={11} className="text-cyan-500" />],
   ];
 
   const topPriorities = Array.isArray(priorityEngine?.top_priorities) ? priorityEngine.top_priorities.slice(0, 3) : [];
   const nextActions = Array.isArray(portfolioOS?.next_best_actions) ? portfolioOS.next_best_actions.slice(0, 3) : [];
   const reviewSummary = [
     {
-      label: 'Beslischeck',
+      label: governanceT.decisionReview,
       tone: 'border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300',
       summary:
         governanceSummary?.decision_review_count > 0
-          ? `${governanceSummary.decision_review_count} beslismomenten zijn vooraf door FINN beoordeeld voordat er actie volgde.`
-          : 'Nog geen beslischeck-spoor in deze periode; Finn heeft hier nog weinig tegenspraak hoeven geven.',
+          ? replaceVars(governanceT.decisionReviewSummary, { count: governanceSummary.decision_review_count })
+          : governanceT.decisionReviewEmpty,
     },
     {
-      label: 'Plantrouw',
+      label: governanceT.planAdherence,
       tone: 'border-rose-200 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300',
       summary:
         governanceSummary?.plan_adherence_count > 0
-          ? `${governanceSummary.plan_adherence_count} momenten zijn langs je planlat gelegd. ${memoryV2?.recommended_rule || 'Gebruik dit om afwijking sneller te herkennen.'}`
-          : 'Nog weinig expliciete plantrouw-signalen; dit venster wordt sterker zodra meer keuzes tegen je plan worden gehouden.',
+          ? replaceVars(governanceT.planAdherenceSummary, { count: governanceSummary.plan_adherence_count, detail: memoryV2?.recommended_rule || governanceT.planAdherenceFallback })
+          : governanceT.planAdherenceEmpty,
     },
     {
-      label: 'Outcome Tracking',
+      label: governanceT.outcomeTracking,
       tone: 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300',
       summary:
         governanceSummary?.outcome_tracking_count > 0
-          ? `${governanceSummary.outcome_tracking_count} follow-through momenten zijn teruggekoppeld aan gedrag. ${memoryV2?.behavioral_cost || 'Finn gebruikt dit om patronen te onderbouwen.'}`
-          : 'Outcome tracking staat klaar, maar heeft nog weinig bewezen voorbeelden om harder te kunnen spreken.',
+          ? replaceVars(governanceT.outcomeTrackingSummary, { count: governanceSummary.outcome_tracking_count, detail: memoryV2?.behavioral_cost || governanceT.outcomeTrackingFallback })
+          : governanceT.outcomeTrackingEmpty,
     },
   ];
 
@@ -851,15 +872,15 @@ function FinnGovernanceSurface({ analysis }) {
           <div>
             <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
               <Terminal size={14} className="text-cyan-500" />
-              Finn governance-overzicht
+              {governanceT.title}
             </div>
             <p className="mt-2 text-sm font-black leading-relaxed text-slate-900 dark:text-slate-100">
-              {portfolioOS?.control_plane?.headline || priorityEngine?.headline || 'Finn laat hier zien hoe decision review, discipline, prioriteit en portfolio-control samen werken.'}
+              {portfolioOS?.control_plane?.headline || priorityEngine?.headline || governanceT.headlineFallback}
             </p>
             {primaryProfileHabitAlignment && (
               <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-300">
                 <Shield size={12} />
-                Behavioral rem: {behaviorLabel}
+                {governanceT.behavioralBrake}: {behaviorLabel}
               </div>
             )}
           </div>
@@ -905,10 +926,10 @@ function FinnGovernanceSurface({ analysis }) {
             <div className="flex items-center justify-between gap-3">
               <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
                 <Target size={13} />
-                Priority Engine
+                {governanceT.priorityEngine}
               </span>
               <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
-                {(priorityEngine.open_counts?.high_priority_count || 0)} high
+                {(priorityEngine.open_counts?.high_priority_count || 0)} {governanceT.priorityHigh}
               </span>
             </div>
             {priorityEngine.why_now && (
@@ -917,7 +938,7 @@ function FinnGovernanceSurface({ analysis }) {
             {primaryProfileHabitAlignment?.recommended_rule && (
               <div className="mt-3 rounded-xl border border-amber-200 bg-white/80 p-3 dark:border-amber-900/40 dark:bg-slate-950/35">
                 <div className="text-[9px] font-black uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">
-                  Waarom Finn remt
+                  {governanceT.whyFinnBrakes}
                 </div>
                 <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
                   {primaryProfileHabitAlignment.recommended_rule}
@@ -949,7 +970,7 @@ function FinnGovernanceSurface({ analysis }) {
                     {item.behavioral_priority_reason && (
                       <div className="mt-2 rounded-lg border border-white/60 dark:border-slate-900/50 bg-white/80 dark:bg-slate-950/35 p-2.5">
                         <div className="text-[8px] font-black uppercase tracking-widest opacity-70">
-                          Finn remt hierom
+                          {governanceT.whyFinnBrakesBecause}
                         </div>
                         <p className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
                           {item.behavioral_priority_reason}
@@ -968,10 +989,10 @@ function FinnGovernanceSurface({ analysis }) {
             <div className="flex items-center justify-between gap-3">
               <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
                 <Brain size={13} />
-                Memory V2
+                {governanceT.memoryV2}
               </span>
               <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
-                {memoryV2.confidence_level || 'early'}
+                {memoryV2.confidence_level || governanceT.memoryEarly}
               </span>
             </div>
             {memoryV2.memory_pattern && (
@@ -1034,6 +1055,9 @@ function FinnGovernanceSurface({ analysis }) {
 }
 
 function FinnReportsPanel() {
+  const { t, locale } = useTranslation();
+  const reportT = t.pages.report;
+  const finnT = reportT.finn;
   const panelRef = useRef(null);
   const [activeFinnReport, setActiveFinnReport] = useState(FINN_REPORT_OPTIONS[0].key);
   const [finnReportCache, setFinnReportCache] = useState({});
@@ -1043,7 +1067,49 @@ function FinnReportsPanel() {
   const [expanded, setExpanded] = useState(false);
   const [shouldLoadFinn, setShouldLoadFinn] = useState(false);
 
-  const activeOption = FINN_REPORT_OPTIONS.find((option) => option.key === activeFinnReport) || FINN_REPORT_OPTIONS[0];
+  const finnReportOptions = useMemo(
+    () => [
+      {
+        key: 'today',
+        label: locale === 'nl' ? 'Vandaag' : 'Today',
+        eyebrow: locale === 'nl' ? 'Dagreflectie' : 'Daily reflection',
+        prompt: locale === 'nl' ? 'Geef mijn Finn rapport van vandaag' : 'Give me my Finn report for today',
+        empty: locale === 'nl'
+          ? 'Nog geen Finn-activiteit vandaag. Zodra Finn iets begeleidt, blokkeert of vastlegt, verschijnt het hier.'
+          : 'No Finn activity yet today. As soon as Finn guides, blocks, or records something, it will appear here.',
+      },
+      {
+        key: 'week',
+        label: locale === 'nl' ? 'Weekreflectie' : 'Weekly reflection',
+        eyebrow: locale === 'nl' ? 'Weekbeeld' : 'Weekly view',
+        prompt: locale === 'nl' ? 'Geef mijn weekreflectie' : 'Give me my weekly reflection',
+        empty: locale === 'nl'
+          ? 'Nog te weinig weekhistorie. Finn toont hier pas patronen wanneer er auditdata is.'
+          : 'There is not enough weekly history yet. Finn only shows patterns here when audit data exists.',
+      },
+      {
+        key: 'blocked',
+        label: locale === 'nl' ? 'Geblokkeerd' : 'Blocked',
+        eyebrow: locale === 'nl' ? 'Risicolog' : 'Risk log',
+        prompt: locale === 'nl' ? 'Wat heeft Finn vandaag geblokkeerd?' : 'What did Finn block today?',
+        empty: locale === 'nl'
+          ? 'Geen blokkades vandaag. Finn heeft nog geen risicovolle actie hoeven afremmen.'
+          : 'No blocks today. Finn has not had to slow down a risky action yet.',
+      },
+      {
+        key: 'behavior',
+        label: locale === 'nl' ? '30 dagen gedrag' : '30 day behavior',
+        eyebrow: locale === 'nl' ? 'Gedragsbeeld' : 'Behavior profile',
+        prompt: locale === 'nl' ? 'Geef mijn gedragsrapport van de laatste 30 dagen' : 'Give me my behavioral report for the last 30 days',
+        empty: locale === 'nl'
+          ? 'Nog te weinig gedragsdata over 30 dagen. Finn verzint hier geen profiel zonder bewijs.'
+          : 'There is not enough behavioral data across 30 days yet. Finn will not invent a profile without evidence.',
+      },
+    ],
+    [locale]
+  );
+
+  const activeOption = finnReportOptions.find((option) => option.key === activeFinnReport) || finnReportOptions[0];
 
   const loadFinnReport = async (option = activeOption, force = false) => {
     if (!force && finnReportCache[option.key]) {
@@ -1086,7 +1152,7 @@ function FinnReportsPanel() {
       setExpanded(false);
     } catch (err) {
       console.error('Finn report load failed:', err);
-      setFinnError('Finn rapport kon niet geladen worden.');
+      setFinnError(finnT.loadError);
     } finally {
       setFinnLoading(false);
     }
@@ -1161,9 +1227,9 @@ function FinnReportsPanel() {
   );
 
   const metricItems = [
-    ['Acties', metrics.actions_today ?? metrics.actions_7d ?? metrics.actions_30d],
-    ['Afgeremd', metrics.plan_deviation_events_today ?? metrics.plan_deviation_events_7d ?? metrics.plan_deviation_events_30d],
-    ['Skips', metrics.skipped_today ?? metrics.skipped_7d ?? metrics.skipped_30d],
+    [finnT.metrics.actions, metrics.actions_today ?? metrics.actions_7d ?? metrics.actions_30d],
+    [finnT.metrics.slowed, metrics.plan_deviation_events_today ?? metrics.plan_deviation_events_7d ?? metrics.plan_deviation_events_30d],
+    [finnT.metrics.skips, metrics.skipped_today ?? metrics.skipped_7d ?? metrics.skipped_30d],
   ].filter(([, value]) => value !== undefined && value !== null);
 
   return (
@@ -1171,7 +1237,7 @@ function FinnReportsPanel() {
       <div className="flex items-center gap-2 mb-4">
         <Brain size={14} className="text-blue-600 dark:text-blue-400" />
         <span className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
-          Finn rapportage
+          {finnT.sectionEyebrow}
         </span>
       </div>
 
@@ -1180,16 +1246,15 @@ function FinnReportsPanel() {
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
             <div className="max-w-3xl">
               <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100">
-                Persoonlijke Finn rapportage
+                {finnT.title}
               </h2>
               <p className="mt-3 text-sm md:text-[15px] leading-relaxed text-slate-500 dark:text-slate-400 max-w-2xl">
-                Alleen-lezen rapportage over je Finn-activiteit, risicochecks en beslisflows.
-                Los van marktrapporten. Dit rapport analyseert je gebruik van Finn, niet de markt.
+                {finnT.description}
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {["Alleen lezen", "Auditspoor", "Los van marktrapporten"].map((label) => (
+              {[finnT.badges.readOnly, finnT.badges.auditTrail, finnT.badges.separate].map((label) => (
                 <span
                   key={label}
                   className="px-3 py-1.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400"
@@ -1204,7 +1269,7 @@ function FinnReportsPanel() {
         <div className="p-6 md:p-7">
           <div className="mb-5 overflow-x-auto">
             <div className="inline-flex min-w-full sm:min-w-0 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-1">
-              {FINN_REPORT_OPTIONS.map((option) => {
+              {finnReportOptions.map((option) => {
                 const active = option.key === activeFinnReport;
                 return (
                   <button
@@ -1226,19 +1291,19 @@ function FinnReportsPanel() {
           {!shouldLoadFinn ? (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 p-4">
               <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-                Finn rapport wordt pas geladen zodra de pagina zelf staat. Zo blijft Reports sneller bruikbaar.
+                {finnT.deferredLoad}
               </div>
               <button
                 onClick={() => setShouldLoadFinn(true)}
                 className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
               >
-                Laad Finn rapport
+                {finnT.loadButton}
               </button>
             </div>
           ) : finnLoading ? (
             <div className="flex items-center gap-3 text-sm font-bold text-slate-500 dark:text-slate-400">
               <Loader2 size={16} className="animate-spin text-blue-600" />
-              Finn rapport ophalen...
+              {finnT.loading}
             </div>
           ) : finnError ? (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 p-4">
@@ -1250,7 +1315,7 @@ function FinnReportsPanel() {
                 onClick={() => loadFinnReport(activeOption, true)}
                 className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white dark:bg-slate-950 border border-red-200 dark:border-red-900/40 text-[10px] font-black uppercase tracking-widest text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors"
               >
-                Opnieuw
+                {finnT.retry}
               </button>
             </div>
           ) : (
@@ -1259,17 +1324,17 @@ function FinnReportsPanel() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                      Laatste Finn rapport
+                      {finnT.latest}
                     </span>
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
                       <ClipboardList size={13} />
                       {activeOption.eyebrow}
                     </span>
                     <span className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                      Gebruikersactiviteit
+                      {finnT.activity}
                     </span>
                     <span className="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">
-                      Auditdata
+                      {finnT.auditData}
                     </span>
                   </div>
 
@@ -1282,15 +1347,15 @@ function FinnReportsPanel() {
                       <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
                         <div className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                            Type
+                            {finnT.type}
                           </div>
                           <div className="mt-1 text-sm font-black text-slate-900 dark:text-slate-100 truncate">
-                            Gebruikersactiviteit
+                            {finnT.activity}
                           </div>
                         </div>
                         <div className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                            Laatste update
+                            {finnT.latestUpdate}
                           </div>
                           <div className="mt-1 text-sm font-black text-slate-900 dark:text-slate-100">
                             {latestUpdateLabel}
@@ -1298,7 +1363,7 @@ function FinnReportsPanel() {
                         </div>
                         <div className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                            Bron
+                            {finnT.source}
                           </div>
                           <div className="mt-1 text-sm font-black text-slate-900 dark:text-slate-100 truncate">
                             {source}
@@ -1315,7 +1380,7 @@ function FinnReportsPanel() {
                           className: 'justify-center gap-2 rounded-xl px-5 py-3 text-[11px] tracking-widest active:scale-[0.98]',
                         })}
                       >
-                        Lees Finn rapport
+                        {finnT.readReport}
                         <ChevronDown
                           size={14}
                           className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
@@ -1329,7 +1394,7 @@ function FinnReportsPanel() {
                         })}
                       >
                         <RefreshCw size={13} />
-                        Vernieuw
+                        {finnT.refresh}
                       </button>
                     </div>
                   </div>
@@ -1339,15 +1404,15 @@ function FinnReportsPanel() {
                       <div className="flex items-center gap-2">
                         <Brain size={14} />
                         <span className="text-[10px] font-black uppercase tracking-[0.16em]">
-                          Gedragsbeeld
+                          {finnT.behavioralLegend}
                         </span>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {[
-                          'Gedragsprofiel',
-                          'Meerweekse trend',
-                          'Waar Finn rem houdt',
-                          'Werkstijl die Finn herkent',
+                          finnT.behavioralPills.profile,
+                          finnT.behavioralPills.trend,
+                          finnT.behavioralPills.brake,
+                          finnT.behavioralPills.style,
                         ].map((label) => (
                           <span
                             key={label}
@@ -1371,19 +1436,19 @@ function FinnReportsPanel() {
                         : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300'
                     }`}>
                       <ShieldCheck size={12} />
-                      {isContractValid ? 'Contract OK' : 'Contract controleren'}
+                      {isContractValid ? finnT.contractOk : finnT.contractCheck}
                     </span>
                     <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                      Bron: {source}
+                      {finnT.sourcePrefix}: {source}
                     </span>
                   </div>
                   <div className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-4">
                     <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
-                      {finnReport?.response || 'Geen rapporttekst beschikbaar.'}
+                      {finnReport?.response || finnT.noReportText}
                     </p>
                   </div>
                   <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
-                    {(metricItems.length ? metricItems : [['Bron', source], ['Type', reportType], ['Scheiding', separateFrom]]).map(([label, value]) => (
+                    {(metricItems.length ? metricItems : [[finnT.detailMetrics.source, source], [finnT.detailMetrics.type, reportType], [finnT.detailMetrics.separation, separateFrom]]).map(([label, value]) => (
                       <div
                         key={label}
                         className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3"
@@ -1408,7 +1473,7 @@ function FinnReportsPanel() {
                   {analysis?.agent_accountability?.performance_light?.summary && (
                     <div className="mt-5 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 p-4 text-blue-700 dark:text-blue-300">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] mb-2">
-                        Verbeterpunt
+                        {finnT.improvementPoint}
                       </div>
                       <p className="text-sm font-semibold leading-relaxed">
                         {analysis.agent_accountability.performance_light.summary}
@@ -1433,6 +1498,8 @@ PAGE
 
 export default function ReportPage() {
   const { showSnackbar } = useModal();
+  const { t } = useTranslation();
+  const reportT = t.pages.report;
 
   const [reportType, setReportType] = useState('daily');
   const [report, setReport] = useState(null);
@@ -1448,7 +1515,7 @@ export default function ReportPage() {
   const pollTokenRef = useRef(0);
   const lastSignatureRef = useRef('');
 
-  const fallbackLabel = REPORT_TYPES[reportType] || 'Report';
+  const fallbackLabel = reportT.types[reportType] || reportT.hudDefaultTitle;
 
   const reportFns = useMemo(
     () => ({
@@ -1600,11 +1667,11 @@ GENERATE
           : selectedDate;
 
       await current.pdf(date);
-      showSnackbar('PDF-download gestart', 'success');
+      showSnackbar(reportT.pdfStarted, 'success');
 
     } catch (err) {
       console.error(err);
-      showSnackbar('Downloaden van de PDF mislukt', 'error');
+      showSnackbar(reportT.pdfFailed, 'error');
     } finally {
       setPdfLoading(false);
     }
@@ -1622,18 +1689,18 @@ RENDER
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
         <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <FileText size={12} />
-           Tradamind Intelligence
+           {reportT.pageEyebrow}
         </div>
-        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-4">Tradamind Reports</h1>
+        <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-4">{reportT.title}</h1>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 max-w-2xl leading-relaxed">
-            Detailed analysis of trading discipline and results
+            {reportT.subtitle}
           </p>
           <div className="hidden sm:block h-4 w-[1px] bg-slate-200 dark:bg-slate-800" />
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
             <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.15em] opacity-80">
-              Generated by Tradamind AI
+              {reportT.generatedBy}
             </span>
           </div>
         </div>
@@ -1660,7 +1727,7 @@ RENDER
                       onChange={(e) => loadData(e.target.value)}
                       className="bg-transparent text-[11px] font-bold text-slate-600 dark:text-slate-400 focus:outline-none appearance-none"
                   >
-                      <option value="latest">Recent</option>
+                      <option value="latest">{reportT.recent}</option>
                       {dates.map((d) => (
                           <option key={d} value={d}>{d}</option>
                       ))}
@@ -1674,7 +1741,7 @@ RENDER
                       className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg transition-all disabled:opacity-30"
                   >
                       {pdfLoading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                      <span className="text-[11px] font-black uppercase tracking-widest">PDF</span>
+                      <span className="text-[11px] font-black uppercase tracking-widest">{reportT.pdf}</span>
                   </button>
 
                   <button
@@ -1683,7 +1750,7 @@ RENDER
                       className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/10 active:scale-95 disabled:bg-slate-300"
                   >
                       <RefreshCw size={13} className={generating ? "animate-spin" : ""} />
-                      <span className="text-[11px] font-black uppercase tracking-widest">New</span>
+                      <span className="text-[11px] font-black uppercase tracking-widest">{reportT.new}</span>
                   </button>
               </div>
           </div>
@@ -1694,9 +1761,9 @@ RENDER
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 p-6 rounded-2xl flex items-center gap-4 text-red-700 dark:text-red-300 shadow-sm transition-colors">
            <AlertTriangle size={24} />
            <div>
-               <div className="text-[11px] font-black uppercase tracking-widest">Rapport tijdelijk niet compleet</div>
+               <div className="text-[11px] font-black uppercase tracking-widest">{reportT.errorTitle}</div>
                <div className="text-sm font-medium">{error}</div>
-               <div className="mt-1 text-xs opacity-80">Ververs de pagina of vraag Finn om de belangrijkste conclusie en risico’s kort samen te vatten.</div>
+               <div className="mt-1 text-xs opacity-80">{reportT.errorHelper}</div>
            </div>
         </div>
       )}

@@ -177,17 +177,17 @@ export default function TradingBrain({ symbol = "BTC", scoresSnapshot = null }) 
              <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-1">
                    <div className="w-1 h-3 bg-blue-500 rounded-full" />
-                   <span className="text-[9px] uppercase font-black text-foreground dark:text-slate-300 tracking-widest">Intelligence Deep-Dive</span>
+                   <span className="text-[9px] uppercase font-black text-foreground dark:text-slate-300 tracking-widest">Intelligence verdieping</span>
                 </div>
                 
                 <div className="space-y-3">
                    {[
                       { label: "Macro", data: macro?.top_contributors },
-                      { label: "Technical", data: technical?.top_contributors },
-                      { label: "Market", data: market?.top_contributors }
+                      { label: "Technisch", data: technical?.top_contributors },
+                      { label: "Markt", data: market?.top_contributors }
                    ].map((item, idx) => (
                       <div key={idx} className="flex flex-col gap-1">
-                         <span className="text-[8px] uppercase font-black text-secondary dark:text-slate-500 tracking-wider">{item.label} Drivers</span>
+                         <span className="text-[8px] uppercase font-black text-secondary dark:text-slate-500 tracking-wider">{item.label} drijvers</span>
                          <div className="flex flex-wrap gap-1">
                             {(Array.isArray(item.data) ? item.data : []).slice(0, 3).map((tag, tIdx) => (
                                <span key={tIdx} className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded text-slate-600 dark:text-slate-400">
@@ -195,7 +195,7 @@ export default function TradingBrain({ symbol = "BTC", scoresSnapshot = null }) 
                                </span>
                             ))}
                             {(!item.data || item.data.length === 0) && (
-                               <span className="text-[9px] font-bold text-secondary/30 italic">No specific signals</span>
+                               <span className="text-[9px] font-bold text-secondary/30 italic">Geen specifieke signalen</span>
                             )}
                          </div>
                       </div>

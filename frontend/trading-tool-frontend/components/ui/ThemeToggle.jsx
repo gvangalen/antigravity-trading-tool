@@ -32,7 +32,7 @@ export default function ThemeToggle() {
     <button
       onClick={toggleTheme}
       className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-card dark:bg-slate-900 text-muted hover:text-blue-600 dark:hover:text-blue-400 transition-all hover:shadow-sm active:scale-95 group"
-      title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+      title={isDark ? "Schakel naar lichte modus" : "Schakel naar donkere modus"}
     >
       <div className="relative w-5 h-5 flex items-center justify-center overflow-hidden">
         <Sun 

@@ -286,7 +286,7 @@ export default function BotTodayProposal({
           className="bg-card border border-[var(--color-border)] text-foreground hover:bg-[var(--bg-soft)] px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all"
         >
           <SkipForward size={16} />
-          {hasTrade ? "SKIP TRADE" : "SKIP ANALYZE"}
+          {hasTrade ? "TRADE OVERSLAAN" : "ANALYSE OVERSLAAN"}
         </button>
       )}
 
@@ -297,7 +297,7 @@ export default function BotTodayProposal({
           className="ml-auto bg-slate-100/80 border border-slate-200 text-muted hover:bg-slate-200/50 px-5 py-2.5 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center gap-2 transition-all disabled:opacity-50"
         >
           <RotateCcw size={14} />
-          {isGenerating ? "RE-ANALYZING..." : "RE-SCAN MARKET"}
+          {isGenerating ? "OPNIEUW ANALYSEREN..." : "MARKT OPNIEUW SCANNEN"}
         </button>
       )}
     </div>

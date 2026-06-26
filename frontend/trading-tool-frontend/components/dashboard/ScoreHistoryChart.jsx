@@ -137,7 +137,7 @@ export default function ScoreHistoryChart({ symbol = "BTC" }) {
 
       <div className="mt-8 pt-6 border-t border-[var(--color-border-subtle)] relative z-10">
          <p className="text-[10px] text-secondary/50 leading-relaxed font-bold uppercase tracking-wider italic text-center">
-            Historical correlation between technical intelligence scores and {symbol} price action (30D Lookback).
+            Historische correlatie tussen technische intelligencescores en de prijsactie van {symbol} over de afgelopen 30 dagen.
          </p>
       </div>
     </div>

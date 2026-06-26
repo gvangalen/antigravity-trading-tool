@@ -120,7 +120,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
       setFinnAdherence(adherence?.analysis || adherence?.state?.analysis || null);
     } catch (err) {
       console.error("FINN strategy review failed:", err);
-      showSnackbar("Finn review mislukt", "danger");
+      showSnackbar("Finn-check mislukt", "danger");
     } finally {
       setFinnLoading(false);
     }
@@ -174,7 +174,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
           <div className="flex items-center gap-1.5 ml-1">
              <div className={`w-2 h-2 rounded-full ${isBotActive ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse" : "bg-slate-300"}`} />
              <span className={`font-black ${isBotActive ? "text-green-600" : "text-secondary"}`}>
-                {linkedBot ? (isBotActive ? "Bot Actief" : "Bot Gepauzeerd") : "Geen Bot"}
+                {linkedBot ? (isBotActive ? "Bot actief" : "Bot gepauzeerd") : "Geen bot"}
              </span>
           </div>
 
@@ -276,7 +276,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-slate-600">
                   <Brain size={15} className="text-violet-500" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Finn review</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest">Finn-check</span>
                 </div>
                 {finnLoading && (
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Laden…</span>
@@ -370,11 +370,11 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
          <div className="flex items-center gap-3">
             <button onClick={handleAnalyze} disabled={loading} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary hover:text-purple-600 transition-colors disabled:opacity-50">
                <Wand2 size={12} />
-               {loading ? "Analyseren..." : "Nieuwe Analyse"}
+               {loading ? "Analyseren..." : "Nieuwe analyse"}
             </button>
             <button onClick={handleFinnReview} disabled={finnLoading} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary hover:text-blue-600 transition-colors disabled:opacity-50">
                <Brain size={12} />
-               {finnLoading ? "Finn review…" : "Review met Finn"}
+               {finnLoading ? "Finn-check…" : "Check met Finn"}
             </button>
          </div>
          

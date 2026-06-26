@@ -60,18 +60,18 @@ export default function DashboardGauges() {
         "Nog geen macrodata beschikbaar. Voeg macro-indicatoren toe op de Macro-pagina.",
     },
     {
-      title: "Technical",
+      title: "Technisch",
       icon: <LineChart className="w-4 h-4" />,
       data: technical,
       emptyText:
         "Nog geen technische analyse beschikbaar. Voeg indicatoren toe op de Technisch-pagina.",
     },
     {
-      title: "Market",
+      title: "Markt",
       icon: <DollarSign className="w-4 h-4" />,
       data: market,
       emptyText:
-        "Nog geen marktdata beschikbaar. Market data wordt automatisch opgehaald.",
+        "Nog geen marktdata beschikbaar. Marktdata wordt automatisch opgehaald.",
     },
     {
       title: "Setup",

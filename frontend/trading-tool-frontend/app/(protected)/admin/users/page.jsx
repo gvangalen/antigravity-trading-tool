@@ -51,7 +51,7 @@ export default function AdminUsersDashboard() {
       const data = await fetchAdminUsers();
       setUsers(data);
     } catch (err) {
-      console.error("Failed to load admin users", err);
+      console.error("Admingebruikers laden mislukt", err);
       setError("Je hebt geen admin rechten of de API is offline.");
     } finally {
       setLoading(false);
@@ -143,8 +143,8 @@ export default function AdminUsersDashboard() {
       <div className="bg-white border border-slate-100 rounded-[32px] shadow-sm overflow-hidden">
         <div className="px-8 py-5 border-b border-slate-100 bg-slate-50/60">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px] text-slate-500 font-medium">
-            <p><span className="font-black text-violet-500 uppercase tracking-widest">Background</span> zijn automatische rapporten, agent-runs en Celery-jobs voor deze gebruiker.</p>
-            <p><span className="font-black text-rose-500 uppercase tracking-widest">Blocked</span> laat zien hoeveel AI-verkeer op quota stukliep en wat dat ongeveer had gekost.</p>
+            <p><span className="font-black text-violet-500 uppercase tracking-widest">Achtergrond</span> zijn automatische rapporten, agent-runs en Celery-jobs voor deze gebruiker.</p>
+            <p><span className="font-black text-rose-500 uppercase tracking-widest">Geblokkeerd</span> laat zien hoeveel AI-verkeer op quota stukliep en wat dat ongeveer had gekost.</p>
             <p><span className="font-black text-blue-500 uppercase tracking-widest">MTD</span> blijft de echte succesvolle spend; blocked staat er bewust los naast.</p>
           </div>
         </div>
@@ -203,8 +203,8 @@ export default function AdminUsersDashboard() {
                     </div>
                     <p className="text-[9px] font-black uppercase text-blue-400 mt-2 italic">MTD-kosten: {formatCurrency(user.usage_month_eur)}</p>
                     <p className="text-[9px] font-black uppercase text-emerald-500 mt-1 italic">Vandaag: {formatCurrency(user.usage_today_eur)}</p>
-                    <p className="text-[9px] font-black uppercase text-violet-400 mt-1 italic">Background: {formatCurrency(user.background_usage_month_eur)}</p>
-                    <p className="text-[9px] font-black uppercase text-rose-500 mt-1 italic">Blocked: {user.blocked_requests_month} / {formatCurrency(user.blocked_estimated_cost_month_eur)} schatting</p>
+                    <p className="text-[9px] font-black uppercase text-violet-400 mt-1 italic">Achtergrond: {formatCurrency(user.background_usage_month_eur)}</p>
+                    <p className="text-[9px] font-black uppercase text-rose-500 mt-1 italic">Geblokkeerd: {user.blocked_requests_month} / {formatCurrency(user.blocked_estimated_cost_month_eur)} schatting</p>
                   </div>
                 </td>
                 <td className="px-6 py-6 font-bold">

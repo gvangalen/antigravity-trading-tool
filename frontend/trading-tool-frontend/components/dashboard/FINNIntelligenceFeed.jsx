@@ -115,7 +115,7 @@ export default function FINNIntelligenceFeed() {
             onClick={() => setActiveTab("all")}
             className={`px-3 py-1 text-[10px] uppercase tracking-wider font-black rounded-lg transition-all ${activeTab === 'all' ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-100 dark:border-slate-700' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600'}`}
           >
-            All ({events.length})
+            Alle ({events.length})
           </button>
           <button 
             onClick={() => setActiveTab("critical")}

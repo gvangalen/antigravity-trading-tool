@@ -109,7 +109,7 @@ export default function AddBotForm({
         </label>
         <input
           className="w-full bg-card border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 transition-all outline-none placeholder:text-slate-300"
-          placeholder="e.g. DCA BTC ALGO"
+          placeholder="bijv. DCA BTC ALGO"
           value={form.name}
           onChange={(e) =>
             setForm((s) => ({ ...s, name: e.target.value }))
@@ -191,7 +191,7 @@ export default function AddBotForm({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-            Execution Environment
+            Uitvoeringsomgeving
           </label>
           <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-2xl border-2 border-slate-100 dark:border-slate-800">
              <button 
@@ -199,21 +199,21 @@ export default function AddBotForm({
                 onClick={() => setForm(s => ({ ...s, is_live: false }))}
                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!form.is_live ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
              >
-                📝 Paper Trading
+                📝 Paper trading
              </button>
              <button 
                 type="button"
                 onClick={() => setForm(s => ({ ...s, is_live: true }))}
                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${form.is_live ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-emerald-600'}`}
              >
-                ⚡ Live Exchange
+                ⚡ Live exchange
              </button>
           </div>
         </div>
 
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-            Operating Mode
+            Uitvoeringsmodus
           </label>
           <div className="relative">
             <select
@@ -223,9 +223,9 @@ export default function AddBotForm({
                 setForm((s) => ({ ...s, mode: e.target.value }))
               }
             >
-              <option value="manual">Manual Approval</option>
-              <option value="semi-auto">Semi-Autonomous</option>
-              <option value="auto">Full-Autonomous</option>
+              <option value="manual">Handmatige goedkeuring</option>
+              <option value="semi-auto">Semi-autonoom</option>
+              <option value="auto">Volledig autonoom</option>
             </select>
             <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
                ▼
@@ -237,7 +237,7 @@ export default function AddBotForm({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-            Safety Profile
+            Veiligheidsprofiel
           </label>
           <div className="relative">
             <select
@@ -264,7 +264,7 @@ export default function AddBotForm({
 
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-            Base Currency
+            Basisvaluta
           </label>
           <div className="relative">
             <select
