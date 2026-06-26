@@ -4,8 +4,8 @@ import { useState } from "react";
 import { Shield, Zap, Info, CheckCircle2, AlertCircle } from "lucide-react";
 
 const EXCHANGES = [
-  { id: "bybit", name: "Bybit", logo: "🚀", description: "Recommended for high-speed AI execution" },
-  { id: "bitvavo", name: "Bitvavo", logo: "🏦", description: "Simple EUR gateway for direct trading" },
+  { id: "bybit", name: "Bybit", logo: "🚀", description: "Aanbevolen voor snelle AI-uitvoering" },
+  { id: "bitvavo", name: "Bitvavo", logo: "🏦", description: "Eenvoudige EUR-gateway voor direct traden" },
 ];
 
 export default function ExchangeSettingsForm({ onSave, onCancel }) {
@@ -27,9 +27,9 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
         exchange_name: selectedExchange.id,
         ...form
       });
-      setStatus({ type: "success", message: "Successfully connected to " + selectedExchange.name });
+      setStatus({ type: "success", message: "Succesvol verbonden met " + selectedExchange.name });
     } catch (err) {
-      setStatus({ type: "error", message: err?.message || "Connection failed. Please check your keys." });
+      setStatus({ type: "error", message: err?.message || "Verbinding mislukt. Controleer je sleutels." });
     } finally {
       setTesting(false);
     }
@@ -69,14 +69,14 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
           {selectedExchange.logo}
         </div>
         <div>
-           <div className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">Selected Node</div>
+           <div className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">Geselecteerde node</div>
            <div className="text-sm font-black text-slate-900 dark:text-white uppercase">{selectedExchange.name}</div>
         </div>
         <button 
           onClick={() => setStep(1)}
           className="ml-auto text-[9px] font-black text-slate-400 uppercase tracking-tighter hover:text-slate-600 underline"
         >
-          Change
+          Wijzigen
         </button>
       </div>
 
@@ -105,7 +105,7 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
 
         {selectedExchange.id === 'bybit' && (
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Passphrase (Optional)</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Passphrase (optioneel)</label>
             <input 
               type="password" 
               placeholder="API-passphrase indien vereist"
@@ -120,10 +120,10 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
       <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border-2 border-slate-100 dark:border-slate-800 rounded-2xl space-y-3">
          <div className="flex items-center gap-3">
             <Shield size={16} className="text-emerald-500" />
-            <span className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest">Security Protocol</span>
+            <span className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest">Beveiligingsprotocol</span>
          </div>
          <p className="text-[11px] font-medium text-slate-400 leading-relaxed italic">
-           Keys are encrypted with AES-256 before storage. We recommend enabling "Withdrawals: Disabled" for this API key on your exchange for maximum safety.
+           Sleutels worden met AES-256 versleuteld voordat ze worden opgeslagen. We raden aan om "Withdrawals: Disabled" voor deze API-key op je exchange aan te zetten voor maximale veiligheid.
          </p>
       </div>
 
@@ -139,7 +139,7 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
            onClick={onCancel}
            className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
          >
-           Cancel
+           Annuleren
          </button>
          <button 
            onClick={handleConnect}
@@ -151,7 +151,7 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
            ) : (
              <Zap size={14} />
            )}
-           {testing ? "Testing Connection..." : "Verify & Connect"}
+           {testing ? "Verbinding testen..." : "Verifiëren en verbinden"}
          </button>
       </div>
     </div>

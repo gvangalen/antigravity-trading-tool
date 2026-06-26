@@ -9,7 +9,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 /**
  * 📈 ReportSectionMarket (Exact Screenshot Edition)
  * - Chapter 1: Dagoverzicht
- * - Chapter 2: Market Analyse
+ * - Chapter 2: Marktanalyse
  */
 export default function ReportSectionMarket({ report, isPrint = false }) {
   const { user } = useAuth();
@@ -34,7 +34,7 @@ export default function ReportSectionMarket({ report, isPrint = false }) {
             
             <div className="space-y-1">
               <div className="text-xl font-bold text-slate-900">
-                Hi {user?.first_name || "Gerrit"},
+                Hallo {user?.first_name || "Gerrit"},
               </div>
               <p className="text-muted font-medium italic">
                 De markt laat vandaag het volgende beeld zien:
@@ -50,11 +50,11 @@ export default function ReportSectionMarket({ report, isPrint = false }) {
         </SectionAlignedAside>
       </div>
 
-      {/* CHAPTER 2: MARKET ANALYSE */}
+      {/* CHAPTER 2: MARKTANALYSE */}
       <div className={gridClass}>
         <div className={colSpanClass}>
           <NarrativeBlock
-            title="Market Analyse"
+            title="Marktanalyse"
             field="market_analysis"
             report={report}
           />
@@ -64,7 +64,7 @@ export default function ReportSectionMarket({ report, isPrint = false }) {
           <DataListBlock
             report={report}
             field="market_indicator_highlights"
-            title="Market Indicator Highlights"
+            title="Marktindicator highlights"
           />
         </SectionAlignedAside>
       </div>

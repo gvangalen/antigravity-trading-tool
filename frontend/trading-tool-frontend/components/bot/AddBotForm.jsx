@@ -5,17 +5,17 @@ import { useEffect, useMemo, useState } from "react";
 const RISK_PROFILES = [
   {
     value: "conservative",
-    label: "🛡️ Conservative",
+    label: "🛡️ Conservatief",
     description: "Alleen trades bij hoge confidence, lage frequentie",
   },
   {
     value: "balanced",
-    label: "⚖️ Balanced",
+    label: "⚖️ Gebalanceerd",
     description: "Standaard profiel met gebalanceerde trade-frequentie",
   },
   {
     value: "aggressive",
-    label: "🚀 Aggressive",
+    label: "🚀 Agressief",
     description: "Sneller trades, hogere exposure en risico",
   },
 ];
@@ -105,7 +105,7 @@ export default function AddBotForm({
       {/* ================= BOT NAME ================= */}
       <div className="space-y-1.5">
         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-          Identifier Tag
+          Identificatielabel
         </label>
         <input
           className="w-full bg-card border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 transition-all outline-none placeholder:text-slate-300"
@@ -120,7 +120,7 @@ export default function AddBotForm({
       {/* ================= STRATEGY ================= */}
       <div className="space-y-1.5">
         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-          Execution Strategy
+          Uitvoeringsstrategie
         </label>
 
         {isEdit ? (
@@ -130,7 +130,7 @@ export default function AddBotForm({
                 ? `${selectedStrategy.name} · ${selectedStrategy.symbol}`
                 : "—"}
             </span>
-            <div className="text-[9px] bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-md uppercase tracking-tighter">Locked</div>
+            <div className="text-[9px] bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-md uppercase tracking-tighter">Vastgezet</div>
           </div>
         ) : (
           <div className="relative">
@@ -146,7 +146,7 @@ export default function AddBotForm({
                 }))
               }
             >
-              <option value="">— Select Baseline Strategy —</option>
+              <option value="">— Kies basisstrategie —</option>
               {strategies.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.display_name || `${s.name} · ${s.symbol} · ${s.timeframe}`}
@@ -164,17 +164,17 @@ export default function AddBotForm({
       {selectedStrategy && (
         <div className="rounded-2xl bg-blue-50/30 dark:bg-blue-900/10 border-2 border-blue-600/10 p-5 space-y-3">
           <div className="flex items-center justify-between">
-             <div className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em]">Strategy Parameters</div>
+             <div className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em]">Strategieparameters</div>
              <div className="text-[9px] font-black text-white uppercase bg-blue-600 px-2 py-0.5 rounded-md shadow-sm shadow-blue-600/20">{getStrategyType(selectedStrategy)}</div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-[8px] font-black text-blue-400 uppercase">Asset Node</div>
+              <div className="text-[8px] font-black text-blue-400 uppercase">Assetnode</div>
               <div className="text-sm font-black text-foreground dark:text-slate-100 font-mono tracking-tighter">{selectedStrategy.symbol}</div>
             </div>
             <div>
-              <div className="text-[8px] font-black text-blue-400 uppercase">Time Horizon</div>
+              <div className="text-[8px] font-black text-blue-400 uppercase">Tijdshorizon</div>
               <div className="text-sm font-black text-foreground dark:text-slate-100 font-mono tracking-tighter">{selectedStrategy.timeframe}</div>
             </div>
           </div>
@@ -290,10 +290,10 @@ export default function AddBotForm({
       {(form.is_live || form.mode !== "manual") && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            ["budget_total_eur", "Total Budget"],
-            ["budget_daily_limit_eur", "Daily Limit"],
-            ["budget_min_order_eur", "Min Order"],
-            ["budget_max_order_eur", "Max Order"],
+            ["budget_total_eur", "Totaal budget"],
+            ["budget_daily_limit_eur", "Daglimiet"],
+            ["budget_min_order_eur", "Min. order"],
+            ["budget_max_order_eur", "Max. order"],
           ].map(([key, label]) => (
             <div key={key} className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">

@@ -265,19 +265,19 @@ export default function LandingPage() {
         <section className="px-6 py-32 text-center">
           <div className="max-w-4xl mx-auto space-y-12">
             <h2 className="text-5xl sm:text-7xl font-black text-foreground tracking-tighter leading-none">
-              Trade with more clarity.
+              Trade met meer helderheid.
             </h2>
             <Link 
               href="/login" 
               className="inline-flex bg-foreground text-card hover:bg-slate-800 dark:hover:bg-slate-200 px-12 py-6 rounded-2xl text-[14px] font-black uppercase tracking-[0.2em] transition-all items-center gap-3 shadow-2xl active:scale-95"
             >
-              Start free trial
+              Start gratis proefperiode
               <ArrowRight size={18} />
             </Link>
             <div className="pt-24 border-t border-[var(--color-border-subtle)] flex flex-col sm:flex-row items-center justify-between gap-6 opacity-40">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">© 2026 Tradamind. All rights reserved.</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">© 2026 Tradamind. Alle rechten voorbehouden.</div>
               <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                Legal pages are being finalized.
+                Juridische pagina's worden momenteel afgerond.
               </div>
             </div>
           </div>

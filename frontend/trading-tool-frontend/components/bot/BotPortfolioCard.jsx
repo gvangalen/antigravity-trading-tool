@@ -65,37 +65,37 @@ export default function BotPortfolioSection({ bot }) {
         {hasBudget ? (
           <div className="space-y-4">
             <BotBudgetBar
-              label="TOTAL BUDGET EXPOSURE"
+              label="TOTALE BUDGETBLOOTSTELLING"
               total={budget.total_eur ?? 0}
               spent={spentExecuted}
             />
 
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/50">
               <div className="flex flex-col">
-                <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">Daily Consumption</span>
+                <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">Dagverbruik</span>
                 <span className="text-xs font-black text-slate-700 font-mono tracking-tighter">€{(todaySpent ?? 0).toFixed(0)} / €{budget.daily_limit_eur || "∞"}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">Max Order Payload</span>
-                <span className="text-xs font-black text-slate-700 font-mono tracking-tighter">€{budget.max_order_eur || "UNLIMITED"}</span>
+                <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">Max ordergrootte</span>
+                <span className="text-xs font-black text-slate-700 font-mono tracking-tighter">€{budget.max_order_eur || "ONBEPERKT"}</span>
               </div>
             </div>
           </div>
         ) : (
           <div className="text-xs font-bold text-secondary italic py-2">
-            NO BUDGET ALLOCATED
+            GEEN BUDGET TOEGEWEZEN
           </div>
         )}
       </div>
 
       {/* 📊 PORTFOLIO READOUT */}
       <div className="grid grid-cols-2 gap-4 pt-1">
-        <Stat label="NET POSITION QTY">
+        <Stat label="NETTOPOSITIE QTY">
           <span className="font-mono tracking-tighter text-slate-800">{netQty.toFixed(6)}</span>
           <span className="ml-1.5 text-secondary font-black text-[10px]">{symbol}</span>
         </Stat>
 
-        <Stat label="CURRENT ASSET VALUE">
+        <Stat label="HUIDIGE ASSETWAARDE">
            <span className="font-mono tracking-tighter text-slate-800">€{positionValue.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
         </Stat>
 
