@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { normalizeLocale } from "@/lib/i18n";
 import {
   CalendarRange,
   TrendingUp,
@@ -36,7 +37,7 @@ const formatPercentage = (value) => {
 =========================================================== */
 export default function MarketForwardReturnTabs({ data = {} }) {
   const { locale } = useTranslation();
-  const isDutch = locale !== "en";
+  const isDutch = normalizeLocale(locale) === "nl";
   const [active, setActive] = useState("month");
   const [selectedYears, setSelectedYears] = useState([]);
 

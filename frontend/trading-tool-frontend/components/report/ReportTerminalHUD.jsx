@@ -4,10 +4,12 @@ import { Calendar, Globe, Zap, Activity, Target, Info } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { HUDSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { normalizeLocale } from "@/lib/i18n";
 
 export default function ReportTerminalHUD({ report, type = "daily", loading = false }) {
   const { user } = useAuth();
   const { t, locale } = useTranslation();
+  const isDutch = normalizeLocale(locale) === "nl";
   const reportT = t.pages.report;
 
   if (loading) {
@@ -76,7 +78,7 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
          <div className="flex items-center gap-4">
             <span>{reportT.hudUser}: {user?.name || reportT.hudSystem}</span>
             <span className="w-1 h-1 rounded-full bg-slate-300" />
-            <span>{reportT.hudUpdated}: {generated_at ? new Date(generated_at).toLocaleTimeString(locale === "nl" ? "nl-NL" : "en-US", { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
+            <span>{reportT.hudUpdated}: {generated_at ? new Date(generated_at).toLocaleTimeString(isDutch ? "nl-NL" : "en-US", { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
          </div>
       </footer>
     </div>

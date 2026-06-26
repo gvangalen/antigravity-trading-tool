@@ -6,12 +6,14 @@ import { toast } from "react-hot-toast";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { API_BASE_URL } from "@/lib/config";
+import { normalizeLocale } from "@/lib/i18n";
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
 export default function NotificationToggle({ variant = "default" }) {
   const { user } = useAuth();
   const { locale } = useTranslation();
+  const isDutch = normalizeLocale(locale) === "nl";
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [registration, setRegistration] = useState(null);
@@ -46,19 +48,19 @@ export default function NotificationToggle({ variant = "default" }) {
   }, []);
 
   const copy = {
-    notifications: locale === "nl" ? "Meldingen" : "Notifications",
-    loginRequired: locale === "nl" ? "Log in om meldingen in te schakelen" : "Log in to enable notifications",
-    notReady: locale === "nl" ? "Meldingen zijn nog niet beschikbaar" : "Notifications are not ready yet",
-    permissionDenied: locale === "nl" ? "Toestemming voor meldingen geweigerd" : "Notification permission was denied",
-    unavailable: locale === "nl" ? "Pushmeldingen zijn nu niet beschikbaar" : "Push notifications are unavailable right now",
-    enabled: locale === "nl" ? "Meldingen ingeschakeld" : "Notifications enabled",
-    disabled: locale === "nl" ? "Meldingen uitgeschakeld" : "Notifications disabled",
-    enableFailed: locale === "nl" ? "Inschakelen van meldingen mislukte" : "Enabling notifications failed",
-    disableFailed: locale === "nl" ? "Uitschakelen van meldingen mislukte" : "Disabling notifications failed",
-    pushEnabled: locale === "nl" ? "Push ingeschakeld" : "Push enabled",
-    pushDisabled: locale === "nl" ? "Push uitgeschakeld" : "Push disabled",
-    pushOn: locale === "nl" ? "Push actief" : "Push on",
-    pushOff: locale === "nl" ? "Push uit" : "Push off",
+    notifications: isDutch ? "Meldingen" : "Notifications",
+    loginRequired: isDutch ? "Log in om meldingen in te schakelen" : "Log in to enable notifications",
+    notReady: isDutch ? "Meldingen zijn nog niet beschikbaar" : "Notifications are not ready yet",
+    permissionDenied: isDutch ? "Toestemming voor meldingen geweigerd" : "Notification permission was denied",
+    unavailable: isDutch ? "Pushmeldingen zijn nu niet beschikbaar" : "Push notifications are unavailable right now",
+    enabled: isDutch ? "Meldingen ingeschakeld" : "Notifications enabled",
+    disabled: isDutch ? "Meldingen uitgeschakeld" : "Notifications disabled",
+    enableFailed: isDutch ? "Inschakelen van meldingen mislukte" : "Enabling notifications failed",
+    disableFailed: isDutch ? "Uitschakelen van meldingen mislukte" : "Disabling notifications failed",
+    pushEnabled: isDutch ? "Push ingeschakeld" : "Push enabled",
+    pushDisabled: isDutch ? "Push uitgeschakeld" : "Push disabled",
+    pushOn: isDutch ? "Push actief" : "Push on",
+    pushOff: isDutch ? "Push uit" : "Push off",
   };
 
   const urlBase64ToUint8Array = (base64String) => {

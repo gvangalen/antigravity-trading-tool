@@ -4,10 +4,11 @@ import { formatChange, formatNumber } from "@/components/market/utils";
 import { useMemo } from "react";
 import SkeletonTable from "@/components/ui/SkeletonTable";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { normalizeLocale } from "@/lib/i18n";
 
 export default function MarketSevenDayTable({ history, loading = false }) {
   const { locale } = useTranslation();
-  const isDutch = locale !== "en";
+  const isDutch = normalizeLocale(locale) === "nl";
 
   if (loading) {
     return <SkeletonTable rows={7} columns={7} />;

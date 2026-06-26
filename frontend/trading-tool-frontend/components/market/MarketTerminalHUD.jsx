@@ -4,6 +4,7 @@ import { Activity, TrendingUp, TrendingDown, Clock, Gauge } from "lucide-react";
 import React from "react";
 import { formatNumber } from "@/components/market/utils";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { normalizeLocale } from "@/lib/i18n";
 
 /**
  * 🛰️ MarketTerminalHUD — PRO V2
@@ -11,7 +12,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
  */
 export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC" }) {
   const { locale } = useTranslation();
-  const isDutch = locale !== "en";
+  const isDutch = normalizeLocale(locale) === "nl";
   
   const scoreNum = Number(score ?? 0);
   const priceChange = btc?.change_24h || 0;

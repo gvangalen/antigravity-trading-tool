@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { normalizeLocale } from "@/lib/i18n";
 
 import { User, LogOut, Loader2, Moon, Sun, Languages } from "lucide-react";
 import NotificationToggle from "@/components/NotificationToggle";
 
 export default function AvatarMenu() {
   const { t, locale, setLocale } = useTranslation();
+  const isDutch = normalizeLocale(locale) === "nl";
   const [showDropdown, setShowDropdown] = useState(false);
   const [loadingLogout, setLoadingLogout] = useState(false);
   const dropdownRef = useRef(null);
@@ -43,14 +45,14 @@ export default function AvatarMenu() {
     }
     setIsDark(!isDark);
     
-    const msg = locale === 'nl' 
+    const msg = isDutch
       ? `Thema gewijzigd naar ${newTheme === 'dark' ? 'Donker' : 'Licht'}` 
       : `Theme changed to ${newTheme === 'dark' ? 'Dark' : 'Light'}`;
     showSnackbar(msg, "success");
   }
 
   function toggleLanguage() {
-    const newLocale = locale === 'en' ? 'nl' : 'en';
+    const newLocale = isDutch ? 'en' : 'nl';
     setLocale(newLocale);
     showSnackbar(newLocale === 'nl' ? "Taal gewijzigd naar Nederlands" : "Language changed to English", "success");
   }
@@ -74,7 +76,7 @@ export default function AvatarMenu() {
 
     await logout();
 
-    showSnackbar(locale === 'nl' ? "Je bent veilig uitgelogd ✔" : "You have been safely logged out ✔", "success");
+    showSnackbar(isDutch ? "Je bent veilig uitgelogd ✔" : "You have been safely logged out ✔", "success");
 
     window.location.href = "/login";
   };
@@ -95,7 +97,7 @@ export default function AvatarMenu() {
           shadow-lg shadow-blue-900/20
           relative overflow-hidden
         "
-        title={locale === 'nl' ? "Profiel menu openen" : "Open profile menu"}
+        title={isDutch ? "Profiel menu openen" : "Open profile menu"}
       >
         {/* Subtle Inner Glow */}
         <div className="absolute inset-x-0 top-0 h-1/2 bg-white/10" />
@@ -125,7 +127,7 @@ export default function AvatarMenu() {
             {/* User info (Industrial Header) */}
             {user && (
               <li className="px-5 py-4 bg-[var(--color-border-subtle)] dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
-                <p className="text-[10px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-widest mb-1">{locale === 'nl' ? "Geïdentificeerd als" : "Identified as"}</p>
+                <p className="text-[10px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-widest mb-1">{isDutch ? "Geïdentificeerd als" : "Identified as"}</p>
                 <p className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">
                   {user.first_name
                     ? `${user.first_name} ${user.last_name || ""}`
@@ -133,14 +135,14 @@ export default function AvatarMenu() {
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                    <span className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[9px] font-black uppercase tracking-tighter border border-blue-200 dark:border-blue-800">
-                     {locale === 'nl' ? "Rol" : "Role"}: {user.role || 'PRO'}
+                     {isDutch ? "Rol" : "Role"}: {user.role || 'PRO'}
                    </span>
                 </div>
               </li>
             )}
 
             <DropdownItem href="/profile" icon={<User size={16} />}>
-              {locale === 'nl' ? "Account en Finn-profiel" : "Account & trader profile"}
+              {isDutch ? "Account en Finn-profiel" : "Account & trader profile"}
             </DropdownItem>
 
             <div className="h-px bg-[var(--color-border-subtle)] dark:bg-slate-800 my-1 mx-4" />
@@ -153,7 +155,7 @@ export default function AvatarMenu() {
               <div className="flex flex-col items-start leading-none">
                 <span className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">{t.common.language}</span>
                 <span className="font-bold">
-                  {locale === "nl" ? "Nederlands actief, wissel naar Engels" : "English active, switch to Dutch"}
+                  {isDutch ? "Nederlands actief, wissel naar Engels" : "English active, switch to Dutch"}
                 </span>
               </div>
             </DropdownButton>
@@ -163,7 +165,7 @@ export default function AvatarMenu() {
               icon={isDark ? <Sun size={16} /> : <Moon size={16} />}
               onClick={toggleTheme}
             >
-              {isDark ? (locale === 'nl' ? "Lichte modus" : "Light mode") : (locale === 'nl' ? "Donkere modus" : "Dark mode")}
+              {isDark ? (isDutch ? "Lichte modus" : "Light mode") : (isDutch ? "Donkere modus" : "Dark mode")}
             </DropdownButton>
 
             <div className="h-px bg-[var(--color-border-subtle)] dark:bg-slate-800 my-1 mx-4" />
@@ -187,7 +189,7 @@ export default function AvatarMenu() {
               danger
               onClick={loadingLogout ? undefined : handleLogout}
             >
-              {loadingLogout ? (locale === 'nl' ? "Uitloggen…" : "Signing out…") : (locale === 'nl' ? "Uitloggen" : "Sign out")}
+              {loadingLogout ? (isDutch ? "Uitloggen…" : "Signing out…") : (isDutch ? "Uitloggen" : "Sign out")}
             </DropdownButton>
           </ul>
         </div>

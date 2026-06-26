@@ -6,6 +6,7 @@ import { fetchLatestPrice } from "@/lib/api/market";
 import { MarketCardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { normalizeLocale } from "@/lib/i18n";
 
 // Lucide icons
 import {
@@ -17,7 +18,7 @@ import {
 
 export default function MarketLiveCard({ symbol = "BTC", data = null, loading: propLoading = false, error: propError = "" }) {
   const { locale } = useTranslation();
-  const isDutch = locale !== "en";
+  const isDutch = normalizeLocale(locale) === "nl";
   const [internalPrice, setInternalPrice] = useState(null);
   const [internalLoading, setInternalLoading] = useState(true);
   const [internalError, setInternalError] = useState("");

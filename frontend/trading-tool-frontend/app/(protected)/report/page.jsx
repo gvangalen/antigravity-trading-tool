@@ -39,6 +39,7 @@ import { waitUntilVisible } from '@/hooks/useVisibilityPolling';
 import { actionButtonStyles } from '@/components/ui/actionButtonStyles';
 import { trackAssistantEvent } from '@/lib/api/assistantAnalytics';
 import { useTranslation } from '@/app/providers/I18nProvider';
+import { normalizeLocale } from '@/lib/i18n';
 
 import {
   Download,
@@ -71,34 +72,42 @@ const AUTO_GENERATE_IF_EMPTY = true;
 const POLL_INTERVAL_MS = 4000;
 const POLL_MAX_ATTEMPTS = 60;
 
-const FINN_REPORT_OPTIONS = [
+const getFinnReportOptions = (isDutch) => [
   {
     key: 'today',
-    label: 'Vandaag',
-    eyebrow: 'Dagreflectie',
-    prompt: 'Geef mijn Finn rapport van vandaag',
-    empty: 'Nog geen Finn-activiteit vandaag. Zodra Finn iets begeleidt, blokkeert of vastlegt, verschijnt het hier.',
+    label: isDutch ? 'Vandaag' : 'Today',
+    eyebrow: isDutch ? 'Dagreflectie' : 'Daily reflection',
+    prompt: isDutch ? 'Geef mijn Finn rapport van vandaag' : 'Give me my Finn report for today',
+    empty: isDutch
+      ? 'Nog geen Finn-activiteit vandaag. Zodra Finn iets begeleidt, blokkeert of vastlegt, verschijnt het hier.'
+      : 'No Finn activity yet today. As soon as Finn guides, blocks, or records something, it will appear here.',
   },
   {
     key: 'week',
-    label: 'Weekreflectie',
-    eyebrow: 'Weekbeeld',
-    prompt: 'Geef mijn weekreflectie',
-    empty: 'Nog te weinig weekhistorie. Finn toont hier pas patronen wanneer er auditdata is.',
+    label: isDutch ? 'Weekreflectie' : 'Weekly reflection',
+    eyebrow: isDutch ? 'Weekbeeld' : 'Weekly view',
+    prompt: isDutch ? 'Geef mijn weekreflectie' : 'Give me my weekly reflection',
+    empty: isDutch
+      ? 'Nog te weinig weekhistorie. Finn toont hier pas patronen wanneer er auditdata is.'
+      : 'There is not enough weekly history yet. Finn only shows patterns here when audit data exists.',
   },
   {
     key: 'blocked',
-    label: 'Geblokkeerd',
-    eyebrow: 'Risicolog',
-    prompt: 'Wat heeft Finn vandaag geblokkeerd?',
-    empty: 'Geen blokkades vandaag. Finn heeft nog geen risicovolle actie hoeven afremmen.',
+    label: isDutch ? 'Geblokkeerd' : 'Blocked',
+    eyebrow: isDutch ? 'Risicolog' : 'Risk log',
+    prompt: isDutch ? 'Wat heeft Finn vandaag geblokkeerd?' : 'What did Finn block today?',
+    empty: isDutch
+      ? 'Geen blokkades vandaag. Finn heeft nog geen risicovolle actie hoeven afremmen.'
+      : 'No blocks today. Finn has not had to slow down a risky action yet.',
   },
   {
     key: 'behavior',
-    label: '30 dagen gedrag',
-    eyebrow: 'Gedragsbeeld',
-    prompt: 'Geef mijn gedragsrapport van de laatste 30 dagen',
-    empty: 'Nog te weinig gedragsdata over 30 dagen. Finn verzint hier geen profiel zonder bewijs.',
+    label: isDutch ? '30 dagen gedrag' : '30 day behavior',
+    eyebrow: isDutch ? 'Gedragsbeeld' : 'Behavior profile',
+    prompt: isDutch ? 'Geef mijn gedragsrapport van de laatste 30 dagen' : 'Give me my behavioral report for the last 30 days',
+    empty: isDutch
+      ? 'Nog te weinig gedragsdata over 30 dagen. Finn verzint hier geen profiel zonder bewijs.'
+      : 'There is not enough behavioral data across 30 days yet. Finn will not invent a profile without evidence.',
   },
 ];
 
@@ -1056,10 +1065,11 @@ function FinnGovernanceSurface({ analysis }) {
 
 function FinnReportsPanel() {
   const { t, locale } = useTranslation();
+  const isDutch = normalizeLocale(locale) === 'nl';
   const reportT = t.pages.report;
   const finnT = reportT.finn;
   const panelRef = useRef(null);
-  const [activeFinnReport, setActiveFinnReport] = useState(FINN_REPORT_OPTIONS[0].key);
+  const [activeFinnReport, setActiveFinnReport] = useState('today');
   const [finnReportCache, setFinnReportCache] = useState({});
   const [finnReport, setFinnReport] = useState(null);
   const [finnLoading, setFinnLoading] = useState(true);
@@ -1067,47 +1077,7 @@ function FinnReportsPanel() {
   const [expanded, setExpanded] = useState(false);
   const [shouldLoadFinn, setShouldLoadFinn] = useState(false);
 
-  const finnReportOptions = useMemo(
-    () => [
-      {
-        key: 'today',
-        label: locale === 'nl' ? 'Vandaag' : 'Today',
-        eyebrow: locale === 'nl' ? 'Dagreflectie' : 'Daily reflection',
-        prompt: locale === 'nl' ? 'Geef mijn Finn rapport van vandaag' : 'Give me my Finn report for today',
-        empty: locale === 'nl'
-          ? 'Nog geen Finn-activiteit vandaag. Zodra Finn iets begeleidt, blokkeert of vastlegt, verschijnt het hier.'
-          : 'No Finn activity yet today. As soon as Finn guides, blocks, or records something, it will appear here.',
-      },
-      {
-        key: 'week',
-        label: locale === 'nl' ? 'Weekreflectie' : 'Weekly reflection',
-        eyebrow: locale === 'nl' ? 'Weekbeeld' : 'Weekly view',
-        prompt: locale === 'nl' ? 'Geef mijn weekreflectie' : 'Give me my weekly reflection',
-        empty: locale === 'nl'
-          ? 'Nog te weinig weekhistorie. Finn toont hier pas patronen wanneer er auditdata is.'
-          : 'There is not enough weekly history yet. Finn only shows patterns here when audit data exists.',
-      },
-      {
-        key: 'blocked',
-        label: locale === 'nl' ? 'Geblokkeerd' : 'Blocked',
-        eyebrow: locale === 'nl' ? 'Risicolog' : 'Risk log',
-        prompt: locale === 'nl' ? 'Wat heeft Finn vandaag geblokkeerd?' : 'What did Finn block today?',
-        empty: locale === 'nl'
-          ? 'Geen blokkades vandaag. Finn heeft nog geen risicovolle actie hoeven afremmen.'
-          : 'No blocks today. Finn has not had to slow down a risky action yet.',
-      },
-      {
-        key: 'behavior',
-        label: locale === 'nl' ? '30 dagen gedrag' : '30 day behavior',
-        eyebrow: locale === 'nl' ? 'Gedragsbeeld' : 'Behavior profile',
-        prompt: locale === 'nl' ? 'Geef mijn gedragsrapport van de laatste 30 dagen' : 'Give me my behavioral report for the last 30 days',
-        empty: locale === 'nl'
-          ? 'Nog te weinig gedragsdata over 30 dagen. Finn verzint hier geen profiel zonder bewijs.'
-          : 'There is not enough behavioral data across 30 days yet. Finn will not invent a profile without evidence.',
-      },
-    ],
-    [locale]
-  );
+  const finnReportOptions = useMemo(() => getFinnReportOptions(isDutch), [isDutch]);
 
   const activeOption = finnReportOptions.find((option) => option.key === activeFinnReport) || finnReportOptions[0];
 

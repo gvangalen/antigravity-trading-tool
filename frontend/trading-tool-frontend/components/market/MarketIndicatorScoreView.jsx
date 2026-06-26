@@ -6,6 +6,7 @@ import IndicatorScorePanel from "@/components/scoring/IndicatorScorePanel";
 import { Coins, Plus } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { normalizeLocale } from "@/lib/i18n";
 
 export default function MarketIndicatorScoreView({
   availableIndicators = [],
@@ -17,7 +18,7 @@ export default function MarketIndicatorScoreView({
   const { showSnackbar } = useModal();
   const { locale } = useTranslation();
   const [indicator, setIndicator] = useState(selectedIndicator || null);
-  const isDutch = locale !== "en";
+  const isDutch = normalizeLocale(locale) === "nl";
 
   /* --------------------------------------------------
      Sync met parent state
