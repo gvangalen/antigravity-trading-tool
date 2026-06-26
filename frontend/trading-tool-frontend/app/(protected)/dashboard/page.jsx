@@ -222,7 +222,7 @@ export default function DashboardPage() {
               {showTelemetryPanel ? (
                 <GlobalMarketDecisionCard symbol={activeSymbol} snapshot={intelligenceSnapshot} />
               ) : (
-                <DeferredPanelPlaceholder title="Terminal intelligence wordt voorbereid" lines={3} />
+                <DeferredPanelPlaceholder title={t.dashboard.placeholders.terminalIntelligence} lines={3} />
               )}
             </div>
           </div>
@@ -265,7 +265,7 @@ export default function DashboardPage() {
                           height={typeof window !== 'undefined' && window.innerWidth < 640 ? 300 : 580}
                         />
                       ) : (
-                        <DeferredPanelPlaceholder title="Chart wordt voorbereid" lines={5} />
+                        <DeferredPanelPlaceholder title={t.dashboard.placeholders.chartPreparing} lines={5} />
                       )}
                     </DashboardErrorBoundary>
                   </div>
@@ -279,7 +279,7 @@ export default function DashboardPage() {
                      <TradingBrain symbol={activeSymbol} scoresSnapshot={scoreSnapshot} />
                   </DashboardErrorBoundary>
                 ) : (
-                  <DeferredPanelPlaceholder title="Trading Brain wordt geladen" lines={4} />
+                  <DeferredPanelPlaceholder title={t.dashboard.placeholders.brainLoading} lines={4} />
                 )}
              </div>
           </div>
@@ -293,7 +293,7 @@ export default function DashboardPage() {
               setFocusedBotId={setFocusedBotId}
             />
           ) : (
-            <DeferredPanelPlaceholder title="Diepe analyse wordt geladen" lines={6} />
+            <DeferredPanelPlaceholder title={t.dashboard.placeholders.deepAnalysisLoading} lines={6} />
           )}
 
           {/* 📊 ANALYTICS: SCORE HISTORY (Moved to bottom) */}
@@ -356,8 +356,9 @@ function DeferredDashboardAnalysis({
 }
 
 function DeferredTechnicalPanel({ symbol, isActive }) {
+  const { t } = useTranslation();
   if (!isActive) {
-    return <DeferredPanelPlaceholder title="Technische analyse laadt wanneer je dit tabblad opent" lines={3} />;
+    return <DeferredPanelPlaceholder title={t.dashboard.placeholders.technicalDeferred} lines={3} />;
   }
 
   return <ActiveTechnicalPanel symbol={symbol} />;
@@ -384,8 +385,9 @@ function ActiveTechnicalPanel({ symbol }) {
 }
 
 function DeferredMacroPanel({ symbol, isActive }) {
+  const { t } = useTranslation();
   if (!isActive) {
-    return <DeferredPanelPlaceholder title="Macro-overzicht laadt wanneer je dit tabblad opent" lines={3} />;
+    return <DeferredPanelPlaceholder title={t.dashboard.placeholders.macroDeferred} lines={3} />;
   }
 
   return <ActiveMacroPanel symbol={symbol} />;
@@ -442,7 +444,7 @@ function DeferredMarketAnalysisPanel({ symbol, snapshot, isActive }) {
           </h3>
         </div>
         <div className="card-p p-8">
-          <DeferredPanelPlaceholder title="Marktdata laadt wanneer je dit tabblad opent" lines={3} />
+          <DeferredPanelPlaceholder title={t.dashboard.placeholders.marketDeferred} lines={3} />
         </div>
       </div>
     );
@@ -467,6 +469,7 @@ function DeferredMarketAnalysisPanel({ symbol, snapshot, isActive }) {
 }
 
 function DeferredBotsPanel({ isActive, onSelectBot }) {
+  const { t } = useTranslation();
   const [bots, setBots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -506,11 +509,11 @@ function DeferredBotsPanel({ isActive, onSelectBot }) {
   }, [isActive, loaded]);
 
   if (!isActive) {
-    return <DeferredPanelPlaceholder title="Bots laden wanneer je dit tabblad opent" lines={3} />;
+    return <DeferredPanelPlaceholder title={t.dashboard.placeholders.botsDeferred} lines={3} />;
   }
 
   if (loading && !loaded) {
-    return <DeferredPanelPlaceholder title="Bots worden geladen" lines={4} />;
+    return <DeferredPanelPlaceholder title={t.dashboard.placeholders.botsLoading} lines={4} />;
   }
 
   if (error) {
@@ -538,6 +541,7 @@ function DeferredBotsPanel({ isActive, onSelectBot }) {
 }
 
 function ScoreHistorySection({ symbol, isLoaded, onLoad }) {
+  const { t } = useTranslation();
   if (isLoaded) {
     return (
       <DashboardErrorBoundary>
@@ -550,10 +554,10 @@ function ScoreHistorySection({ symbol, isLoaded, onLoad }) {
     <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden">
       <div className="card-p p-6 sm:p-8 space-y-5">
         <div className="text-[11px] font-black uppercase tracking-[0.2em] text-secondary">
-          Scorehistorie op aanvraag
+          {t.dashboard.scoreHistory.title}
         </div>
         <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 max-w-2xl">
-          Deze chart vraagt extra historische scoredata op. Open hem pas wanneer je echt in trends en terugblik wilt duiken.
+          {t.dashboard.scoreHistory.description}
         </p>
         <button
           type="button"
@@ -561,7 +565,7 @@ function ScoreHistorySection({ symbol, isLoaded, onLoad }) {
           className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition hover:bg-blue-700 active:scale-[0.98]"
         >
           <Loader2 size={14} className="animate-spin" />
-          Laad scorehistorie
+          {t.dashboard.scoreHistory.load}
         </button>
       </div>
     </div>

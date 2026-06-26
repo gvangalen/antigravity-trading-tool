@@ -1,48 +1,59 @@
 // ==============================================================================
 // Central Frontend Intelligence Semantics Helper (Single Source of Truth)
 // ==============================================================================
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export function useIntelligenceSemantics() {
+  const { locale } = useTranslation();
+  const isDutch = String(locale).toLowerCase().startsWith("nl");
   const getMacroSemantics = (score) => {
     const val = score === null || score === undefined ? 50 : Number(score);
     const conviction = Math.round(val);
 
     if (val >= 70) {
       return {
-        regime: "Expansion Regime",
-        posture: "Aggressive Growth",
-        riskState: "Minimal Macro Risk",
+        regime: isDutch ? "Expansieregime" : "Expansion regime",
+        posture: isDutch ? "Agressieve groei" : "Aggressive growth",
+        riskState: isDutch ? "Laag macrorisico" : "Minimal macro risk",
         conviction,
-        explanation: "Markt toont sterke trendcontinuatie, gezonde liquiditeit en gunstige macro-economische condities.",
+        explanation: isDutch
+          ? "De markt toont sterke trendcontinuatie, gezonde liquiditeit en gunstige macro-economische condities."
+          : "The market shows strong trend continuation, healthy liquidity, and favorable macroeconomic conditions.",
         badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
       };
     }
     if (val >= 45) {
       return {
-        regime: "Recovery Phase",
-        posture: "Constructive Alignment",
-        riskState: "Controlled Risk",
+        regime: isDutch ? "Herstelfase" : "Recovery phase",
+        posture: isDutch ? "Constructieve alignering" : "Constructive alignment",
+        riskState: isDutch ? "Beheerst risico" : "Controlled risk",
         conviction,
-        explanation: "Macro-indicatoren stabiliseren na een correctie met toenemende kapitaalinstroom.",
+        explanation: isDutch
+          ? "Macro-indicatoren stabiliseren na een correctie met toenemende kapitaalinstroom."
+          : "Macro indicators are stabilizing after a correction with increasing capital inflows.",
         badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
       };
     }
     if (val >= 30) {
       return {
-        regime: "Stagflation Risk",
-        posture: "Cautious Stance",
-        riskState: "Elevated Uncertainty",
+        regime: isDutch ? "Stagflatierisico" : "Stagflation risk",
+        posture: isDutch ? "Voorzichtige houding" : "Cautious stance",
+        riskState: isDutch ? "Verhoogde onzekerheid" : "Elevated uncertainty",
         conviction,
-        explanation: "Tegenstrijdige signalen in inflatie en rentebeleid vereisen een verlaagde handelsfrequentie.",
+        explanation: isDutch
+          ? "Tegenstrijdige signalen in inflatie en rentebeleid vragen om een lagere handelsfrequentie."
+          : "Conflicting inflation and rate-policy signals call for a lower trading frequency.",
         badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
       };
     }
     return {
-      regime: "Contraction Regime",
-      posture: "Defensive Posture",
-      riskState: "Severe Contraction",
+      regime: isDutch ? "Krimpregime" : "Contraction regime",
+      posture: isDutch ? "Defensieve houding" : "Defensive posture",
+      riskState: isDutch ? "Zware krimp" : "Severe contraction",
       conviction,
-      explanation: "Macro-omgeving vertoont zware liquiditeitskrimp. Positiegroottes worden automatisch afgeschaald (0.2x).",
+      explanation: isDutch
+        ? "De macro-omgeving laat stevige liquiditeitskrimp zien. Positiegroottes worden automatisch afgeschaald (0,2x)."
+        : "The macro environment shows severe liquidity contraction. Position sizing is automatically scaled down (0.2x).",
       badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
     };
   };
@@ -53,36 +64,44 @@ export function useIntelligenceSemantics() {
 
     if (val >= 70) {
       return {
-        structure: "Bullish Expansion",
+        structure: isDutch ? "Positieve expansie" : "Bullish expansion",
         conviction,
-        momentum: "Strong Upward Bias",
-        explanation: "Prijsactie en voortschrijdende gemiddelden wijzen op krachtig institutioneel opwaarts momentum.",
+        momentum: isDutch ? "Sterk opwaarts momentum" : "Strong upward bias",
+        explanation: isDutch
+          ? "Prijsactie en voortschrijdende gemiddelden wijzen op krachtig institutioneel opwaarts momentum."
+          : "Price action and moving averages point to strong institutional upside momentum.",
         badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
       };
     }
     if (val >= 50) {
       return {
-        structure: "Bullish Recovery",
+        structure: isDutch ? "Positief herstel" : "Bullish recovery",
         conviction,
-        momentum: "Positive Divergence",
-        explanation: "Technische structuur herstelt van oversold condities en bouwt hogere bodems op.",
+        momentum: isDutch ? "Positieve divergentie" : "Positive divergence",
+        explanation: isDutch
+          ? "De technische structuur herstelt van oversold-condities en bouwt hogere bodems op."
+          : "Technical structure is recovering from oversold conditions and building higher lows.",
         badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
       };
     }
     if (val >= 30) {
       return {
-        structure: "Consolidation",
+        structure: isDutch ? "Consolidatie" : "Consolidation",
         conviction,
-        momentum: "Neutral / Sideways",
-        explanation: "Prijs beweegt in een krappe bandbreedte zonder duidelijke richting. Uitbraak wordt afgewacht.",
+        momentum: isDutch ? "Neutraal / zijwaarts" : "Neutral / sideways",
+        explanation: isDutch
+          ? "De prijs beweegt in een smalle bandbreedte zonder duidelijke richting. Een uitbraak wordt afgewacht."
+          : "Price is moving in a tight range without clear direction. Waiting for a breakout.",
         badgeClass: "bg-slate-50 text-slate-700 border-slate-200",
       };
     }
     return {
-      structure: "Bearish Structure",
+      structure: isDutch ? "Negatieve structuur" : "Bearish structure",
       conviction,
-      momentum: "Downward Pressure",
-      explanation: "Dominante neerwaartse trend met zwakke koopkracht. Short-posities of cash-allocatie aanbevolen.",
+      momentum: isDutch ? "Neerwaartse druk" : "Downward pressure",
+      explanation: isDutch
+        ? "Een dominante neerwaartse trend met zwakke koopkracht. Meer cash of defensieve positionering ligt meer voor de hand."
+        : "A dominant downward trend with weak buying pressure. More cash or defensive positioning is more appropriate.",
       badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
     };
   };
@@ -93,36 +112,44 @@ export function useIntelligenceSemantics() {
 
     if (val >= 70) {
       return {
-        posture: "Capital Inflow",
+        posture: isDutch ? "Kapitaalinstroom" : "Capital inflow",
         conviction,
-        liquidity: "Premium Liquidity",
-        explanation: "Hoge handelsvolumes en brede marktparticipatie bevestigen robuuste institutionele steun.",
+        liquidity: isDutch ? "Sterke liquiditeit" : "Premium liquidity",
+        explanation: isDutch
+          ? "Hoge handelsvolumes en brede marktparticipatie bevestigen robuuste institutionele steun."
+          : "High trading volumes and broad participation confirm robust institutional support.",
         badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
       };
     }
     if (val >= 50) {
       return {
-        posture: "Stable Participation",
+        posture: isDutch ? "Stabiele participatie" : "Stable participation",
         conviction,
-        liquidity: "Standard Volume",
-        explanation: "Gemiddelde liquiditeit en orderboekdiepte ondersteunen reguliere DCA-uitvoering.",
+        liquidity: isDutch ? "Normaal volume" : "Standard volume",
+        explanation: isDutch
+          ? "Gemiddelde liquiditeit en orderboekdiepte ondersteunen reguliere DCA-uitvoering."
+          : "Average liquidity and order book depth support regular DCA execution.",
         badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
       };
     }
     if (val >= 30) {
       return {
-        posture: "Liquidity Divergence",
+        posture: isDutch ? "Liquiditeitsdivergentie" : "Liquidity divergence",
         conviction,
-        liquidity: "Thin Orderbooks",
-        explanation: "Afnemend volume en oplopende spreads duiden op verminderde institutionele interesse.",
+        liquidity: isDutch ? "Dunne orderboeken" : "Thin order books",
+        explanation: isDutch
+          ? "Afnemend volume en oplopende spreads duiden op afnemende institutionele interesse."
+          : "Falling volume and widening spreads point to declining institutional interest.",
         badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
       };
     }
     return {
-      posture: "Risk Aversion",
+      posture: isDutch ? "Risicomijding" : "Risk aversion",
       conviction,
-      liquidity: "Capital Flight",
-      explanation: "Kapitaalvlucht waargenomen met verhoogde marktbrede volatiliteit en verkoopdruk.",
+      liquidity: isDutch ? "Kapitaalvlucht" : "Capital flight",
+      explanation: isDutch
+        ? "Er is kapitaalvlucht zichtbaar met verhoogde marktbrede volatiliteit en verkoopdruk."
+        : "Capital flight is visible, with elevated market-wide volatility and selling pressure.",
       badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
     };
   };

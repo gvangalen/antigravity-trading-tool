@@ -2,6 +2,7 @@ import { Info, Activity, AlertTriangle, RefreshCcw, Trash2 } from "lucide-react"
 import dayjs from "dayjs";
 import TrendSparkline from "@/components/dashboard/TrendSparkline";
 import SkeletonTable from "@/components/ui/SkeletonTable";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function TechnicalTerminalGrid({
   title = null,
@@ -13,6 +14,9 @@ export default function TechnicalTerminalGrid({
   onViewChart = null,
   loading = false,
 }) {
+  const { locale } = useTranslation();
+  const isDutch = String(locale).toLowerCase().startsWith("nl");
+
   if (loading) {
     return (
       <div className="card card-p">
@@ -21,22 +25,39 @@ export default function TechnicalTerminalGrid({
     );
   }
   const safeData = Array.isArray(data) ? data : [];
+  const copy = {
+    live: isDutch ? "LIVE" : "LIVE",
+    noConnection: isDutch ? "Geen verbinding" : "No connection",
+    recover: isDutch ? "Herstellen" : "Recover",
+    overview: isDutch ? "Overzicht" : "Overview",
+    indicator: isDutch ? "Indicator" : "Indicator",
+    value: isDutch ? "Waarde" : "Value",
+    trend: isDutch ? "Trend" : "Trend",
+    score: isDutch ? "Score" : "Score",
+    signal: isDutch ? "Signaal" : "Signal",
+    interpretation: isDutch ? "Toelichting" : "Interpretation",
+    noSignals: isDutch ? "Geen signalen beschikbaar" : "No signals available",
+    active: isDutch ? "Actief" : "Active",
+    weak: isDutch ? "Zwak" : "Weak",
+    neutral: isDutch ? "Neutraal" : "Neutral",
+    analysisPending: isDutch ? "Analyse in afwachting..." : "Analysis pending...",
+  };
 
   const getDayLabel = () => {
-    if (!safeData.length) return "LIVE";
+    if (!safeData.length) return copy.live;
     const ts = safeData[0]?.timestamp || safeData[0]?.created_at || safeData[0]?.date;
-    return ts ? dayjs(ts).format("DD MMM YYYY") : "LIVE";
+    return ts ? dayjs(ts).format("DD MMM YYYY") : copy.live;
   };
 
   if (error) {
     return (
-      <div className="card card-p flex flex-col items-center justify-center text-center py-12">
+        <div className="card card-p flex flex-col items-center justify-center text-center py-12">
         <AlertTriangle className="w-10 h-10 mb-4 text-red-500" />
-        <h3 className="text-lg font-semibold text-foreground mb-2">Geen verbinding</h3>
+        <h3 className="text-lg font-semibold text-foreground mb-2">{copy.noConnection}</h3>
         <p className="text-sm text-muted mb-6 max-w-xs">{error}</p>
         {onRetry && (
           <button onClick={onRetry} className="btn-primary flex items-center gap-2">
-            <RefreshCcw className="w-4 h-4" /> Herstellen
+            <RefreshCcw className="w-4 h-4" /> {copy.recover}
           </button>
         )}
       </div>
@@ -52,7 +73,7 @@ export default function TechnicalTerminalGrid({
              {icon || <Activity size={16} />}
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">{title || "Overzicht"}</h2>
+            <h2 className="text-sm font-semibold text-slate-900">{title || copy.overview}</h2>
             <div className="text-[10px] font-bold text-secondary uppercase tracking-widest">{getDayLabel()}</div>
           </div>
         </div>
@@ -62,12 +83,12 @@ export default function TechnicalTerminalGrid({
         <table className="w-full text-left border-collapse table-auto">
           <thead>
             <tr className="border-b border-slate-100 text-[10px] font-bold text-secondary uppercase tracking-widest">
-              <th className="px-6 py-4">Indicator</th>
-              <th className="px-6 py-4 text-center">Waarde</th>
-              <th className="px-6 py-4 text-center">Trend</th>
-              <th className="px-6 py-4 text-center">Score</th>
-              <th className="px-6 py-4">Signaal</th>
-              <th className="px-6 py-4">Toelichting</th>
+              <th className="px-6 py-4">{copy.indicator}</th>
+              <th className="px-6 py-4 text-center">{copy.value}</th>
+              <th className="px-6 py-4 text-center">{copy.trend}</th>
+              <th className="px-6 py-4 text-center">{copy.score}</th>
+              <th className="px-6 py-4">{copy.signal}</th>
+              <th className="px-6 py-4">{copy.interpretation}</th>
               <th className="px-6 py-4 text-right w-12"></th>
             </tr>
           </thead>
@@ -75,7 +96,7 @@ export default function TechnicalTerminalGrid({
             {safeData.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-8 py-20 text-center text-[11px] font-bold text-slate-300 uppercase tracking-widest italic animate-pulse">
-                   Geen signalen beschikbaar
+                   {copy.noSignals}
                 </td>
               </tr>
             ) : (
@@ -83,6 +104,7 @@ export default function TechnicalTerminalGrid({
                 <TerminalRow 
                   key={idx} 
                   item={item} 
+                  copy={copy}
                   onRemove={onRemove} 
                   onViewChart={onViewChart} 
                 />
@@ -95,7 +117,7 @@ export default function TechnicalTerminalGrid({
   );
 }
 
-function TerminalRow({ item, onRemove, onViewChart }) {
+function TerminalRow({ item, copy, onRemove, onViewChart }) {
   const { name, indicator, value, score, action, interpretation } = item;
   const displayName = name || indicator || "—";
   const scoreNum = Number(score ?? 0);
@@ -120,9 +142,9 @@ function TerminalRow({ item, onRemove, onViewChart }) {
 
   const getStatusClass = (a, s) => {
     const act = (a || "").toLowerCase();
-    if (act.includes("buy") || s >= 70) return { cls: "status-active", label: "Actief" };
-    if (act.includes("sell") || s <= 30) return { cls: "status-weak", label: "Zwak" };
-    return { cls: "status-neutral", label: "Neutraal" };
+    if (act.includes("buy") || s >= 70) return { cls: "status-active", label: copy.active };
+    if (act.includes("sell") || s <= 30) return { cls: "status-weak", label: copy.weak };
+    return { cls: "status-neutral", label: copy.neutral };
   };
 
   const status = getStatusClass(action, scoreNum);
@@ -174,7 +196,7 @@ function TerminalRow({ item, onRemove, onViewChart }) {
 
       <td className="px-6 py-5">
         <p className="text-[10px] text-muted leading-normal max-w-[240px] font-medium italic">
-          {interpretation || "Analyse in afwachting..."}
+          {interpretation || copy.analysisPending}
         </p>
       </td>
 

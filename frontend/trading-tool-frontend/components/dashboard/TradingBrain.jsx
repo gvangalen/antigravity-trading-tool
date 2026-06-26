@@ -86,12 +86,12 @@ export default function TradingBrain({ symbol = "BTC", scoresSnapshot = null }) 
                <div className="bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 p-4 rounded-xl mt-4">
                   <div className="flex items-center gap-2 mb-2">
                      <Layers className="w-4 h-4 text-blue-600" />
-                     <span className="text-xs font-black text-blue-800 dark:text-blue-300 uppercase tracking-widest">DCA Accumulation</span>
+                     <span className="text-xs font-black text-blue-800 dark:text-blue-300 uppercase tracking-widest">{t.dashboard.brain.dcaTitle}</span>
                   </div>
                   <p className="text-xs font-medium text-slate-700 dark:text-slate-300 leading-relaxed">
-                     Actieve Dollar Cost Averaging strategie. Instapmomenten en targets worden dynamisch door de bot bepaald op basis van de deviatie logica, in plaats van vaste levels.
+                     {t.dashboard.brain.dcaBody}
                   </p>
-               </div>
+                </div>
              ) : (
                <div className="grid grid-cols-1 gap-3">
                   <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 px-3 py-2 rounded-lg border border-white dark:border-slate-700 transition-colors">
@@ -133,12 +133,12 @@ export default function TradingBrain({ symbol = "BTC", scoresSnapshot = null }) 
              <div className="mt-4 flex items-center justify-between px-1">
                 <div className="flex flex-col">
                    <span className="text-[9px] uppercase font-bold text-secondary dark:text-slate-500 opacity-60">{t.dashboard.brain.risk_reward}</span>
-                   <span className="text-xs font-black text-foreground dark:text-slate-100">{isDCA ? "Dynamic" : advice.riskReward}</span>
+                   <span className="text-xs font-black text-foreground dark:text-slate-100">{isDCA ? t.dashboard.brain.dynamic : advice.riskReward}</span>
                 </div>
                 <div className="text-right flex flex-col">
                    <span className="text-[9px] uppercase font-bold text-secondary dark:text-slate-500 opacity-60">{t.dashboard.brain.risk_level}</span>
                    <span className={`text-xs font-black ${advice.riskLevel?.toLowerCase() === 'high' ? 'text-orange-500' : 'text-blue-600 dark:text-blue-400'}`}>
-                      {isDCA ? "Scale-In" : advice.riskLevel}
+                      {isDCA ? t.dashboard.brain.scaleIn : advice.riskLevel}
                    </span>
                 </div>
              </div>
@@ -177,14 +177,14 @@ export default function TradingBrain({ symbol = "BTC", scoresSnapshot = null }) 
              <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-1">
                    <div className="w-1 h-3 bg-blue-500 rounded-full" />
-                   <span className="text-[9px] uppercase font-black text-foreground dark:text-slate-300 tracking-widest">Intelligence verdieping</span>
+                   <span className="text-[9px] uppercase font-black text-foreground dark:text-slate-300 tracking-widest">{t.dashboard.brain.intelligenceDive}</span>
                 </div>
                 
                 <div className="space-y-3">
                    {[
-                      { label: "Macro", data: macro?.top_contributors },
-                      { label: "Technisch", data: technical?.top_contributors },
-                      { label: "Markt", data: market?.top_contributors }
+                      { label: t.dashboard.brain.macroDrivers, data: macro?.top_contributors },
+                      { label: t.dashboard.brain.technicalDrivers, data: technical?.top_contributors },
+                      { label: t.dashboard.brain.marketDrivers, data: market?.top_contributors }
                    ].map((item, idx) => (
                       <div key={idx} className="flex flex-col gap-1">
                          <span className="text-[8px] uppercase font-black text-secondary dark:text-slate-500 tracking-wider">{item.label} drijvers</span>
@@ -195,7 +195,7 @@ export default function TradingBrain({ symbol = "BTC", scoresSnapshot = null }) 
                                </span>
                             ))}
                             {(!item.data || item.data.length === 0) && (
-                               <span className="text-[9px] font-bold text-secondary/30 italic">Geen specifieke signalen</span>
+                               <span className="text-[9px] font-bold text-secondary/30 italic">{t.dashboard.brain.noSpecificSignals}</span>
                             )}
                          </div>
                       </div>

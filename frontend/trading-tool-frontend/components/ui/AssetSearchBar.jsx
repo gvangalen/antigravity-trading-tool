@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { normalizeLocale } from "@/lib/i18n";
 
 const ASSETS = [
   { symbol: "BTC", name: "Bitcoin", icon: "₿" },
@@ -19,6 +20,7 @@ const ASSETS = [
 
 export default function AssetSearchBar() {
   const { locale } = useTranslation();
+  const isDutch = normalizeLocale(locale) === "nl";
   const router = useRouter();
   const { selectedAsset, setSelectedAsset } = useAsset();
   const { setActiveSetup, setFocusedBotId } = useActiveSetup();
@@ -94,7 +96,7 @@ export default function AssetSearchBar() {
             setIsOpen(true);
           }}
           onFocus={() => setIsOpen(true)}
-          placeholder={locale === "nl" ? "Zoek crypto of asset... (BTC, ETH, SOL)" : "Search crypto or asset... (BTC, ETH, SOL)"}
+          placeholder={isDutch ? "Zoek crypto of asset... (BTC, ETH, SOL)" : "Search crypto or asset... (BTC, ETH, SOL)"}
           className="w-full bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl py-2.5 pl-11 pr-12 text-sm font-bold text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all"
         />
         <div className="absolute inset-y-0 right-0 pr-4 flex items-center gap-2 pointer-events-none">
@@ -123,7 +125,7 @@ export default function AssetSearchBar() {
           >
             <div className="p-2">
               <div className="px-3 py-2 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-50 dark:border-slate-800/50 mb-1">
-                {locale === "nl" ? "Crypto-assets" : "Crypto assets"}
+                {isDutch ? "Crypto-assets" : "Crypto assets"}
               </div>
               {filteredAssets.map((asset) => (
                 <button
@@ -193,10 +195,10 @@ export default function AssetSearchBar() {
                 </div>
                 <div>
                   <div className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">
-                    {locale === "nl" ? "Geen assets gevonden" : "No assets found"}
+                    {isDutch ? "Geen assets gevonden" : "No assets found"}
                   </div>
                   <div className="text-xs font-bold text-slate-400 mt-1">
-                    {locale === "nl" ? "Probeer een ander symbool zoals BTC of ETH" : "Try another symbol such as BTC or ETH"}
+                    {isDutch ? "Probeer een ander symbool zoals BTC of ETH" : "Try another symbol such as BTC or ETH"}
                   </div>
                 </div>
               </div>

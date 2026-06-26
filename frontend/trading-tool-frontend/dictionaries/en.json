@@ -55,6 +55,23 @@
     "system_status": "System Status",
     "market_data": "Market Data",
     "live_market": "Market",
+    "loadingMarketContext": "Loading market context...",
+    "placeholders": {
+      "terminalIntelligence": "Preparing market intelligence",
+      "chartPreparing": "Preparing chart",
+      "brainLoading": "Loading Trading Brain",
+      "deepAnalysisLoading": "Loading deep analysis",
+      "technicalDeferred": "Technical analysis will load when you open this tab",
+      "macroDeferred": "Macro overview will load when you open this tab",
+      "marketDeferred": "Market data will load when you open this tab",
+      "botsDeferred": "Bots will load when you open this tab",
+      "botsLoading": "Loading bots"
+    },
+    "scoreHistory": {
+      "title": "Score history on demand",
+      "description": "This chart requests additional historical score data. Open it only when you really want to dive into trends and hindsight.",
+      "load": "Load score history"
+    },
     "brain": {
       "execution": "Execution",
       "signal": "Signal",
@@ -70,13 +87,47 @@
       "score": "Score",
       "master_snippet": "Master Snippet",
       "explore_report": "Explore Full Daily Report",
-      "bot_active": "Bot Active"
+      "bot_active": "Bot Active",
+      "dcaTitle": "DCA Accumulation",
+      "dcaBody": "Active Dollar Cost Averaging strategy. Entry timing and targets are determined dynamically by the bot based on deviation logic, instead of fixed levels.",
+      "dynamic": "Dynamic",
+      "scaleIn": "Scale in",
+      "intelligenceDive": "Intelligence deep dive",
+      "macroDrivers": "Macro drivers",
+      "technicalDrivers": "Technical drivers",
+      "marketDrivers": "Market drivers",
+      "noSpecificSignals": "No specific signals"
     },
     "gauges": {
       "macro": "Macro",
       "technical": "Technical",
       "market": "Market",
-      "setup": "Setup"
+      "setup": "Setup",
+      "tune": "Tune engine",
+      "cancelTune": "Cancel tuning",
+      "askFinn": "Ask Finn about {title}",
+      "weight": "Weight",
+      "configurationStatus": "Configuration status",
+      "balanced": "Balanced mix detected. Ready to optimize.",
+      "unbalanced": "The weights should ideally add up to 100%.",
+      "applyChanges": "Apply changes",
+      "structure": {
+        "expansion": "Expansion",
+        "recovery": "Recovery",
+        "stagflationRisk": "Stagflation risk",
+        "contraction": "Contraction",
+        "continuation": "Continuation",
+        "consolidation": "Consolidation",
+        "highConviction": "High conviction",
+        "capitalInflow": "Capital inflow",
+        "liquidityDivergence": "Liquidity divergence",
+        "riskAversion": "Risk aversion",
+        "premiumAlignment": "Premium alignment",
+        "favorableRiskReward": "Favorable R/R",
+        "suboptimal": "Suboptimal",
+        "drawdownRisk": "Drawdown risk",
+        "stableStructure": "Stable structure"
+      }
     },
     "tabs": {
       "technical": "Technical",

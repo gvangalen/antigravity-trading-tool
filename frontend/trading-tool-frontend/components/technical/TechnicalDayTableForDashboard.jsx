@@ -3,6 +3,7 @@
 import SkeletonTable from "@/components/ui/SkeletonTable";
 import TechnicalTerminalGrid from "@/components/technical/TechnicalTerminalGrid";
 import { TrendingUp } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function TechnicalDayTableForDashboard({
   data = [],
@@ -10,6 +11,7 @@ export default function TechnicalDayTableForDashboard({
   error = "",
   onRetry = null,
 }) {
+  const { t } = useTranslation();
   // ⏳ LOADING
   if (loading) {
     return <SkeletonTable rows={5} columns={5} />;
@@ -33,7 +35,7 @@ export default function TechnicalDayTableForDashboard({
 
   return (
     <TechnicalTerminalGrid
-      title="Technische Analyse"
+      title={t.dashboard.tabs.technical}
       icon={<TrendingUp className="w-5 h-5 text-[var(--primary)]" />}
       data={formatted}
       error={error}

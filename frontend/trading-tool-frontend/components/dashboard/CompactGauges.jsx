@@ -6,32 +6,32 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { GaugeSkeleton } from "./DashboardSkeleton";
 import { useState, useEffect } from "react";
 
-const getStructureLabel = (domain, score) => {
+const getStructureLabel = (domain, score, labels) => {
   if (domain === 'macro') {
-    if (score >= 75) return "Expansion";
-    if (score >= 50) return "Recovery";
-    if (score >= 35) return "Stagflation Risk";
-    return "Contraction";
+    if (score >= 75) return labels.expansion;
+    if (score >= 50) return labels.recovery;
+    if (score >= 35) return labels.stagflationRisk;
+    return labels.contraction;
   }
   if (domain === 'technical') {
-    if (score >= 75) return "Continuation";
-    if (score >= 55) return "Recovery";
-    if (score >= 40) return "Consolidation";
-    return "Correction";
+    if (score >= 75) return labels.continuation;
+    if (score >= 55) return labels.recovery;
+    if (score >= 40) return labels.consolidation;
+    return labels.contraction;
   }
   if (domain === 'market') {
-    if (score >= 75) return "High Conviction";
-    if (score >= 50) return "Capital Inflow";
-    if (score >= 35) return "Liq. Divergence";
-    return "Risk Aversion";
+    if (score >= 75) return labels.highConviction;
+    if (score >= 50) return labels.capitalInflow;
+    if (score >= 35) return labels.liquidityDivergence;
+    return labels.riskAversion;
   }
   if (domain === 'setup') {
-    if (score >= 75) return "Premium Alignment";
-    if (score >= 50) return "Favorable R/R";
-    if (score >= 35) return "Suboptimal";
-    return "Drawdown Risk";
+    if (score >= 75) return labels.premiumAlignment;
+    if (score >= 50) return labels.favorableRiskReward;
+    if (score >= 35) return labels.suboptimal;
+    return labels.drawdownRisk;
   }
-  return "Stable Structure";
+  return labels.stableStructure;
 };
 
 /**
@@ -98,11 +98,13 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
      setIsEditing(false);
   };
 
+  const structureLabels = t.dashboard.gauges.structure;
+
   const items = [
-    { id: 'macro', title: t.dashboard.gauges.macro, icon: <Globe2 size={14} />, score: macro.score, weight: localWeights.macro, structure: getStructureLabel('macro', macro.score) },
-    { id: 'technical', title: t.dashboard.gauges.technical, icon: <LineChart size={14} />, score: technical.score, weight: localWeights.technical, structure: getStructureLabel('technical', technical.score) },
-    { id: 'market', title: t.dashboard.gauges.market, icon: <DollarSign size={14} />, score: market.score, weight: localWeights.market, structure: getStructureLabel('market', market.score) },
-    { id: 'setup', title: t.dashboard.gauges.setup, icon: <Settings2 size={14} />, score: setup.score, weight: localWeights.setup, structure: getStructureLabel('setup', setup.score) },
+    { id: 'macro', title: t.dashboard.gauges.macro, icon: <Globe2 size={14} />, score: macro.score, weight: localWeights.macro, structure: getStructureLabel('macro', macro.score, structureLabels) },
+    { id: 'technical', title: t.dashboard.gauges.technical, icon: <LineChart size={14} />, score: technical.score, weight: localWeights.technical, structure: getStructureLabel('technical', technical.score, structureLabels) },
+    { id: 'market', title: t.dashboard.gauges.market, icon: <DollarSign size={14} />, score: market.score, weight: localWeights.market, structure: getStructureLabel('market', market.score, structureLabels) },
+    { id: 'setup', title: t.dashboard.gauges.setup, icon: <Settings2 size={14} />, score: setup.score, weight: localWeights.setup, structure: getStructureLabel('setup', setup.score, structureLabels) },
   ];
 
   if (loading && !isEditing) {
@@ -123,14 +125,14 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
       <div className="flex items-center justify-between px-2">
          <div className="flex items-center gap-2">
             <div className="w-1 h-4 bg-blue-600 rounded-full" />
-            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-secondary">Systeemstatus</h3>
+            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-secondary">{t.dashboard.system_status}</h3>
          </div>
          <button 
             onClick={() => setIsEditing(!isEditing)}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${isEditing ? 'bg-rose-500 text-white' : 'bg-slate-100 dark:bg-slate-900 text-secondary hover:bg-slate-200'}`}
          >
             {isEditing ? <X size={12} /> : <Sliders size={12} />}
-            {isEditing ? 'Cancel Tuning' : 'Tune Engine'}
+            {isEditing ? t.dashboard.gauges.cancelTune : t.dashboard.gauges.tune}
          </button>
       </div>
 
@@ -168,7 +170,7 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
                         }));
                       }
                     }}
-                    aria-label={`Ask Finn about ${item.title}`}
+                    aria-label={t.dashboard.gauges.askFinn.replace("{title}", item.title)}
                     className="absolute -top-5 right-2 z-10 hidden lg:inline-flex items-center justify-center h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shadow-sm transition-all opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 focus-visible:opacity-100 focus-visible:translate-y-0 hover:scale-105 active:scale-95"
                   >
                     <Sparkles size={16} />
@@ -199,7 +201,7 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
                {isEditing && (
                   <div className="px-2 space-y-1 animate-in slide-in-from-top-2 duration-300">
                      <div className="flex justify-between text-[9px] font-bold text-secondary uppercase tracking-widest px-1">
-                        <span>Weight</span>
+                        <span>{t.dashboard.gauges.weight}</span>
                         <span>{Math.round(item.weight * 100)}%</span>
                      </div>
                      <input 
@@ -235,14 +237,14 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
 
       {isEditing && (
          <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 p-4 rounded-2xl animate-in fade-in zoom-in duration-300">
-            <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3">
                <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${isBalanced ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' : 'border-amber-500 text-amber-500 bg-amber-500/10'}`}>
                   <span className="text-xs font-black">{Math.round(totalWeight * 100)}%</span>
                </div>
                <div>
-                  <div className="text-[10px] font-black uppercase tracking-widest text-secondary">Configuration Status</div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-secondary">{t.dashboard.gauges.configurationStatus}</div>
                   <div className="text-[11px] font-bold text-foreground">
-                     {isBalanced ? 'Balanced mixing board detected. Ready to optimize.' : 'Weights should ideally total 100% for optimal AI alignment.'}
+                     {isBalanced ? t.dashboard.gauges.balanced : t.dashboard.gauges.unbalanced}
                   </div>
                </div>
             </div>
@@ -252,7 +254,7 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
                className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-blue-500/20 active:scale-95 transition-all disabled:opacity-50"
             >
                <Save size={14} />
-               Apply Changes
+               {t.dashboard.gauges.applyChanges}
             </button>
          </div>
       )}

@@ -55,6 +55,23 @@
     "system_status": "Systeemstatus",
     "market_data": "Marktgegevens",
     "live_market": "Markt",
+    "loadingMarketContext": "Marktcontext laden...",
+    "placeholders": {
+      "terminalIntelligence": "Marktintelligentie wordt voorbereid",
+      "chartPreparing": "Chart wordt voorbereid",
+      "brainLoading": "Trading Brain wordt geladen",
+      "deepAnalysisLoading": "Diepe analyse wordt geladen",
+      "technicalDeferred": "Technische analyse laadt wanneer je dit tabblad opent",
+      "macroDeferred": "Macro-overzicht laadt wanneer je dit tabblad opent",
+      "marketDeferred": "Marktdata laadt wanneer je dit tabblad opent",
+      "botsDeferred": "Bots laden wanneer je dit tabblad opent",
+      "botsLoading": "Bots worden geladen"
+    },
+    "scoreHistory": {
+      "title": "Scorehistorie op aanvraag",
+      "description": "Deze chart vraagt extra historische scoredata op. Open hem pas wanneer je echt in trends en terugblik wilt duiken.",
+      "load": "Laad scorehistorie"
+    },
     "brain": {
       "execution": "Executie",
       "signal": "Signaal",
@@ -70,13 +87,47 @@
       "score": "Score",
       "master_snippet": "Kernsamenvatting",
       "explore_report": "Bekijk volledig dagrapport",
-      "bot_active": "Bot Actief"
+      "bot_active": "Bot Actief",
+      "dcaTitle": "DCA-opbouw",
+      "dcaBody": "Actieve Dollar Cost Averaging-strategie. Instapmomenten en targets worden dynamisch door de bot bepaald op basis van de deviatie-logica, in plaats van vaste levels.",
+      "dynamic": "Dynamisch",
+      "scaleIn": "Gefaseerd opbouwen",
+      "intelligenceDive": "Intelligence verdieping",
+      "macroDrivers": "Macrodrijvers",
+      "technicalDrivers": "Technische drijvers",
+      "marketDrivers": "Marktdrijvers",
+      "noSpecificSignals": "Geen specifieke signalen"
     },
     "gauges": {
       "macro": "Macro",
       "technical": "Technisch",
       "market": "Markt",
-      "setup": "Setup"
+      "setup": "Setup",
+      "tune": "Engine afstemmen",
+      "cancelTune": "Afstemmen sluiten",
+      "askFinn": "Vraag Finn over {title}",
+      "weight": "Weging",
+      "configurationStatus": "Configuratiestatus",
+      "balanced": "Gebalanceerde mix gedetecteerd. Klaar om te optimaliseren.",
+      "unbalanced": "De wegingen horen samen idealiter op 100% uit te komen.",
+      "applyChanges": "Wijzigingen toepassen",
+      "structure": {
+        "expansion": "Expansie",
+        "recovery": "Herstel",
+        "stagflationRisk": "Stagflatierisico",
+        "contraction": "Krimp",
+        "continuation": "Voortzetting",
+        "consolidation": "Consolidatie",
+        "highConviction": "Hoge overtuiging",
+        "capitalInflow": "Kapitaalinstroom",
+        "liquidityDivergence": "Liquiditeitsdivergentie",
+        "riskAversion": "Risicomijding",
+        "premiumAlignment": "Premium alignering",
+        "favorableRiskReward": "Gunstige R/R",
+        "suboptimal": "Suboptimaal",
+        "drawdownRisk": "Drawdownrisico",
+        "stableStructure": "Stabiele structuur"
+      }
     },
     "tabs": {
       "technical": "Technisch",
@@ -85,7 +136,7 @@
       "bots": "Bots",
       "analysis_mode": "Diepe analysemodus",
       "source": "Bron: live API",
-      "export": "Exporteer Systeemlog"
+      "export": "Exporteer systeemlog"
     },
     "cards": {
       "report": "Dagrapport",
