@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from "react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 import {
   CalendarRange,
   TrendingUp,
@@ -23,13 +24,13 @@ const heatmapColor = (value) => {
   return "bg-[var(--bg-soft)] text-[var(--text-dark)]";       // neutraal
 };
 
-const tabs = ["Week", "Maand", "Kwartaal", "Jaar"];
+const TAB_KEYS = ["week", "month", "quarter", "year"];
 
 const labelsByTab = {
-  Week: Array.from({ length: 53 }, (_, i) => `W${i + 1}`),
-  Maand: ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"],
-  Kwartaal: ["Q1", "Q2", "Q3", "Q4"],
-  Jaar: ["Year"],
+  week: Array.from({ length: 53 }, (_, i) => `W${i + 1}`),
+  month: ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"],
+  quarter: ["Q1", "Q2", "Q3", "Q4"],
+  year: ["YEAR"],
 };
 
 const formatPercentage = (value) => {
@@ -41,14 +42,40 @@ const formatPercentage = (value) => {
    🌟 HOOFD COMPONENT
 =========================================================== */
 export default function MarketForwardReturnTabs({ data = {} }) {
-  const [active, setActive] = useState("Maand");
+  const { locale } = useTranslation();
+  const isDutch = locale !== "en";
+  const [active, setActive] = useState("month");
   const [selectedYears, setSelectedYears] = useState(() =>
     (data["maand"] || []).map((row) => row.year)
   );
 
-  const activeKey = active.toLowerCase();
-  const activeData = data[activeKey] || [];
+  const activeData = data[active] || [];
   const labels = labelsByTab[active] || [];
+
+  const tabLabels = {
+    week: isDutch ? "Week" : "Week",
+    month: isDutch ? "Maand" : "Month",
+    quarter: isDutch ? "Kwartaal" : "Quarter",
+    year: isDutch ? "Jaar" : "Year",
+  };
+
+  const copy = {
+    matrix: isDutch ? "Matrix" : "Matrix",
+    computed: isDutch ? "Berekend" : "Computed",
+    year: isDutch ? "Jaar" : "Year",
+    yearAverage: isDutch ? "Gem. jaar" : "Avg. year",
+    totalAverage: isDutch ? "Gem. totaal" : "Avg. total",
+    forwardOverview: isDutch
+      ? "Forward return overzicht (geselecteerde jaren)"
+      : "Forward return overview (selected years)",
+    metric: isDutch ? "Metriek" : "Metric",
+    numberOfYears: isDutch ? "Aantal jaren" : "Number of years",
+    positivePeriods: isDutch ? "Positieve periodes" : "Positive periods",
+    negativePeriods: isDutch ? "Negatieve periodes" : "Negative periods",
+    positiveChance: isDutch
+      ? "Kans op positief resultaat"
+      : "Chance of positive outcome",
+  };
 
   const toggleYear = (year) => {
     setSelectedYears((prev) =>
@@ -98,7 +125,7 @@ export default function MarketForwardReturnTabs({ data = {} }) {
     <div className="space-y-6">
       {/* INDUSTRIAL CONTROL CONSOLE (Tabs) */}
       <div className="flex p-1.5 bg-slate-100/50 border border-slate-200 rounded-2xl w-fit">
-        {tabs.map((tab) => (
+        {TAB_KEYS.map((tab) => (
           <button
             key={tab}
             onClick={() => setActive(tab)}
@@ -108,7 +135,7 @@ export default function MarketForwardReturnTabs({ data = {} }) {
                   : "text-secondary hover:text-slate-600 hover:bg-white/50"
               }`}
           >
-            {tab}
+            {tabLabels[tab]}
           </button>
         ))}
       </div>
@@ -123,10 +150,12 @@ export default function MarketForwardReturnTabs({ data = {} }) {
                 <div className="w-8 h-8 rounded-lg bg-card border border-slate-200 flex items-center justify-center text-slate-400">
                    <PieChart className="w-4 h-4" />
                 </div>
-                <div className="text-[10px] font-black text-muted uppercase tracking-widest leading-none">Matrix: {active.toUpperCase()}</div>
+                <div className="text-[10px] font-black text-muted uppercase tracking-widest leading-none">
+                  {copy.matrix}: {tabLabels[active].toUpperCase()}
+                </div>
              </div>
              <div className="text-[8px] font-black text-slate-300 uppercase tracking-[0.2em] whitespace-nowrap">
-                BEREKEND
+                {copy.computed}
              </div>
           </div>
 
@@ -137,11 +166,11 @@ export default function MarketForwardReturnTabs({ data = {} }) {
                   <th className="px-6 py-4 w-12 text-center">
                      <CalendarRange className="w-3.5 h-3.5 mx-auto" />
                   </th>
-                  <th className="px-6 py-4">Jaar</th>
+                  <th className="px-6 py-4">{copy.year}</th>
                   {labels.map((label) => (
                     <th key={label} className="px-1 py-4 text-center">{label}</th>
                   ))}
-                  <th className="px-6 py-4 text-center">Gem. jaar</th>
+                  <th className="px-6 py-4 text-center">{copy.yearAverage}</th>
                 </tr>
               </thead>
 
@@ -179,7 +208,7 @@ export default function MarketForwardReturnTabs({ data = {} }) {
                 {/* FOOTER: COLUMN AVERAGES */}
                 <tr className="bg-slate-50/80 font-black border-t border-slate-200">
                   <td className="px-6 py-5 text-center">—</td>
-                  <td className="px-6 py-5 text-[10px] uppercase tracking-widest text-muted whitespace-nowrap">Gem. totaal</td>
+                  <td className="px-6 py-5 text-[10px] uppercase tracking-widest text-muted whitespace-nowrap">{copy.totalAverage}</td>
                   {colAverages.map((val, i) => (
                     <td key={i} className="px-0.5 py-5 text-center">
                        <div className={`py-1.5 rounded-[4px] font-mono text-[10px] font-black ${heatmapColor(val)}`}>
@@ -199,7 +228,7 @@ export default function MarketForwardReturnTabs({ data = {} }) {
           <div className="px-8 py-5 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
              <BarChart3 size={16} className="text-[var(--primary)]" />
              <h3 className="text-[10px] font-black uppercase tracking-widest text-muted truncate">
-                Forward return overzicht (geselecteerde jaren)
+                {copy.forwardOverview}
              </h3>
           </div>
 
@@ -207,7 +236,7 @@ export default function MarketForwardReturnTabs({ data = {} }) {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 text-[9px] font-black text-secondary uppercase tracking-widest">
-                  <th className="px-8 py-4">Metriek</th>
+                  <th className="px-8 py-4">{copy.metric}</th>
                   {labels.map((l) => (
                     <th key={l} className="px-1 py-4 text-center">{l}</th>
                   ))}
@@ -216,25 +245,25 @@ export default function MarketForwardReturnTabs({ data = {} }) {
 
               <tbody className="divide-y divide-slate-50">
                 <tr className="group hover:bg-slate-50/30">
-                  <td className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Aantal jaren</td>
+                  <td className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">{copy.numberOfYears}</td>
                   {forwardStats.map((s, i) => (
                     <td key={i} className="px-1 py-4 text-center font-mono text-[10px] font-bold text-slate-600">{s.total}</td>
                   ))}
                 </tr>
                 <tr className="group hover:bg-slate-50/30">
-                  <td className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-green-500">Positieve periodes</td>
+                  <td className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-green-500">{copy.positivePeriods}</td>
                   {forwardStats.map((s, i) => (
                     <td key={i} className="px-1 py-4 text-center font-mono text-[10px] font-bold text-green-600">{s.wins}</td>
                   ))}
                 </tr>
                 <tr className="group hover:bg-slate-50/30">
-                  <td className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-red-500">Negatieve periodes</td>
+                  <td className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-red-500">{copy.negativePeriods}</td>
                   {forwardStats.map((s, i) => (
                     <td key={i} className="px-1 py-4 text-center font-mono text-[10px] font-bold text-red-600">{s.losses}</td>
                   ))}
                 </tr>
                 <tr className="group hover:bg-slate-50/30 bg-slate-50/50">
-                  <td className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-foreground italic">Kans op positief resultaat</td>
+                  <td className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-foreground italic">{copy.positiveChance}</td>
                   {forwardStats.map((s, i) => (
                     <td key={i} className="px-1 py-5 text-center font-mono text-xs font-black text-foreground border-t border-slate-100/50">
                       {s.rate !== null ? `${s.rate.toFixed(1)}%` : "—"}
