@@ -1,12 +1,14 @@
 "use client";
 
-import CardWrapper from "@/components/ui/CardWrapper";
-import { CalendarDays } from "lucide-react";
 import { formatChange, formatNumber } from "@/components/market/utils";
 import { useMemo } from "react";
 import SkeletonTable from "@/components/ui/SkeletonTable";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function MarketSevenDayTable({ history, loading = false }) {
+  const { locale } = useTranslation();
+  const isDutch = locale !== "en";
+
   if (loading) {
     return <SkeletonTable rows={7} columns={7} />;
   }
@@ -21,10 +23,13 @@ export default function MarketSevenDayTable({ history, loading = false }) {
       date.setDate(today.getDate() - i);
 
       const isoDate = date.toISOString().slice(0, 10);
-      const formattedDate = date.toLocaleDateString("nl-NL", {
+      const formattedDate = date.toLocaleDateString(
+        isDutch ? "nl-NL" : "en-US",
+        {
         day: "2-digit",
         month: "short",
-      });
+        }
+      );
 
       const record = history?.find(
         (d) => new Date(d.date).toISOString().slice(0, 10) === isoDate
@@ -41,7 +46,7 @@ export default function MarketSevenDayTable({ history, loading = false }) {
       });
     }
     return result;
-  }, [history]);
+  }, [history, isDutch]);
 
   /* ------------------------------
      Scorekleur volgens PRO 2.2
@@ -53,35 +58,28 @@ export default function MarketSevenDayTable({ history, loading = false }) {
     return "text-[var(--text-light)]";
   };
 
-  return (
-    <div className="bg-card border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden">
-      {/* TERMINAL HEADER */}
-      <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-card border border-slate-200 flex items-center justify-center text-[var(--primary)] shadow-sm">
-             <CalendarDays className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">Historisch Log</div>
-            <h2 className="text-xl font-black text-foreground tracking-tight uppercase leading-none mt-1">Markt Historie (7 Dagen)</h2>
-          </div>
-        </div>
-        <div className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] bg-blue-50 px-4 py-2 rounded-xl border border-blue-100 shadow-sm">
-           SYSTEEM STATUS: LIVE
-        </div>
-      </div>
+  const copy = {
+    date: isDutch ? "Datum" : "Date",
+    open: isDutch ? "Open" : "Open",
+    high: isDutch ? "Hoog" : "High",
+    low: isDutch ? "Laag" : "Low",
+    close: isDutch ? "Sluit" : "Close",
+    change: isDutch ? "Verandering" : "Change",
+    volume: isDutch ? "Volume" : "Volume",
+  };
 
-      <div className="overflow-x-auto">
+  return (
+    <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-slate-100 text-[10px] font-black text-secondary uppercase tracking-widest">
-              <th className="px-8 py-5">Datum</th>
-              <th className="px-8 py-5 text-right">Open</th>
-              <th className="px-8 py-5 text-right">Hoog</th>
-              <th className="px-8 py-5 text-right">Laag</th>
-              <th className="px-8 py-5 text-right">Sluit</th>
-              <th className="px-8 py-5 text-right">Verandering</th>
-              <th className="px-8 py-5 text-right">Volume</th>
+              <th className="px-8 py-5">{copy.date}</th>
+              <th className="px-8 py-5 text-right">{copy.open}</th>
+              <th className="px-8 py-5 text-right">{copy.high}</th>
+              <th className="px-8 py-5 text-right">{copy.low}</th>
+              <th className="px-8 py-5 text-right">{copy.close}</th>
+              <th className="px-8 py-5 text-right">{copy.change}</th>
+              <th className="px-8 py-5 text-right">{copy.volume}</th>
             </tr>
           </thead>
 
@@ -113,13 +111,14 @@ export default function MarketSevenDayTable({ history, loading = false }) {
                 </td>
 
                 <td className="px-8 py-5 text-right font-mono text-[10px] font-bold text-slate-400">
-                  {typeof day.volume === "number" ? `$${(day.volume / 1e9).toFixed(1)}B` : "—"}
+                  {typeof day.volume === "number"
+                    ? `$${(day.volume / 1e9).toFixed(1)}B`
+                    : "—"}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
     </div>
   );
 }
