@@ -2,9 +2,9 @@
 
 export default function ScoreModeBadge({ mode }) {
   const labels = {
-    standard: "Standard",
-    contrarian: "Contrarian",
-    custom: "Custom",
+    standard: "Standaard",
+    contrarian: "Contrair",
+    custom: "Aangepast",
   };
 
   const classes = {
@@ -15,7 +15,7 @@ export default function ScoreModeBadge({ mode }) {
 
   return (
     <span className={`badge ${classes[mode] || "badge-standard"}`}>
-      {labels[mode] || "Standard"}
+      {labels[mode] || "Standaard"}
     </span>
   );
 }

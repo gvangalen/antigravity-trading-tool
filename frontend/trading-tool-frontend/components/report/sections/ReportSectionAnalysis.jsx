@@ -26,14 +26,14 @@ export default function ReportSectionAnalysis({ report, isPrint = false }) {
              <DataListBlock
                report={report}
                field="macro_indicator_highlights"
-               title="Macro Indicator Highlights"
+               title="Macro-indicator highlights"
              />
           </SectionAlignedAside>
         </div>
 
         <div className={`${colSpanClass} ${isPrint ? "order-1" : "order-1 lg:order-2"}`}>
           <NarrativeBlock
-            title="Macro Context"
+            title="Macrocontext"
             field="macro_context"
             report={report}
           />
@@ -54,7 +54,7 @@ export default function ReportSectionAnalysis({ report, isPrint = false }) {
            <DataListBlock
              report={report}
              field="technical_indicator_highlights"
-             title="Technical Indicator Highlights"
+             title="Technische indicator-highlights"
            />
         </SectionAlignedAside>
       </div>

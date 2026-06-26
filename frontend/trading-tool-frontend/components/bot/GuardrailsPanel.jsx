@@ -180,7 +180,7 @@ export default function GuardrailsPanel({
 
         {/* SENSOR 2: ASSET EXPOSURE */}
         <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-xl p-3 flex flex-col justify-between">
-           <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-1">Exposure Ratio</div>
+           <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-1">Exposureratio</div>
            <div className="text-[11px] font-black text-foreground font-mono tracking-tighter opacity-80 mb-1">
              {currentExposure}% / {maxExposure}%
            </div>
@@ -196,9 +196,9 @@ export default function GuardrailsPanel({
 
       <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-xl p-3 space-y-2">
          <div className="flex justify-between items-center">
-            <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">Adjusted Loadout</div>
+            <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">Aangepaste inzet</div>
             <div className={`text-[10px] font-black px-1.5 py-0.5 rounded ${tradeAdjusted ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
-              {tradeAdjusted ? "SCALED DOWN" : "OPTIMAL SIZE"}
+              {tradeAdjusted ? "AFGESCHAALD" : "OPTIMALE GROOTTE"}
             </div>
          </div>
          <div className="text-sm font-black text-foreground font-mono tracking-tighter">
@@ -213,9 +213,9 @@ export default function GuardrailsPanel({
 
       {/* SYSTEM FEEDBACK SECTION */}
       <div className="pt-2">
-        <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1 mx-1">Interlock Reason</div>
+        <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1 mx-1">Reden van interlock</div>
         <div className={`p-3 rounded-xl border italic text-xs font-bold tracking-tight min-h-[44px] flex items-center ${allowed ? "bg-blue-50/50 border-blue-100/50 text-blue-600" : "bg-orange-100/50 border-orange-200/50 text-orange-600"}`}>
-           {reason === "within risk limits" ? "✓ All safety parameters nominal" : reason}
+           {reason === "within risk limits" ? "✓ Alle veiligheidsparameters zijn normaal" : reason}
         </div>
       </div>
 

@@ -285,9 +285,9 @@ export default function IndicatorScoreEditor({
     : "Genormaliseerde waarde (0–100)";
 
   const modes = [
-    { key: "standard", label: "Standard" },
-    { key: "contrarian", label: "Contrarian" },
-    { key: "custom", label: "Custom" },
+    { key: "standard", label: "Standaard" },
+    { key: "contrarian", label: "Contrair" },
+    { key: "custom", label: "Aangepast" },
   ];
 
   return (
@@ -300,7 +300,7 @@ export default function IndicatorScoreEditor({
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Signal Generation Logic</h3>
+              <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Signaalgeneratielogica</h3>
               <ScoreModeBadge mode={mode} />
             </div>
             <p className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">

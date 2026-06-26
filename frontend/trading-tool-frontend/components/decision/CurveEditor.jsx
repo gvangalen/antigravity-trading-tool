@@ -183,7 +183,7 @@ export default function CurveEditor({
         <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
            <div className="flex items-center gap-2 mb-4 text-slate-400">
               <Layers size={14} />
-              <span className="text-[10px] font-black uppercase tracking-widest leading-none">Execution Mapping Preview</span>
+              <span className="text-[10px] font-black uppercase tracking-widest leading-none">Preview van uitvoeringsmapping</span>
            </div>
            
            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -193,7 +193,7 @@ export default function CurveEditor({
                    <div className="flex items-end gap-1.5">
                       <div className="text-xl font-black text-foreground leading-none">{(p.y).toFixed(2)}x</div>
                       <div className={`text-[9px] font-bold pb-0.5 ${p.y >= 1 ? "text-green-500" : "text-red-400"}`}>
-                         {p.y > 1.2 ? "Aggressive" : p.y > 0.8 ? "Standard" : "Defensive"}
+                         {p.y > 1.2 ? "Agressief" : p.y > 0.8 ? "Standaard" : "Defensief"}
                       </div>
                    </div>
                 </div>
@@ -206,7 +206,7 @@ export default function CurveEditor({
         <div className="bg-[var(--color-border-subtle)] px-6 py-3 flex items-center gap-2 border-t border-slate-100">
            <Info size={12} className="text-secondary" />
            <span className="text-[10px] font-bold text-secondary uppercase tracking-tight italic">
-             Fixed amount deployment active — curve parameters bypassed
+             Vaste bedraginzet actief — curveparameters worden overgeslagen
            </span>
         </div>
       )}

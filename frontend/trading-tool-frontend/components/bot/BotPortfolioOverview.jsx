@@ -127,7 +127,7 @@ export default function BotPortfolioOverview({
               Systeem Overzicht
            </div>
            <h3 className="text-3xl font-black text-foreground tracking-tighter uppercase leading-none">
-             Portfolio <span className="text-blue-600/30">—</span> {envFilter === 'all' ? 'Alle bots' : envFilter === 'live' ? 'Live Exchange' : 'Paper Trading'}
+             Portfolio <span className="text-blue-600/30">—</span> {envFilter === 'all' ? 'Alle bots' : envFilter === 'live' ? 'Live exchange' : 'Paper trading'}
            </h3>
             <p className="text-[13px] font-medium text-secondary mt-2">
               Geaggregeerd overzicht van budget en posities over je geselecteerde omgeving.
@@ -141,7 +141,7 @@ export default function BotPortfolioOverview({
                 className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${envFilter === "all" ? 'bg-white dark:bg-slate-800 text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
              >
                 <LayoutGrid size={12} />
-                All
+                Alles
              </button>
              <button 
                 onClick={() => onEnvFilterChange?.("paper")}
@@ -242,7 +242,7 @@ export default function BotPortfolioOverview({
           €{Number(positionValue).toFixed(0)}
         </Stat>
 
-        <Stat label="Invested (Exec)">
+        <Stat label="Geïnvesteerd (exec)">
           €{Number(spentExecuted).toFixed(0)}
         </Stat>
 
@@ -257,7 +257,7 @@ export default function BotPortfolioOverview({
       {symbolRows.length > 0 && (
         <div className="space-y-6">
           <div className="text-[10px] font-black text-secondary uppercase tracking-[0.25em]">
-            Breakdown per asset
+            Uitsplitsing per asset
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

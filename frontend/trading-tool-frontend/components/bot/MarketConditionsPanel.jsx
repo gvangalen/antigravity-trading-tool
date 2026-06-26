@@ -31,52 +31,52 @@ const safeMultiplier = (v) => {
 ===================================================== */
 
 const getPressureLabel = (v) => {
-  if (v < 30) return "Calm market";
-  if (v < 50) return "Neutral pressure";
-  if (v < 70) return "Moderate pressure";
-  if (v < 85) return "High pressure";
-  return "Extreme pressure";
+  if (v < 30) return "Rustige markt";
+  if (v < 50) return "Neutrale druk";
+  if (v < 70) return "Opbouwende druk";
+  if (v < 85) return "Hoge druk";
+  return "Extreme druk";
 };
 
 const getTransitionRiskLabel = (v) => {
-  if (v < 30) return "Stable regime";
-  if (v < 50) return "Minor shifts possible";
-  if (v < 70) return "Regime pressure building";
-  if (v < 85) return "High transition risk";
-  return "Regime change risk";
+  if (v < 30) return "Stabiel regime";
+  if (v < 50) return "Kleine verschuiving mogelijk";
+  if (v < 70) return "Regimedruk neemt toe";
+  if (v < 85) return "Hoog transitierisico";
+  return "Risico op regimewissel";
 };
 
 const getSetupQualityLabel = (v) => {
-  if (v < 30) return "Weak setups";
-  if (v < 50) return "Mixed setups";
-  if (v < 70) return "Decent setups";
-  if (v < 85) return "High quality";
-  return "Very strong setups";
+  if (v < 30) return "Zwakke setups";
+  if (v < 50) return "Gemengde setups";
+  if (v < 70) return "Redelijke setups";
+  if (v < 85) return "Hoge kwaliteit";
+  return "Zeer sterke setups";
 };
 
 const getVolatilityLabel = (v) => {
-  if (v < 25) return "Very calm";
-  if (v < 50) return "Normal";
-  if (v < 70) return "Volatile";
-  if (v < 85) return "High volatility";
-  return "Extreme volatility";
+  if (v < 25) return "Zeer rustig";
+  if (v < 50) return "Normaal";
+  if (v < 70) return "Volatiel";
+  if (v < 85) return "Hoge volatiliteit";
+  return "Extreme volatiliteit";
 };
 
 const getTrendStrengthLabel = (v) => {
-  if (v < 30) return "Weak trend";
-  if (v < 50) return "Sideways";
-  if (v < 70) return "Trending";
-  if (v < 85) return "Strong trend";
-  return "Very strong trend";
+  if (v < 30) return "Zwakke trend";
+  if (v < 50) return "Zijwaarts";
+  if (v < 70) return "Trendend";
+  if (v < 85) return "Sterke trend";
+  return "Zeer sterke trend";
 };
 
 const getExposureLabel = (v) => {
   const value = v / 100; // Convert back to 0-2 range
-  if (value < 0.7) return "Defensive";
-  if (value < 0.95) return "Reduced size";
-  if (value <= 1.05) return "Normal size";
-  if (value <= 1.25) return "Increased size";
-  return "Aggressive size";
+  if (value < 0.7) return "Defensief";
+  if (value < 0.95) return "Verlaagde grootte";
+  if (value <= 1.05) return "Normale grootte";
+  if (value <= 1.25) return "Verhoogde grootte";
+  return "Agressieve grootte";
 };
 
 const getExposureColor = (v) => {
@@ -143,7 +143,7 @@ function Bar({ icon, label, value, color, getLabel, onClick }) {
           }}
           className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all hover:scale-105 active:scale-95 shadow-sm"
         >
-          <Sparkles size={10} /> Ask FINN
+          <Sparkles size={10} /> Vraag Finn
         </button>
         <span className="px-3 py-1 rounded-lg bg-card dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-[9px] font-black uppercase tracking-widest text-muted shadow-sm group-hover:border-blue-600/30 group-hover:text-blue-600 transition-all">
           {status}
@@ -197,7 +197,7 @@ export default function MarketConditionsInline({
 
       <Bar
         icon={<BarChart3 size={16} />}
-        label="Market pressure"
+        label="Marktdruk"
         value={safePressure}
         color="bg-blue-500"
         getLabel={getPressureLabel}
@@ -208,7 +208,7 @@ export default function MarketConditionsInline({
 
       <Bar
         icon={<AlertTriangle size={16} />}
-        label="Transition risk"
+        label="Transitierisico"
         value={safeRisk}
         color="bg-orange-500"
         getLabel={getTransitionRiskLabel}
@@ -219,7 +219,7 @@ export default function MarketConditionsInline({
 
       <Bar
         icon={<Target size={16} />}
-        label="Setup quality"
+        label="Setupkwaliteit"
         value={safeHealth}
         color="bg-emerald-500"
         getLabel={getSetupQualityLabel}
@@ -230,7 +230,7 @@ export default function MarketConditionsInline({
 
       <Bar
         icon={<Zap size={16} />}
-        label="Market volatility"
+        label="Marktvolatiliteit"
         value={safeVolatility}
         color="bg-purple-500"
         getLabel={getVolatilityLabel}
@@ -241,7 +241,7 @@ export default function MarketConditionsInline({
 
       <Bar
         icon={<TrendingUp size={16} />}
-        label="Trend strength"
+        label="Trendsterkte"
         value={safeTrend}
         color="bg-indigo-500"
         getLabel={getTrendStrengthLabel}
@@ -252,7 +252,7 @@ export default function MarketConditionsInline({
 
       <Bar
         icon={<Layers size={16} />}
-        label="Position size"
+        label="Positiegrootte"
         value={exposureScore}
         color={exposureColor}
         getLabel={() => exposureLabel}
