@@ -5,6 +5,7 @@ import {
   BarChart3,
   Activity,
 } from 'lucide-react';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 /* =====================================================
    HELPERS
@@ -42,10 +43,11 @@ function getIconForIndicator(name = '') {
 
 export default function DataListBlock({
   report,
-  title = 'Indicator Highlights',
+  title,
   field,                 // nieuw (optioneel)
   maxItems = 6,
 }) {
+  const { t } = useTranslation();
   if (!report) return null;
 
   // 🔁 BACKWARD COMPATIBLE FALLBACK
@@ -58,7 +60,7 @@ export default function DataListBlock({
 
   return (
     <ReportCard
-      title={title}
+      title={title || t?.reports?.blocks?.indicatorHighlights?.cardTitle || 'Indicator highlights'}
       icon={<ListChecks size={18} />}
     >
       {!Array.isArray(inds) || inds.length === 0 ? (
@@ -66,7 +68,7 @@ export default function DataListBlock({
            EMPTY STATE
         ========================= */
         <div className="text-sm text-muted italic">
-          Nog geen indicator-data beschikbaar voor dit onderdeel.
+          {t?.reports?.blocks?.indicatorHighlights?.empty || 'No indicator data is available for this section yet.'}
         </div>
       ) : (
         /* =========================
@@ -74,7 +76,11 @@ export default function DataListBlock({
         ========================= */
         <div className="grid gap-3">
           {inds.slice(0, maxItems).map((i, idx) => {
-            const name = i?.indicator ?? i?.name ?? 'Onbekend';
+            const name =
+              i?.indicator ??
+              i?.name ??
+              t?.reports?.blocks?.indicatorHighlights?.unknown ??
+              'Unknown';
             const score = i?.score;
             const interp =
               i?.interpretation ??

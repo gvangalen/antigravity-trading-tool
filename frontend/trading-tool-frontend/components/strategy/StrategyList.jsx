@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import StrategyCard from "@/components/strategy/StrategyCard";
 import { fetchBotConfigs } from "@/lib/api/botApi";
 import { StrategySkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function StrategyList({
   strategies = [],
@@ -12,6 +13,8 @@ export default function StrategyList({
   onEdit,
   loading = false,
 }) {
+  const { t } = useTranslation();
+  const copy = t?.strategies?.list || {};
   const [bots, setBots] = useState([]);
   const [filter, setFilter] = useState("all");
 
@@ -73,9 +76,9 @@ export default function StrategyList({
       {/* 🟢 TABS */}
       <div className="flex gap-2 p-1 bg-[var(--color-border-subtle)] border border-slate-100 rounded-xl w-fit">
         {[
-          { id: "all", label: "Alle" },
-          { id: "active", label: "Actief" },
-          { id: "inactive", label: "Inactief" }
+          { id: "all", label: copy.all },
+          { id: "active", label: copy.active },
+          { id: "inactive", label: copy.inactive }
         ].map((f) => (
           <button
             key={f.id}
@@ -94,7 +97,9 @@ export default function StrategyList({
       {sortedStrategies.length === 0 ? (
         <div className="text-center text-muted py-12 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
           <div className="text-2xl mb-2">📭</div>
-          <div className="text-sm font-bold uppercase tracking-widest opacity-40">Geen strategieen gevonden</div>
+          <div className="text-sm font-bold uppercase tracking-widest opacity-40">
+            {copy.empty}
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">

@@ -2,18 +2,22 @@
 
 import { Info, Trash2 } from "lucide-react";
 import dayjs from "dayjs";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 /**
  * 📅 WeekTable — PRO Stable Edition (v2.3)
  * Geen isoWeek(), geen week(), geen plugins — 100% crash-free.
  */
 export default function WeekTable({ data = [], onRemove }) {
-  const groups = groupByWeek(data);
+  const { t } = useTranslation();
+  const copy = t?.ui?.groupedTables || {};
+  const gridCopy = t?.ui?.terminalGrid || {};
+  const groups = groupByWeek(data, copy.weekLabel);
 
   if (!groups || groups.length === 0) {
     return (
       <div className="bg-card border border-slate-200 rounded-[2rem] p-12 text-center text-xs font-black text-secondary uppercase tracking-widest italic opacity-60">
-         Geen wekelijkse data beschikbaar
+         {copy.noWeeklyData}
       </div>
     );
   }
@@ -23,29 +27,26 @@ export default function WeekTable({ data = [], onRemove }) {
       {groups.map((group, idx) => (
         <div key={idx} className="bg-card border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden group/table">
           {/* TERMINAL HEADER */}
-          <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <div className="px-8 py-5 border-b border-slate-100 bg-slate-50/50">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-card border border-slate-200 flex items-center justify-center text-secondary shadow-sm">
                  <Info className="w-4 h-4" />
               </div>
               <div className="text-[10px] font-black text-muted uppercase tracking-widest leading-none">
-                 Weekoverzicht: {group.label.toUpperCase()}
+                 {copy.weeklyOverview}: {group.label.toUpperCase()}
               </div>
-            </div>
-            <div className="text-[8px] font-black text-blue-500 uppercase tracking-[0.2em]">
-               SYSTEEM STATUS: LIVE
             </div>
           </div>
 
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 text-[10px] font-black text-secondary uppercase tracking-widest">
-                <th className="px-8 py-4">Indicator</th>
-                <th className="px-8 py-4 text-center">Waarde</th>
-                <th className="px-8 py-4 text-center">Score</th>
-                <th className="px-8 py-4">Signaal</th>
-                <th className="px-8 py-4">Toelichting</th>
-                {onRemove && <th className="px-8 py-4 text-right">Acties</th>}
+                <th className="px-8 py-4">{gridCopy.indicator}</th>
+                <th className="px-8 py-4 text-center">{gridCopy.value}</th>
+                <th className="px-8 py-4 text-center">{gridCopy.score}</th>
+                <th className="px-8 py-4">{gridCopy.signal}</th>
+                <th className="px-8 py-4">{gridCopy.interpretation}</th>
+                {onRemove && <th className="px-8 py-4 text-right">{gridCopy.actions}</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -61,6 +62,8 @@ export default function WeekTable({ data = [], onRemove }) {
 }
 
 function WeekRow({ item, onRemove }) {
+  const { t } = useTranslation();
+  const copy = t?.ui?.groupedTables || {};
   const { name, indicator, value = "—", score = null, interpretation = "—", action = "—" } = item;
   const displayName = name || indicator || "—";
   const scoreNum = Number(score ?? 0);
@@ -95,7 +98,7 @@ function WeekRow({ item, onRemove }) {
               <div className={`h-full rounded-full transition-all duration-700 ${signal.bg}`} style={{ width: `${scoreNum}%` }} />
            </div>
            <div className={`text-[8px] font-black uppercase tracking-widest ${signal.color}`}>
-              {action || "NEUTRAL"}
+              {action || copy.neutralAction}
            </div>
         </div>
       </td>
@@ -123,7 +126,7 @@ function WeekRow({ item, onRemove }) {
 /* =====================================================
    ULTRA-STABLE WEEK GROUPING
 ===================================================== */
-function groupByWeek(items) {
+function groupByWeek(items, weekLabel) {
   if (!Array.isArray(items)) return [];
 
   const groups = {};
@@ -142,7 +145,7 @@ function groupByWeek(items) {
 
     if (!groups[key]) {
       groups[key] = {
-        label: `Week ${weekNumber} – ${year}`,
+        label: `${weekLabel} ${weekNumber} – ${year}`,
         items: [],
       };
     }

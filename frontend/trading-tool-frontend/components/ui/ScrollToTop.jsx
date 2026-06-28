@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { ChevronsUp } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function ScrollToTop() {
+  const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -36,7 +38,7 @@ export default function ScrollToTop() {
           exit={{ opacity: 0, y: 20, scale: 0.8 }}
           onClick={scrollToTop}
           className="fixed bottom-8 left-[calc(50%+128px)] -translate-x-1/2 z-50 p-3 rounded-full bg-slate-900/90 text-white shadow-2xl backdrop-blur-md border border-slate-700/50 hover:bg-blue-600 hover:-translate-y-1 transition-all duration-300 group"
-          aria-label="Scroll to top"
+          aria-label={t?.ui?.scrollToTop}
         >
           <ChevronsUp 
             size={20} 

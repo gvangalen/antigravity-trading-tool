@@ -30,7 +30,7 @@ const SYMBOL_MAP = {
 import { useCurrentAsset } from "@/hooks/useCurrentAsset";
 
 export default function TechnicalPage() {
-  const [activeTab, setActiveTab] = useState("Dag");
+  const [activeTab, setActiveTab] = useState("day");
   const { openConfirm, showSnackbar } = useModal();
   const { symbol: selectedAsset } = useCurrentAsset();
   const { t } = useTranslation();

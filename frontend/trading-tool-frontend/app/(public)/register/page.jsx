@@ -9,6 +9,25 @@ import { API_BASE_URL } from "@/lib/config";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { getOnboardingStatus } from "@/lib/api/onboarding";
+
+async function resolvePostRegisterDestination() {
+  try {
+    const status = await getOnboardingStatus();
+    const isComplete = status?.onboarding_complete ?? (
+      status?.has_profile &&
+      status?.has_setup &&
+      status?.has_technical &&
+      status?.has_macro &&
+      status?.has_market &&
+      status?.has_strategy
+    );
+    return isComplete ? "/dashboard" : "/onboarding";
+  } catch (error) {
+    console.warn("⚠️ Could not resolve onboarding status after register:", error);
+    return "/onboarding";
+  }
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -28,7 +47,9 @@ export default function RegisterPage() {
   useEffect(() => {
     if (sessionChecked && isAuthenticated && !redirected.current) {
       redirected.current = true;
-      router.replace("/dashboard");
+      void resolvePostRegisterDestination().then((destination) => {
+        router.replace(destination);
+      });
     }
   }, [isAuthenticated, sessionChecked, router]);
 
@@ -70,8 +91,8 @@ export default function RegisterPage() {
         return;
       }
 
-      // 3️⃣ Naar dashboard
-      router.replace("/dashboard");
+      const destination = await resolvePostRegisterDestination();
+      router.replace(destination);
     } catch (err) {
       console.error("❌ Register fout:", err);
       showSnackbar(
@@ -107,11 +128,11 @@ export default function RegisterPage() {
                   <ShieldCheck size={18} strokeWidth={2.5} />
                 </div>
                 <div className="text-[11px] font-black uppercase tracking-[0.3em]">
-                  Professional
+                  {t?.auth?.professional}
                 </div>
               </div>
               <div className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] opacity-80 border-t border-slate-100 dark:border-slate-800 pt-2 w-full">
-                Trade Smarter. Follow your plan.<br/>Win consistently.
+                {t?.auth?.taglineLine1}<br/>{t?.auth?.taglineLine2}
               </div>
             </div>
           </div>
@@ -121,6 +142,9 @@ export default function RegisterPage() {
           </h1>
           <p className="page-subtitle mx-auto mt-4">
             {t?.auth?.brandRegisterDescription}
+          </p>
+          <p className="mt-4 text-sm font-semibold text-slate-500">
+            {t?.auth?.betaNoVerification}
           </p>
         </div>
 

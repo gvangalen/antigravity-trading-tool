@@ -5,9 +5,15 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Check, ShieldCheck, Zap, Brain, LineChart, Globe, DollarSign, ArrowUpRight, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function LandingPage() {
   const { isAuthenticated } = useAuth();
+  const { t } = useTranslation();
+  const copy = t?.publicPages?.landing || {};
+  const pricing = copy.pricing || {};
+  const cta = copy.cta || {};
+  const footer = copy.footer || {};
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
@@ -36,7 +42,7 @@ export default function LandingPage() {
                   <ShieldCheck size={12} strokeWidth={2.5} className="text-blue-600" />
                 </div>
                 <div className="text-[8px] font-black uppercase tracking-[0.2em]">
-                  Professioneel
+                  {copy.badge}
                 </div>
               </div>
             </div>
@@ -46,14 +52,14 @@ export default function LandingPage() {
                 href="/login" 
                 className="px-6 py-2.5 rounded-xl border-2 border-[var(--color-border)] hover:border-blue-600/30 text-[11px] font-black uppercase tracking-widest transition-all"
               >
-                Inloggen
+                {copy.login}
               </Link>
             ) : (
               <Link 
                 href="/dashboard" 
                 className="px-6 py-2.5 rounded-xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20"
               >
-                Dashboard
+                {copy.dashboard}
               </Link>
             )}
         </div>
@@ -70,15 +76,14 @@ export default function LandingPage() {
 
           <div className="max-w-4xl mx-auto text-center relative z-10">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] mb-8 border border-blue-200 dark:border-blue-800/50">
-              <Zap size={12} className="fill-current" /> Tradamind Professional
+              <Zap size={12} className="fill-current" /> {copy.badge}
             </div>
             <h1 className="text-6xl sm:text-8xl font-black text-foreground tracking-tighter leading-[0.9] mb-8">
-              Marktanalyse met Finn <br />
-              <span className="text-blue-600 italic">voor gedisciplineerde traders</span>
+              {copy.titleLine1} <br />
+              <span className="text-blue-600 italic">{copy.titleLine2}</span>
             </h1>
             <p className="text-xl sm:text-2xl font-bold text-secondary max-w-2xl mx-auto mb-12 leading-relaxed">
-              Zie eerst de marktcontext, volg je plan en laat Finn je waarschuwen
-              <br className="hidden sm:block" /> zodra timing, risico of gedrag begint af te wijken.
+              {copy.subtitle}
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               {!isAuthenticated ? (
@@ -87,14 +92,14 @@ export default function LandingPage() {
                     href="/login" 
                     className="w-full sm:w-auto bg-foreground text-card hover:bg-slate-800 dark:hover:bg-slate-200 px-10 py-5 rounded-2xl text-[12px] font-black uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 shadow-xl shadow-foreground/5 active:scale-95"
                   >
-                    Start gratis proefperiode
+                    {copy.startTrial}
                     <ArrowRight size={16} />
                   </Link>
                   <Link 
                     href="/login?next=/dashboard"
                     className="w-full sm:w-auto px-10 py-5 rounded-2xl border-2 border-[var(--color-border)] hover:border-blue-600/30 text-[12px] font-black uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 active:scale-95"
                   >
-                    Bekijk dashboard
+                    {copy.viewDashboard}
                   </Link>
                 </>
               ) : (
@@ -103,7 +108,7 @@ export default function LandingPage() {
                   className="w-full sm:w-auto bg-blue-600 text-white hover:bg-blue-700 px-14 py-6 rounded-[2rem] text-[14px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20 active:scale-95 animate-pulse-soft"
                 >
                   <LayoutDashboard size={20} />
-                  Open dashboard
+                  {copy.openDashboard}
                   <ArrowRight size={18} />
                 </Link>
               )}
@@ -122,9 +127,9 @@ export default function LandingPage() {
                   <Globe size={24} />
                 </div>
                 <div className="space-y-3">
-                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Marktinzichten</h3>
+                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">{copy.features?.marketTitle}</h3>
                   <p className="text-sm font-bold text-secondary leading-relaxed">
-                    Lees marktstructuur, momentum en macrocontext op één plek voordat je handelt.
+                    {copy.features?.marketBody}
                   </p>
                 </div>
               </div>
@@ -135,9 +140,9 @@ export default function LandingPage() {
                   <Brain size={24} />
                 </div>
                 <div className="space-y-3">
-                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Finn coach</h3>
+                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">{copy.features?.coachTitle}</h3>
                   <p className="text-sm font-bold text-secondary leading-relaxed">
-                    Krijg uitleg, gedragsremmen en coaching die passen bij jouw traderprofiel.
+                    {copy.features?.coachBody}
                   </p>
                 </div>
               </div>
@@ -148,9 +153,9 @@ export default function LandingPage() {
                   <LineChart size={24} />
                 </div>
                 <div className="space-y-3">
-                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Strategiemotor</h3>
+                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">{copy.features?.strategyTitle}</h3>
                   <p className="text-sm font-bold text-secondary leading-relaxed">
-                    Zet analyse om in een helder plan met setups, timing en gedisciplineerde uitvoeringssignalen.
+                    {copy.features?.strategyBody}
                   </p>
                 </div>
               </div>
@@ -167,7 +172,7 @@ export default function LandingPage() {
               <div className="relative bg-card border-2 border-[var(--color-border)] rounded-[3rem] overflow-hidden shadow-2xl">
                 <Image 
                   src="/dashboard_mockup.png"
-                  alt="Tradamind dashboardvoorbeeld"
+                  alt={copy.previewAlt}
                   width={1920}
                   height={1080}
                   className="w-full h-auto"
@@ -180,8 +185,8 @@ export default function LandingPage() {
         {/* 5. PRICING SECTION */}
         <section className="px-6 py-24 bg-[var(--color-border-subtle)]/30 border-y border-[var(--color-border-subtle)]">
           <div className="max-w-4xl mx-auto text-center mb-16">
-            <h2 className="text-4xl sm:text-5xl font-black text-foreground tracking-tighter mb-4">Eenvoudige prijzen. Heldere toegang.</h2>
-            <p className="text-lg font-bold text-secondary uppercase tracking-widest">Kies het plan dat bij jouw workflow past</p>
+            <h2 className="text-4xl sm:text-5xl font-black text-foreground tracking-tighter mb-4">{copy.pricingTitle}</h2>
+            <p className="text-lg font-bold text-secondary uppercase tracking-widest">{copy.pricingSubtitle}</p>
           </div>
 
           <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
@@ -191,17 +196,12 @@ export default function LandingPage() {
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="text-2xl font-black text-foreground uppercase tracking-tight italic">Basis</h3>
-                    <p className="text-[10px] font-black text-secondary uppercase tracking-widest mt-1">Analyse en coaching als kern</p>
+                    <p className="text-[10px] font-black text-secondary uppercase tracking-widest mt-1">{pricing.basicTagline}</p>
                   </div>
                   <div className="text-4xl font-black text-foreground tracking-tighter">€89<span className="text-sm text-dim align-top mt-2 ml-1">/mo</span></div>
                 </div>
                 <div className="space-y-5">
-                  {[
-                    "Toegang tot Finn-coaching",
-                    "Realtime strategie-inzichten",
-                    "Dagelijkse performance-analyse",
-                    "Technische indicatorhub"
-                  ].map((f) => (
+                  {(pricing.basicFeatures || []).map((f) => (
                     <div key={f} className="flex items-center gap-4">
                       <div className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600">
                         <Check size={12} strokeWidth={4} />
@@ -215,7 +215,7 @@ export default function LandingPage() {
                 href="/login" 
                 className="w-full mt-12 py-5 rounded-2xl border-2 border-[var(--color-border)] hover:bg-foreground hover:text-card hover:border-foreground text-[11px] font-black uppercase tracking-[0.2em] transition-all text-center flex items-center justify-center gap-2 group active:scale-95"
               >
-                Start gratis proefperiode
+                {copy.startTrial}
                 <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
               </Link>
             </div>
@@ -227,20 +227,14 @@ export default function LandingPage() {
               <div className="relative z-10 space-y-10">
                 <div className="flex justify-between items-start">
                   <div>
-                    <div className="inline-flex px-2 py-0.5 rounded-md bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest mb-2">Meest gekozen</div>
+                    <div className="inline-flex px-2 py-0.5 rounded-md bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest mb-2">{pricing.featuredBadge}</div>
                     <h3 className="text-2xl font-black text-card dark:text-slate-900 uppercase tracking-tight italic">Pro</h3>
-                    <p className="text-[10px] font-black opacity-60 uppercase tracking-widest mt-1">Volledige uitvoeringsondersteuning</p>
+                    <p className="text-[10px] font-black opacity-60 uppercase tracking-widest mt-1">{pricing.proTagline}</p>
                   </div>
                   <div className="text-4xl font-black text-card dark:text-slate-900 tracking-tighter">€149<span className="text-sm opacity-60 align-top mt-2 ml-1">/mo</span></div>
                 </div>
                 <div className="space-y-5">
-                  {[
-                    "Alles uit Basis",
-                    "Snellere signaaldekking",
-                    "Diepere Finn-context",
-                    "Voorrang bij nieuwe features",
-                    "Geavanceerd risicobeheer"
-                  ].map((f) => (
+                  {(pricing.proFeatures || []).map((f) => (
                     <div key={f} className="flex items-center gap-4">
                       <div className="w-5 h-5 rounded-full bg-slate-800 dark:bg-slate-200 flex items-center justify-center text-white dark:text-slate-900">
                         <Check size={12} strokeWidth={4} />
@@ -254,7 +248,7 @@ export default function LandingPage() {
                 href="/login" 
                 className="relative z-10 w-full mt-12 py-5 rounded-2xl bg-white dark:bg-slate-100 text-slate-900 hover:bg-blue-600 hover:text-white text-[11px] font-black uppercase tracking-[0.2em] transition-all text-center flex items-center justify-center gap-2 group active:scale-95 border-none shadow-lg"
               >
-                Start gratis proefperiode
+                {copy.startTrial}
                 <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
               </Link>
             </div>
@@ -265,19 +259,19 @@ export default function LandingPage() {
         <section className="px-6 py-32 text-center">
           <div className="max-w-4xl mx-auto space-y-12">
             <h2 className="text-5xl sm:text-7xl font-black text-foreground tracking-tighter leading-none">
-              Trade met meer helderheid.
+              {cta.title}
             </h2>
             <Link 
               href="/login" 
               className="inline-flex bg-foreground text-card hover:bg-slate-800 dark:hover:bg-slate-200 px-12 py-6 rounded-2xl text-[14px] font-black uppercase tracking-[0.2em] transition-all items-center gap-3 shadow-2xl active:scale-95"
             >
-              Start gratis proefperiode
+              {copy.startTrial}
               <ArrowRight size={18} />
             </Link>
             <div className="pt-24 border-t border-[var(--color-border-subtle)] flex flex-col sm:flex-row items-center justify-between gap-6 opacity-40">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">© 2026 Tradamind. Alle rechten voorbehouden.</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{footer.rights}</div>
               <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                Juridische pagina's worden momenteel afgerond.
+                {footer.legal}
               </div>
             </div>
           </div>

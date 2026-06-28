@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useModal } from "@/components/modal/ModalProvider";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 import {
   analyzeStrategy, // POST /api/strategies/analyze/{strategy_id}
@@ -12,6 +13,8 @@ import { Wand2, Loader2 } from "lucide-react";
 
 export default function AnalyzeStrategyButton({ strategyId, onSuccess }) {
   const { showSnackbar } = useModal();
+  const { t } = useTranslation();
+  const copy = t?.strategies?.analyzeButton || {};
 
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +23,7 @@ export default function AnalyzeStrategyButton({ strategyId, onSuccess }) {
   // ======================================================
   const handleAnalyze = async () => {
     if (!strategyId) {
-      showSnackbar("Geen strategie geselecteerd", "warning");
+      showSnackbar(copy.noSelection, "warning");
       return;
     }
 
@@ -29,14 +32,14 @@ export default function AnalyzeStrategyButton({ strategyId, onSuccess }) {
     try {
       await analyzeStrategy(strategyId);
 
-      showSnackbar("🧠 AI-uitleg bijgewerkt", "success");
+      showSnackbar(copy.success, "success");
 
       // Parent laten refreshen (strategies opnieuw laden)
       if (onSuccess) onSuccess();
 
     } catch (err) {
       console.error("❌ AI analyse fout:", err);
-      showSnackbar("AI analyse mislukt", "danger");
+      showSnackbar(copy.error, "danger");
     } finally {
       setLoading(false);
     }
@@ -62,12 +65,12 @@ export default function AnalyzeStrategyButton({ strategyId, onSuccess }) {
       {loading ? (
         <>
           <Loader2 className="w-4 h-4 animate-spin" />
-          AI bezig…
+          {copy.loading}
         </>
       ) : (
         <>
           <Wand2 className="w-4 h-4" />
-          Analyseer strategie (AI)
+          {copy.label}
         </>
       )}
     </button>

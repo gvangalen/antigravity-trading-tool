@@ -7,6 +7,7 @@ import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 // ⭐ JULLIE STANDAARD
 import { useModal } from "@/components/modal/ModalProvider";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 // Lucide Icons
 import {
@@ -20,6 +21,8 @@ import {
 export default function TopSetupsMini() {
   const { showSnackbar } = useModal();
   const { setActiveSetup } = useActiveSetup();
+  const { t } = useTranslation();
+  const copy = t?.setups?.topMini || {};
 
   const [topSetups, setTopSetups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -61,7 +64,7 @@ export default function TopSetupsMini() {
       setLastUpdated(new Date());
     } catch (error) {
       console.error("❌ Fout bij laden setups:", error);
-      showSnackbar("Top-setups laden mislukt", "danger");
+      showSnackbar(copy.loadError, "danger");
       setTopSetups([]);
     } finally {
       setLoading(false);
@@ -89,7 +92,7 @@ export default function TopSetupsMini() {
   if (loading) {
     return (
       <div className="text-[var(--text-light)] text-sm text-center py-4">
-        📡 Setups laden...
+        {copy.loading}
       </div>
     );
   }
@@ -97,7 +100,7 @@ export default function TopSetupsMini() {
   if (topSetups.length === 0) {
     return (
       <div className="text-[var(--text-light)] text-sm text-center py-4">
-        ⚠️ Geen actieve setups gevonden.
+        {copy.empty}
       </div>
     );
   }
@@ -125,7 +128,7 @@ export default function TopSetupsMini() {
       <div className="flex items-center justify-between">
         <h4 className="font-semibold text-[var(--text-dark)] flex items-center gap-2">
           <Brain size={16} className="text-[var(--primary-dark)]" />
-          Top Setups
+          {copy.title}
         </h4>
 
         {lastUpdated && (
@@ -149,10 +152,10 @@ export default function TopSetupsMini() {
             cursor-pointer
           "
         >
-          <option value="all">Alle trends</option>
-          <option value="bullish">Bullish</option>
-          <option value="bearish">Bearish</option>
-          <option value="neutral">Neutraal</option>
+          <option value="all">{copy.allTrends}</option>
+          <option value="bullish">{t?.common?.bullish}</option>
+          <option value="bearish">{t?.common?.bearish}</option>
+          <option value="neutral">{t?.common?.neutral}</option>
         </select>
       </div>
 
@@ -160,7 +163,7 @@ export default function TopSetupsMini() {
       <ul className="space-y-2">
         {filteredSetups.length === 0 ? (
           <p className="text-[var(--text-light)] text-sm italic">
-            Geen setups voor deze trend.
+            {copy.noTrendResults}
           </p>
         ) : (
           filteredSetups.map((setup) => (

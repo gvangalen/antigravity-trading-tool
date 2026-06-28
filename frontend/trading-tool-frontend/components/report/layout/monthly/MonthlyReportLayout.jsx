@@ -5,9 +5,13 @@ import MonthlyScoreStabilityCard from '@/components/report/blocks/monthly/Monthl
 import MonthlyBotReliabilityCard from '@/components/report/blocks/monthly/MonthlyBotReliabilityCard';
 
 import ReportSection from '@/components/report/sections/ReportSection';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 export default function MonthlyReportLayout({ report }) {
+  const { t } = useTranslation();
   if (!report) return null;
+
+  const copy = t?.reports?.layouts?.monthly || {};
 
   return (
     <div className="max-w-6xl mx-auto space-y-16">
@@ -26,33 +30,33 @@ export default function MonthlyReportLayout({ report }) {
       ====================================================== */}
       <section className="max-w-3xl mx-auto space-y-12">
 
-        <ReportSection title="Maandoverzicht">
+        <ReportSection title={copy.sections?.overview || 'Monthly overview'}>
           <p className="leading-relaxed">
-            {report.executive_summary || 'Geen maandoverzicht beschikbaar.'}
+            {report.executive_summary || copy.fallbacks?.overview || 'No monthly overview is available yet.'}
           </p>
         </ReportSection>
 
-        <ReportSection title="Markt- en macrocontext">
+        <ReportSection title={copy.sections?.marketMacroContext || 'Market and macro context'}>
           <p className="leading-relaxed">
-            {report.market_overview || report.macro_trends || 'Geen context beschikbaar.'}
+            {report.market_overview || report.macro_trends || copy.fallbacks?.marketMacroContext || 'No context is available yet.'}
           </p>
         </ReportSection>
 
-        <ReportSection title="Technische structuur">
+        <ReportSection title={copy.sections?.technicalStructure || 'Technical structure'}>
           <p className="leading-relaxed">
-            {report.technical_structure || 'Geen technische evaluatie beschikbaar.'}
+            {report.technical_structure || copy.fallbacks?.technicalStructure || 'No technical evaluation is available yet.'}
           </p>
         </ReportSection>
 
-        <ReportSection title="Strategische lessen">
+        <ReportSection title={copy.sections?.strategicLessons || 'Strategic lessons'}>
           <p className="leading-relaxed">
-            {report.strategic_lessons || 'Geen strategische lessen beschikbaar.'}
+            {report.strategic_lessons || copy.fallbacks?.strategicLessons || 'No strategic lessons are available yet.'}
           </p>
         </ReportSection>
 
-        <ReportSection title="Vooruitblik">
+        <ReportSection title={copy.sections?.outlook || 'Outlook'}>
           <p className="leading-relaxed">
-            {report.outlook || 'Geen vooruitblik beschikbaar.'}
+            {report.outlook || copy.fallbacks?.outlook || 'No outlook is available yet.'}
           </p>
         </ReportSection>
 

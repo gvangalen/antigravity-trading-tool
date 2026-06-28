@@ -6,6 +6,7 @@ import { fetchAuth } from "@/lib/api/auth";
 
 import { Wallet, TrendingUp } from "lucide-react";
 import CurveEditor from "@/components/decision/CurveEditor";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function StrategyForm({
   onSubmit,
@@ -14,6 +15,8 @@ export default function StrategyForm({
   isEdit = false,
   hideSubmit = false,
 }) {
+  const { t } = useTranslation();
+  const copy = t?.strategies?.form || {};
   const { showSnackbar } = useModal();
 
   const [error, setError] = useState("");
@@ -231,7 +234,7 @@ export default function StrategyForm({
   e.preventDefault();
 
   if (!isValid) {
-    setError("❌ Vul alle velden correct in.");
+    setError(copy.validationError);
     return;
   }
 
@@ -280,10 +283,10 @@ export default function StrategyForm({
 
   try {
     await onSubmit(payload);
-    showSnackbar("Strategie opgeslagen", "success");
+    showSnackbar(copy.savedSuccess, "success");
   } catch (err) {
     console.error(err);
-    setError("Opslaan mislukt.");
+    setError(copy.saveFailed);
   }
 };
 
@@ -298,7 +301,7 @@ export default function StrategyForm({
           ) : (
             <TrendingUp className="w-5 h-5 text-blue-600" />
           )}
-          Nieuwe Strategie
+          {copy.newTitle}
         </h2>
       )}
 
@@ -306,8 +309,8 @@ export default function StrategyForm({
       {isEdit && (
         <div className="flex items-center justify-between p-4 bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl mb-6">
            <div>
-              <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Status</div>
-              <div className="text-sm font-bold text-slate-800">{form.is_active ? "Actief" : "Gepauzeerd"}</div>
+              <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">{copy.statusLabel}</div>
+              <div className="text-sm font-bold text-slate-800">{form.is_active ? copy.active : copy.paused}</div>
            </div>
            <button
              type="button"
@@ -323,7 +326,7 @@ export default function StrategyForm({
         name="name"
         value={form.name}
         onChange={handleChange}
-        placeholder="Naam"
+        placeholder={copy.namePlaceholder}
         className="input"
       />
 
@@ -333,7 +336,7 @@ export default function StrategyForm({
         onChange={handleChange}
         className="input"
       >
-        <option value="">-- Kies een setup --</option>
+        <option value="">{copy.setupPlaceholder}</option>
         {availableSetups.map((s) => (
           <option key={s.id} value={s.id}>
             {s.name} ({s.symbol})
@@ -349,14 +352,14 @@ export default function StrategyForm({
             type="number"
             value={form.entry}
             onChange={handleChange}
-            placeholder="Instap"
+            placeholder={copy.entryPlaceholder}
             className="input"
           />
           <input
             name="targetsText"
             value={form.targetsText}
             onChange={handleChange}
-            placeholder="Doelen (komma gescheiden)"
+            placeholder={copy.targetsPlaceholder}
             className="input"
           />
           <input
@@ -364,7 +367,7 @@ export default function StrategyForm({
             type="number"
             value={form.stop_loss}
             onChange={handleChange}
-            placeholder="Stop-loss"
+            placeholder={copy.stopLossPlaceholder}
             className="input"
           />
         </>
@@ -376,13 +379,13 @@ export default function StrategyForm({
         name="base_amount"
         value={form.base_amount}
         onChange={handleChange}
-        placeholder="Bedrag (€)"
+        placeholder={copy.amountPlaceholder}
         className="input"
       />
 
       {/* EXECUTION LOGIC */}
       <div className="space-y-3">
-        <label className="text-sm font-semibold">Uitvoering</label>
+        <label className="text-sm font-semibold">{copy.executionLabel}</label>
 
         <label className="flex gap-3 p-3 border rounded-xl cursor-pointer">
           <input
@@ -392,7 +395,7 @@ export default function StrategyForm({
             checked={form.execution_mode === "fixed"}
             onChange={handleChange}
           />
-          <div>Vast bedrag</div>
+          <div>{copy.fixedAmount}</div>
         </label>
 
         <label className="flex gap-3 p-3 border rounded-xl cursor-pointer">
@@ -403,7 +406,7 @@ export default function StrategyForm({
             checked={form.execution_mode === "custom"}
             onChange={handleChange}
           />
-          <div>Op basis van curve</div>
+          <div>{copy.curveBased}</div>
         </label>
       </div>
 
@@ -416,7 +419,7 @@ export default function StrategyForm({
             onChange={handleChange}
             className="input"
           >
-            <option value="new">Nieuwe curve</option>
+            <option value="new">{copy.newCurve}</option>
             {curves.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -430,7 +433,7 @@ export default function StrategyForm({
                 name="curve_name"
                 value={form.curve_name}
                 onChange={handleChange}
-                placeholder="Naam curve"
+                placeholder={copy.curveNamePlaceholder}
                 className="input"
               />
               <CurveEditor
@@ -448,7 +451,7 @@ export default function StrategyForm({
 
       {!hideSubmit && (
         <button id="strategy-edit-submit" disabled={!isValid} className="btn-primary w-full py-3 text-sm font-black uppercase tracking-widest">
-          {isEdit ? "Bijwerken" : "Opslaan"}
+          {isEdit ? copy.updateButton : copy.saveButton}
         </button>
       )}
     </form>

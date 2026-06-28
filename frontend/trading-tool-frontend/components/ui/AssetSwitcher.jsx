@@ -6,8 +6,10 @@ import { Coins, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
 import useBotData from "@/hooks/useBotData";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function AssetSwitcher() {
+  const { t } = useTranslation();
   const { selectedAsset, setSelectedAsset, availableAssets } = useAsset();
   const { activeSetup, focusedBotId } = useActiveSetup();
   const { configs: botConfigs } = useBotData();
@@ -16,6 +18,7 @@ export default function AssetSwitcher() {
   const focusedBot = botConfigs.find(b => b.id === focusedBotId);
   const effectiveAsset = focusedBot?.symbol || activeSetup?.symbol || selectedAsset;
   const isOverride = !!(focusedBot || activeSetup);
+  const copy = t?.common || {};
 
   return (
     <div className="px-4 mb-4 relative">
@@ -36,7 +39,7 @@ export default function AssetSwitcher() {
           <span className={`text-[9px] font-black uppercase tracking-[0.2em] leading-none mb-1 ${
             isOverride ? "text-amber-600 dark:text-amber-500" : "text-secondary"
           }`}>
-            {isOverride ? "Bot Override" : "Active Asset"}
+            {isOverride ? copy.botOverrideLabel : copy.activeAssetLabel}
           </span>
           <span className="text-sm font-black text-slate-900 dark:text-white tracking-tight">{effectiveAsset}</span>
         </div>

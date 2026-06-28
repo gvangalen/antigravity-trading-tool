@@ -4,15 +4,15 @@ import { Activity, TrendingUp, TrendingDown, Clock, Gauge } from "lucide-react";
 import React from "react";
 import { formatNumber } from "@/components/market/utils";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { normalizeLocale } from "@/lib/i18n";
+import { formatDateTime, formatNumber as formatIntlNumber } from "@/lib/i18n";
 
 /**
  * 🛰️ MarketTerminalHUD — PRO V2
  * Visualizes live price action (BTC) and market sentiment (Score & Bias).
  */
 export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC" }) {
-  const { locale } = useTranslation();
-  const isDutch = normalizeLocale(locale) === "nl";
+  const { t, locale } = useTranslation();
+  const copy = t?.pages?.market?.terminalHud || {};
   
   const scoreNum = Number(score ?? 0);
   const priceChange = btc?.change_24h || 0;
@@ -20,33 +20,23 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
   const ChangeIcon = positive ? TrendingUp : TrendingDown;
   
   const getBiasConfig = (s) => {
-    if (s >= 80) return { label: isDutch ? "Sterk positief" : "Strongly positive", color: "text-green-500", bg: "bg-green-500", border: "border-green-200" };
-    if (s >= 60) return { label: isDutch ? "Positief" : "Positive", color: "text-blue-500", bg: "bg-blue-500", border: "border-blue-200" };
-    if (s >= 40) return { label: isDutch ? "Neutraal" : "Neutral", color: "text-secondary", bg: "bg-slate-400", border: "border-slate-200" };
-    if (s >= 20) return { label: isDutch ? "Negatief" : "Negative", color: "text-red-400", bg: "bg-red-400", border: "border-red-200" };
-    return { label: isDutch ? "Sterk negatief" : "Strongly negative", color: "text-red-600", bg: "bg-red-600", border: "border-red-300" };
+    if (s >= 80) return { label: copy.stronglyPositive, color: "text-green-500", bg: "bg-green-500", border: "border-green-200" };
+    if (s >= 60) return { label: copy.positive, color: "text-blue-500", bg: "bg-blue-500", border: "border-blue-200" };
+    if (s >= 40) return { label: copy.neutral, color: "text-secondary", bg: "bg-slate-400", border: "border-slate-200" };
+    if (s >= 20) return { label: copy.negative, color: "text-red-400", bg: "bg-red-400", border: "border-red-200" };
+    return { label: copy.stronglyNegative, color: "text-red-600", bg: "bg-red-600", border: "border-red-300" };
   };
 
   const config = getBiasConfig(scoreNum);
   const biasLabel = {
-    bullish: isDutch ? "Positief" : "Positive",
-    bearish: isDutch ? "Negatief" : "Negative",
-    neutral: isDutch ? "Neutraal" : "Neutral",
-    ranging: isDutch ? "Zijwaarts" : "Sideways",
-    stable: isDutch ? "Stabiel" : "Stable",
-  }[String(bias || "").toLowerCase()] || bias || (isDutch ? "Neutraal" : "Neutral");
+    bullish: copy.positive,
+    bearish: copy.negative,
+    neutral: copy.neutral,
+    ranging: copy.sideways,
+    stable: copy.stable,
+  }[String(bias || "").toLowerCase()] || bias || copy.neutral;
 
-  const copy = {
-    consensus: isDutch ? "Marktconsensus" : "Market consensus",
-    marketView: isDutch ? "Marktbeeld" : "Market view",
-    marketDirection: isDutch ? "Marktrichting" : "Market direction",
-    assetStatus: isDutch ? "Assetstatus" : "Asset status",
-    offline: isDutch ? "Offline" : "Offline",
-    price: isDutch ? `${symbol} prijs` : `${symbol} price`,
-    change24h: isDutch ? "24u verandering" : "24h change",
-    volume: isDutch ? "Volume" : "Volume",
-    liveFeed: isDutch ? "Live feed" : "Live feed",
-  };
+  const priceLabel = String(copy.price).replace("{symbol}", symbol);
 
   return (
     <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -108,15 +98,15 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
             <div className="flex items-center gap-2 text-[9px] sm:text-[10px] font-black text-secondary/40">
                <Clock size={12} strokeWidth={2} />
                <span suppressHydrationWarning className="uppercase tracking-[0.1em] leading-none">
-                 {btc?.timestamp ? new Date(btc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : copy.offline}
+                 {btc?.timestamp ? formatDateTime(btc.timestamp, locale, { hour: '2-digit', minute: '2-digit' }) : copy.offline}
                </span>
             </div>
          </div>
 
          <div className="relative z-10 space-y-2">
-            <div className="text-[10px] sm:text-[11px] font-black text-secondary/40 uppercase tracking-[0.25em]">{copy.price}</div>
+            <div className="text-[10px] sm:text-[11px] font-black text-secondary/40 uppercase tracking-[0.25em]">{priceLabel}</div>
             <div suppressHydrationWarning className="text-3xl sm:text-5xl font-black tracking-tighter uppercase leading-none text-foreground font-mono tabular-nums">
-               ${btc?.price ? Number(btc.price).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : "—"}
+               ${btc?.price ? formatIntlNumber(Number(btc.price), locale, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : "—"}
             </div>
             
             <div className={`flex items-center flex-wrap gap-2 pt-3 font-black text-sm uppercase tracking-widest ${positive ? 'text-green-500' : 'text-red-500'}`}>

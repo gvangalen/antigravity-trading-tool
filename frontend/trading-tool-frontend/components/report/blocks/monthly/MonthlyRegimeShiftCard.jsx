@@ -1,27 +1,30 @@
 'use client';
 
 import ReportCard from '@/components/report/sections/ReportCard';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 export default function MonthlyRegimeShiftCard({ report }) {
+  const { t } = useTranslation();
+  const copy = t?.reports?.blocks?.monthlyRegimeShift || {};
   if (!report) return null;
 
   return (
-    <ReportCard title="Marktregime (Maand)">
+    <ReportCard title={copy.title}>
       <div className="space-y-4 text-sm">
 
         <RegimeRow
-          label="Marktstructuur"
-          value={extract(report.market_overview)}
+          label={copy.marketStructure}
+          value={extract(report.market_overview, copy)}
         />
 
         <RegimeRow
-          label="Macro-omgeving"
-          value={extract(report.macro_trends)}
+          label={copy.macroEnvironment}
+          value={extract(report.macro_trends, copy)}
         />
 
         <RegimeRow
-          label="Technisch regime"
-          value={extract(report.technical_structure)}
+          label={copy.technicalRegime}
+          value={extract(report.technical_structure, copy)}
         />
 
       </div>
@@ -42,12 +45,12 @@ function RegimeRow({ label, value }) {
  * Semantische extractie:
  * we tonen GEEN ruwe tekst, maar een compacte interpretatie
  */
-function extract(text) {
-  if (!text) return 'Onvoldoende data';
+function extract(text, copy = {}) {
+  if (!text) return copy.insufficientData;
 
-  if (/bear|zwak|druk/i.test(text)) return 'Bearish / defensief';
-  if (/bull|sterk|opbouw/i.test(text)) return 'Bullish / ondersteunend';
-  if (/range|neutraal|consolid/i.test(text)) return 'Neutraal / range';
+  if (/bear|zwak|druk/i.test(text)) return copy.bearish;
+  if (/bull|sterk|opbouw/i.test(text)) return copy.bullish;
+  if (/range|neutraal|consolid/i.test(text)) return copy.neutral;
 
-  return 'Gemengd / overgangsfase';
+  return copy.mixed;
 }

@@ -14,8 +14,7 @@ export default function TechnicalTerminalGrid({
   onViewChart = null,
   loading = false,
 }) {
-  const { locale } = useTranslation();
-  const isDutch = String(locale).toLowerCase().startsWith("nl");
+  const { t } = useTranslation();
 
   if (loading) {
     return (
@@ -25,23 +24,7 @@ export default function TechnicalTerminalGrid({
     );
   }
   const safeData = Array.isArray(data) ? data : [];
-  const copy = {
-    live: isDutch ? "LIVE" : "LIVE",
-    noConnection: isDutch ? "Geen verbinding" : "No connection",
-    recover: isDutch ? "Herstellen" : "Recover",
-    overview: isDutch ? "Overzicht" : "Overview",
-    indicator: isDutch ? "Indicator" : "Indicator",
-    value: isDutch ? "Waarde" : "Value",
-    trend: isDutch ? "Trend" : "Trend",
-    score: isDutch ? "Score" : "Score",
-    signal: isDutch ? "Signaal" : "Signal",
-    interpretation: isDutch ? "Toelichting" : "Interpretation",
-    noSignals: isDutch ? "Geen signalen beschikbaar" : "No signals available",
-    active: isDutch ? "Actief" : "Active",
-    weak: isDutch ? "Zwak" : "Weak",
-    neutral: isDutch ? "Neutraal" : "Neutral",
-    analysisPending: isDutch ? "Analyse in afwachting..." : "Analysis pending...",
-  };
+  const copy = t?.ui?.terminalGrid || {};
 
   const getDayLabel = () => {
     if (!safeData.length) return copy.live;
@@ -89,7 +72,7 @@ export default function TechnicalTerminalGrid({
               <th className="px-6 py-4 text-center">{copy.score}</th>
               <th className="px-6 py-4">{copy.signal}</th>
               <th className="px-6 py-4">{copy.interpretation}</th>
-              <th className="px-6 py-4 text-right w-12"></th>
+              <th className="px-6 py-4 text-right w-12">{onRemove ? copy.actions : ""}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">

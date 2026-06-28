@@ -6,7 +6,7 @@ import { fetchLatestPrice } from "@/lib/api/market";
 import { MarketCardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { normalizeLocale } from "@/lib/i18n";
+import { formatDateTime, formatNumber as formatIntlNumber } from "@/lib/i18n";
 
 // Lucide icons
 import {
@@ -17,8 +17,7 @@ import {
 } from "lucide-react";
 
 export default function MarketLiveCard({ symbol = "BTC", data = null, loading: propLoading = false, error: propError = "" }) {
-  const { locale } = useTranslation();
-  const isDutch = normalizeLocale(locale) === "nl";
+  const { t, locale } = useTranslation();
   const [internalPrice, setInternalPrice] = useState(null);
   const [internalLoading, setInternalLoading] = useState(true);
   const [internalError, setInternalError] = useState("");
@@ -27,13 +26,14 @@ export default function MarketLiveCard({ symbol = "BTC", data = null, loading: p
   const asset = data || internalPrice;
   const loading = propLoading || (data ? false : internalLoading);
   const error = propError || (data ? "" : internalError);
+  const cardCopy = t?.pages?.market?.liveCard || {};
   const copy = {
-    fetchError: isDutch ? `Fout bij ophalen ${symbol}-data` : `Failed to load ${symbol} data`,
-    unavailable: isDutch ? `Geen ${symbol} data beschikbaar` : `No ${symbol} data available`,
-    livePrice: isDutch ? `Live ${symbol} koers` : `Live ${symbol} price`,
-    currentPrice: isDutch ? "Huidige koers (USD)" : "Current price (USD)",
-    change24h: isDutch ? "24u verandering" : "24h change",
-    volume24h: isDutch ? "24u volume" : "24h volume",
+    fetchError: cardCopy.fetchError.replace("{symbol}", symbol),
+    unavailable: cardCopy.unavailable.replace("{symbol}", symbol),
+    livePrice: cardCopy.livePrice.replace("{symbol}", symbol),
+    currentPrice: cardCopy.currentPrice,
+    change24h: cardCopy.change24h,
+    volume24h: cardCopy.volume24h,
   };
 
   useVisibilityPolling(loadData, {
@@ -82,7 +82,7 @@ export default function MarketLiveCard({ symbol = "BTC", data = null, loading: p
   const ChangeIcon = positive ? TrendingUp : TrendingDown;
   const formatTimestamp = (timestamp) =>
     timestamp
-      ? new Date(timestamp).toLocaleTimeString(isDutch ? "nl-NL" : "en-US", {
+      ? formatDateTime(timestamp, locale, {
           hour: "2-digit",
           minute: "2-digit",
         })
@@ -105,7 +105,7 @@ export default function MarketLiveCard({ symbol = "BTC", data = null, loading: p
           <div>
              <span className="metric-label">{copy.currentPrice}</span>
              <h2 suppressHydrationWarning className="metric-value text-5xl font-mono !tracking-tighter">
-                ${Number(asset.price || 0).toLocaleString(undefined, { 
+                ${formatIntlNumber(Number(asset.price || 0), locale, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: symbol === 'BTC' ? 2 : 4 
                 })}

@@ -22,7 +22,7 @@ export default function TradingBotCard() {
         setStrategy(data && !data.message ? data : null);
       } catch (err) {
         console.error("❌ TradingBotCard error:", err);
-        setError("Kan laatste strategy niet laden");
+        setError(t?.dashboard?.cards?.error_bot);
         setStrategy(null);
       } finally {
         setLoading(false);
@@ -62,19 +62,19 @@ export default function TradingBotCard() {
 
             {/* BASIS FIELDS */}
             <div className="space-y-[2px] text-sm text-[var(--text-dark)]">
-              <p><strong>Setup:</strong> {strategy.setup_name}</p>
+              <p><strong>{t?.dashboard?.cards?.setupLabel}:</strong> {strategy.setup_name}</p>
               <p><strong>{t.common.type}:</strong> {strategy.strategy_type}</p>
               <p><strong>{t.common.asset}:</strong> {strategy.symbol}</p>
-              <p><strong>Timeframe:</strong> {strategy.timeframe}</p>
+              <p><strong>{t?.dashboard?.brain?.timeframe}:</strong> {strategy.timeframe}</p>
 
               {strategy.entry && (
-                <p><strong>Entry:</strong> {strategy.entry}</p>
+                <p><strong>{t?.dashboard?.brain?.entry}:</strong> {strategy.entry}</p>
               )}
               {strategy.targets && (
-                <p><strong>Targets:</strong> {strategy.targets.join(", ")}</p>
+                <p><strong>{t?.dashboard?.brain?.targets}:</strong> {strategy.targets.join(", ")}</p>
               )}
               {strategy.stop_loss && (
-                <p><strong>SL:</strong> {strategy.stop_loss}</p>
+                <p><strong>{t?.dashboard?.brain?.stop_loss}:</strong> {strategy.stop_loss}</p>
               )}
             </div>
 

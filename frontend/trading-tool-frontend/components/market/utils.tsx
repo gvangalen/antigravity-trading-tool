@@ -1,4 +1,5 @@
 import React, { ReactNode } from "react";
+import { formatNumber as formatLocaleNumber } from "@/lib/i18n";
 
 /**
  * Formatteert dagverandering in %
@@ -41,7 +42,8 @@ export function formatChange(
  */
 export function formatNumber(
   num: number | string | null,
-  isPrice = false
+  isPrice = false,
+  locale?: string | null,
 ): string {
   if (num === null || num === "N/A" || Number.isNaN(Number(num))) {
     return "–";
@@ -51,5 +53,5 @@ export function formatNumber(
 
   return isPrice
     ? `$${value.toFixed(2)}`
-    : value.toLocaleString("nl-NL");
+    : formatLocaleNumber(value, locale);
 }

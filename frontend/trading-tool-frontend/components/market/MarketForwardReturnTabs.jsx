@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { normalizeLocale } from "@/lib/i18n";
+import { getIntlLocale } from "@/lib/i18n";
 import {
   CalendarRange,
-  TrendingUp,
   PieChart,
   BarChart3
 } from "lucide-react";
@@ -36,48 +35,34 @@ const formatPercentage = (value) => {
    🌟 HOOFD COMPONENT
 =========================================================== */
 export default function MarketForwardReturnTabs({ data = {} }) {
-  const { locale } = useTranslation();
-  const isDutch = normalizeLocale(locale) === "nl";
+  const { t, locale } = useTranslation();
   const [active, setActive] = useState("month");
   const [selectedYears, setSelectedYears] = useState([]);
+  const copy = t?.pages?.market?.forecastTable || {};
 
   const activeData = data[active] || [];
   const labelsByTab = useMemo(
     () => ({
       week: Array.from({ length: 53 }, (_, i) => `W${i + 1}`),
-      month: isDutch
-        ? ["JAN", "FEB", "MRT", "APR", "MEI", "JUN", "JUL", "AUG", "SEP", "OKT", "NOV", "DEC"]
-        : ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"],
+      month: Array.from({ length: 12 }, (_, i) =>
+        new Intl.DateTimeFormat(getIntlLocale(locale), { month: "short" })
+          .format(new Date(2026, i, 1))
+          .replace(".", "")
+          .toUpperCase(),
+      ),
       quarter: ["Q1", "Q2", "Q3", "Q4"],
-      year: [isDutch ? "JAAR" : "YEAR"],
+      year: [String(copy.year).toUpperCase()],
     }),
-    [isDutch]
+    [copy.year, locale]
   );
   const labels = labelsByTab[active] || [];
 
+  const timeIntervals = t?.ui?.timeIntervals || {};
   const tabLabels = {
-    week: isDutch ? "Week" : "Week",
-    month: isDutch ? "Maand" : "Month",
-    quarter: isDutch ? "Kwartaal" : "Quarter",
-    year: isDutch ? "Jaar" : "Year",
-  };
-
-  const copy = {
-    matrix: isDutch ? "Matrix" : "Matrix",
-    computed: isDutch ? "Berekend" : "Computed",
-    year: isDutch ? "Jaar" : "Year",
-    yearAverage: isDutch ? "Gem. jaar" : "Avg. year",
-    totalAverage: isDutch ? "Gem. totaal" : "Avg. total",
-    forwardOverview: isDutch
-      ? "Forward return overzicht (geselecteerde jaren)"
-      : "Forward return overview (selected years)",
-    metric: isDutch ? "Metriek" : "Metric",
-    numberOfYears: isDutch ? "Aantal jaren" : "Number of years",
-    positivePeriods: isDutch ? "Positieve periodes" : "Positive periods",
-    negativePeriods: isDutch ? "Negatieve periodes" : "Negative periods",
-    positiveChance: isDutch
-      ? "Kans op positief resultaat"
-      : "Chance of positive outcome",
+    week: timeIntervals.week,
+    month: timeIntervals.month,
+    quarter: timeIntervals.quarter,
+    year: timeIntervals.year,
   };
 
   useEffect(() => {

@@ -6,11 +6,17 @@ import {
   PauseCircle,
   AlertCircle
 } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatCurrency } from "@/lib/i18n";
 
 /* =======================================================
    Bot Decision — REPORT (V2 PRO REFINED)
 ======================================================= */
 export default function BotDecisionReportCard({ snapshot }) {
+  const { t, locale } = useTranslation();
+  const copy = t?.reports?.blocks?.botDecision || {};
+  const actionLabels = copy.actionLabels || {};
+
   // 1) Normaliseer snapshot
   let safeSnapshot = snapshot ?? {};
 
@@ -28,12 +34,12 @@ export default function BotDecisionReportCard({ snapshot }) {
 
   // 2) Defaults
   const {
-    bot_name = "Handelsbot",
+    bot_name = copy.defaultBotName,
     action = "hold",
     confidence = null,
     amount_eur = null,
     setup_match = null,
-    reason = "Geen actie: criteria niet bereikt.",
+    reason = copy.defaultReason,
   } = safeSnapshot || {};
 
   const normalizedAction =
@@ -42,13 +48,19 @@ export default function BotDecisionReportCard({ snapshot }) {
   const isBuy = normalizedAction === "buy";
   const isSell = normalizedAction === "sell";
   const isHold = !isBuy && !isSell;
+  const actionLabel = actionLabels[normalizedAction] || normalizedAction;
 
   return (
-    <ReportCard title="Handelsactie" icon={<Bot size={16} />}>
+    <ReportCard
+      title={copy.cardTitle}
+      icon={<Bot size={16} />}
+    >
       
       {/* BOT IDENTITY */}
       <div className="mb-6">
-        <div className="text-[11px] font-bold text-secondary tracking-tight mb-1">Bot</div>
+        <div className="text-[11px] font-bold text-secondary tracking-tight mb-1">
+          {copy.botLabel}
+        </div>
         <div className="text-xl font-bold text-foreground tracking-tight">{bot_name}</div>
       </div>
 
@@ -71,16 +83,20 @@ export default function BotDecisionReportCard({ snapshot }) {
                   {isHold && <PauseCircle size={20} />}
                </div>
                <div>
-                  <div className="text-[11px] font-bold tracking-tight opacity-60">Actie</div>
+                  <div className="text-[11px] font-bold tracking-tight opacity-60">
+                    {copy.actionLabel}
+                  </div>
                   <div className="text-xl font-bold uppercase tracking-tight leading-none">
-                    {normalizedAction}
+                    {actionLabel}
                   </div>
                </div>
             </div>
 
             {confidence !== null && (
               <div className="flex flex-col items-end">
-                 <span className="text-[10px] font-bold tracking-tight opacity-60">Vertrouwen</span>
+                 <span className="text-[10px] font-bold tracking-tight opacity-60">
+                   {copy.confidenceLabel}
+                 </span>
                  <span className="text-lg font-bold font-mono tracking-tight">{confidence}%</span>
               </div>
             )}
@@ -90,14 +106,20 @@ export default function BotDecisionReportCard({ snapshot }) {
         <div className="grid grid-cols-2 gap-4">
            {amount_eur !== null && (
              <div className="p-4 rounded-xl border border-slate-50 bg-white/50 shadow-sm">
-                <span className="text-[10px] font-bold text-secondary tracking-tight mb-2 block">Ordergrootte</span>
-                <span className="text-sm font-bold text-foreground font-mono tracking-tight">€{amount_eur.toLocaleString()}</span>
+                <span className="text-[10px] font-bold text-secondary tracking-tight mb-2 block">
+                  {copy.orderSizeLabel}
+                </span>
+                <span className="text-sm font-bold text-foreground font-mono tracking-tight">
+                  {formatCurrency(Number(amount_eur), locale, "EUR", { maximumFractionDigits: 0 })}
+                </span>
              </div>
            )}
 
            {setup_match !== null && (
              <div className="p-4 rounded-xl border border-slate-50 bg-white/50 shadow-sm">
-                <span className="text-[10px] font-bold text-secondary tracking-tight mb-2 block">Setup Match</span>
+                <span className="text-[10px] font-bold text-secondary tracking-tight mb-2 block">
+                  {copy.setupMatchLabel}
+                </span>
                 <span className="text-sm font-bold text-foreground font-mono tracking-tight">{setup_match}%</span>
              </div>
            )}
@@ -107,7 +129,9 @@ export default function BotDecisionReportCard({ snapshot }) {
         <div className="pt-6 border-t border-slate-50">
            <div className="flex items-center gap-2 mb-3">
               <AlertCircle size={14} className="text-secondary" />
-              <span className="text-[11px] font-bold text-secondary tracking-tight">Toelichting</span>
+              <span className="text-[11px] font-bold text-secondary tracking-tight">
+                {copy.explanationLabel}
+              </span>
            </div>
            <div className="text-[14px] text-dim leading-relaxed italic bg-card p-4 rounded-xl border border-slate-50 shadow-inner-light">
              {reason}

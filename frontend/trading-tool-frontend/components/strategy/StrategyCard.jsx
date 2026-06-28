@@ -7,7 +7,7 @@ import {
   toggleFavoriteStrategy,
 } from "@/lib/api/strategy";
 import { useMarketData } from "@/hooks/useMarketData";
-import { 
+import {
   ArrowRight, 
   ChevronRight, 
   Target, 
@@ -26,9 +26,13 @@ import {
   Brain,
   Wand2
 } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { getIntlLocale } from "@/lib/i18n";
 
 export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] }) {
   if (!strategy || typeof strategy !== "object") return null;
+  const { t, locale } = useTranslation();
+  const copy = t?.strategies?.card || {};
 
   const { openConfirm, showSnackbar } = useModal();
   const { btcLive } = useMarketData(strategy.symbol, { mode: "live" });
@@ -60,7 +64,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
   const linkedBot = bots.find(b => b.strategy_id === id);
   const isBotActive = linkedBot?.is_active;
 
-  const strategyName = name || strategy.setup_name || "Strategie";
+  const strategyName = name || strategy.setup_name || copy.fallbackName;
   const isDCA = strategy_type === "dca";
 
   const targets = Array.isArray(strategy.targets)
@@ -92,10 +96,10 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
     try {
       setLoading(true);
       await analyzeStrategy(id);
-      showSnackbar("AI-uitleg bijgewerkt", "success");
+      showSnackbar(copy.analysisSuccess, "success");
       onRefresh?.();
     } catch (err) {
-      showSnackbar("AI analyse mislukt", "danger");
+      showSnackbar(copy.analysisFailed, "danger");
     } finally {
       setLoading(false);
     }
@@ -120,7 +124,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
       setFinnAdherence(adherence?.analysis || adherence?.state?.analysis || null);
     } catch (err) {
       console.error("FINN strategy review failed:", err);
-      showSnackbar("Finn-check mislukt", "danger");
+      showSnackbar(copy.finnFailed, "danger");
     } finally {
       setFinnLoading(false);
     }
@@ -131,25 +135,25 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
       await toggleFavoriteStrategy(id);
       onRefresh?.();
     } catch (err) {
-      showSnackbar("Favoriet aanpassen mislukt", "danger");
+      showSnackbar(copy.favoriteFailed, "danger");
     }
   }
 
   function openDel() {
     openConfirm({
-      title: "Strategie verwijderen",
-      statusLabel: "Gevoelige actie",
+      title: copy.deleteTitle,
+      statusLabel: copy.deleteStatus,
       context: <p>{strategyName} · {symbol} · {timeframe}</p>,
-      impact: <p>Deze strategie verdwijnt uit je review-lane en gekoppelde workflows verliezen hun strategiecontext.</p>,
-      safety: <p>Verwijderen is definitief. Controleer eerst of je bot of setup deze strategie nog gebruikt.</p>,
-      consequence: <p>Na verwijderen verversen we de lijst en kun je Finn vragen om een nieuw concept of een veiliger alternatief.</p>,
+      impact: <p>{copy.deleteImpact}</p>,
+      safety: <p>{copy.deleteSafety}</p>,
+      consequence: <p>{copy.deleteConsequence}</p>,
       icon: <Trash />,
       tone: "danger",
-      confirmText: "Verwijder strategie",
+      confirmText: copy.deleteConfirm,
       onConfirm: async () => {
         await deleteStrategy(id);
         onRefresh?.();
-        showSnackbar("Strategie verwijderd. Finn kan je helpen een nieuw concept op te zetten.", "success");
+        showSnackbar(copy.deleteSuccess, "success");
       },
     });
   }
@@ -159,7 +163,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
   ========================================================== */
   const formatCurrency = (v) => {
     if (v === null || v === undefined || isNaN(v)) return "---";
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v);
+    return new Intl.NumberFormat(getIntlLocale(locale), { style: "currency", currency: "USD" }).format(v);
   };
 
   return (
@@ -167,21 +171,21 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
       {/* ⛓️ LINEAGE HEADER */}
       <div className="bg-slate-50/80 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
-          <span className="text-muted hover:text-slate-700 cursor-default transition-colors">{strategy.setup_name || "Setup"}</span>
+          <span className="text-muted hover:text-slate-700 cursor-default transition-colors">{strategy.setup_name || copy.setupLabel}</span>
           <ChevronRight size={12} className="opacity-30" />
           <span className="text-[var(--primary)]">{strategyName}</span>
           <ChevronRight size={12} className="opacity-30" />
           <div className="flex items-center gap-1.5 ml-1">
              <div className={`w-2 h-2 rounded-full ${isBotActive ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse" : "bg-slate-300"}`} />
              <span className={`font-black ${isBotActive ? "text-green-600" : "text-secondary"}`}>
-                {linkedBot ? (isBotActive ? "Bot actief" : "Bot gepauzeerd") : "Geen bot"}
+                {linkedBot ? (isBotActive ? copy.botActive : copy.botPaused) : copy.noBot}
              </span>
           </div>
 
           <div className="h-3 w-[1px] bg-slate-200 mx-1" />
 
           <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${is_active ? "bg-blue-100 text-blue-600" : "bg-[var(--color-border-subtle)] text-slate-400"}`}>
-             Status: {is_active ? "Live" : "Stand-by"}
+             {copy.statusPrefix}: {is_active ? copy.live : copy.standby}
           </div>
         </div>
 
@@ -205,13 +209,13 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
             </div>
 
             <div className="text-right flex flex-col justify-center">
-              <div className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none mb-1">Koers</div>
+              <div className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none mb-1">{copy.priceLabel}</div>
               <div className="text-2xl font-black text-foreground tracking-tighter leading-none">
-                {currentPrice ? formatCurrency(currentPrice) : <span className="text-slate-300 animate-pulse text-sm">Laden...</span>}
+                {currentPrice ? formatCurrency(currentPrice) : <span className="text-slate-300 animate-pulse text-sm">{copy.loading}</span>}
               </div>
               {distToEntry !== null && !isNaN(distToEntry) && (
                 <div className={`text-[11px] font-bold mt-1.5 ${distToEntry >= 0 ? "text-green-500" : "text-red-500"}`}>
-                  {distToEntry >= 0 ? "+" : ""}{distToEntry.toFixed(2)}% <span className="opacity-50 font-medium tracking-tight">vanaf instap</span>
+                  {distToEntry >= 0 ? "+" : ""}{distToEntry.toFixed(2)}% <span className="opacity-50 font-medium tracking-tight">{copy.fromEntry}</span>
                 </div>
               )}
             </div>
@@ -221,19 +225,19 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
             <div className="grid grid-cols-3 gap-4 items-stretch">
               <div className="bg-[var(--color-border-subtle)] p-4 rounded-2xl border border-slate-100 flex flex-col justify-center">
                 <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                  <ArrowRight size={12} className="text-blue-500" /> Instap
+                  <ArrowRight size={12} className="text-blue-500" /> {copy.entryLabel}
                 </div>
                 <div className="text-lg font-black text-foreground tracking-tight">{formatCurrency(entry)}</div>
               </div>
               <div className="bg-[var(--color-border-subtle)] p-4 rounded-2xl border border-slate-100 flex flex-col justify-center">
                 <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                  <Target size={12} className="text-green-500" /> Doelen
+                  <Target size={12} className="text-green-500" /> {copy.targetsLabel}
                 </div>
                 <div className="text-lg font-black text-foreground tracking-tight">{targets.length > 0 ? formatCurrency(targets[0]) : "-"}</div>
               </div>
               <div className="bg-red-50/50 p-4 rounded-2xl border border-red-100 flex flex-col justify-center">
                 <div className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                  <ShieldAlert size={12} className="text-red-500" /> Stop-loss
+                  <ShieldAlert size={12} className="text-red-500" /> {copy.stopLossLabel}
                 </div>
                 <div className="text-lg font-black text-red-600 tracking-tight">{formatCurrency(stop_loss)}</div>
               </div>
@@ -244,12 +248,12 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
             <div className="bg-slate-800 rounded-2xl p-4 text-white">
                <div className="flex justify-between items-end mb-4">
                   <div>
-                     <div className="text-[9px] font-black text-secondary uppercase tracking-widest">Risico / Rendement</div>
+                     <div className="text-[9px] font-black text-secondary uppercase tracking-widest">{copy.riskReward}</div>
                      <div className="text-xl font-black tracking-tighter">1 : {rrStats.rr.toFixed(2)}</div>
                   </div>
                   <div className="text-right">
-                     <span className="text-[9px] font-black bg-red-500/20 text-red-400 px-2 py-1 rounded-lg mr-2">RISICO {rrStats.riskPct.toFixed(1)}%</span>
-                     <span className="text-[9px] font-black bg-green-500/20 text-green-400 px-2 py-1 rounded-lg">RENDEMENT {rrStats.rewardPct.toFixed(1)}%</span>
+                     <span className="text-[9px] font-black bg-red-500/20 text-red-400 px-2 py-1 rounded-lg mr-2">{copy.riskBadge} {rrStats.riskPct.toFixed(1)}%</span>
+                     <span className="text-[9px] font-black bg-green-500/20 text-green-400 px-2 py-1 rounded-lg">{copy.rewardBadge} {rrStats.rewardPct.toFixed(1)}%</span>
                   </div>
                </div>
                
@@ -276,10 +280,10 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-slate-600">
                   <Brain size={15} className="text-violet-500" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Finn-check</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest">{copy.finnCheck}</span>
                 </div>
                 {finnLoading && (
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Laden…</span>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.loadingShort}</span>
                 )}
               </div>
 
@@ -292,7 +296,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
                       : "border-emerald-200 bg-emerald-50 text-emerald-700"
                 }`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[9px] font-black uppercase tracking-widest">Beslischeck</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest">{copy.decisionCheck}</span>
                     <span className="text-[8px] font-black uppercase tracking-widest">{finnReview.decision_status}</span>
                   </div>
                   <p className="mt-2 text-xs font-semibold leading-relaxed">{finnReview.risk_summary}</p>
@@ -311,7 +315,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
                       : "border-rose-200 bg-rose-50 text-rose-700"
                 }`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[9px] font-black uppercase tracking-widest">Plantrouw</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest">{copy.planAdherence}</span>
                     <span className="text-[8px] font-black uppercase tracking-widest">{finnAdherence.adherence_status}</span>
                   </div>
                   <p className="mt-2 text-xs font-semibold leading-relaxed">{finnAdherence.adherence_reason}</p>
@@ -328,7 +332,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
         {!isDCA && (
           <div className="lg:col-span-4 bg-slate-50/50 rounded-2xl border border-slate-100 p-4">
              <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-4 flex items-center gap-2">
-                <Activity size={12} /> Uitvoering
+                <Activity size={12} /> {copy.execution}
              </div>
              
              <div className="space-y-3">
@@ -346,18 +350,18 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
                    <div className="relative z-10 flex justify-center">
                       <div className="bg-card border border-slate-300 px-3 py-1 rounded-full shadow-sm flex items-center gap-2">
                          <div className="w-1.5 h-1.5 bg-[var(--primary)] rounded-full animate-ping" />
-                         <span className="text-[10px] font-black text-[var(--primary)]">LIVE {formatCurrency(currentPrice)}</span>
+                         <span className="text-[10px] font-black text-[var(--primary)]">{copy.livePrice} {formatCurrency(currentPrice)}</span>
                       </div>
                    </div>
                 </div>
 
                 <div className="flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg">
-                   <span className="text-[9px] font-black text-blue-500 uppercase">Instap</span>
+                   <span className="text-[9px] font-black text-blue-500 uppercase">{copy.entryShort}</span>
                    <span className="text-xs font-black text-blue-700">{formatCurrency(entry)}</span>
                 </div>
 
                 <div className="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-100 rounded-lg">
-                   <span className="text-[9px] font-black text-red-500 uppercase">Stop</span>
+                   <span className="text-[9px] font-black text-red-500 uppercase">{copy.stopShort}</span>
                    <span className="text-xs font-black text-red-700">{formatCurrency(stop_loss)}</span>
                 </div>
              </div>
@@ -370,11 +374,11 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
          <div className="flex items-center gap-3">
             <button onClick={handleAnalyze} disabled={loading} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary hover:text-purple-600 transition-colors disabled:opacity-50">
                <Wand2 size={12} />
-               {loading ? "Analyseren..." : "Nieuwe analyse"}
+               {loading ? copy.analyzing : copy.newAnalysis}
             </button>
             <button onClick={handleFinnReview} disabled={finnLoading} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary hover:text-blue-600 transition-colors disabled:opacity-50">
                <Brain size={12} />
-               {finnLoading ? "Finn-check…" : "Check met Finn"}
+               {finnLoading ? copy.finnChecking : copy.checkWithFinn}
             </button>
          </div>
          
@@ -383,7 +387,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
                <Trash size={14} />
             </button>
             <button onClick={() => onEdit?.(strategy)} className="bg-slate-800 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all">
-               Beheer
+               {copy.manage}
             </button>
          </div>
       </div>

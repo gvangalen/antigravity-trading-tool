@@ -5,6 +5,7 @@ import DataListBlock from "../blocks/DataListBlock";
 import SectionAlignedAside from "../layout/SectionAlignedAside";
 
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 /**
  * 📈 ReportSectionMarket (Exact Screenshot Edition)
@@ -12,6 +13,8 @@ import { useAuth } from "@/components/auth/AuthProvider";
  * - Chapter 2: Marktanalyse
  */
 export default function ReportSectionMarket({ report, isPrint = false }) {
+  const { t } = useTranslation();
+  const copy = t?.reports?.sections?.market || {};
   const { user } = useAuth();
   if (!report) return null;
 
@@ -29,15 +32,15 @@ export default function ReportSectionMarket({ report, isPrint = false }) {
         <div className={colSpanClass}>
           <div className="mb-10">
             <h2 className="text-2xl font-bold text-foreground tracking-tight mb-6">
-              Dagoverzicht — <span className="text-secondary font-medium">{report.report_date || "—"}</span>
+              {copy.dailyOverview} — <span className="text-secondary font-medium">{report.report_date || "—"}</span>
             </h2>
             
             <div className="space-y-1">
               <div className="text-xl font-bold text-slate-900">
-                Hallo {user?.first_name || "Gerrit"},
+                {copy.greeting} {user?.first_name || "Gerrit"},
               </div>
               <p className="text-muted font-medium italic">
-                De markt laat vandaag het volgende beeld zien:
+                {copy.marketIntro}
               </p>
             </div>
           </div>
@@ -54,7 +57,7 @@ export default function ReportSectionMarket({ report, isPrint = false }) {
       <div className={gridClass}>
         <div className={colSpanClass}>
           <NarrativeBlock
-            title="Marktanalyse"
+            title={copy.analysisTitle}
             field="market_analysis"
             report={report}
           />
@@ -64,7 +67,7 @@ export default function ReportSectionMarket({ report, isPrint = false }) {
           <DataListBlock
             report={report}
             field="market_indicator_highlights"
-            title="Marktindicator highlights"
+            title={copy.highlightsTitle}
           />
         </SectionAlignedAside>
       </div>

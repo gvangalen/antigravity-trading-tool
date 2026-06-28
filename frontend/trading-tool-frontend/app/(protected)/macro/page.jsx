@@ -58,7 +58,7 @@ const SYMBOL_MAP = {
 import { useCurrentAsset } from "@/hooks/useCurrentAsset";
 
 export default function MacroPage() {
-  const [activeTab, setActiveTab] = useState("Dag");
+  const [activeTab, setActiveTab] = useState("day");
   const { symbol: selectedAsset } = useCurrentAsset();
   const { t } = useTranslation();
   const macroT = t.pages.macro;

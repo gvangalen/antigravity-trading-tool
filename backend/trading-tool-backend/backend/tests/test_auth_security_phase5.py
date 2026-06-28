@@ -12,6 +12,7 @@ class _FakeRepo:
         self.users_by_id = {}
         self.refresh_sessions = {}
         self.refresh_by_hash = {}
+        self.password_reset_tokens = {}
         self.last_login_updates = []
 
     async def get_by_email(self, email):
@@ -63,6 +64,52 @@ class _FakeRepo:
         current_session.revoked_reason = reason
         current_session.last_used_at = revoked_at
 
+    async def revoke_all_refresh_sessions_for_user(self, user_id, *, reason, revoked_at):
+        for session in self.refresh_sessions.values():
+            if session.user_id == user_id and session.revoked_at is None:
+                session.revoked_at = revoked_at
+                session.revoked_reason = reason
+                session.last_used_at = revoked_at
+
+    async def update_password_hash(self, user_id, password_hash):
+        user = self.users_by_id.get(user_id)
+        if not user:
+            return None
+        user.password_hash = password_hash
+        return user
+
+    async def create_password_reset_token(self, *, user_id, token_hash, expires_at, locale=None):
+        token = SimpleNamespace(
+            id=len(self.password_reset_tokens) + 1,
+            user_id=user_id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+            locale=locale,
+            created_at=datetime.now(timezone.utc),
+            used_at=None,
+            revoked_at=None,
+            revoked_reason=None,
+        )
+        self.password_reset_tokens[token_hash] = token
+        return token
+
+    async def get_password_reset_token(self, token_hash):
+        return self.password_reset_tokens.get(token_hash)
+
+    async def revoke_password_reset_tokens_for_user(self, user_id, *, reason, revoked_at, exclude_token_id=None):
+        for token in self.password_reset_tokens.values():
+            if token.user_id != user_id:
+                continue
+            if exclude_token_id is not None and token.id == exclude_token_id:
+                continue
+            if token.used_at is None and token.revoked_at is None:
+                token.revoked_at = revoked_at
+                token.revoked_reason = reason
+
+    async def consume_password_reset_token(self, token, *, used_at):
+        token.used_at = used_at
+        token.revoked_reason = "used"
+
 
 def _user(user_id=7, email="henk@example.com", password_hash="hashed-password", role="user"):
     return SimpleNamespace(
@@ -76,6 +123,7 @@ def _user(user_id=7, email="henk@example.com", password_hash="hashed-password", 
         ai_plan="basis",
         ai_requests_limit_day=25,
         ai_requests_used_day=0,
+        ai_preferences={},
     )
 
 
@@ -216,3 +264,116 @@ def test_refresh_migration_exists():
     assert "CREATE TABLE IF NOT EXISTS auth_refresh_sessions" in source
     assert "jti VARCHAR NOT NULL UNIQUE" in source
     assert "token_hash VARCHAR NOT NULL UNIQUE" in source
+
+
+def test_password_reset_request_creates_single_use_token_and_sends_localized_email(monkeypatch):
+    from backend.services import auth_service as auth_service_module
+
+    repo = _FakeRepo()
+    user = _user()
+    repo.users_by_email[user.email] = user
+    repo.users_by_id[user.id] = user
+    sent = {}
+
+    monkeypatch.setattr(auth_service_module, "hash_token", lambda token: f"hash:{token}")
+    monkeypatch.setattr(auth_service_module.secrets, "token_urlsafe", lambda _: "reset-token")
+    monkeypatch.setattr(
+        auth_service_module,
+        "send_email",
+        lambda subject, body, receiver: sent.update(
+            {"subject": subject, "body": body, "receiver": receiver}
+        ),
+    )
+
+    service = AuthService(repo)
+    asyncio.run(service.request_password_reset(SimpleNamespace(email=user.email, locale="en")))
+
+    stored = repo.password_reset_tokens["hash:reset-token"]
+    assert stored.user_id == user.id
+    assert stored.locale == "en"
+    assert sent["receiver"] == user.email
+    assert "Reset your Tradamind password" == sent["subject"]
+    assert "/reset-password?token=reset-token" in sent["body"]
+
+
+def test_password_reset_validation_rejects_used_or_expired_tokens(monkeypatch):
+    repo = _FakeRepo()
+    user = _user()
+    repo.users_by_id[user.id] = user
+    token = asyncio.run(
+        repo.create_password_reset_token(
+            user_id=user.id,
+            token_hash="hash:reset-token",
+            expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+            locale="nl",
+        )
+    )
+
+    from backend.services import auth_service as auth_service_module
+
+    monkeypatch.setattr(auth_service_module, "hash_token", lambda raw: f"hash:{raw}")
+    service = AuthService(repo)
+    assert asyncio.run(service.validate_password_reset_token("reset-token")) is False
+
+    token.expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    token.used_at = datetime.now(timezone.utc)
+    assert asyncio.run(service.validate_password_reset_token("reset-token")) is False
+
+
+def test_password_reset_updates_password_and_revokes_other_sessions(monkeypatch):
+    from backend.services import auth_service as auth_service_module
+
+    repo = _FakeRepo()
+    user = _user(password_hash="old-hash")
+    repo.users_by_id[user.id] = user
+    repo.users_by_email[user.email] = user
+    asyncio.run(
+        repo.create_refresh_session(
+            user_id=user.id,
+            jti="jti-1",
+            token_hash="hash:refresh:jti-1",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+        )
+    )
+    token = asyncio.run(
+        repo.create_password_reset_token(
+            user_id=user.id,
+            token_hash="hash:reset-token",
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+            locale="nl",
+        )
+    )
+    asyncio.run(
+        repo.create_password_reset_token(
+            user_id=user.id,
+            token_hash="hash:other-token",
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+            locale="nl",
+        )
+    )
+
+    monkeypatch.setattr(auth_service_module, "hash_token", lambda raw: f"hash:{raw}")
+    monkeypatch.setattr(auth_service_module, "hash_password", lambda raw: f"hashed:{raw}")
+
+    service = AuthService(repo)
+    asyncio.run(service.reset_password(SimpleNamespace(token="reset-token", password="new-password-1")))
+
+    assert user.password_hash == "hashed:new-password-1"
+    assert repo.refresh_sessions["jti-1"].revoked_reason == "password_reset"
+    assert token.used_at is not None
+    assert token.revoked_reason == "used"
+    assert repo.password_reset_tokens["hash:other-token"].revoked_reason == "password_reset"
+
+
+def test_password_reset_migration_exists():
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "migrations"
+        / "2026_06_28_auth_password_reset_tokens.py"
+    )
+    source = migration_path.read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS auth_password_reset_tokens" in source
+    assert "token_hash VARCHAR NOT NULL UNIQUE" in source
+    assert "used_at TIMESTAMPTZ" in source

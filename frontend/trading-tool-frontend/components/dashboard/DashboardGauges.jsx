@@ -5,6 +5,7 @@ import { useScoresData } from "@/hooks/useScoresData";
 import GaugeChart from "@/components/ui/GaugeChart";
 import TopSetupsMini from "@/components/setup/TopSetupsMini";
 import CardWrapper from "@/components/ui/CardWrapper";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 // Icons
 import { Globe2, LineChart, DollarSign, Settings2 } from "lucide-react";
@@ -13,72 +14,39 @@ import { Globe2, LineChart, DollarSign, Settings2 } from "lucide-react";
    SCORE → TEKST (DE ENIGE WAARHEID)
 ===================================================== */
 
-const SCORE_TEXT = {
-  Macro: (score) => {
-    if (score >= 75)
-      return "Macro-omgeving is duidelijk ondersteunend voor risico-assets.";
-    if (score < 40)
-      return "Macro-omgeving is ongunstig en verhoogt neerwaarts risico.";
-    return "Macro-omgeving is neutraal en geeft geen duidelijke richting.";
-  },
-  Technical: (score) => {
-    if (score >= 75)
-      return "Technische structuur is sterk en ondersteunt hogere prijzen.";
-    if (score < 40)
-      return "Technische structuur is zwak en vraagt om voorzichtigheid.";
-    return "Technische signalen zijn gemengd zonder duidelijke trend.";
-  },
-  Market: (score) => {
-    if (score >= 75)
-      return "Marktdynamiek is positief met ondersteunend momentum.";
-    if (score < 40)
-      return "Marktdynamiek is zwak en mist overtuiging.";
-    return "Marktdynamiek is zijwaarts en afwachtend.";
-  },
-  Setup: (score) => {
-    if (score >= 75)
-      return "Meerdere setups zijn actief en kansrijk.";
-    if (score < 40)
-      return "Weinig of geen setups voldoen aan de voorwaarden.";
-    return "Beperkt aantal setups actief, selectief handelen.";
-  },
-};
-
-/* =====================================================
-   DASHBOARD GAUGES
-===================================================== */
-
 export default function DashboardGauges() {
+  const { t } = useTranslation();
   const { macro, technical, market, setup } = useScoresData();
+  const gaugesT = t?.dashboard?.gauges || {};
 
   const gauges = [
     {
-      title: "Macro",
+      key: "macro",
+      title: gaugesT.macro,
       icon: <Globe2 className="w-4 h-4" />,
       data: macro,
-      emptyText:
-        "Nog geen macrodata beschikbaar. Voeg macro-indicatoren toe op de Macro-pagina.",
+      emptyText: gaugesT.emptyState?.macro,
     },
     {
-      title: "Technisch",
+      key: "technical",
+      title: gaugesT.technical,
       icon: <LineChart className="w-4 h-4" />,
       data: technical,
-      emptyText:
-        "Nog geen technische analyse beschikbaar. Voeg indicatoren toe op de Technisch-pagina.",
+      emptyText: gaugesT.emptyState?.technical,
     },
     {
-      title: "Markt",
+      key: "market",
+      title: gaugesT.market,
       icon: <DollarSign className="w-4 h-4" />,
       data: market,
-      emptyText:
-        "Nog geen marktdata beschikbaar. Marktdata wordt automatisch opgehaald.",
+      emptyText: gaugesT.emptyState?.market,
     },
     {
-      title: "Setup",
+      key: "setup",
+      title: gaugesT.setup,
       icon: <Settings2 className="w-4 h-4" />,
       data: setup,
-      emptyText:
-        "Geen actieve setups gevonden. Maak een setup aan op de Setup-pagina.",
+      emptyText: gaugesT.emptyState?.setup,
       showTopSetups: true,
     },
   ];
@@ -88,6 +56,7 @@ export default function DashboardGauges() {
       {gauges.map((g, idx) => (
         <GaugeCard
           key={idx}
+          areaKey={g.key}
           title={g.title}
           icon={g.icon}
           data={g.data}
@@ -103,15 +72,46 @@ export default function DashboardGauges() {
    SINGLE GAUGE CARD
 ===================================================== */
 
-function GaugeCard({ title, icon, data, emptyText, showTopSetups = false }) {
+function GaugeCard({ areaKey, title, icon, data, emptyText, showTopSetups = false }) {
+  const { t } = useTranslation();
+  const gaugesT = t?.dashboard?.gauges || {};
   const score = typeof data?.score === "number" ? data.score : null;
 
   const numericScore = score ?? 0;
   const displayScore = Math.round(numericScore);
 
   // 🔒 DEFINITIEVE TEKSTLOGICA (score → tekst)
+  const explanationMap = {
+    macro: {
+      strong: gaugesT.explanations?.macroStrong,
+      weak: gaugesT.explanations?.macroWeak,
+      neutral: gaugesT.explanations?.macroNeutral,
+    },
+    technical: {
+      strong: gaugesT.explanations?.technicalStrong,
+      weak: gaugesT.explanations?.technicalWeak,
+      neutral: gaugesT.explanations?.technicalNeutral,
+    },
+    market: {
+      strong: gaugesT.explanations?.marketStrong,
+      weak: gaugesT.explanations?.marketWeak,
+      neutral: gaugesT.explanations?.marketNeutral,
+    },
+    setup: {
+      strong: gaugesT.explanations?.setupStrong,
+      weak: gaugesT.explanations?.setupWeak,
+      neutral: gaugesT.explanations?.setupNeutral,
+    },
+  };
+
   const displayExplanation =
-    score === null ? emptyText : (SCORE_TEXT[title] ? SCORE_TEXT[title](score) : emptyText);
+    score === null
+      ? emptyText
+      : score >= 75
+        ? explanationMap[areaKey]?.strong
+        : score < 40
+          ? explanationMap[areaKey]?.weak
+          : explanationMap[areaKey]?.neutral;
 
   const topContributors = Array.isArray(data?.top_contributors)
     ? data.top_contributors
@@ -140,11 +140,11 @@ function GaugeCard({ title, icon, data, emptyText, showTopSetups = false }) {
         {score !== null && (
           <button 
             onClick={() => window.dispatchEvent(new CustomEvent("open-ai-assistant", { 
-              detail: { query: `Leg uit: waarom is de ${title} score ${displayScore}?` } 
+              detail: { query: gaugesT.askFinn.replace("{title}", title).replace("{score}", String(displayScore)) } 
             }))}
             className="ml-auto text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-[var(--color-border-subtle)] border border-slate-100 text-secondary hover:text-[var(--primary)] hover:border-[var(--primary)] hover:bg-white transition-all shadow-sm"
           >
-            Explain
+            {gaugesT.explain}
           </button>
         )}
       </div>
@@ -158,7 +158,7 @@ function GaugeCard({ title, icon, data, emptyText, showTopSetups = false }) {
       {topContributors.length > 0 && (
         <div className="mt-3">
           <p className="text-[11px] font-medium text-[var(--text-light)] uppercase tracking-wide mb-1">
-            Top bijdragen
+            {gaugesT.topContributors}
           </p>
 
           <div className="space-y-1">

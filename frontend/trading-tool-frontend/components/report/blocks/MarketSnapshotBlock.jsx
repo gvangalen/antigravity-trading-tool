@@ -1,5 +1,8 @@
+"use client";
+
 import ReportCard from "../ReportCard";
 import { Activity } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 /* =====================================================
    HELPERS
@@ -56,6 +59,8 @@ export default function MarketSnapshotBlock({
   report,
   title = "Market_Audit_Log",
 }) {
+  const { t } = useTranslation();
+  const copy = t?.reports?.blocks?.marketSnapshot || {};
   if (!report || typeof report !== "object") return null;
 
   const {
@@ -77,14 +82,14 @@ export default function MarketSnapshotBlock({
   const changeIsUp = isNum(change_24h) ? Number(change_24h) >= 0 : null;
 
   return (
-    <ReportCard title="Marktanalyse" icon={<Activity size={16} />}>
+    <ReportCard title={copy.cardTitle} icon={<Activity size={16} />}>
       {/* === PRICE & VOL TELEMETRY === */}
       <div className="flex flex-col gap-6 mb-10">
         
         {/* PRICE NODE */}
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[11px] font-bold text-secondary tracking-tight">Bitcoin Prijs</span>
+            <span className="text-[11px] font-bold text-secondary tracking-tight">{copy.priceLabel}</span>
           </div>
           <div className="flex items-baseline gap-3">
             <div className="text-3xl font-bold text-foreground tracking-tight font-mono">
@@ -101,7 +106,7 @@ export default function MarketSnapshotBlock({
         {/* VOLUME NODE */}
         <div>
            <div className="flex items-center gap-2 mb-1">
-             <span className="text-[11px] font-bold text-secondary tracking-tight">Totaal Volume</span>
+             <span className="text-[11px] font-bold text-secondary tracking-tight">{copy.volumeLabel}</span>
            </div>
            <div className="text-2xl font-bold text-foreground font-mono tracking-tight">
              {formatNumber(volume, 0)}
@@ -113,10 +118,10 @@ export default function MarketSnapshotBlock({
       {/* === SCORE ARCHITECTURE GRID === */}
       {hasAnyScores && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-6 border-t border-slate-50">
-          <ScoreItem label="Macro" value={macro_score} />
-          <ScoreItem label="Technisch" value={technical_score} />
-          <ScoreItem label="Markt" value={market_score} />
-          <ScoreItem label="Setup" value={setup_score} />
+          <ScoreItem label={copy.macroLabel} value={macro_score} />
+          <ScoreItem label={copy.technicalLabel} value={technical_score} />
+          <ScoreItem label={copy.marketLabel} value={market_score} />
+          <ScoreItem label={copy.setupLabel} value={setup_score} />
         </div>
       )}
     </ReportCard>

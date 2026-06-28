@@ -5,9 +5,13 @@ import QuarterlyStrategyQualityCard from '@/components/report/blocks/quarterly/Q
 import QuarterlyRiskDrawdownCard from '@/components/report/blocks/quarterly/QuarterlyRiskDrawdownCard';
 
 import ReportSection from '@/components/report/sections/ReportSection';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 export default function QuarterlyReportLayout({ report }) {
+  const { t } = useTranslation();
   if (!report) return null;
+
+  const copy = t?.reports?.layouts?.quarterly || {};
 
   return (
     <div className="max-w-6xl mx-auto space-y-20">
@@ -26,21 +30,21 @@ export default function QuarterlyReportLayout({ report }) {
       ====================================================== */}
       <section className="max-w-3xl mx-auto space-y-14">
 
-        <ReportSection title="Kwartaaloverzicht">
+        <ReportSection title={copy.sections?.overview || 'Quarterly overview'}>
           <p className="leading-relaxed">
-            {report.executive_summary || 'Geen kwartaaloverzicht beschikbaar.'}
+            {report.executive_summary || copy.fallbacks?.overview || 'No quarterly overview is available yet.'}
           </p>
         </ReportSection>
 
-        <ReportSection title="Strategische lessen">
+        <ReportSection title={copy.sections?.strategicLessons || 'Strategic lessons'}>
           <p className="leading-relaxed">
-            {report.strategic_lessons || 'Geen strategische lessen beschikbaar.'}
+            {report.strategic_lessons || copy.fallbacks?.strategicLessons || 'No strategic lessons are available yet.'}
           </p>
         </ReportSection>
 
-        <ReportSection title="Vooruitblik volgend kwartaal">
+        <ReportSection title={copy.sections?.nextQuarterOutlook || 'Outlook for next quarter'}>
           <p className="leading-relaxed">
-            {report.outlook || 'Geen vooruitblik beschikbaar.'}
+            {report.outlook || copy.fallbacks?.nextQuarterOutlook || 'No outlook is available yet.'}
           </p>
         </ReportSection>
 

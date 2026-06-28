@@ -4,8 +4,20 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ReportLayout from "@/components/report/layout/ReportLayout";
 import { API_BASE_URL } from "@/lib/config";
+import { useTranslation } from "@/app/providers/I18nProvider";
+
+const DEFAULT_PRINT_COPY = {
+  missingToken: "Missing print token.",
+  fetchFailed: "Failed to fetch report",
+  loadFailed: "Could not load report data.",
+  loading: "Loading report...",
+  errorPrefix: "Error",
+  unknownError: "Unknown error.",
+};
 
 function DailyPrintReportPageContent() {
+  const { t } = useTranslation();
+  const copy = t?.reports?.print || DEFAULT_PRINT_COPY;
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const [report, setReport] = useState(null);
@@ -14,7 +26,7 @@ function DailyPrintReportPageContent() {
 
   useEffect(() => {
     if (!token) {
-       setError(`Missing print token.`);
+       setError(copy.missingToken);
        setLoading(false);
        return;
     }
@@ -26,14 +38,14 @@ function DailyPrintReportPageContent() {
         });
 
         if (!res.ok) {
-          throw new Error(`Failed to fetch report: ${res.status}`);
+          throw new Error(`${copy.fetchFailed}: ${res.status}`);
         }
 
         const data = await res.json();
         setReport(data);
       } catch (err) {
         console.error("PRINT FETCH ERROR:", err);
-        setError("Failed to load report data.");
+        setError(copy.loadFailed);
       } finally {
         setLoading(false);
       }
@@ -43,13 +55,13 @@ function DailyPrintReportPageContent() {
   }, [token]);
 
   if (loading) {
-    return <div className="p-8 font-mono animate-pulse">Laden van rapport...</div>;
+    return <div className="p-8 font-mono animate-pulse">{copy.loading}</div>;
   }
 
   if (error || !report) {
     return (
       <div className="print-wrapper p-8 text-red-500 font-mono">
-        Error: {error || "Onbekende fout."}
+        {copy.errorPrefix}: {error || copy.unknownError}
       </div>
     );
   }
@@ -65,8 +77,10 @@ function DailyPrintReportPageContent() {
 }
 
 export default function DailyPrintReportPage() {
+  const { t } = useTranslation();
+  const copy = t?.reports?.print || DEFAULT_PRINT_COPY;
   return (
-    <Suspense fallback={<div className="p-8 font-mono animate-pulse">Laden van rapport...</div>}>
+    <Suspense fallback={<div className="p-8 font-mono animate-pulse">{copy.loading}</div>}>
       <DailyPrintReportPageContent />
     </Suspense>
   );

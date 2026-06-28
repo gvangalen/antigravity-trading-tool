@@ -39,14 +39,14 @@ export default function TopBar() {
     "/strategy": t.nav.strategies,
     "/bot": t.nav.bots,
     "/report": t.nav.reports,
-    "/profile": localeAware(t?.traderProfile?.profilePage?.title, "Account & trader profile"),
+    "/profile": localeAware(t?.traderProfile?.profilePage?.pageTitle, t?.traderProfile?.profilePage?.title),
     "/admin/ai": t.nav.admin_ai,
-    "/admin/telemetry": "Telemetry",
+    "/admin/telemetry": t.nav.telemetry,
     "/admin/users": t.nav.users,
     "/admin/logs": t.nav.logs,
   };
 
-  const currentLabel = labels[pathname] || "Tradamind";
+  const currentLabel = labels[pathname] || t?.ui?.topBar?.defaultTitle;
 
   return (
     <header className="h-full w-full flex items-center justify-between px-10 bg-card dark:bg-[#020617] transition-colors border-b-2 border-slate-100 dark:border-slate-800">

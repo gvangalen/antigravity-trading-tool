@@ -6,14 +6,12 @@ import { toast } from "react-hot-toast";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { API_BASE_URL } from "@/lib/config";
-import { normalizeLocale } from "@/lib/i18n";
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
 export default function NotificationToggle({ variant = "default" }) {
   const { user } = useAuth();
-  const { locale } = useTranslation();
-  const isDutch = normalizeLocale(locale) === "nl";
+  const { t } = useTranslation();
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [registration, setRegistration] = useState(null);
@@ -47,21 +45,7 @@ export default function NotificationToggle({ variant = "default" }) {
     return () => clearTimeout(timer);
   }, []);
 
-  const copy = {
-    notifications: isDutch ? "Meldingen" : "Notifications",
-    loginRequired: isDutch ? "Log in om meldingen in te schakelen" : "Log in to enable notifications",
-    notReady: isDutch ? "Meldingen zijn nog niet beschikbaar" : "Notifications are not ready yet",
-    permissionDenied: isDutch ? "Toestemming voor meldingen geweigerd" : "Notification permission was denied",
-    unavailable: isDutch ? "Pushmeldingen zijn nu niet beschikbaar" : "Push notifications are unavailable right now",
-    enabled: isDutch ? "Meldingen ingeschakeld" : "Notifications enabled",
-    disabled: isDutch ? "Meldingen uitgeschakeld" : "Notifications disabled",
-    enableFailed: isDutch ? "Inschakelen van meldingen mislukte" : "Enabling notifications failed",
-    disableFailed: isDutch ? "Uitschakelen van meldingen mislukte" : "Disabling notifications failed",
-    pushEnabled: isDutch ? "Push ingeschakeld" : "Push enabled",
-    pushDisabled: isDutch ? "Push uitgeschakeld" : "Push disabled",
-    pushOn: isDutch ? "Push actief" : "Push on",
-    pushOff: isDutch ? "Push uit" : "Push off",
-  };
+  const copy = t?.ui?.notificationsToggle || {};
 
   const urlBase64ToUint8Array = (base64String) => {
     const padding = "=".repeat((4 - (base64String.length % 4)) % 4);

@@ -1,14 +1,18 @@
 'use client';
 
 import { Info, Rocket } from 'lucide-react';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 export default function TradingAdvice() {
+  const { t } = useTranslation();
+  const copy = t?.dashboard?.tradingAdvice || {};
+
   return (
     <div className="rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950/40 p-6 shadow-sm transition-all overflow-hidden relative">
       <div className="flex items-center gap-2 mb-4">
         <Rocket size={18} className="text-blue-600" />
         <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">
-          Tradingadvies
+          {copy.title}
         </h3>
       </div>
 
@@ -17,11 +21,10 @@ export default function TradingAdvice() {
           <Info size={16} className="mt-0.5 text-blue-600 dark:text-blue-400" />
           <div className="space-y-2">
             <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
-              Dit blok toont nog geen live tradingadvies.
+              {copy.emptyTitle}
             </p>
             <p className="text-xs font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-              We laten hier bewust geen voorbeeld- of mockadvies meer zien. Gebruik voorlopig het dagrapport,
-              Finn en je setup-review voor echte context en concrete vervolgstappen.
+              {copy.emptyBody}
             </p>
           </div>
         </div>

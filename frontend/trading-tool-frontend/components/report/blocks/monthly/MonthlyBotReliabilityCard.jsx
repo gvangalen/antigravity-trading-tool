@@ -1,31 +1,34 @@
 'use client';
 
 import ReportCard from '@/components/report/sections/ReportCard';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 export default function MonthlyBotReliabilityCard({ report }) {
+  const { t } = useTranslation();
+  const copy = t?.reports?.blocks?.monthlyBotReliability || {};
   if (!report) return null;
 
   return (
-    <ReportCard title="Botbetrouwbaarheid">
+    <ReportCard title={copy.title}>
       <div className="space-y-4 text-sm">
 
         <BehaviorRow
-          label="Selectiviteit"
-          value={infer('selective', report.bot_performance)}
+          label={copy.selectivity}
+          value={infer('selective', report.bot_performance, copy)}
         />
 
         <BehaviorRow
-          label="Discipline"
-          value={infer('discipline', report.bot_performance)}
+          label={copy.discipline}
+          value={infer('discipline', report.bot_performance, copy)}
         />
 
         <BehaviorRow
-          label="Activiteit"
-          value={infer('activity', report.bot_performance)}
+          label={copy.activity}
+          value={infer('activity', report.bot_performance, copy)}
         />
 
         <p className="pt-2 text-muted-foreground leading-relaxed">
-          {report.bot_performance || 'Geen bot-evaluatie beschikbaar.'}
+          {report.bot_performance || copy.noEvaluation}
         </p>
 
       </div>
@@ -42,23 +45,23 @@ function BehaviorRow({ label, value }) {
   );
 }
 
-function infer(type, text = '') {
+function infer(type, text = '', copy = {}) {
   const t = text.toLowerCase();
 
   if (type === 'selective') {
-    if (t.includes('weinig') || t.includes('selectief')) return 'Hoog';
-    if (t.includes('veel')) return 'Laag';
+    if (t.includes('weinig') || t.includes('selectief')) return copy.high;
+    if (t.includes('veel')) return copy.low;
   }
 
   if (type === 'discipline') {
-    if (t.includes('consistent') || t.includes('gedisciplineerd')) return 'Consistent';
-    if (t.includes('afwijk')) return 'Wisselend';
+    if (t.includes('consistent') || t.includes('gedisciplineerd')) return copy.consistent;
+    if (t.includes('afwijk')) return copy.variable;
   }
 
   if (type === 'activity') {
-    if (t.includes('actief')) return 'Actief';
-    if (t.includes('terughoudend') || t.includes('weinig')) return 'Laag';
+    if (t.includes('actief')) return copy.active;
+    if (t.includes('terughoudend') || t.includes('weinig')) return copy.low;
   }
 
-  return 'Neutraal';
+  return copy.neutral;
 }

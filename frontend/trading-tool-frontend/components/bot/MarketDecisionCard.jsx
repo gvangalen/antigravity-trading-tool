@@ -10,9 +10,9 @@ import { useIntelligenceSemantics } from "@/hooks/useIntelligenceSemantics";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function MarketDecisionCard({ data, symbol = "BTC" }) {
-  const { locale } = useTranslation();
-  const isDutch = String(locale).toLowerCase().startsWith("nl");
+  const { t } = useTranslation();
   if (!data) return null;
+  const copy = t?.ui?.marketDecision || {};
 
   /* ======================================
      API DATA (DE ENIGE SOURCE)
@@ -47,37 +47,27 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
   const trendMid = trend?.mid || "trading range";
   const trendLong = trend?.long || "trading range";
 
-  const formatTrend = (t) => {
-    const v = String(t).toLowerCase();
+  const formatTrend = (trendValue) => {
+    const v = String(trendValue).toLowerCase();
+    const trendLabels = copy.trendLabels || {};
 
-    if (v === "bullish") return isDutch ? "Positief" : "Bullish";
-    if (v === "bearish") return isDutch ? "Negatief" : "Bearish";
-    if (v === "trading_range" || v === "trading range" || v === "ranging") return isDutch ? "Zijwaarts" : "Sideways";
-    return isDutch ? "Zijwaarts" : "Sideways";
+    if (v === "bullish") return trendLabels.bullish;
+    if (v === "bearish") return trendLabels.bearish;
+    if (v === "trading_range" || v === "trading range" || v === "ranging") return trendLabels.sideways;
+    return trendLabels.sideways;
   };
 
   /* ======================================
      MARKET CYCLE
   ====================================== */
 
+  const phaseCopy = copy.phases || {};
   const phases = [
-    isDutch ? "Accumulatie" : "Accumulation",
-    isDutch ? "Expansie" : "Expansion",
-    isDutch ? "Distributie" : "Distribution",
-    isDutch ? "Correctie" : "Correction",
+    phaseCopy.accumulation,
+    phaseCopy.expansion,
+    phaseCopy.distribution,
+    phaseCopy.correction,
   ];
-
-  const copy = {
-    title: isDutch ? "Marktanalyse" : "Market analysis",
-    subtitle: isDutch ? "Marktcontext en globale analyse" : "Market context and global analysis",
-    riskStatus: isDutch ? "Risicostatus:" : "Risk status:",
-    structuralPhase: isDutch ? "Structurele fase" : "Structural phase",
-    askFinn: isDutch ? "Vraag Finn" : "Ask Finn",
-    active: isDutch ? "Actief" : "Active",
-    shortTerm: isDutch ? "Korte termijn" : "Short term",
-    mediumTerm: isDutch ? "Middellange termijn" : "Medium term",
-    longTerm: isDutch ? "Lange termijn" : "Long term",
-  };
 
   const phaseIndex =
     {

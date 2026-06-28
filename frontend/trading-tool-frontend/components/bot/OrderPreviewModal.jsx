@@ -16,11 +16,13 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatNumber, getIntlLocale } from "@/lib/i18n";
 
-const fmt = (value, digits = 2) => {
+const fmt = (value, locale, digits = 2) => {
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";
-  return num.toLocaleString("nl-NL", {
+  return num.toLocaleString(getIntlLocale(locale), {
     minimumFractionDigits: 0,
     maximumFractionDigits: digits,
   });
@@ -39,24 +41,16 @@ const badgeTone = (status) => {
   return "bg-emerald-100 text-emerald-700 border-emerald-200";
 };
 
-const detailValue = (value) => {
+const detailValue = (value, labels = {}) => {
   if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "boolean") return value ? "Ja" : "Nee";
+  if (typeof value === "boolean") return value ? labels.booleanTrue : labels.booleanFalse;
   return String(value);
 };
 
-const BEHAVIOR_FLAG_LABELS = {
-  fomo: "FOMO",
-  overtrades: "Overtrading",
-  leverage_seeking: "Leverage-neiging",
-  holds_losers_too_long: "Verlies te lang laten lopen",
-  takes_profit_too_early: "Winst te vroeg nemen",
-};
+const humanizeBehaviorLabel = (flag, fallbackLabel = "", labels = {}) =>
+  fallbackLabel || labels[String(flag || "").trim()] || String(flag || "").replaceAll("_", " ");
 
-const humanizeBehaviorLabel = (flag, fallbackLabel = "") =>
-  fallbackLabel || BEHAVIOR_FLAG_LABELS[String(flag || "").trim()] || String(flag || "").replaceAll("_", " ");
-
-const extractBehavioralFriction = (preview = {}, review = null, adherence = null) => {
+const extractBehavioralFriction = (preview = {}, review = null, adherence = null, behaviorLabels = {}) => {
   const direct =
     preview?.pending_behavioral_memory_friction ||
     preview?.memory_friction ||
@@ -71,30 +65,30 @@ const extractBehavioralFriction = (preview = {}, review = null, adherence = null
     preview?.profile_habit_alignment?.primary_alignment ||
     null;
   if (alignment) {
-    return {
-      source: "profile_habit_alignment",
-      message: alignment.behavioral_cost || alignment.summary,
-      safe_alternative: alignment.recommended_rule,
-      label: humanizeBehaviorLabel(alignment.flag, alignment.label),
-    };
+      return {
+        source: "profile_habit_alignment",
+        message: alignment.behavioral_cost || alignment.summary,
+        safe_alternative: alignment.recommended_rule,
+        label: humanizeBehaviorLabel(alignment.flag, alignment.label, behaviorLabels),
+      };
   }
   return null;
 };
 
-function DetailRow({ label, value, emphasis = false }) {
+function DetailRow({ label, value, emphasis = false, labels }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-100 bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/40">
       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
         {label}
       </span>
       <span className={`text-right text-[11px] font-black ${emphasis ? "text-slate-900 dark:text-white" : "text-slate-700 dark:text-slate-200"}`}>
-        {detailValue(value)}
+        {detailValue(value, labels)}
       </span>
     </div>
   );
 }
 
-function GuardrailList({ title, items = [], blocked = false }) {
+function GuardrailList({ title, items = [], blocked = false, copy, locale }) {
   if (!Array.isArray(items) || items.length === 0) return null;
 
   return (
@@ -104,7 +98,7 @@ function GuardrailList({ title, items = [], blocked = false }) {
           {title}
         </span>
         <span className={`rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${blocked ? "border-rose-200 bg-rose-100 text-rose-700" : "border-emerald-200 bg-emerald-100 text-emerald-700"}`}>
-          {blocked ? "actie nodig" : "groen"}
+          {blocked ? copy.actionRequired : copy.green}
         </span>
       </div>
       <div className="space-y-2 px-4 py-4">
@@ -117,8 +111,8 @@ function GuardrailList({ title, items = [], blocked = false }) {
             item?.summary ||
             item?.status ||
             item?.symbol ||
-            (Number.isFinite(Number(item?.projected_pct)) ? `${fmt(item.projected_pct)}%` : null) ||
-            (Number.isFinite(Number(item?.limit_eur)) ? `limiet ${fmt(item.limit_eur)}` : null);
+            (Number.isFinite(Number(item?.projected_pct)) ? `${fmt(item.projected_pct, locale)}%` : null) ||
+            (Number.isFinite(Number(item?.limit_eur)) ? `${copy.limitPrefix} ${fmt(item.limit_eur, locale)}` : null);
           return (
             <div key={`${code}-${index}`} className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/60">
               <div className="flex items-start justify-between gap-3">
@@ -134,7 +128,7 @@ function GuardrailList({ title, items = [], blocked = false }) {
                 </div>
                 <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${ok ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
                   {ok ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-                  {ok ? "ok" : "blocked"}
+                  {ok ? copy.ok : copy.blocked}
                 </span>
               </div>
             </div>
@@ -155,6 +149,10 @@ export default function OrderPreviewModal({
   currencySymbol = "€",
   botName = "Bot",
 }) {
+  const { t, locale } = useTranslation();
+  const copy = t?.botPage?.orderPreview || {};
+  const behaviorLabels = copy.behaviorLabels || {};
+  const detailLabels = { booleanTrue: copy.booleanTrue, booleanFalse: copy.booleanFalse };
   const [seconds, setSeconds] = useState(10);
   const [liveIntentConfirmed, setLiveIntentConfirmed] = useState(false);
   const [finnReview, setFinnReview] = useState(null);
@@ -209,10 +207,10 @@ export default function OrderPreviewModal({
           strategy_id: preview.strategy_id || null,
           setup_id: preview.setup_id || null,
         };
-        const orderSummary = `${preview.side === "buy" ? "koop" : "verkoop"} ${preview.symbol} voor ongeveer ${fmt(preview.notional_eur ?? preview.gross_eur ?? 0)} ${currencySymbol}`;
+        const orderSummary = `${preview.side === "buy" ? copy.buy : copy.sell} ${preview.symbol} ${copy.orderSummaryFor} ${fmt(preview.notional_eur ?? preview.gross_eur ?? 0, locale)} ${currencySymbol}`;
         const [review, adherence] = await Promise.all([
-          assistantChat(`Beoordeel deze trade: ${orderSummary}.`, context, []),
-          assistantChat(`Wijk ik af van mijn plan met deze trade: ${orderSummary}?`, context, []),
+          assistantChat(copy.reviewPrompt.replace("{order}", orderSummary), context, []),
+          assistantChat(copy.planCheckPrompt.replace("{order}", orderSummary), context, []),
         ]);
         if (cancelled) return;
         setFinnReview(review?.analysis || review?.state?.analysis || null);
@@ -220,7 +218,7 @@ export default function OrderPreviewModal({
       } catch (error) {
         if (cancelled) return;
         console.error("Finn governance preview failed:", error);
-        setFinnError("Finn kon deze preflight-review nu niet laden.");
+        setFinnError(copy.finnLoadError);
       } finally {
         if (!cancelled) setFinnLoading(false);
       }
@@ -230,7 +228,7 @@ export default function OrderPreviewModal({
     return () => {
       cancelled = true;
     };
-  }, [preview?.bot_id, preview?.strategy_id, preview?.setup_id, preview?.symbol, preview?.side, preview?.notional_eur, preview?.gross_eur, currencySymbol]);
+  }, [copy.buy, copy.finnLoadError, copy.orderSummaryFor, copy.sell, currencySymbol, locale, preview?.bot_id, preview?.strategy_id, preview?.setup_id, preview?.symbol, preview?.side, preview?.notional_eur, preview?.gross_eur]);
 
   const isLive = Boolean(preview?.is_live);
   const isLivePreflight = preview?.mode === "manual_order_preflight" || isLive;
@@ -247,33 +245,33 @@ export default function OrderPreviewModal({
   const readinessStatus = isBlocked ? "blocked" : isLive ? "live" : "paper";
   const consequenceSummary = useMemo(() => {
     const rows = [
-      ["Pad", isLive ? "Live manual order" : "Paper/manual preview"],
-      ["Bot", botName],
-      ["Asset", preview?.symbol],
-      ["Side", isBuy ? "Koop" : "Verkoop"],
-      ["Prijs", `${currencySymbol} ${fmt(preview?.price)}`],
-      ["Aantal", `${fmt(preview?.quantity, 8)} ${preview?.symbol || ""}`.trim()],
-      ["Orderwaarde", `${currencySymbol} ${fmt(orderAmount)}`],
+      { id: "path", label: copy.pathLabel, value: isLive ? copy.liveManualOrder : copy.paperPreview },
+      { id: "bot", label: copy.botLabel, value: botName },
+      { id: "asset", label: copy.assetLabel, value: preview?.symbol },
+      { id: "side", label: copy.sideLabel, value: isBuy ? copy.buy : copy.sell },
+      { id: "price", label: copy.priceLabel, value: `${currencySymbol} ${fmt(preview?.price, locale)}` },
+      { id: "quantity", label: copy.quantityLabel, value: `${fmt(preview?.quantity, locale, 8)} ${preview?.symbol || ""}`.trim() },
+      { id: "orderValue", label: copy.orderValueLabel, value: `${currencySymbol} ${fmt(orderAmount, locale)}` },
     ];
     if (!isLive && Number.isFinite(feeRate)) {
-      rows.push(["Fee", `${(feeRate * 100).toFixed(2)}%`]);
+      rows.push({ id: "fee", label: copy.feeLabel, value: `${formatNumber(feeRate * 100, locale, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}%` });
     }
     if (isLive) {
-      rows.push(["Exchange effect", isBlocked ? "Geen order mogelijk" : "Bevestigen plaatst live order"]);
+      rows.push({ id: "exchangeEffect", label: copy.exchangeEffectLabel, value: isBlocked ? copy.noOrderPossible : copy.confirmPlacesLiveOrder });
     } else {
-      rows.push(["Exchange effect", "Na bevestigen wordt manual/paper order opgeslagen"]);
+      rows.push({ id: "exchangeEffect", label: copy.exchangeEffectLabel, value: copy.paperConfirmEffect });
     }
     return rows;
-  }, [botName, currencySymbol, feeRate, isBlocked, isBuy, isLive, orderAmount, preview?.price, preview?.quantity, preview?.symbol]);
+  }, [botName, copy.assetLabel, copy.botLabel, copy.buy, copy.confirmPlacesLiveOrder, copy.exchangeEffectLabel, copy.feeLabel, copy.liveManualOrder, copy.noOrderPossible, copy.orderValueLabel, copy.paperConfirmEffect, copy.paperPreview, copy.pathLabel, copy.priceLabel, copy.quantityLabel, copy.sell, copy.sideLabel, currencySymbol, feeRate, isBlocked, isBuy, isLive, locale, orderAmount, preview?.price, preview?.quantity, preview?.symbol]);
 
   const liveContextRows = [
-    livePreflight?.token ? ["Preflight token", "Geldig"] : null,
-    Number.isFinite(Number(livePreflight?.age_minutes)) ? ["Preflight leeftijd", `${livePreflight.age_minutes} min`] : null,
-    decisionFreshness?.status ? ["Decision context", decisionFreshness.status] : null,
-    Number.isFinite(Number(liveMarketPrice?.age_seconds)) ? ["Market prijs leeftijd", `${liveMarketPrice.age_seconds} sec`] : null,
-    liveMarketPrice?.market_timestamp ? ["Market timestamp", liveMarketPrice.market_timestamp] : null,
+    livePreflight?.token ? [copy.preflightTokenLabel, copy.valid] : null,
+    Number.isFinite(Number(livePreflight?.age_minutes)) ? [copy.preflightAgeLabel, `${livePreflight.age_minutes} ${copy.minutesShort}`] : null,
+    decisionFreshness?.status ? [copy.decisionContextLabel, decisionFreshness.status] : null,
+    Number.isFinite(Number(liveMarketPrice?.age_seconds)) ? [copy.marketPriceAgeLabel, `${liveMarketPrice.age_seconds} ${copy.secondsShort}`] : null,
+    liveMarketPrice?.market_timestamp ? [copy.marketTimestampLabel, liveMarketPrice.market_timestamp] : null,
   ].filter(Boolean);
-  const behavioralFriction = extractBehavioralFriction(preview, finnReview, finnAdherence);
+  const behavioralFriction = extractBehavioralFriction(preview, finnReview, finnAdherence, behaviorLabels);
 
   useEffect(() => {
     if (!behavioralFriction?.message) return;
@@ -337,10 +335,10 @@ export default function OrderPreviewModal({
 
   const canConfirm = !loading && !isBlocked && (!isLive || liveIntentConfirmed);
   const primaryButtonLabel = loading
-    ? "Bezig..."
+    ? copy.busy
     : isLive
-      ? "Plaats live order"
-      : "Bevestig order";
+      ? copy.placeLiveOrder
+      : copy.confirmOrder;
 
   if (!preview) return null;
 
@@ -352,20 +350,20 @@ export default function OrderPreviewModal({
             <div className="flex flex-wrap items-center gap-2">
               <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${badgeTone(readinessStatus)}`}>
                 {isBlocked ? <ShieldAlert size={12} /> : isLive ? <ShieldCheck size={12} /> : <Shield size={12} />}
-                {isBlocked ? (preview?.code || "Blocked") : isLive ? "Live preflight" : "Order preview"}
+                {isBlocked ? (preview?.code || copy.blocked) : isLive ? copy.livePreflight : copy.orderPreview}
               </span>
               {isLivePreflight && !isBlocked && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-700">
                   <CheckCircle2 size={12} />
-                  Geen order geplaatst
+                  {copy.noOrderPlaced}
                 </span>
               )}
             </div>
             <h3 className="mt-3 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
-              {isBlocked ? "Execution geblokkeerd" : isLive ? "Live execution check" : "Order preview"}
+              {isBlocked ? copy.executionBlocked : isLive ? copy.liveExecutionCheck : copy.orderPreview}
             </h3>
             <p className="mt-2 max-w-2xl text-sm font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
-              {preview?.message || (isLive ? "Preflight is uitgevoerd. Je ziet nu eerst de guardrails en gevolgen, daarna pas de bevestiging." : "Controleer eerst wat deze order doet voordat je hem opslaat.")}
+              {preview?.message || (isLive ? copy.livePreflightDescription : copy.previewDescription)}
             </p>
           </div>
           <button
@@ -387,7 +385,7 @@ export default function OrderPreviewModal({
                     </div>
                     <div>
                       <div className={`text-[11px] font-black uppercase tracking-widest ${isBuy ? "text-blue-600" : "text-rose-600"}`}>
-                        {isBuy ? "Koop" : "Verkoop"}
+                    {isBuy ? copy.buy : copy.sell}
                       </div>
                       <div className="mt-1 text-lg font-black tracking-tight text-slate-950 dark:text-white">
                         {preview?.symbol} / {currencySymbol === "€" ? "EUR" : "USD"}
@@ -404,13 +402,13 @@ export default function OrderPreviewModal({
                     className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
                     <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-                    Refresh
+                    {copy.refresh}
                   </button>
                 </div>
 
                 <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                  {consequenceSummary.map(([label, value]) => (
-                    <DetailRow key={label} label={label} value={value} emphasis={label === "Orderwaarde" || label === "Exchange effect"} />
+                  {consequenceSummary.map((row) => (
+                    <DetailRow key={row.id} label={row.label} value={row.value} emphasis={row.id === "orderValue" || row.id === "exchangeEffect"} labels={detailLabels} />
                   ))}
                 </div>
               </div>
@@ -420,16 +418,16 @@ export default function OrderPreviewModal({
                   <div>
                     <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
                       <Brain size={13} className="text-violet-500" />
-                      FINN 3.0 Preflight
+                      {copy.finnPreflight}
                     </div>
                     <p className="mt-2 text-sm font-black leading-relaxed text-slate-900 dark:text-white">
-                      Finn weegt nu direct beslissing en plan-discipline mee op deze order-preview.
+                      {copy.finnPreflightBody}
                     </p>
                   </div>
                   {finnLoading && (
                     <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
                       <RefreshCw size={12} className="animate-spin" />
-                      Laden
+                      {copy.loading}
                     </span>
                   )}
                 </div>
@@ -451,7 +449,7 @@ export default function OrderPreviewModal({
                     <div className="flex items-center justify-between gap-3">
                       <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
                         <Target size={13} />
-                        Beslischeck
+                        {copy.decisionCheck}
                       </span>
                       <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
                         {finnReview.decision_status}
@@ -470,7 +468,7 @@ export default function OrderPreviewModal({
                     {behavioralFriction?.message && (
                       <div className="mt-3 rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
                         <div className="text-[9px] font-black uppercase tracking-widest opacity-70">
-                          Gedragsrem{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
+                          {copy.behavioralBrake}{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
                         </div>
                         <p className="mt-2 text-xs font-semibold leading-relaxed">{behavioralFriction.message}</p>
                         {behavioralFriction?.safe_alternative && (
@@ -492,7 +490,7 @@ export default function OrderPreviewModal({
                     <div className="flex items-center justify-between gap-3">
                       <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
                         <ShieldCheck size={13} />
-                        Plantrouw
+                        {copy.planAdherence}
                       </span>
                       <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
                         {finnAdherence.adherence_status}
@@ -502,13 +500,13 @@ export default function OrderPreviewModal({
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       {finnAdherence.threatened_rule && (
                         <div className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
-                          <div className="text-[9px] font-black uppercase tracking-widest opacity-70">Bedreigde regel</div>
+                          <div className="text-[9px] font-black uppercase tracking-widest opacity-70">{copy.threatenedRule}</div>
                           <p className="mt-2 text-xs font-semibold leading-relaxed">{finnAdherence.threatened_rule}</p>
                         </div>
                       )}
                       {finnAdherence.suggested_recovery_step && (
                         <div className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
-                          <div className="text-[9px] font-black uppercase tracking-widest opacity-70">Veilige volgende stap</div>
+                          <div className="text-[9px] font-black uppercase tracking-widest opacity-70">{copy.safeNextStep}</div>
                           <p className="mt-2 text-xs font-semibold leading-relaxed">{finnAdherence.suggested_recovery_step}</p>
                         </div>
                       )}
@@ -521,35 +519,35 @@ export default function OrderPreviewModal({
                 <div className="rounded-[1.5rem] border border-blue-200 bg-blue-50/80 p-5 dark:border-blue-900/40 dark:bg-blue-950/20">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">
                     <ShieldCheck size={13} />
-                    Live execution context
+                    {copy.liveExecutionContext}
                   </div>
                   <p className="mt-2 text-sm font-semibold leading-relaxed text-blue-900 dark:text-blue-100">
-                    Deze stap is expliciet preflight-first. De order is nog niet naar de exchange gestuurd. Pas na jouw bevestiging wordt er live uitgevoerd.
+                    {copy.liveExecutionBody}
                   </p>
                   <div className="mt-4 grid gap-2 sm:grid-cols-2">
                     {liveContextRows.map(([label, value]) => (
-                      <DetailRow key={label} label={label} value={value} />
+                      <DetailRow key={label} label={label} value={value} labels={detailLabels} />
                     ))}
                   </div>
                 </div>
               )}
 
               {hasLiveGuardrails && (
-                <GuardrailList title="Live guardrails" items={guardrailChecks} blocked={false} />
+                <GuardrailList title={copy.liveGuardrails} items={guardrailChecks} blocked={false} copy={copy} locale={locale} />
               )}
 
               {preview?.bot_guardrails && (
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950/35">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
                     <Shield size={13} />
-                    Bot guardrails
+                    {copy.botGuardrails}
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {Object.entries(preview.bot_guardrails)
                       .filter(([, value]) => value !== null && value !== undefined && value !== "")
                       .slice(0, 6)
                       .map(([key, value]) => (
-                        <DetailRow key={key} label={titleCase(key)} value={typeof value === "number" ? fmt(value) : detailValue(value)} />
+                        <DetailRow key={key} label={titleCase(key)} value={typeof value === "number" ? fmt(value, locale) : detailValue(value, detailLabels)} labels={detailLabels} />
                       ))}
                   </div>
                 </div>
@@ -559,10 +557,10 @@ export default function OrderPreviewModal({
                 <div className="rounded-[1.5rem] border border-rose-200 bg-rose-50/80 p-5 dark:border-rose-900/40 dark:bg-rose-950/20">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-300">
                     <XCircle size={13} />
-                    Order blijft geblokkeerd
+                    {copy.orderBlocked}
                   </div>
                   <p className="mt-2 text-sm font-semibold leading-relaxed text-rose-900 dark:text-rose-100">
-                    {preview?.safe_next_step || "Los eerst de blocker op voordat je opnieuw preflight of execution probeert."}
+                    {preview?.safe_next_step || copy.resolveBlockerFirst}
                   </p>
                   {requiresSetupBlockAck && (
                     <button
@@ -572,7 +570,7 @@ export default function OrderPreviewModal({
                       className="mt-4 inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-rose-700 disabled:opacity-60"
                     >
                       <ShieldAlert size={13} />
-                      Bewust setup-block erkennen
+                      {copy.acknowledgeSetupBlock}
                     </button>
                   )}
                 </div>
@@ -583,39 +581,39 @@ export default function OrderPreviewModal({
               <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950/45">
                 <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
                   <AlertCircle size={13} />
-                  Consequence summary
+                  {copy.consequenceSummary}
                 </div>
                 <div className="mt-4 space-y-3">
                   <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60">
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                      Als je nu bevestigt
+                      {copy.ifYouConfirmNow}
                     </div>
                     <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-800 dark:text-slate-100">
                       {isBlocked
-                        ? "Er gebeurt niets op de exchange; deze order blijft tegengehouden door guardrails."
+                        ? copy.blockedConfirmBody
                         : isLive
-                          ? `Er wordt een live ${isBuy ? "koop" : "verkoop"}order geplaatst voor ongeveer ${currencySymbol} ${fmt(orderAmount)}.`
-                          : `Er wordt een manual/paper ${isBuy ? "koop" : "verkoop"}order opgeslagen voor ongeveer ${currencySymbol} ${fmt(orderAmount)}.`}
+                          ? `${copy.liveOrderPrefix} ${isBuy ? copy.buy : copy.sell} ${copy.liveOrderSuffix} ${currencySymbol} ${fmt(orderAmount, locale)}.`
+                          : `${copy.paperOrderPrefix} ${isBuy ? copy.buy : copy.sell} ${copy.paperOrderSuffix} ${currencySymbol} ${fmt(orderAmount, locale)}.`}
                     </p>
                   </div>
 
                   <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60">
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                      Finn verwacht daarna
+                      {copy.finnExpectsAfter}
                     </div>
                     <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-800 dark:text-slate-100">
                       {isBlocked
-                        ? "Eerst de blocker oplossen en dan opnieuw een frisse preflight draaien."
+                        ? copy.afterBlocked
                         : isLive
-                          ? "Dat je deze live order bewust hebt gecheckt en pas na guardrails groen bevestigt."
-                          : "Dat je het resultaat daarna terugziet in portfolio en activity feed zonder live side-effect."}
+                          ? copy.afterLive
+                          : copy.afterPaper}
                     </p>
                   </div>
 
                   {preview?.trace_id && (
                     <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60">
                       <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                        Trace
+                        {copy.traceLabel}
                       </div>
                       <p className="mt-2 break-all font-mono text-[11px] font-bold text-slate-700 dark:text-slate-200">
                         {preview.trace_id}
@@ -629,7 +627,7 @@ export default function OrderPreviewModal({
                 <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50/80 p-5 dark:border-amber-900/40 dark:bg-amber-950/20">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
                     <ShieldAlert size={13} />
-                    Live confirmation friction
+                    {copy.liveConfirmationFriction}
                   </div>
                   <label className="mt-4 flex cursor-pointer items-start gap-3">
                     <input
@@ -639,12 +637,12 @@ export default function OrderPreviewModal({
                       className="mt-0.5 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
                     />
                     <span className="text-sm font-semibold leading-relaxed text-amber-900 dark:text-amber-100">
-                      Ik begrijp dat deze bevestiging een echte live order kan plaatsen en dat de preflight alleen advies- en safety-context gaf.
+                      {copy.liveConfirmationCheckbox}
                     </span>
                   </label>
                   {behavioralFriction?.safe_alternative && (
                     <div className="mt-4 rounded-xl border border-white/70 bg-white/70 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-900 dark:border-slate-900/40 dark:bg-slate-950/30 dark:text-amber-100">
-                      Extra gedragsrem: {behavioralFriction.safe_alternative}
+                      {copy.extraBehavioralBrake}: {behavioralFriction.safe_alternative}
                     </div>
                   )}
                 </div>
@@ -670,7 +668,7 @@ export default function OrderPreviewModal({
                     <span className="absolute text-[10px] font-black text-slate-900 dark:text-white">{seconds}</span>
                   </div>
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                    Preview wordt ververst
+                    {copy.previewRefreshing}
                   </span>
                 </div>
               )}
@@ -683,7 +681,7 @@ export default function OrderPreviewModal({
             onClick={onCancel}
             className="flex-1 rounded-2xl border border-slate-200 px-5 py-3 text-[11px] font-black uppercase tracking-widest text-slate-500 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            Annuleer
+            {copy.cancel}
           </button>
           <button
             type="button"
@@ -691,7 +689,7 @@ export default function OrderPreviewModal({
             disabled={loading}
             className="rounded-2xl border border-slate-200 px-5 py-3 text-[11px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            Refresh checks
+            {copy.refreshChecks}
           </button>
           <button
             onClick={onConfirm}

@@ -11,6 +11,7 @@ import {
   loadRefreshTokenLocal,
   clearTokenLocal,
 } from "@/lib/api/user";
+import { normalizeLocale } from "@/lib/i18n";
 
 /* =======================================================
    📌 Native Token Helpers
@@ -46,6 +47,24 @@ export function getCsrfToken() {
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function buildLoginRedirectUrl(reason?: string) {
+  if (typeof window === "undefined") return "/login";
+  const currentPath = `${window.location.pathname || "/"}${window.location.search || ""}`;
+  const params = new URLSearchParams();
+  if (reason) params.set("reason", reason);
+  if (currentPath && !currentPath.startsWith("/login")) {
+    params.set("next", currentPath);
+  }
+  const query = params.toString();
+  return query ? `/login?${query}` : "/login";
+}
+
+function redirectToLogin(reason?: string) {
+  if (typeof window !== "undefined") {
+    window.location.href = buildLoginRedirectUrl(reason);
+  }
 }
 
 let csrfBootstrapPromise: Promise<boolean> | null = null;
@@ -180,9 +199,7 @@ async function fetchAuthInternal(
       } else {
          console.error("❌ Token refresh mislukt. Gebruiker moet opnieuw inloggen.");
          clearStoredAuth();
-         if (typeof window !== "undefined") {
-            window.location.href = "/login";
-         }
+         redirectToLogin("session_expired");
       }
     }
 
@@ -313,12 +330,87 @@ export async function apiRefresh(refreshToken?: string) {
     const data = await res.json().catch(() => ({}));
     storeAuthTokens({
       access_token: data.access_token,
-      refresh_token: tokenForRequest,
+      refresh_token: data.refresh_token ?? tokenForRequest,
     });
     return { success: true, ...data };
   } catch (err) {
     console.error("❌ apiRefresh error:", err);
     return { success: false };
+  }
+}
+
+export async function apiForgotPassword(email: string, locale?: string | null) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        locale: normalizeLocale(locale) || undefined,
+      }),
+    });
+
+    const body = await res.json().catch(() => ({}));
+    return {
+      success: res.ok,
+      message: body?.message,
+    };
+  } catch (err) {
+    console.error("❌ apiForgotPassword error:", err);
+    return {
+      success: false,
+      message: null,
+    };
+  }
+}
+
+export async function apiValidateResetPasswordToken(token: string) {
+  try {
+    const url = new URL(`${API_BASE_URL}/api/auth/reset-password/validate`);
+    url.searchParams.set("token", token);
+    const res = await fetch(url.toString(), {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!res.ok) return { success: false, valid: false };
+
+    const body = await res.json().catch(() => ({}));
+    return { success: true, valid: Boolean(body?.valid) };
+  } catch (err) {
+    console.error("❌ apiValidateResetPasswordToken error:", err);
+    return { success: false, valid: false };
+  }
+}
+
+export async function apiResetPassword(token: string, password: string) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ token, password }),
+    });
+
+    const body = await res.json().catch(() => ({}));
+    return {
+      success: res.ok,
+      message: body?.detail || null,
+    };
+  } catch (err) {
+    console.error("❌ apiResetPassword error:", err);
+    return {
+      success: false,
+      message: null,
+    };
   }
 }
 

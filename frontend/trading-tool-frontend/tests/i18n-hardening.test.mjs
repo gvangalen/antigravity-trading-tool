@@ -69,6 +69,15 @@ test("EN renders English trader profile labels", () => {
   assert.equal(behaviorMap.takes_profit_too_early, "Take profit too early");
 });
 
+test("auth dictionaries expose locale-specific login and reset copy", () => {
+  assert.equal(nl.auth.forgotPassword, "Wachtwoord vergeten?");
+  assert.equal(en.auth.forgotPassword, "Forgot password?");
+  assert.equal(de.auth.forgotPassword, "Passwort vergessen?");
+  assert.equal(nl.auth.sessionExpired, "Je sessie is verlopen. Log opnieuw in om verder te gaan.");
+  assert.equal(en.auth.sessionExpired, "Your session has expired. Please sign in again.");
+  assert.equal(de.auth.resetPasswordTitle, "Neues Passwort festlegen");
+});
+
 test("third locale dictionary can be registered without component changes", () => {
   assert.equal(de.common.language, "Language");
   assert.match(i18nSource, /SUPPORTED_LOCALES = \["nl", "en", "de"\]/);

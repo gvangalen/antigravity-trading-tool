@@ -7,6 +7,7 @@ import OrderPreviewModal from "./OrderPreviewModal";
 import { fetchTradePlan, createManualOrder, preflightManualOrder, previewManualOrder } from "@/lib/api/botApi";
 import { fetchLatestPrice } from "@/lib/api/market";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function TradePanelContainer({
   bot,
@@ -16,6 +17,8 @@ export default function TradePanelContainer({
 }) {
 
   const { showSnackbar } = useModal();
+  const { t } = useTranslation();
+  const copy = t?.botPage?.tradePanel || {};
   const botId = bot?.id;
   const decisionId = decision?.id;
   const tradeSymbol = (
@@ -258,7 +261,7 @@ export default function TradePanelContainer({
       setPreviewData({
         ok: false,
         blocked: true,
-        message: err.message || "Order preview mislukt",
+        message: err.message || copy.previewFailed,
       });
     } finally {
       setLoading(false);
@@ -304,15 +307,15 @@ export default function TradePanelContainer({
       setShowPreview(false);
 
       showSnackbar(
-        `${draftOrder.side === "buy" ? "Koop" : "Verkoop"} order succesvol geplaatst!`,
+        `${draftOrder.side === "buy" ? copy.buySuccess : copy.sellSuccess} ${copy.orderPlacedSuccess}`,
         "success"
       );
       
       window.dispatchEvent(new Event("portfolio:updated"));
 
     } catch (err) {
-      showSnackbar(err.message || "Order mislukt", "danger");
-      setError(err.message || "Order mislukt");
+      showSnackbar(err.message || copy.orderFailed, "danger");
+      setError(err.message || copy.orderFailed);
     } finally {
       setLoading(false);
     }
@@ -352,7 +355,7 @@ export default function TradePanelContainer({
   if (!price) {
     return (
       <div className="p-4 text-sm text-gray-500">
-        Marktprijs laden...
+        {copy.loadingMarketPrice}
       </div>
     );
   }

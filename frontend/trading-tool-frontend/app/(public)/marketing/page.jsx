@@ -1,17 +1,23 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn, LineChart, Shield, Bot } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider"; // komt straks
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function LandingPage() {
   const router = useRouter();
+  const { t } = useTranslation();
+  const copy = t?.publicPages?.marketing || {};
 
   // ⛔ Als user al ingelogd is → stiekem doorsturen naar dashboard
   const { user } = useAuth() || {};
-  if (user) {
-    router.push("/dashboard");
-  }
+  useEffect(() => {
+    if (user) {
+      router.push("/dashboard");
+    }
+  }, [router, user]);
 
   return (
     <div
@@ -31,23 +37,22 @@ export default function LandingPage() {
 
       {/* SUBTEXT */}
       <p className="text-lg text-gray-300 max-w-xl text-center mb-10 leading-relaxed">
-        Het AI-gedreven trading dashboard dat macro, technische analyse,
-        setups en strategieën combineert tot één next-gen systeem.
+        {copy.subtitle}
       </p>
 
       {/* USP's */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12 text-gray-300 max-w-3xl text-sm">
         <div className="flex flex-col items-center gap-2">
           <Shield className="text-blue-400" size={24} />
-          <span>Beveiligd dashboard</span>
+          <span>{copy.security}</span>
         </div>
         <div className="flex flex-col items-center gap-2">
           <Bot className="text-purple-400" size={24} />
-          <span>AI-strategieën & rapporten</span>
+          <span>{copy.aiStrategies}</span>
         </div>
         <div className="flex flex-col items-center gap-2">
           <LineChart className="text-green-400" size={24} />
-          <span>Live macro & technical scores</span>
+          <span>{copy.liveScores}</span>
         </div>
       </div>
 
@@ -62,7 +67,7 @@ export default function LandingPage() {
         "
       >
         <LogIn size={20} />
-        Log in
+        {copy.login}
       </button>
     </div>
   );

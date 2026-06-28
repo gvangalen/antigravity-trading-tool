@@ -39,7 +39,7 @@ import { waitUntilVisible } from '@/hooks/useVisibilityPolling';
 import { actionButtonStyles } from '@/components/ui/actionButtonStyles';
 import { trackAssistantEvent } from '@/lib/api/assistantAnalytics';
 import { useTranslation } from '@/app/providers/I18nProvider';
-import { normalizeLocale } from '@/lib/i18n';
+import { formatDateTime, getIntlLocale, getLocaleValue, normalizeLocale } from '@/lib/i18n';
 
 import {
   Download,
@@ -72,44 +72,9 @@ const AUTO_GENERATE_IF_EMPTY = true;
 const POLL_INTERVAL_MS = 4000;
 const POLL_MAX_ATTEMPTS = 60;
 
-const getFinnReportOptions = (isDutch) => [
-  {
-    key: 'today',
-    label: isDutch ? 'Vandaag' : 'Today',
-    eyebrow: isDutch ? 'Dagreflectie' : 'Daily reflection',
-    prompt: isDutch ? 'Geef mijn Finn rapport van vandaag' : 'Give me my Finn report for today',
-    empty: isDutch
-      ? 'Nog geen Finn-activiteit vandaag. Zodra Finn iets begeleidt, blokkeert of vastlegt, verschijnt het hier.'
-      : 'No Finn activity yet today. As soon as Finn guides, blocks, or records something, it will appear here.',
-  },
-  {
-    key: 'week',
-    label: isDutch ? 'Weekreflectie' : 'Weekly reflection',
-    eyebrow: isDutch ? 'Weekbeeld' : 'Weekly view',
-    prompt: isDutch ? 'Geef mijn weekreflectie' : 'Give me my weekly reflection',
-    empty: isDutch
-      ? 'Nog te weinig weekhistorie. Finn toont hier pas patronen wanneer er auditdata is.'
-      : 'There is not enough weekly history yet. Finn only shows patterns here when audit data exists.',
-  },
-  {
-    key: 'blocked',
-    label: isDutch ? 'Geblokkeerd' : 'Blocked',
-    eyebrow: isDutch ? 'Risicolog' : 'Risk log',
-    prompt: isDutch ? 'Wat heeft Finn vandaag geblokkeerd?' : 'What did Finn block today?',
-    empty: isDutch
-      ? 'Geen blokkades vandaag. Finn heeft nog geen risicovolle actie hoeven afremmen.'
-      : 'No blocks today. Finn has not had to slow down a risky action yet.',
-  },
-  {
-    key: 'behavior',
-    label: isDutch ? '30 dagen gedrag' : '30 day behavior',
-    eyebrow: isDutch ? 'Gedragsbeeld' : 'Behavior profile',
-    prompt: isDutch ? 'Geef mijn gedragsrapport van de laatste 30 dagen' : 'Give me my behavioral report for the last 30 days',
-    empty: isDutch
-      ? 'Nog te weinig gedragsdata over 30 dagen. Finn verzint hier geen profiel zonder bewijs.'
-      : 'There is not enough behavioral data across 30 days yet. Finn will not invent a profile without evidence.',
-  },
-];
+const getFinnReportOptions = (finnOptions = {}) => REPORT_TYPE_KEYS
+  .map((key) => ({ key, ...(finnOptions?.[key] || {}) }))
+  .filter((option) => option.label && option.prompt);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -200,13 +165,11 @@ function mergeBehavioralAnalysis(...sources) {
   }, {});
 }
 
-function getFinnReportSummary(report) {
-  const locale = report?.locale === 'en' ? 'en' : 'nl';
+function getFinnReportSummary(report, fallbackText) {
+  const locale = normalizeLocale(report?.locale) || 'nl';
   const text = report?.response || '';
   if (!text) {
-    return locale === 'en'
-      ? 'Finn analyzed your recent interactions, risk checks, and decision flows.'
-      : 'Finn analyseerde je recente interacties, risicochecks en beslisflows.';
+    return fallbackText;
   }
 
   const cleaned = text
@@ -215,21 +178,19 @@ function getFinnReportSummary(report) {
     .trim();
 
   if (!cleaned) {
-    return locale === 'en'
-      ? 'Finn analyzed your recent interactions, risk checks, and decision flows.'
-      : 'Finn analyseerde je recente interacties, risicochecks en beslisflows.';
+    return fallbackText;
   }
 
   return cleaned.length > 220 ? `${cleaned.slice(0, 220).trim()}...` : cleaned;
 }
 
-function formatFinnReportSource(report) {
+function formatFinnReportSource(report, fallbackText) {
   const source = getNested(report, 'state.source.primary') || getNested(report, 'state.analysis.source.primary');
-  return source || (report?.locale === 'en' ? 'Finn audit data' : 'Finn auditdata');
+  return source || fallbackText;
 }
 
-function formatFinnReportTimestamp(report) {
-  const locale = report?.locale === 'en' ? 'en' : 'nl';
+function formatFinnReportTimestamp(report, fallbackText) {
+  const locale = normalizeLocale(report?.locale) || 'nl';
   const raw =
     getNested(report, 'state.generated_at') ||
     getNested(report, 'state.updated_at') ||
@@ -237,18 +198,20 @@ function formatFinnReportTimestamp(report) {
     report?.updated_at ||
     null;
 
-  if (!raw) return locale === 'en' ? 'Not available yet' : 'Nog niet beschikbaar';
+  if (!raw) {
+    return fallbackText;
+  }
 
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return String(raw);
 
-  return new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'nl-NL', {
+  return formatDateTime(parsed, locale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(parsed);
+  });
 }
 
 function finnAgentVerdictTone(verdict = {}) {
@@ -1013,9 +976,9 @@ function FinnGovernanceSurface({ analysis }) {
               <p className="mt-2 text-sm font-semibold leading-relaxed">{memoryV2.behavioral_cost}</p>
             )}
             {memoryV2.recommended_rule && (
-              <div className="mt-3 rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
+                <div className="mt-3 rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
                 <div className="text-[9px] font-black uppercase tracking-[0.14em] opacity-80">
-                  Aanbevolen regel
+                  {governanceT.recommendedRule}
                 </div>
                 <p className="mt-2 text-xs font-semibold leading-relaxed">{memoryV2.recommended_rule}</p>
               </div>
@@ -1028,10 +991,10 @@ function FinnGovernanceSurface({ analysis }) {
             <div className="flex items-center justify-between gap-3">
               <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]">
                 <Bot size={13} />
-                Portfolio Operating System
+                {governanceT.portfolioOperatingSystem}
               </span>
               <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
-                {portfolioOS.operating_posture || 'steady'}
+                {portfolioOS.operating_posture || governanceT.steady}
               </span>
             </div>
             {portfolioOS.control_plane?.why_now && (
@@ -1040,7 +1003,7 @@ function FinnGovernanceSurface({ analysis }) {
             {portfolioOS.control_plane?.habit_override && (
               <div className="mt-3 rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
                 <div className="text-[9px] font-black uppercase tracking-[0.14em] opacity-80">
-                  Gedragsregel nu
+                  {governanceT.behaviorRuleNow}
                 </div>
                 <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
                   {portfolioOS.control_plane.habit_override}
@@ -1065,7 +1028,6 @@ function FinnGovernanceSurface({ analysis }) {
 
 function FinnReportsPanel() {
   const { t, locale } = useTranslation();
-  const isDutch = normalizeLocale(locale) === 'nl';
   const reportT = t.pages.report;
   const finnT = reportT.finn;
   const panelRef = useRef(null);
@@ -1077,7 +1039,7 @@ function FinnReportsPanel() {
   const [expanded, setExpanded] = useState(false);
   const [shouldLoadFinn, setShouldLoadFinn] = useState(false);
 
-  const finnReportOptions = useMemo(() => getFinnReportOptions(isDutch), [isDutch]);
+  const finnReportOptions = useMemo(() => getFinnReportOptions(finnT.options), [finnT.options]);
 
   const activeOption = finnReportOptions.find((option) => option.key === activeFinnReport) || finnReportOptions[0];
 
@@ -1181,9 +1143,9 @@ function FinnReportsPanel() {
   );
   const portfolioRisk = analysis?.portfolio_risk || finnReport?.state?.portfolio_risk || null;
   const metrics = analysis?.metrics || {};
-  const source = formatFinnReportSource(finnReport);
-  const summary = getFinnReportSummary(finnReport);
-  const latestUpdateLabel = formatFinnReportTimestamp(finnReport);
+  const source = formatFinnReportSource(finnReport, finnT.auditSourceFallback);
+  const summary = getFinnReportSummary(finnReport, finnT.summaryFallback);
+  const latestUpdateLabel = formatFinnReportTimestamp(finnReport, finnT.timestampUnavailable);
   const reportType = finnReport?.state?.report_type || analysis?.report_type || 'finn_reflection_report';
   const separateFrom = finnReport?.state?.separate_from || analysis?.separate_from || 'daily_trading_report';
   const isFinnReport = finnReport?.intent === 'finn_report' && finnReport?.flow === 'finn_report';

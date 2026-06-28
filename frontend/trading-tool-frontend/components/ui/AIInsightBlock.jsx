@@ -1,23 +1,15 @@
 'use client';
 
 import { Bot } from "lucide-react";
-
-function formatDateTime(dateString) {
-  const d = new Date(dateString);
-  return d.toLocaleString("nl-NL", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatDateTime } from "@/lib/i18n";
 
 export default function AIInsightBlock({
   text,
   updatedAt,              // 👈 NIEUW
   variant = "dashboard",
 }) {
+  const { t, locale } = useTranslation();
   if (!text) return null;
 
   const styles = {
@@ -37,7 +29,13 @@ export default function AIInsightBlock({
         {/* ✅ Laatste update */}
         {updatedAt && (
           <div className="mb-1 text-[10px] text-[var(--text-muted)]">
-            Laatste update: {formatDateTime(updatedAt)}
+            {t?.common?.updated}: {formatDateTime(updatedAt, locale, {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </div>
         )}
 

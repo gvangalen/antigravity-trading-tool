@@ -5,6 +5,7 @@ import SkeletonTable from "@/components/ui/SkeletonTable";
 import TechnicalTerminalGrid from "@/components/technical/TechnicalTerminalGrid";
 import { useModal } from "@/components/modal/ModalProvider";
 import TradingViewChart from "@/components/charts/TradingViewChart";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 const SYMBOL_MAP = {
   "us_dollar_index_(dxy)": "CAPITALCOM:DXY",
@@ -31,6 +32,9 @@ export default function MacroSummaryTableForDashboard({
   error = "",
   onRetry = null,
 }) {
+  const { t } = useTranslation();
+  const macroT = t?.pages?.macro || {};
+  const tabsCopy = macroT.tabs || {};
   const { openConfirm } = useModal();
 
   // ⏳ LOADING
@@ -43,19 +47,19 @@ export default function MacroSummaryTableForDashboard({
     const symbol = SYMBOL_MAP[normalized] || "BINANCE:BTCUSDT";
 
     openConfirm({
-      title: `Bekijk chart: ${name}`,
-      statusLabel: "Alleen lezen",
-      context: `Je bekijkt de live chart van ${name} binnen Macro.`,
-      impact: "Er verandert niets aan je indicatoren of macro-overzicht.",
-      safety: "Veilig om te gebruiken tijdens review. Er worden geen instellingen aangepast.",
-      consequence: "Na sluiten keer je terug naar je huidige macrocontext.",
+      title: macroT.viewChartTitle.replace("{name}", name),
+      statusLabel: macroT.readOnly,
+      context: macroT.viewChartContext.replace("{name}", name),
+      impact: macroT.viewChartImpact,
+      safety: macroT.viewChartSafety,
+      consequence: macroT.viewChartConsequence,
       description: (
         <div className="w-full h-[400px] mt-4">
           <TradingViewChart symbol={symbol} height={400} />
         </div>
       ),
-      confirmText: "Sluiten",
-      cancelText: "Terug",
+      confirmText: macroT.close,
+      cancelText: macroT.back,
       icon: <LineChart className="w-5 h-5 text-blue-500" />,
       tone: "info"
     });
@@ -70,14 +74,14 @@ export default function MacroSummaryTableForDashboard({
     indicator: item.indicator || item.name || "–",
     value: item.value ?? null,
     score: item.score ?? null,
-    action: item.action ?? "–",
-    interpretation: item.interpretation ?? "–",
+    action: item.action ?? macroT.notAvailable,
+    interpretation: item.interpretation ?? macroT.notAvailable,
     timestamp: item.timestamp,
   }));
 
   return (
     <TechnicalTerminalGrid
-      title="Macro Indicatoren"
+      title={tabsCopy.indicators}
       icon={<Globe2 className="w-5 h-5 text-[var(--primary)]" />}
       data={formatted}
       error={error}

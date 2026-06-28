@@ -3,6 +3,7 @@ import SetupMatchReportCard from "../blocks/SetupMatchReportCard";
 import ActiveStrategyReportCard from "../blocks/ActiveStrategyReportCard";
 import BotDecisionReportCard from "../blocks/BotDecisionReportCard";
 import SectionAlignedAside from "../layout/SectionAlignedAside";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 /**
  * 🎯 ReportSectionStrategy (Exact Screenshot Edition)
@@ -12,6 +13,8 @@ import SectionAlignedAside from "../layout/SectionAlignedAside";
  * - Chapter 8: Vooruitblik & Scenario's
  */
 export default function ReportSectionStrategy({ report, isPrint = false }) {
+  const { t } = useTranslation();
+  const copy = t?.reports?.sections?.strategy || {};
   if (!report) return null;
 
   const gridClass = isPrint 
@@ -27,14 +30,14 @@ export default function ReportSectionStrategy({ report, isPrint = false }) {
       <div className={gridClass}>
         <div className={colSpanClass}>
           <NarrativeBlock
-            title="Setup Validatie"
+            title={copy.setupValidation}
             field="setup_validation"
             report={report}
           />
         </div>
 
         <SectionAlignedAside isPrint={isPrint}>
-           <SetupMatchReportCard report={report} title="Setup Match Vandaag" />
+           <SetupMatchReportCard report={report} title={copy.setupMatchToday} />
         </SectionAlignedAside>
       </div>
 
@@ -42,14 +45,14 @@ export default function ReportSectionStrategy({ report, isPrint = false }) {
       <div className={gridClass}>
         <div className={colSpanClass}>
           <NarrativeBlock
-            title="Strategie Implicatie"
+            title={copy.strategyImplication}
             field="strategy_implication"
             report={report}
           />
         </div>
 
         <SectionAlignedAside isPrint={isPrint}>
-           <ActiveStrategyReportCard report={report} title="Actieve Strategie Vandaag" />
+           <ActiveStrategyReportCard report={report} title={copy.activeStrategyToday} />
         </SectionAlignedAside>
       </div>
 
@@ -57,21 +60,21 @@ export default function ReportSectionStrategy({ report, isPrint = false }) {
       <div className={gridClass}>
         <div className={colSpanClass}>
           <NarrativeBlock
-            title="Botbeslissing"
+            title={copy.botDecision}
             field="bot_strategy"
             report={report}
           />
         </div>
 
         <SectionAlignedAside isPrint={isPrint}>
-           <BotDecisionReportCard snapshot={report?.bot_snapshot} title="Botbeslissing Vandaag" />
+           <BotDecisionReportCard snapshot={report?.bot_snapshot} title={copy.botDecisionToday} />
         </SectionAlignedAside>
       </div>
 
       {/* CHAPTER 8: VOORUITBLIK & SCENARIO'S (Full Width) */}
       <div className={isPrint ? "w-full" : "max-w-3xl"}>
         <NarrativeBlock
-          title="Vooruitblik & Scenario's"
+          title={copy.outlook}
           field="outlook"
           report={report}
         />

@@ -19,7 +19,7 @@ export default function AuthGuard({ children }) {
   const onboardingCheckInFlight = useRef(false);
 
   // Routes that don't need auth
-  const publicRoutes = ["/", "/login", "/register", "/print", "/daily-report"];
+  const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/print", "/daily-report"];
   const isPublicRoute = publicRoutes.some(route => pathname === route || pathname.startsWith("/public/"));
   const debug = (...args) => {
     if (process.env.NODE_ENV === "development") console.log(...args);

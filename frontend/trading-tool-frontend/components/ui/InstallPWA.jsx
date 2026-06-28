@@ -7,6 +7,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function InstallPWA() {
   const { t } = useTranslation();
+  const copy = t?.ui?.pwaPrompt || {};
   const [show, setShow] = useState(false);
   const [platform, setPlatform] = useState(null);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -89,11 +90,11 @@ export default function InstallPWA() {
                 </div>
                 <div>
                   <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1.5 uppercase">
-                    Installer Tradamind
+                    {copy.title}
                   </h3>
                   <div className="text-[10px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-widest opacity-80 flex items-center gap-1.5">
                     <CheckCircle2 size={12} />
-                    Professionele App Ervaring
+                    {copy.badge}
                   </div>
                 </div>
               </div>
@@ -108,7 +109,7 @@ export default function InstallPWA() {
             {/* CONTENT */}
             <div className="space-y-4">
               <p className="text-[14px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed">
-                Download de Tradamind app naar je beginscherm voor snellere toegang en real-time meldingen.
+                {copy.description}
               </p>
 
               {platform === "ios" ? (
@@ -118,7 +119,7 @@ export default function InstallPWA() {
                       <Share size={16} />
                     </div>
                     <div className="text-[13px] font-bold text-slate-700 dark:text-slate-300">
-                      1. Tik op de <span className="text-blue-600 dark:text-blue-500">'Deel'</span> knop onderin je browser.
+                      {copy.iosStep1Prefix} <span className="text-blue-600 dark:text-blue-500">{copy.iosShareLabel}</span> {copy.iosStep1Suffix}
                     </div>
                   </div>
                   <div className="flex items-start gap-4">
@@ -126,7 +127,7 @@ export default function InstallPWA() {
                       <PlusSquare size={16} />
                     </div>
                     <div className="text-[13px] font-bold text-slate-700 dark:text-slate-300">
-                      2. Scroll naar beneden en kies <span className="text-blue-600 dark:text-blue-500">'Zet op beginscherm'</span>.
+                      {copy.iosStep2Prefix} <span className="text-blue-600 dark:text-blue-500">{copy.iosAddToHomeLabel}</span>.
                     </div>
                   </div>
                 </div>
@@ -136,7 +137,7 @@ export default function InstallPWA() {
                   className="w-full py-4 bg-foreground text-white dark:bg-white dark:text-slate-900 rounded-2xl text-[12px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95"
                 >
                   <Download size={18} strokeWidth={3} />
-                  Nu Installeren
+                  {copy.installNow}
                 </button>
               )}
             </div>
@@ -146,7 +147,7 @@ export default function InstallPWA() {
               onClick={handleDismiss}
               className="w-full text-center text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
             >
-              Misschien Later
+              {copy.later}
             </button>
           </div>
         </motion.div>

@@ -4,11 +4,10 @@ import { formatChange, formatNumber } from "@/components/market/utils";
 import { useMemo } from "react";
 import SkeletonTable from "@/components/ui/SkeletonTable";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { normalizeLocale } from "@/lib/i18n";
+import { formatCurrency, formatDate, getIntlLocale } from "@/lib/i18n";
 
 export default function MarketSevenDayTable({ history, loading = false }) {
-  const { locale } = useTranslation();
-  const isDutch = normalizeLocale(locale) === "nl";
+  const { t, locale } = useTranslation();
 
   if (loading) {
     return <SkeletonTable rows={7} columns={7} />;
@@ -24,13 +23,10 @@ export default function MarketSevenDayTable({ history, loading = false }) {
       date.setDate(today.getDate() - i);
 
       const isoDate = date.toISOString().slice(0, 10);
-      const formattedDate = date.toLocaleDateString(
-        isDutch ? "nl-NL" : "en-US",
-        {
+      const formattedDate = formatDate(date, locale, {
         day: "2-digit",
         month: "short",
-        }
-      );
+      });
 
       const record = history?.find(
         (d) => new Date(d.date).toISOString().slice(0, 10) === isoDate
@@ -47,7 +43,7 @@ export default function MarketSevenDayTable({ history, loading = false }) {
       });
     }
     return result;
-  }, [history, isDutch]);
+  }, [history, locale]);
 
   /* ------------------------------
      Scorekleur volgens PRO 2.2
@@ -59,15 +55,7 @@ export default function MarketSevenDayTable({ history, loading = false }) {
     return "text-[var(--text-light)]";
   };
 
-  const copy = {
-    date: isDutch ? "Datum" : "Date",
-    open: isDutch ? "Open" : "Open",
-    high: isDutch ? "Hoog" : "High",
-    low: isDutch ? "Laag" : "Low",
-    close: isDutch ? "Sluit" : "Close",
-    change: isDutch ? "Verandering" : "Change",
-    volume: isDutch ? "Volume" : "Volume",
-  };
+  const copy = t?.pages?.market?.historyTable || {};
 
   return (
     <div className="overflow-x-auto">
@@ -113,7 +101,10 @@ export default function MarketSevenDayTable({ history, loading = false }) {
 
                 <td className="px-8 py-5 text-right font-mono text-[10px] font-bold text-slate-400">
                   {typeof day.volume === "number"
-                    ? `$${(day.volume / 1e9).toFixed(1)}B`
+                    ? new Intl.NumberFormat(getIntlLocale(locale), {
+                        minimumFractionDigits: 1,
+                        maximumFractionDigits: 1,
+                      }).format(day.volume / 1e9) + "B"
                     : "—"}
                 </td>
               </tr>

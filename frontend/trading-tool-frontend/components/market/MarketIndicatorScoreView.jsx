@@ -6,7 +6,6 @@ import IndicatorScorePanel from "@/components/scoring/IndicatorScorePanel";
 import { Coins, Plus } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { normalizeLocale } from "@/lib/i18n";
 
 export default function MarketIndicatorScoreView({
   availableIndicators = [],
@@ -16,9 +15,8 @@ export default function MarketIndicatorScoreView({
   activeIndicators = [],
 }) {
   const { showSnackbar } = useModal();
-  const { locale } = useTranslation();
+  const { t } = useTranslation();
   const [indicator, setIndicator] = useState(selectedIndicator || null);
-  const isDutch = normalizeLocale(locale) === "nl";
 
   /* --------------------------------------------------
      Sync met parent state
@@ -51,15 +49,9 @@ export default function MarketIndicatorScoreView({
 
     try {
       await addMarketIndicator(indicator.name);
-      showSnackbar(
-        isDutch ? "Indicator toegevoegd" : "Indicator added",
-        "success"
-      );
+      showSnackbar(panelCopy.addSuccess, "success");
     } catch {
-      showSnackbar(
-        isDutch ? "Toevoegen mislukt" : "Adding indicator failed",
-        "danger"
-      );
+      showSnackbar(panelCopy.addError, "danger");
     }
   };
 
@@ -71,22 +63,17 @@ export default function MarketIndicatorScoreView({
     indicator?.label ||
     indicator?.name;
 
+  const panelCopy = t?.pages?.market?.indicatorPanel || {};
   const copy = {
-    eyebrow: isDutch ? "Indicatoroverzicht" : "Indicator overview",
-    title: isDutch ? "Marktindicatoren" : "Market indicators",
-    configId: isDutch ? "Configuratie-ID" : "Configuration ID",
-    selectLabel: isDutch ? "Kies marktnode" : "Select market node",
-    searchPlaceholder: isDutch
-      ? "Zoek indicatoren (prijs, volume, 24u-verandering)..."
-      : "Search indicators (price, volume, 24h change)...",
-    emptyHint: isDutch
-      ? "Kies eerst een indicator om de signaalinstellingen te bekijken..."
-      : "Select an indicator first to view the signal settings...",
-    tuningLabel: isDutch
-      ? "Live parameterafstemming"
-      : "Live parameter tuning",
-    active: isDutch ? "Actief" : "Active",
-    attach: isDutch ? "Koppel aan marktoverzicht" : "Attach to market overview",
+    eyebrow: panelCopy.eyebrow,
+    title: panelCopy.title,
+    configBadge: panelCopy.configBadge || panelCopy.configId,
+    selectLabel: panelCopy.selectLabel,
+    searchPlaceholder: panelCopy.searchPlaceholder,
+    emptyHint: panelCopy.emptyHint,
+    tuningLabel: panelCopy.tuningLabel,
+    active: t?.ui?.terminalGrid?.active,
+    attach: panelCopy.attach,
   };
 
   return (
@@ -107,7 +94,7 @@ export default function MarketIndicatorScoreView({
           </div>
         </div>
         <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] bg-card px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
-          {copy.configId}: MARKET_CFG_V2.0
+          {copy.configBadge}
         </div>
       </div>
 

@@ -2,6 +2,8 @@
 
 import { Wallet, Info, Zap, Clock, LayoutGrid } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatCurrency, formatNumber } from "@/lib/i18n";
 
 import BotBudgetBar from "./BotBudgetBar";
 import BotPnLBadge from "./BotPnLBadge";
@@ -20,6 +22,8 @@ export default function BotPortfolioOverview({
   envFilter = "all", 
   onEnvFilterChange 
 }) {
+  const { t, locale } = useTranslation();
+  const copy = t?.botPage?.portfolioOverview || {};
   const [exchangeBalances, setExchangeBalances] = useState([]);
   const [exchangeLoading, setExchangeLoading] = useState(false);
 
@@ -124,13 +128,13 @@ export default function BotPortfolioOverview({
         <div className="border-l-4 border-blue-600 pl-6">
            <div className="text-[10px] font-black text-secondary gap-2 flex items-center uppercase tracking-[0.3em] mb-1">
               <Wallet size={10} className="text-blue-600" />
-              Systeem Overzicht
+              {copy.eyebrow}
            </div>
            <h3 className="text-3xl font-black text-foreground tracking-tighter uppercase leading-none">
-             Portfolio <span className="text-blue-600/30">—</span> {envFilter === 'all' ? 'Alle bots' : envFilter === 'live' ? 'Live exchange' : 'Paper trading'}
+             {copy.title} <span className="text-blue-600/30">—</span> {envFilter === "all" ? copy.allBots : envFilter === "live" ? copy.liveExchange : copy.paperTrading}
            </h3>
             <p className="text-[13px] font-medium text-secondary mt-2">
-              Geaggregeerd overzicht van budget en posities over je geselecteerde omgeving.
+              {copy.subtitle}
             </p>
         </div>
 
@@ -141,26 +145,26 @@ export default function BotPortfolioOverview({
                 className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${envFilter === "all" ? 'bg-white dark:bg-slate-800 text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
              >
                 <LayoutGrid size={12} />
-                Alles
+                {copy.filterAll}
              </button>
              <button 
                 onClick={() => onEnvFilterChange?.("paper")}
                 className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${envFilter === "paper" ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-md' : 'text-slate-400 hover:text-blue-500'}`}
              >
                 <Clock size={12} />
-                Paper
+                {copy.filterPaper}
              </button>
              <button 
                 onClick={() => onEnvFilterChange?.("live")}
                 className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${envFilter === "live" ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-md' : 'text-slate-400 hover:text-emerald-500'}`}
              >
                 <Zap size={12} />
-                Live
+                {copy.filterLive}
              </button>
           </div>
 
           <div className="bg-[var(--color-border-subtle)] px-4 py-2 rounded-xl border-2 border-slate-200/50">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-widest">Actieve Bots</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest">{copy.activeBots}</div>
              <span className="text-xl font-black text-foreground tracking-tighter tabular-nums">
                {list.length}
              </span>
@@ -178,21 +182,21 @@ export default function BotPortfolioOverview({
                <Wallet size={16} />
             </div>
             <div>
-               <div className="text-[10px] font-black text-secondary uppercase tracking-widest">Gebruik van Totaal Budget</div>
-               <div className="text-[11px] font-bold text-blue-600/60 uppercase">Single Source of Truth: Backend</div>
+               <div className="text-[10px] font-black text-secondary uppercase tracking-widest">{copy.budgetUsage}</div>
+               <div className="text-[11px] font-bold text-blue-600/60 uppercase">{copy.backendSource}</div>
             </div>
           </div>
 
           {envFilter === 'live' && exchangeBalances.length > 0 && (
             <div className="flex items-center gap-4 animate-in fade-in slide-in-from-right-4 duration-500">
                <div className="text-right">
-                  <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">Bitvavo Cash</div>
-                  <div className="text-sm font-black text-emerald-600">€{Number(exchangeBalances[0]?.free?.EUR ?? 0).toLocaleString()}</div>
+                  <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.bitvavoCash}</div>
+                  <div className="text-sm font-black text-emerald-600">{formatCurrency(Number(exchangeBalances[0]?.free?.EUR ?? 0), locale, "EUR", { maximumFractionDigits: 0 })}</div>
                </div>
                <div className="w-px h-8 bg-slate-200 dark:bg-slate-800" />
                <div className="text-right">
-                  <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">Totaal Waarde</div>
-                  <div className="text-sm font-black text-slate-900 dark:text-white">€{Number(exchangeBalances[0]?.total_eur ?? 0).toLocaleString()}</div>
+                  <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.totalValue}</div>
+                  <div className="text-sm font-black text-slate-900 dark:text-white">{formatCurrency(Number(exchangeBalances[0]?.total_eur ?? 0), locale, "EUR", { maximumFractionDigits: 0 })}</div>
                </div>
             </div>
           )}
@@ -201,33 +205,33 @@ export default function BotPortfolioOverview({
         {hasBudget ? (
           <div className="space-y-6">
             <BotBudgetBar
-              label="Alle bots gecombineerd"
+              label={copy.combinedBots}
               total={totalBudgetEur}
               spent={spentExecuted}
             />
 
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-6 border-t border-blue-600/5">
                <div className="flex flex-col">
-                  <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">Vandaag besteed</span>
-                  <span className="text-sm font-black text-slate-800">€{Number(todaySpent ?? 0).toFixed(0)}</span>
+                  <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.spentToday}</span>
+                  <span className="text-sm font-black text-slate-800">{formatCurrency(Number(todaySpent ?? 0), locale, "EUR", { maximumFractionDigits: 0 })}</span>
                </div>
                {totalDailyLimitEur && (
                   <div className="flex flex-col">
-                     <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">Daglimiet</span>
-                     <span className="text-sm font-black text-slate-800">€{Number(totalDailyLimitEur).toFixed(0)}</span>
+                     <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.dailyLimit}</span>
+                     <span className="text-sm font-black text-slate-800">{formatCurrency(Number(totalDailyLimitEur), locale, "EUR", { maximumFractionDigits: 0 })}</span>
                   </div>
                )}
                {totalMaxOrderEur && (
                   <div className="flex flex-col">
-                     <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">Som Max/Trade</span>
-                     <span className="text-sm font-black text-slate-800">€{Number(totalMaxOrderEur).toFixed(0)}</span>
+                     <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.maxPerTrade}</span>
+                     <span className="text-sm font-black text-slate-800">{formatCurrency(Number(totalMaxOrderEur), locale, "EUR", { maximumFractionDigits: 0 })}</span>
                   </div>
                )}
             </div>
           </div>
         ) : (
           <div className="text-sm font-black text-secondary uppercase tracking-widest flex items-center gap-2 py-4">
-             <Info size={16} /> Geen budget ingesteld
+             <Info size={16} /> {copy.noBudget}
           </div>
         )}
       </div>
@@ -236,17 +240,17 @@ export default function BotPortfolioOverview({
          PORTFOLIO TOTAL METRICS
       ============================= */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-8 py-8 border-y-2 border-slate-100">
-        <Stat label="Posities">{symbolRows.length}</Stat>
+        <Stat label={copy.positions}>{symbolRows.length}</Stat>
 
-        <Stat label="Totale waarde">
-          €{Number(positionValue).toFixed(0)}
+        <Stat label={copy.totalValue}>
+          {formatCurrency(Number(positionValue), locale, "EUR", { maximumFractionDigits: 0 })}
         </Stat>
 
-        <Stat label="Geïnvesteerd (exec)">
-          €{Number(spentExecuted).toFixed(0)}
+        <Stat label={copy.investedExecuted}>
+          {formatCurrency(Number(spentExecuted), locale, "EUR", { maximumFractionDigits: 0 })}
         </Stat>
 
-        <Stat label="PnL (Totaal)">
+        <Stat label={copy.totalPnl}>
           <BotPnLBadge pnlEur={pnlEur} pnlPct={pnlPct} />
         </Stat>
       </div>
@@ -257,7 +261,7 @@ export default function BotPortfolioOverview({
       {symbolRows.length > 0 && (
         <div className="space-y-6">
           <div className="text-[10px] font-black text-secondary uppercase tracking-[0.25em]">
-            Uitsplitsing per asset
+            {copy.byAsset}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -278,13 +282,13 @@ export default function BotPortfolioOverview({
                       {row.symbol}
                     </div>
                     <div className="text-sm font-black text-foreground tracking-tighter">
-                      {Number(row.netQty).toFixed(6)} <span className="opacity-40 text-[9px] uppercase tracking-normal">{row.symbol}</span>
+                      {formatNumber(Number(row.netQty), locale, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} <span className="opacity-40 text-[9px] uppercase tracking-normal">{row.symbol}</span>
                     </div>
                   </div>
 
                   <div className="text-right">
                     <div className="text-sm font-black text-foreground tracking-tight">
-                      €{Number(row.positionValue).toFixed(0)}
+                      {formatCurrency(Number(row.positionValue), locale, "EUR", { maximumFractionDigits: 0 })}
                     </div>
                     <div className="mt-1">
                       <BotPnLBadge pnlEur={rowPnl} pnlPct={rowPct} />

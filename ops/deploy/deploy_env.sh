@@ -124,6 +124,7 @@ if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_26_auth_refresh_sessions.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_10_finn_product_events.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_24_mobile_push_tokens.py
+  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_28_auth_password_reset_tokens.py
 
   cd ../../frontend/trading-tool-frontend
   rm -rf .next out

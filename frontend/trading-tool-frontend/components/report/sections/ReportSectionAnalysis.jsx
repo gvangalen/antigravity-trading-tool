@@ -1,6 +1,7 @@
 import NarrativeBlock from "../blocks/NarrativeBlock";
 import DataListBlock from "../blocks/DataListBlock";
 import SectionAlignedAside from "../layout/SectionAlignedAside";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 /**
  * 🛠️ ReportSectionAnalysis (Exact Screenshot Edition)
@@ -8,6 +9,8 @@ import SectionAlignedAside from "../layout/SectionAlignedAside";
  * - Chapter 4: Technische Analyse
  */
 export default function ReportSectionAnalysis({ report, isPrint = false }) {
+  const { t } = useTranslation();
+  const copy = t?.reports?.sections?.analysis || {};
   if (!report) return null;
 
   const gridClass = isPrint 
@@ -26,14 +29,14 @@ export default function ReportSectionAnalysis({ report, isPrint = false }) {
              <DataListBlock
                report={report}
                field="macro_indicator_highlights"
-               title="Macro-indicator highlights"
+               title={copy.macroIndicatorHighlights}
              />
           </SectionAlignedAside>
         </div>
 
         <div className={`${colSpanClass} ${isPrint ? "order-1" : "order-1 lg:order-2"}`}>
           <NarrativeBlock
-            title="Macrocontext"
+            title={copy.macroContext}
             field="macro_context"
             report={report}
           />
@@ -44,7 +47,7 @@ export default function ReportSectionAnalysis({ report, isPrint = false }) {
       <div className={gridClass}>
         <div className={colSpanClass}>
           <NarrativeBlock
-            title="Technische Analyse"
+            title={copy.technicalAnalysis}
             field="technical_analysis"
             report={report}
           />
@@ -54,7 +57,7 @@ export default function ReportSectionAnalysis({ report, isPrint = false }) {
            <DataListBlock
              report={report}
              field="technical_indicator_highlights"
-             title="Technische indicator-highlights"
+             title={copy.technicalIndicatorHighlights}
            />
         </SectionAlignedAside>
       </div>

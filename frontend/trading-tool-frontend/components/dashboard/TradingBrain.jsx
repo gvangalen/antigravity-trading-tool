@@ -41,9 +41,9 @@ export default function TradingBrain({ symbol = "BTC", scoresSnapshot = null }) 
     entry: strategy?.entry || "–",
     targets: Array.isArray(strategy?.targets) ? strategy.targets.join(" / ") : (strategy?.targets || "–"),
     stopLoss: strategy?.stop_loss || "–",
-    trend: activeSetup?.trend || "Neutral",
-    riskReward: strategy?.risk_reward || "N/A",
-    riskLevel: strategy?.risk_profile || "Medium",
+    trend: activeSetup?.trend || t.dashboard.brain.neutralTrend,
+    riskReward: strategy?.risk_reward || t.dashboard.brain.notAvailable,
+    riskLevel: strategy?.risk_profile || t.dashboard.brain.mediumRisk,
   };
 
   const isDCA = activeSetup?.setup_type?.toLowerCase() === "dca" || 
@@ -187,7 +187,7 @@ export default function TradingBrain({ symbol = "BTC", scoresSnapshot = null }) 
                       { label: t.dashboard.brain.marketDrivers, data: market?.top_contributors }
                    ].map((item, idx) => (
                       <div key={idx} className="flex flex-col gap-1">
-                         <span className="text-[8px] uppercase font-black text-secondary dark:text-slate-500 tracking-wider">{item.label} drijvers</span>
+                         <span className="text-[8px] uppercase font-black text-secondary dark:text-slate-500 tracking-wider">{item.label} {t.dashboard.brain.driversSuffix}</span>
                          <div className="flex flex-wrap gap-1">
                             {(Array.isArray(item.data) ? item.data : []).slice(0, 3).map((tag, tIdx) => (
                                <span key={tIdx} className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded text-slate-600 dark:text-slate-400">
@@ -213,7 +213,7 @@ export default function TradingBrain({ symbol = "BTC", scoresSnapshot = null }) 
                     {scoresLoading && !reportSnippet ? (
                       <TextSkeleton lines={2} className="mt-1" />
                     ) : (
-                      reportSnippet && reportSnippet !== "undefined." ? `"${reportSnippet}"` : "Nog geen samenvatting beschikbaar."
+                      reportSnippet && reportSnippet !== "undefined." ? `"${reportSnippet}"` : t.dashboard.brain.noSummaryAvailable
                     )}
                 </div>
              </div>
