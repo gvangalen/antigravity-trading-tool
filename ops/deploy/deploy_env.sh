@@ -125,6 +125,10 @@ if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_10_finn_product_events.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_24_mobile_push_tokens.py
 
+  cd ../../frontend/trading-tool-frontend
+  rm -rf .next out
+  npm run build
+
   cd ../..
   if [ ! -f \"$PM2_CONFIG\" ]; then
     echo \"❌ PM2 config $PM2_CONFIG not found on remote host.\" >&2
