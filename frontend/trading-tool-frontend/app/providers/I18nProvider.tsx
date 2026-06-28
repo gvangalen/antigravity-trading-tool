@@ -65,11 +65,19 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     if (!sessionChecked || !user) return;
 
     const accountLocale = normalizeLocale(user?.ai_preferences?.locale);
-    const effectiveAccountLocale = pendingAccountLocaleRef.current || accountLocale;
+    const pendingLocale = pendingAccountLocaleRef.current;
 
-    if (effectiveAccountLocale) {
-      if (locale !== effectiveAccountLocale) {
-        setLocaleState(effectiveAccountLocale);
+    if (pendingLocale) {
+      if (accountLocale === pendingLocale) {
+        pendingAccountLocaleRef.current = null;
+      } else {
+        return;
+      }
+    }
+
+    if (accountLocale) {
+      if (locale !== accountLocale) {
+        setLocaleState(accountLocale);
       }
       return;
     }
@@ -91,6 +99,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [locale, sessionChecked, user]);
 
   const setLocale = (l: Locale) => {
+    if (typeof document !== "undefined") {
+      applyLocaleToDocument(l, document);
+    }
+    if (typeof window !== "undefined") {
+      persistLocale(l, window);
+    }
+
     setLocaleState(l);
 
     if (user?.id && sessionChecked) {

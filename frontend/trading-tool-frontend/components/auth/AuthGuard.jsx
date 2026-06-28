@@ -64,9 +64,6 @@ export default function AuthGuard({ children }) {
           !pathname.startsWith("/strategy")) {
         debug("🚧 AuthGuard: Onboarding niet compleet -> naar /onboarding");
         router.push("/onboarding");
-      } else if (isComplete && pathname.startsWith("/onboarding")) {
-        debug("✅ AuthGuard: Onboarding al klaar -> naar dashboard");
-        router.push("/dashboard");
       }
 
     } catch (err) {
@@ -91,10 +88,6 @@ export default function AuthGuard({ children }) {
       if (!onboardingComplete) {
         checkOnboardingStatus();
       } else {
-        if (pathname.startsWith("/onboarding")) {
-          debug("✅ AuthGuard: Onboarding al klaar -> naar dashboard");
-          router.push("/dashboard");
-        }
         setCheckingOnboarding(false);
       }
     } else {
