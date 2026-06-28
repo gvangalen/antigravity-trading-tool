@@ -25,8 +25,10 @@ import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 function BotPageInner() {
+  const { t } = useTranslation();
   const { openConfirm, showSnackbar } = useModal();
   const searchParams = useSearchParams();
   const formRef = useRef({});
@@ -39,6 +41,7 @@ function BotPageInner() {
   const [currentTime, setCurrentTime] = useState(null);
   const [envFilter, setEnvFilter] = useState("all"); // "all", "paper", "live"
   const [generatingBotId, setGeneratingBotId] = useState(null);
+  const copy = t?.botPage || {};
 
   const {
     configs: bots = [],
@@ -211,10 +214,10 @@ function BotPageInner() {
     try { 
       setGeneratingBotId(bot.id); 
       await generateDecisionForBot({ bot_id: bot.id }); 
-      showSnackbar(`Nieuw voorstel voor ${bot.name}`, "success"); 
+      showSnackbar(`${copy.proposalCreatedPrefix} ${bot.name}`, "success");
     }
     catch { 
-      showSnackbar("Voorstel genereren mislukt", "danger"); 
+      showSnackbar(copy.proposalCreateFailed, "danger");
     }
     finally { 
       setGeneratingBotId(null); 
@@ -224,18 +227,18 @@ function BotPageInner() {
   const handleAddBot = (initialValues = {}) => {
     formRef.current = initialValues;
     openConfirm({
-      title: "Bot aanmaken",
-      statusLabel: "Concept aanmaken",
+      title: copy.createTitle,
+      statusLabel: copy.createStatus,
       description: <BotForm strategies={strategies} initialValues={initialValues} onChange={(v) => (formRef.current = v)} />,
-      context: <p>{initialValues.symbol || formRef.current?.symbol || "Nieuwe bot"} · {(initialValues.is_live || formRef.current?.is_live) ? "Live" : "Simulatie"}</p>,
-      impact: <p>Je maakt een nieuwe botconfig aan met een eigen strategie, budget en review-lane.</p>,
-      safety: <p>Controleer modus, budget en strategie. Live-activiteit blijft pas na expliciete review mogelijk.</p>,
-      consequence: <p>Na opslaan verversen we de botlijst en kun je Finn direct laten controleren of de bot goed is ingericht.</p>,
-      confirmText: "Sla bot op",
-      busyText: "Bot wordt opgeslagen...",
+      context: <p>{initialValues.symbol || formRef.current?.symbol || copy.newBotLabel} · {(initialValues.is_live || formRef.current?.is_live) ? copy.modeLive : copy.modeSimulation}</p>,
+      impact: <p>{copy.createImpact}</p>,
+      safety: <p>{copy.createSafety}</p>,
+      consequence: <p>{copy.createConsequence}</p>,
+      confirmText: copy.createConfirm,
+      busyText: copy.createBusy,
       onConfirm: async () => {
-        if (!formRef.current?.name || !formRef.current?.strategy_id) { showSnackbar("Vul naam en strategie in voordat je de bot opslaat.", "danger"); return; }
-        await createBot(formRef.current); showSnackbar("Bot opgeslagen. Laat Finn nu de configuratie en risico's kort checken.", "success");
+        if (!formRef.current?.name || !formRef.current?.strategy_id) { showSnackbar(copy.createValidation, "danger"); return; }
+        await createBot(formRef.current); showSnackbar(copy.createSuccess, "success");
       },
     });
   };
@@ -250,7 +253,7 @@ function BotPageInner() {
       
       // Auto-prefill the form values
       const initialValues = {
-        name: `Finn Bot ${symbol} ${mode === "paper" ? "Paper" : "Live"}`,
+        name: `Finn Bot ${symbol} ${mode === "paper" ? copy.modePaper : copy.modeLive}`,
         symbol: symbol,
         is_live: mode === "live",
         budget_total_eur: budget ? Number(budget) : 1000,
@@ -269,16 +272,16 @@ function BotPageInner() {
     if (type === "general") {
       formRef.current = bot;
       openConfirm({
-        title: `Botinstellingen bijwerken – ${bot.name}`,
-        statusLabel: "Configuratie wijzigen",
+        title: `${copy.updateTitlePrefix} – ${bot.name}`,
+        statusLabel: copy.updateStatus,
         description: <BotForm strategies={strategies} initialValues={bot} onChange={(v) => (formRef.current = v)} />,
-        context: <p>{bot.symbol || "Bot"} · {bot.is_live ? "Live" : "Paper"}</p>,
-        impact: <p>Je past naam, strategie of uitvoeringsinstellingen van deze bot aan.</p>,
-        safety: <p>Wijzigingen gelden meteen voor volgende reviews en voorstellen. Controleer live/paper en strategie opnieuw.</p>,
-        consequence: <p>Na opslaan verversen we de bot en kun je Finn vragen welke vervolgstap nu logisch is.</p>,
-        confirmText: "Sla instellingen op",
-        busyText: "Instellingen worden opgeslagen...",
-        onConfirm: async () => { await updateBot(bot.id, formRef.current); showSnackbar("Bot bijgewerkt. Finn kan nu samenvatten wat er inhoudelijk veranderde.", "success"); },
+        context: <p>{bot.symbol || copy.botLabel} · {bot.is_live ? copy.modeLive : copy.modePaper}</p>,
+        impact: <p>{copy.updateImpact}</p>,
+        safety: <p>{copy.updateSafety}</p>,
+        consequence: <p>{copy.updateConsequence}</p>,
+        confirmText: copy.updateConfirm,
+        busyText: copy.updateBusy,
+        onConfirm: async () => { await updateBot(bot.id, formRef.current); showSnackbar(copy.updateSuccess, "success"); },
       });
       return;
     }
@@ -286,15 +289,15 @@ function BotPageInner() {
       const portfolio = portfolios.find((p) => p.bot_id === bot.id);
       budgetRef.current = { total_eur: portfolio?.budget?.total_eur ?? 0, daily_limit_eur: portfolio?.budget?.daily_limit_eur ?? 0, max_order_eur: portfolio?.budget?.max_order_eur ?? 0, max_asset_exposure_pct: portfolio?.budget?.max_asset_exposure_pct ?? 100 };
       openConfirm({
-        title: `Budget en limieten bijwerken – ${bot.name}`,
-        statusLabel: "Risicolimieten",
+        title: `${copy.budgetTitlePrefix} – ${bot.name}`,
+        statusLabel: copy.budgetStatus,
         description: <BotBudgetForm initialBudget={budgetRef.current} onChange={(v) => (budgetRef.current = v)} />,
-        context: <p>{bot.symbol || "Bot"} · {bot.is_live ? "Live" : "Paper"}</p>,
-        impact: <p>Je wijzigt budget, daglimiet, maximale ordergrootte en asset-exposure voor deze bot.</p>,
-        safety: <p>Nieuwe limieten beïnvloeden direct de guardrails van volgende beslissingen. Houd live-bots extra conservatief.</p>,
-        consequence: <p>Na opslaan verversen we de guardrails en genereren we opnieuw een voorstel op basis van de nieuwe grenzen.</p>,
-        confirmText: "Sla limieten op",
-        busyText: "Limieten worden opgeslagen...",
+        context: <p>{bot.symbol || copy.botLabel} · {bot.is_live ? copy.modeLive : copy.modePaper}</p>,
+        impact: <p>{copy.budgetImpact}</p>,
+        safety: <p>{copy.budgetSafety}</p>,
+        consequence: <p>{copy.budgetConsequence}</p>,
+        confirmText: copy.budgetConfirm,
+        busyText: copy.budgetBusy,
         onConfirm: async () => {
           await updateBot(bot.id, {
             budget_total_eur: budgetRef.current.total_eur,
@@ -302,27 +305,27 @@ function BotPageInner() {
             budget_max_order_eur: budgetRef.current.max_order_eur,
             max_asset_exposure_pct: budgetRef.current.max_asset_exposure_pct,
           });
-          showSnackbar("Budget en limieten bijgewerkt. Finn kan nu uitleggen wat dit doet met je volgende botactie.", "success");
+          showSnackbar(copy.budgetSuccess, "success");
           // 🔥 Refresh decision to apply new budget to guardrails
           await handleGenerateDecision(bot);
         },
       });
       return;
     }
-    if (type === "pause") { await updateBot(bot.id, { is_active: false }); showSnackbar("Bot gepauzeerd. Finn kan nu toelichten wat je handmatig moet blijven volgen.", "info"); return; }
-    if (type === "resume") { await updateBot(bot.id, { is_active: true }); showSnackbar("Bot hervat. Controleer met Finn of de huidige context nog veilig is.", "success"); return; }
+    if (type === "pause") { await updateBot(bot.id, { is_active: false }); showSnackbar(copy.pauseSuccess, "info"); return; }
+    if (type === "resume") { await updateBot(bot.id, { is_active: true }); showSnackbar(copy.resumeSuccess, "success"); return; }
     if (type === "delete") {
       openConfirm({
-        title: `Bot verwijderen – ${bot.name}`,
-        statusLabel: "Gevoelige actie",
+        title: `${copy.deleteTitlePrefix} – ${bot.name}`,
+        statusLabel: copy.deleteStatus,
         tone: "danger",
-        context: <p>{bot.symbol || "Bot"} · {bot.is_live ? "Live" : "Paper"}</p>,
-        impact: <p>Je verwijdert deze botconfig en de gekoppelde operationele lane uit het control panel.</p>,
-        safety: <p>Controleer of open reviews, budgetcontext of portfolio-afspraken eerst zijn afgerond.</p>,
-        consequence: <p>Na verwijderen verversen we de lijst. Laat Finn daarna bepalen of je een vervangende bot of handmatige follow-up nodig hebt.</p>,
-        confirmText: "Verwijder bot",
-        busyText: "Bot wordt verwijderd...",
-        onConfirm: async () => { await deleteBot(bot.id); showSnackbar("Bot verwijderd. Vraag Finn welke opvolgstap nu het meest logisch is.", "danger"); }
+        context: <p>{bot.symbol || copy.botLabel} · {bot.is_live ? copy.modeLive : copy.modePaper}</p>,
+        impact: <p>{copy.deleteImpact}</p>,
+        safety: <p>{copy.deleteSafety}</p>,
+        consequence: <p>{copy.deleteConsequence}</p>,
+        confirmText: copy.deleteConfirm,
+        busyText: copy.deleteBusy,
+        onConfirm: async () => { await deleteBot(bot.id); showSnackbar(copy.deleteSuccess, "danger"); }
       });
     }
   };
@@ -369,12 +372,12 @@ function BotPageInner() {
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
         <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Wallet size={12} />
-           Systeemcontrole
+           {copy.eyebrow}
         </div>
           <div className="max-w-2xl">
-            <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">Bots</h1>
+            <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">{copy.title}</h1>
             <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 leading-relaxed">
-              Beheer je geautomatiseerde tradingstrategieën
+              {copy.subtitle}
             </p>
           </div>
       </header>
@@ -385,7 +388,7 @@ function BotPageInner() {
         <div className="flex-1 min-w-0 space-y-12">
           {error && (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
-              Botdata kon niet volledig geladen worden. Sommige cijfers kunnen verouderd zijn. Ververs de pagina of laat Finn eerst de huidige bot- en risicocontext samenvatten.
+              {copy.partialError}
             </div>
           )}
 
@@ -395,11 +398,11 @@ function BotPageInner() {
             
             <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
               <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
-                <div className="card-title text-slate-900 dark:text-white flex items-center gap-3 font-black uppercase tracking-widest text-xs">Portfolio-overzicht</div>
+                <div className="card-title text-slate-900 dark:text-white flex items-center gap-3 font-black uppercase tracking-widest text-xs">{copy.portfolioOverviewTitle}</div>
               </div>
               <div className="card-p p-8">
                 <PortfolioBalanceCard
-                  title="OVERZICHT"
+                  title={copy.portfolioOverviewCardTitle}
                   defaultRange="1W"
                   is_live={envFilter === "all" ? null : envFilter === "live"}
                 />
@@ -417,16 +420,16 @@ function BotPageInner() {
           <div className="space-y-8 pt-8 border-t border-slate-100 dark:border-slate-800">
             <div className="space-y-6">
               <div>
-                <h2 className="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tighter">Mijn bots</h2>
-                <p className="text-[13px] font-medium text-slate-400 dark:text-slate-500 mt-1">Overzicht en beheer van al je actieve handelsstrategieën.</p>
+                <h2 className="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tighter">{copy.myBotsTitle}</h2>
+                <p className="text-[13px] font-medium text-slate-400 dark:text-slate-500 mt-1">{copy.myBotsSubtitle}</p>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-6">
                 <div className="flex gap-4">
                   <div className="flex bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-inner">
-                    <button onClick={() => setStatusFilter("all")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "all" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-slate-600"}`}>Alle ({bots.length})</button>
-                    <button onClick={() => setStatusFilter("active")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "active" ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-emerald-500"}`}>Actief ({bots.filter(b => b.is_active).length})</button>
-                    <button onClick={() => setStatusFilter("paused")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "paused" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-amber-500"}`}>Gepauzeerd ({bots.filter(b => !b.is_active).length})</button>
+                    <button onClick={() => setStatusFilter("all")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "all" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-slate-600"}`}>{copy.filterAll} ({bots.length})</button>
+                    <button onClick={() => setStatusFilter("active")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "active" ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-emerald-500"}`}>{copy.filterActive} ({bots.filter(b => b.is_active).length})</button>
+                    <button onClick={() => setStatusFilter("paused")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "paused" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-amber-500"}`}>{copy.filterPaused} ({bots.filter(b => !b.is_active).length})</button>
                   </div>
                   
                   <div className="flex bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-inner items-center">
@@ -435,7 +438,7 @@ function BotPageInner() {
                       onChange={(e) => setAssetFilter(e.target.value)}
                       className="bg-transparent px-4 py-1 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer appearance-none"
                     >
-                      <option value="all">ALLE ASSETS</option>
+                      <option value="all">{copy.allAssets}</option>
                       {availableAssets.map((a) => (
                         <option key={a} value={a}>{a}</option>
                       ))}
@@ -450,7 +453,7 @@ function BotPageInner() {
 
                   <button onClick={handleAddBot} className={actionButtonStyles({ variant: "primary", className: "min-h-12 px-6 rounded-2xl shadow-sm" })}>
                     <Plus size={18} strokeWidth={3} />
-                    Bot aanmaken
+                    {copy.createTitle}
                   </button>
                 </div>
               </div>

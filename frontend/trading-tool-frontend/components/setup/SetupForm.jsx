@@ -8,21 +8,24 @@ import { Settings, BarChart3, Save, Info, Rocket, Target } from "lucide-react";
 
 import { saveNewSetup, updateSetup } from "@/lib/api/setups";
 import { useModal } from "@/components/modal/ModalProvider";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function SetupForm({ onSaved, mode = "new", initialData = null }) {
   const isEdit = mode === "edit";
+  const { t } = useTranslation();
+  const copy = t?.setups?.form || {};
   const { showSnackbar } = useModal();
 
   // ----------------------------------------------------
   // SCORE MEANING
   // ----------------------------------------------------
   const scoreLabel = (v) => {
-    if (v <= 25) return "Sterk bearish / risk-off";
-    if (v <= 45) return "Bearish";
-    if (v <= 60) return "Neutraal";
-    if (v <= 75) return "Neutraal → bullish";
-    if (v <= 90) return "Bullish";
-    return "Euforisch / oververhit";
+    if (v <= 25) return copy.scoreVeryBearish;
+    if (v <= 45) return copy.scoreBearish;
+    if (v <= 60) return copy.scoreNeutral;
+    if (v <= 75) return copy.scoreNeutralBullish;
+    if (v <= 90) return copy.scoreBullish;
+    return copy.scoreEuphoric;
   };
 
   const rangeText = (min, max) => `${scoreLabel(min)} → ${scoreLabel(max)}`;
@@ -133,10 +136,10 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
     try {
       if (isEdit) {
         await updateSetup(initialData.id, payload);
-        showSnackbar("Setup bijgewerkt", "success");
+        showSnackbar(copy.updatedSuccess, "success");
       } else {
         await saveNewSetup(payload);
-        showSnackbar("Setup opgeslagen", "success");
+        showSnackbar(copy.savedSuccess, "success");
         setFormData(emptyForm);
         setMacroScore([30, 70]);
         setTechnicalScore([40, 80]);
@@ -146,7 +149,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
       onSaved?.();
     } catch (err) {
       console.error(err);
-      showSnackbar("Opslaan mislukt", "danger");
+      showSnackbar(copy.saveFailed, "danger");
     } finally {
       setLoading(false);
     }
@@ -207,7 +210,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
       </div>
 
       <div className="flex items-center gap-3 pt-6 border-t-2 border-slate-100">
-        <div className="px-2 py-1 rounded bg-blue-600 text-[9px] font-black text-white uppercase tracking-widest shadow-sm">Phase Response</div>
+        <div className="px-2 py-1 rounded bg-blue-600 text-[9px] font-black text-white uppercase tracking-widest shadow-sm">{copy.phaseResponse}</div>
         <div className="text-[12px] font-black text-slate-700 tracking-tight italic leading-none">
           {rangeText(score[0], score[1])}
         </div>
@@ -222,11 +225,11 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
     <form onSubmit={handleSubmit} className="space-y-8">
       {/* BASIS */}
       <div className={sectionClass}>
-        {sectionTitle(<Settings size={18} />, "Basisgegevens")}
+        {sectionTitle(<Settings size={18} />, copy.basicsTitle)}
 
         <input
           name="name"
-          placeholder="Naam van de setup"
+          placeholder={copy.namePlaceholder}
           value={formData.name}
           onChange={handleChange}
           className={fieldClass}
@@ -249,8 +252,8 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
                <Rocket size={22} />
             </div>
             <div>
-               <p className="font-black text-sm uppercase tracking-tight text-slate-900">DCA Blueprint</p>
-               <p className="text-[11px] font-medium text-muted mt-1 leading-relaxed">Focus on long-term accumulation and market health.</p>
+               <p className="font-black text-sm uppercase tracking-tight text-slate-900">{copy.dcaBlueprintTitle}</p>
+               <p className="text-[11px] font-medium text-muted mt-1 leading-relaxed">{copy.dcaBlueprintBody}</p>
             </div>
           </button>
 
@@ -268,38 +271,38 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
                <Target size={22} />
             </div>
             <div>
-               <p className="font-black text-sm uppercase tracking-tight text-slate-900">Trade Blueprint</p>
-               <p className="text-[11px] font-medium text-muted mt-1 leading-relaxed">Focus on execution-ready setups and technical validation.</p>
+               <p className="font-black text-sm uppercase tracking-tight text-slate-900">{copy.tradeBlueprintTitle}</p>
+               <p className="text-[11px] font-medium text-muted mt-1 leading-relaxed">{copy.tradeBlueprintBody}</p>
             </div>
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
           <div className="space-y-1.5 flex-1">
-            <label className="text-[10px] font-black uppercase text-[var(--text-light)] ml-1">Asset Symbol</label>
+            <label className="text-[10px] font-black uppercase text-[var(--text-light)] ml-1">{copy.assetSymbolLabel}</label>
             <select
               name="symbol"
               value={formData.symbol}
               onChange={handleChange}
               className={fieldClass}
             >
-              <option value="BTC">BTC (Bitcoin)</option>
-              <option value="ETH">ETH (Ethereum)</option>
-              <option value="SOL">SOL (Solana)</option>
+              <option value="BTC">{copy.assetBtc}</option>
+              <option value="ETH">{copy.assetEth}</option>
+              <option value="SOL">{copy.assetSol}</option>
             </select>
           </div>
 
           <div className="space-y-1.5 flex-1">
-            <label className="text-[10px] font-black uppercase text-[var(--text-light)] ml-1">Timeframe</label>
+            <label className="text-[10px] font-black uppercase text-[var(--text-light)] ml-1">{copy.timeframeLabel}</label>
             <select
               name="timeframe"
               value={formData.timeframe}
               onChange={handleChange}
               className={fieldClass}
             >
-              <option value="1D">1D (Daily)</option>
-              <option value="4H">4H (4 Hour)</option>
-              <option value="1W">1W (Weekly)</option>
+              <option value="1D">{copy.timeframe1d}</option>
+              <option value="4H">{copy.timeframe4h}</option>
+              <option value="1W">{copy.timeframe1w}</option>
             </select>
           </div>
         </div>
@@ -313,9 +316,9 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
               onChange={handleChange}
               className={fieldClass}
             >
-              <option value="daily">Dagelijks</option>
-              <option value="weekly">Wekelijks</option>
-              <option value="monthly">Maandelijks</option>
+              <option value="daily">{copy.frequencyDaily}</option>
+              <option value="weekly">{copy.frequencyWeekly}</option>
+              <option value="monthly">{copy.frequencyMonthly}</option>
             </select>
 
             {formData.dcaFrequency === "weekly" && (
@@ -325,13 +328,13 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
                 onChange={handleChange}
                 className={fieldClass}
               >
-                <option value="monday">Maandag</option>
-                <option value="tuesday">Dinsdag</option>
-                <option value="wednesday">Woensdag</option>
-                <option value="thursday">Donderdag</option>
-                <option value="friday">Vrijdag</option>
-                <option value="saturday">Zaterdag</option>
-                <option value="sunday">Zondag</option>
+                <option value="monday">{copy.dayMonday}</option>
+                <option value="tuesday">{copy.dayTuesday}</option>
+                <option value="wednesday">{copy.dayWednesday}</option>
+                <option value="thursday">{copy.dayThursday}</option>
+                <option value="friday">{copy.dayFriday}</option>
+                <option value="saturday">{copy.daySaturday}</option>
+                <option value="sunday">{copy.daySunday}</option>
               </select>
             )}
 
@@ -344,7 +347,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
                 value={formData.dcaMonthDay}
                 onChange={handleChange}
                 className={fieldClass}
-                placeholder="Dag van de maand (1-28)"
+                placeholder={copy.monthDayPlaceholder}
               />
             )}
           </div>
@@ -353,7 +356,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
         {/* Trade info */}
         {isTrade && (
           <div className="text-sm text-[var(--text-soft)]">
-            Dit is een trade setup. Entry, targets en stop-loss beheer je later in de gekoppelde strategie.
+            {copy.tradeHint}
           </div>
         )}
       </div>
@@ -362,23 +365,23 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
       <div className={sectionClass}>
         {sectionTitle(
           <BarChart3 size={18} />,
-          "Wanneer mag deze setup actief zijn?"
+          copy.activationTitle
         )}
 
         <div className="flex items-start gap-2 text-sm text-[var(--text-soft)]">
           <Info size={16} className="mt-0.5" />
           <p>
-            Deze score-ranges bepalen <strong>in welke marktfase</strong> deze setup geldig is.
+            {copy.scoreIntroPrefix} <strong>{copy.scoreIntroBold}</strong> {copy.scoreIntroSuffix}
           </p>
         </div>
 
-        {scoreBlock("Macro", macroScore, setMacroScore, "Macro-omgeving")}
-        {scoreBlock("Technical", technicalScore, setTechnicalScore, "Trend")}
+        {scoreBlock(copy.macroTitle, macroScore, setMacroScore, copy.macroDescription)}
+        {scoreBlock(copy.technicalTitle, technicalScore, setTechnicalScore, copy.technicalDescription)}
         {scoreBlock(
-          "Market / Sentiment",
+          copy.marketTitle,
           marketScore,
           setMarketScore,
-          "Sentiment"
+          copy.marketDescription
         )}
       </div>
 
@@ -390,7 +393,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
         className="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl text-[12px] font-black uppercase tracking-widest transition-all active:scale-95 border-b-4 border-blue-800 active:border-b-0"
       >
         <Save size={20} />
-        {loading ? "BEZIG…" : "Blueprint Opslaan"}
+        {loading ? copy.savingButton : copy.saveButton}
       </button>
     </form>
   );

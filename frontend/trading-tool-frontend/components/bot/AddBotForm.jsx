@@ -1,24 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
-const RISK_PROFILES = [
-  {
-    value: "conservative",
-    label: "🛡️ Conservatief",
-    description: "Alleen trades bij hoge confidence, lage frequentie",
-  },
-  {
-    value: "balanced",
-    label: "⚖️ Gebalanceerd",
-    description: "Standaard profiel met gebalanceerde trade-frequentie",
-  },
-  {
-    value: "aggressive",
-    label: "🚀 Agressief",
-    description: "Sneller trades, hogere exposure en risico",
-  },
-];
+const RISK_PROFILE_ICONS = {
+  conservative: "🛡️",
+  balanced: "⚖️",
+  aggressive: "🚀",
+};
 
 /**
  * AddBotForm — Tradamind 2.5 (FINAL)
@@ -29,6 +18,8 @@ export default function AddBotForm({
   strategies = [],
   onChange,
 }) {
+  const { t } = useTranslation();
+  const copy = t?.botPage?.form || {};
 
   const sourceData = initialData ?? initialValues;
   const isEdit = Boolean(sourceData?.id ?? sourceData?.bot_id);
@@ -93,9 +84,30 @@ export default function AddBotForm({
     );
   }, [strategies, form.strategy_id, sourceData]);
 
+  const riskProfiles = [
+    {
+      value: "conservative",
+      icon: RISK_PROFILE_ICONS.conservative,
+      label: copy.riskConservativeLabel,
+      description: copy.riskConservativeDescription,
+    },
+    {
+      value: "balanced",
+      icon: RISK_PROFILE_ICONS.balanced,
+      label: copy.riskBalancedLabel,
+      description: copy.riskBalancedDescription,
+    },
+    {
+      value: "aggressive",
+      icon: RISK_PROFILE_ICONS.aggressive,
+      label: copy.riskAggressiveLabel,
+      description: copy.riskAggressiveDescription,
+    },
+  ];
+
   const selectedRisk =
-    RISK_PROFILES.find((r) => r.value === form.risk_profile) ??
-    RISK_PROFILES[1];
+    riskProfiles.find((r) => r.value === form.risk_profile) ??
+    riskProfiles[1];
 
   const getStrategyType = (s) =>
     (s?.strategy_type || s?.type || "manual").toUpperCase();
@@ -104,12 +116,12 @@ export default function AddBotForm({
     <div className="space-y-6">
       {/* ================= BOT NAME ================= */}
       <div className="space-y-1.5">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-          Identificatielabel
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+          {copy.nameLabel}
         </label>
         <input
           className="w-full bg-card border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 transition-all outline-none placeholder:text-slate-300"
-          placeholder="bijv. DCA BTC ALGO"
+          placeholder={copy.namePlaceholder}
           value={form.name}
           onChange={(e) =>
             setForm((s) => ({ ...s, name: e.target.value }))
@@ -120,17 +132,13 @@ export default function AddBotForm({
       {/* ================= STRATEGY ================= */}
       <div className="space-y-1.5">
         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-          Uitvoeringsstrategie
+          {copy.strategyLabel}
         </label>
 
         {isEdit ? (
           <div className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-muted cursor-not-allowed flex items-center justify-between">
-            <span>
-              {selectedStrategy
-                ? `${selectedStrategy.name} · ${selectedStrategy.symbol}`
-                : "—"}
-            </span>
-            <div className="text-[9px] bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-md uppercase tracking-tighter">Vastgezet</div>
+            <span>{selectedStrategy ? `${selectedStrategy.name} · ${selectedStrategy.symbol}` : "—"}</span>
+            <div className="text-[9px] bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-md uppercase tracking-tighter">{copy.lockedLabel}</div>
           </div>
         ) : (
           <div className="relative">
@@ -146,7 +154,7 @@ export default function AddBotForm({
                 }))
               }
             >
-              <option value="">— Kies basisstrategie —</option>
+              <option value="">{copy.strategyPlaceholder}</option>
               {strategies.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.display_name || `${s.name} · ${s.symbol} · ${s.timeframe}`}
@@ -164,17 +172,17 @@ export default function AddBotForm({
       {selectedStrategy && (
         <div className="rounded-2xl bg-blue-50/30 dark:bg-blue-900/10 border-2 border-blue-600/10 p-5 space-y-3">
           <div className="flex items-center justify-between">
-             <div className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em]">Strategieparameters</div>
+             <div className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em]">{copy.strategyParameters}</div>
              <div className="text-[9px] font-black text-white uppercase bg-blue-600 px-2 py-0.5 rounded-md shadow-sm shadow-blue-600/20">{getStrategyType(selectedStrategy)}</div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-[8px] font-black text-blue-400 uppercase">Assetnode</div>
+              <div className="text-[8px] font-black text-blue-400 uppercase">{copy.assetNode}</div>
               <div className="text-sm font-black text-foreground dark:text-slate-100 font-mono tracking-tighter">{selectedStrategy.symbol}</div>
             </div>
             <div>
-              <div className="text-[8px] font-black text-blue-400 uppercase">Tijdshorizon</div>
+              <div className="text-[8px] font-black text-blue-400 uppercase">{copy.timeHorizon}</div>
               <div className="text-sm font-black text-foreground dark:text-slate-100 font-mono tracking-tighter">{selectedStrategy.timeframe}</div>
             </div>
           </div>
@@ -190,8 +198,8 @@ export default function AddBotForm({
       {/* ================= EXECUTION TYPE & RISK ================= */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-            Uitvoeringsomgeving
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+            {copy.environmentLabel}
           </label>
           <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-2xl border-2 border-slate-100 dark:border-slate-800">
              <button 
@@ -199,21 +207,21 @@ export default function AddBotForm({
                 onClick={() => setForm(s => ({ ...s, is_live: false }))}
                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!form.is_live ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
              >
-                📝 Paper trading
+                {copy.paperTrading}
              </button>
              <button 
                 type="button"
                 onClick={() => setForm(s => ({ ...s, is_live: true }))}
                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${form.is_live ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-emerald-600'}`}
              >
-                ⚡ Live exchange
+                {copy.liveExchange}
              </button>
           </div>
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-            Uitvoeringsmodus
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+            {copy.modeLabel}
           </label>
           <div className="relative">
             <select
@@ -223,9 +231,9 @@ export default function AddBotForm({
                 setForm((s) => ({ ...s, mode: e.target.value }))
               }
             >
-              <option value="manual">Handmatige goedkeuring</option>
-              <option value="semi-auto">Semi-autonoom</option>
-              <option value="auto">Volledig autonoom</option>
+              <option value="manual">{copy.modeManual}</option>
+              <option value="semi-auto">{copy.modeSemiAuto}</option>
+              <option value="auto">{copy.modeAuto}</option>
             </select>
             <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
                ▼
@@ -236,8 +244,8 @@ export default function AddBotForm({
  
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-            Veiligheidsprofiel
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+            {copy.riskLabel}
           </label>
           <div className="relative">
             <select
@@ -250,9 +258,9 @@ export default function AddBotForm({
                 }))
               }
             >
-              {RISK_PROFILES.map((r) => (
+              {riskProfiles.map((r) => (
                 <option key={r.value} value={r.value}>
-                  {r.label}
+                  {`${r.icon} ${r.label}`}
                 </option>
               ))}
             </select>
@@ -264,7 +272,7 @@ export default function AddBotForm({
 
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-            Basisvaluta
+            {copy.baseCurrencyLabel}
           </label>
           <div className="relative">
             <select
@@ -277,8 +285,8 @@ export default function AddBotForm({
                 }))
               }
             >
-              <option value="EUR">🇪🇺 EUR (Euro)</option>
-              <option value="USD">🇺🇸 USD (US Dollar)</option>
+              <option value="EUR">{copy.currencyEuro}</option>
+              <option value="USD">{copy.currencyUsd}</option>
             </select>
             <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
                ▼
@@ -290,10 +298,10 @@ export default function AddBotForm({
       {(form.is_live || form.mode !== "manual") && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            ["budget_total_eur", "Totaal budget"],
-            ["budget_daily_limit_eur", "Daglimiet"],
-            ["budget_min_order_eur", "Min. order"],
-            ["budget_max_order_eur", "Max. order"],
+            ["budget_total_eur", copy.totalBudgetLabel],
+            ["budget_daily_limit_eur", copy.dailyLimitLabel],
+            ["budget_min_order_eur", copy.minOrderLabel],
+            ["budget_max_order_eur", copy.maxOrderLabel],
           ].map(([key, label]) => (
             <div key={key} className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
@@ -315,7 +323,7 @@ export default function AddBotForm({
       {/* PROFILE DESCRIPTION */}
       <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border-2 border-slate-100 dark:border-slate-800 flex items-center gap-4 transition-all hover:bg-slate-100">
          <div className="w-10 h-10 rounded-xl bg-card border border-slate-100 shadow-sm flex items-center justify-center text-lg">
-            {selectedRisk.label.split(' ')[0]}
+            {selectedRisk.icon}
          </div>
          <div className="text-[11px] font-bold text-slate-500 leading-relaxed italic">
             {selectedRisk.description}

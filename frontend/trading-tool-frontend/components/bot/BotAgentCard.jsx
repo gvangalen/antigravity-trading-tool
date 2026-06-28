@@ -24,6 +24,8 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatCurrency, formatDateTime } from "@/lib/i18n";
 
 export default function BotAgentCard({
   bot,
@@ -45,6 +47,8 @@ export default function BotAgentCard({
   onSaveTradePlan,
   onBacktest,
 }) {
+  const { t, locale } = useTranslation();
+  const copy = t?.botPage?.agentCard || {};
   if (!bot) return null;
 
   const [backtestResult, setBacktestResult] = useState(null);
@@ -82,12 +86,13 @@ export default function BotAgentCard({
     bot?.timeframe ||
     "—";
 
-  const statusLabel = (safeDecision?.action || "OBSERVE").toUpperCase();
+  const normalizedActionLabel = String(safeDecision?.action || "observe").toLowerCase();
 
-  const confidence =
+  const normalizedConfidence = String(
     safeDecision?.confidence_label ||
     safeDecision?.confidence ||
-    "LOW";
+    "low"
+  ).toLowerCase();
 
   /* ================= DYNAMIC BOT BRAIN ================= */
   const {
@@ -106,7 +111,7 @@ export default function BotAgentCard({
 
   const lastRun =
     bot?.last_run
-      ? new Date(bot.last_run).toLocaleTimeString("nl-NL", {
+      ? formatDateTime(bot.last_run, locale, {
           hour: "2-digit",
           minute: "2-digit",
         })
@@ -259,17 +264,17 @@ export default function BotAgentCard({
 
   const riskConfig = {
     conservative: {
-      label: "Risico: Conservatief",
+      label: copy.riskConservative,
       className: "bg-green-100 text-green-700 border-green-200",
       icon: <Shield size={12} />,
     },
     balanced: {
-      label: "Risico: Gebalanceerd",
+      label: copy.riskBalanced,
       className: "bg-yellow-100 text-yellow-700 border-yellow-200",
       icon: <Layers size={12} />,
     },
     aggressive: {
-      label: "Risico: Agressief",
+      label: copy.riskAggressive,
       className: "bg-red-100 text-red-700 border-red-200",
       icon: <Rocket size={12} />,
     },
@@ -278,6 +283,15 @@ export default function BotAgentCard({
   const risk =
     riskConfig[String(bot?.risk_profile || "balanced").toLowerCase()] ||
     riskConfig.balanced;
+
+  const scenarioLabels = {
+    default: copy.scenarioDefault,
+    aggressive: copy.scenarioAggressive,
+    conservative: copy.scenarioConservative,
+  };
+  const stateLabels = copy.stateLabels || {};
+  const actionLabels = copy.actionLabels || {};
+  const confidenceLabels = copy.confidenceLabels || {};
 
   /* ================= SAVE TRADE PLAN ================= */
 
@@ -311,7 +325,7 @@ export default function BotAgentCard({
       });
     } catch (e) {
       console.error("❌ Save plan error", e);
-      setSaveError(e?.message || "Opslaan mislukt");
+      setSaveError(e?.message || copy.saveFailed);
       throw e;
     } finally {
       setSavingPlan(false);
@@ -417,17 +431,17 @@ export default function BotAgentCard({
               <div className="flex flex-wrap items-center gap-2 pt-1.5">
                 <div className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1.5 ${risk.className}`}>
                    {risk.icon}
-                   {risk.label.replace('Risk: ', '')}
+                   {risk.label.replace(copy.riskPrefix, "")}
                 </div>
                 
                 <div className="px-3 py-1.5 rounded-xl border border-slate-200 bg-[var(--color-border-subtle)] text-[9px] font-black text-muted uppercase tracking-widest shadow-sm flex items-center gap-1.5">
                    <Activity size={10} />
-                   {isAuto ? "AUTO-PILOT" : "MANUAL-LINK"}
+                   {isAuto ? copy.autoPilot : copy.manualLink}
                 </div>
 
                 <div className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1.5 ${bot?.is_live ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>
                    {bot?.is_live ? <Zap size={10} /> : <Clock size={10} />}
-                   {bot?.is_live ? "LIVE" : "PAPER"}
+                   {bot?.is_live ? copy.liveMode : copy.paperMode}
                 </div>
 
                 <button
@@ -440,7 +454,7 @@ export default function BotAgentCard({
                   ) : (
                     <RotateCcw size={11} className="opacity-70" />
                   )}
-                  {backtestLoading ? "ANALYSEREN..." : "BACKTEST STARTEN"}
+                   {backtestLoading ? copy.analyzing : copy.startBacktest}
                 </button>
 
                 <button
@@ -453,7 +467,7 @@ export default function BotAgentCard({
                   ) : (
                     <Activity size={11} className="opacity-70" />
                   )}
-                  SCENARIO'S
+                  {copy.scenarios}
                 </button>
               </div>
             </div>
@@ -486,32 +500,32 @@ export default function BotAgentCard({
         {/* 📊 SYSTEM STATUS BAR (UPGRADED PADDING) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-2 bg-[var(--color-border-subtle)] border border-slate-100 rounded-[1.5rem]">
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Statusreactie</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.statusReaction}</div>
              <div className={`text-xs font-black uppercase tracking-tight flex items-center gap-2 ${bot?.is_live ? 'text-emerald-600' : 'text-blue-600'}`}>
                 <div className={`w-2 h-2 rounded-full ${botState === 'live' ? (bot?.is_live ? 'bg-emerald-500' : 'bg-green-500') : 'bg-slate-400'}`} />
-                {bot?.is_live ? 'LIVE' : 'PAPER'} {botState}
+                {bot?.is_live ? copy.liveMode : copy.paperMode} {stateLabels[botState] || botState}
              </div>
           </div>
 
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Marktactie</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.marketAction}</div>
              <div className="text-xs font-black text-[var(--primary)] uppercase tracking-tight flex items-center gap-2">
                 <Rocket size={12} strokeWidth={3} />
-                {statusLabel}
+                {actionLabels[normalizedActionLabel] || normalizedActionLabel.toUpperCase()}
              </div>
           </div>
 
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Logische zekerheid</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.logicalConfidence}</div>
              <div className="text-xs font-black text-foreground uppercase tracking-tight flex items-center gap-2">
                 <Layers size={12} strokeWidth={3} />
-                {confidence}
+                {confidenceLabels[normalizedConfidence] || normalizedConfidence.toUpperCase()}
              </div>
           </div>
 
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">Telemetry-sync</div>
-             <div className="text-xs font-black text-muted tracking-tight font-mono">{lastRun || "SYNCHRONISEREN..."}</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.telemetrySync}</div>
+             <div className="text-xs font-black text-muted tracking-tight font-mono">{lastRun || copy.syncing}</div>
           </div>
         </div>
 
@@ -521,7 +535,7 @@ export default function BotAgentCard({
           className="w-full mt-4 py-3 border border-slate-200 dark:border-slate-800 border-dashed rounded-xl text-[10px] font-black text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center justify-center gap-2 uppercase tracking-[0.2em] shadow-sm active:scale-[0.99]"
         >
           {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          {isExpanded ? "Diagnostiek inklappen" : "Volledige diagnostiek bekijken"}
+          {isExpanded ? copy.collapseDiagnostics : copy.viewFullDiagnostics}
         </button>
 
         {/* 📊 BACKTEST RESULTS SECTION */}
@@ -530,7 +544,7 @@ export default function BotAgentCard({
           <div className="mt-4 p-6 bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl flex items-center justify-center gap-4 animate-pulse">
             <div className="w-5 h-5 border-2 border-slate-300 border-t-[var(--primary)] animate-spin rounded-full" />
             <div className="text-xs font-black text-secondary uppercase tracking-[0.2em]">
-              {scenariosLoading ? "Parallelle scenario's doorrekenen..." : "Laatste 30 dagen analyseren..."}
+              {scenariosLoading ? copy.scenarioLoading : copy.backtestLoading}
             </div>
           </div>
         )}
@@ -546,7 +560,7 @@ export default function BotAgentCard({
                   <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
                     <Activity size={16} strokeWidth={3} />
                   </div>
-                  <h3 className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">{symbol} Performancescan (V2)</h3>
+                  <h3 className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">{symbol} {copy.performanceScan}</h3>
                 </div>
                 <button 
                   onClick={() => setBacktestResult(null)}
@@ -558,23 +572,25 @@ export default function BotAgentCard({
 
               <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-slate-100">
                 <div className="p-8 hover:bg-slate-50/50 transition-colors">
-                  <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-2">Profit (€)</div>
+                  <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-2">{copy.profit}</div>
                   <div className={`text-2xl font-black tracking-tighter ${backtestResult.return_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                     {backtestResult.return_pct >= 0 ? '+' : ''}
-                    €{Math.round((backtestResult.return_pct / 100) * 10000).toLocaleString()}
+                    {formatCurrency(Math.round((backtestResult.return_pct / 100) * 10000), locale, "EUR", {
+                      maximumFractionDigits: 0,
+                    })}
                   </div>
-                  <div className="text-[8px] font-bold text-secondary mt-1 italic">€10,000 model</div>
+                  <div className="text-[8px] font-bold text-secondary mt-1 italic">{copy.modelTenK}</div>
                 </div>
 
                 <div className="p-8 hover:bg-slate-50/50 transition-colors">
-                  <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-2">ROI (%)</div>
+                  <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-2">{copy.roi}</div>
                   <div className={`text-2xl font-black tracking-tighter ${backtestResult.return_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                     {backtestResult.return_pct >= 0 ? '+' : ''}{backtestResult.return_pct}%
                   </div>
                 </div>
 
                 <div className="p-8 hover:bg-slate-50/50 transition-colors">
-                  <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-2">Win%</div>
+                  <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-2">{copy.winRate}</div>
                   <div className="text-2xl font-black text-foreground tracking-tighter">
                     {backtestResult.performance?.winrate}%
                   </div>
@@ -584,41 +600,43 @@ export default function BotAgentCard({
                 </div>
 
                 <div className="p-8 hover:bg-slate-50/50 transition-colors">
-                  <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-2">Total Capital</div>
+                  <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-2">{copy.totalCapital}</div>
                   <div className="text-2xl font-black text-foreground tracking-tighter">
-                    €{Math.round(10000 + ((backtestResult.return_pct / 100) * 10000)).toLocaleString()}
+                    {formatCurrency(Math.round(10000 + ((backtestResult.return_pct / 100) * 10000)), locale, "EUR", {
+                      maximumFractionDigits: 0,
+                    })}
                   </div>
-                  <div className="text-[8px] font-bold text-indigo-400 mt-1 uppercase tracking-widest">€10K START</div>
+                  <div className="text-[8px] font-bold text-indigo-400 mt-1 uppercase tracking-widest">{copy.tenKStart}</div>
                 </div>
               </div>
 
               <div className="p-6 bg-slate-50/80 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex flex-col">
-                  <span className="text-[8px] font-bold text-secondary uppercase tracking-widest">Avg Trade</span>
+                  <span className="text-[8px] font-bold text-secondary uppercase tracking-widest">{copy.avgTrade}</span>
                   <span className={`text-xs font-black ${backtestResult.performance?.expectancy >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                     {backtestResult.performance?.expectancy >= 0 ? '+' : ''}{backtestResult.performance?.expectancy}%
                   </span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[8px] font-bold text-secondary uppercase tracking-widest">Best Trade</span>
+                  <span className="text-[8px] font-bold text-secondary uppercase tracking-widest">{copy.bestTrade}</span>
                   <span className="text-xs font-black text-emerald-600">+{backtestResult.performance?.best_trade_pct}%</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[8px] font-bold text-secondary uppercase tracking-widest">Worst Trade</span>
+                  <span className="text-[8px] font-bold text-secondary uppercase tracking-widest">{copy.worstTrade}</span>
                   <span className="text-xs font-black text-red-400">{backtestResult.performance?.worst_trade_pct}%</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[8px] font-bold text-secondary uppercase tracking-widest">Executions</span>
+                  <span className="text-[8px] font-bold text-secondary uppercase tracking-widest">{copy.executions}</span>
                   <span className="text-xs font-black text-slate-600">
-                    {backtestResult.total_trades} trades
+                    {backtestResult.total_trades} {copy.trades}
                   </span>
                 </div>
                 <div className="flex flex-col text-right">
                   <span 
                     className="text-[8px] font-bold text-secondary uppercase tracking-widest cursor-help underline decoration-slate-200 decoration-dotted"
-                    title="Expected average profit per trade based on historical performance"
+                    title={copy.expectancyTooltip}
                    >
-                     Expectancy ?
+                     {copy.expectancy}
                    </span>
                   <span className={`text-xs font-black ${backtestResult.performance?.expectancy >= 0 ? 'text-indigo-600' : 'text-red-500'}`}>
                     {backtestResult.performance?.expectancy >= 0 ? '+' : ''}{backtestResult.performance?.expectancy}%
@@ -629,25 +647,29 @@ export default function BotAgentCard({
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="p-5 bg-card border border-slate-100 rounded-2xl shadow-sm">
-                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-3">AI_SUMMARY</div>
+                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-3">{copy.aiSummary}</div>
                 <div className="text-sm font-bold text-slate-700 leading-relaxed italic border-l-4 border-indigo-400 pl-4 py-1">
-                  "{backtestResult.summary?.message || 'Geen details beschikbaar.'}"
+                  "{backtestResult.summary?.message || copy.noDetails}"
                 </div>
               </div>
 
               <div className="p-5 bg-slate-50/50 border border-slate-100 rounded-2xl shadow-sm">
-                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-3">RECENT_TRADES</div>
+                <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-3">{copy.recentTrades}</div>
                 <div className="space-y-2">
                   {backtestResult.trades?.length > 0 ? (
                     backtestResult.trades.map((t, i) => (
                       <div key={i} className="flex items-center justify-between bg-card px-3 py-2 rounded-xl border border-slate-100 shadow-xs">
                         <div className="flex items-center gap-3">
                            {t.type === 'buy' ? (
-                             <div className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">BUY</div>
+                             <div className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">{copy.buy}</div>
                            ) : (
-                             <div className="text-[10px] font-black text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">SELL</div>
+                             <div className="text-[10px] font-black text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">{copy.sell}</div>
                            )}
-                           <span className="text-xs font-bold text-muted tracking-tighter">€{t.price.toLocaleString()}</span>
+                           <span className="text-xs font-bold text-muted tracking-tighter">
+                             {formatCurrency(Number(t.price ?? 0), locale, "EUR", {
+                               maximumFractionDigits: 0,
+                             })}
+                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                            {t.pnl_pct !== null && (
@@ -666,7 +688,7 @@ export default function BotAgentCard({
                       </div>
                     ))
                   ) : (
-                    <div className="text-[10px] font-bold text-secondary italic">Geen trades uitgevoerd in de afgelopen 30 dagen.</div>
+                    <div className="text-[10px] font-bold text-secondary italic">{copy.noRecentTrades}</div>
                   )}
                 </div>
               </div>
@@ -682,7 +704,7 @@ export default function BotAgentCard({
                    <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center border border-indigo-200">
                       <Zap size={18} strokeWidth={3} />
                    </div>
-                   <h3 className="text-sm font-black text-foreground uppercase tracking-widest">Scenario Comparison</h3>
+                   <h3 className="text-sm font-black text-foreground uppercase tracking-widest">{copy.scenarioComparison}</h3>
                 </div>
                 <button onClick={() => setScenarios({})} className="text-secondary hover:text-slate-600 transition-colors">
                    <RotateCcw size={14} />
@@ -704,7 +726,7 @@ export default function BotAgentCard({
                         className={`p-5 rounded-2xl flex flex-col items-center text-center transition-all ${isBest ? 'bg-white border-2 border-indigo-500 shadow-lg shadow-indigo-100' : 'bg-white/50 border border-slate-200'}`}
                       >
                          <div className="flex items-center gap-2 mb-3">
-                           <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">{type}</div>
+                           <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">{scenarioLabels[type] || type}</div>
                            {isBest && <span className="text-[10px]">🏆</span>}
                          </div>
 
@@ -714,10 +736,12 @@ export default function BotAgentCard({
                          
                          <div className="space-y-1">
                            <div className={`text-[12px] font-black ${isBest ? 'text-slate-900' : 'text-slate-600'}`}>
-                             €{Math.round(10000 + ((res.return_pct / 100) * 10000)).toLocaleString()}
+                             {formatCurrency(Math.round(10000 + ((res.return_pct / 100) * 10000)), locale, "EUR", {
+                               maximumFractionDigits: 0,
+                             })}
                            </div>
                            <div className="text-[9px] font-bold text-secondary uppercase tracking-widest">
-                             {res.total_trades} trades
+                             {res.total_trades} {copy.trades}
                            </div>
                          </div>
                       </div>
@@ -754,7 +778,7 @@ export default function BotAgentCard({
               {loadingBotMarketIntelligence ? (
                 <div className="flex items-center gap-3 text-xs font-black text-secondary uppercase tracking-widest p-10 justify-center">
                   <div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-[var(--primary)] animate-spin" />
-                  Syncing Brain...
+                  {copy.syncingBrain}
                 </div>
               ) : (
                 <MarketDecisionCard data={botMarketIntelligence} />
@@ -801,9 +825,9 @@ export default function BotAgentCard({
             >
               <div className="flex items-center gap-3">
                 <Clock size={14} className="group-hover:rotate-[360deg] transition-transform duration-700" />
-                {showHistory ? "SYSTEM_LOGS_MINIMIZE" : "SYSTEM_LOGS_OPEN"}
+                {showHistory ? copy.systemLogsMinimize : copy.systemLogsOpen}
               </div>
-              <div className="text-[10px] opacity-40">[{combinedHistory.length} ENTRIES]</div>
+              <div className="text-[10px] opacity-40">[{combinedHistory.length} {copy.entries.toUpperCase()}]</div>
             </button>
 
             {showHistory && (

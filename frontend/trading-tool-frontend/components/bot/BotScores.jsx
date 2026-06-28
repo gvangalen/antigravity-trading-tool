@@ -3,11 +3,14 @@
 import CardWrapper from "@/components/ui/CardWrapper";
 import CardLoader from "@/components/ui/CardLoader";
 import { BarChart3 } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function BotScores({
   scores = {},
   loading = false,
 }) {
+  const { t } = useTranslation();
+  const copy = t?.botPage?.botScores || {};
   const hasScores =
     scores && Object.keys(scores).length > 0;
 
@@ -18,19 +21,19 @@ export default function BotScores({
           <BarChart3 size={18} />
         </div>
         <div>
-          <div className="text-[10px] font-black text-muted uppercase tracking-widest">Omgevingsanalyse</div>
-          <div className="text-sm font-bold text-foreground tracking-tight">Systeemstatus en marktdomeinen</div>
+          <div className="text-[10px] font-black text-muted uppercase tracking-widest">{copy.eyebrow}</div>
+          <div className="text-sm font-bold text-foreground tracking-tight">{copy.title}</div>
         </div>
       </div>
 
       {loading && (
-        <CardLoader text="SIGNALEN LADEN..." />
+        <CardLoader text={copy.loading} />
       )}
 
       {!loading && !hasScores && (
         <div className="p-8 rounded-2xl bg-[var(--color-border-subtle)] border border-[var(--color-border)] border-dashed text-center">
           <p className="text-xs font-black text-muted uppercase tracking-widest">
-            Nog geen meetdata beschikbaar voor deze sessie
+            {copy.empty}
           </p>
         </div>
       )}
@@ -62,7 +65,7 @@ export default function BotScores({
                 `}
               >
                 <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-1">
-                  {key} score
+                  {copy.scoreSuffixTemplate.replace("{key}", key)}
                 </div>
 
                 <div className={`text-2xl font-black font-mono tracking-tighter ${colorClass}`}>

@@ -26,25 +26,11 @@ import {
 import { useScoresData } from "@/hooks/useScoresData";
 import { fetchStrategies } from "@/lib/api/strategy";
 import { fetchBotConfigs } from "@/lib/api/botApi";
-
-/* =========================================================
-   🧠 SCORE INTERPRETATIE
-========================================================= */
-const scoreLabel = (v) => {
-  if (v <= 25) return "Sterk bearish / risk-off";
-  if (v <= 45) return "Bearish";
-  if (v <= 60) return "Neutraal";
-  if (v <= 75) return "Neutraal → bullish";
-  if (v <= 90) return "Bullish";
-  return "Euforisch / oververhit";
-};
-
-const rangeText = (min, max) =>
-  `${scoreLabel(min)} → ${scoreLabel(max)}`;
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 const setupNameById = (setups, id) => {
   const setup = Array.isArray(setups) ? setups.find((item) => item.id === id) : null;
-  return setup?.name || setup?.symbol || "Deze setup";
+  return setup?.name || setup?.symbol;
 };
 
 /* =========================================================
@@ -58,6 +44,17 @@ export default function SetupList({
   removeSetup,
   reload,
 }) {
+  const { t } = useTranslation();
+  const copy = t?.setups?.list || {};
+  const scoreLabel = (v) => {
+    if (v <= 25) return copy.scoreVeryBearish;
+    if (v <= 45) return copy.scoreBearish;
+    if (v <= 60) return copy.scoreNeutral;
+    if (v <= 75) return copy.scoreNeutralBullish;
+    if (v <= 90) return copy.scoreBullish;
+    return copy.scoreEuphoric;
+  };
+  const rangeText = (min, max) => `${scoreLabel(min)} → ${scoreLabel(max)}`;
   const { openConfirm, showSnackbar } = useModal();
 
   const [localSetups, setLocalSetups] = useState(setups);
@@ -116,7 +113,7 @@ export default function SetupList({
         );
       }
 
-      showSnackbar("AI-uitleg succesvol gegenereerd", "success");
+      showSnackbar(copy.aiSuccess, "success");
 
       setJustUpdated((p) => ({ ...p, [id]: true }));
       setTimeout(
@@ -125,7 +122,7 @@ export default function SetupList({
       );
     } catch (e) {
       console.error(e);
-      showSnackbar("AI generatie mislukt", "danger");
+      showSnackbar(copy.aiFailed, "danger");
     } finally {
       setAiLoading((p) => ({ ...p, [id]: false }));
     }
@@ -143,8 +140,8 @@ export default function SetupList({
         strategy_id: lineage.strategy?.id || null,
       };
       const [review, adherence] = await Promise.all([
-        assistantChat(`Beoordeel deze setup voor ${setup.symbol}.`, context, []),
-        assistantChat(`Past deze setup nog bij mijn plan voor ${setup.symbol}?`, context, []),
+        assistantChat(copy.finnReviewPrompt.replace("{symbol}", setup.symbol), context, []),
+        assistantChat(copy.finnPlanPrompt.replace("{symbol}", setup.symbol), context, []),
       ]);
       setFinnPanels((p) => ({
         ...p,
@@ -155,7 +152,7 @@ export default function SetupList({
       }));
     } catch (e) {
       console.error(e);
-      showSnackbar("Finn-check mislukt", "danger");
+      showSnackbar(copy.finnFailed, "danger");
     } finally {
       setFinnLoading((p) => ({ ...p, [setup.id]: false }));
     }
@@ -166,19 +163,19 @@ export default function SetupList({
   --------------------------------------------------------- */
   function openDeleteModal(id) {
     openConfirm({
-      title: "Setup verwijderen",
-      statusLabel: "Gevoelige actie",
+      title: copy.deleteTitle,
+      statusLabel: copy.deleteStatus,
       tone: "danger",
-      confirmText: "Verwijder setup",
-      cancelText: "Annuleren",
-      context: <p>{setupNameById(localSetups, id)}</p>,
-      impact: <p>De setup verdwijnt uit je actieve lijst en is niet meer beschikbaar voor review of vervolgacties.</p>,
-      safety: <p>Dit verwijdert alleen deze setup. Verwijderen kan niet ongedaan worden gemaakt.</p>,
-      consequence: <p>Na bevestigen verversen we de lijst en kun je Finn gebruiken om een nieuwe setup te laten beoordelen.</p>,
+      confirmText: copy.deleteConfirm,
+      cancelText: copy.cancelAction,
+      context: <p>{setupNameById(localSetups, id) || copy.setupFallbackName}</p>,
+      impact: <p>{copy.deleteImpact}</p>,
+      safety: <p>{copy.deleteSafety}</p>,
+      consequence: <p>{copy.deleteConsequence}</p>,
       onConfirm: async () => {
         await removeSetup(id);
         reload && reload();
-        showSnackbar("Setup verwijderd. Vraag Finn om een nieuwe setup te reviewen als je wilt verdergaan.", "success");
+        showSnackbar(copy.deleteSuccess, "success");
       },
     });
   }
@@ -188,13 +185,13 @@ export default function SetupList({
   --------------------------------------------------------- */
   function openEditModal(setup) {
     openConfirm({
-      title: `Setup bewerken – ${setup.name}`,
-      statusLabel: "Wijzig concept",
+      title: `${copy.editTitle} – ${setup.name}`,
+      statusLabel: copy.editStatus,
       tone: "primary",
-      confirmText: "Sla setup op",
-      cancelText: "Annuleren",
+      confirmText: copy.editConfirm,
+      cancelText: copy.cancelAction,
       description: <SetupFormWrapper setup={setup} />,
-      consequence: <p>Na opslaan verversen we de setup en kun je Finn direct opnieuw laten beoordelen of hij nog past bij je plan.</p>,
+      consequence: <p>{copy.editConsequence}</p>,
       onConfirm: () =>
         document.querySelector("#setup-edit-submit")?.click(),
     });
@@ -208,7 +205,7 @@ export default function SetupList({
           initialData={setup}
           onSaved={() => {
             reload && reload();
-            showSnackbar("Setup bijgewerkt. Finn kan nu opnieuw checken of deze setup nog klopt.", "success");
+            showSnackbar(copy.editSuccess, "success");
           }}
         />
       </div>
@@ -219,7 +216,7 @@ export default function SetupList({
      LINEAGE & STATUS HELPERS
   --------------------------------------------------------- */
   const getSetupStatus = (setup) => {
-    if (scoresLoading) return { active: false, label: "Laden..." };
+    if (scoresLoading) return { active: false, label: copy.loadingStatus };
     
     const isMacroOk = macro.score >= setup.min_macro_score && macro.score <= setup.max_macro_score;
     const isTechOk = technical.score >= setup.min_technical_score && technical.score <= setup.max_technical_score;
@@ -228,7 +225,7 @@ export default function SetupList({
     const active = isMacroOk && isTechOk && isMarketOk;
     return { 
       active, 
-      label: active ? "ACTIEF" : "STANDBY",
+      label: active ? copy.activeLabel : copy.standbyLabel,
       reasons: { macro: isMacroOk, tech: isTechOk, market: isMarketOk }
     };
   };
@@ -246,12 +243,12 @@ export default function SetupList({
     <div className="space-y-6 mt-4">
       {loading && (
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
-          Setups worden geladen. Zodra de context binnen is, kun je Finn direct laten reviewen wat aandacht nodig heeft.
+          {copy.loadingBanner}
         </div>
       )}
       {error && (
         <div className="rounded-2xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
-          Setups konden niet geladen worden. De lijst kan daardoor verouderd zijn. Ververs de pagina of vraag Finn om de huidige setupcontext kort samen te vatten.
+          {copy.errorBanner}
         </div>
       )}
 
@@ -278,7 +275,7 @@ export default function SetupList({
               {/* AI overlay */}
               {aiLoading[setup.id] && (
                 <div className="absolute inset-0 z-20 rounded-2xl bg-white/60 backdrop-blur-sm flex items-center justify-center">
-                  <AILoader variant="dots" size="md" text="AI analyse…" />
+                  <AILoader variant="dots" size="md" text={copy.analyzing} />
                 </div>
               )}
 
@@ -333,11 +330,15 @@ export default function SetupList({
                         {/* Gap Analysis */}
                         <div className="text-[9px] font-bold text-right">
                            {status.active ? (
-                              <span className="text-green-500/70 uppercase tracking-tighter">✓ Alle voorwaarden voldaan</span>
+                              <span className="text-green-500/70 uppercase tracking-tighter">
+                                {copy.allConditionsMet}
+                              </span>
                            ) : (
                               <div className="flex flex-col gap-0.5 items-end opacity-60">
                                  {gaps.map((gap, i) => (
-                                    <span key={i} className="text-secondary">Wacht op {gap}</span>
+                                    <span key={i} className="text-secondary">
+                                      {copy.waitingForPrefix} {gap}
+                                    </span>
                                  ))}
                               </div>
                            )}
@@ -352,14 +353,14 @@ export default function SetupList({
                 <h3 className="font-black text-[var(--text-dark)] leading-tight uppercase text-base tracking-tight">{setup.name}</h3>
                 <p className="text-[10px] text-[var(--text-light)] font-bold uppercase tracking-widest mt-1 flex items-center gap-1">
                   {setup.setup_type === 'dca' ? <Rocket size={10} /> : <Target size={10} />}
-                  {setup.setup_type || 'Aangepast'} blueprint
+                  {setup.setup_type || copy.customBlueprint} {copy.blueprintSuffix}
                 </p>
               </div>
 
               {/* SCORE RANGES */}
               <div className="space-y-3 bg-card p-5 rounded-2xl border-2 border-slate-50">
                 <div>
-                  <strong>Macro:</strong>{" "}
+                  <strong>{copy.macroLabel}:</strong>{" "}
                   {setup.min_macro_score}–{setup.max_macro_score}
                   <div className="opacity-70">
                     {rangeText(
@@ -370,7 +371,7 @@ export default function SetupList({
                 </div>
 
                 <div>
-                  <strong>Technisch:</strong>{" "}
+                  <strong>{copy.technicalLabel}:</strong>{" "}
                   {setup.min_technical_score}–{setup.max_technical_score}
                   <div className="opacity-70">
                     {rangeText(
@@ -381,7 +382,7 @@ export default function SetupList({
                 </div>
 
                 <div>
-                  <strong>Markt:</strong>{" "}
+                  <strong>{copy.marketLabel}:</strong>{" "}
                   {setup.min_market_score}–{setup.max_market_score}
                   <div className="opacity-70">
                     {rangeText(
@@ -394,7 +395,7 @@ export default function SetupList({
 
               {/* UITLEG */}
               <div className="mt-4 text-xs font-medium text-dim leading-relaxed bg-slate-50/50 p-5 rounded-2xl border-2 border-slate-50">
-                {setup.explanation || "Nog geen uitleg beschikbaar."}
+                {setup.explanation || copy.noExplanation}
               </div>
 
               {(finnPanel.review || finnPanel.adherence) && (
@@ -402,9 +403,9 @@ export default function SetupList({
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 text-slate-600">
                       <Brain size={15} className="text-violet-500" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Finn-check</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest">{copy.finnCheck}</span>
                     </div>
-                    {finnBusy && <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Laden…</span>}
+                    {finnBusy && <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.loadingShort}</span>}
                   </div>
 
                   {finnPanel.review && (
@@ -416,7 +417,7 @@ export default function SetupList({
                           : "border-emerald-200 bg-emerald-50 text-emerald-700"
                     }`}>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[9px] font-black uppercase tracking-widest">Setupreview</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest">{copy.setupReview}</span>
                         <span className="text-[8px] font-black uppercase tracking-widest">{finnPanel.review.decision_status}</span>
                       </div>
                       <p className="mt-2 text-xs font-semibold leading-relaxed">{finnPanel.review.risk_summary}</p>
@@ -435,7 +436,7 @@ export default function SetupList({
                           : "border-rose-200 bg-rose-50 text-rose-700"
                     }`}>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[9px] font-black uppercase tracking-widest">Plantrouw</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest">{copy.planAdherence}</span>
                         <span className="text-[8px] font-black uppercase tracking-widest">{finnPanel.adherence.adherence_status}</span>
                       </div>
                       <p className="mt-2 text-xs font-semibold leading-relaxed">{finnPanel.adherence.adherence_reason}</p>
@@ -456,10 +457,10 @@ export default function SetupList({
                 >
                   <BotIcon size={16} />
                   {aiLoading[setup.id]
-                    ? "ANALYSEREN…"
+                    ? copy.analyzing
                     : setup.explanation
-                    ? "Blueprint opnieuw analyseren"
-                    : "Strategie-DNA analyseren"}
+                    ? copy.reanalyzeBlueprint
+                    : copy.analyzeBlueprint}
                 </button>
                 <button
                   onClick={() => handleFinnReview(setup)}
@@ -467,7 +468,7 @@ export default function SetupList({
                   className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-violet-600 bg-violet-50 hover:bg-violet-100 transition-all border-2 border-violet-100/50"
                 >
                   <Brain size={16} />
-                  {finnBusy ? "Finn-check…" : "Check met Finn"}
+                  {finnBusy ? copy.finnChecking : copy.checkWithFinn}
                 </button>
               </div>
 
@@ -480,16 +481,16 @@ export default function SetupList({
                     </div>
                     <ChevronRight size={12} className="opacity-30 mt-3" />
                     <div className="flex flex-col items-center gap-1 flex-1">
-                       <span>Strategie</span>
+                       <span>{copy.strategyLabel}</span>
                        <span className={lineage.strategy ? "text-green-600 truncate max-w-[60px]" : "opacity-40"}>
-                          {lineage.strategy?.name || "Geen"}
+                          {lineage.strategy?.name || copy.none}
                        </span>
                     </div>
                     <ChevronRight size={12} className="opacity-30 mt-3" />
                     <div className="flex flex-col items-center gap-1 flex-1">
-                       <span>Bot</span>
+                       <span>{copy.botLabel}</span>
                        <span className={lineage.bot?.is_active ? "text-purple-600" : "opacity-40 text-red-400"}>
-                          {lineage.bot ? (lineage.bot.is_active ? "Actief" : "Gepauzeerd") : "Geen"}
+                          {lineage.bot ? (lineage.bot.is_active ? copy.botActive : copy.botPaused) : copy.none}
                        </span>
                     </div>
                  </div>
@@ -501,14 +502,14 @@ export default function SetupList({
                   onClick={() => openDeleteModal(setup.id)}
                   className="text-[10px] font-black uppercase text-red-500 hover:text-red-600 tracking-[0.2em] transition-all flex items-center gap-2 px-2"
                 >
-                  <Trash size={12} /> Verwijderen
+                  <Trash size={12} /> {copy.deleteAction}
                 </button>
                 
                 <button
                   onClick={() => openEditModal(setup)}
                   className="flex items-center gap-3 px-6 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest bg-slate-900 text-white hover:bg-black transition-all shadow-sm active:scale-95"
                 >
-                  <Pencil size={12} /> Bewerken
+                  <Pencil size={12} /> {copy.editAction}
                 </button>
               </div>
                   </>
@@ -518,7 +519,7 @@ export default function SetupList({
           ))
         ) : (
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 px-4 py-4 text-sm text-slate-600 dark:text-slate-300">
-            Geen setups voor deze selectie. Dat kan normaal zijn als je context net is ververst of als er nog geen actief concept klaarstaat. Vraag Finn om een nieuw setupconcept als je verder wilt.
+            {copy.emptyState}
           </div>
         )}
       </div>

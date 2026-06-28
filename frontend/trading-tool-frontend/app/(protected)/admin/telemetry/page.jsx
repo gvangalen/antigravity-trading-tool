@@ -16,15 +16,27 @@ import {
   Users,
 } from "lucide-react";
 
+import { useTranslation } from "@/app/providers/I18nProvider";
 import { fetchAdminTelemetry } from "@/lib/api/admin";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
+import { formatDateTime } from "@/lib/i18n";
 
-function formatTimestamp(isoValue) {
-  if (!isoValue) return "Onbekend";
+function replaceTemplate(template, values = {}) {
+  return String(template || "").replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ""));
+}
+
+function formatTimestamp(isoValue, locale, fallbackUnknown) {
+  if (!isoValue) return fallbackUnknown;
   const date = new Date(isoValue);
-  if (Number.isNaN(date.getTime())) return "Onbekend";
-  return `${date.toLocaleDateString("nl-NL")} ${date.toLocaleTimeString("nl-NL")}`;
+  if (Number.isNaN(date.getTime())) return fallbackUnknown;
+  return formatDateTime(date, locale, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatPercent(part, total) {
@@ -32,8 +44,8 @@ function formatPercent(part, total) {
   return `${Math.round((part / total) * 100)}%`;
 }
 
-function toSentenceCase(value) {
-  if (!value) return "Onbekend";
+function toSentenceCase(value, fallbackUnknown) {
+  if (!value) return fallbackUnknown;
   return String(value)
     .replaceAll("_", " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
@@ -140,18 +152,20 @@ function FunnelRow({ label, value, total, helpText, tone = "blue" }) {
   );
 }
 
-function LatestEventCard({ event }) {
+function LatestEventCard({ event, copy, locale }) {
   return (
     <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-slate-800">{toSentenceCase(event.event_name)}</p>
+          <p className="text-sm font-semibold text-slate-800">
+            {toSentenceCase(event.event_name, copy.unknown)}
+          </p>
           <p className="mt-1 text-xs font-medium text-slate-500">
-            {event.page || event.surface || "Geen schermcontext"}
+            {event.page || event.surface || copy.noScreenContext}
           </p>
         </div>
         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-          {formatTimestamp(event.timestamp)}
+          {formatTimestamp(event.timestamp, locale, copy.unknown)}
         </span>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -167,18 +181,19 @@ function LatestEventCard({ event }) {
         ) : null}
         {event.prompt_text ? (
           <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">
-            Prompt
+            {copy.promptBadge}
           </span>
         ) : null}
       </div>
-      {event.prompt_text ? (
-        <p className="mt-3 text-sm font-medium text-slate-700">{event.prompt_text}</p>
-      ) : null}
+      {event.prompt_text ? <p className="mt-3 text-sm font-medium text-slate-700">{event.prompt_text}</p> : null}
     </div>
   );
 }
 
 export default function AdminTelemetryPage() {
+  const { t, locale } = useTranslation();
+  const copy = t.adminTelemetryPage;
+  const latestEventCopy = copy.latestEvents;
   const [telemetry, setTelemetry] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -193,12 +208,12 @@ export default function AdminTelemetryPage() {
       setError(null);
     } catch (err) {
       console.error("Failed to load telemetry", err);
-      setError("Telemetry kon niet worden geladen. Controleer admin-toegang of runtime health.");
+      setError(copy.loadError);
     } finally {
       setLoading(false);
       isFetchingRef.current = false;
     }
-  }, []);
+  }, [copy.loadError]);
 
   useVisibilityPolling(loadTelemetry, {
     intervalMs: 15000,
@@ -240,63 +255,73 @@ export default function AdminTelemetryPage() {
         ? {
             tone: "amber",
             icon: AlertTriangle,
-            text: `Queues lopen op (${queueTotal}). Check eerst broker depth en workerbelasting.`,
+            text: replaceTemplate(copy.summary.queueBusy, { queueTotal }),
           }
         : {
             tone: "green",
             icon: CheckCircle2,
-            text: "Queues staan leeg. Productie ademt op dit moment rustig.",
+            text: copy.summary.queueCalm,
           },
       totalSessions > 0
         ? {
             tone: "blue",
             icon: UserPlus,
-            text: `${dashboardRate} van de nieuwe sessies haalt het dashboard, ${reportRate} raakt report en ${promptRate} stelt direct een Finn-vraag.`,
+            text: replaceTemplate(copy.summary.sessionsActive, {
+              dashboardRate,
+              reportRate,
+              promptRate,
+            }),
           }
         : {
             tone: "slate",
             icon: Users,
-            text: "Nog geen nieuwe sessies in de huidige dataset. Laat 1 testuser een verse run doen om de funnel te vullen.",
+            text: copy.summary.noSessions,
           },
       topPrompt
         ? {
             tone: "slate",
             icon: Sparkles,
-            text: `Meest zichtbare Finn-vraag nu: “${topPrompt}”`,
+            text: replaceTemplate(copy.summary.topPrompt, { topPrompt }),
           }
         : {
             tone: "slate",
             icon: BrainCircuit,
-            text: "Nog geen prompts vastgelegd. Kijk of users Finn al vroeg genoeg vinden.",
+            text: copy.summary.noPrompts,
           },
       topFirstScreen
         ? {
             tone: "blue",
             icon: Activity,
-            text: `Nieuwe users landen eerst op ${topFirstScreen}. Meest gebruikte scherm nu: ${topScreen || topFirstScreen}.`,
+            text: replaceTemplate(copy.summary.topScreen, {
+              topFirstScreen,
+              topScreen: topScreen || topFirstScreen,
+            }),
           }
         : {
             tone: "slate",
             icon: Activity,
-            text: "Screen-telemetry is nog leeg. De volgende live sessie vult meteen first landings en screengebruik.",
+            text: copy.summary.noScreenTelemetry,
           },
       topBehavioralFlag
         ? {
             tone: "amber",
             icon: ShieldCheck,
-            text: `Behavioral rem rond ${toSentenceCase(topBehavioralFlag.flag)} is ${topBehavioralFlag.count} keer zichtbaar geweest, vooral op ${topBehavioralSurface?.surface || "bekende surfaces"}.`,
+            text: replaceTemplate(copy.summary.topBehavioralFlag, {
+              flag: toSentenceCase(topBehavioralFlag.flag, copy.unknown),
+              count: topBehavioralFlag.count,
+              surface: topBehavioralSurface?.surface || copy.knownSurfaces,
+            }),
           }
         : {
             tone: "slate",
             icon: ShieldCheck,
-            text: "Nog geen behavioral intervention-events zichtbaar. Zodra report of preflight deze remmen tonen, verschijnen ze hier.",
+            text: copy.summary.noBehavioralEvents,
           },
     ];
 
     return {
       health,
       analytics,
-      openaiRuntime,
       queueDepths,
       runtimeIdentity,
       onboardingFunnel,
@@ -314,15 +339,13 @@ export default function AdminTelemetryPage() {
       topBehavioralSurface,
       summaryNotes,
     };
-  }, [telemetry]);
+  }, [copy, telemetry]);
 
   if (loading) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center p-10">
         <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-blue-600/20 border-t-blue-600" />
-        <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
-          Telemetry wordt verzameld...
-        </p>
+        <p className="text-xs font-bold uppercase tracking-widest text-slate-400">{copy.loading}</p>
       </div>
     );
   }
@@ -333,7 +356,7 @@ export default function AdminTelemetryPage() {
         <div className="mb-4 inline-flex rounded-full bg-rose-50 p-4 text-rose-500">
           <ShieldCheck size={32} />
         </div>
-        <h1 className="mb-2 text-2xl font-black text-slate-900">Telemetry niet beschikbaar</h1>
+        <h1 className="mb-2 text-2xl font-black text-slate-900">{copy.unavailableTitle}</h1>
         <p className="mx-auto max-w-md text-slate-500">{error}</p>
       </div>
     );
@@ -353,7 +376,6 @@ export default function AdminTelemetryPage() {
     promptRate,
     confirmRate,
     reportRate,
-    dashboardRate,
     totalSessions,
     topBehavioralFlag,
     topBehavioralSurface,
@@ -361,7 +383,7 @@ export default function AdminTelemetryPage() {
   } = derived;
 
   return (
-    <div className="min-h-screen max-w-[1700px] animate-fade-in bg-[#fcfcfd] p-8 mx-auto">
+    <div className="mx-auto min-h-screen max-w-[1700px] animate-fade-in bg-[#fcfcfd] p-8">
       <div className="mb-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="mb-2 flex items-center gap-3">
@@ -369,29 +391,34 @@ export default function AdminTelemetryPage() {
               <Activity size={22} />
             </div>
             <h1 className="text-3xl font-black tracking-tight text-slate-900">
-              Platform <span className="text-blue-600">Telemetry</span>
+              {copy.pageTitlePrefix} <span className="text-blue-600">{copy.pageTitleAccent}</span>
             </h1>
           </div>
-          <p className="max-w-3xl text-sm font-medium text-slate-500">
-            Minder ruwe JSON, meer snelle productconclusies. Hier zie je waar nieuwe users landen, waar ze afhaken en wat ze Finn echt vragen.
-          </p>
+          <p className="max-w-3xl text-sm font-medium text-slate-500">{copy.pageSubtitle}</p>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Laatste update</p>
-            <p className="mt-1 text-xs font-bold text-slate-700">{formatTimestamp(health?.checked_at)}</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+              {copy.lastUpdated}
+            </p>
+            <p className="mt-1 text-xs font-bold text-slate-700">
+              {formatTimestamp(health?.checked_at, locale, copy.unknown)}
+            </p>
           </div>
-          <button onClick={loadTelemetry} className={actionButtonStyles({ variant: "primary", className: "rounded-2xl" })}>
+          <button
+            onClick={loadTelemetry}
+            className={actionButtonStyles({ variant: "primary", className: "rounded-2xl" })}
+          >
             <RefreshCcw size={14} />
-            Ververs telemetry
+            {copy.refresh}
           </button>
         </div>
       </div>
 
       <SectionCard
-        title="Snelle operatorlezing"
-        subtitle="De korte versie van wat deze telemetry nu zegt."
+        title={copy.operatorSummary.title}
+        subtitle={copy.operatorSummary.subtitle}
         actions={
           <div
             className={`rounded-2xl border px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] ${
@@ -400,7 +427,9 @@ export default function AdminTelemetryPage() {
                 : "border-emerald-100 bg-emerald-50 text-emerald-700"
             }`}
           >
-            OpenAI breaker {breakerActive ? "actief" : "rustig"}
+            {replaceTemplate(copy.operatorSummary.breakerStatus, {
+              state: breakerActive ? copy.operatorSummary.breakerActive : copy.operatorSummary.breakerCalm,
+            })}
           </div>
         }
       >
@@ -421,94 +450,107 @@ export default function AdminTelemetryPage() {
 
       <div className="my-10 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <TelemetryMetricCard
-          title="Queue depth"
+          title={copy.metrics.queueDepth.title}
           value={health?.cluster_observability?.total_queue_depth ?? 0}
-          subtitle={`Status: ${health?.status || "unknown"}`}
+          subtitle={replaceTemplate(copy.metrics.queueDepth.subtitle, {
+            status: health?.status || copy.unknown,
+          })}
           icon={<Layers3 size={18} className="text-blue-600" />}
           tone="blue"
         />
         <TelemetryMetricCard
-          title="Workers zichtbaar"
+          title={copy.metrics.visibleWorkers.title}
           value={health?.components?.celery?.worker_count ?? 0}
-          subtitle={runtimeIdentity?.instance_id || "runtime onbekend"}
+          subtitle={runtimeIdentity?.instance_id || copy.metrics.visibleWorkers.runtimeUnknown}
           icon={<BrainCircuit size={18} className="text-emerald-600" />}
           tone="green"
         />
         <TelemetryMetricCard
-          title="FINN events"
+          title={copy.metrics.finnEvents.title}
           value={analytics?.event_count ?? 0}
-          subtitle={`${analytics?.decision_review_usage_count ?? 0} decision reviews · ${analytics?.priority_engine_usage_count ?? 0} priority runs`}
+          subtitle={replaceTemplate(copy.metrics.finnEvents.subtitle, {
+            decisionReviews: analytics?.decision_review_usage_count ?? 0,
+            priorityRuns: analytics?.priority_engine_usage_count ?? 0,
+          })}
           icon={<CheckCircle2 size={18} className="text-slate-700" />}
           tone="slate"
         />
         <TelemetryMetricCard
-          title="Behavioral rem"
+          title={copy.metrics.behavioralBrake.title}
           value={analytics?.behavioral_intervention_seen_count ?? 0}
-          subtitle={`${analytics?.behavioral_intervention_ack_count ?? 0} acknowledgements`}
+          subtitle={replaceTemplate(copy.metrics.behavioralBrake.subtitle, {
+            acknowledgements: analytics?.behavioral_intervention_ack_count ?? 0,
+          })}
           icon={<ShieldCheck size={18} className="text-amber-600" />}
           tone="amber"
         />
         <TelemetryMetricCard
-          title="Nieuwe sessies"
+          title={copy.metrics.newSessions.title}
           value={firstSessionSummary?.sessions_seen ?? 0}
-          subtitle={`Meerdere sessies: ${repeatedUserSignal?.users_with_multiple_sessions ?? 0}`}
+          subtitle={replaceTemplate(copy.metrics.newSessions.subtitle, {
+            multipleSessions: repeatedUserSignal?.users_with_multiple_sessions ?? 0,
+          })}
           icon={<UserPlus size={18} className="text-amber-600" />}
           tone="amber"
         />
       </div>
 
       <div className="mb-10 grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <SectionCard
-          title="Behavioral Flags"
-          subtitle="Welke gedragsremmen Finn nu het vaakst zichtbaar maakt."
-        >
+        <SectionCard title={copy.behavioralFlags.title} subtitle={copy.behavioralFlags.subtitle}>
           <div className="space-y-3">
             {(analytics?.top_behavioral_flags || []).length ? (
               analytics.top_behavioral_flags.map((item) => (
                 <div key={item.flag} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">{toSentenceCase(item.flag)}</p>
+                      <p className="text-sm font-semibold text-slate-800">
+                        {toSentenceCase(item.flag, copy.unknown)}
+                      </p>
                       <p className="mt-1 text-xs font-medium text-slate-500">
                         {topBehavioralFlag?.flag === item.flag && topBehavioralSurface?.surface
-                          ? `Vaakst zichtbaar op ${topBehavioralSurface.surface}.`
-                          : "Komt terug in behavioral interventions."}
+                          ? replaceTemplate(copy.behavioralFlags.mostVisibleOn, {
+                              surface: topBehavioralSurface.surface,
+                            })
+                          : copy.behavioralFlags.recurringHint}
                       </p>
                     </div>
-                    <span className="text-xs font-black uppercase tracking-[0.2em] text-amber-600">{item.count}x</span>
+                    <span className="text-xs font-black uppercase tracking-[0.2em] text-amber-600">
+                      {item.count}x
+                    </span>
                   </div>
                 </div>
               ))
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm font-semibold text-slate-500">
-                Nog geen behavioral flags geregistreerd in producttelemetry.
+                {copy.behavioralFlags.empty}
               </div>
             )}
           </div>
         </SectionCard>
 
-        <SectionCard
-          title="Behavioral Surfaces"
-          subtitle="Waar de behavioral remmen nu vooral aan users getoond worden."
-        >
+        <SectionCard title={copy.behavioralSurfaces.title} subtitle={copy.behavioralSurfaces.subtitle}>
           <div className="space-y-3">
             {(analytics?.top_behavioral_surfaces || []).length ? (
               analytics.top_behavioral_surfaces.map((item) => (
                 <div key={item.surface} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">{toSentenceCase(item.surface)}</p>
+                      <p className="text-sm font-semibold text-slate-800">
+                        {toSentenceCase(item.surface, copy.unknown)}
+                      </p>
                       <p className="mt-1 text-xs font-medium text-slate-500">
-                        Surface waar behavioral interventions zijn gezien of bewust erkend.
+                        {copy.behavioralSurfaces.hint}
                       </p>
                     </div>
-                    <span className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">{item.count}x</span>
+                    <span className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">
+                      {item.count}x
+                    </span>
                   </div>
                 </div>
               ))
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm font-semibold text-slate-500">
-                Nog geen behavioral surfaces vastgelegd.
+                {copy.behavioralSurfaces.empty}
               </div>
             )}
           </div>
@@ -516,20 +558,23 @@ export default function AdminTelemetryPage() {
       </div>
 
       <div className="mb-10 grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_1fr]">
-        <SectionCard
-          title="Queue-overzicht"
-          subtitle="Zo zie je meteen of productie dichtslibt of netjes leegloopt."
-        >
+        <SectionCard title={copy.queueOverview.title} subtitle={copy.queueOverview.subtitle}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {queueDepths.map(([queueName, depth]) => (
               <div key={queueName} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{queueName}</p>
                 <div className="mt-2 flex items-end justify-between gap-4">
-                  <span className={`text-2xl font-black tracking-tight ${Number(depth) > 0 ? "text-amber-600" : "text-slate-900"}`}>
+                  <span
+                    className={`text-2xl font-black tracking-tight ${
+                      Number(depth) > 0 ? "text-amber-600" : "text-slate-900"
+                    }`}
+                  >
                     {depth}
                   </span>
                   <span className="text-xs font-semibold text-slate-500">
-                    {health?.components?.celery?.workers_by_queue?.[queueName]?.length || 0} workers
+                    {replaceTemplate(copy.queueOverview.workers, {
+                      count: health?.components?.celery?.workers_by_queue?.[queueName]?.length || 0,
+                    })}
                   </span>
                 </div>
               </div>
@@ -537,58 +582,71 @@ export default function AdminTelemetryPage() {
           </div>
         </SectionCard>
 
-        <SectionCard
-          title="First-session funnel"
-          subtitle="Hier zie je of nieuwe users onboarding halen, Finn vinden en confirm-frictie raken."
-        >
+        <SectionCard title={copy.firstSessionFunnel.title} subtitle={copy.firstSessionFunnel.subtitle}>
           <div className="grid grid-cols-1 gap-4">
             <FunnelRow
-              label="Dashboard bereikt"
+              label={copy.firstSessionFunnel.rows.dashboardReached.label}
               value={firstSessionSummary.sessions_reaching_dashboard ?? 0}
               total={totalSessions}
-              helpText="Van alle nieuwe sessies die we gezien hebben."
+              helpText={copy.firstSessionFunnel.rows.dashboardReached.help}
               tone="blue"
             />
             <FunnelRow
-              label="Report bereikt"
+              label={copy.firstSessionFunnel.rows.reportReached.label}
               value={firstSessionSummary.sessions_reaching_report ?? 0}
               total={totalSessions}
-              helpText="Belangrijk om te zien of report vroeg genoeg ontdekt wordt."
+              helpText={copy.firstSessionFunnel.rows.reportReached.help}
               tone="green"
             />
             <FunnelRow
-              label="Finn prompt gestuurd"
+              label={copy.firstSessionFunnel.rows.promptSent.label}
               value={firstSessionSummary.sessions_with_prompt ?? 0}
               total={totalSessions}
-              helpText={`${promptRate} van de nieuwe sessies stelt al een Finn-vraag.`}
+              helpText={replaceTemplate(copy.firstSessionFunnel.rows.promptSent.help, { promptRate })}
               tone="amber"
             />
             <FunnelRow
-              label="Confirm flow geraakt"
+              label={copy.firstSessionFunnel.rows.confirmReached.label}
               value={firstSessionSummary.sessions_with_confirm ?? 0}
               total={totalSessions}
-              helpText={`${confirmRate} van de nieuwe sessies loopt tegen een confirmmoment aan.`}
+              helpText={replaceTemplate(copy.firstSessionFunnel.rows.confirmReached.help, { confirmRate })}
               tone="blue"
             />
           </div>
           <div className="mt-5 flex flex-wrap items-center gap-3 text-sm font-semibold text-slate-700">
-            <span>{onboardingFunnel.sessions_seen ?? 0} sessies</span>
+            <span>
+              {replaceTemplate(copy.firstSessionFunnel.footer.sessionsSeen, {
+                count: onboardingFunnel.sessions_seen ?? 0,
+              })}
+            </span>
             <ArrowRight size={14} className="text-slate-300" />
-            <span>{onboardingFunnel.step_clicked ?? 0} stapkliks</span>
+            <span>
+              {replaceTemplate(copy.firstSessionFunnel.footer.stepClicked, {
+                count: onboardingFunnel.step_clicked ?? 0,
+              })}
+            </span>
             <ArrowRight size={14} className="text-slate-300" />
-            <span>{onboardingFunnel.step_completed ?? 0} afgeronde stappen</span>
+            <span>
+              {replaceTemplate(copy.firstSessionFunnel.footer.stepCompleted, {
+                count: onboardingFunnel.step_completed ?? 0,
+              })}
+            </span>
             <ArrowRight size={14} className="text-slate-300" />
-            <span>{onboardingFunnel.dashboard_activated ?? 0} dashboard activaties</span>
+            <span>
+              {replaceTemplate(copy.firstSessionFunnel.footer.dashboardActivated, {
+                count: onboardingFunnel.dashboard_activated ?? 0,
+              })}
+            </span>
           </div>
         </SectionCard>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <SimpleList
-          title="Top FINN prompts"
-          subtitle="De snelste manier om te zien wat users echt aan Finn vragen."
+          title={copy.topPrompts.title}
+          subtitle={copy.topPrompts.subtitle}
           items={analytics?.top_prompts || []}
-          emptyText="Nog geen FINN prompttelemetrie opgeslagen."
+          emptyText={copy.topPrompts.empty}
           renderItem={(item, index) => (
             <div key={`${item.prompt}-${index}`} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
               <div className="flex items-start justify-between gap-4">
@@ -600,16 +658,18 @@ export default function AdminTelemetryPage() {
         />
 
         <SimpleList
-          title="Top screengebruik"
-          subtitle="Handig om te zien waar de meeste aandacht zit."
+          title={copy.topScreens.title}
+          subtitle={copy.topScreens.subtitle}
           items={analytics?.top_screens || []}
-          emptyText="Nog geen screen-telemetry opgeslagen."
+          emptyText={copy.topScreens.empty}
           renderItem={(item, index) => (
             <div key={`${item.page}-${index}`} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-semibold text-slate-800">{item.page}</p>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Schermgebruik</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                    {copy.topScreens.label}
+                  </p>
                 </div>
                 <span className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">{item.count}x</span>
               </div>
@@ -618,16 +678,18 @@ export default function AdminTelemetryPage() {
         />
 
         <SimpleList
-          title="Eerste landingen"
-          subtitle="Dit laat zien waar nieuwe sessies echt beginnen."
+          title={copy.firstLandings.title}
+          subtitle={copy.firstLandings.subtitle}
           items={analytics?.top_first_screens || []}
-          emptyText="Nog geen first-landing data opgeslagen."
+          emptyText={copy.firstLandings.empty}
           renderItem={(item, index) => (
             <div key={`${item.page}-${index}`} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-semibold text-slate-800">{item.page}</p>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Eerste landing</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                    {copy.firstLandings.label}
+                  </p>
                 </div>
                 <span className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">{item.count}x</span>
               </div>
@@ -635,15 +697,12 @@ export default function AdminTelemetryPage() {
           )}
         />
 
-        <SectionCard
-          title="Confirm- en CTA-overzicht"
-          subtitle="Waar users doorpakken en waar ze nog twijfelen."
-        >
+        <SectionCard title={copy.confirmCtaOverview.title} subtitle={copy.confirmCtaOverview.subtitle}>
           <div className="grid grid-cols-3 gap-4">
             {[
-              ["Geopend", confirmFunnel.opened ?? 0],
-              ["Bevestigd", confirmFunnel.confirmed ?? 0],
-              ["Geannuleerd", confirmFunnel.canceled ?? 0],
+              [copy.confirmCtaOverview.stats.opened, confirmFunnel.opened ?? 0],
+              [copy.confirmCtaOverview.stats.confirmed, confirmFunnel.confirmed ?? 0],
+              [copy.confirmCtaOverview.stats.canceled, confirmFunnel.canceled ?? 0],
             ].map(([label, value]) => (
               <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-center">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{label}</p>
@@ -656,7 +715,7 @@ export default function AdminTelemetryPage() {
             <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
                 <BrainCircuit size={14} />
-                Beslischeck
+                {copy.confirmCtaOverview.decisionReview}
               </div>
               <p className="mt-2 text-2xl font-black tracking-tight text-slate-900">
                 {analytics?.decision_review_usage_count ?? 0}
@@ -665,7 +724,7 @@ export default function AdminTelemetryPage() {
             <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
                 <Clock3 size={14} />
-                Prioriteitenmotor
+                {copy.confirmCtaOverview.priorityEngine}
               </div>
               <p className="mt-2 text-2xl font-black tracking-tight text-slate-900">
                 {analytics?.priority_engine_usage_count ?? 0}
@@ -680,7 +739,9 @@ export default function AdminTelemetryPage() {
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <p className="text-sm font-semibold text-slate-800">{item.action}</p>
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">CTA actie</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                        {copy.confirmCtaOverview.ctaAction}
+                      </p>
                     </div>
                     <span className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">{item.count}x</span>
                   </div>
@@ -688,7 +749,7 @@ export default function AdminTelemetryPage() {
               ))
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm font-semibold text-slate-500">
-                Nog geen CTA-kliks opgeslagen.
+                {copy.confirmCtaOverview.empty}
               </div>
             )}
           </div>
@@ -697,11 +758,18 @@ export default function AdminTelemetryPage() {
 
       <div className="mt-6">
         <SimpleList
-          title="Laatste events"
-          subtitle="Handig voor een snelle sanity check zonder ruwe JSON."
+          title={latestEventCopy.title}
+          subtitle={latestEventCopy.subtitle}
           items={latestEvents.slice(0, 6)}
-          emptyText="Nog geen recente events beschikbaar."
-          renderItem={(event, index) => <LatestEventCard key={`${event.timestamp}-${index}`} event={event} />}
+          emptyText={latestEventCopy.empty}
+          renderItem={(event, index) => (
+            <LatestEventCard
+              key={`${event.timestamp}-${index}`}
+              event={event}
+              copy={latestEventCopy}
+              locale={locale}
+            />
+          )}
         />
       </div>
     </div>
