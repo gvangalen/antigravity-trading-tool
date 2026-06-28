@@ -9,6 +9,8 @@
     "dev": "next dev",
     "build": "NEXT_PRIVATE_BUILD_WORKER=1 next build",
     "export": "next build",
+    "lint:i18n": "node scripts/check-i18n-literals.mjs",
+    "test:i18n": "node --test tests/i18n-hardening.test.mjs",
     "ios:sync": "npm run build && npx cap sync ios",
     "start": "next start"
   },

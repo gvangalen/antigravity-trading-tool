@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from "react";
 import en from "@/dictionaries/en.json";
+import de from "@/dictionaries/de.json";
 import nl from "@/dictionaries/nl.json";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { updateAssistantPreferences } from "@/lib/api/ai";
@@ -11,18 +12,28 @@ import {
   normalizeLocale,
   persistLocale,
   resolveInitialLocale,
+  SUPPORTED_LOCALES,
 } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n";
 
-const dictionaries = { en, nl };
+export const dictionaries = {
+  nl,
+  en,
+  de,
+} as const satisfies Record<Locale, typeof en>;
+
+export function getDictionary(locale?: string | null) {
+  return dictionaries[normalizeLocale(locale) || DEFAULT_LOCALE];
+}
 
 type I18nContextValue = {
   locale: Locale;
   setLocale: (l: Locale) => void;
   t: typeof en;
+  supportedLocales: readonly Locale[];
 };
 
-const I18nContext = createContext<I18nContextValue | null>(null);
+export const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function useTranslation() {
   const ctx = useContext(I18nContext);
@@ -95,10 +106,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const t = dictionaries[locale];
+  const t = getDictionary(locale);
 
   return (
-    <I18nContext.Provider value={{ locale, setLocale, t }}>
+    <I18nContext.Provider value={{ locale, setLocale, t, supportedLocales: SUPPORTED_LOCALES }}>
       {children}
     </I18nContext.Provider>
   );

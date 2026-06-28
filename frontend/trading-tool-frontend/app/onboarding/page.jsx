@@ -76,6 +76,7 @@ export default function OnboardingPage() {
 
   const stepText = t?.traderProfile?.onboardingOverview?.steps || {};
   const statusText = t?.traderProfile?.onboardingOverview?.status || {};
+  const copy = t?.traderProfile?.onboardingOverview || {};
 
   const steps = [
     {
@@ -333,12 +334,12 @@ export default function OnboardingPage() {
                   {step.description}
                 </p>
                 <p className="mb-8 text-[13px] font-semibold leading-relaxed text-slate-600">
-                  <span className="text-blue-600">{copy.finnHelpsLabel || "Finn helps:"}</span> {step.finnHelp}
+                  <span className="text-blue-600">{copy.finnHelpsLabel}</span> {step.finnHelp}
                 </p>
 
                 <div className="mb-8 flex flex-wrap gap-2">
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">
-                    {copy.unlocksLabel || "Then you unlock"}
+                    {copy.unlocksLabel}
                   </span>
                   <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700">
                     {step.unlocks}
@@ -350,14 +351,14 @@ export default function OnboardingPage() {
                     <div className="flex items-center gap-2 text-emerald-500">
                       <CheckCircle2 size={16} />
                       <span className="text-[10px] font-black uppercase tracking-widest">
-                        {copy.stepCompleted || "Step completed"}
+                        {copy.stepCompleted}
                       </span>
                     </div>
                   ) : isUnlocked ? (
                     <div className="rounded-xl bg-blue-600 px-5 py-3 text-white shadow-md transition group-hover:bg-blue-700">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-black uppercase tracking-widest">
-                          {copy.openStep || "Open step"}
+                          {copy.openStep}
                         </span>
                         <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
                       </div>
@@ -366,11 +367,11 @@ export default function OnboardingPage() {
                     <div className="flex items-center gap-2 text-slate-500">
                       <Lock size={14} />
                       <span className="text-[10px] font-black uppercase tracking-widest leading-none">
-                        {(copy.completePreviousPrefix || "Complete")
+                        {copy.completePreviousPrefix
                           + " "
-                          + (steps[idx - 1]?.title || copy.previousStepFallback || "the previous step")
+                          + (steps[idx - 1]?.title || copy.previousStepFallback)
                           + " "
-                          + (copy.completePreviousSuffix || "first")}
+                          + copy.completePreviousSuffix}
                       </span>
                     </div>
                   )}
@@ -397,24 +398,23 @@ export default function OnboardingPage() {
             <div className="max-w-2xl">
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-600">
                 <ShieldCheck size={14} />
-                Basis staat
+                {t?.traderProfile?.onboardingOverview?.completeLabel}
               </div>
               <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900">
-                Je kunt nu echt met Tradamind werken
+                {t?.traderProfile?.onboardingOverview?.completeTitle}
               </h3>
               <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
-                Je onboarding is klaar. Open nu je dashboard voor het totaalbeeld, bekijk je report
-                voor samenvatting en vraag Finn om je eerste concrete volgende stap.
+                {t?.traderProfile?.onboardingOverview?.completeBody}
               </p>
               <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold">
                 <span className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-emerald-700">
-                  Dashboard openen
+                  {t?.traderProfile?.onboardingOverview?.completeActions?.dashboard}
                 </span>
                 <span className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-emerald-700">
-                  Report lezen
+                  {t?.traderProfile?.onboardingOverview?.completeActions?.report}
                 </span>
                 <span className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-emerald-700">
-                  Vraag Finn om je volgende stap
+                  {t?.traderProfile?.onboardingOverview?.completeActions?.finn}
                 </span>
               </div>
             </div>

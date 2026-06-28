@@ -1,11 +1,11 @@
 {
   "common": {
+    "delete": "Delete",
+    "cancel": "Cancel",
     "loading": "Loading...",
     "error": "An error occurred",
     "retry": "Retry",
     "save": "Save",
-    "cancel": "Cancel",
-    "delete": "Delete",
     "settings": "Settings",
     "explore": "Explore",
     "language": "Language",
@@ -20,6 +20,7 @@
     "status": "System Status",
     "updated": "Last Update",
     "name": "Name",
+    "trend": "Trend",
     "type": "Type",
     "asset": "Asset",
     "action": "Action",
@@ -33,6 +34,16 @@
     "evening": "Good evening"
   },
   "nav": {
+    "marketContext": "Market context",
+    "watchlistEmptyTitle": "No watchlist yet",
+    "watchlistEmptyBody": "Add assets through the search bar or let Finn add one to your watchlist. Your market context will appear here.",
+    "watchlistOpenContext": "Open the market context directly for",
+    "watchlistRemoveTitle": "Remove asset?",
+    "watchlistRemoveContext": "{symbol} will be removed from your active watchlist.",
+    "watchlistRemoveImpact": "The asset stays available, but disappears from your current tracking and quick context switches.",
+    "watchlistRemoveSafety": "This does not trigger orders or data changes. Only your personal watchlist changes.",
+    "watchlistRemoveConsequence": "After confirming, your watchlist refreshes and Finn focuses on your remaining assets.",
+    "watchlistRemoveSuccess": "{symbol} removed from watchlist",
     "dashboard": "Overview",
     "market": "Market",
     "macro": "Macro",
@@ -46,25 +57,15 @@
     "users": "Users",
     "logs": "System Logs",
     "telemetry": "Telemetry",
-    "command_center": "Command Center",
-    "marketContext": "Market context",
-    "watchlistEmptyTitle": "No watchlist yet",
-    "watchlistEmptyBody": "Add assets through the search bar or let Finn add one to your watchlist. Your market context will appear here.",
-    "watchlistRemoveTitle": "Remove asset?",
-    "watchlistRemoveContext": "{symbol} will be removed from your active watchlist.",
-    "watchlistRemoveImpact": "The asset stays available, but disappears from your current tracking and quick context switches.",
-    "watchlistRemoveSafety": "This does not trigger orders or data changes. Only your personal watchlist changes.",
-    "watchlistRemoveConsequence": "After confirming, your watchlist refreshes and Finn focuses on your remaining assets.",
-    "watchlistRemoveSuccess": "{symbol} removed from watchlist",
-    "watchlistOpenContext": "Open the market context directly for"
+    "command_center": "Command Center"
   },
   "ui": {
     "shell": {
-      "appSlogan": "Professional",
+      "appSlogan": "Professionell",
       "missionStatement": [
-        "TRADE SMARTER.",
-        "FOLLOW YOUR PLAN.",
-        "WIN CONSISTENTLY."
+        "HANDLE SMARTER.",
+        "FOLGE DEINEM PLAN.",
+        "GEWINNE KONSTANT."
       ]
     },
     "timeIntervals": {
@@ -76,8 +77,8 @@
       "year": "Year"
     },
     "searchDropdown": {
-      "label": "Search an item",
-      "placeholder": "Type to search…"
+      "label": "Element suchen",
+      "placeholder": "Zum Suchen tippen…"
     },
     "agentPanel": {
       "noData": "No data",
@@ -197,7 +198,7 @@
       "noMonthlyData": "No monthly data available",
       "noQuarterlyData": "No quarterly overview available",
       "neutralAction": "Neutral",
-      "weekLabel": "Week"
+      "weekLabel": "Woche"
     },
     "errorBoundary": {
       "title": "Data temporarily unavailable",
@@ -236,35 +237,35 @@
       "defaultTitle": "Tradamind"
     },
     "avatarMenu": {
-      "themeChanged": "Theme changed to",
-      "themeDark": "Dark",
-      "themeLight": "Light",
-      "languageChanged": "Language changed to",
-      "loggedOut": "You have been safely logged out ✔",
-      "openMenu": "Open profile menu",
-      "identifiedAs": "Identified as",
-      "role": "Role",
-      "profile": "Account & trader profile",
-      "chooseLanguage": "Choose your account language",
-      "lightMode": "Light mode",
-      "darkMode": "Dark mode",
-      "signingOut": "Signing out...",
-      "signOut": "Sign out"
+      "themeChanged": "Sprache geaendert zu",
+      "themeDark": "Dunkel",
+      "themeLight": "Hell",
+      "languageChanged": "Sprache geaendert zu",
+      "loggedOut": "Du wurdest sicher abgemeldet ✔",
+      "openMenu": "Profilmenue oeffnen",
+      "identifiedAs": "Identifiziert als",
+      "role": "Rolle",
+      "profile": "Konto und Finn-Profil",
+      "chooseLanguage": "Waehle deine Kontosprache",
+      "lightMode": "Heller Modus",
+      "darkMode": "Dunkler Modus",
+      "signingOut": "Abmelden...",
+      "signOut": "Abmelden"
     },
     "notificationsToggle": {
-      "notifications": "Notifications",
-      "loginRequired": "Log in to enable notifications",
-      "notReady": "Notifications are not ready yet",
-      "permissionDenied": "Notification permission was denied",
-      "unavailable": "Push notifications are unavailable right now",
-      "enabled": "Notifications enabled",
-      "disabled": "Notifications disabled",
-      "enableFailed": "Enabling notifications failed",
-      "disableFailed": "Disabling notifications failed",
-      "pushEnabled": "Push enabled",
-      "pushDisabled": "Push disabled",
-      "pushOn": "Push on",
-      "pushOff": "Push off"
+      "notifications": "Benachrichtigungen",
+      "loginRequired": "Melde dich an, um Benachrichtigungen zu aktivieren",
+      "notReady": "Benachrichtigungen sind noch nicht verfügbar",
+      "permissionDenied": "Benachrichtigungsberechtigung wurde verweigert",
+      "unavailable": "Push-Benachrichtigungen sind gerade nicht verfügbar",
+      "enabled": "Benachrichtigungen aktiviert",
+      "disabled": "Benachrichtigungen deaktiviert",
+      "enableFailed": "Aktivieren der Benachrichtigungen fehlgeschlagen",
+      "disableFailed": "Deaktivieren der Benachrichtigungen fehlgeschlagen",
+      "pushEnabled": "Push aktiviert",
+      "pushDisabled": "Push deaktiviert",
+      "pushOn": "Push an",
+      "pushOff": "Push aus"
     }
   },
   "dashboard": {
@@ -300,72 +301,72 @@
     "intelligenceSemantics": {
       "macro": {
         "expansion": {
-          "regime": "Expansion regime",
-          "posture": "Aggressive growth",
-          "riskState": "Minimal macro risk",
-          "explanation": "The market shows strong trend continuation, healthy liquidity, and favorable macroeconomic conditions."
+          "regime": "Expansionsregime",
+          "posture": "Aggressives Wachstum",
+          "riskState": "Geringes Makrorisiko",
+          "explanation": "Der Markt zeigt starke Trendfortsetzung, gesunde Liquidität und günstige makroökonomische Bedingungen."
         },
         "recovery": {
-          "regime": "Recovery phase",
-          "posture": "Constructive alignment",
-          "riskState": "Controlled risk",
-          "explanation": "Macro indicators are stabilizing after a correction with increasing capital inflows."
+          "regime": "Erholungsphase",
+          "posture": "Konstruktive Ausrichtung",
+          "riskState": "Kontrolliertes Risiko",
+          "explanation": "Makroindikatoren stabilisieren sich nach einer Korrektur bei zunehmenden Kapitalzuflüssen."
         },
         "stagflation": {
-          "regime": "Stagflation risk",
-          "posture": "Cautious stance",
-          "riskState": "Elevated uncertainty",
-          "explanation": "Conflicting inflation and rate-policy signals call for a lower trading frequency."
+          "regime": "Stagflationsrisiko",
+          "posture": "Vorsichtige Haltung",
+          "riskState": "Erhöhte Unsicherheit",
+          "explanation": "Widersprüchliche Signale bei Inflation und Zinspolitik verlangen eine niedrigere Handelsfrequenz."
         },
         "contraction": {
-          "regime": "Contraction regime",
-          "posture": "Defensive posture",
-          "riskState": "Severe contraction",
-          "explanation": "The macro environment shows severe liquidity contraction. Position sizing is automatically scaled down."
+          "regime": "Kontraktionsregime",
+          "posture": "Defensive Haltung",
+          "riskState": "Starke Kontraktion",
+          "explanation": "Das Makroumfeld zeigt eine starke Liquiditätskontraktion. Positionsgrößen werden automatisch reduziert."
         }
       },
       "technical": {
         "strong": {
-          "structure": "Bullish expansion",
-          "momentum": "Strong upward bias",
-          "explanation": "Price action and moving averages point to strong institutional upside momentum."
+          "structure": "Bullische Expansion",
+          "momentum": "Starker Aufwärtsdruck",
+          "explanation": "Kursverlauf und gleitende Durchschnitte deuten auf starkes institutionelles Aufwärtsmomentum hin."
         },
         "recovery": {
-          "structure": "Bullish recovery",
-          "momentum": "Positive divergence",
-          "explanation": "Technical structure is recovering from oversold conditions and building higher lows."
+          "structure": "Bullische Erholung",
+          "momentum": "Positive Divergenz",
+          "explanation": "Die technische Struktur erholt sich von überverkauften Bedingungen und bildet höhere Tiefs."
         },
         "neutral": {
-          "structure": "Consolidation",
-          "momentum": "Neutral / sideways",
-          "explanation": "Price is moving in a tight range without clear direction. Waiting for a breakout."
+          "structure": "Konsolidierung",
+          "momentum": "Neutral / seitwärts",
+          "explanation": "Der Preis bewegt sich in einer engen Spanne ohne klare Richtung. Es wird auf einen Ausbruch gewartet."
         },
         "weak": {
-          "structure": "Bearish structure",
-          "momentum": "Downward pressure",
-          "explanation": "A dominant downward trend with weak buying pressure. More cash or defensive positioning is more appropriate."
+          "structure": "Bärische Struktur",
+          "momentum": "Abwärtsdruck",
+          "explanation": "Ein dominanter Abwärtstrend mit schwachem Kaufdruck. Mehr Cash oder eine defensivere Positionierung ist sinnvoller."
         }
       },
       "market": {
         "strong": {
-          "posture": "Capital inflow",
-          "liquidity": "Premium liquidity",
-          "explanation": "High trading volumes and broad participation confirm robust institutional support."
+          "posture": "Kapitalzufluss",
+          "liquidity": "Starke Liquidität",
+          "explanation": "Hohe Handelsvolumina und breite Marktteilnahme bestätigen eine robuste institutionelle Unterstützung."
         },
         "recovery": {
-          "posture": "Stable participation",
-          "liquidity": "Standard volume",
-          "explanation": "Average liquidity and order book depth support regular execution."
+          "posture": "Stabile Teilnahme",
+          "liquidity": "Normales Volumen",
+          "explanation": "Durchschnittliche Liquidität und Orderbuchtiefe unterstützen die reguläre Ausführung."
         },
         "cautious": {
-          "posture": "Liquidity divergence",
-          "liquidity": "Thin order books",
-          "explanation": "Falling volume and widening spreads point to declining institutional interest."
+          "posture": "Liquiditätsdivergenz",
+          "liquidity": "Dünne Orderbücher",
+          "explanation": "Sinkendes Volumen und breitere Spreads deuten auf nachlassendes institutionelles Interesse hin."
         },
         "defensive": {
-          "posture": "Risk aversion",
-          "liquidity": "Capital flight",
-          "explanation": "Capital flight is visible, with elevated market-wide volatility and selling pressure."
+          "posture": "Risikovermeidung",
+          "liquidity": "Kapitalflucht",
+          "explanation": "Kapitalflucht ist sichtbar, mit erhöhter marktweiter Volatilität und Verkaufsdruck."
         }
       }
     },
@@ -786,7 +787,7 @@
         "guided": "Finn guides every step"
       },
       "finnSays": "Finn says",
-      "finnHelpsLabel": "Finn helps:",
+      "finnHelpsLabel": "Finn hilft:",
       "finnComplete": "Your foundation is ready. Open your dashboard now, review your first report, and ask Finn for your next step.",
       "completeLabel": "Foundation ready",
       "completeTitle": "You can now really start working with Tradamind",
@@ -799,13 +800,13 @@
       "nextStepPrefix": "Next step:",
       "ready": "Done",
       "recommendedRoute": "Recommended route",
-      "openStep": "Open step",
-      "stepCompleted": "Step completed",
+      "openStep": "Schritt öffnen",
+      "stepCompleted": "Schritt abgeschlossen",
       "unlocksPrefix": "Then you unlock:",
-      "unlocksLabel": "Then you unlock",
-      "completePreviousPrefix": "Complete",
-      "completePreviousSuffix": "first",
-      "previousStepFallback": "the previous step",
+      "unlocksLabel": "Danach schaltest du frei",
+      "completePreviousPrefix": "Schließe zuerst",
+      "completePreviousSuffix": "ab",
+      "previousStepFallback": "den vorherigen Schritt",
       "status": {
         "done": "Done",
         "recommended": "Recommended",
@@ -878,17 +879,17 @@
       "priceHistory": "{symbol} price history",
       "forecast": "{symbol} forecast",
       "indicatorPanel": {
-        "eyebrow": "Indicator overview",
-        "title": "Market indicators",
-        "configId": "Configuration id",
-        "configBadge": "Live configuration",
-        "selectLabel": "Select market node",
-        "searchPlaceholder": "Search indicators (price, volume, 24h change)...",
-        "emptyHint": "Select an indicator first to view the signal settings...",
-        "tuningLabel": "Live parameter tuning",
-        "attach": "Attach to market overview",
-        "addSuccess": "Indicator added",
-        "addError": "Adding indicator failed"
+        "eyebrow": "Indikatorübersicht",
+        "title": "Marktindikatoren",
+        "configId": "Konfigurations-ID",
+        "configBadge": "Live-Konfiguration",
+        "selectLabel": "Marktnode wählen",
+        "searchPlaceholder": "Indikatoren suchen (Preis, Volumen, 24h-Änderung)...",
+        "emptyHint": "Wähle zuerst einen Indikator, um die Signaleinstellungen zu sehen...",
+        "tuningLabel": "Live-Parameterabstimmung",
+        "attach": "An Marktübersicht koppeln",
+        "addSuccess": "Indikator hinzugefügt",
+        "addError": "Hinzufügen fehlgeschlagen"
       },
       "historyTable": {
         "date": "Date",
@@ -923,7 +924,7 @@
       "systemMaintenanceTitle": "System maintenance",
       "systemMaintenanceDescription": "Sync historical Coingecko data to make backtests available for specific assets.",
       "syncHistory": "Sync {symbol} history",
-      "syncHistoryError": "Could not synchronize historical data.",
+      "syncHistoryError": "Historische Daten konnten nicht synchronisiert werden.",
       "partialLoadError": "A portion of the market data could not be loaded right away.",
       "loadError": "Could not load market data.",
       "processing": "{symbol} is being processed...",
@@ -931,22 +932,22 @@
       "biasNegative": "Negative",
       "biasNeutral": "Neutral",
       "terminalHud": {
-        "stronglyPositive": "Strongly positive",
-        "positive": "Positive",
+        "stronglyPositive": "Stark positiv",
+        "positive": "Positiv",
         "neutral": "Neutral",
-        "negative": "Negative",
-        "stronglyNegative": "Strongly negative",
-        "sideways": "Sideways",
-        "stable": "Stable",
-        "consensus": "Market consensus",
-        "marketView": "Market view",
-        "marketDirection": "Market direction",
-        "assetStatus": "Asset status",
+        "negative": "Negativ",
+        "stronglyNegative": "Stark negativ",
+        "sideways": "Seitwärts",
+        "stable": "Stabil",
+        "consensus": "Marktkonsens",
+        "marketView": "Marktbild",
+        "marketDirection": "Marktrichtung",
+        "assetStatus": "Assetstatus",
         "offline": "Offline",
-        "price": "{symbol} price",
-        "change24h": "24h change",
-        "volume": "Volume",
-        "liveFeed": "Live feed"
+        "price": "{symbol} Preis",
+        "change24h": "24h-Änderung",
+        "volume": "Volumen",
+        "liveFeed": "Live-Feed"
       }
     },
     "macro": {
@@ -1236,34 +1237,34 @@
         },
         "options": {
           "today": {
-            "label": "Today",
-            "eyebrow": "Daily reflection",
-            "prompt": "Give me my Finn report for today",
-            "empty": "No Finn activity yet today. As soon as Finn guides, blocks, or records something, it will appear here."
+            "label": "Heute",
+            "eyebrow": "Tagesreflexion",
+            "prompt": "Gib mir meinen Finn-Bericht fuer heute",
+            "empty": "Noch keine Finn-Aktivitaet heute. Sobald Finn etwas begleitet, blockiert oder festlegt, erscheint es hier."
           },
           "week": {
-            "label": "Weekly reflection",
-            "eyebrow": "Weekly view",
-            "prompt": "Give me my weekly reflection",
-            "empty": "There is not enough weekly history yet. Finn only shows patterns here when audit data exists."
+            "label": "Wochenreflexion",
+            "eyebrow": "Wochenbild",
+            "prompt": "Gib mir meine Wochenreflexion",
+            "empty": "Es gibt noch nicht genug Wochenhistorie. Finn zeigt hier erst Muster, wenn Auditdaten vorhanden sind."
           },
           "blocked": {
-            "label": "Blocked",
-            "eyebrow": "Risk log",
-            "prompt": "What did Finn block today?",
-            "empty": "No blocks today. Finn has not had to slow down a risky action yet."
+            "label": "Blockiert",
+            "eyebrow": "Risiko-Log",
+            "prompt": "Was hat Finn heute blockiert?",
+            "empty": "Heute gibt es keine Blockierungen. Finn musste noch keine riskante Aktion abbremsen."
           },
           "behavior": {
-            "label": "30 day behavior",
-            "eyebrow": "Behavior profile",
-            "prompt": "Give me my behavioral report for the last 30 days",
-            "empty": "There is not enough behavioral data across 30 days yet. Finn will not invent a profile without evidence."
+            "label": "30 Tage Verhalten",
+            "eyebrow": "Verhaltensprofil",
+            "prompt": "Gib mir meinen Verhaltensbericht der letzten 30 Tage",
+            "empty": "Es gibt noch nicht genug Verhaltensdaten ueber 30 Tage. Finn erfindet hier kein Profil ohne Beweise."
           }
         }
       },
-      "hudMacro": "Macro",
-      "hudTechnical": "Technical",
-      "hudMarket": "Market",
+      "hudMacro": "Makro",
+      "hudTechnical": "Technisch",
+      "hudMarket": "Markt",
       "hudSetup": "Setup"
     }
   },
@@ -1371,7 +1372,7 @@
       "riskBalancedDescription": "Standard profile with a balanced trading cadence.",
       "riskAggressiveLabel": "Aggressive",
       "riskAggressiveDescription": "Faster trading with higher exposure and more risk.",
-      "lockedLabel": "Locked"
+      "lockedLabel": "Fixiert"
     },
     "history": {
       "title": "Bot history",
@@ -1382,29 +1383,29 @@
       "quantity": "Quantity",
       "price": "Price",
       "amount": "Amount",
-      "confidence": "Confidence",
+      "confidence": "Vertrauen",
       "status": "Status"
     },
     "budgetBar": {
-      "noBudget": "No budget configured",
-      "available": "Available"
+      "noBudget": "Kein Budget konfiguriert",
+      "available": "Verfügbar"
     },
     "budgetForm": {
-      "description": "This budget configuration acts as a hard safety ceiling. The bot will automatically scale or block trades that exceed these limits.",
-      "globalLimit": "Global limit (€)",
-      "dailyCap": "Daily cap (€)",
-      "orderMax": "Order max (€)",
-      "assetExposure": "Asset exposure",
+      "description": "Diese Budgetkonfiguration wirkt als harte Sicherheitsgrenze. Der Bot skaliert oder blockiert automatisch Trades, die darüber hinausgehen.",
+      "globalLimit": "Globales Limit (€)",
+      "dailyCap": "Tageslimit (€)",
+      "orderMax": "Max. Order (€)",
+      "assetExposure": "Asset-Exponierung",
       "maxSuffix": "MAX",
-      "assetExposureDescription": "Maximum allocation of total bot capital per single asset node."
+      "assetExposureDescription": "Maximale Allokation des gesamten Bot-Kapitals pro einzelner Asset-Node."
     },
     "settingsMenu": {
-      "title": "Bot settings",
-      "general": "General",
-      "portfolio": "Portfolio & budget",
-      "pause": "Pause bot",
-      "resume": "Resume bot",
-      "delete": "Delete bot"
+      "title": "Bot-Einstellungen",
+      "general": "Allgemein",
+      "portfolio": "Portfolio & Budget",
+      "pause": "Bot pausieren",
+      "resume": "Bot fortsetzen",
+      "delete": "Bot löschen"
     },
     "decisionCard": {
       "loading": "Bot is analyzing the market…",
@@ -1464,29 +1465,29 @@
       }
     },
     "portfolioOverview": {
-      "eyebrow": "System overview",
+      "eyebrow": "Systemübersicht",
       "title": "Portfolio",
-      "subtitle": "Combined view of budget and positions across your selected environment.",
-      "allBots": "All bots",
-      "liveExchange": "Live exchange",
-      "paperTrading": "Paper trading",
-      "filterAll": "All",
+      "subtitle": "Kombinierte Ansicht von Budget und Positionen in deiner gewählten Umgebung.",
+      "allBots": "Alle Bots",
+      "liveExchange": "Live-Börse",
+      "paperTrading": "Paper-Umgebung",
+      "filterAll": "Alle",
       "filterPaper": "Paper",
       "filterLive": "Live",
-      "activeBots": "Active bots",
-      "budgetUsage": "Total budget usage",
-      "backendSource": "Single source of truth: backend",
-      "bitvavoCash": "Bitvavo cash",
-      "totalValue": "Total value",
-      "combinedBots": "All bots combined",
-      "spentToday": "Spent today",
-      "dailyLimit": "Daily limit",
-      "maxPerTrade": "Sum max/trade",
-      "noBudget": "No budget configured",
-      "positions": "Positions",
-      "investedExecuted": "Invested (executed)",
-      "totalPnl": "PnL (total)",
-      "byAsset": "Breakdown by asset"
+      "activeBots": "Aktive Bots",
+      "budgetUsage": "Gesamte Budgetnutzung",
+      "backendSource": "Zentrale Quelle: Backend",
+      "bitvavoCash": "Bitvavo-Guthaben",
+      "totalValue": "Gesamtwert",
+      "combinedBots": "Alle Bots zusammen",
+      "spentToday": "Heute ausgegeben",
+      "dailyLimit": "Tageslimit",
+      "maxPerTrade": "Summe max. pro Trade",
+      "noBudget": "Kein Budget konfiguriert",
+      "positions": "Positionen",
+      "investedExecuted": "Investiert (ausgeführt)",
+      "totalPnl": "PnL (gesamt)",
+      "byAsset": "Aufschlüsselung nach Asset"
     },
     "botCard": {
       "active": "Active",
@@ -1504,174 +1505,174 @@
       "version": "Version"
     },
     "agentCard": {
-      "riskConservative": "Risk: Conservative",
-      "riskBalanced": "Risk: Balanced",
-      "riskAggressive": "Risk: Aggressive",
-      "saveFailed": "Saving failed",
+      "riskConservative": "Risiko: Konservativ",
+      "riskBalanced": "Risiko: Ausgewogen",
+      "riskAggressive": "Risiko: Aggressiv",
+      "saveFailed": "Speichern fehlgeschlagen",
       "autoPilot": "AUTO-PILOT",
-      "manualLink": "MANUAL LINK",
-      "analyzing": "ANALYZING...",
-      "startBacktest": "START BACKTEST",
-      "scenarios": "SCENARIOS",
-      "statusReaction": "Status reaction",
-      "marketAction": "Market action",
-      "logicalConfidence": "Logical confidence",
-      "telemetrySync": "Telemetry sync",
-      "syncing": "SYNCING...",
-      "collapseDiagnostics": "Collapse diagnostics",
-      "viewFullDiagnostics": "View full diagnostics",
-      "scenarioLoading": "Running parallel scenarios...",
-      "backtestLoading": "Analyzing the last 30 days...",
-      "performanceScan": "Performance scan (V2)",
-      "profit": "Profit (€)",
-      "modelTenK": "€10,000 model",
+      "manualLink": "MANUELLE KOPPLUNG",
+      "analyzing": "ANALYSIEREN...",
+      "startBacktest": "BACKTEST STARTEN",
+      "scenarios": "SZENARIEN",
+      "statusReaction": "Statusreaktion",
+      "marketAction": "Marktaktion",
+      "logicalConfidence": "Logische Sicherheit",
+      "telemetrySync": "Telemetrie-Sync",
+      "syncing": "SYNCHRONISIEREN...",
+      "collapseDiagnostics": "Diagnostik einklappen",
+      "viewFullDiagnostics": "Vollständige Diagnostik ansehen",
+      "scenarioLoading": "Parallele Szenarien berechnen...",
+      "backtestLoading": "Die letzten 30 Tage analysieren...",
+      "performanceScan": "Performance-Scan (V2)",
+      "profit": "Gewinn (€)",
+      "modelTenK": "€10.000-Modell",
       "roi": "ROI (%)",
-      "totalCapital": "Total capital",
+      "totalCapital": "Gesamtkapital",
       "tenKStart": "€10K START",
-      "avgTrade": "Avg trade",
-      "bestTrade": "Best trade",
-      "worstTrade": "Worst trade",
-      "trades": "trades",
-      "expectancyTooltip": "Expected average profit per trade based on historical performance",
-      "expectancy": "Expectancy",
-      "aiSummary": "AI summary",
-      "noDetails": "No details available.",
-      "recentTrades": "Recent trades",
-      "noRecentTrades": "No trades executed in the last 30 days.",
-      "scenarioComparison": "Scenario comparison",
-      "syncingBrain": "Syncing brain...",
-      "systemLogsMinimize": "Minimize system logs",
-      "systemLogsOpen": "Open system logs",
+      "avgTrade": "Durchschn. Trade",
+      "bestTrade": "Bester Trade",
+      "worstTrade": "Schlechtester Trade",
+      "trades": "Trades",
+      "expectancyTooltip": "Erwarteter durchschnittlicher Gewinn pro Trade auf Basis historischer Leistung",
+      "expectancy": "Erwartungswert",
+      "aiSummary": "AI-Zusammenfassung",
+      "noDetails": "Keine Details verfügbar.",
+      "recentTrades": "Letzte Trades",
+      "noRecentTrades": "In den letzten 30 Tagen wurden keine Trades ausgeführt.",
+      "scenarioComparison": "Szenarienvergleich",
+      "syncingBrain": "Brain synchronisieren...",
+      "systemLogsMinimize": "Systemlogs minimieren",
+      "systemLogsOpen": "Systemlogs öffnen",
       "paperMode": "PAPER",
       "liveMode": "LIVE",
-      "riskPrefix": "Risk: ",
-      "winRate": "Win rate",
-      "executions": "Executions",
-      "buy": "BUY",
-      "sell": "SELL",
-      "entries": "entries",
-      "observe": "OBSERVE",
-      "scenarioDefault": "Default",
-      "scenarioAggressive": "Aggressive",
-      "scenarioConservative": "Conservative",
+      "riskPrefix": "Risiko: ",
+      "winRate": "Gewinnrate",
+      "executions": "Ausführungen",
+      "buy": "KAUF",
+      "sell": "VERKAUF",
+      "entries": "einträge",
+      "observe": "BEOBACHTEN",
+      "scenarioDefault": "Standard",
+      "scenarioAggressive": "Aggressiv",
+      "scenarioConservative": "Konservativ",
       "stateLabels": {
-        "live": "live",
-        "waiting": "waiting",
-        "paused": "paused"
+        "live": "aktiv",
+        "waiting": "wartend",
+        "paused": "pausiert"
       },
       "actionLabels": {
-        "buy": "BUY",
-        "sell": "SELL",
-        "hold": "HOLD",
-        "observe": "OBSERVE",
+        "buy": "KAUF",
+        "sell": "VERKAUF",
+        "hold": "HALTEN",
+        "observe": "BEOBACHTEN",
         "short": "SHORT"
       },
       "confidenceLabels": {
-        "low": "LOW",
-        "medium": "MEDIUM",
-        "high": "HIGH"
+        "low": "NIEDRIG",
+        "medium": "MITTEL",
+        "high": "HOCH"
       }
     },
     "orderPreview": {
-      "finnLoadError": "Finn could not load this preflight review right now.",
-      "pathLabel": "Path",
-      "liveManualOrder": "Live manual order",
-      "paperPreview": "Paper/manual preview",
+      "finnLoadError": "Finn konnte diese Preflight-Prüfung gerade nicht laden.",
+      "pathLabel": "Pfad",
+      "liveManualOrder": "Live-Manuellauftrag",
+      "paperPreview": "Paper-/Manuellvorschau",
       "botLabel": "Bot",
       "assetLabel": "Asset",
-      "sideLabel": "Side",
-      "buy": "Buy",
-      "sell": "Sell",
-      "priceLabel": "Price",
-      "quantityLabel": "Quantity",
-      "orderValueLabel": "Order value",
-      "feeLabel": "Fee",
-      "exchangeEffectLabel": "Exchange effect",
-      "noOrderPossible": "No order possible",
-      "confirmPlacesLiveOrder": "Confirming places a live order",
-      "paperConfirmEffect": "After confirmation, the manual/paper order is stored",
-      "busy": "Working...",
-      "placeLiveOrder": "Place live order",
-      "confirmOrder": "Confirm order",
-      "livePreflight": "Live preflight",
-      "orderPreview": "Order preview",
-      "noOrderPlaced": "No order placed",
-      "executionBlocked": "Execution blocked",
-      "liveExecutionCheck": "Live execution check",
-      "livePreflightDescription": "Preflight has been completed. You first see the guardrails and consequences, and only then the confirmation step.",
-      "previewDescription": "First review what this order does before saving it.",
-      "refresh": "Refresh",
+      "sideLabel": "Richtung",
+      "buy": "Kauf",
+      "sell": "Verkauf",
+      "priceLabel": "Preis",
+      "quantityLabel": "Menge",
+      "orderValueLabel": "Orderwert",
+      "feeLabel": "Gebühr",
+      "exchangeEffectLabel": "Börseneffekt",
+      "noOrderPossible": "Keine Order möglich",
+      "confirmPlacesLiveOrder": "Bestätigen platziert eine Live-Order",
+      "paperConfirmEffect": "Nach der Bestätigung wird die Paper-/manuelle Order gespeichert",
+      "busy": "In Arbeit...",
+      "placeLiveOrder": "Live-Order platzieren",
+      "confirmOrder": "Order bestätigen",
+      "livePreflight": "Live-Preflight",
+      "orderPreview": "Ordervorschau",
+      "noOrderPlaced": "Keine Order platziert",
+      "executionBlocked": "Ausführung blockiert",
+      "liveExecutionCheck": "Live-Ausführungscheck",
+      "livePreflightDescription": "Der Preflight wurde ausgeführt. Du siehst zuerst die Guardrails und Folgen und erst danach den Bestätigungsschritt.",
+      "previewDescription": "Prüfe zuerst, was diese Order macht, bevor du sie speicherst.",
+      "refresh": "Aktualisieren",
       "finnPreflight": "FINN 3.0 Preflight",
-      "finnPreflightBody": "Finn now directly weighs decision quality and plan discipline in this order preview.",
-      "loading": "Loading",
-      "decisionCheck": "Decision check",
-      "behavioralBrake": "Behavioral brake",
-      "planAdherence": "Plan adherence",
-      "threatenedRule": "Threatened rule",
-      "safeNextStep": "Safe next step",
-      "liveExecutionContext": "Live execution context",
-      "liveExecutionBody": "This step is explicitly preflight-first. The order has not yet been sent to the exchange. Live execution only happens after your confirmation.",
-      "liveGuardrails": "Live guardrails",
-      "botGuardrails": "Bot guardrails",
-      "orderBlocked": "Order remains blocked",
-      "resolveBlockerFirst": "Resolve the blocker first before trying preflight or execution again.",
-      "acknowledgeSetupBlock": "Acknowledge setup block consciously",
-      "consequenceSummary": "Consequence summary",
-      "ifYouConfirmNow": "If you confirm now",
-      "blockedConfirmBody": "Nothing happens on the exchange; this order remains blocked by guardrails.",
-      "liveOrderPrefix": "A live",
-      "liveOrderSuffix": "order will be placed for roughly",
-      "paperOrderPrefix": "A manual/paper",
-      "paperOrderSuffix": "order will be stored for roughly",
-      "finnExpectsAfter": "Finn expects afterwards",
-      "afterBlocked": "Resolve the blocker first and then run a fresh preflight again.",
-      "afterLive": "That you consciously checked this live order and only confirm once the guardrails are green.",
-      "afterPaper": "That you see the result afterward in portfolio and activity feed without a live side effect.",
-      "liveConfirmationFriction": "Live confirmation friction",
-      "liveConfirmationCheckbox": "I understand that this confirmation can place a real live order and that the preflight only provided advice and safety context.",
-      "extraBehavioralBrake": "Extra behavioral brake",
-      "previewRefreshing": "Preview refreshing",
-      "cancel": "Cancel",
-      "refreshChecks": "Refresh checks",
-      "booleanTrue": "Yes",
-      "booleanFalse": "No",
-      "orderSummaryFor": "for roughly",
-      "reviewPrompt": "Review this trade: {order}.",
-      "planCheckPrompt": "Am I deviating from my plan with this trade: {order}?",
-      "preflightTokenLabel": "Preflight token",
-      "valid": "Valid",
-      "preflightAgeLabel": "Preflight age",
-      "minutesShort": "min",
-      "decisionContextLabel": "Decision context",
-      "marketPriceAgeLabel": "Market price age",
-      "secondsShort": "sec",
-      "marketTimestampLabel": "Market timestamp",
+      "finnPreflightBody": "Finn bewertet jetzt direkt Entscheidungsqualität und Plandisziplin in dieser Ordervorschau.",
+      "loading": "Lädt",
+      "decisionCheck": "Entscheidungscheck",
+      "behavioralBrake": "Verhaltensbremse",
+      "planAdherence": "Plankonformität",
+      "threatenedRule": "Gefährdete Regel",
+      "safeNextStep": "Sicherer nächster Schritt",
+      "liveExecutionContext": "Live-Ausführungskontext",
+      "liveExecutionBody": "Dieser Schritt ist ausdrücklich preflight-first. Die Order wurde noch nicht an die Börse gesendet. Live-Ausführung passiert erst nach deiner Bestätigung.",
+      "liveGuardrails": "Live-Sicherheitschecks",
+      "botGuardrails": "Bot-Sicherheitschecks",
+      "orderBlocked": "Order bleibt blockiert",
+      "resolveBlockerFirst": "Löse zuerst den Blocker, bevor du Preflight oder Ausführung erneut versuchst.",
+      "acknowledgeSetupBlock": "Setup-Block bewusst bestätigen",
+      "consequenceSummary": "Folgenübersicht",
+      "ifYouConfirmNow": "Wenn du jetzt bestätigst",
+      "blockedConfirmBody": "An der Börse passiert nichts; diese Order bleibt durch Guardrails blockiert.",
+      "liveOrderPrefix": "Es wird eine Live-",
+      "liveOrderSuffix": "Order platziert für ungefähr",
+      "paperOrderPrefix": "Es wird eine Paper-/manuelle",
+      "paperOrderSuffix": "Order gespeichert für ungefähr",
+      "finnExpectsAfter": "Finn erwartet danach",
+      "afterBlocked": "Löse zuerst den Blocker und starte dann einen frischen Preflight.",
+      "afterLive": "Dass du diese Live-Order bewusst geprüft hast und erst bestätigst, wenn die Guardrails grün sind.",
+      "afterPaper": "Dass du das Ergebnis danach im Portfolio und Activity Feed ohne Live-Nebeneffekt siehst.",
+      "liveConfirmationFriction": "Live-Bestätigungsbremse",
+      "liveConfirmationCheckbox": "Ich verstehe, dass diese Bestätigung eine echte Live-Order platzieren kann und dass der Preflight nur Beratungs- und Sicherheitskontext geliefert hat.",
+      "extraBehavioralBrake": "Zusätzliche Verhaltensbremse",
+      "previewRefreshing": "Vorschau wird aktualisiert",
+      "cancel": "Abbrechen",
+      "refreshChecks": "Checks aktualisieren",
+      "booleanTrue": "Ja",
+      "booleanFalse": "Nein",
+      "orderSummaryFor": "für ungefähr",
+      "reviewPrompt": "Bewerte diesen Trade: {order}.",
+      "planCheckPrompt": "Weiche ich mit diesem Trade von meinem Plan ab: {order}?",
+      "preflightTokenLabel": "Preflight-Token",
+      "valid": "Gültig",
+      "preflightAgeLabel": "Preflight-Alter",
+      "minutesShort": "Min.",
+      "decisionContextLabel": "Entscheidungskontext",
+      "marketPriceAgeLabel": "Alter Marktpreis",
+      "secondsShort": "Sek.",
+      "marketTimestampLabel": "Marktzeitstempel",
       "traceLabel": "Trace",
-      "actionRequired": "action required",
-      "green": "green",
+      "actionRequired": "Aktion nötig",
+      "green": "grün",
       "ok": "ok",
-      "blocked": "blocked",
+      "blocked": "blockiert",
       "behaviorLabels": {
         "fomo": "FOMO",
-        "overtrades": "Overtrading",
-        "leverage_seeking": "Leverage seeking",
-        "holds_losers_too_long": "Holding losers too long",
-        "takes_profit_too_early": "Taking profit too early"
+        "overtrades": "Übertrading",
+        "leverage_seeking": "Hebelsuche",
+        "holds_losers_too_long": "Verlierer zu lange halten",
+        "takes_profit_too_early": "Gewinne zu früh mitnehmen"
       },
-      "limitPrefix": "limit"
+      "limitPrefix": "Limit"
     },
     "portfolioCard": {
-      "capitalAllocation": "Capital allocation",
-      "synced": "SYNCED",
-      "totalBudgetExposure": "Total budget exposure",
-      "dailySpend": "Daily spend",
-      "maxOrderSize": "Max order size",
-      "unlimited": "Unlimited",
-      "noBudgetAssigned": "No budget assigned",
-      "netPositionQty": "Net position",
-      "currentAssetValue": "Current asset value",
-      "costBasisExecuted": "COST BASIS (EXECUTED)",
-      "sessionPerformance": "Session performance"
+      "capitalAllocation": "Kapitalverteilung",
+      "synced": "SYNCHRONISIERT",
+      "totalBudgetExposure": "Gesamte Budgetauslastung",
+      "dailySpend": "Tagesverbrauch",
+      "maxOrderSize": "Max. Ordergröße",
+      "unlimited": "Unbegrenzt",
+      "noBudgetAssigned": "Kein Budget zugewiesen",
+      "netPositionQty": "Nettoposition",
+      "currentAssetValue": "Aktueller Assetwert",
+      "costBasisExecuted": "Kostengrundlage ausgeführt",
+      "sessionPerformance": "Sitzungsperformance"
     },
     "tradePlanCard": {
       "loading": "Loading trade plan…",
@@ -1719,47 +1720,47 @@
       }
     },
     "botScores": {
-      "eyebrow": "Environment analysis",
-      "title": "System status and market domains",
-      "loading": "LOADING SIGNALS...",
-      "empty": "No measurement data is available for this session yet",
-      "scoreSuffixTemplate": "{key} score"
+      "eyebrow": "Umgebungsanalyse",
+      "title": "Systemstatus und Marktdomänen",
+      "loading": "SIGNALE LADEN...",
+      "empty": "Für diese Sitzung liegen noch keine Messdaten vor",
+      "scoreSuffixTemplate": "{key}-Score"
     },
     "globalTradePanel": {
-      "selectBot": "Select a bot to trade",
-      "tradingWith": "Trading with",
+      "selectBot": "Wähle einen Bot zum Handeln aus",
+      "tradingWith": "Handeln mit",
       "botFallback": "Bot"
     },
     "exchangeSettings": {
-      "statusSuccess": "Successfully connected to {exchange}",
-      "statusError": "Connection failed. Check your keys.",
-      "bybitDescription": "Recommended for fast AI-driven execution",
-      "bitvavoDescription": "Simple EUR gateway for direct trading",
-      "selectedNode": "Selected node",
-      "change": "Change",
-      "apiKeyLabel": "API key",
-      "apiKeyPlaceholder": "Paste your API key here",
-      "apiSecretLabel": "API secret",
-      "apiSecretPlaceholder": "Paste your API secret here",
+      "statusSuccess": "Erfolgreich mit {exchange} verbunden",
+      "statusError": "Verbindung fehlgeschlagen. Prüfe deine Schlüssel.",
+      "bybitDescription": "Empfohlen für schnelle KI-gestützte Ausführung",
+      "bitvavoDescription": "Einfache EUR-Gateway für direktes Trading",
+      "selectedNode": "Ausgewählter Knoten",
+      "change": "Ändern",
+      "apiKeyLabel": "API-Schlüssel",
+      "apiKeyPlaceholder": "Füge hier deinen API-Schlüssel ein",
+      "apiSecretLabel": "API-Secret",
+      "apiSecretPlaceholder": "Füge hier dein API-Secret ein",
       "passphraseLabel": "Passphrase (optional)",
-      "passphrasePlaceholder": "API passphrase if required",
-      "securityTitle": "Security protocol",
-      "securityBody": "Keys are encrypted with AES-256 before storage. We recommend enabling \"Withdrawals: Disabled\" for this API key on your exchange for maximum safety.",
-      "cancel": "Cancel",
-      "testing": "Testing connection...",
-      "submit": "Verify and connect"
+      "passphrasePlaceholder": "API-Passphrase falls erforderlich",
+      "securityTitle": "Sicherheitsprotokoll",
+      "securityBody": "Schlüssel werden vor dem Speichern mit AES-256 verschlüsselt. Wir empfehlen, für diesen API-Schlüssel auf deiner Börse \"Withdrawals: Disabled\" zu aktivieren, für maximale Sicherheit.",
+      "cancel": "Abbrechen",
+      "testing": "Verbindung wird getestet...",
+      "submit": "Prüfen und verbinden"
     },
     "portfolioBalance": {
-      "title": "Portfolio overview",
-      "loading": "Loading portfolio data...",
-      "entryLog": "Snapshot",
+      "title": "Portfolioübersicht",
+      "loading": "Portfoliodaten werden geladen...",
+      "entryLog": "Momentaufnahme",
       "modes": {
-        "equity": "Equity",
+        "equity": "Eigenkapital",
         "cash": "Cash",
-        "btcValue": "BTC value",
-        "btcQty": "BTC quantity",
-        "invested": "Invested",
-        "unrealizedPnl": "Unrealized PnL"
+        "btcValue": "BTC-Wert",
+        "btcQty": "BTC-Menge",
+        "invested": "Investiert",
+        "unrealizedPnl": "Unrealisierte PnL"
       }
     },
     "tradePanel": {
@@ -1794,10 +1795,10 @@
       "validationInsufficientBalance": "Insufficient balance",
       "validationInsufficientAsset": "Insufficient {asset}"
     },
-    "proposalCreatedPrefix": "New proposal for",
-    "proposalCreateFailed": "Could not generate proposal",
-    "portfolioOverviewTitle": "Portfolio overview",
-    "portfolioOverviewCardTitle": "Overview"
+    "proposalCreatedPrefix": "Neuer Vorschlag für",
+    "proposalCreateFailed": "Vorschlag konnte nicht erstellt werden",
+    "portfolioOverviewTitle": "Portfolioübersicht",
+    "portfolioOverviewCardTitle": "Übersicht"
   },
   "setups": {
     "manager": {
@@ -1809,61 +1810,61 @@
       "listDescription": "View, edit, or remove existing setups."
     },
     "list": {
-      "scoreVeryBearish": "Very bearish / risk-off",
+      "scoreVeryBearish": "Stark bärisch / Risk-off",
       "scoreBearish": "Bearish",
       "scoreNeutral": "Neutral",
       "scoreNeutralBullish": "Neutral → bullish",
       "scoreBullish": "Bullish",
-      "scoreEuphoric": "Euphoric / overheated",
-      "aiSuccess": "AI explanation generated successfully.",
-      "aiFailed": "AI generation failed.",
-      "finnFailed": "Finn check failed.",
-      "deleteTitle": "Delete setup",
-      "deleteStatus": "Sensitive action",
-      "deleteConfirm": "Delete setup",
-      "deleteImpact": "This setup disappears from your active list and is no longer available for review or follow-up actions.",
-      "deleteSafety": "This only removes this setup. Deletion cannot be undone.",
-      "deleteConsequence": "After confirming, we refresh the list and you can ask Finn to review a new setup.",
-      "deleteSuccess": "Setup removed. Ask Finn to review a new setup if you want to continue.",
-      "cancelAction": "Cancel",
-      "editTitle": "Edit setup",
-      "editStatus": "Change concept",
-      "editConfirm": "Save setup",
-      "editConsequence": "After saving, we refresh the setup and Finn can immediately re-evaluate whether it still fits your plan.",
-      "editSuccess": "Setup updated. Finn can now check again whether this setup still fits.",
-      "loadingStatus": "Loading...",
-      "activeLabel": "ACTIVE",
-      "standbyLabel": "STANDBY",
-      "loadingBanner": "Setups are loading. As soon as the context is in, Finn can immediately review what needs attention.",
-      "errorBanner": "Setups could not be loaded. The list may be outdated. Refresh the page or ask Finn to summarize the current setup context.",
-      "noExplanation": "No explanation available yet.",
-      "finnCheck": "Finn check",
-      "loadingShort": "Loading…",
-      "setupReview": "Setup review",
-      "planAdherence": "Plan adherence",
-      "analyzing": "ANALYZING…",
-      "reanalyzeBlueprint": "Re-analyze blueprint",
-      "analyzeBlueprint": "Analyze strategy DNA",
-      "finnChecking": "Finn check…",
-      "checkWithFinn": "Check with Finn",
-      "finnReviewPrompt": "Review this setup for {symbol}.",
-      "finnPlanPrompt": "Does this setup still fit my plan for {symbol}?",
-      "strategyLabel": "Strategy",
+      "scoreEuphoric": "Euphorisch / überhitzt",
+      "aiSuccess": "KI-Erklärung erfolgreich erstellt.",
+      "aiFailed": "KI-Generierung fehlgeschlagen.",
+      "finnFailed": "Finn-Prüfung fehlgeschlagen.",
+      "deleteTitle": "Setup löschen",
+      "deleteStatus": "Sensible Aktion",
+      "deleteConfirm": "Setup löschen",
+      "deleteImpact": "Dieses Setup verschwindet aus deiner aktiven Liste und steht nicht mehr für Review oder Folgeschritte zur Verfügung.",
+      "deleteSafety": "Dadurch wird nur dieses Setup entfernt. Das Löschen kann nicht rückgängig gemacht werden.",
+      "deleteConsequence": "Nach der Bestätigung aktualisieren wir die Liste und du kannst Finn bitten, ein neues Setup zu prüfen.",
+      "deleteSuccess": "Setup entfernt. Bitte Finn, ein neues Setup zu prüfen, wenn du weitermachen willst.",
+      "cancelAction": "Abbrechen",
+      "editTitle": "Setup bearbeiten",
+      "editStatus": "Konzept ändern",
+      "editConfirm": "Setup speichern",
+      "editConsequence": "Nach dem Speichern aktualisieren wir das Setup und Finn kann sofort neu bewerten, ob es noch zu deinem Plan passt.",
+      "editSuccess": "Setup aktualisiert. Finn kann jetzt erneut prüfen, ob dieses Setup noch passt.",
+      "loadingStatus": "Wird geladen...",
+      "activeLabel": "AKTIV",
+      "standbyLabel": "BEREIT",
+      "loadingBanner": "Setups werden geladen. Sobald der Kontext da ist, kann Finn direkt prüfen, was Aufmerksamkeit braucht.",
+      "errorBanner": "Setups konnten nicht geladen werden. Die Liste kann veraltet sein. Aktualisiere die Seite oder bitte Finn um eine kurze Zusammenfassung des aktuellen Setup-Kontexts.",
+      "noExplanation": "Noch keine Erklärung verfügbar.",
+      "finnCheck": "Finn-Prüfung",
+      "loadingShort": "Lädt…",
+      "setupReview": "Setup-Review",
+      "planAdherence": "Plantreue",
+      "analyzing": "ANALYSIERE…",
+      "reanalyzeBlueprint": "Blueprint neu analysieren",
+      "analyzeBlueprint": "Strategie-DNA analysieren",
+      "finnChecking": "Finn prüft…",
+      "checkWithFinn": "Mit Finn prüfen",
+      "finnReviewPrompt": "Bewerte dieses Setup für {symbol}.",
+      "finnPlanPrompt": "Passt dieses Setup noch zu meinem Plan für {symbol}?",
+      "strategyLabel": "Strategie",
       "botLabel": "Bot",
       "macroLabel": "Macro",
-      "technicalLabel": "Technical",
+      "technicalLabel": "Technisch",
       "marketLabel": "Market",
-      "allConditionsMet": "✓ All conditions met",
-      "waitingForPrefix": "Waiting for",
-      "customBlueprint": "Custom",
+      "allConditionsMet": "✓ Alle Bedingungen erfüllt",
+      "waitingForPrefix": "Wartet auf",
+      "customBlueprint": "Benutzerdefiniert",
       "blueprintSuffix": "blueprint",
-      "none": "None",
-      "botActive": "Active",
-      "botPaused": "Paused",
-      "deleteAction": "Delete",
-      "editAction": "Edit",
-      "emptyState": "No setups for this selection. That can be normal if your context was just refreshed or if no active concept is ready yet. Ask Finn for a new setup concept if you want to continue.",
-      "setupFallbackName": "This setup"
+      "none": "Keine",
+      "botActive": "Aktiv",
+      "botPaused": "Pausiert",
+      "deleteAction": "Löschen",
+      "editAction": "Bearbeiten",
+      "emptyState": "Keine Setups für diese Auswahl. Das kann normal sein, wenn dein Kontext gerade aktualisiert wurde oder noch kein aktives Konzept bereitsteht. Bitte Finn um ein neues Setup-Konzept, wenn du weitermachen willst.",
+      "setupFallbackName": "Dieses Setup"
     },
     "form": {
       "scoreVeryBearish": "Very bearish / risk-off",
@@ -1992,14 +1993,14 @@
       "finnChecking": "Finn check…",
       "checkWithFinn": "Check with Finn",
       "manage": "Manage",
-      "favoriteFailed": "Could not update favorite.",
-      "entryLabel": "Entry",
-      "targetsLabel": "Targets",
-      "stopLossLabel": "Stop-loss",
-      "riskBadge": "RISK",
-      "rewardBadge": "REWARD",
-      "entryShort": "Entry",
-      "stopShort": "Stop"
+      "favoriteFailed": "Favorit konnte nicht aktualisiert werden.",
+      "entryLabel": "Einstieg",
+      "targetsLabel": "Ziele",
+      "stopLossLabel": "Stop-Loss",
+      "riskBadge": "RISIKO",
+      "rewardBadge": "ERTRAG",
+      "entryShort": "Einstieg",
+      "stopShort": "Stopp"
     },
     "list": {
       "all": "All",
@@ -2276,6 +2277,68 @@
       "loading": "Loading report...",
       "errorPrefix": "Error",
       "unknownError": "Unknown error."
+    }
+  },
+  "publicPages": {
+    "notFound": {
+      "title": "Oops… Page not found",
+      "body": "This page no longer exists in Tradamind. Check the URL or go back to the dashboard.",
+      "cta": "Back to dashboard",
+      "brand": "Tradamind — Pro"
+    },
+    "landing": {
+      "badge": "Tradamind Professional",
+      "titleLine1": "Market analysis with Finn",
+      "titleLine2": "for disciplined traders",
+      "subtitle": "See the market context first, follow your plan, and let Finn warn you as soon as timing, risk, or behavior starts to drift.",
+      "login": "Log in",
+      "dashboard": "Dashboard",
+      "startTrial": "Start free trial",
+      "viewDashboard": "View dashboard",
+      "openDashboard": "Open dashboard",
+      "previewAlt": "Tradamind dashboard preview",
+      "features": {
+        "marketTitle": "Market insights",
+        "marketBody": "Read market structure, momentum, and macro context in one place before you trade.",
+        "coachTitle": "Finn coach",
+        "coachBody": "Get explanations, behavioral brakes, and coaching that fit your trader profile.",
+        "strategyTitle": "Strategy engine",
+        "strategyBody": "Turn analysis into a clear plan with setups, timing, and disciplined execution signals."
+      },
+      "pricingTitle": "Simple pricing. Clear access.",
+      "pricingSubtitle": "Choose the plan that fits your workflow",
+      "pricing": {
+        "basicTagline": "Analysis and coaching at the core",
+        "basicFeatures": [
+          "Access to Finn coaching",
+          "Real-time strategy insights",
+          "Daily performance analysis",
+          "Technical indicator hub"
+        ],
+        "featuredBadge": "Most popular",
+        "proTagline": "Full execution support",
+        "proFeatures": [
+          "Everything in Basic",
+          "Faster signal coverage",
+          "Deeper Finn context",
+          "Priority access to new features",
+          "Advanced risk management"
+        ]
+      },
+      "cta": {
+        "title": "Trade with more clarity."
+      },
+      "footer": {
+        "rights": "© 2026 Tradamind. All rights reserved.",
+        "legal": "Legal pages are currently being finalized."
+      }
+    },
+    "marketing": {
+      "subtitle": "The AI-driven trading dashboard that combines macro, technical analysis, setups, and strategies into one next-generation system.",
+      "security": "Secure dashboard",
+      "aiStrategies": "AI strategies and reports",
+      "liveScores": "Live macro and technical scores",
+      "login": "Log in"
     }
   },
   "assistant": {
@@ -2682,440 +2745,378 @@
     }
   },
   "adminUsersPage": {
-    "loading": "Loading users...",
-    "loadError": "You do not have admin rights or the API is offline.",
-    "updateError": "Failed to update the user.",
-    "titlePrefix": "Users",
-    "titleAccent": "and access",
-    "subtitle": "Manage access, AI limits, and activity usage for all registered accounts.",
-    "refresh": "Refresh",
-    "searchPlaceholder": "Search by email address or name...",
-    "allPlans": "All plans",
+    "loading": "Benutzer werden geladen...",
+    "loadError": "Du hast keine Admin-Rechte oder die API ist offline.",
+    "updateError": "Benutzer konnte nicht aktualisiert werden.",
+    "titlePrefix": "Benutzer",
+    "titleAccent": "und Zugriff",
+    "subtitle": "Verwalte Zugriff, KI-Limits und Nutzungsaktivität aller registrierten Konten.",
+    "refresh": "Aktualisieren",
+    "searchPlaceholder": "Nach E-Mail-Adresse oder Name suchen...",
+    "allPlans": "Alle Pläne",
     "planLabels": {
-      "basis": "Basic",
+      "basis": "Basis",
       "pro": "Pro",
       "premium": "Premium",
-      "free": "Free"
+      "free": "Gratis"
     },
     "infoBadges": {
-      "background": "Background",
-      "blocked": "Blocked",
+      "background": "Hintergrund",
+      "blocked": "Blockiert",
       "mtd": "MTD"
     },
-    "infoBackground": "are automatic reports, agent runs, and Celery jobs for this user.",
-    "infoBlocked": "shows how much AI traffic hit quota limits and what that would have approximately cost.",
-    "infoMtd": "remains the real successful spend; blocked is intentionally shown separately.",
+    "infoBackground": "sind automatische Reports, Agent-Runs und Celery-Jobs für diesen Benutzer.",
+    "infoBlocked": "zeigt, wie viel KI-Traffic an Quoten scheiterte und was das ungefähr gekostet hätte.",
+    "infoMtd": "bleibt die echte erfolgreiche Ausgabe; blocked wird bewusst separat gezeigt.",
     "table": {
-      "user": "User",
-      "planStatus": "Plan and status",
-      "aiLimit": "AI limit",
-      "activity": "Activity"
+      "user": "Benutzer",
+      "planStatus": "Plan und Status",
+      "aiLimit": "KI-Limit",
+      "activity": "Aktivität"
     },
-    "unknownUser": "Unknown user",
-    "statusActive": "Active",
-    "statusBlocked": "Blocked",
-    "dailyLimit": "Daily limit",
-    "dailyLimitLong": "Daily limit",
-    "costMtd": "MTD cost",
-    "today": "Today",
-    "background": "Background",
-    "blocked": "Blocked",
-    "estimate": "estimate",
-    "lastSeen": "Last seen",
-    "createdAt": "Created",
-    "aiActivity": "AI activity",
-    "never": "Never",
-    "unknown": "Unknown",
-    "noUsage": "No usage",
-    "noUsersFound": "No users found",
-    "editUser": "Edit user",
+    "unknownUser": "Unbekannter Benutzer",
+    "statusActive": "Aktiv",
+    "statusBlocked": "Blockiert",
+    "dailyLimit": "Tageslimit",
+    "dailyLimitLong": "Tageslimit",
+    "costMtd": "MTD-Kosten",
+    "today": "Heute",
+    "background": "Hintergrund",
+    "blocked": "Blockiert",
+    "estimate": "Schätzung",
+    "lastSeen": "Zuletzt gesehen",
+    "createdAt": "Erstellt",
+    "aiActivity": "KI-Aktivität",
+    "never": "Nie",
+    "unknown": "Unbekannt",
+    "noUsage": "Keine Nutzung",
+    "noUsersFound": "Keine Benutzer gefunden",
+    "editUser": "Benutzer bearbeiten",
     "plan": "Plan",
-    "access": "Access",
-    "toggleAccess": "Turn the account on or off",
-    "close": "Close"
+    "access": "Zugriff",
+    "toggleAccess": "Konto aktivieren oder deaktivieren",
+    "close": "Schließen"
   },
   "adminAiPage": {
-    "loading": "Loading AI statistics...",
-    "loadError": "You do not have admin rights or the API is offline.",
-    "noAccess": "No access",
-    "titlePrefix": "AI usage",
-    "titleAccent": "and performance",
-    "subtitle": "Overview of AI consumption, cache behavior, latency, and notable production anomalies.",
-    "monitoringActive": "AI monitoring active",
-    "refresh": "Refresh",
+    "loading": "KI-Statistiken werden geladen...",
+    "loadError": "Du hast keine Admin-Rechte oder die API ist offline.",
+    "noAccess": "Kein Zugriff",
+    "titlePrefix": "KI-Nutzung",
+    "titleAccent": "und Leistung",
+    "subtitle": "Übersicht über KI-Verbrauch, Cache-Verhalten, Latenz und auffällige Anomalien in Produktion.",
+    "monitoringActive": "KI-Monitoring aktiv",
+    "refresh": "Aktualisieren",
     "metrics": {
-      "mtdResult": "MTD result",
-      "grossMargin": "gross margin",
-      "exactHits": "Exact hits",
-      "queryHashMatch": "Query hash match",
-      "semanticHits": "Semantic hits",
-      "vectorMatch": "Vector match",
-      "avgLatency": "Avg. latency",
-      "platformAverage": "Platform average",
-      "avgCostPerCall": "Avg. cost / AI call",
-      "nonCachedOnly": "Non-cached calls only",
-      "blockedAiCost": "Blocked AI cost",
-      "quotaBlockedAttempts": "quota-blocked attempts",
-      "totalSavings": "Total savings",
-      "savedAiCost": "Saved AI cost"
+      "mtdResult": "MTD-Ergebnis",
+      "grossMargin": "Bruttomarge",
+      "exactHits": "Exakte Treffer",
+      "queryHashMatch": "Query-Hash-Treffer",
+      "semanticHits": "Semantische Treffer",
+      "vectorMatch": "Vektor-Übereinstimmung",
+      "avgLatency": "Ø Latenz",
+      "platformAverage": "Plattformdurchschnitt",
+      "avgCostPerCall": "Ø Kosten / KI-Call",
+      "nonCachedOnly": "Nur nicht gecachte Calls",
+      "blockedAiCost": "Blockierte KI-Kosten",
+      "quotaBlockedAttempts": "quota-blockierte Versuche",
+      "totalSavings": "Gesamtersparnis",
+      "savedAiCost": "Eingesparte KI-Kosten"
     },
     "sourceCards": {
-      "liveUsers": "Live users",
-      "qaSmoke": "QA / smoke",
-      "backgroundJobs": "Background jobs",
-      "stagingUsers": "Staging users"
+      "liveUsers": "Live-Benutzer",
+      "qaSmoke": "QA / Smoke",
+      "backgroundJobs": "Hintergrundaufgaben",
+      "stagingUsers": "Staging-Benutzer"
     },
     "anomalies": {
-      "title": "AI anomalies",
-      "subtitle": "Signals that require extra attention in current AI usage.",
-      "detectedIncidents": "incidents detected",
-      "email": "Email",
+      "title": "KI-Anomalien",
+      "subtitle": "Signale, die im aktuellen KI-Einsatz zusätzliche Aufmerksamkeit brauchen.",
+      "detectedIncidents": "erkannte Vorfälle",
+      "email": "E-Mail",
       "trace": "Trace",
-      "confidence": "Confidence",
-      "latency": "Latency",
-      "normalStatus": "System status: Normal",
-      "noActiveAnomalies": "No active anomalies detected on the Oracle Cloud node."
+      "confidence": "Vertrauen",
+      "latency": "Latenz",
+      "normalStatus": "Systemstatus: Normal",
+      "noActiveAnomalies": "Keine aktiven Anomalien auf dem Oracle-Cloud-Node erkannt."
     },
     "modeLabels": {
-      "cache_exact": "Exact hit",
-      "cache_semantic": "Semantic hit",
-      "full_ai": "Full AI call",
-      "fallback": "Platform fallback"
+      "cache_exact": "Exakter Treffer",
+      "cache_semantic": "Semantischer Treffer",
+      "full_ai": "Voller KI-Call",
+      "fallback": "Plattform-Fallback"
     },
     "sourceLabels": {
-      "live_user": "Live user",
-      "qa_user": "QA / smoke",
-      "staging_user": "Staging user",
-      "background_job": "Background job",
+      "live_user": "Live-Benutzer",
+      "qa_user": "QA / Smoke",
+      "staging_user": "Staging-Benutzer",
+      "background_job": "Hintergrundjob",
       "system": "System",
-      "unclassified": "Legacy / old logs"
+      "unclassified": "Legacy / alte Logs"
     },
     "sourceHints": {
-      "live_user": "Real production interaction from the app.",
-      "qa_user": "Test users, smoke runs, and QA traffic.",
-      "staging_user": "Usage on the staging environment.",
-      "background_job": "Automated reports, agents, and Celery jobs.",
-      "system": "Internal platform AI calls without a user flow.",
-      "unclassified": "Older logs from before the new source labels."
+      "live_user": "Echte Produktionsinteraktion aus der App.",
+      "qa_user": "Testbenutzer, Smoke-Runs und QA-Verkehr.",
+      "staging_user": "Nutzung auf der Staging-Umgebung.",
+      "background_job": "Automatische Reports, Agents und Celery-Jobs.",
+      "system": "Plattforminterne KI-Calls ohne User-Flow.",
+      "unclassified": "Ältere Logs von vor den neuen Quellenlabels."
     },
     "entryPointLabels": {
-      "unclassified": "Legacy / old logs",
-      "scheduledJob": "Scheduled job",
-      "taskSuffix": " task"
+      "unclassified": "Legacy / alte Logs",
+      "scheduledJob": "Geplanter Job",
+      "taskSuffix": " Aufgabe"
     },
     "entryPointPrefixes": {
       "assistantService": "Finn / ",
       "reportService": "Reports / "
     },
     "severityLabels": {
-      "critical": "Critical",
-      "high": "High",
-      "warning": "Warning"
+      "critical": "Kritisch",
+      "high": "Hoch",
+      "warning": "Warnung"
     },
     "anomalyTypeLabels": {
-      "budget_breach": "Budget breach",
-      "parser_recovery": "Parser recovery",
-      "hallucination_risk": "Hallucination risk",
-      "safety_guardrail_trigger": "Safety guardrail trigger"
+      "budget_breach": "Budgetüberschreitung",
+      "parser_recovery": "Parser-Wiederherstellung",
+      "hallucination_risk": "Halluzinationsrisiko",
+      "safety_guardrail_trigger": "Safety-Guardrail ausgelöst"
     },
     "rejectionReasons": {
-      "context_mismatch": "Context mismatch"
+      "context_mismatch": "Kontextkonflikt"
     },
     "featurePurposeLabels": {
-      "general_help": "general help",
-      "report_explain": "report explain",
+      "general_help": "allgemeine hilfe",
+      "report_explain": "report-erklärung",
       "coaching": "coaching",
-      "daily_coach": "daily coach",
-      "behavioral_intelligence": "behavioral intelligence",
+      "daily_coach": "tägliches coaching",
+      "behavioral_intelligence": "verhaltensintelligenz",
       "preflight": "preflight",
-      "priorities": "priorities"
+      "priorities": "prioritäten"
     },
     "sections": {
-      "gatewaySelectionMix": "Gateway selection mix",
-      "latencyResponseMap": "Latency response map (ms)",
-      "rejectionAnalysis": "Rejection analysis",
-      "noRejectionsToday": "No rejections today",
-      "spendBySource": "Spend by source",
-      "costliestEntryPoints": "Costliest entry points",
-      "profitabilityTierDistribution": "Profitability tier distribution",
-      "unitEconomicsPerUser": "Unit economics per user",
-      "featureEconomics": "Feature economics & margin contribution"
+      "gatewaySelectionMix": "Gateway-Auswahl-Mix",
+      "latencyResponseMap": "Latenz-Response-Map (ms)",
+      "rejectionAnalysis": "Ablehnungsanalyse",
+      "noRejectionsToday": "Heute keine Ablehnungen",
+      "spendBySource": "Spend nach Quelle",
+      "costliestEntryPoints": "Teuerste Entry Points",
+      "profitabilityTierDistribution": "Profitability-Tier-Verteilung",
+      "unitEconomicsPerUser": "Unit Economics pro Benutzer",
+      "featureEconomics": "Feature Economics & Margin Contribution"
     },
     "table": {
-      "entryPoint": "Entry point",
-      "source": "Source",
-      "mtdCost": "MTD cost",
-      "blocked": "Blocked",
-      "avgPerCall": "Avg. / call",
+      "entryPoint": "Entry Point",
+      "source": "Quelle",
+      "mtdCost": "MTD-Kosten",
+      "blocked": "Blockiert",
+      "avgPerCall": "Ø / Call",
       "partner": "Partner",
-      "netMargin": "Net margin",
+      "netMargin": "Net Margin",
       "status": "Status",
-      "featureType": "Feature type / purpose",
-      "usageVolume": "Usage volume",
-      "totalCostMtd": "Total cost MTD",
-      "avgCostPerCall": "Avg. cost / call"
+      "featureType": "Featuretyp / Zweck",
+      "usageVolume": "Nutzungsvolumen",
+      "totalCostMtd": "Gesamtkosten MTD",
+      "avgCostPerCall": "Ø Kosten / Call"
     },
-    "unknownSource": "Unknown source.",
-    "requests": "requests",
-    "users": "users",
-    "estimate": "est.",
-    "calls": "calls",
-    "hits": "hits",
-    "assetTier": "asset tier",
+    "unknownSource": "Unbekannte Quelle.",
+    "requests": "Requests",
+    "users": "Benutzer",
+    "estimate": "Schätzung",
+    "calls": "Calls",
+    "hits": "Treffer",
+    "assetTier": "Asset-Tier",
     "planLabels": {
-      "basis": "Basic",
+      "basis": "Basis",
       "pro": "Pro",
       "premium": "Premium",
-      "free": "Free"
+      "free": "Gratis"
     },
-    "monthShort": "Month",
-    "today": "Today",
-    "background": "Background",
-    "interactive": "Interactive",
-    "blocked": "Blocked",
-    "overQuota": "Over quota",
-    "optimized": "Optimized",
-    "activeOrchestrationModel": "Active orchestration model"
+    "monthShort": "Monat",
+    "today": "Heute",
+    "background": "Hintergrund",
+    "interactive": "Interaktiv",
+    "blocked": "Blockiert",
+    "overQuota": "Über Quote",
+    "optimized": "Optimiert",
+    "activeOrchestrationModel": "Aktives Orchestration-Modell"
   },
   "adminLogsPage": {
-    "analysisError": "Failed to run analysis. Check the logs.",
-    "title": "System logs",
+    "analysisError": "Analyse konnte nicht ausgeführt werden. Prüfe die Logs.",
+    "title": "Systemlogs",
     "titlePrefix": "System",
     "titleAccent": "logs",
-    "subtitle": "Real-time overview of platform activity, security alerts, and internal system signals.",
-    "analyzeErrors": "Analyze errors",
-    "refresh": "Refresh",
-    "aiDiagnosisReport": "AI diagnosis report",
-    "priority": "priority",
-    "rootCause": "Root cause",
-    "impact": "Impact",
-    "suggestedFix": "Suggested fix",
-    "category": "Category",
-    "action": "Action",
-    "searchPlaceholder": "Search by log line or content...",
-    "allLevels": "All levels",
+    "subtitle": "Echtzeitübersicht über Plattformaktivität, Sicherheitsmeldungen und interne Systemsignale.",
+    "analyzeErrors": "Fehler analysieren",
+    "refresh": "Aktualisieren",
+    "aiDiagnosisReport": "KI-Diagnosebericht",
+    "priority": "Priorität",
+    "rootCause": "Hauptursache",
+    "impact": "Auswirkung",
+    "suggestedFix": "Vorgeschlagener Fix",
+    "category": "Kategorie",
+    "action": "Aktion",
+    "searchPlaceholder": "Nach Logzeile oder Inhalt suchen...",
+    "allLevels": "Alle Level",
     "levels": {
       "info": "Info",
-      "warning": "Warnings",
-      "error": "Errors only",
-      "critical": "Critical only"
+      "warning": "Warnungen",
+      "error": "Nur Fehler",
+      "critical": "Nur kritisch"
     },
-    "allSources": "All sources",
+    "allSources": "Alle Quellen",
     "sources": {
       "auth": "Auth",
       "api": "API",
-      "ai": "AI",
-      "marketData": "Market data",
-      "db": "Database"
+      "ai": "KI",
+      "marketData": "Marktdaten",
+      "db": "Datenbank"
     },
     "table": {
-      "timestamp": "Timestamp",
-      "source": "Source",
+      "timestamp": "Zeitpunkt",
+      "source": "Quelle",
       "level": "Level",
-      "message": "Message",
+      "message": "Meldung",
       "endpoint": "Endpoint"
     },
-    "internalService": "Internal service",
-    "noSystemActivity": "No system activity found",
-    "logsSyncing": "Syncing logs..."
+    "internalService": "Interner Service",
+    "noSystemActivity": "Keine Systemaktivität gefunden",
+    "logsSyncing": "Logs werden synchronisiert..."
   },
   "adminTelemetryPage": {
-    "loading": "Loading telemetry...",
-    "loadError": "Telemetry could not be loaded. Check admin access or runtime health.",
-    "unavailableTitle": "Telemetry unavailable",
-    "pageTitlePrefix": "Platform",
+    "loading": "Telemetry wird geladen...",
+    "loadError": "Telemetry konnte nicht geladen werden. Prüfe Admin-Zugriff oder Runtime-Health.",
+    "unavailableTitle": "Telemetry nicht verfügbar",
+    "pageTitlePrefix": "Plattform",
     "pageTitleAccent": "Telemetry",
-    "pageSubtitle": "Less raw JSON, more fast product conclusions. Here you can see where new users land, where they drop off, and what they really ask Finn.",
-    "lastUpdated": "Last update",
-    "refresh": "Refresh telemetry",
-    "unknown": "Unknown",
-    "knownSurfaces": "known surfaces",
+    "pageSubtitle": "Weniger Roh-JSON, mehr schnelle Produktschlüsse. Hier siehst du, wo neue Nutzer landen, wo sie abbrechen und was sie Finn wirklich fragen.",
+    "lastUpdated": "Letztes Update",
+    "refresh": "Telemetry aktualisieren",
+    "unknown": "Unbekannt",
+    "knownSurfaces": "bekannte Oberflächen",
     "operatorSummary": {
-      "title": "Quick operator read",
-      "subtitle": "The short version of what this telemetry says right now.",
-      "breakerStatus": "OpenAI breaker {state}",
-      "breakerActive": "active",
-      "breakerCalm": "calm"
+      "title": "Schneller Operator-Read",
+      "subtitle": "Die Kurzfassung dessen, was diese Telemetry gerade sagt.",
+      "breakerStatus": "OpenAI-Breaker {state}",
+      "breakerActive": "aktiv",
+      "breakerCalm": "ruhig"
     },
     "summary": {
-      "queueBusy": "Queues are building up ({queueTotal}). Check broker depth and worker load first.",
-      "queueCalm": "Queues are empty. Production is breathing easily right now.",
-      "sessionsActive": "{dashboardRate} of new sessions reach the dashboard, {reportRate} reach report, and {promptRate} ask Finn a question right away.",
-      "noSessions": "No new sessions in the current dataset yet. Let one test user run a fresh session to fill the funnel.",
-      "topPrompt": "Most visible Finn question right now: “{topPrompt}”",
-      "noPrompts": "No prompts recorded yet. Check whether users are finding Finn early enough.",
-      "topScreen": "New users land first on {topFirstScreen}. Most-used screen right now: {topScreen}.",
-      "noScreenTelemetry": "Screen telemetry is still empty. The next live session will immediately fill first landings and screen usage.",
-      "topBehavioralFlag": "The behavioral brake around {flag} was shown {count} times, mostly on {surface}.",
-      "noBehavioralEvents": "No behavioral intervention events are visible yet. As soon as report or preflight shows these brakes, they will appear here."
+      "queueBusy": "Queues laufen voll ({queueTotal}). Prüfe zuerst Broker-Tiefe und Worker-Last.",
+      "queueCalm": "Queues sind leer. Die Produktion läuft im Moment ruhig.",
+      "sessionsActive": "{dashboardRate} der neuen Sessions erreichen das Dashboard, {reportRate} erreichen den Report und {promptRate} stellen Finn direkt eine Frage.",
+      "noSessions": "Noch keine neuen Sessions im aktuellen Datensatz. Lass einen Testnutzer einen frischen Lauf machen, um den Funnel zu füllen.",
+      "topPrompt": "Die sichtbarste Finn-Frage aktuell: „{topPrompt}“",
+      "noPrompts": "Noch keine Prompts erfasst. Prüfe, ob Nutzer Finn früh genug finden.",
+      "topScreen": "Neue Nutzer landen zuerst auf {topFirstScreen}. Der aktuell meistgenutzte Screen ist {topScreen}.",
+      "noScreenTelemetry": "Screen-Telemetry ist noch leer. Die nächste Live-Session füllt sofort First Landings und Screen-Nutzung.",
+      "topBehavioralFlag": "Die Verhaltensbremse rund um {flag} wurde {count} Mal gezeigt, vor allem auf {surface}.",
+      "noBehavioralEvents": "Noch keine Behavioral-Intervention-Events sichtbar. Sobald Report oder Preflight diese Bremsen zeigen, erscheinen sie hier."
     },
     "metrics": {
       "queueDepth": {
-        "title": "Queue depth",
+        "title": "Queue-Tiefe",
         "subtitle": "Status: {status}"
       },
       "visibleWorkers": {
-        "title": "Visible workers",
-        "runtimeUnknown": "runtime unknown"
+        "title": "Sichtbare Worker",
+        "runtimeUnknown": "Runtime unbekannt"
       },
       "finnEvents": {
-        "title": "FINN events",
-        "subtitle": "{decisionReviews} decision reviews · {priorityRuns} priority runs"
+        "title": "FINN-Events",
+        "subtitle": "{decisionReviews} Entscheidungs-Reviews · {priorityRuns} Prioritätsläufe"
       },
       "behavioralBrake": {
-        "title": "Behavioral brake",
-        "subtitle": "{acknowledgements} acknowledgements"
+        "title": "Verhaltensbremse",
+        "subtitle": "{acknowledgements} Bestätigungen"
       },
       "newSessions": {
-        "title": "New sessions",
-        "subtitle": "Multiple sessions: {multipleSessions}"
+        "title": "Neue Sessions",
+        "subtitle": "Mehrere Sessions: {multipleSessions}"
       }
     },
     "behavioralFlags": {
-      "title": "Behavioral flags",
-      "subtitle": "Which behavioral brakes Finn is surfacing most often right now.",
-      "mostVisibleOn": "Most visible on {surface}.",
-      "recurringHint": "Recurring in behavioral interventions.",
-      "empty": "No behavioral flags registered in product telemetry yet."
+      "title": "Verhaltens-Flags",
+      "subtitle": "Welche Verhaltensbremsen Finn gerade am häufigsten sichtbar macht.",
+      "mostVisibleOn": "Am sichtbarsten auf {surface}.",
+      "recurringHint": "Taucht in Behavioral Interventions wiederholt auf.",
+      "empty": "Noch keine Behavioral Flags in der Produkt-Telemetry registriert."
     },
     "behavioralSurfaces": {
-      "title": "Behavioral surfaces",
-      "subtitle": "Where the behavioral brakes are mainly being shown to users right now.",
-      "hint": "Surface where behavioral interventions were seen or explicitly acknowledged.",
-      "empty": "No behavioral surfaces recorded yet."
+      "title": "Verhaltens-Oberflächen",
+      "subtitle": "Wo die Verhaltensbremsen gerade hauptsächlich Nutzern gezeigt werden.",
+      "hint": "Oberfläche, auf der Behavioral Interventions gesehen oder bewusst bestätigt wurden.",
+      "empty": "Noch keine Behavioral Surfaces erfasst."
     },
     "queueOverview": {
-      "title": "Queue overview",
-      "subtitle": "This shows immediately whether production is clogging up or draining cleanly.",
-      "workers": "{count} workers"
+      "title": "Queue-Überblick",
+      "subtitle": "So siehst du sofort, ob die Produktion verstopft oder sauber abläuft.",
+      "workers": "{count} Worker"
     },
     "firstSessionFunnel": {
-      "title": "First-session funnel",
-      "subtitle": "This shows whether new users complete onboarding, find Finn, and hit confirm friction.",
+      "title": "Erst-Sitzungs-Funnel",
+      "subtitle": "Hier siehst du, ob neue Nutzer das Onboarding schaffen, Finn finden und Confirm-Reibung erleben.",
       "rows": {
         "dashboardReached": {
-          "label": "Reached dashboard",
-          "help": "Out of all new sessions we have seen."
+          "label": "Dashboard erreicht",
+          "help": "Von allen neuen Sessions, die wir gesehen haben."
         },
         "reportReached": {
-          "label": "Reached report",
-          "help": "Useful to see whether report is discovered early enough."
+          "label": "Report erreicht",
+          "help": "Hilfreich, um zu sehen, ob der Report früh genug entdeckt wird."
         },
         "promptSent": {
-          "label": "Sent Finn prompt",
-          "help": "{promptRate} of new sessions already ask Finn a question."
+          "label": "Finn-Prompt gesendet",
+          "help": "{promptRate} der neuen Sessions stellen Finn bereits eine Frage."
         },
         "confirmReached": {
-          "label": "Hit confirm flow",
-          "help": "{confirmRate} of new sessions run into a confirm moment."
+          "label": "Confirm-Flow erreicht",
+          "help": "{confirmRate} der neuen Sessions stoßen auf einen Confirm-Moment."
         }
       },
       "footer": {
-        "sessionsSeen": "{count} sessions",
-        "stepClicked": "{count} step clicks",
-        "stepCompleted": "{count} completed steps",
-        "dashboardActivated": "{count} dashboard activations"
+        "sessionsSeen": "{count} Sessions",
+        "stepClicked": "{count} Schritt-Klicks",
+        "stepCompleted": "{count} abgeschlossene Schritte",
+        "dashboardActivated": "{count} Dashboard-Aktivierungen"
       }
     },
     "topPrompts": {
-      "title": "Top FINN prompts",
-      "subtitle": "The fastest way to see what users are really asking Finn.",
-      "empty": "No FINN prompt telemetry stored yet."
+      "title": "Top-FINN-Prompts",
+      "subtitle": "Der schnellste Weg zu sehen, was Nutzer Finn wirklich fragen.",
+      "empty": "Noch keine FINN-Prompt-Telemetry gespeichert."
     },
     "topScreens": {
-      "title": "Top screen usage",
-      "subtitle": "Useful for seeing where most attention is going.",
-      "label": "Screen usage",
-      "empty": "No screen telemetry stored yet."
+      "title": "Top-Screennutzung",
+      "subtitle": "Hilfreich, um zu sehen, wohin die meiste Aufmerksamkeit geht.",
+      "label": "Screennutzung",
+      "empty": "Noch keine Screen-Telemetry gespeichert."
     },
     "firstLandings": {
-      "title": "First landings",
-      "subtitle": "This shows where new sessions really start.",
-      "label": "First landing",
-      "empty": "No first-landing data stored yet."
+      "title": "Erste Landungen",
+      "subtitle": "Das zeigt, wo neue Sessions wirklich beginnen.",
+      "label": "Erste Landung",
+      "empty": "Noch keine First-Landing-Daten gespeichert."
     },
     "confirmCtaOverview": {
-      "title": "Confirm and CTA overview",
-      "subtitle": "Where users move forward and where they still hesitate.",
+      "title": "Confirm- und CTA-Überblick",
+      "subtitle": "Wo Nutzer weitermachen und wo sie noch zögern.",
       "stats": {
-        "opened": "Opened",
-        "confirmed": "Confirmed",
-        "canceled": "Canceled"
+        "opened": "Geöffnet",
+        "confirmed": "Bestätigt",
+        "canceled": "Abgebrochen"
       },
-      "decisionReview": "Decision review",
-      "priorityEngine": "Priority engine",
-      "ctaAction": "CTA action",
-      "empty": "No CTA clicks stored yet."
+      "decisionReview": "Entscheidungs-Review",
+      "priorityEngine": "Prioritäts-Engine",
+      "ctaAction": "CTA-Aktion",
+      "empty": "Noch keine CTA-Klicks gespeichert."
     },
     "latestEvents": {
-      "title": "Latest events",
-      "subtitle": "Useful for a quick sanity check without raw JSON.",
-      "empty": "No recent events available yet.",
-      "noScreenContext": "No screen context",
+      "title": "Neueste Events",
+      "subtitle": "Hilfreich für einen schnellen Sanity-Check ohne Roh-JSON.",
+      "empty": "Noch keine aktuellen Events verfügbar.",
+      "noScreenContext": "Kein Screen-Kontext",
       "promptBadge": "Prompt",
-      "unknown": "Unknown"
-    }
-  },
-  "publicPages": {
-    "notFound": {
-      "title": "Oops… Page not found",
-      "body": "This page no longer exists in Tradamind. Check the URL or go back to the dashboard.",
-      "cta": "Back to dashboard",
-      "brand": "Tradamind — Pro"
-    },
-    "landing": {
-      "badge": "Tradamind Professional",
-      "titleLine1": "Market analysis with Finn",
-      "titleLine2": "for disciplined traders",
-      "subtitle": "See the market context first, follow your plan, and let Finn warn you as soon as timing, risk, or behavior starts to drift.",
-      "login": "Log in",
-      "dashboard": "Dashboard",
-      "startTrial": "Start free trial",
-      "viewDashboard": "View dashboard",
-      "openDashboard": "Open dashboard",
-      "previewAlt": "Tradamind dashboard preview",
-      "features": {
-        "marketTitle": "Market insights",
-        "marketBody": "Read market structure, momentum, and macro context in one place before you trade.",
-        "coachTitle": "Finn coach",
-        "coachBody": "Get explanations, behavioral brakes, and coaching that fit your trader profile.",
-        "strategyTitle": "Strategy engine",
-        "strategyBody": "Turn analysis into a clear plan with setups, timing, and disciplined execution signals."
-      },
-      "pricingTitle": "Simple pricing. Clear access.",
-      "pricingSubtitle": "Choose the plan that fits your workflow",
-      "pricing": {
-        "basicTagline": "Analysis and coaching at the core",
-        "basicFeatures": [
-          "Access to Finn coaching",
-          "Real-time strategy insights",
-          "Daily performance analysis",
-          "Technical indicator hub"
-        ],
-        "featuredBadge": "Most popular",
-        "proTagline": "Full execution support",
-        "proFeatures": [
-          "Everything in Basic",
-          "Faster signal coverage",
-          "Deeper Finn context",
-          "Priority access to new features",
-          "Advanced risk management"
-        ]
-      },
-      "cta": {
-        "title": "Trade with more clarity."
-      },
-      "footer": {
-        "rights": "© 2026 Tradamind. All rights reserved.",
-        "legal": "Legal pages are currently being finalized."
-      }
-    },
-    "marketing": {
-      "subtitle": "The AI-driven trading dashboard that combines macro, technical analysis, setups, and strategies into one next-generation system.",
-      "security": "Secure dashboard",
-      "aiStrategies": "AI strategies and reports",
-      "liveScores": "Live macro and technical scores",
-      "login": "Log in"
+      "unknown": "Unbekannt"
     }
   }
 }

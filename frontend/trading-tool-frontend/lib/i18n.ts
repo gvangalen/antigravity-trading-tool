@@ -1,16 +1,36 @@
-export const SUPPORTED_LOCALES = ["en", "nl"] as const;
+export const SUPPORTED_LOCALES = ["nl", "en", "de"] as const;
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = "nl";
 export const LOCALE_STORAGE_KEY = "antigravity_locale";
 export const LOCALE_COOKIE_KEY = "antigravity_locale";
+export const LOCALE_LABELS: Record<Locale, string> = {
+  nl: "Nederlands",
+  en: "English",
+  de: "Deutsch",
+};
+export const LOCALE_TO_INTL_LOCALE: Record<Locale, string> = {
+  nl: "nl-NL",
+  en: "en-US",
+  de: "de-DE",
+};
+export const LOCALE_TO_FINN_LANGUAGE: Record<Locale, string> = {
+  nl: "Dutch",
+  en: "English",
+  de: "German",
+};
+
+export function isSupportedLocale(value: string): value is Locale {
+  return (SUPPORTED_LOCALES as readonly string[]).includes(value);
+}
 
 export function normalizeLocale(value?: string | null): Locale | null {
   if (!value) return null;
   const lowered = String(value).trim().toLowerCase();
+  const directMatch = lowered.split(/[_-]/)[0];
 
-  if (lowered.startsWith("nl")) return "nl";
-  if (lowered.startsWith("en")) return "en";
+  if (isSupportedLocale(lowered as Locale)) return lowered as Locale;
+  if (isSupportedLocale(directMatch)) return directMatch;
 
   return null;
 }
@@ -82,6 +102,83 @@ export function resolveServerFallbackLocale(): Locale {
   return DEFAULT_LOCALE;
 }
 
+export function getLocaleLabel(locale: Locale) {
+  return LOCALE_LABELS[normalizeLocale(locale) || DEFAULT_LOCALE];
+}
+
+export function getIntlLocale(locale?: string | null) {
+  return LOCALE_TO_INTL_LOCALE[normalizeLocale(locale) || DEFAULT_LOCALE];
+}
+
+export function getFinnLanguage(locale?: string | null) {
+  return LOCALE_TO_FINN_LANGUAGE[normalizeLocale(locale) || DEFAULT_LOCALE];
+}
+
+export function getLocaleValue<T>(
+  locale: string | null | undefined,
+  values: Partial<Record<Locale, T>>,
+  fallback?: T,
+) {
+  const normalizedLocale = normalizeLocale(locale) || DEFAULT_LOCALE;
+  if (values[normalizedLocale] !== undefined) return values[normalizedLocale] as T;
+  if (values[DEFAULT_LOCALE] !== undefined) return values[DEFAULT_LOCALE] as T;
+  if (values.en !== undefined) return values.en as T;
+  if (values.nl !== undefined) return values.nl as T;
+  return fallback as T;
+}
+
+type FormatDateOptions = Intl.DateTimeFormatOptions;
+
+export function formatDate(
+  value: Date | number | string,
+  locale?: string | null,
+  options?: FormatDateOptions,
+) {
+  const date = value instanceof Date ? value : new Date(value);
+  return new Intl.DateTimeFormat(getIntlLocale(locale), options).format(date);
+}
+
+export function formatDateTime(
+  value: Date | number | string,
+  locale?: string | null,
+  options?: FormatDateOptions,
+) {
+  return formatDate(value, locale, options);
+}
+
+export function formatNumber(
+  value: number,
+  locale?: string | null,
+  options?: Intl.NumberFormatOptions,
+) {
+  return new Intl.NumberFormat(getIntlLocale(locale), options).format(value);
+}
+
+export function formatPercent(
+  value: number,
+  locale?: string | null,
+  options?: Intl.NumberFormatOptions,
+) {
+  return formatNumber(value, locale, {
+    style: "percent",
+    maximumFractionDigits: 2,
+    ...options,
+  });
+}
+
+export function formatCurrency(
+  value: number,
+  locale?: string | null,
+  currency = "EUR",
+  options?: Intl.NumberFormatOptions,
+) {
+  return formatNumber(value, locale, {
+    style: "currency",
+    currency,
+    ...options,
+  });
+}
+
 export function getLocaleBootScript() {
   return `
     (function () {
@@ -89,12 +186,14 @@ export function getLocaleBootScript() {
         var STORAGE_KEY = ${JSON.stringify(LOCALE_STORAGE_KEY)};
         var COOKIE_KEY = ${JSON.stringify(LOCALE_COOKIE_KEY)};
         var DEFAULT_LOCALE = ${JSON.stringify(DEFAULT_LOCALE)};
+        var SUPPORTED_LOCALES = ${JSON.stringify([...SUPPORTED_LOCALES])};
 
         function normalizeLocale(value) {
           if (!value) return null;
           var lowered = String(value).trim().toLowerCase();
-          if (lowered.indexOf("nl") === 0) return "nl";
-          if (lowered.indexOf("en") === 0) return "en";
+          var directMatch = lowered.split(/[_-]/)[0];
+          if (SUPPORTED_LOCALES.indexOf(lowered) >= 0) return lowered;
+          if (SUPPORTED_LOCALES.indexOf(directMatch) >= 0) return directMatch;
           return null;
         }
 

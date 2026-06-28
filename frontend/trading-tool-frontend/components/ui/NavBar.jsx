@@ -39,6 +39,8 @@ export default function NavBar() {
   const { user } = useAuthHook();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const shellCopy = t?.ui?.shell || {};
+  const appSlogan = shellCopy.appSlogan || BRANDING.APP_SLOGAN;
 
   const isAdmin = user?.role === 'admin';
 
@@ -59,7 +61,7 @@ export default function NavBar() {
   if (isAdmin) {
     ADMIN_LINKS.push(
       { href: "/admin/ai", label: t.nav.admin_ai, icon: <ShieldCheck size={18} /> },
-      { href: "/admin/telemetry", label: "Telemetry", icon: <Activity size={18} /> },
+      { href: "/admin/telemetry", label: t.nav.telemetry, icon: <Activity size={18} /> },
       { href: "/admin/users", label: t.nav.users, icon: <Users size={18} /> },
       { href: "/admin/logs", label: t.nav.logs, icon: <FileText size={18} /> }
     );
@@ -89,7 +91,7 @@ export default function NavBar() {
                   <ShieldCheck size={10} strokeWidth={2.5} />
                 </div>
                 <div className="text-[7.5px] font-black uppercase tracking-[0.15em]">
-                  {BRANDING.APP_SLOGAN}
+                  {appSlogan}
                 </div>
               </div>
             </div>
@@ -137,7 +139,7 @@ export default function NavBar() {
                         <ShieldCheck size={12} strokeWidth={2.5} />
                       </div>
                       <div className="text-[8px] font-black uppercase tracking-[0.2em] opacity-90">
-                        {BRANDING.APP_SLOGAN}
+                        {appSlogan}
                       </div>
                     </div>
                   </div>
@@ -156,7 +158,10 @@ export default function NavBar() {
 }
 
 function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
-  const { t } = require("@/app/providers/I18nProvider").useTranslation();
+  const { t } = useTranslation();
+  const shellCopy = t?.ui?.shell || {};
+  const missionStatement = shellCopy.missionStatement || BRANDING.MISSION_STATEMENT;
+  const appSlogan = shellCopy.appSlogan || BRANDING.APP_SLOGAN;
   return (
     <div className="flex flex-col h-full bg-card dark:bg-[#020617] transition-colors">
       <Link 
@@ -180,7 +185,7 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
                 <ShieldCheck size={14} strokeWidth={2.5} />
               </div>
               <div className="text-[9px] font-black uppercase tracking-[0.25em] opacity-90">
-                {BRANDING.APP_SLOGAN}
+                {appSlogan}
               </div>
             </div>
           </div>
@@ -251,7 +256,7 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
       {/* FOOTER - MISSION STATEMENT */}
       <div className="p-8 border-t border-slate-100 dark:border-slate-800 flex flex-col items-start gap-4">
         <div className="text-[7.5px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em] leading-relaxed opacity-80">
-           {BRANDING.MISSION_STATEMENT.map((line, i) => (
+           {missionStatement.map((line, i) => (
              <span key={i}>{line}<br/></span>
            ))}
         </div>
@@ -310,7 +315,7 @@ function WatchlistSidebar({ onNavigate, pathname }) {
     <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80">
       <p className="px-5 text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-3 flex items-center gap-2">
         <Star size={10} className="text-amber-400 fill-amber-400 animate-pulse" />
-        {t?.nav?.marketContext || "Market context"}
+        {t?.nav?.marketContext}
       </p>
       {loading ? (
         <div className="space-y-2.5 px-1.5">
@@ -323,11 +328,10 @@ function WatchlistSidebar({ onNavigate, pathname }) {
         <div className="px-1.5">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 px-4 py-4">
             <p className="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">
-              {t?.nav?.watchlistEmptyTitle || "Nog geen watchlist"}
+              {t?.nav?.watchlistEmptyTitle}
             </p>
             <p className="mt-2 text-[11px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
-              {t?.nav?.watchlistEmptyBody ||
-                "Voeg assets toe via de zoekbalk of laat Finn er een aan je watchlist toevoegen. Je marktcontext verschijnt hier."}
+              {t?.nav?.watchlistEmptyBody}
             </p>
           </div>
         </div>
@@ -340,7 +344,7 @@ function WatchlistSidebar({ onNavigate, pathname }) {
                 key={symbol}
                 symbol={symbol}
                 isActive={isActive}
-                helperText={t?.nav?.watchlistOpenContext || "Open direct de marktcontext voor"}
+                helperText={t?.nav?.watchlistOpenContext}
                 onSelect={() => {
                   setActiveSetup(null);
                   setFocusedBotId(null);
@@ -355,28 +359,19 @@ function WatchlistSidebar({ onNavigate, pathname }) {
                 }}
                 onRemove={() => {
                   openConfirm({
-                    title: t?.nav?.watchlistRemoveTitle || "Asset verwijderen?",
-                    context:
-                      t?.nav?.watchlistRemoveContext?.replace("{symbol}", symbol) ||
-                      `${symbol} verdwijnt uit je actieve watchlist.`,
-                    impact:
-                      t?.nav?.watchlistRemoveImpact ||
-                      "De asset blijft beschikbaar, maar verdwijnt uit je huidige tracking en snelle contextwissels.",
-                    safety:
-                      t?.nav?.watchlistRemoveSafety ||
-                      "Dit start geen orders of datawijzigingen. Alleen je persoonlijke watchlist verandert.",
-                    consequence:
-                      t?.nav?.watchlistRemoveConsequence ||
-                      "Na bevestigen vernieuwt je watchlist en focust Finn op je overgebleven assets.",
+                    title: t?.nav?.watchlistRemoveTitle,
+                    context: t?.nav?.watchlistRemoveContext?.replace("{symbol}", symbol),
+                    impact: t?.nav?.watchlistRemoveImpact,
+                    safety: t?.nav?.watchlistRemoveSafety,
+                    consequence: t?.nav?.watchlistRemoveConsequence,
                     tone: "danger",
-                    confirmText: t?.common?.delete || "Delete",
-                    cancelText: t?.common?.cancel || "Cancel",
+                    confirmText: t?.common?.delete,
+                    cancelText: t?.common?.cancel,
                     icon: <AlertTriangle size={20} />,
                     onConfirm: async () => {
                       await remove(symbol);
                       showSnackbar(
-                        t?.nav?.watchlistRemoveSuccess?.replace("{symbol}", symbol) ||
-                          `${symbol} verwijderd van watchlist`,
+                        t?.nav?.watchlistRemoveSuccess?.replace("{symbol}", symbol),
                         "success"
                       );
                     }
