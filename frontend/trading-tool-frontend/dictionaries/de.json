@@ -1289,6 +1289,15 @@
     "newDescription": "Add a new strategy that fits your setup and execution style",
     "editTitle": "Edit strategy",
     "editSubtitle": "Settings",
+    "feedback": {
+      "deleted": "Strategy removed.",
+      "deleteFailed": "Deleting the strategy failed.",
+      "updated": "Strategy updated.",
+      "updateFailed": "Updating the strategy failed.",
+      "invalidSetup": "Choose a valid setup first.",
+      "saved": "Strategy saved.",
+      "saveFailed": "Saving the strategy failed."
+    },
     "footerFast": "Fast execution",
     "footerSafe": "Protected system"
   },
@@ -2983,7 +2992,7 @@
     "logsSyncing": "Logs werden synchronisiert..."
   },
   "adminTelemetryPage": {
-    "loading": "Telemetry wird geladen...",
+    "loading": "Telemetrie wird geladen...",
     "loadError": "Telemetry konnte nicht geladen werden. Prüfe Admin-Zugriff oder Runtime-Health.",
     "unavailableTitle": "Telemetry nicht verfügbar",
     "pageTitlePrefix": "Plattform",

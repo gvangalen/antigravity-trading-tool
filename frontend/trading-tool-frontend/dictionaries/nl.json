@@ -1289,6 +1289,15 @@
     "newDescription": "Voeg een nieuwe strategie toe die past bij je setup en uitvoeringsstijl",
     "editTitle": "Strategie aanpassen",
     "editSubtitle": "Instellingen",
+    "feedback": {
+      "deleted": "Strategie verwijderd.",
+      "deleteFailed": "Verwijderen van de strategie mislukt.",
+      "updated": "Strategie bijgewerkt.",
+      "updateFailed": "Bijwerken van de strategie mislukt.",
+      "invalidSetup": "Kies eerst een geldige setup.",
+      "saved": "Strategie opgeslagen.",
+      "saveFailed": "Opslaan van de strategie mislukt."
+    },
     "footerFast": "Snelle uitvoering",
     "footerSafe": "Beveiligd systeem"
   },
@@ -2984,7 +2993,7 @@
     "logsSyncing": "Logs synchroniseren..."
   },
   "adminTelemetryPage": {
-    "loading": "Telemetry wordt verzameld...",
+    "loading": "Telemetrie wordt geladen...",
     "loadError": "Telemetry kon niet worden geladen. Controleer admin-toegang of runtime health.",
     "unavailableTitle": "Telemetry niet beschikbaar",
     "pageTitlePrefix": "Platform",
