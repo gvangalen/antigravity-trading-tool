@@ -11,6 +11,7 @@ import {
   DEFAULT_LOCALE,
   normalizeLocale,
   persistLocale,
+  readStoredLocale,
   resolveInitialLocale,
   SUPPORTED_LOCALES,
 } from "@/lib/i18n";
@@ -65,14 +66,38 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     if (!sessionChecked || !user) return;
 
     const accountLocale = normalizeLocale(user?.ai_preferences?.locale);
+    const storedLocale =
+      typeof window !== "undefined" ? readStoredLocale(window) : null;
     const pendingLocale = pendingAccountLocaleRef.current;
 
-    if (pendingLocale) {
-      if (accountLocale === pendingLocale) {
-        pendingAccountLocaleRef.current = null;
-      } else {
+    if (pendingLocale && accountLocale === pendingLocale) {
+      pendingAccountLocaleRef.current = null;
+    }
+
+    if (storedLocale) {
+      if (locale !== storedLocale) {
+        setLocaleState(storedLocale);
         return;
       }
+
+      if (accountLocale === storedLocale) {
+        return;
+      }
+
+      if (seededAccountLocaleRef.current === `${user.id}:${storedLocale}`) {
+        return;
+      }
+
+      seededAccountLocaleRef.current = `${user.id}:${storedLocale}`;
+      pendingAccountLocaleRef.current = storedLocale;
+
+      void updateAssistantPreferences({ locale: storedLocale }).catch(() => {
+        if (pendingAccountLocaleRef.current === storedLocale) {
+          pendingAccountLocaleRef.current = null;
+        }
+        seededAccountLocaleRef.current = null;
+      });
+      return;
     }
 
     if (accountLocale) {

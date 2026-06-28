@@ -2988,7 +2988,7 @@
     "loadError": "Telemetry kon niet worden geladen. Controleer admin-toegang of runtime health.",
     "unavailableTitle": "Telemetry niet beschikbaar",
     "pageTitlePrefix": "Platform",
-    "pageTitleAccent": "Telemetry",
+    "pageTitleAccent": "Telemetrie",
     "pageSubtitle": "Minder ruwe JSON, meer snelle productconclusies. Hier zie je waar nieuwe users landen, waar ze afhaken en wat ze Finn echt vragen.",
     "lastUpdated": "Laatste update",
     "refresh": "Ververs telemetry",
