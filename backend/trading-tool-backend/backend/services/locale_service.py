@@ -4,6 +4,11 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Optional
 
+from backend.services.locale_config import (
+    DEFAULT_LOCALE,
+    LOCALE_TO_FINN_LANGUAGE,
+    resolve_locale as resolve_supported_locale,
+)
 from backend.utils.openai_client import ask_gpt_text_async
 
 
@@ -103,14 +108,13 @@ def resolve_locale(preferences: Optional[dict] = None, context: Optional[dict] =
     locale = (
         (preferences or {}).get("locale")
         or (context or {}).get("locale")
-        or "nl"
+        or DEFAULT_LOCALE
     )
-    locale = str(locale).strip().lower()
-    return "en" if locale.startswith("en") else "nl"
+    return resolve_supported_locale(locale)
 
 
 def response_language_name(locale: str) -> str:
-    return "English" if resolve_locale({"locale": locale}) == "en" else "Dutch"
+    return LOCALE_TO_FINN_LANGUAGE[resolve_locale({"locale": locale})]
 
 
 def _rule_based_translate_to_english(text: str) -> str:
@@ -137,21 +141,22 @@ async def translate_text_if_needed(text: Any, target_locale: str) -> Any:
     if not isinstance(text, str):
         return text
     stripped = text.strip()
-    if not stripped or resolve_locale({"locale": target_locale}) != "en":
+    normalized_locale = resolve_locale({"locale": target_locale})
+    if not stripped or normalized_locale == DEFAULT_LOCALE:
         return text
 
-    cache_key = hashlib.sha256(f"en::{stripped}".encode("utf-8")).hexdigest()
+    cache_key = hashlib.sha256(f"{normalized_locale}::{stripped}".encode("utf-8")).hexdigest()
     cached = _translation_cache.get(cache_key)
     if cached:
         return cached
 
-    rule_based = _rule_based_translate_to_english(stripped)
-    if rule_based != stripped and any(token in rule_based for token in ("The ", "For ", "Blocked", "Strategy", "Macro", "Safe next step", "Within the")):
+    rule_based = _rule_based_translate_to_english(stripped) if normalized_locale == "en" else stripped
+    if normalized_locale == "en" and rule_based != stripped and any(token in rule_based for token in ("The ", "For ", "Blocked", "Strategy", "Macro", "Safe next step", "Within the")):
         _translation_cache[cache_key] = rule_based
         return rule_based
 
     prompt = (
-        "Translate the following Tradamind/Finn trading product text from Dutch to natural English.\n"
+        f"Translate the following Tradamind/Finn trading product text from Dutch to natural {response_language_name(normalized_locale)}.\n"
         "Rules:\n"
         "- Keep the meaning exactly the same.\n"
         "- Keep bullet points, line breaks, numbers, ids, percentages, and asset tickers exactly intact.\n"
@@ -163,7 +168,7 @@ async def translate_text_if_needed(text: Any, target_locale: str) -> Any:
         prompt=prompt,
         system_role=(
             "You are a precise product copy translator for a trading app. "
-            "Translate Dutch UI and coaching text into concise natural English."
+            f"Translate Dutch UI and coaching text into concise natural {response_language_name(normalized_locale)}."
         ),
         max_tokens=1200,
     )
@@ -186,7 +191,7 @@ async def _translate_string_list(values: Iterable[Any], target_locale: str) -> l
 
 async def localize_finn_payload(payload: Dict[str, Any], target_locale: str) -> Dict[str, Any]:
     locale = resolve_locale({"locale": target_locale})
-    if locale != "en":
+    if locale == DEFAULT_LOCALE:
         return payload
 
     localized = deepcopy(payload)
@@ -202,7 +207,7 @@ async def localize_finn_payload(payload: Dict[str, Any], target_locale: str) -> 
 
 async def localize_report_payload(payload: Dict[str, Any], target_locale: str) -> Dict[str, Any]:
     locale = resolve_locale({"locale": target_locale})
-    if locale != "en":
+    if locale == DEFAULT_LOCALE:
         return payload
 
     localized = deepcopy(payload)

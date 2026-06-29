@@ -22,6 +22,11 @@ from backend.infrastructure.repositories.conversation_state_repository import Co
 from backend.services.platform_metrics import record_latency_sample
 from backend.services.setup_service import SetupService
 from backend.services.finn_plan_service import FinnPlanService
+from backend.services.locale_config import (
+    DEFAULT_LOCALE,
+    response_language_name as response_language_name_for_locale,
+    resolve_locale as resolve_supported_locale,
+)
 from backend.services.trader_profile_service import build_trader_profile_context
 
 logger = logging.getLogger(__name__)
@@ -102,12 +107,11 @@ def _build_adaptive_profile_str(
 
 
 def _resolve_locale(preferences: Optional[dict]) -> str:
-    locale = str((preferences or {}).get("locale") or "nl").strip().lower()
-    return "en" if locale.startswith("en") else "nl"
+    return resolve_supported_locale((preferences or {}).get("locale"))
 
 
 def _response_language_name(preferences: Optional[dict]) -> str:
-    return "English" if _resolve_locale(preferences) == "en" else "Dutch"
+    return response_language_name_for_locale(_resolve_locale(preferences))
 
 
 def _localized_example_text(preferences: Optional[dict], key: str, symbol: str) -> str:
@@ -116,21 +120,25 @@ def _localized_example_text(preferences: Optional[dict], key: str, symbol: str) 
         "no_setup": {
             "nl": f"Er is nog geen setup voor {symbol}, laten we die eerst maken.",
             "en": f"There is no setup for {symbol} yet, so let’s create that first.",
+            "de": f"Es gibt noch kein Setup fuer {symbol}, also richten wir das zuerst ein.",
         },
         "no_strategy": {
             "nl": f"Er is nog geen strategie voor {symbol}, laten we die eerst ontwerpen.",
             "en": f"There is no strategy for {symbol} yet, so let’s design that first.",
+            "de": f"Es gibt noch keine Strategie fuer {symbol}, also entwerfen wir diese zuerst.",
         },
         "no_setup_nor_strategy": {
             "nl": f"Er is nog geen setup of strategie voor {symbol}, dus we beginnen bij de basis met een setup.",
             "en": f"There is no setup or strategy for {symbol} yet, so we should start with a setup first.",
+            "de": f"Es gibt noch kein Setup und keine Strategie fuer {symbol}, daher beginnen wir zuerst mit einem Setup.",
         },
         "setup_type_question": {
             "nl": "Wil je een DCA of trade setup?",
             "en": "Do you want a DCA setup or a trade setup?",
+            "de": "Moechtest du ein DCA- oder ein Trade-Setup?",
         },
     }
-    return examples.get(key, {}).get(locale) or examples.get(key, {}).get("nl") or ""
+    return examples.get(key, {}).get(locale) or examples.get(key, {}).get(DEFAULT_LOCALE) or ""
 
 class AiAssistantService:
     def __init__(

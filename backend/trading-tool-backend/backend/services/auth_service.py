@@ -1,8 +1,12 @@
 import logging
+import os
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.services.locale_config import DEFAULT_LOCALE, resolve_locale as resolve_supported_locale
+from backend.utils.email_utils import send_email
 from backend.utils.auth_utils import (
     hash_password,
     verify_password,
@@ -11,9 +15,46 @@ from backend.utils.auth_utils import (
     decode_token,
     hash_token,
 )
-from backend.schemas.auth_schema import RegisterRequest, LoginRequest, UserOut
+from backend.schemas.auth_schema import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    UserOut,
+)
 
 logger = logging.getLogger(__name__)
+PASSWORD_RESET_EXPIRE_MINUTES = int(os.getenv("PASSWORD_RESET_EXPIRE_MINUTES", "60"))
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+PASSWORD_RESET_COPY = {
+    "nl": {
+        "subject": "Reset je Tradamind-wachtwoord",
+        "body": (
+            "Je hebt een verzoek gedaan om je wachtwoord te resetten.\n\n"
+            "Open deze link om een nieuw wachtwoord in te stellen:\n{reset_url}\n\n"
+            "Deze link verloopt over {minutes} minuten en kan maar één keer worden gebruikt.\n"
+            "Heb je dit niet aangevraagd? Dan kun je deze mail negeren."
+        ),
+    },
+    "en": {
+        "subject": "Reset your Tradamind password",
+        "body": (
+            "You requested a password reset.\n\n"
+            "Open this link to set a new password:\n{reset_url}\n\n"
+            "This link expires in {minutes} minutes and can only be used once.\n"
+            "If you did not request this, you can ignore this email."
+        ),
+    },
+    "de": {
+        "subject": "Setze dein Tradamind-Passwort zurück",
+        "body": (
+            "Du hast ein Zurücksetzen deines Passworts angefordert.\n\n"
+            "Öffne diesen Link, um ein neues Passwort festzulegen:\n{reset_url}\n\n"
+            "Dieser Link läuft in {minutes} Minuten ab und kann nur einmal verwendet werden.\n"
+            "Wenn du das nicht angefordert hast, kannst du diese E-Mail ignorieren."
+        ),
+    },
+}
 
 class AuthService:
     def __init__(self, repository: UserRepository):
@@ -43,6 +84,15 @@ class AuthService:
         from backend.utils.auth_utils import REFRESH_TOKEN_EXPIRE_DAYS
 
         return cls._db_utc_now() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+
+    @classmethod
+    def _password_reset_expiry(cls) -> datetime:
+        return cls._db_utc_now() + timedelta(minutes=PASSWORD_RESET_EXPIRE_MINUTES)
+
+    @staticmethod
+    def _password_reset_copy(locale: str) -> dict:
+        normalized = resolve_supported_locale(locale)
+        return PASSWORD_RESET_COPY.get(normalized) or PASSWORD_RESET_COPY[DEFAULT_LOCALE]
 
     async def _issue_refresh_session(self, user) -> tuple[str, str]:
         refresh_jti = str(uuid.uuid4())
@@ -101,6 +151,83 @@ class AuthService:
             "refresh_token": refresh_token,
             "user": self._user_out(user)
         }
+
+    async def request_password_reset(self, data: ForgotPasswordRequest) -> None:
+        locale = resolve_supported_locale(data.locale)
+        user = await self.repository.get_by_email(data.email)
+        if not user or not user.is_active:
+            return
+
+        raw_token = secrets.token_urlsafe(32)
+        expires_at = self._password_reset_expiry()
+
+        await self.repository.revoke_password_reset_tokens_for_user(
+            user.id,
+            reason="replaced",
+            revoked_at=self._db_utc_now(),
+        )
+        await self.repository.create_password_reset_token(
+            user_id=user.id,
+            token_hash=hash_token(raw_token),
+            expires_at=expires_at,
+            locale=locale,
+        )
+
+        reset_url = f"{FRONTEND_URL}/reset-password?token={raw_token}"
+        copy = self._password_reset_copy(locale)
+        body = copy["body"].format(
+            reset_url=reset_url,
+            minutes=PASSWORD_RESET_EXPIRE_MINUTES,
+        )
+        send_email(copy["subject"], body, user.email)
+
+    async def validate_password_reset_token(self, raw_token: str) -> bool:
+        if not raw_token:
+            return False
+
+        token = await self.repository.get_password_reset_token(hash_token(raw_token))
+        if not token:
+            return False
+        if token.used_at is not None or token.revoked_at is not None:
+            return False
+
+        expires_at = token.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        return expires_at > datetime.now(timezone.utc)
+
+    async def reset_password(self, data: ResetPasswordRequest) -> None:
+        if not data.password or len(data.password) < 8:
+            raise ValueError("Wachtwoord voldoet niet aan minimumlengte")
+
+        token = await self.repository.get_password_reset_token(hash_token(data.token))
+        if not token or token.used_at is not None or token.revoked_at is not None:
+            raise ValueError("Reset token ongeldig")
+
+        expires_at = token.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at <= datetime.now(timezone.utc):
+            raise ValueError("Reset token verlopen")
+
+        user = await self.repository.get_by_id(token.user_id)
+        if not user or not user.is_active:
+            raise ValueError("Gebruiker niet gevonden")
+
+        now = self._db_utc_now()
+        await self.repository.update_password_hash(user.id, hash_password(data.password))
+        await self.repository.revoke_all_refresh_sessions_for_user(
+            user.id,
+            reason="password_reset",
+            revoked_at=now,
+        )
+        await self.repository.revoke_password_reset_tokens_for_user(
+            user.id,
+            reason="password_reset",
+            revoked_at=now,
+            exclude_token_id=token.id,
+        )
+        await self.repository.consume_password_reset_token(token, used_at=now)
 
     async def get_me(self, user_id: int) -> UserOut:
         user = await self.repository.get_by_id(user_id)

@@ -29,7 +29,7 @@ export default function TableTabs({
     { id: "technical", label: t.dashboard.tabs.technical, icon: <TrendingUp size={16} /> },
     { id: "macro", label: t.dashboard.tabs.macro, icon: <Globe2 size={16} /> },
     { id: "market", label: t.dashboard.tabs.market, icon: <Coins size={16} /> },
-    { id: "bots", label: "Bots", icon: <Bot size={16} /> },
+    { id: "bots", label: t.dashboard.tabs.bots, icon: <Bot size={16} /> },
   ];
 
   return (

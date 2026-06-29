@@ -12,8 +12,11 @@ import {
 import { useActiveStrategyToday } from "@/hooks/useAgentData";
 import { useMarketData } from "@/hooks/useMarketData";
 import { ScoreCardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function ActiveStrategyTodayCard({ className = "" }) {
+  const { t } = useTranslation();
+  const copy = t?.strategies?.activeToday || {};
   const { strategy, loading } = useActiveStrategyToday();
   const { btcLive } = useMarketData(undefined, { mode: "live" });
 
@@ -25,7 +28,7 @@ export default function ActiveStrategyTodayCard({ className = "" }) {
     return (
       <CardWrapper className={className}>
         <p className="text-sm text-[var(--text-light)]">
-          Geen actieve strategie voor vandaag.
+          {copy.empty}
         </p>
       </CardWrapper>
     );
@@ -75,7 +78,7 @@ export default function ActiveStrategyTodayCard({ className = "" }) {
       <div className="flex items-center gap-2 mb-4">
         <TrendingUp className="w-5 h-5 text-[var(--primary)]" />
         <h2 className="text-lg font-semibold text-[var(--text-dark)]">
-          Actieve Strategie Vandaag
+          {copy.title}
         </h2>
       </div>
 
@@ -90,14 +93,14 @@ export default function ActiveStrategyTodayCard({ className = "" }) {
         <span className="text-sm text-[var(--text-dark)]">
           {isDCA ? (
             <>
-              <strong>Startprijs (referentie):</strong>{" "}
+              <strong>{copy.referencePrice}:</strong>{" "}
               {referencePrice
                 ? Number(referencePrice).toLocaleString()
                 : "—"}
             </>
           ) : (
             <>
-              <strong>Entry:</strong>{" "}
+              <strong>{copy.entry}:</strong>{" "}
               {entry ? Number(entry).toLocaleString() : "—"}
             </>
           )}
@@ -107,8 +110,7 @@ export default function ActiveStrategyTodayCard({ className = "" }) {
       {/* DCA uitleg */}
       {isDCA && (
         <p className="text-xs text-[var(--text-light)] mb-3">
-          DCA-strategie actief. Er is geen vast instapmoment — deze prijs
-          dient als referentie voor performance sinds activatie.
+          {copy.dcaDescription}
         </p>
       )}
 
@@ -121,7 +123,7 @@ export default function ActiveStrategyTodayCard({ className = "" }) {
             <ArrowDownRight className="w-4 h-4 text-red-600" />
           )}
           <span className="text-[var(--text-dark)]">
-            <strong>Huidige prijs:</strong>{" "}
+            <strong>{copy.currentPrice}:</strong>{" "}
             {Number(currentPrice).toLocaleString()}
             <span
               className={
@@ -140,7 +142,7 @@ export default function ActiveStrategyTodayCard({ className = "" }) {
       {parsedTargets.length > 0 && (
         <div className="mb-3">
           <p className="text-sm font-medium text-[var(--text-dark)] mb-1">
-            Targets
+            {copy.targets}
           </p>
           <ul className="ml-4 space-y-1">
             {parsedTargets.map((t, i) => (
@@ -156,7 +158,7 @@ export default function ActiveStrategyTodayCard({ className = "" }) {
       <div className="flex items-center gap-2 mb-3">
         <Shield className="w-4 h-4 text-red-500" />
         <span className="text-sm text-[var(--text-dark)]">
-          <strong>Stop-loss:</strong>{" "}
+          <strong>{copy.stopLoss}:</strong>{" "}
           {stop_loss ? Number(stop_loss).toLocaleString() : "—"}
         </span>
       </div>
@@ -164,7 +166,7 @@ export default function ActiveStrategyTodayCard({ className = "" }) {
       {/* Adjustment reason */}
       {adjustment_reason && (
         <p className="text-sm text-[var(--text-dark)] mb-2">
-          <strong>Aanpassing:</strong> {adjustment_reason}
+          <strong>{copy.adjustment}:</strong> {adjustment_reason}
         </p>
       )}
 
@@ -172,7 +174,7 @@ export default function ActiveStrategyTodayCard({ className = "" }) {
       {confidence_score !== null &&
         confidence_score !== undefined && (
           <p className="text-xs text-[var(--text-light)]">
-            Confidence score:{" "}
+            {copy.confidence}:{" "}
             <strong className="text-[var(--text-dark)]">
               {confidence_score}%
             </strong>

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { useActiveSetup } from "@/app/providers/SetupProvider";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function BotCard({
   bot,
@@ -22,6 +23,8 @@ export default function BotCard({
   onRun,
   showActions = true,
 }) {
+  const { t } = useTranslation();
+  const copy: Record<string, string> = t?.botPage?.botCard || {};
   const { focusedBotId, setFocusedBotId } = useActiveSetup();
   
   if (!bot) return null;
@@ -70,14 +73,14 @@ export default function BotCard({
                   {is_active ? (
                     <>
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Actief
+                      {copy.active}
                     </>
-                  ) : "Inactief"}
+                  ) : copy.inactive}
                 </span>
                 
                 {strategy && (
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    {strategy.symbol || "NO SYMBOL"}
+                    {strategy.symbol || copy.noSymbol}
                   </span>
                 )}
               </div>
@@ -92,7 +95,7 @@ export default function BotCard({
                 e.stopPropagation();
                 setFocusedBotId(isFocused ? null : id);
               }}
-              title={isFocused ? "Unfocus bot" : "Focus on chart"}
+              title={isFocused ? copy.unfocus : copy.focus}
             >
               <Target size={16} className={isFocused ? "animate-pulse" : ""} />
             </button>
@@ -105,7 +108,7 @@ export default function BotCard({
                     e.stopPropagation();
                     onEdit?.(id);
                   }}
-                  title="Bewerken"
+                  title={copy.edit}
                 >
                   <Pencil size={16} />
                 </button>
@@ -116,7 +119,7 @@ export default function BotCard({
                     e.stopPropagation();
                     onDelete?.(id);
                   }}
-                  title="Verwijderen"
+                  title={copy.delete}
                 >
                   <Trash2 size={16} />
                 </button>
@@ -130,16 +133,16 @@ export default function BotCard({
           <div className="trade-surface !p-4 group/strategy">
             <div className="flex items-center gap-2 mb-3">
               <Settings2 size={14} className="text-blue-600" />
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Strategy Config</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.strategyConfig}</span>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Name</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{copy.name}</p>
                 <p className="text-xs font-black text-slate-900 dark:text-slate-200 truncate">{strategy.name}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Type</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{copy.type}</p>
                 <p className="text-xs font-black text-blue-600">{getStrategyType(strategy)}</p>
               </div>
             </div>
@@ -152,14 +155,14 @@ export default function BotCard({
                 </div>
                 <div className="flex items-center gap-1">
                    <Layers size={10} className="text-slate-400" />
-                   <span className="text-[10px] font-black text-slate-600 uppercase">V1</span>
+                   <span className="text-[10px] font-black text-slate-600 uppercase">{copy.version}</span>
                 </div>
               </div>
             </div>
           </div>
         ) : (
           <div className="p-4 rounded-2xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-center">
-            <p className="text-xs font-bold text-slate-400">⚠️ Geen strategie gekoppeld</p>
+            <p className="text-xs font-bold text-slate-400">{copy.noStrategy}</p>
           </div>
         )}
 
@@ -182,7 +185,7 @@ export default function BotCard({
               disabled={!strategy}
             >
               <Play size={14} fill="currentColor" />
-              Start Bot Execution
+              {copy.startExecution}
             </button>
           )}
         </div>

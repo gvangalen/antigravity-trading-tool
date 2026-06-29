@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
+import { useTranslation } from "@/app/providers/I18nProvider";
 import { 
   AlertTriangle, 
   Activity, 
@@ -17,7 +18,9 @@ import {
 
 export default function FINNIntelligenceFeed() {
   const { events, loading, error, archiveEvent } = useIntelligenceEvents();
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("all");
+  const copy = t?.dashboard?.finnFeed || {};
 
   const getSeverityStyles = (severity) => {
     switch (severity?.toLowerCase()) {
@@ -69,7 +72,9 @@ export default function FINNIntelligenceFeed() {
   const handleActionChipClick = (actionType, event) => {
     // We send a custom event that can be listened to by the AIAssistant or pages to trigger action flow conversationally or directly
     if (actionType === "discuss") {
-      const chatQuery = `Wat kan ik concreet doen aan het event: "${event.title}" voor ${event.symbol || "portfolio"}?`;
+      const chatQuery = copy.discussQuery
+        .replace("{title}", event.title)
+        .replace("{symbol}", event.symbol || "portfolio");
       const customEvent = new CustomEvent("finn-action-trigger", { 
         detail: { query: chatQuery, openAssistant: true } 
       });
@@ -101,10 +106,10 @@ export default function FINNIntelligenceFeed() {
           <div>
             <h3 className="card-title text-slate-900 dark:text-white uppercase tracking-widest text-[12px] font-black flex items-center gap-2">
               <Terminal className="w-4 h-4 text-blue-600" />
-              FINN Live Context
+              {copy.title}
             </h3>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold tracking-tight mt-0.5">
-              Realtime risico-evaluatie & marktonderzoek • Server-Driven
+              {copy.subtitle}
             </p>
           </div>
         </div>
@@ -115,13 +120,13 @@ export default function FINNIntelligenceFeed() {
             onClick={() => setActiveTab("all")}
             className={`px-3 py-1 text-[10px] uppercase tracking-wider font-black rounded-lg transition-all ${activeTab === 'all' ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-100 dark:border-slate-700' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600'}`}
           >
-            Alle ({events.length})
+            {copy.all} ({events.length})
           </button>
           <button 
             onClick={() => setActiveTab("critical")}
             className={`px-3 py-1 text-[10px] uppercase tracking-wider font-black rounded-lg transition-all ${activeTab === 'critical' ? 'bg-white dark:bg-slate-800 text-rose-500 shadow-sm border border-slate-100 dark:border-slate-700' : 'text-slate-400 dark:text-slate-500 hover:text-rose-400'}`}
           >
-            Alerts ({events.filter(e => e.severity === 'critical' || e.severity === 'warning').length})
+            {copy.alerts} ({events.filter(e => e.severity === 'critical' || e.severity === 'warning').length})
           </button>
         </div>
       </div>
@@ -132,7 +137,7 @@ export default function FINNIntelligenceFeed() {
           <div className="py-12 flex flex-col items-center justify-center gap-2">
             <Sparkles className="w-6 h-6 text-blue-500 animate-spin" />
             <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-              Live evaluatie starten...
+              {copy.loading}
             </p>
           </div>
         ) : error ? (
@@ -142,7 +147,7 @@ export default function FINNIntelligenceFeed() {
         ) : filteredEvents.length === 0 ? (
           <div className="py-12 text-center">
             <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest italic">
-              Geen actieve intelligence meldingen. Je portfolio draait stabiel.
+              {copy.empty}
             </p>
           </div>
         ) : (
@@ -157,7 +162,7 @@ export default function FINNIntelligenceFeed() {
                 <button 
                   onClick={() => archiveEvent(ev.id)}
                   className="absolute top-3 right-3 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                  title="Archiveer event"
+                  title={copy.archive}
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -177,7 +182,7 @@ export default function FINNIntelligenceFeed() {
                       )}
                     </h4>
                     <span className="text-[8px] uppercase tracking-wider font-black text-slate-400 dark:text-slate-500">
-                      {new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Realtime
+                      {new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {copy.realtime}
                     </span>
                   </div>
                 </div>
@@ -194,7 +199,7 @@ export default function FINNIntelligenceFeed() {
                     className="flex items-center gap-1 px-3 py-1 rounded-xl bg-slate-100 hover:bg-blue-500 dark:bg-slate-800 dark:hover:bg-blue-600 text-[10px] font-black text-slate-700 hover:text-white dark:text-slate-300 transition-all border border-slate-200 dark:border-slate-700 hover:border-transparent uppercase tracking-wider"
                   >
                     <MessageSquare className="w-3 h-3" />
-                    Bespreek met FINN
+                    {copy.discuss}
                   </button>
                   
                   {ev.type === "drawdown_alert" && (
@@ -202,17 +207,17 @@ export default function FINNIntelligenceFeed() {
                       onClick={() => handleActionChipClick("view_bot", ev)}
                       className="flex items-center gap-1 px-3 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] font-black text-slate-700 dark:text-slate-300 transition-all border border-slate-200 dark:border-slate-700 uppercase tracking-wider"
                     >
-                      Beheer Bot
+                      {copy.manageBot}
                       <ArrowRight className="w-3 h-3" />
                     </button>
                   )}
                   
                   {ev.symbol && (
-                    <button 
+                  <button 
                       onClick={() => handleActionChipClick("view_market", ev)}
                       className="flex items-center gap-1 px-3 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] font-black text-slate-700 dark:text-slate-300 transition-all border border-slate-200 dark:border-slate-700 uppercase tracking-wider"
                     >
-                      Analyseer {ev.symbol}
+                      {copy.analyzeSymbol.replace("{symbol}", ev.symbol)}
                       <ArrowRight className="w-3 h-3" />
                     </button>
                   )}

@@ -13,7 +13,7 @@ fi
 SSH_KEY="${SSH_KEY:-$HOME/Documents/market_dashboard/Oracle_Keys/ssh-key-2025-05-06.pem}"
 SERVER_IP="${SERVER_IP:-}"
 REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/antigravity-trading-tool}"
-NODE_BIN="${NODE_BIN:-/home/ubuntu/.nvm/versions/node/v18.20.8/bin}"
+NODE_BIN="${NODE_BIN:-/home/ubuntu/.nvm/versions/node/v20.19.5/bin}"
 STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
 DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
 AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"
@@ -124,6 +124,12 @@ if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_26_auth_refresh_sessions.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_10_finn_product_events.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_24_mobile_push_tokens.py
+  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_28_auth_password_reset_tokens.py
+
+  cd ../../frontend/trading-tool-frontend
+  pkill -f '$REMOTE_DIR/frontend/trading-tool-frontend/node_modules/.bin/next build' || true
+  rm -rf .next out
+  npm run build
 
   cd ../..
   if [ ! -f \"$PM2_CONFIG\" ]; then

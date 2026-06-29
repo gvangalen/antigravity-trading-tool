@@ -2,16 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { getDailyScores, getAiMasterScore, getScoreHistory, updateIntelligenceWeights } from '@/lib/api/scores';
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 const SCORE_CACHE_TTL_MS = 30_000;
 const scoreCache = new Map();
 const inflightScoreRequests = new Map();
-
-// Score → Advies
-const getAdvies = (score) =>
-  score >= 75 ? '📈 Bullish' :
-  score <= 25 ? '📉 Bearish' :
-  '⚖️ Neutraal';
 
 // Zorg dat altijd een array terugkomt
 const normalizeArray = (v) => {
@@ -21,14 +16,26 @@ const normalizeArray = (v) => {
 };
 
 export function useScoresData(symbol = "BTC", options = {}) {
+  const { t } = useTranslation();
   const { includeHistory = true } = options;
+  const gaugesT = t?.dashboard?.gauges || {};
+  const commonT = t?.common || {};
+  const adviceMap = {
+    bullish: `📈 ${commonT.bullish}`,
+    bearish: `📉 ${commonT.bearish}`,
+    neutral: `⚖️ ${commonT.neutral}`,
+  };
+  const getAdvies = (score) =>
+    score >= 75 ? adviceMap.bullish :
+    score <= 25 ? adviceMap.bearish :
+    adviceMap.neutral;
   const [scores, setScores] = useState({
-    macro: { score: 0, uitleg: '', advies: '⚖️ Neutraal', top_contributors: [] },
-    technical: { score: 0, uitleg: '', advies: '⚖️ Neutraal', top_contributors: [] },
-    market: { score: 0, uitleg: '', advies: '⚖️ Neutraal', top_contributors: [] },
-    setup: { score: 0, uitleg: '', advies: '⚖️ Neutraal', top_contributors: [] },
+    macro: { score: 0, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
+    technical: { score: 0, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
+    market: { score: 0, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
+    setup: { score: 0, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
     master: { 
-      score: 0, trend: '–', bias: '–', risk: '–', outlook: '–', summary: 'Geen samenvatting beschikbaar',
+      score: 0, trend: '–', bias: '–', risk: '–', outlook: '–', summary: t?.dashboard?.brain?.noSpecificSignals,
       weights: { macro: 0.25, market: 0.25, technical: 0.25, setup: 0.25 }
     },
     history: []
@@ -89,36 +96,36 @@ export function useScoresData(symbol = "BTC", options = {}) {
         macro: {
           score: macroScore,
           trend: mData.trend ?? 'Stable',
-          bias: mData.bias ?? daily.macro?.advies ?? 'Neutral',
+          bias: mData.bias ?? daily.macro?.advies ?? gaugesT.macro,
           risk: mData.risk ?? 'Low',
-          uitleg: daily.macro?.interpretation ?? 'Geen uitleg beschikbaar',
+          uitleg: daily.macro?.interpretation ?? gaugesT.emptyState?.macro,
           advies: getAdvies(macroScore),
           top_contributors: normalizeArray(daily.macro?.top_contributors),
         },
         technical: {
           score: technicalScore,
           trend: tData.trend ?? 'Stable',
-          bias: tData.bias ?? daily.technical?.advies ?? 'Neutral',
+          bias: tData.bias ?? daily.technical?.advies ?? gaugesT.technical,
           risk: tData.risk ?? 'Low',
-          uitleg: daily.technical?.interpretation ?? 'Geen uitleg beschikbaar',
+          uitleg: daily.technical?.interpretation ?? gaugesT.emptyState?.technical,
           advies: getAdvies(technicalScore),
           top_contributors: normalizeArray(daily.technical?.top_contributors),
         },
         market: {
           score: marketScore,
           trend: mkData.trend ?? 'Stable',
-          bias: mkData.bias ?? daily.market?.advies ?? 'Neutral',
+          bias: mkData.bias ?? daily.market?.advies ?? gaugesT.market,
           risk: mkData.risk ?? 'Low',
-          uitleg: daily.market?.interpretation ?? 'Geen uitleg beschikbaar',
+          uitleg: daily.market?.interpretation ?? gaugesT.emptyState?.market,
           advies: getAdvies(marketScore),
           top_contributors: normalizeArray(daily.market?.top_contributors),
         },
         setup: {
           score: setupScore,
           trend: sData.trend ?? 'Stable',
-          bias: sData.bias ?? daily.setup?.advies ?? 'Neutral',
+          bias: sData.bias ?? daily.setup?.advies ?? gaugesT.setup,
           risk: sData.risk ?? 'Low',
-          uitleg: daily.setup?.interpretation ?? 'Geen uitleg beschikbaar',
+          uitleg: daily.setup?.interpretation ?? gaugesT.emptyState?.setup,
           advies: getAdvies(setupScore),
           top_contributors: normalizeArray(daily.setup?.top_contributors),
         },
@@ -127,8 +134,8 @@ export function useScoresData(symbol = "BTC", options = {}) {
           trend: master?.master_trend ?? '–',
           bias: master?.master_bias ?? '–',
           risk: master?.master_risk ?? '–',
-          outlook: master?.outlook ?? 'Geen outlook',
-          summary: master?.summary ?? 'Geen samenvatting beschikbaar',
+          outlook: master?.outlook ?? t?.dashboard?.brain?.noSpecificSignals,
+          summary: master?.summary ?? t?.dashboard?.brain?.master_snippet,
           weights
         },
         history

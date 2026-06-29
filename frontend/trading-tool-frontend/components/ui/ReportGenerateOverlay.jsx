@@ -1,12 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function ReportGenerateOverlay({
-  text = 'Finn genereert het rapport…',
+  text,
   status = 'pending', // ⬅️ nieuw
   onFinished,         // ⬅️ optioneel callback
 }) {
+  const { t } = useTranslation();
+  const copy = t?.ui?.reportOverlay || {};
+  const displayText = text || copy.pendingText;
   const [progress, setProgress] = useState(0);
 
   /**
@@ -68,10 +72,10 @@ export default function ReportGenerateOverlay({
         <div className="absolute inset-0 bg-black/10 backdrop-blur-sm" />
         <div className="relative z-50 bg-card rounded-2xl shadow-xl px-10 py-8 text-center">
           <div className="font-semibold text-red-600">
-            Rapport genereren mislukt
+            {copy.failedTitle}
           </div>
           <div className="text-sm text-muted-foreground mt-2">
-            Probeer het opnieuw
+            {copy.failedBody}
           </div>
         </div>
       </div>
@@ -123,9 +127,9 @@ export default function ReportGenerateOverlay({
 
         {/* text */}
         <div className="text-sm text-center">
-          <div className="font-medium">{text}</div>
+          <div className="font-medium">{displayText}</div>
           <div className="text-muted-foreground mt-1">
-            Dit kan ± 1 minuut duren
+            {copy.pendingHint}
           </div>
         </div>
       </div>

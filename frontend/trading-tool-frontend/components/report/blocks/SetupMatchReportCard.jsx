@@ -1,5 +1,8 @@
+"use client";
+
 import ReportCard from "../ReportCard";
 import { CheckCircle2, Layers } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 /* -------------------------------------------------------
    Helper
@@ -26,28 +29,30 @@ function ScoreBar({ score }) {
    Setup Match — REPORT (V2 PRO REFINED)
 ======================================================= */
 export default function SetupMatchReportCard({ report }) {
+  const { t } = useTranslation();
+  const copy = t?.reports?.blocks?.setupMatch || {};
   const best = report?.best_setup;
   const topSetups = report?.top_setups || [];
 
   if (!best) {
     return (
-      <ReportCard title="Optimale Setup" icon={<Layers size={16} />}>
+      <ReportCard title={copy.cardTitle} icon={<Layers size={16} />}>
         <p className="text-sm text-secondary italic">
-          Geen passende setups gevonden voor deze periode.
+          {copy.empty}
         </p>
       </ReportCard>
     );
   }
 
   return (
-    <ReportCard title="Optimale Setup" icon={<Layers size={16} />}>
+    <ReportCard title={copy.cardTitle} icon={<Layers size={16} />}>
       
       {/* BESTE OPTIE */}
       <div className="mb-8 p-5 rounded-2xl bg-card border border-slate-50 shadow-sm">
         <div className="flex items-center gap-2 mb-3">
           <CheckCircle2 className="w-4 h-4 text-green-600" />
           <span className="text-[11px] font-bold text-secondary tracking-tight">
-            Beste match
+            {copy.bestMatch}
           </span>
         </div>
 
@@ -60,7 +65,7 @@ export default function SetupMatchReportCard({ report }) {
 
         <div className="space-y-2">
            <div className="flex justify-between items-end">
-              <span className="text-[11px] font-bold text-secondary tracking-tight">Match score</span>
+              <span className="text-[11px] font-bold text-secondary tracking-tight">{copy.matchScore}</span>
               <span className="text-sm font-bold text-foreground font-mono tracking-tight">{best.score}%</span>
            </div>
            <ScoreBar score={best.score} />
@@ -71,7 +76,7 @@ export default function SetupMatchReportCard({ report }) {
       {topSetups.length > 0 && (
         <div className="space-y-6">
           <h4 className="text-[11px] font-bold text-secondary tracking-tight mb-4">
-            Vergelijking
+            {copy.comparison}
           </h4>
 
           <div className="space-y-5">
@@ -94,7 +99,7 @@ export default function SetupMatchReportCard({ report }) {
 
       {/* TOELICHTING */}
       <div className="mt-8 pt-6 border-t border-slate-50 text-[12px] text-muted leading-relaxed italic">
-        Toelichting: De beste setup is geselecteerd op basis van de huidige macro- en marktomstandigheden.
+        {copy.explanation}
       </div>
     </ReportCard>
   );

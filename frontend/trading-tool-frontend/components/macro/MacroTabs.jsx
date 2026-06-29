@@ -1,14 +1,13 @@
 "use client";
 
 import CardWrapper from "@/components/ui/CardWrapper";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 // PRO Tables
 import TechnicalTerminalGrid from "@/components/technical/TechnicalTerminalGrid";
 import WeekTable from "@/components/ui/WeekTable";
 import MonthTable from "@/components/ui/MonthTable";
 import QuarterTable from "@/components/ui/QuarterTable";
-
-const TABS = ["Dag", "Week", "Maand", "Kwartaal"];
 
 export default function MacroTabs({
   activeTab,
@@ -19,6 +18,14 @@ export default function MacroTabs({
   handleRemove,
   onViewChart,
 }) {
+  const { t } = useTranslation();
+  const tabsCopy = t?.pages?.macro?.tabs || {};
+  const TABS = [
+    { id: "day", label: tabsCopy.day },
+    { id: "week", label: tabsCopy.week },
+    { id: "month", label: tabsCopy.month },
+    { id: "quarter", label: tabsCopy.quarter },
+  ];
   // Always guard macroData
   const safeData = Array.isArray(macroData) ? macroData : [];
 
@@ -29,7 +36,7 @@ export default function MacroTabs({
     if (loading) {
       return (
         <TechnicalTerminalGrid
-          title="Macro Indicatoren"
+          title={tabsCopy.indicators}
           data={[]} 
           onRemove={() => {}} // veilige no-op functie
         />
@@ -41,36 +48,33 @@ export default function MacroTabs({
     }
 
     switch (activeTab) {
-      case "Dag":
+      case "day":
         return (
           <TechnicalTerminalGrid
-            title="Macro Indicatoren"
+            title={tabsCopy.indicators}
             data={safeData}
             onRemove={handleRemove} // enige tab met delete
             onViewChart={onViewChart}
           />
         );
 
-      case "Week":
+      case "week":
         return (
           <WeekTable
-            title="Macro Indicatoren"
             data={safeData}
           />
         );
 
-      case "Maand":
+      case "month":
         return (
           <MonthTable
-            title="Macro Indicatoren"
             data={safeData}
           />
         );
 
-      case "Kwartaal":
+      case "quarter":
         return (
           <QuarterTable
-            title="Macro Indicatoren"
             data={safeData}
           />
         );
@@ -78,7 +82,7 @@ export default function MacroTabs({
       default:
         return (
           <TechnicalTerminalGrid
-            title="Macro Indicatoren"
+            title={tabsCopy.indicators}
             data={safeData}
             onRemove={handleRemove}
             onViewChart={onViewChart}
@@ -94,19 +98,19 @@ export default function MacroTabs({
     <div className="space-y-8">
       {/* 🔹 TABS: SEGMENTED CONTROL (Matching Technical Style) */}
       <div className="flex items-center gap-4">
-         <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">Tijdsinterval</div>
+         <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">{tabsCopy.title}</div>
          <div className="flex bg-[var(--color-border-subtle)] p-1 rounded-xl border border-slate-200">
             {TABS.map((tab) => (
                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
                   className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
-                     activeTab === tab
+                     activeTab === tab.id
                         ? "bg-card text-foreground shadow-sm"
                         : "text-secondary hover:text-slate-600"
                   }`}
                >
-                  {tab}
+                  {tab.label}
                </button>
             ))}
          </div>

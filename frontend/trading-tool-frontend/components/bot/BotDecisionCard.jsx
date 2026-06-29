@@ -8,20 +8,20 @@ import {
   SkipForward,
   RotateCcw,
   ShoppingCart,
-  Layers,
-  TrendingUp,
 } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatCurrency, formatDateTime } from "@/lib/i18n";
 
 const BEHAVIOR_FLAG_LABELS = {
-  fomo: "FOMO",
-  overtrades: "Overtrading",
-  leverage_seeking: "Leverage-neiging",
-  holds_losers_too_long: "Verlies te lang laten lopen",
-  takes_profit_too_early: "Winst te vroeg nemen",
+  fomo: "fomo",
+  overtrades: "overtrades",
+  leverage_seeking: "leverage_seeking",
+  holds_losers_too_long: "holds_losers_too_long",
+  takes_profit_too_early: "takes_profit_too_early",
 };
 
-const humanizeBehaviorLabel = (flag, fallbackLabel = "") =>
-  fallbackLabel || BEHAVIOR_FLAG_LABELS[String(flag || "").trim()] || String(flag || "").replaceAll("_", " ");
+const humanizeBehaviorLabel = (flag, labels = {}, fallbackLabel = "") =>
+  fallbackLabel || labels[BEHAVIOR_FLAG_LABELS[String(flag || "").trim()] || String(flag || "").trim()] || String(flag || "").replaceAll("_", " ");
 
 const extractBehavioralFriction = (decision = {}) => {
   const direct =
@@ -56,6 +56,10 @@ export default function BotTodayProposal({
   onSkip,
   isAuto = false,
 }) {
+  const { t, locale } = useTranslation();
+  const copy = t?.botPage?.decisionCard || {};
+  const behaviorLabels = t?.botPage?.orderPreview?.behaviorLabels || {};
+  const actionLabels = copy.actionLabels || {};
 
   /* =====================================================
      LOADING / EMPTY
@@ -64,7 +68,7 @@ export default function BotTodayProposal({
   if (loading) {
     return (
       <div className="py-6">
-        <CardLoader text="Bot analyseert markt…" />
+        <CardLoader text={copy.loading} />
       </div>
     );
   }
@@ -93,9 +97,9 @@ export default function BotTodayProposal({
   // ✅ FIX
   const deviation = safeStrategyMultiplier - safeMarketMultiplier;
     const deviationLabel =
-      deviation > 0 ? "Higher risk"
-      : deviation < 0 ? "Safer than market"
-      : "Aligned";
+      deviation > 0 ? copy.higherRisk
+      : deviation < 0 ? copy.saferThanMarket
+      : copy.aligned;
 
   const deviationColor =
     deviation > 0 ? "text-red-600"
@@ -119,12 +123,14 @@ export default function BotTodayProposal({
 
   const executionLabel =
     executionMode === "custom"
-      ? "Curve sizing actief"
-      : "Vast bedrag";
+      ? copy.curveSizing
+      : copy.fixedAmount;
 
   const allocationPreview =
     baseAmount > 0
-      ? `€${Math.round(baseAmount * safeStrategyMultiplier)}`
+      ? formatCurrency(Math.round(baseAmount * safeStrategyMultiplier), locale, "EUR", {
+          maximumFractionDigits: 0,
+        })
       : null;
 
   /* =====================================================
@@ -138,7 +144,7 @@ export default function BotTodayProposal({
     null;
 
   const formattedDecisionTime = decisionTime
-    ? new Date(decisionTime).toLocaleString("nl-NL", {
+    ? formatDateTime(decisionTime, locale, {
         day: "2-digit",
         month: "short",
         hour: "2-digit",
@@ -163,22 +169,32 @@ export default function BotTodayProposal({
     return 10;
   })();
 
-  const setupName = setupMatch?.name ?? "Geen strategy match";
+  const setupName = setupMatch?.name ?? copy.noStrategyMatch;
   const setupSymbol = setupMatch?.symbol ?? "—";
   const setupTf = setupMatch?.timeframe ?? "—";
 
   const summary =
     setupMatch?.summary ??
-    "De bot ziet momenteel geen setup die aan de voorwaarden voldoet.";
+    copy.noSetupSummary;
 
   const detail =
     setupMatch?.detail ??
-    "De bot wacht op betere marktomstandigheden.";
+    copy.waitingForConditions;
 
   const budgetTotal = Number(portfolio?.budget?.total_eur ?? 0);
   const positionValue = Number(portfolio?.stats?.position_value_eur ?? 0);
   const guardrails = decision?.guardrails_result || decision?.guardrails || {};
   const behavioralFriction = extractBehavioralFriction(decision);
+  if (behavioralFriction?.label) {
+    behavioralFriction.label = humanizeBehaviorLabel(behavioralFriction.label, behaviorLabels, behavioralFriction.label);
+  }
+  if (behavioralFriction?.source === "profile_habit_alignment" && decision?.profile_habit_alignment?.primary_alignment?.flag) {
+    behavioralFriction.label = humanizeBehaviorLabel(
+      decision.profile_habit_alignment.primary_alignment.flag,
+      behaviorLabels,
+      behavioralFriction.label
+    );
+  }
 
   /* =====================================================
      TRADE DETECTIE (🔥 BELANGRIJK FIX)
@@ -214,34 +230,37 @@ export default function BotTodayProposal({
 
   const governanceHeadline =
     governanceStatus === "block"
-      ? "Finn wil deze botactie nu blokkeren."
+      ? copy.blockHeadline
       : governanceStatus === "modify"
-        ? "Finn wil deze botactie eerst bijschaven."
+        ? copy.modifyHeadline
         : governanceStatus === "watch"
-          ? "Finn ziet nog geen harde entry, alleen review-context."
-          : "Finn ziet deze botactie als uitvoerbaar binnen de huidige context.";
+          ? copy.watchHeadline
+          : copy.approveHeadline;
 
   const setupFitText =
-    score >= 75 ? "Sterke setup-fit" : score >= 55 ? "Redelijke setup-fit" : "Zwakke setup-fit";
+    score >= 75 ? copy.setupFitStrong : score >= 55 ? copy.setupFitReasonable : copy.setupFitWeak;
 
   const portfolioMessage = (() => {
     if (budgetTotal > 0 && positionValue / budgetTotal >= 0.7) {
-      return `${decision?.symbol || bot?.symbol || "Dit asset"} gebruikt al veel van dit botbudget. Voeg pas exposure toe als je bewust ruimte vrijhoudt.`;
+      return copy.portfolioHeavyExposure.replace("{symbol}", decision?.symbol || bot?.symbol || "BTC");
     }
     if (deviation > 0.2) {
-      return "De logic sizing ligt boven de markt sizing. Controleer eerst of je hier echt extra risico wilt stapelen.";
+      return copy.portfolioSizingWarning;
     }
-    return "Portfolio-fit oogt werkbaar zolang je dit niet combineert met te veel andere live beslissingen op hetzelfde asset.";
+    return copy.portfolioFitWorkable;
   })();
 
   const nextStepMessage =
     governanceStatus === "block"
-      ? "Open eerst de guardrails of verlaag het risico voordat je iets bevestigt."
+      ? copy.nextStepBlock
       : governanceStatus === "modify"
-        ? "Pas sizing of setup-condities aan en laat Finn daarna opnieuw meekijken."
+        ? copy.nextStepModify
         : governanceStatus === "watch"
-          ? "Laat de bot wachten tot er een duidelijkere entry ontstaat of review de setup eerst."
-          : "Je kunt nu door naar execution, zolang je plan en exposure bewust blijven.";
+          ? copy.nextStepWatch
+          : copy.nextStepApprove;
+  const primaryActionLabel =
+    actionLabels[String(order?.side ?? decision.action ?? "buy").toLowerCase()] ||
+    String(order?.side ?? decision.action ?? "buy").toUpperCase();
 
   /* =====================================================
      HEADER
@@ -257,8 +276,8 @@ export default function BotTodayProposal({
         <ShoppingCart size={18} />
       </div>
       <div>
-        <div className="text-[10px] font-black text-muted uppercase tracking-widest">Bot Intelligence Pipeline</div>
-        <div className="text-sm font-bold text-foreground tracking-tight">Daily Execution Proposal</div>
+        <div className="text-[10px] font-black text-muted uppercase tracking-widest">{copy.pipelineLabel}</div>
+        <div className="text-sm font-bold text-foreground tracking-tight">{copy.dailyProposalLabel}</div>
       </div>
     </div>
   );
@@ -276,7 +295,7 @@ export default function BotTodayProposal({
           className="bg-[var(--primary)] hover:bg-[var(--primary-dark)] text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
         >
           <Play size={16} fill="currentColor" />
-          EXECUTE PROPOSAL
+          {copy.executeProposal}
         </button>
       )}
 
@@ -286,7 +305,7 @@ export default function BotTodayProposal({
           className="bg-card border border-[var(--color-border)] text-foreground hover:bg-[var(--bg-soft)] px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all"
         >
           <SkipForward size={16} />
-          {hasTrade ? "TRADE OVERSLAAN" : "ANALYSE OVERSLAAN"}
+          {hasTrade ? copy.skipTrade : copy.skipAnalysis}
         </button>
       )}
 
@@ -297,7 +316,7 @@ export default function BotTodayProposal({
           className="ml-auto bg-slate-100/80 border border-slate-200 text-muted hover:bg-slate-200/50 px-5 py-2.5 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center gap-2 transition-all disabled:opacity-50"
         >
           <RotateCcw size={14} />
-          {isGenerating ? "OPNIEUW ANALYSEREN..." : "MARKT OPNIEUW SCANNEN"}
+          {isGenerating ? copy.reanalyzing : copy.rescanMarket}
         </button>
       )}
     </div>
@@ -308,7 +327,7 @@ export default function BotTodayProposal({
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-black uppercase tracking-[0.18em] opacity-75">
-            Finn beslislaag
+            {copy.decisionLayer}
           </div>
           <p className="mt-2 text-sm font-black leading-snug text-slate-900">
             {governanceHeadline}
@@ -320,28 +339,28 @@ export default function BotTodayProposal({
       </div>
       <div className="mt-4 grid gap-2 md:grid-cols-3">
         <div className="rounded-xl border border-white/70 bg-white/75 p-3">
-          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Beslischeck</div>
+          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{copy.decisionCheckLabel}</div>
           <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">{setupFitText}</p>
         </div>
         <div className="rounded-xl border border-white/70 bg-white/75 p-3">
-          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Planfit</div>
+          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{copy.planFitLabel}</div>
           <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">
-            {score >= 60 ? "Deze actie volgt de huidige setup-logica redelijk goed." : "Deze actie vraagt eerst betere setupbevestiging."}
+            {score >= 60 ? copy.planFitPositive : copy.planFitNegative}
           </p>
         </div>
         <div className="rounded-xl border border-white/70 bg-white/75 p-3">
-          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Portfoliofit</div>
+          <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{copy.portfolioFitLabel}</div>
           <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">{portfolioMessage}</p>
         </div>
       </div>
       <div className="mt-3 rounded-xl border border-white/70 bg-white/75 p-3">
-        <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Veilige volgende stap</div>
+        <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{copy.safeNextStepLabel}</div>
         <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">{nextStepMessage}</p>
       </div>
       {behavioralFriction && (
         <div className="mt-3 rounded-xl border border-amber-200 bg-white/85 p-3 text-amber-700">
           <div className="text-[8px] font-black uppercase tracking-widest">
-            Gedragsrem{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
+            {copy.behavioralBrakeLabel}{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
           </div>
           {behavioralFriction?.message && (
             <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">
@@ -364,7 +383,7 @@ export default function BotTodayProposal({
       <div className="bg-[var(--color-border-subtle)] border border-[var(--color-border)] rounded-2xl p-5 space-y-4 transition-colors">
         <div className="flex justify-between items-start">
           <div>
-            <div className="text-[10px] font-black text-muted uppercase tracking-widest mb-1">Setupbasis</div>
+            <div className="text-[10px] font-black text-muted uppercase tracking-widest mb-1">{copy.setupBasisLabel}</div>
             <div className="text-sm font-black text-foreground tracking-tight">{setupName}</div>
           </div>
           <div className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/40 px-2 py-1 rounded border border-blue-100 dark:border-blue-800 font-mono">
@@ -376,12 +395,12 @@ export default function BotTodayProposal({
 
         <div className="grid grid-cols-2 gap-3 pt-2">
           <div className="bg-white/80 p-2 rounded-lg border border-slate-200/50">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-0.5">Discipline</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-0.5">{copy.disciplineLabel}</div>
              <div className="text-[11px] font-black text-slate-700 uppercase">{confidence}</div>
           </div>
           <div className="bg-white/80 p-2 rounded-lg border border-slate-200/50">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-0.5">Tijdstip</div>
-             <div className="text-[11px] font-black text-muted font-mono">{formattedDecisionTime?.split(',')[1] || "KLAAR"}</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-0.5">{copy.timingLabel}</div>
+             <div className="text-[11px] font-black text-muted font-mono">{formattedDecisionTime?.split(',')[1] || copy.readyLabel}</div>
           </div>
         </div>
 
@@ -393,28 +412,28 @@ export default function BotTodayProposal({
       {/* POSITION SIZING INSTRUMENT */}
       <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
         <div>
-           <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Blootstelling</div>
+           <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">{copy.exposureLabel}</div>
            <div className="text-sm font-black text-foreground tracking-tight">{executionLabel}</div>
         </div>
 
         <div className="space-y-2.5">
            <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-slate-200/40">
-              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">Marktweging</span>
+              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">{copy.marketWeightLabel}</span>
               <span className="text-xs font-black text-slate-700 font-mono">{safeMarketMultiplier.toFixed(2)}x</span>
            </div>
            <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-slate-200/40">
-              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">Setupweging</span>
+              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">{copy.setupWeightLabel}</span>
               <span className="text-xs font-black text-[var(--primary)] font-mono">{safeStrategyMultiplier.toFixed(2)}x</span>
            </div>
            <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-slate-200/40">
-              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">Afwijking</span>
+              <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">{copy.deviationLabel}</span>
               <span className={`text-[10px] font-black uppercase ${deviationColor}`}>{deviationLabel} ({deviation >= 0 ? "+" : ""}{deviation.toFixed(2)})</span>
            </div>
         </div>
 
         {allocationPreview && (
           <div className="bg-[var(--primary)] p-3 rounded-xl shadow-sm flex items-center justify-between">
-             <div className="text-[9px] font-black text-white/70 uppercase tracking-widest">Netto inzet</div>
+             <div className="text-[9px] font-black text-white/70 uppercase tracking-widest">{copy.netAllocationLabel}</div>
              <div className="text-sm font-black text-white font-mono">{allocationPreview}</div>
           </div>
         )}
@@ -434,7 +453,7 @@ export default function BotTodayProposal({
            {governancePanel}
            <div className="flex items-center gap-2 text-muted mb-6">
               <div className="w-1.5 h-1.5 rounded-full bg-muted/30" />
-              <div className="text-xs font-black uppercase tracking-widest">Geen actieve instapcondities gevonden</div>
+              <div className="text-xs font-black uppercase tracking-widest">{copy.noActiveEntryConditions}</div>
            </div>
            {proposalGrid}
            {tacticalCommandBar}
@@ -452,11 +471,11 @@ export default function BotTodayProposal({
             <div className="flex items-center gap-3">
                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
                <div className="text-2xl font-black text-foreground tracking-tighter uppercase">
-                  {(order?.side ?? decision.action ?? "buy")} {order?.symbol ?? decision.symbol ?? "—"}
+                  {primaryActionLabel} {order?.symbol ?? decision.symbol ?? "—"}
                </div>
             </div>
             <div className="px-3 py-1 rounded-lg bg-green-50 border border-green-100 text-green-600 text-[10px] font-black uppercase tracking-widest">
-               Uitvoering nodig
+               {copy.executionNeeded}
             </div>
          </div>
          {proposalGrid}

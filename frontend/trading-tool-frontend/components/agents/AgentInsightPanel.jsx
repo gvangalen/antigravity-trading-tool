@@ -5,8 +5,12 @@ import { Brain, TrendingUp, TrendingDown, Minus, Target, ShieldAlert, Cpu } from
 import { useAgentData } from "@/hooks/useAgentData";
 import { InsightSkeleton, TextSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatDateTime } from "@/lib/i18n";
 
 export default function AgentInsightPanel({ category, className = "" }) {
+  const { t, locale } = useTranslation();
+  const copy = t?.ui?.agentPanel || {};
   const { insight, reflections, loading } = useAgentData(category);
 
   if (loading) {
@@ -17,7 +21,7 @@ export default function AgentInsightPanel({ category, className = "" }) {
     return (
       <div className={`card card-p flex items-center justify-center min-h-[200px] ${className}`}>
         <p className="text-[11px] font-bold text-secondary uppercase tracking-widest text-slate-300">
-          Geen gegevens
+          {copy.noData}
         </p>
       </div>
     );
@@ -36,7 +40,7 @@ export default function AgentInsightPanel({ category, className = "" }) {
   // 🕒 Last Update Timestamp
   const lastUpdateRaw = updated_at || created_at;
   const lastUpdate = lastUpdateRaw
-    ? new Date(lastUpdateRaw).toLocaleString("nl-NL", {
+      ? formatDateTime(lastUpdateRaw, locale, {
         day: "2-digit",
         month: "short",
         year: "numeric",
@@ -76,10 +80,10 @@ export default function AgentInsightPanel({ category, className = "" }) {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-foreground leading-none">Analyse</h3>
-              <span className="status status-active">Actief</span>
+              <h3 className="text-sm font-semibold text-foreground leading-none">{copy.title}</h3>
+              <span className="status status-active">{copy.active}</span>
             </div>
-            <p className="text-[10px] font-bold text-secondary uppercase tracking-widest mt-1">Marktsentiment</p>
+            <p className="text-[10px] font-bold text-secondary uppercase tracking-widest mt-1">{copy.sentiment}</p>
           </div>
         </div>
       </div>
@@ -89,33 +93,33 @@ export default function AgentInsightPanel({ category, className = "" }) {
         {/* KPI Grid */}
         <div className="flex flex-wrap items-center gap-4">
            <div className="flex flex-col p-5 rounded-2xl bg-card border-2 border-slate-100 min-w-[140px] flex-1">
-              <span className="metric-label text-blue-600">Trend</span>
+              <span className="metric-label text-blue-600">{copy.trend}</span>
               <div className="flex items-center gap-2">
                  {trendIcon}
-                 <span className="text-sm font-black text-foreground uppercase tracking-tight">{trend || "Neutraal"}</span>
+                 <span className="text-sm font-black text-foreground uppercase tracking-tight">{trend || copy.neutral}</span>
               </div>
            </div>
 
            <div className="flex flex-col p-5 rounded-2xl bg-card border-2 border-slate-100 min-w-[140px] flex-1">
-              <span className="metric-label text-blue-600">Sentiment</span>
+              <span className="metric-label text-blue-600">{copy.sentiment}</span>
               <div className="flex items-center gap-2">
                  <Target size={14} className="text-secondary" />
-                 <span className="text-sm font-black text-foreground uppercase tracking-tight">{bias || "Geen"}</span>
+                 <span className="text-sm font-black text-foreground uppercase tracking-tight">{bias || copy.none}</span>
               </div>
            </div>
 
            <div className="flex flex-col p-5 rounded-2xl bg-card border-2 border-slate-100 min-w-[140px] flex-1">
-              <span className="metric-label text-blue-600">Risico</span>
+              <span className="metric-label text-blue-600">{copy.risk}</span>
               <div className="flex items-center gap-2">
                  <ShieldAlert size={14} className="text-secondary" />
-                 <span className="text-sm font-black text-foreground uppercase tracking-tight">{risk || "Laag"}</span>
+                 <span className="text-sm font-black text-foreground uppercase tracking-tight">{risk || copy.low}</span>
               </div>
            </div>
         </div>
 
         {/* SUMMARY */}
         <div className="space-y-4">
-           <div className="metric-label ml-1">Toelichting</div>
+           <div className="metric-label ml-1">{copy.explanation}</div>
            <div className="bg-gradient-to-br from-white to-slate-50 border-2 border-slate-100 p-8 rounded-2xl relative overflow-hidden">
               <div className="absolute top-4 right-6 opacity-[0.2] text-slate-400">
                  <Brain size={16} />
@@ -148,7 +152,7 @@ export default function AgentInsightPanel({ category, className = "" }) {
                ))
              ) : (
                <div className="text-[11px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest text-center py-8">
-                  Nog geen reflecties vastgelegd
+                  {copy.noReflections}
                </div>
              )
            )}
@@ -157,7 +161,7 @@ export default function AgentInsightPanel({ category, className = "" }) {
         {/* SIGNALS */}
         {cleanSignals.length > 0 && (
           <div className="space-y-3">
-             <div className="text-[11px] font-bold text-secondary uppercase tracking-widest">Signalen</div>
+             <div className="text-[11px] font-bold text-secondary uppercase tracking-widest">{copy.signals}</div>
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {cleanSignals.map((s, i) => (
                   <div key={i} className="flex items-center gap-3 p-4 bg-card border border-slate-100 rounded-lg shadow-sm hover:border-blue-200 hover:bg-blue-50 transition-all">
@@ -173,10 +177,10 @@ export default function AgentInsightPanel({ category, className = "" }) {
 
         {/* FOOTER */}
         <footer className="pt-6 border-t border-slate-100 flex items-center justify-between opacity-50">
-           <div className="text-[9px] font-bold text-secondary uppercase tracking-widest">Controle voltooid</div>
+           <div className="text-[9px] font-bold text-secondary uppercase tracking-widest">{copy.checked}</div>
            {lastUpdate && (
              <div className="text-[9px] font-bold text-secondary uppercase tracking-[0.1em]">
-               Bijgewerkt: {lastUpdate}
+               {copy.updated}: {lastUpdate}
              </div>
            )}
         </footer>

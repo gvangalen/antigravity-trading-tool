@@ -4,12 +4,12 @@ import { useEffect, useState } from 'react';
 import { fetchDailyReportSummary } from '@/lib/api/sidebar'; // deze bestaat wél nog
 
 export function useSidebarData(symbol = "BTC") {
-  const [summary, setSummary] = useState('Geen samenvatting beschikbaar');
+  const [summary, setSummary] = useState("");
   const [trades, setTrades] = useState([]);
   const [aiStatus, setAiStatus] = useState({
-    state: 'onbekend',
-    strategy: 'n.v.t.',
-    updated: 'onbekend'
+    state: "",
+    strategy: "",
+    updated: ""
   });
 
   const [loading, setLoading] = useState(true);
@@ -26,28 +26,28 @@ export function useSidebarData(symbol = "BTC") {
 
         if (!mounted) return;
 
-        setSummary(summaryRes.summary || 'Geen samenvatting beschikbaar');
+        setSummary(summaryRes.summary || "");
 
         // 🟡 ACTIEVE TRADES = dummy
         setTrades([]);
 
         // 🔵 AI BOT STATUS = dummy
         setAiStatus({
-          state: 'onbekend',
-          strategy: 'n.v.t.',
-          updated: 'onbekend'
+          state: "",
+          strategy: "",
+          updated: ""
         });
 
       } catch (e) {
         console.error("Sidebar load failed:", e);
 
         if (mounted) {
-          setSummary('Geen samenvatting beschikbaar');
+          setSummary("");
           setTrades([]);
           setAiStatus({
-            state: 'onbekend',
-            strategy: 'n.v.t.',
-            updated: 'onbekend'
+            state: "",
+            strategy: "",
+            updated: ""
           });
         }
       } finally {

@@ -8,6 +8,14 @@ def test_resolve_locale_prefers_english_account_setting():
     assert locale_service.resolve_locale({"locale": "en"}) == "en"
     assert locale_service.resolve_locale({"locale": "en-US"}) == "en"
     assert locale_service.resolve_locale({"locale": "nl"}) == "nl"
+    assert locale_service.resolve_locale({"locale": "de-DE"}) == "de"
+    assert locale_service.resolve_locale({"locale": "fr-FR"}) == "nl"
+
+
+def test_response_language_name_uses_supported_locale_mapping():
+    assert locale_service.response_language_name("nl") == "Dutch"
+    assert locale_service.response_language_name("en") == "English"
+    assert locale_service.response_language_name("de") == "German"
 
 
 def test_localize_finn_payload_keeps_dutch_when_locale_is_nl(monkeypatch):
@@ -33,6 +41,19 @@ def test_localize_finn_payload_translates_user_visible_fields(monkeypatch):
     localized = asyncio.run(locale_service.localize_finn_payload(payload, "en"))
 
     assert localized["response"] == "For BTC: I would wait today."
+
+
+def test_localize_finn_payload_can_target_third_locale(monkeypatch):
+    async def fake_translate(*, prompt, system_role, max_tokens):
+        assert "natural German" in prompt
+        return "Fuer BTC wuerde ich heute warten."
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", fake_translate)
+
+    payload = {"response": "Voor BTC: ik zou vandaag wachten.", "intent": "daily_coach"}
+    localized = asyncio.run(locale_service.localize_finn_payload(payload, "de"))
+
+    assert localized["response"] == "Fuer BTC wuerde ich heute warten."
 
 
 def test_translate_text_if_needed_uses_rule_based_fallback_when_ai_is_unavailable(monkeypatch):

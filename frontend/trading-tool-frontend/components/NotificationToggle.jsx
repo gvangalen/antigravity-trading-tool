@@ -11,7 +11,7 @@ const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
 export default function NotificationToggle({ variant = "default" }) {
   const { user } = useAuth();
-  const { locale } = useTranslation();
+  const { t } = useTranslation();
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [registration, setRegistration] = useState(null);
@@ -45,21 +45,7 @@ export default function NotificationToggle({ variant = "default" }) {
     return () => clearTimeout(timer);
   }, []);
 
-  const copy = {
-    notifications: locale === "nl" ? "Meldingen" : "Notifications",
-    loginRequired: locale === "nl" ? "Log in om meldingen in te schakelen" : "Log in to enable notifications",
-    notReady: locale === "nl" ? "Meldingen zijn nog niet beschikbaar" : "Notifications are not ready yet",
-    permissionDenied: locale === "nl" ? "Toestemming voor meldingen geweigerd" : "Notification permission was denied",
-    unavailable: locale === "nl" ? "Pushmeldingen zijn nu niet beschikbaar" : "Push notifications are unavailable right now",
-    enabled: locale === "nl" ? "Meldingen ingeschakeld" : "Notifications enabled",
-    disabled: locale === "nl" ? "Meldingen uitgeschakeld" : "Notifications disabled",
-    enableFailed: locale === "nl" ? "Inschakelen van meldingen mislukte" : "Enabling notifications failed",
-    disableFailed: locale === "nl" ? "Uitschakelen van meldingen mislukte" : "Disabling notifications failed",
-    pushEnabled: locale === "nl" ? "Push ingeschakeld" : "Push enabled",
-    pushDisabled: locale === "nl" ? "Push uitgeschakeld" : "Push disabled",
-    pushOn: locale === "nl" ? "Push actief" : "Push on",
-    pushOff: locale === "nl" ? "Push uit" : "Push off",
-  };
+  const copy = t?.ui?.notificationsToggle || {};
 
   const urlBase64ToUint8Array = (base64String) => {
     const padding = "=".repeat((4 - (base64String.length % 4)) % 4);

@@ -4,6 +4,7 @@ import CardWrapper from "@/components/ui/CardWrapper";
 import { CheckCircle2, Layers } from "lucide-react";
 import { useDailySetupScores } from "@/hooks/useDailySetupScores";
 import { ScoreCardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 /* -------------------------------------------------------
    Kleine helper voor score visualisatie
@@ -29,6 +30,8 @@ function ScoreBar({ score }) {
    Setup Match Card
 ======================================================= */
 export default function SetupMatchCard() {
+  const { t } = useTranslation();
+  const copy = t?.setups?.matchCard || {};
   const { dailySetups, loading } = useDailySetupScores();
 
   /* -------------------------------
@@ -45,9 +48,9 @@ export default function SetupMatchCard() {
     return (
       <CardWrapper>
         <div className="space-y-2 text-sm text-[var(--text-light)]">
-          <p>Er zijn nog geen setup-scores voor vandaag.</p>
+          <p>{copy.emptyTitle}</p>
           <p className="text-xs opacity-80">
-            Dat kan normaal zijn als de marktcontext net is ververst. Vraag Finn om een compact setup-overzicht totdat de nieuwe scores klaarstaan.
+            {copy.emptyBody}
           </p>
         </div>
       </CardWrapper>
@@ -76,8 +79,8 @@ export default function SetupMatchCard() {
                <Layers size={18} className="text-blue-500 sm:size-5" strokeWidth={1.5} />
             </div>
             <div>
-               <div className="text-[10px] sm:text-[11px] font-bold text-secondary/60 uppercase tracking-[0.2em] mb-0.5">Optimization</div>
-               <div className="text-lg sm:text-xl font-black text-foreground tracking-tight uppercase leading-none">Setup Matcher</div>
+               <div className="text-[10px] sm:text-[11px] font-bold text-secondary/60 uppercase tracking-[0.2em] mb-0.5">{copy.eyebrow}</div>
+               <div className="text-lg sm:text-xl font-black text-foreground tracking-tight uppercase leading-none">{copy.title}</div>
             </div>
          </div>
       </div>
@@ -87,13 +90,13 @@ export default function SetupMatchCard() {
          <div className="flex items-center gap-3 mb-4">
             <div className="px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-[8px] sm:text-[9px] font-black text-green-500 uppercase tracking-widest flex items-center gap-2">
                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-               Elite Selection
+               {copy.bestBadge}
             </div>
          </div>
 
          <div className="space-y-4">
             <div>
-               <div className="text-[9px] sm:text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em] mb-1">Active Selection</div>
+               <div className="text-[9px] sm:text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em] mb-1">{copy.activeSelection}</div>
                <div className="text-xl sm:text-2xl font-black text-foreground tracking-tighter uppercase leading-none">
                   {best.name}
                </div>
@@ -105,7 +108,7 @@ export default function SetupMatchCard() {
 
             <div className="pt-2">
                <div className="flex justify-between items-end mb-2">
-                  <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">Confidence Score</span>
+                  <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">{copy.confidence}</span>
                   <span className="text-sm font-black text-foreground">{best.score}%</span>
                </div>
                <div className="h-3 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5 border border-[var(--color-border-subtle)] shadow-inner">
@@ -122,7 +125,7 @@ export default function SetupMatchCard() {
 
       {/* 📊 COMPETITORS */}
       <div className="flex-grow relative z-10">
-         <div className="text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em] mb-6">Comparison Matrix</div>
+         <div className="text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em] mb-6">{copy.comparison}</div>
          <div className="space-y-6">
             {topSetups.map((s, idx) => (
                <div key={s.id} className="group/item">
@@ -146,7 +149,7 @@ export default function SetupMatchCard() {
       {/* 📝 FOOTER NOTE */}
       <div className="mt-10 relative z-10 pt-6 border-t border-[var(--color-border-subtle)]">
          <p className="text-[9px] text-secondary/40 leading-relaxed font-bold uppercase tracking-wider italic">
-            Elite matching determined via multi-vector cross-correlation across macro, technical, and market indicators.
+            {copy.footer}
          </p>
       </div>
     </div>

@@ -30,3 +30,27 @@ def send_email_with_attachment(subject: str, body: str, attachment_path: str):
         server.send_message(msg)
 
     print(f"✅ E-mail verzonden naar {receiver}")
+
+
+def send_email(subject: str, body: str, receiver: str, *, html_body: str | None = None):
+    host = os.getenv("EMAIL_HOST")
+    port = int(os.getenv("EMAIL_PORT", 587))
+    username = os.getenv("EMAIL_USERNAME")
+    password = os.getenv("EMAIL_PASSWORD")
+
+    if not all([host, username, password, receiver]):
+        raise RuntimeError("Email configuration is incomplete.")
+
+    msg = MIMEMultipart("alternative")
+    msg["From"] = username
+    msg["To"] = receiver
+    msg["Subject"] = subject
+
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+    if html_body:
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    with smtplib.SMTP(host, port) as server:
+        server.starttls()
+        server.login(username, password)
+        server.send_message(msg)

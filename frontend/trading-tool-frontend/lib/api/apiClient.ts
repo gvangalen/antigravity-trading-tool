@@ -1,6 +1,17 @@
 import { API_BASE_URL } from "@/lib/config";
 import { apiRefresh, clearStoredAuth, buildAuthHeaders, ensureCsrfCookie } from "@/lib/api/auth";
 
+function redirectToLogin(reason?: string) {
+  if (typeof window === "undefined") return;
+  const currentPath = `${window.location.pathname || "/"}${window.location.search || ""}`;
+  const params = new URLSearchParams();
+  if (reason) params.set("reason", reason);
+  if (currentPath && !currentPath.startsWith("/login")) {
+    params.set("next", currentPath);
+  }
+  window.location.href = params.toString() ? `/login?${params.toString()}` : "/login";
+}
+
 type ApiRequestInit = RequestInit & {
   _retry?: boolean;
   forceFresh?: boolean;
@@ -51,9 +62,7 @@ export async function apiGet<T>(path: string, init?: ApiRequestInit): Promise<T>
         return apiGet(path, { ...init, _retry: true });
       } else {
         clearStoredAuth();
-        if (typeof window !== "undefined") {
-          window.location.href = "/login";
-        }
+        redirectToLogin("session_expired");
       }
     }
 
@@ -97,9 +106,7 @@ export async function apiPost<T>(
         return apiPost(path, body, { ...init, _retry: true });
       } else {
         clearStoredAuth();
-        if (typeof window !== "undefined") {
-          window.location.href = "/login";
-        }
+        redirectToLogin("session_expired");
       }
     }
 
@@ -143,9 +150,7 @@ export async function apiPut<T>(
         return apiPut(path, body, { ...init, _retry: true });
       } else {
         clearStoredAuth();
-        if (typeof window !== "undefined") {
-          window.location.href = "/login";
-        }
+        redirectToLogin("session_expired");
       }
     }
 
@@ -184,9 +189,7 @@ export async function apiDelete<T>(path: string, init?: ApiRequestInit): Promise
         return apiDelete(path, { ...init, _retry: true });
       } else {
         clearStoredAuth();
-        if (typeof window !== "undefined") {
-          window.location.href = "/login";
-        }
+        redirectToLogin("session_expired");
       }
     }
 

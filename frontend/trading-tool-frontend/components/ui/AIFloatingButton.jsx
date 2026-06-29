@@ -2,14 +2,16 @@
 
 import React from "react";
 import { Brain } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function AIFloatingButton({ isOpen, onClick }) {
+  const { t } = useTranslation();
   const assistantBuild = "mc-shell-v2";
   return (
     <button
       onClick={onClick}
       data-assistant-build={assistantBuild}
-      aria-label="Open FINN assistant"
+      aria-label={t?.ui?.aiFloatingButton?.open}
       className={`fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-2xl border transition-all duration-300 group ${
         isOpen 
           ? "bg-slate-900 border-slate-700 opacity-95 ring-2 ring-blue-500/15" 

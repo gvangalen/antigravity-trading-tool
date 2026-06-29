@@ -10,7 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
 from backend.utils.rate_limit import InMemoryRateLimiter, client_ip
-from backend.schemas.auth_schema import LoginRequest, RegisterRequest, RefreshRequest, UserOut
+from backend.schemas.auth_schema import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    PasswordResetValidationOut,
+    RefreshRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    UserOut,
+)
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.auth_service import AuthService
 from backend.utils.system_logger import sys_logger
@@ -56,6 +64,9 @@ auth_rate_limiter = InMemoryRateLimiter(requests_limit=10, window_seconds=300)
 AUTH_LOGIN_EMAIL_LIMIT = 6
 AUTH_LOGIN_IP_LIMIT = 20
 AUTH_REFRESH_IP_LIMIT = 30
+AUTH_REGISTER_IP_LIMIT = 10
+AUTH_RESET_IP_LIMIT = 8
+AUTH_FORGOT_EMAIL_LIMIT = 5
 CSRF_COOKIE_NAME = "csrf_token"
 CSRF_HEADER_NAME = "X-CSRF-Token"
 
@@ -101,6 +112,30 @@ def _apply_auth_refresh_rate_limit(raw_request: Request) -> None:
     )
 
 
+def _apply_auth_register_rate_limit(raw_request: Request) -> None:
+    ip_addr = client_ip(raw_request)
+    auth_rate_limiter.check_rate_limit(
+        f"auth_register_ip:{ip_addr}",
+        limit=AUTH_REGISTER_IP_LIMIT,
+        detail="Te veel registratiepogingen. Wacht kort en probeer opnieuw.",
+    )
+
+
+def _apply_auth_reset_rate_limit(raw_request: Request, email: Optional[str] = None) -> None:
+    ip_addr = client_ip(raw_request)
+    auth_rate_limiter.check_rate_limit(
+        f"auth_reset_ip:{ip_addr}",
+        limit=AUTH_RESET_IP_LIMIT,
+        detail="Te veel reset-verzoeken. Wacht kort en probeer opnieuw.",
+    )
+    if email:
+        auth_rate_limiter.check_rate_limit(
+            f"auth_forgot_email:{email.lower()}",
+            limit=AUTH_FORGOT_EMAIL_LIMIT,
+            detail="Te veel reset-verzoeken voor dit account. Wacht kort en probeer opnieuw.",
+        )
+
+
 def _safe_auth_error(message: str, status_code: int) -> HTTPException:
     return HTTPException(status_code=status_code, detail=message)
 
@@ -127,9 +162,11 @@ async def get_auth_service(db: AsyncSession = Depends(get_db)):
 @router.post("/auth/register", response_model=UserOut)
 async def register_user(
     body: RegisterRequest,
+    request: Request,
     service: AuthService = Depends(get_auth_service)
 ):
     try:
+        _apply_auth_register_rate_limit(request)
         user = await service.register_user(body)
         sys_logger.log_info(f"User registered: {body.email}", source="auth", endpoint="/auth/register")
         return user
@@ -140,6 +177,61 @@ async def register_user(
         sys_logger.log_error(f"Critical registration error: {str(e)}", source="auth", endpoint="/auth/register", metadata={"email": body.email})
         logger.exception("❌ Error opgetreden bij registratie")
         raise HTTPException(status_code=500, detail="Gebruiker kan niet worden aangemaakt")
+
+
+@router.post("/auth/forgot-password")
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    request: Request,
+    service: AuthService = Depends(get_auth_service),
+):
+    try:
+        _apply_auth_reset_rate_limit(request, body.email)
+        await service.request_password_reset(body)
+        return {
+            "success": True,
+            "message": "Als het account bestaat, is er een resetmail verstuurd.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("❌ Fout tijdens forgot-password flow")
+        sys_logger.log_error(
+            f"Forgot-password error for {body.email}: {str(e)}",
+            source="auth",
+            endpoint="/auth/forgot-password",
+        )
+        return {
+            "success": True,
+            "message": "Als het account bestaat, is er een resetmail verstuurd.",
+        }
+
+
+@router.get("/auth/reset-password/validate", response_model=PasswordResetValidationOut)
+async def validate_reset_password_token(
+    token: str,
+    service: AuthService = Depends(get_auth_service),
+):
+    return PasswordResetValidationOut(valid=await service.validate_password_reset_token(token))
+
+
+@router.post("/auth/reset-password")
+async def reset_password(
+    body: ResetPasswordRequest,
+    request: Request,
+    service: AuthService = Depends(get_auth_service),
+):
+    try:
+        _apply_auth_reset_rate_limit(request)
+        await service.reset_password(body)
+        return {"success": True}
+    except ValueError:
+        raise _safe_auth_error("Resetlink ongeldig of verlopen.", 400)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("❌ Fout tijdens reset-password flow")
+        raise HTTPException(status_code=500, detail="Wachtwoord resetten mislukt.")
 
 
 # =========================================================

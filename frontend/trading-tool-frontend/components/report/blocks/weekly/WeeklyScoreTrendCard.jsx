@@ -1,6 +1,7 @@
 'use client';
 
 import ReportCard from '@/components/report/sections/ReportCard';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 /**
  * WeeklyScoreTrendCard — v2.0
@@ -17,25 +18,30 @@ import ReportCard from '@/components/report/sections/ReportCard';
  * - (optioneel later: market_score, sentiment_score)
  */
 export default function WeeklyScoreTrendCard({ report }) {
+  const { t } = useTranslation();
+  const copy = t?.reports?.blocks?.weeklyScoreTrend || {};
   if (!report) return null;
 
   return (
-    <ReportCard title="Scoretrend (Week)">
+    <ReportCard title={copy.title}>
       <div className="space-y-4">
 
         <ScoreRow
-          label="Macro"
+          label={copy.macro}
           score={report.macro_score}
+          copy={copy}
         />
 
         <ScoreRow
-          label="Technisch"
+          label={copy.technical}
           score={report.technical_score}
+          copy={copy}
         />
 
         <ScoreRow
-          label="Setups"
+          label={copy.setups}
           score={report.setup_score}
+          copy={copy}
         />
 
       </div>
@@ -47,7 +53,7 @@ export default function WeeklyScoreTrendCard({ report }) {
    🔹 Helpers
 ===================================================== */
 
-function ScoreRow({ label, score }) {
+function ScoreRow({ label, score, copy }) {
   const safeScore = typeof score === 'number' ? score : null;
 
   const trend =
@@ -78,7 +84,7 @@ function ScoreRow({ label, score }) {
         <span className={`flex items-center gap-1 ${trendColor}`}>
           <span className="text-base">{trendIcon}</span>
           <span className="text-xs">
-            {trendLabel(trend)}
+            {trendLabel(trend, copy)}
           </span>
         </span>
       </div>
@@ -95,20 +101,20 @@ function ScoreRow({ label, score }) {
 
       {/* Score value */}
       <div className="text-xs text-muted-foreground">
-        {safeScore !== null ? `Score: ${safeScore}` : 'Geen score beschikbaar'}
+        {safeScore !== null ? `${copy.scoreLabel}: ${safeScore}` : copy.noScore}
       </div>
 
     </div>
   );
 }
 
-function trendLabel(trend) {
+function trendLabel(trend, copy = {}) {
   switch (trend) {
     case 'up':
-      return 'Versterkend';
+      return copy.up;
     case 'down':
-      return 'Verzwakkend';
+      return copy.down;
     default:
-      return 'Zijwaarts';
+      return copy.flat;
   }
 }

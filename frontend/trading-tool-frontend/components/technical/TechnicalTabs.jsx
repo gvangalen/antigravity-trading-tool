@@ -3,13 +3,7 @@
 // PRO Terminal Grid
 import TechnicalTerminalGrid from "@/components/technical/TechnicalTerminalGrid";
 import { Activity, Layout, Layers, Box } from "lucide-react";
-
-const TABS = [
-  { id: "Dag", label: "Dag" },
-  { id: "Week", label: "Week" },
-  { id: "Maand", label: "Maand" },
-  { id: "Kwartaal", label: "Kwartaal" },
-];
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function TechnicalTabs({
   activeTab,
@@ -19,6 +13,14 @@ export default function TechnicalTabs({
   loading,
   error,
 }) {
+  const { t } = useTranslation();
+  const tabsCopy = t?.pages?.technical?.tabs || {};
+  const TABS = [
+    { id: "day", label: tabsCopy.day },
+    { id: "week", label: tabsCopy.week },
+    { id: "month", label: tabsCopy.month },
+    { id: "quarter", label: tabsCopy.quarter },
+  ];
 
   const safeData = Array.isArray(technicalData) ? technicalData : [];
 
@@ -26,7 +28,7 @@ export default function TechnicalTabs({
     if (loading) {
       return (
         <TechnicalTerminalGrid
-          title="Analyseren..."
+          title={tabsCopy.loading}
           data={[]}
           onRemove={null}
         />
@@ -38,40 +40,40 @@ export default function TechnicalTabs({
     }
 
     switch (activeTab) {
-      case "Dag":
+      case "day":
         return (
           <TechnicalTerminalGrid
-            title="Dagelijkse Analyse"
+            title={tabsCopy.dailyAnalysis}
             icon={<Activity size={20} />}
             data={safeData}
             onRemove={handleRemove}
           />
         );
 
-      case "Week":
+      case "week":
         return (
           <TechnicalTerminalGrid
-            title="Wekelijkse Analyse"
+            title={tabsCopy.weeklyAnalysis}
             icon={<Box size={20} />}
             data={safeData}
             onRemove={handleRemove}
           />
         );
 
-      case "Maand":
+      case "month":
         return (
           <TechnicalTerminalGrid
-            title="Maandelijkse Analyse"
+            title={tabsCopy.monthlyAnalysis}
             icon={<Layers size={20} />}
             data={safeData}
             onRemove={handleRemove}
           />
         );
 
-      case "Kwartaal":
+      case "quarter":
         return (
           <TechnicalTerminalGrid
-            title="Kwartaal Analyse"
+            title={tabsCopy.quarterlyAnalysis}
             icon={<Layout size={20} />}
             data={safeData}
             onRemove={handleRemove}
@@ -87,7 +89,7 @@ export default function TechnicalTabs({
     <div className="space-y-8">
       {/* 🔹 TABS: SEGMENTED CONTROL */}
       <div className="flex items-center gap-4">
-         <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">Tijdsinterval</div>
+         <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">{tabsCopy.title}</div>
          <div className="flex bg-[var(--color-border-subtle)] p-1 rounded-xl border border-slate-200">
             {TABS.map((tab) => (
                <button

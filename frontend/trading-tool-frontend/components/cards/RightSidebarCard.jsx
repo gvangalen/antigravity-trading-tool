@@ -4,8 +4,11 @@ import Link from 'next/link';
 import CardWrapper from '@/components/ui/CardWrapper';
 import { useSidebarData } from '@/hooks/useSidebarData';
 import { CalendarDays, TrendingUp, Bot } from 'lucide-react';
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function RightSidebarCard() {
+  const { t } = useTranslation();
+  const copy = t?.dashboard?.sidebar || {};
   const { summary, trades, aiStatus, loading } = useSidebarData();
 
   return (
@@ -31,24 +34,24 @@ export default function RightSidebarCard() {
               <CalendarDays className="w-5 h-5 text-blue-600 dark:text-blue-300" />
             </div>
             <h3 className="text-sm font-semibold text-[var(--text-dark)]">
-              Dagelijks Rapport
+              {copy.dailyReport}
             </h3>
           </div>
 
           {/* Content */}
           {loading ? (
-            <p className="text-sm text-[var(--text-light)] italic">Laden...</p>
+            <p className="text-sm text-[var(--text-light)] italic">{copy.loading}</p>
           ) : (
             <div className="text-sm text-[var(--text-dark)] leading-relaxed">
               <p className="mb-2">
-                {summary || 'Geen samenvatting beschikbaar.'}
+                {summary || copy.noSummary}
               </p>
 
               <Link
                 href="/report"
                 className="text-[var(--primary-dark)] hover:underline text-xs"
               >
-                Bekijk volledig rapport →
+                {copy.viewFullReport} →
               </Link>
             </div>
           )}
@@ -73,13 +76,13 @@ export default function RightSidebarCard() {
               <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-300" />
             </div>
             <h3 className="text-sm font-semibold text-[var(--text-dark)]">
-              Actieve Trades
+              {copy.activeTrades}
             </h3>
           </div>
 
           {/* Content */}
           {loading ? (
-            <p className="text-sm text-[var(--text-light)] italic">Laden...</p>
+            <p className="text-sm text-[var(--text-light)] italic">{copy.loading}</p>
           ) : trades.length > 0 ? (
             <ul className="text-sm space-y-2 text-[var(--text-dark)]">
               {trades.map((trade) => (
@@ -91,7 +94,7 @@ export default function RightSidebarCard() {
             </ul>
           ) : (
             <p className="text-sm text-[var(--text-light)] italic">
-              Geen actieve trades.
+              {copy.noActiveTrades}
             </p>
           )}
         </div>
@@ -115,18 +118,18 @@ export default function RightSidebarCard() {
               <Bot className="w-5 h-5 text-purple-600 dark:text-purple-300" />
             </div>
             <h3 className="text-sm font-semibold text-[var(--text-dark)]">
-              AI Trading Bot
+              {copy.aiTradingBot}
             </h3>
           </div>
 
           {/* Content */}
           {loading ? (
-            <p className="text-sm text-[var(--text-light)] italic">Botstatus ophalen...</p>
+            <p className="text-sm text-[var(--text-light)] italic">{copy.loadingBotStatus}</p>
           ) : (
             <div className="text-sm text-[var(--text-dark)] leading-relaxed">
-              <p><strong>Status:</strong> {aiStatus.state || 'onbekend'}</p>
-              <p><strong>Strategie:</strong> {aiStatus.strategy || 'n.v.t.'}</p>
-              <p><strong>Laatste update:</strong> {aiStatus.updated || 'onbekend'}</p>
+              <p><strong>{copy.statusLabel}:</strong> {aiStatus.state || copy.unknown}</p>
+              <p><strong>{copy.strategyLabel}:</strong> {aiStatus.strategy || copy.notAvailable}</p>
+              <p><strong>{copy.lastUpdateLabel}:</strong> {aiStatus.updated || copy.unknown}</p>
             </div>
           )}
         </div>

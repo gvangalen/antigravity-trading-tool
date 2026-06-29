@@ -53,6 +53,20 @@ class AuthRefreshSession(Base):
     revoked_reason = Column(String, nullable=True)
     replaced_by_jti = Column(String, nullable=True)
 
+
+class AuthPasswordResetToken(Base):
+    __tablename__ = "auth_password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash = Column(String, unique=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    locale = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    used_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True)
+    revoked_reason = Column(String, nullable=True)
+
 class AiUsageLog(Base):
     __tablename__ = 'ai_usage_logs'
 

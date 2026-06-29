@@ -61,6 +61,12 @@ for attempt in $(seq 1 5); do
 done
 git reset --hard "$ROLLBACK_COMMIT"
 
+cd frontend/trading-tool-frontend
+rm -rf .next out
+npm run build
+
+cd ../..
+
 if [ ! -f "$PM2_CONFIG" ]; then
   echo "❌ PM2 config $PM2_CONFIG not found on remote host." >&2
   exit 1

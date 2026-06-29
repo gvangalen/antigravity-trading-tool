@@ -11,6 +11,8 @@ import {
 } from "recharts";
 
 import usePortfolioBalance from "@/hooks/usePortfolioBalance";
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatCurrency, formatDate, formatDateTime, formatNumber, getIntlLocale } from "@/lib/i18n";
 
 /* =====================================================
    RANGE CONFIG
@@ -27,38 +29,31 @@ const RANGES = [
    MODES
 ===================================================== */
 const MODES = [
-  { key: "equity", label: "Equity" },
-  { key: "cash", label: "Cash" },
-  { key: "btc_value", label: "BTC Value" },
-  { key: "btc_qty", label: "BTC Qty" },
-  { key: "invested", label: "Invested" },
-  { key: "unrealized_pnl", label: "Unrealized PnL" },
+  { key: "equity", labelKey: "equity" },
+  { key: "cash", labelKey: "cash" },
+  { key: "btc_value", labelKey: "btcValue" },
+  { key: "btc_qty", labelKey: "btcQty" },
+  { key: "invested", labelKey: "invested" },
+  { key: "unrealized_pnl", labelKey: "unrealizedPnl" },
 ];
 
 /* =====================================================
    FORMATTERS
 ===================================================== */
-const fmtEur = (n) =>
-  new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: 0,
-  }).format(Number(n || 0));
-
 const fmtBtc = (n) => `${Number(n || 0).toFixed(4)} BTC`;
 const fmtPct = (n) => `${Number(n || 0).toFixed(1)}%`;
 
-function shortDate(ts, rangeKey) {
+function shortDate(ts, rangeKey, locale) {
   const d = new Date(ts);
 
   if (rangeKey === "1D") {
-    return d.toLocaleTimeString("nl-NL", {
+    return formatDateTime(d, locale, {
       hour: "2-digit",
       minute: "2-digit",
     });
   }
 
-  return d.toLocaleDateString("nl-NL", {
+  return formatDate(d, locale, {
     day: "2-digit",
     month: "short",
   });
@@ -91,9 +86,11 @@ function calcDelta(series, mode) {
 
 export default function PortfolioBalanceCard({
   defaultRange = "1W",
-  title = "Portfolio balance",
+  title = null,
   is_live = null,
 }) {
+  const { t, locale } = useTranslation();
+  const copy = t?.botPage?.portfolioBalance || {};
   const [range, setRange] = useState(defaultRange);
   const [mode, setMode] = useState("equity");
 
@@ -170,9 +167,9 @@ export default function PortfolioBalanceCard({
     return series.map((p) => ({
       ts: p.ts,
       value: Number(p?.[mode] ?? 0),
-      label: shortDate(p.ts, range),
+      label: shortDate(p.ts, range, locale),
     }));
-  }, [series, range, mode]);
+  }, [series, range, mode, locale]);
 
   /* =====================================================
      Y DOMAIN
@@ -215,7 +212,9 @@ export default function PortfolioBalanceCard({
   const gradientId = `balanceFill-${mode}`;
 
   const formatValue = (v) =>
-    mode === "btc_qty" ? fmtBtc(v) : fmtEur(v);
+    mode === "btc_qty"
+      ? fmtBtc(v)
+      : formatCurrency(Number(v || 0), locale, "EUR", { maximumFractionDigits: 0 });
 
   /* =====================================================
      UI
@@ -227,7 +226,7 @@ export default function PortfolioBalanceCard({
 
         <div className="space-y-1">
           <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">
-            Global Equity Performance
+            {title || copy.title}
           </div>
 
           <div className="text-4xl font-black tracking-tighter text-foreground font-mono">
@@ -278,7 +277,8 @@ export default function PortfolioBalanceCard({
                     : "text-secondary hover:text-slate-600"
                 }`}
               >
-                {m.label}
+                {copy.modes?.[m.labelKey] || m.key}
+                
               </button>
             ))}
           </div>
@@ -287,9 +287,9 @@ export default function PortfolioBalanceCard({
 
       {/* 🚀 TELEMETRY CHART */}
       <div className="mt-8 h-[260px] w-full min-w-0 relative">
-        {loading && (
+            {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-[1px] z-10 text-[10px] font-black text-secondary uppercase tracking-[0.2em] animate-pulse">
-            Portefeuilledata laden...
+            {copy.loading}
           </div>
         )}
 
@@ -334,7 +334,7 @@ export default function PortfolioBalanceCard({
               tickLine={false}
               width={50}
               tick={{ fontSize: 9, fontWeight: 700, fill: 'var(--color-text-muted)', fontFamily: 'monospace' }}
-              tickFormatter={(v) => `€${(v/1000).toFixed(0)}k`}
+              tickFormatter={(v) => formatNumber(v / 1000, locale, { maximumFractionDigits: 0 }) + "k"}
               dx={-5}
             />
 
@@ -343,7 +343,7 @@ export default function PortfolioBalanceCard({
                 if (active && payload && payload.length) {
                   return (
                     <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl shadow-2xl">
-                      <div className="text-[8px] font-black text-muted uppercase tracking-widest mb-1">Entry Log</div>
+                      <div className="text-[8px] font-black text-muted uppercase tracking-widest mb-1">{copy.entryLog}</div>
                       <div className="text-sm font-black text-white font-mono">{formatValue(payload[0].value)}</div>
                       <div className="text-[9px] font-bold text-secondary mt-1">{payload[0].payload.label}</div>
                     </div>

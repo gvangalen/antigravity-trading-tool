@@ -9,6 +9,7 @@ import {
   Layers,
   Sparkles
 } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 /* =====================================================
    HELPERS
@@ -30,53 +31,53 @@ const safeMultiplier = (v) => {
    LABELS
 ===================================================== */
 
-const getPressureLabel = (v) => {
-  if (v < 30) return "Rustige markt";
-  if (v < 50) return "Neutrale druk";
-  if (v < 70) return "Opbouwende druk";
-  if (v < 85) return "Hoge druk";
-  return "Extreme druk";
+const getPressureLabel = (v, labels) => {
+  if (v < 30) return labels[0];
+  if (v < 50) return labels[1];
+  if (v < 70) return labels[2];
+  if (v < 85) return labels[3];
+  return labels[4];
 };
 
-const getTransitionRiskLabel = (v) => {
-  if (v < 30) return "Stabiel regime";
-  if (v < 50) return "Kleine verschuiving mogelijk";
-  if (v < 70) return "Regimedruk neemt toe";
-  if (v < 85) return "Hoog transitierisico";
-  return "Risico op regimewissel";
+const getTransitionRiskLabel = (v, labels) => {
+  if (v < 30) return labels[0];
+  if (v < 50) return labels[1];
+  if (v < 70) return labels[2];
+  if (v < 85) return labels[3];
+  return labels[4];
 };
 
-const getSetupQualityLabel = (v) => {
-  if (v < 30) return "Zwakke setups";
-  if (v < 50) return "Gemengde setups";
-  if (v < 70) return "Redelijke setups";
-  if (v < 85) return "Hoge kwaliteit";
-  return "Zeer sterke setups";
+const getSetupQualityLabel = (v, labels) => {
+  if (v < 30) return labels[0];
+  if (v < 50) return labels[1];
+  if (v < 70) return labels[2];
+  if (v < 85) return labels[3];
+  return labels[4];
 };
 
-const getVolatilityLabel = (v) => {
-  if (v < 25) return "Zeer rustig";
-  if (v < 50) return "Normaal";
-  if (v < 70) return "Volatiel";
-  if (v < 85) return "Hoge volatiliteit";
-  return "Extreme volatiliteit";
+const getVolatilityLabel = (v, labels) => {
+  if (v < 25) return labels[0];
+  if (v < 50) return labels[1];
+  if (v < 70) return labels[2];
+  if (v < 85) return labels[3];
+  return labels[4];
 };
 
-const getTrendStrengthLabel = (v) => {
-  if (v < 30) return "Zwakke trend";
-  if (v < 50) return "Zijwaarts";
-  if (v < 70) return "Trendend";
-  if (v < 85) return "Sterke trend";
-  return "Zeer sterke trend";
+const getTrendStrengthLabel = (v, labels) => {
+  if (v < 30) return labels[0];
+  if (v < 50) return labels[1];
+  if (v < 70) return labels[2];
+  if (v < 85) return labels[3];
+  return labels[4];
 };
 
-const getExposureLabel = (v) => {
+const getExposureLabel = (v, labels) => {
   const value = v / 100; // Convert back to 0-2 range
-  if (value < 0.7) return "Defensief";
-  if (value < 0.95) return "Verlaagde grootte";
-  if (value <= 1.05) return "Normale grootte";
-  if (value <= 1.25) return "Verhoogde grootte";
-  return "Agressieve grootte";
+  if (value < 0.7) return labels[0];
+  if (value < 0.95) return labels[1];
+  if (value <= 1.05) return labels[2];
+  if (value <= 1.25) return labels[3];
+  return labels[4];
 };
 
 const getExposureColor = (v) => {
@@ -111,7 +112,7 @@ function Bar({ icon, label, value, color, getLabel, onClick }) {
 
       {/* label */}
       <span className="w-48 font-black uppercase tracking-widest text-muted group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors leading-none">
-        {label}
+        {label.text}
       </span>
 
       {/* bar container (THE 'BALKJES') - SOLID & FIXED VISIBILITY */}
@@ -143,7 +144,7 @@ function Bar({ icon, label, value, color, getLabel, onClick }) {
           }}
           className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all hover:scale-105 active:scale-95 shadow-sm"
         >
-          <Sparkles size={10} /> Vraag Finn
+          <Sparkles size={10} /> {label.askFinn}
         </button>
         <span className="px-3 py-1 rounded-lg bg-card dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-[9px] font-black uppercase tracking-widest text-muted shadow-sm group-hover:border-blue-600/30 group-hover:text-blue-600 transition-all">
           {status}
@@ -167,6 +168,15 @@ export default function MarketConditionsInline({
   multiplier = 1,
   symbol = "BTC",
 }) {
+  const { t } = useTranslation();
+  const copy = t?.ui?.marketConditions || {};
+  const labels = copy.labels || {};
+  const pressureStates = copy.pressureStates || [];
+  const transitionRiskStates = copy.transitionRiskStates || [];
+  const setupQualityStates = copy.setupQualityStates || [];
+  const volatilityStates = copy.volatilityStates || [];
+  const trendStrengthStates = copy.trendStrengthStates || [];
+  const exposureStates = copy.exposureStates || [];
 
   const safeHealth = clamp(health);
   const safeRisk = clamp(transitionRisk);
@@ -175,7 +185,7 @@ export default function MarketConditionsInline({
   const safeTrend = clamp(trendStrength);
   const safeMulti = safeMultiplier(multiplier);
 
-  const exposureLabel = getExposureLabel(safeMulti * 100);
+  const exposureLabel = getExposureLabel(safeMulti * 100, exposureStates);
   const exposureColor = getExposureColor(safeMulti * 100);
 
   /* multiplier → score schaal */
@@ -197,10 +207,10 @@ export default function MarketConditionsInline({
 
       <Bar
         icon={<BarChart3 size={16} />}
-        label="Marktdruk"
+        label={{ text: labels.pressure, askFinn: copy.askFinn }}
         value={safePressure}
         color="bg-blue-500"
-        getLabel={getPressureLabel}
+        getLabel={(value) => getPressureLabel(value, pressureStates)}
         onClick={() => triggerAI('market_pressure')}
       />
 
@@ -208,10 +218,10 @@ export default function MarketConditionsInline({
 
       <Bar
         icon={<AlertTriangle size={16} />}
-        label="Transitierisico"
+        label={{ text: labels.transitionRisk, askFinn: copy.askFinn }}
         value={safeRisk}
         color="bg-orange-500"
-        getLabel={getTransitionRiskLabel}
+        getLabel={(value) => getTransitionRiskLabel(value, transitionRiskStates)}
         onClick={() => triggerAI('transition_risk')}
       />
 
@@ -219,10 +229,10 @@ export default function MarketConditionsInline({
 
       <Bar
         icon={<Target size={16} />}
-        label="Setupkwaliteit"
+        label={{ text: labels.setupQuality, askFinn: copy.askFinn }}
         value={safeHealth}
         color="bg-emerald-500"
-        getLabel={getSetupQualityLabel}
+        getLabel={(value) => getSetupQualityLabel(value, setupQualityStates)}
         onClick={() => triggerAI('setup_quality')}
       />
 
@@ -230,10 +240,10 @@ export default function MarketConditionsInline({
 
       <Bar
         icon={<Zap size={16} />}
-        label="Marktvolatiliteit"
+        label={{ text: labels.volatility, askFinn: copy.askFinn }}
         value={safeVolatility}
         color="bg-purple-500"
-        getLabel={getVolatilityLabel}
+        getLabel={(value) => getVolatilityLabel(value, volatilityStates)}
         onClick={() => triggerAI('market_volatility')}
       />
 
@@ -241,10 +251,10 @@ export default function MarketConditionsInline({
 
       <Bar
         icon={<TrendingUp size={16} />}
-        label="Trendsterkte"
+        label={{ text: labels.trendStrength, askFinn: copy.askFinn }}
         value={safeTrend}
         color="bg-indigo-500"
-        getLabel={getTrendStrengthLabel}
+        getLabel={(value) => getTrendStrengthLabel(value, trendStrengthStates)}
         onClick={() => triggerAI('trend_strength')}
       />
 
@@ -252,7 +262,7 @@ export default function MarketConditionsInline({
 
       <Bar
         icon={<Layers size={16} />}
-        label="Positiegrootte"
+        label={{ text: labels.positionSize, askFinn: copy.askFinn }}
         value={exposureScore}
         color={exposureColor}
         getLabel={() => exposureLabel}

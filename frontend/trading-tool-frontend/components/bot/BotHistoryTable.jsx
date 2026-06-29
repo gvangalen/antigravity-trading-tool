@@ -3,21 +3,26 @@
 import CardWrapper from "@/components/ui/CardWrapper";
 import CardLoader from "@/components/ui/CardLoader";
 import { Clock } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
 
 export default function BotHistoryTable({
   history = [],
   loading = false,
 }) {
+  const { t, locale } = useTranslation();
+  const copy = t?.botPage?.history || {};
+
   return (
     <CardWrapper
-      title="Bot History"
+      title={copy.title}
       icon={<Clock className="icon icon-muted" />}
     >
       {/* ===================== */}
       {/* LOADING STATE */}
       {/* ===================== */}
       {loading && (
-        <CardLoader text="Geschiedenis laden…" />
+        <CardLoader text={copy.loading} />
       )}
 
       {/* ===================== */}
@@ -25,7 +30,7 @@ export default function BotHistoryTable({
       {/* ===================== */}
       {!loading && history.length === 0 && (
         <p className="text-sm text-[var(--text-muted)]">
-          Er zijn nog geen bot-acties uitgevoerd.
+          {copy.empty}
         </p>
       )}
 
@@ -36,13 +41,13 @@ export default function BotHistoryTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-[var(--text-muted)] border-b border-[var(--border)]">
-              <th className="py-2">Date</th>
-              <th>Action</th>
-              <th>Qty</th>
-              <th>Price</th>
-              <th>Amount</th>
-              <th>Confidence</th>
-              <th>Status</th>
+              <th className="py-2">{copy.date}</th>
+              <th>{copy.action}</th>
+              <th>{copy.quantity}</th>
+              <th>{copy.price}</th>
+              <th>{copy.amount}</th>
+              <th>{copy.confidence}</th>
+              <th>{copy.status}</th>
             </tr>
           </thead>
 
@@ -63,20 +68,23 @@ export default function BotHistoryTable({
               ===================== */
               const qty =
                 h.qty != null
-                  ? `${Number(h.qty).toFixed(6)} ${h.symbol || "BTC"}`
+                  ? `${formatNumber(Number(h.qty), locale, {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 6,
+                    })} ${h.symbol || "BTC"}`
                   : "—";
 
               const price =
                 h.price != null
-                  ? `€${h.price}`
+                  ? formatCurrency(Number(h.price), locale)
                   : "—";
 
               const amount =
                 h.amount_eur != null
-                  ? `€${h.amount_eur}`
+                  ? formatCurrency(Number(h.amount_eur), locale)
                   : h.amount != null
-                  ? `€${h.amount}`
-                  : "€0";
+                  ? formatCurrency(Number(h.amount), locale)
+                  : formatCurrency(0, locale);
 
               return (
                 <tr
@@ -91,7 +99,7 @@ export default function BotHistoryTable({
                   <td className="py-2">
                     {h.date ||
                       (h.created_at
-                        ? new Date(h.created_at).toLocaleString("nl-NL")
+                        ? formatDateTime(h.created_at, locale)
                         : "—")}
                   </td>
 

@@ -43,6 +43,8 @@ CSRF_HEADER_NAME = "x-csrf-token"
 CSRF_EXEMPT_PATHS = {
     "/api/auth/login",
     "/api/auth/register",
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
 }
 
 

@@ -3,6 +3,8 @@
 import { useModal } from "@/components/modal/ModalProvider";
 import { TradingSlider } from "@/components/ui/Slider";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatNumber } from "@/lib/i18n";
 import {
   ArrowUpCircle,
   ArrowDownCircle,
@@ -19,10 +21,10 @@ const num = (v, d = null) => {
   return Number.isFinite(n) ? n : d;
 };
 
-const fmt = (v, digits = 2) => {
+const fmt = (v, locale, digits = 2) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("nl-NL", {
+  return formatNumber(n, locale, {
     minimumFractionDigits: 0,
     maximumFractionDigits: digits,
   });
@@ -47,6 +49,8 @@ export default function TradePanel({
 }) {
 
   const { showSnackbar } = useModal();
+  const { t, locale } = useTranslation();
+  const copy = t?.botPage?.tradePanel || {};
 
   const [side, setSide] = useState("buy");
   const [orderType, setOrderType] = useState("limit");
@@ -181,24 +185,24 @@ export default function TradePanel({
   const validation = useMemo(() => {
 
     if (!hasBalance)
-      return { ok: false, reason: "Geen beschikbaar saldo" };
+      return { ok: false, reason: copy.validationNoBalance };
 
     const p = num(effectivePrice, null);
     const q = num(qtyBase, null);
 
-    if (!p) return { ok: false, reason: "Geen geldige prijs" };
-    if (!q || q <= 0) return { ok: false, reason: "Aantal is 0" };
+    if (!p) return { ok: false, reason: copy.validationInvalidPrice };
+    if (!q || q <= 0) return { ok: false, reason: copy.validationZeroAmount };
 
     const v = num(orderValueQuote, null);
 
     if (side === "buy") {
-      if (v == null) return { ok: false, reason: "Orderwaarde onbekend" };
+      if (v == null) return { ok: false, reason: copy.validationUnknownOrderValue };
       if (v > num(availableQuote, 0))
-        return { ok: false, reason: "Onvoldoende saldo" };
+        return { ok: false, reason: copy.validationInsufficientBalance };
     }
 
     if (side === "sell" && q > num(balanceBase, 0))
-      return { ok: false, reason: "Onvoldoende BTC" };
+      return { ok: false, reason: copy.validationInsufficientAsset.replace("{asset}", baseSymbol) };
 
     return { ok: true };
 
@@ -293,23 +297,23 @@ export default function TradePanel({
     >
       <div className="flex justify-between items-end border-b-2 border-slate-100 pb-6">
         <div>
-           <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Status</div>
-           <h2 className="text-2xl font-black text-foreground tracking-tighter uppercase leading-none">Trade</h2>
+           <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">{copy.status}</div>
+           <h2 className="text-2xl font-black text-foreground tracking-tighter uppercase leading-none">{copy.title}</h2>
         </div>
 
         <div className="text-right">
-          <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Beschikbaar Saldo</div>
+          <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">{copy.availableBalance}</div>
           <div className="flex items-center gap-2 justify-end">
              {side === "buy"
                ? (
                  <div className="flex flex-col items-end">
-                    <div className="text-lg font-black text-blue-600 tracking-tighter">{fmt(availableQuote)} <span className="text-[10px] opacity-60 ml-0.5">{quoteSymbol}</span></div>
+                    <div className="text-lg font-black text-blue-600 tracking-tighter">{fmt(availableQuote, locale)} <span className="text-[10px] opacity-60 ml-0.5">{quoteSymbol}</span></div>
                     {availableQuote < balanceQuote && (
-                      <div className="text-[8px] font-bold text-orange-500 uppercase tracking-tighter">Capped by budget limits</div>
+                      <div className="text-[8px] font-bold text-orange-500 uppercase tracking-tighter">{copy.cappedByBudget}</div>
                     )}
                  </div>
                )
-               : <div className="text-lg font-black text-emerald-600 tracking-tighter">{fmt(balanceBase,6)} <span className="text-[10px] opacity-60 ml-0.5">{baseSymbol}</span></div>
+               : <div className="text-lg font-black text-emerald-600 tracking-tighter">{fmt(balanceBase, locale, 6)} <span className="text-[10px] opacity-60 ml-0.5">{baseSymbol}</span></div>
              }
           </div>
         </div>
@@ -323,7 +327,7 @@ export default function TradePanel({
           className={side === "buy" ? "active-buy" : ""}
         >
           <ArrowUpCircle size={14} className={side === "buy" ? "" : "opacity-40"} />
-          Kopen
+          {copy.buy}
         </button>
 
         <button
@@ -332,15 +336,15 @@ export default function TradePanel({
           className={side === "sell" ? "active-sell" : ""}
         >
           <ArrowDownCircle size={14} className={side === "sell" ? "" : "opacity-40"} />
-          Verkopen
+          {copy.sell}
         </button>
       </div>
 
       {/* PRICE SECTION */}
       <div className="trade-surface">
         <div className="flex items-center justify-between mb-2">
-           <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Order Prijs</label>
-           <div className="text-[9px] font-bold text-blue-600/60 uppercase">Live: {fmt(price)}</div>
+           <label className="text-[10px] font-black text-secondary uppercase tracking-widest">{copy.orderPrice}</label>
+           <div className="text-[9px] font-bold text-blue-600/60 uppercase">{copy.liveLabel}: {fmt(price, locale)}</div>
         </div>
         <input
           type="number"
@@ -356,7 +360,7 @@ export default function TradePanel({
       {/* AMOUNT SECTION */}
       <div className="trade-surface">
         <div className="flex items-center justify-between mb-2">
-           <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Aantal</label>
+           <label className="text-[10px] font-black text-secondary uppercase tracking-widest">{copy.amount}</label>
            <div className="flex gap-2">
               <button onClick={() => setSizeMode("quote")} className={`text-[9px] font-black uppercase tracking-tighter px-2 py-0.5 rounded ${sizeMode === 'quote' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{quoteSymbol}</button>
               <button onClick={() => setSizeMode("base")} className={`text-[9px] font-black uppercase tracking-tighter px-2 py-0.5 rounded ${sizeMode === 'base' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{baseSymbol}</button>
@@ -370,7 +374,7 @@ export default function TradePanel({
               value={amountQuoteInput}
               onChange={(e)=>setAmountQuoteInput(e.target.value)}
               className="trade-input"
-              placeholder={`Bedrag in ${quoteSymbol}`}
+              placeholder={copy.amountInQuote.replace("{symbol}", quoteSymbol)}
             />
           )
           : (
@@ -379,7 +383,7 @@ export default function TradePanel({
               value={amountBaseInput}
               onChange={(e)=>setAmountBaseInput(e.target.value)}
               className="trade-input"
-              placeholder={`Grootte in ${baseSymbol}`}
+              placeholder={copy.sizeInBase.replace("{symbol}", baseSymbol)}
             />
           )
         }
@@ -399,18 +403,18 @@ export default function TradePanel({
 
         <div className="flex justify-between items-center bg-white/50 p-3 rounded-xl border border-slate-100/50">
            <div className="flex flex-col">
-              <span className="text-[9px] font-black text-secondary uppercase">Verwacht</span>
-              <span className="text-xs font-black text-slate-900">{fmt(qtyBase,6)} <span className="opacity-40">{baseSymbol}</span></span>
+              <span className="text-[9px] font-black text-secondary uppercase">{copy.expected}</span>
+              <span className="text-xs font-black text-slate-900">{fmt(qtyBase, locale, 6)} <span className="opacity-40">{baseSymbol}</span></span>
            </div>
            <div className="text-right">
-              <span className="text-[9px] font-black text-secondary uppercase">Max</span>
-              <div className="text-xs font-bold text-slate-600">{fmt(maxQtyBase,6)}</div>
+              <span className="text-[9px] font-black text-secondary uppercase">{copy.max}</span>
+              <div className="text-xs font-bold text-slate-600">{fmt(maxQtyBase, locale, 6)}</div>
            </div>
         </div>
 
         {!hasBalance && (
           <div className="flex items-center gap-2 p-3 bg-rose-50 text-rose-600 rounded-xl border border-rose-100 text-[10px] font-black uppercase tracking-widest">
-            <XCircle size={14}/> {side === "buy" ? `Onvoldoende ${quoteSymbol}` : `Onvoldoende ${baseSymbol}`}
+            <XCircle size={14}/> {copy.insufficientAsset.replace("{asset}", side === "buy" ? quoteSymbol : baseSymbol)}
           </div>
         )}
       </div>
@@ -420,9 +424,9 @@ export default function TradePanel({
         <div className="flex items-center gap-3">
            <div className="w-1.5 h-10 bg-blue-500 rounded-full" />
            <div>
-              <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">Totale Orderwaarde</div>
+              <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">{copy.totalOrderValue}</div>
               <div className="text-2xl font-black text-white tracking-tighter">
-                {orderValueQuote == null ? "—" : `${fmt(orderValueQuote)} ${quoteSymbol}`}
+                {orderValueQuote == null ? "—" : `${fmt(orderValueQuote, locale)} ${quoteSymbol}`}
               </div>
            </div>
         </div>
@@ -435,7 +439,7 @@ export default function TradePanel({
         {validation.ok
           ? (
             <span className="trade-badge-ok flex items-center gap-1">
-              <CheckCircle2 size={14}/> Klaar om te plaatsen
+              <CheckCircle2 size={14}/> {copy.readyToPlace}
             </span>
           )
           : (
@@ -455,7 +459,7 @@ export default function TradePanel({
         disabled={!canSubmit}
         className={`trade-submit ${side==="buy"?"buy":"sell"}`}
       >
-        {loading ? "Plaatsen..." : "Plaats order"}
+        {loading ? copy.placing : copy.placeOrder}
       </button>
 
     </div>

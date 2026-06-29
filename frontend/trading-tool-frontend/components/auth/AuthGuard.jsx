@@ -19,7 +19,7 @@ export default function AuthGuard({ children }) {
   const onboardingCheckInFlight = useRef(false);
 
   // Routes that don't need auth
-  const publicRoutes = ["/", "/login", "/register", "/print", "/daily-report"];
+  const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/print", "/daily-report"];
   const isPublicRoute = publicRoutes.some(route => pathname === route || pathname.startsWith("/public/"));
   const debug = (...args) => {
     if (process.env.NODE_ENV === "development") console.log(...args);
@@ -64,9 +64,6 @@ export default function AuthGuard({ children }) {
           !pathname.startsWith("/strategy")) {
         debug("🚧 AuthGuard: Onboarding niet compleet -> naar /onboarding");
         router.push("/onboarding");
-      } else if (isComplete && pathname.startsWith("/onboarding")) {
-        debug("✅ AuthGuard: Onboarding al klaar -> naar dashboard");
-        router.push("/dashboard");
       }
 
     } catch (err) {
@@ -91,10 +88,6 @@ export default function AuthGuard({ children }) {
       if (!onboardingComplete) {
         checkOnboardingStatus();
       } else {
-        if (pathname.startsWith("/onboarding")) {
-          debug("✅ AuthGuard: Onboarding al klaar -> naar dashboard");
-          router.push("/dashboard");
-        }
         setCheckingOnboarding(false);
       }
     } else {

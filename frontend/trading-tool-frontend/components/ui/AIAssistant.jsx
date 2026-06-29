@@ -26,6 +26,154 @@ import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantA
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
+function getDictionaryValue(dictionary, path) {
+  return String(path || "")
+    .split(".")
+    .filter(Boolean)
+    .reduce((current, part) => (current && typeof current === "object" ? current[part] : undefined), dictionary);
+}
+
+function interpolateTranslation(template, vars = {}) {
+  if (typeof template !== "string") return template;
+  return template.replace(/\{(\w+)\}/g, (_, key) => {
+    const value = vars[key];
+    return value === undefined || value === null ? "" : String(value);
+  });
+}
+
+function createAssistantTranslator(t) {
+  const assistantCopy = t?.assistant || {};
+  return (path, fallback = "", vars = {}) => interpolateTranslation(getDictionaryValue(assistantCopy, path) ?? fallback, vars);
+}
+
+function buildAssistantUiText(at) {
+  return {
+    activeBriefing: at("uiText.activeBriefing"),
+    defensivePosture: at("uiText.defensivePosture"),
+    alignedTo: at("uiText.alignedTo"),
+    workspaceOverview: at("uiText.workspaceOverview"),
+    loadingWorkspace: at("uiText.loadingWorkspace"),
+    todayFirst: at("uiText.todayFirst"),
+    why: at("uiText.why"),
+    noActions: at("uiText.noActions"),
+    noReviews: at("uiText.noReviews"),
+    noPerformance: at("uiText.noPerformance"),
+    noHistory: at("uiText.noHistory"),
+    retry: at("uiText.retry"),
+    inputPlaceholder: at("uiText.inputPlaceholder"),
+    setupWizard: at("uiText.setupWizard"),
+    startGuide: at("uiText.startGuide"),
+    decisionReviewFallback: at("uiText.decisionReviewFallback"),
+    missionControlUnavailable: at("uiText.missionControlUnavailable"),
+    openExecutionConsole: at("uiText.openExecutionConsole"),
+    nextSteps: at("uiText.nextSteps"),
+    finnOverview: at("uiText.finnOverview"),
+    memoryV2: at("uiText.memoryV2"),
+    whyFinnBrakes: at("uiText.whyFinnBrakes"),
+    decisionExplain: at("uiText.decisionExplain"),
+    whyThis: at("uiText.whyThis"),
+    whyNow: at("uiText.whyNow"),
+    whatNow: at("uiText.whatNow"),
+    doNotDo: at("uiText.doNotDo"),
+    firstThis: at("uiText.firstThis"),
+    thenReview: at("uiText.thenReview"),
+    canWait: at("uiText.canWait"),
+    rhythmToday: at("uiText.rhythmToday"),
+    behaviorDiscipline: at("uiText.behaviorDiscipline"),
+    markDone: at("uiText.markDone"),
+    reviewLater: at("uiText.reviewLater"),
+    finnBrakesBecause: at("uiText.finnBrakesBecause"),
+    chooseSetup: at("uiText.chooseSetup"),
+    chooseStrategy: at("uiText.chooseStrategy"),
+    chooseIndicatorNode: at("uiText.chooseIndicatorNode"),
+    planDeviation: at("uiText.planDeviation"),
+    overrideConfirmed: at("uiText.overrideConfirmed"),
+    overrideRequired: at("uiText.overrideRequired"),
+    planDeviationTitle: at("uiText.planDeviationTitle"),
+    safeRoute: at("uiText.safeRoute"),
+    missingStill: at("uiText.missingStill"),
+    invalid: at("uiText.invalid"),
+    confirm: at("uiText.confirm"),
+    behavioralMemoryCheck: at("uiText.behavioralMemoryCheck"),
+    consciousConfirmationNeeded: at("uiText.consciousConfirmationNeeded"),
+    consciouslyContinue: at("uiText.consciouslyContinue"),
+    reviewFirst: at("uiText.reviewFirst"),
+    finnActionNeedsConfirmation: at("uiText.finnActionNeedsConfirmation"),
+    context: at("uiText.context"),
+    impact: at("uiText.impact"),
+    safety: at("uiText.safety"),
+    afterThis: at("uiText.afterThis"),
+    aiCommandCenter: at("uiText.aiCommandCenter"),
+    reasoningChains: at("uiText.reasoningChains"),
+    actionCanceled: at("uiText.actionCanceled"),
+    actionSucceeded: at("uiText.actionSucceeded"),
+    asset: at("uiText.asset"),
+    setupType: at("uiText.setupType"),
+    dcaParameters: at("uiText.dcaParameters"),
+    scoreThresholds: at("uiText.scoreThresholds"),
+    baseBudget: at("uiText.baseBudget"),
+    entryTarget: at("uiText.entryTarget"),
+    stopLoss: at("uiText.stopLoss"),
+    takeProfitTargets: at("uiText.takeProfitTargets"),
+    dcaMultiplierMode: at("uiText.dcaMultiplierMode"),
+    targetAsset: at("uiText.targetAsset"),
+    noDetailedParameters: at("uiText.noDetailedParameters"),
+    loadingShort: at("uiText.loadingShort"),
+    edit: at("uiText.edit"),
+    cancel: at("uiText.cancel"),
+    approve: at("uiText.approve"),
+    actionCheck: at("uiText.actionCheck"),
+    actionCheckBody: at("uiText.actionCheckBody"),
+    proposedAction: at("uiText.proposedAction"),
+    conceptReview: at("uiText.conceptReview"),
+    activeConcept: at("uiText.activeConcept"),
+    dcaFrequency: at("uiText.dcaFrequency"),
+    chooseAmount: at("uiText.chooseAmount"),
+    optional: at("uiText.optional"),
+    required: at("uiText.required"),
+    botName: at("uiText.botName"),
+    safetyProfile: at("uiText.safetyProfile"),
+    budget: at("uiText.budget"),
+    environment: at("uiText.environment"),
+    mode: at("uiText.mode"),
+    liveReal: at("uiText.liveReal"),
+    paperSandbox: at("uiText.paperSandbox"),
+    newConcept: at("uiText.newConcept"),
+    setupConceptSuffix: at("uiText.setupConceptSuffix"),
+    strategyConceptSuffix: at("uiText.strategyConceptSuffix"),
+    botConceptSuffix: at("uiText.botConceptSuffix"),
+    conceptSuffix: at("uiText.conceptSuffix"),
+    debugReasoning: at("uiText.debugReasoning"),
+    confidence: at("uiText.confidence"),
+    risk: at("uiText.risk"),
+    detected: at("uiText.detected"),
+    safe: at("uiText.safe"),
+    coaching: at("uiText.coaching"),
+    general: at("uiText.general"),
+    riskLow: at("uiText.riskLow"),
+    riskMedium: at("uiText.riskMedium"),
+    riskHigh: at("uiText.riskHigh"),
+    riskActive: at("uiText.riskActive"),
+    riskConservative: at("uiText.riskConservative"),
+    riskBalanced: at("uiText.riskBalanced"),
+    operational: at("uiText.operational"),
+    daily: at("uiText.daily"),
+    weekly: at("uiText.weekly"),
+    monthly: at("uiText.monthly"),
+    notAvailable: at("uiText.notAvailable"),
+    missingSetupForStrategy: at("uiText.missingSetupForStrategy"),
+    missingStrategyForBot: at("uiText.missingStrategyForBot"),
+    draftSetupApproved: at("uiText.draftSetupApproved"),
+    draftStrategyApproved: at("uiText.draftStrategyApproved"),
+    draftBotApproved: at("uiText.draftBotApproved"),
+    draftApproveError: at("uiText.draftApproveError"),
+    paperExecutionPendingVerification: at("uiText.paperExecutionPendingVerification"),
+    botDecisionPaperExecuted: at("uiText.botDecisionPaperExecuted"),
+    botDecisionSkippedVerified: at("uiText.botDecisionSkippedVerified"),
+    defaultBotName: at("uiText.defaultBotName"),
+  };
+}
+
 function AIAssistantContent({ isOpen, setIsOpen }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -33,7 +181,8 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   const router = useRouter();
   const watchlist = useWatchlist();
   const { openConfirm, showSnackbar } = useModal();
-  const { locale } = useTranslation();
+  const { t } = useTranslation();
+  const governanceCopy = t?.pages?.report?.finn?.governance || {};
   const { events, loading: eventsLoading, archiveEvent } = useIntelligenceEvents();
   
   const [query, setQuery] = useState("");
@@ -60,6 +209,23 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   const activeStreamIdRef = useRef(null);
   const profileTelemetryKeyRef = useRef("");
   const [showReasoning, setShowReasoning] = useState(false);
+  const at = createAssistantTranslator(t);
+
+  const humanizeSurfaceStatus = (value) => {
+    const raw = String(value || "").toLowerCase();
+    if (!raw) return at("surfaceStatus.quiet");
+    if (raw.includes("active")) return at("surfaceStatus.active");
+    if (raw.includes("quiet")) return at("surfaceStatus.quiet");
+    if (raw.includes("early")) return at("surfaceStatus.early");
+    if (raw.includes("high")) return at("surfaceStatus.high");
+    if (raw.includes("stable")) return at("surfaceStatus.stable");
+    if (raw.includes("guarded")) return at("surfaceStatus.guarded");
+    if (raw.includes("defensive")) return at("surfaceStatus.defensive");
+    if (raw.includes("balanced")) return at("surfaceStatus.balanced");
+    return value;
+  };
+
+  const uiText = buildAssistantUiText(at);
 
   const humanizeSurfaceStatus = (value) => {
     const raw = String(value || "").toLowerCase();
@@ -203,24 +369,15 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   }, [isOpen, pathname, globalSymbol]);
 
   const getMetricTitle = (metric) => {
-    const titles = locale === "en"
-      ? {
-          transition_risk: "Transition risk analysis",
-          setup_quality: "Setup quality assessment",
-          market_pressure: "Market pressure analysis",
-          structural_cycle: "Structural cycle phase",
-          position_size: "Position size telemetry",
-          trend_strength: "Trend strength evaluation",
-        }
-      : {
-          transition_risk: "Transitierisico-analyse",
-          setup_quality: "Setupkwaliteitscheck",
-          market_pressure: "Marktdrukanalyse",
-          structural_cycle: "Structurele cyclusfase",
-          position_size: "Positiegrootte-telemetrie",
-          trend_strength: "Trendsterkte-evaluatie",
-        };
-    return titles[metric] || (locale === "en" ? "Contextual intelligence" : "Contextuele intelligentie");
+    const titles = {
+      transition_risk: at("metricTitles.transition_risk"),
+      setup_quality: at("metricTitles.setup_quality"),
+      market_pressure: at("metricTitles.market_pressure"),
+      structural_cycle: at("metricTitles.structural_cycle"),
+      position_size: at("metricTitles.position_size"),
+      trend_strength: at("metricTitles.trend_strength"),
+    };
+    return titles[metric] || at("metricTitles.default");
   };
 
   const getMetricAnalysisText = (metric, symbol = "BTC", tf = "1W") => {
@@ -244,19 +401,19 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     }
     switch (metric) {
       case "transition_risk":
-        return `FINN detecteert toenemende regime-instabiliteit door afnemende trend strength en hogere volatiliteit voor ${symbol}. Nieuwe agressieve entries worden momenteel niet aanbevolen op het ${tf} timeframe.`;
+        return at("metricAnalysis.transition_risk", "", { symbol, tf });
       case "setup_quality":
-        return `De setup quality score weerspiegelt robuuste confluences en gunstige risk/reward verhoudingen voor ${symbol}. Voldoet momenteel aan alle institutionele instapeisen.`;
+        return at("metricAnalysis.setup_quality", "", { symbol, tf });
       case "market_pressure":
-        return `De verkoopdruk neemt toe in de orderboeken van ${symbol} met dalend volume op stijgingen. FINN adviseert strakkere stop-loss niveaus op ${tf}.`;
+        return at("metricAnalysis.market_pressure", "", { symbol, tf });
       case "structural_cycle":
-        return `De macro-structuur van ${symbol} bevindt zich in een vroege herstelfase (recovery). Accumulatie op belangrijke steunniveaus wordt ondersteund door stabiele kapitaalinstroom.`;
+        return at("metricAnalysis.structural_cycle", "", { symbol, tf });
       case "position_size":
-        return `Huidige aanbevolen positiegrootte voor ${symbol} is defensief (50%). Verlaag actieve blootstelling bij verhoogde marktvolatiliteit om kapitaalbehoud te garanderen.`;
+        return at("metricAnalysis.position_size", "", { symbol, tf });
       case "trend_strength":
-        return `De trend strength toont zwakke momentum-indicatoren op korte termijn voor ${symbol}. Verwacht verdere consolidatie voordat een duidelijke uitbraak wordt bevestigd.`;
+        return at("metricAnalysis.trend_strength", "", { symbol, tf });
       default:
-        return `FINN analyseert momenteel de realtime datastromen voor ${symbol} (${tf}). Alle achtergrondmodellen en risico-parameters draaien binnen normale drempelwaarden.`;
+        return at("metricAnalysis.default", "", { symbol, tf });
     }
   };
 
@@ -318,53 +475,29 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     profileRisk,
   ].some((list) => Array.isArray(list) && list.length > 0);
 
-  const traderTypeLabelMap = locale === "en"
-    ? {
-        investor: "Investor",
-        dca_investor: "DCA investor",
-        swing_trader: "Swing trader",
-        day_trader: "Day trader",
-        scalper: "Scalper",
-        hybrid: "Hybrid",
-      }
-    : {
-        investor: "Investeerder",
-        dca_investor: "DCA-investeerder",
-        swing_trader: "Swing trader",
-        day_trader: "Day trader",
-        scalper: "Scalper",
-        hybrid: "Hybride",
-      };
+  const traderTypeLabelMap = {
+    investor: at("labels.traderTypes.investor"),
+    dca_investor: at("labels.traderTypes.dca_investor"),
+    swing_trader: at("labels.traderTypes.swing_trader"),
+    day_trader: at("labels.traderTypes.day_trader"),
+    scalper: at("labels.traderTypes.scalper"),
+    hybrid: at("labels.traderTypes.hybrid"),
+  };
 
-  const riskLabelMap = locale === "en"
-    ? {
-        conservative: "Conservative risk",
-        balanced: "Balanced risk",
-        aggressive: "Higher risk",
-      }
-    : {
-        conservative: "Conservatief risico",
-        balanced: "Gematigd risico",
-        aggressive: "Agressiever risico",
-      };
+  const riskLabelMap = {
+    conservative: at("labels.risk.conservative"),
+    balanced: at("labels.risk.balanced"),
+    aggressive: at("labels.risk.aggressive"),
+  };
 
-  const assetFocusLabelMap = locale === "en"
-    ? {
-        bitcoin: "BTC focus",
-        crypto_general: "Broad crypto",
-        stocks: "Stocks",
-        etfs: "ETFs",
-        forex: "Forex",
-        commodities: "Commodities",
-      }
-    : {
-        bitcoin: "BTC-focus",
-        crypto_general: "Crypto-breed",
-        stocks: "Aandelen",
-        etfs: "ETF's",
-        forex: "Forex",
-        commodities: "Grondstoffen",
-      };
+  const assetFocusLabelMap = {
+    bitcoin: at("labels.assetFocus.bitcoin"),
+    crypto_general: at("labels.assetFocus.crypto_general"),
+    stocks: at("labels.assetFocus.stocks"),
+    etfs: at("labels.assetFocus.etfs"),
+    forex: at("labels.assetFocus.forex"),
+    commodities: at("labels.assetFocus.commodities"),
+  };
 
   const normalizeListValue = (value) => {
     if (Array.isArray(value)) return value.filter(Boolean);
@@ -388,21 +521,13 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   };
 
   const profileSummaryLabel = buildTraderProfileUiSummary();
-  const behaviorFlagLabelMap = locale === "en"
-    ? {
-        fomo: "FOMO",
-        overtrades: "Overtrading",
-        leverage_seeking: "Leverage seeking",
-        holds_losers_too_long: "Holding losers too long",
-        takes_profit_too_early: "Taking profit too early",
-      }
-    : {
-        fomo: "FOMO",
-        overtrades: "Overtrading",
-        leverage_seeking: "Leverage-neiging",
-        holds_losers_too_long: "Verliezers te lang laten lopen",
-        takes_profit_too_early: "Winst te vroeg nemen",
-      };
+  const behaviorFlagLabelMap = {
+    fomo: "FOMO",
+    overtrades: at("labels.behaviorFlags.overtrades"),
+    leverage_seeking: at("labels.behaviorFlags.leverage_seeking"),
+    holds_losers_too_long: at("labels.behaviorFlags.holds_losers_too_long"),
+    takes_profit_too_early: at("labels.behaviorFlags.takes_profit_too_early"),
+  };
 
   const humanizeBehaviorFlagLabel = (flag, fallbackLabel = "") =>
     fallbackLabel || behaviorFlagLabelMap[String(flag || "").trim()] || String(flag || "").replace(/_/g, " ");
@@ -461,70 +586,48 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     ).toLowerCase();
     const nowHour = new Date().getHours();
 
-    const greetingLine =
-      `${locale === "en"
-        ? nowHour < 12 ? "Good morning" : nowHour < 18 ? "Good afternoon" : "Good evening"
-        : nowHour < 12 ? "Goedemorgen" : nowHour < 18 ? "Goedemiddag" : "Goedenavond"} ${greetingName}.`;
+    const greetingKey = nowHour < 12 ? "morning" : nowHour < 18 ? "afternoon" : "evening";
+    const greetingLine = `${at(`briefing.greeting.${greetingKey}`, "", { name: greetingName })} ${greetingName}.`;
 
-    let marketLine = locale === "en"
-      ? `${symbol} needs extra patience today. Forcing new positions is not recommended.`
-      : `${symbol} vraagt vandaag extra geduld. Nieuwe posities forceren wordt vandaag afgeraden.`;
+    let marketLine = at("briefing.market.default", "", { symbol });
     if (isInvestorLike) {
       marketLine = cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")
-        ? (locale === "en"
-            ? `For your longer horizon, ${symbol} is in a corrective phase, but your plan does not need to change. Forcing new positions is not recommended today.`
-            : `Voor jouw langere horizon zit ${symbol} in een correctiefase, maar je plan hoeft niet om. Nieuwe posities forceren wordt vandaag afgeraden.`)
-        : (locale === "en"
-            ? `For your longer horizon, this is mainly a moment to stay loyal to your plan. There is no need to force new positions today.`
-            : `Voor jouw langere horizon is dit vooral een moment om plantrouw te blijven. Nieuwe posities forceren is vandaag niet nodig.`);
+        ? at("briefing.market.investor.correction", "", { symbol })
+        : at("briefing.market.investor.steady", "", { symbol });
     } else if (isSwingLike) {
       marketLine = cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")
-        ? (locale === "en"
-            ? `For your swing profile, ${symbol} is in a corrective phase. Forcing new positions is not recommended today.`
-            : `Voor jouw swing-profiel zit ${symbol} in een correctiefase. Nieuwe posities forceren wordt vandaag afgeraden.`)
-        : (locale === "en"
-            ? `For your swing profile, timing matters more than speed right now. Wait for a cleaner setup.`
-            : `Voor jouw swing-profiel is timing nu belangrijker dan snelheid. Wacht liever op een schonere setup.`);
+        ? at("briefing.market.swing.correction", "", { symbol })
+        : at("briefing.market.swing.steady", "", { symbol });
     } else if (isIntradayLike) {
       marketLine = cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")
-        ? (locale === "en"
-            ? `For your shorter trading style, ${symbol} is too fragile right now to force new positions.`
-            : `Voor jouw kortere handelsstijl is ${symbol} nu te fragiel om nieuwe posities te forceren.`)
-        : (locale === "en"
-            ? `For your shorter trading style, timing matters more than conviction right now. Only take clean entries.`
-            : `Voor jouw kortere handelsstijl is timing nu belangrijker dan overtuiging. Neem alleen schone entries.`);
+        ? at("briefing.market.intraday.correction", "", { symbol })
+        : at("briefing.market.intraday.steady", "", { symbol });
     } else if (cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")) {
-      marketLine = locale === "en"
-        ? `${symbol} is currently in a corrective phase. Forcing new positions is not recommended today.`
-        : `${symbol} zit momenteel in een correctiefase. Nieuwe posities forceren wordt vandaag afgeraden.`;
+      marketLine = at("briefing.market.generic.correction", "", { symbol });
     } else if (cycleLabel.includes("recovery") || postureLabel.includes("stable")) {
-      marketLine = locale === "en"
-        ? `${symbol} looks calmer today. Only consider new positions once your review path is clean.`
-        : `${symbol} oogt vandaag rustiger. Nieuwe posities kun je pas overwegen als je reviewpad schoon is.`;
+      marketLine = at("briefing.market.generic.recovery", "", { symbol });
     } else if (cycleLabel.includes("distribution")) {
-      marketLine = locale === "en"
-        ? `${symbol} is in a doubt zone. Forcing new positions is not recommended today.`
-        : `${symbol} zit in een twijfelzone. Nieuwe posities forceren wordt vandaag afgeraden.`;
+      marketLine = at("briefing.market.generic.distribution", "", { symbol });
     }
 
     const reviewCount = Math.max(openReviews || 0, isReviewCandidate(primaryItem) ? 1 : 0);
-    let reviewLine = locale === "en" ? "No review needs attention right now." : "Er staat nu geen review op aandacht.";
+    let reviewLine = at("briefing.review.none");
     if (reviewCount === 1) {
-      reviewLine = locale === "en" ? "1 review needs attention." : "Er wacht 1 review op aandacht.";
+      reviewLine = at("briefing.review.one");
     } else if (reviewCount > 1) {
-      reviewLine = locale === "en" ? `${reviewCount} reviews need attention.` : `Er wachten ${reviewCount} reviews op aandacht.`;
+      reviewLine = at("briefing.review.many", "", { count: reviewCount });
     } else if (blockedCount > 0) {
       reviewLine = blockedCount === 1
-        ? (locale === "en" ? "1 blocking issue is open." : "Er staat 1 blokkerend punt open.")
-        : (locale === "en" ? `${blockedCount} blocking issues are open.` : `Er staan ${blockedCount} blokkerende punten open.`);
+        ? at("briefing.review.blockingOne")
+        : at("briefing.review.blockingMany", "", { count: blockedCount });
     }
 
     const beginTarget = primaryItem
       ? humanizeMissionTitle(primaryItem).replace(/^Review\s+/i, "Review ")
       : blockedCount > 0
-        ? (locale === "en" ? "the blocking issue" : "het blokkerende punt")
-        : (locale === "en" ? "your next safe step" : "je eerstvolgende veilige stap");
-    const beginLine = locale === "en" ? `Start with: ${beginTarget}.` : `Begin met: ${beginTarget}.`;
+        ? at("briefing.begin.blockingIssue")
+        : at("briefing.begin.nextSafeStep");
+    const beginLine = at("briefing.begin.prefix", "", { target: beginTarget });
 
     return [greetingLine, marketLine, reviewLine, beginLine].filter(Boolean).join("\n");
   };
@@ -556,30 +659,35 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
   const getContext = () => {
     const pageMap = {
-      "/dashboard": "Overzicht",
-      "/": "Overzicht",
-      "/market": "Markt",
-      "/macro": "Macro",
-      "/technical": "Technisch",
-      "/setup": "Setups",
-      "/strategy": "Strategieën",
-      "/onboarding": "Startgids",
-      "/bot": "Bots",
-      "/report": "Rapporten",
+      "/dashboard": t?.nav?.dashboard || "Dashboard",
+      "/": t?.nav?.dashboard || "Dashboard",
+      "/market": t?.nav?.market || "Market",
+      "/macro": t?.nav?.macro || "Macro",
+      "/technical": t?.nav?.technical || "Technical",
+      "/setup": t?.nav?.setups || "Setups",
+      "/strategy": t?.nav?.strategies || "Strategies",
+      "/onboarding": t?.onboarding?.title || "Onboarding",
+      "/bot": t?.nav?.bots || "Bots",
+      "/report": t?.nav?.reports || "Reports",
     };
 
     return {
       page: pathname,
-      page_type: pageMap[pathname] || "Onbekend",
+      page_type: pageMap[pathname] || t?.common?.unknown || "Unknown",
       symbol: searchParams.get("symbol") || searchParams.get("asset") || globalSymbol || "BTC",
-      timeframe: searchParams.get("tf") || searchParams.get("interval") || (pathname.includes("dashboard") || pathname === "/" ? "Week" : "Dag"),
+      timeframe:
+        searchParams.get("tf") ||
+        searchParams.get("interval") ||
+        (pathname.includes("dashboard") || pathname === "/"
+          ? t?.common?.week || "Week"
+          : t?.common?.day || "Day"),
       setup_id: activeSetup?.id || activeSetup?.setup_id || null,
       setup_type: activeSetup?.setup_type || activeSetup?.type || null,
       setup_symbol: activeSetup?.symbol || null,
       setup_timeframe: activeSetup?.timeframe || null,
       bot_id: activeBot?.id || activeBot?.bot_id || focusedBotId || null,
       strategy_id: activeSetup?.strategy_id || null,
-      setup_name: searchParams.get("name") || activeSetup?.name || "Geen specifieke setup",
+      setup_name: searchParams.get("name") || activeSetup?.name || t?.common?.none || "None",
       finn_draft: finnDraft,
     };
   };
@@ -767,21 +875,21 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
   const followUpLabel = (handoff) => {
     const labels = {
-      indicator_config: "Config",
-      daily_score_refresh: "Confirm",
-      maintenance_action: "Confirm",
-      bot_decision: "Proposal",
-      bot_decision_review: "Review",
-      bot_execution_decision: "Confirm",
-      bot_execution_console: "Execute",
-      indicator_insight: "Insight",
-      plan_status: "Status",
-      daily_coach: "Coach",
-      behavioral_memory: "Memory",
-      weekly_reflection: "Reflect",
-      mission_control: "Control",
+      indicator_config: uiText.configLabel,
+      daily_score_refresh: uiText.confirmLabel,
+      maintenance_action: uiText.confirmLabel,
+      bot_decision: uiText.proposalLabel,
+      bot_decision_review: uiText.reviewLabel,
+      bot_execution_decision: uiText.confirmLabel,
+      bot_execution_console: uiText.executeLabel,
+      indicator_insight: uiText.insightLabel,
+      plan_status: uiText.statusLabel,
+      daily_coach: uiText.coachLabel,
+      behavioral_memory: uiText.memoryLabel,
+      weekly_reflection: uiText.reflectLabel,
+      mission_control: uiText.controlLabel,
     };
-    return labels[handoff] || "Open";
+    return labels[handoff] || uiText.openLabel;
   };
 
   const followUpIcon = (handoff) => {
@@ -843,7 +951,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       if (setupName) return `Review ${botLabel} voor ${setupName}`;
       return `Review ${botLabel}`;
     }
-    return rawTitle || "Eerstvolgende stap";
+    return rawTitle || uiText.firstNextStep;
   };
 
   const humanizeMissionReason = (item = {}) => {
@@ -883,7 +991,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     if (handoff === "bot_decision_review") return `Leg ${botName} uit`;
     if (handoff === "bot_decision") return `Nieuwe stap voor ${botName}`;
     if (handoff === "bot_execution_decision") return `Volgende stap voor ${botName}`;
-    return action?.label || "Open";
+    return action?.label || uiText.openLabel;
   };
 
   const openExecutionConsole = (action = {}) => {
@@ -943,7 +1051,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const symbol = action?.payload?.symbol || action?.asset || res?.symbol || globalSymbol || "BTC";
     if (!botId && !symbol) return null;
     return {
-      label: "Open execution console",
+      label: uiText.openExecutionConsole,
       handoff: "bot_execution_console",
       type: "open_bot_execution_console",
       bot_id: botId,
@@ -992,7 +1100,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     <div className={`flex flex-wrap gap-2 ${compact ? "" : "mt-4 pt-3 border-t border-slate-100/50 dark:border-slate-800/50"}`}>
       {!compact && (
         <span className="w-full text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-          Volgende stappen:
+          {uiText.nextSteps}
         </span>
       )}
       {actions.map((action, idx) => (
@@ -1195,14 +1303,14 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         <div className="flex items-center justify-between gap-2">
           <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
             <Brain size={11} />
-            {locale === "en" ? "Main conclusion" : "Hoofdconclusie"}
+            {at("cards.mainConclusion")}
           </span>
           <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">
             {controller.dominant_label || controller.dominant_agent}
           </span>
         </div>
         <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">
-          {controller.reason || controller.next_action || (locale === "en" ? "Finn weighed the agent ranking." : "Finn heeft de agent-rangorde gewogen.")}
+          {controller.reason || controller.next_action || at("cards.agentRankingFallback")}
         </p>
         {!compact && controller.next_action && (
           <p className="mt-1 text-[8px] font-black uppercase tracking-widest opacity-75">
@@ -1211,7 +1319,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         )}
         {controller.primary_item_id && (
           <p className="mt-1 text-[8px] font-black uppercase tracking-widest opacity-65">
-            {locale === "en" ? "Accountability" : "Accountability"}: {controller.primary_item_id}
+            {at("cards.accountability")}: {controller.primary_item_id}
           </p>
         )}
         {controller.primary_action?.prompt && (
@@ -1250,7 +1358,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         <div className="flex items-center justify-between gap-3">
           <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
             <Brain size={13} />
-            {locale === "en" ? "Behavioral intelligence" : "Behavioral intelligence"}
+            {at("cards.behavioralIntelligence")}
           </span>
           {balanceScore !== undefined && balanceScore !== null && (
             <span className="rounded-full border border-violet-200 dark:border-violet-900/50 bg-white/80 dark:bg-slate-950/40 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
@@ -1282,7 +1390,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             <div className="flex items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
                 <Activity size={11} />
-                {locale === "en" ? "Trend" : "Trend"}
+                {at("cards.trend")}
               </span>
               {(trend.status || trend.momentum) && (
                 <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
@@ -1299,7 +1407,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {signalCards.length > 0 && (
           <div className="space-y-2">
             <div className="text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-              {locale === "en" ? "What Finn is watching now" : "Waar Finn nu op let"}
+              {at("cards.whatFinnWatching")}
             </div>
             {signalCards.slice(0, 3).map((item, index) => (
               <div
@@ -1308,7 +1416,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-                    {item.label || item.type || (locale === "en" ? "Signal" : "Signaal")}
+                    {item.label || item.type || at("cards.signal")}
                   </span>
                   {(item.severity || item.confidence) && (
                     <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
@@ -1327,7 +1435,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {habitCards.length > 0 && (
           <div className="space-y-2">
             <div className="text-[9px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-              {locale === "en" ? "Work style Finn recognizes" : "Werkstijl die Finn herkent"}
+              {at("cards.workStyleRecognized")}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {habitCards.slice(0, 4).map((card) => (
@@ -1422,7 +1530,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         <div className="flex items-center justify-between gap-2">
           <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
             <Shield size={11} />
-            {locale === "en" ? "Portfolio risk" : "Portfolio Risk"}
+            {at("cards.portfolioRisk")}
           </span>
           <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
             {portfolioRisk.status}
@@ -1437,7 +1545,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {ignoreToday.length > 0 && (
           <div className="mt-2">
             <div className="text-[8px] font-black uppercase tracking-widest opacity-70">
-              {locale === "en" ? "Better to ignore today" : "Vandaag liever negeren"}
+              {at("cards.betterIgnoreToday")}
             </div>
             <div className="mt-1 space-y-1">
               {ignoreToday.map((item) => (
@@ -1445,7 +1553,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[9px] font-black uppercase tracking-widest">{item.asset}</span>
                     <span className="text-[7px] font-black uppercase tracking-widest opacity-70">
-                      {locale === "en" ? "score" : "score"} {item.risk_score}
+                      {at("cards.score")} {item.risk_score}
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{item.reason}</p>
@@ -1458,7 +1566,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {liveHotspots.length > 0 && (
           <div className="mt-2">
             <div className="text-[8px] font-black uppercase tracking-widest opacity-70">
-              {locale === "en" ? "Live bot hotspots" : "Live bot-hotspots"}
+              {at("cards.liveBotHotspots")}
             </div>
             <div className="mt-1 space-y-1">
               {liveHotspots.map((item) => (
@@ -1466,7 +1574,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[9px] font-black uppercase tracking-widest">{item.asset}</span>
                     <span className="text-[7px] font-black uppercase tracking-widest opacity-70">
-                      {item.live_bot_count} {locale === "en" ? "live" : "live"}
+                      {item.live_bot_count} {at("cards.live")}
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{item.summary}</p>
@@ -1479,15 +1587,15 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {!compact && rankedConflicts.length > 0 && (
           <div className="mt-2">
             <div className="text-[8px] font-black uppercase tracking-widest opacity-70">
-              {locale === "en" ? "Top conflicts" : "Topconflicten"}
+              {at("cards.topConflicts")}
             </div>
             <div className="mt-1 space-y-1">
               {rankedConflicts.map((item, index) => (
                 <div key={`conflict-${item.asset || "portfolio"}-${index}`} className="rounded-lg bg-white/70 dark:bg-slate-950/35 px-2.5 py-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[9px] font-black uppercase tracking-widest">{item.asset || (locale === "en" ? "Portfolio" : "Portfolio")}</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">{item.asset || at("cards.portfolio")}</span>
                     <span className="text-[7px] font-black uppercase tracking-widest opacity-70">
-                      {item.severity || item.risk_level || (locale === "en" ? "review" : "review")}
+                      {item.severity || item.risk_level || at("cards.review")}
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{item.reason}</p>
@@ -1553,7 +1661,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       },
       {
         key: "p6",
-        label: "Geheugen V2",
+        label: uiText.memoryV2,
         value: memoryV2?.supporting_evidence_count || 0,
         tone: "text-fuchsia-600 dark:text-fuchsia-300",
         status: memoryV2?.confidence_level || "early",
@@ -1561,7 +1669,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       },
       {
         key: "p7",
-        label: "Portfolio-overzicht",
+        label: uiText.portfolioOverview,
         value: Array.isArray(portfolioOS?.next_best_actions) ? portfolioOS.next_best_actions.length : 0,
         tone: "text-cyan-600 dark:text-cyan-300",
         status: portfolioOS?.operating_posture || "quiet",
@@ -1575,15 +1683,15 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
               <Terminal size={11} className="text-cyan-500" />
-              Finn overzicht
+              {uiText.finnOverview}
             </div>
             <p className="mt-1 text-[11px] font-black text-slate-900 dark:text-slate-100 leading-snug">
-              {portfolioOS?.control_plane?.headline || priorityEngine?.headline || "Finn laat hier zien hoe prioriteit, discipline en portfolio-overzicht samenkomen."}
+              {portfolioOS?.control_plane?.headline || priorityEngine?.headline || uiText.portfolioOverviewSummary}
             </p>
             {primaryProfileHabitAlignment && (
               <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-200/80 bg-amber-50 px-2.5 py-1 text-[7px] font-black uppercase tracking-widest text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-300">
                 <Shield size={10} />
-                Gedragsrem: {primaryBehaviorLabel}
+                {(governanceCopy.behavioralBrake || uiText.behavioralBrakeShort)}: {primaryBehaviorLabel}
               </div>
             )}
           </div>
@@ -1616,16 +1724,16 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             <div className="flex items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
                 <Target size={11} />
-                Prioriteitenmotor
+                {governanceCopy.priorityEngine || uiText.priorityEngine}
               </span>
               <span className="text-[7px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">
-                {priorityEngine.open_counts?.high_priority_count || 0} hoog
+                {priorityEngine.open_counts?.high_priority_count || 0} {(governanceCopy.priorityHigh || uiText.priorityHigh)}
               </span>
             </div>
             {primaryBehaviorRule && (
               <div className="mt-2 rounded-lg border border-amber-200/80 bg-white/80 px-2.5 py-2 dark:border-amber-900/40 dark:bg-slate-950/35">
                 <div className="text-[7px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
-                  Waarom Finn remt
+                  {uiText.whyFinnBrakes}
                 </div>
                 <p className="mt-1 text-[9px] font-semibold leading-snug text-slate-600 dark:text-slate-300">
                   {primaryBehaviorRule}
@@ -1683,7 +1791,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-fuchsia-700 dark:text-fuchsia-300">
                     <Brain size={11} />
-                    Geheugen V2
+                    {uiText.memoryV2}
                   </span>
                   <span className="text-[7px] font-black uppercase tracking-widest text-fuchsia-700 dark:text-fuchsia-300">
                     {humanizeSurfaceStatus(memoryV2.confidence_level || "early")}
@@ -1702,7 +1810,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 {memoryV2.recommended_rule && (
                   <div className="mt-2 rounded-lg bg-white/80 dark:bg-slate-950/40 px-2.5 py-2">
                     <div className="text-[7px] font-black uppercase tracking-widest text-fuchsia-700 dark:text-fuchsia-300">
-                      Aanbevolen regel
+                      {governanceCopy.recommendedRule}
                     </div>
                     <p className="mt-1 text-[9px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
                       {memoryV2.recommended_rule}
@@ -1717,7 +1825,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">
                     <Bot size={11} />
-                    Portfolio Operating System
+                    {governanceCopy.portfolioOperatingSystem}
                   </span>
                   <span className="text-[7px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">
                     {humanizeSurfaceStatus(portfolioOS.operating_posture)}
@@ -1731,7 +1839,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 {portfolioOS.control_plane?.habit_override && (
                   <div className="mt-2 rounded-lg bg-white/80 dark:bg-slate-950/40 px-2.5 py-2">
                     <div className="text-[7px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">
-                      Gedragsregel nu
+                      {governanceCopy.behaviorRuleNow}
                     </div>
                     <p className="mt-1 text-[9px] font-semibold text-slate-600 dark:text-slate-300 leading-snug">
                       {portfolioOS.control_plane.habit_override}
@@ -1775,7 +1883,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
               <FileText size={11} />
-              Decision Explain
+              {uiText.decisionExplain}
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
               {review.title}
@@ -1794,7 +1902,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
         {whyThis.length > 0 && (
           <div className="mt-3">
-            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Waarom dit</div>
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{uiText.whyThis}</div>
             <div className="mt-1 space-y-1">
               {whyThis.map((item, index) => (
                 <p key={`why-${index}`} className="text-[10px] font-semibold leading-snug opacity-90">
@@ -1807,14 +1915,14 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
         {review.why_now && (
           <div className="mt-3">
-            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Waarom nu</div>
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{uiText.whyNow}</div>
             <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{review.why_now}</p>
           </div>
         )}
 
         {whatNext.length > 0 && (
           <div className="mt-3">
-            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Wat nu</div>
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{uiText.whatNow}</div>
             <div className="mt-1 space-y-1">
               {whatNext.map((item, index) => (
                 <p key={`next-${index}`} className="text-[10px] font-semibold leading-snug opacity-90">
@@ -1827,7 +1935,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
         {review.do_not_do && (
           <div className="mt-3 rounded-lg border border-white/70 dark:border-slate-900/40 bg-white/70 dark:bg-slate-950/30 px-2.5 py-2">
-            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Niet doen</div>
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{uiText.doNotDo}</div>
             <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{review.do_not_do}</p>
           </div>
         )}
@@ -1871,7 +1979,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         <div className="flex items-start justify-between gap-3">
           <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
             <CheckCircle2 size={11} />
-            Action Follow-through
+            {at("cards.actionFollowThrough")}
           </div>
           {resolution.status && (
             <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
@@ -1888,7 +1996,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
         {whatChanged.length > 0 && (
           <div className="mt-3">
-            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Wat veranderde</div>
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.whatChanged")}</div>
             <div className="mt-1 space-y-1">
               {whatChanged.map((item, index) => (
                 <p key={`changed-${index}`} className="text-[10px] font-semibold leading-snug opacity-90">
@@ -1901,7 +2009,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
         {whatNext.length > 0 && (
           <div className="mt-3">
-            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Volgende veilige stap</div>
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.nextSafeStep")}</div>
             <div className="mt-1 space-y-1">
               {whatNext.map((item, index) => (
                 <p key={`follow-${index}`} className="text-[10px] font-semibold leading-snug opacity-90">
@@ -1933,7 +2041,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       <div className={`mt-3 rounded-xl border px-3 py-3 ${tone}`}>
         <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
           <Shield size={11} />
-          Operator Readout
+          {at("cards.operatorReadout")}
         </div>
         {summary && summary !== message?.text && (
           <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
@@ -1949,13 +2057,13 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
             {risk && (
               <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
-                <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Risicoframe</div>
+                <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.riskFrame")}</div>
                 <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{risk}</p>
               </div>
             )}
             {next && (
               <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
-                <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Volgende stap</div>
+                <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.nextStep")}</div>
                 <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{next}</p>
               </div>
             )}
@@ -1981,7 +2089,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
               <FileText size={11} />
-              Beslischeck
+              {at("cards.decisionReview")}
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
               {analysis.headline || uiText.decisionReviewFallback}
@@ -2016,7 +2124,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         )}
         {blockers.length > 0 && (
           <div className="mt-3">
-            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Belangrijkste blockers</div>
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.mainBlockers")}</div>
             <div className="mt-1 space-y-1">
               {blockers.map((item, index) => (
                 <p key={`decision-blocker-${index}`} className="text-[10px] font-semibold leading-snug opacity-90">{item}</p>
@@ -2026,7 +2134,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         )}
         {changes.length > 0 && (
           <div className="mt-3 rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
-            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Aanbevolen aanpassing</div>
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.recommendedAdjustment")}</div>
             <div className="mt-1 space-y-1">
               {changes.map((item, index) => (
                 <p key={`decision-change-${index}`} className="text-[10px] font-semibold leading-snug opacity-90">{item}</p>
@@ -2038,13 +2146,13 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
             {analysis.review_reason && (
               <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
-                <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Waarom nu</div>
+                <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.whyNow")}</div>
                 <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.review_reason}</p>
               </div>
             )}
             {(analysis.operator_next_step || analysis.next_best_action) && (
               <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
-                <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Volgende stap</div>
+                <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.nextStep")}</div>
                 <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.operator_next_step || analysis.next_best_action}</p>
               </div>
             )}
@@ -2067,10 +2175,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
               <Shield size={11} />
-              Plantrouw
+              {at("cards.planAdherence")}
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
-              {analysis.headline || "Finn checkt of dit binnen je plan valt."}
+              {analysis.headline || at("cards.planAdherenceFallback")}
             </p>
           </div>
           <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
@@ -2086,26 +2194,26 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
           {analysis.threatened_rule && (
             <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
-              <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Bedreigde regel</div>
+              <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.threatenedRule")}</div>
               <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.threatened_rule}</p>
             </div>
           )}
           {analysis.discipline_score !== undefined && analysis.discipline_score !== null && (
             <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
-              <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Discipline-score</div>
+              <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.disciplineScore")}</div>
               <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.discipline_score}/100</p>
             </div>
           )}
           {analysis.week_delta && (
             <div className="rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
-              <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Week-op-week</div>
+              <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.weekOverWeek")}</div>
               <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.week_delta}</p>
             </div>
           )}
         </div>
         {analysis.suggested_recovery_step && (
           <div className="mt-3 rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
-            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Herstelstap</div>
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.recoveryStep")}</div>
             <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.suggested_recovery_step}</p>
           </div>
         )}
@@ -2121,10 +2229,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
               <BarChart3 size={11} />
-              Outcome-tracking
+              {at("cards.outcomeTracking")}
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
-              {analysis.headline || "Finn koppelt gedrag aan follow-through."}
+              {analysis.headline || at("cards.outcomeTrackingFallback")}
             </p>
           </div>
           {analysis.sample_size !== undefined && (
@@ -2144,7 +2252,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         )}
         {analysis.operator_next_step && (
           <div className="mt-3 rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
-            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Volgende stap</div>
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{at("cards.nextStep")}</div>
             <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.operator_next_step}</p>
           </div>
         )}
@@ -2161,15 +2269,15 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
               <Target size={11} />
-              Prioriteitenmotor
+              {at("cards.priorityEngine")}
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
-              {analysis.headline || "Finn rangschikt je volgende beste acties."}
+              {analysis.headline || at("cards.priorityEngineFallback")}
             </p>
           </div>
           {analysis.open_counts?.high_priority_count !== undefined && (
             <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest">
-              {analysis.open_counts.high_priority_count} hoog
+              {analysis.open_counts.high_priority_count} {at("cards.high")}
             </span>
           )}
         </div>
@@ -2203,7 +2311,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
               <Brain size={11} />
-              Geheugen V2
+              {uiText.memoryV2}
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
               {analysis.memory_pattern}
@@ -2218,7 +2326,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         )}
         {analysis.recommended_rule && (
           <div className="mt-3 rounded-lg bg-white/80 dark:bg-slate-950/35 px-2.5 py-2">
-            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">Aanbevolen regel</div>
+            <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{governanceCopy.recommendedRule}</div>
             <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">{analysis.recommended_rule}</p>
           </div>
         )}
@@ -2235,10 +2343,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div>
             <div className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
               <Bot size={11} />
-              Portfolio Operating System
+              {governanceCopy.portfolioOperatingSystem}
             </div>
             <p className="mt-1 text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
-              {analysis.control_plane?.headline || "Finn combineert portfolio, governance en prioriteit."}
+              {analysis.control_plane?.headline || governanceCopy.headlineFallback}
             </p>
           </div>
           {analysis.operating_posture && (
@@ -2290,9 +2398,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     });
 
     return [
-      { key: "first", title: "Eerst dit", tone: "rose", items: first },
-      { key: "review", title: "Daarna reviewen", tone: "amber", items: review },
-      { key: "later", title: "Kan wachten", tone: "slate", items: later },
+      { key: "first", title: uiText.firstThis, tone: "rose", items: first },
+      { key: "review", title: uiText.thenReview, tone: "amber", items: review },
+      { key: "later", title: uiText.canWait, tone: "slate", items: later },
     ].filter((section) => section.items.length > 0);
   };
 
@@ -2510,18 +2618,18 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const outcome = String(item?.outcome || "").trim();
     const status = String(item?.status || "").toLowerCase();
     if (outcome) return outcome;
-    if (status === "snoozed") return "Bewust doorgeschoven naar later.";
-    if (status === "resolved" || status === "executed") return "Afgerond in recente Finn-activiteit.";
-    if (status === "failed") return "Deze stap liep niet netjes door.";
-    return "Recente Finn-activiteit.";
+    if (status === "snoozed") return uiText.historyReasonSnoozed;
+    if (status === "resolved" || status === "executed") return uiText.historyReasonResolved;
+    if (status === "failed") return uiText.historyReasonFailed;
+    return uiText.historyReasonRecent;
   };
 
   const humanizeHistoryStatus = (item = {}) => {
     const status = String(item?.status || "").toLowerCase();
-    if (status === "executed" || status === "resolved") return "afgerond";
-    if (status === "snoozed") return "later";
-    if (status === "failed") return "mislukt";
-    return "recent";
+    if (status === "executed" || status === "resolved") return uiText.historyStatusResolved;
+    if (status === "snoozed") return uiText.historyStatusSnoozed;
+    if (status === "failed") return uiText.historyStatusFailed;
+    return uiText.historyStatusRecent;
   };
 
   const buildMissionOverlaySections = () => {
@@ -2570,13 +2678,13 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         id: `verdict:${verdict.agent || index}`,
         type: "agent_verdict",
         asset: verdict.asset || context.symbol || globalSymbol || null,
-        title: verdict.label || "Risico-agent",
+        title: verdict.label || uiText.riskAgent,
         reason: verdict.reason,
         status: verdict.status,
         next_best_action: verdict.next_action
           ? {
               type: "chat_prompt",
-              label: verdict.label ? `Waarom ${verdict.label}?` : "Waarom blokkeert dit?",
+              label: verdict.label ? `${uiText.whyLabelPrefix} ${verdict.label}?` : uiText.whyBlocked,
               prompt: verdict.next_action,
               handoff: "daily_coach",
               requires_confirmation: false,
@@ -2589,13 +2697,13 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         id: `risk-stack:${stack.asset || index}`,
         type: "portfolio_risk_stack",
         asset: stack.asset,
-        title: `${String(stack.asset || "Portfolio").toUpperCase()} risico stapelt`,
+        title: `${String(stack.asset || uiText.portfolioAssetFallback).toUpperCase()} ${uiText.riskStackTitleSuffix}`,
         reason: stack.reason,
         risk_score: stack.risk_score,
         next_best_action: {
           type: "chat_prompt",
-          label: `${String(stack.asset || "BTC").toUpperCase()} risk stack uitleg`,
-          prompt: `Welke risico's stapelen nu voor ${String(stack.asset || "BTC").toUpperCase()}?`,
+          label: `${String(stack.asset || "BTC").toUpperCase()} ${uiText.riskStackExplainLabelSuffix}`,
+          prompt: uiText.riskStackPrompt.replace("{asset}", String(stack.asset || "BTC").toUpperCase()),
           handoff: "daily_coach",
           requires_confirmation: false,
         },
@@ -2604,7 +2712,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         id: `live-hotspot:${hotspot.asset || index}`,
         type: "portfolio_live_hotspot",
         asset: hotspot.asset,
-        title: `${String(hotspot.asset || "Portfolio").toUpperCase()} live bots vragen aandacht`,
+        title: `${String(hotspot.asset || uiText.portfolioAssetFallback).toUpperCase()} ${uiText.liveBotsNeedAttention}`,
         reason: hotspot.summary || hotspot.reason,
         risk_score: hotspot.risk_score,
       })) || []),
@@ -2621,19 +2729,19 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       const snoozedCount = missionControl.day_log.snoozed_count || 0;
       let rhythmSummary = null;
       if (resolvedCount > 0 && snoozedCount > 0) {
-        rhythmSummary = "Je hebt vandaag dingen bewust afgerond en andere bewust naar later gezet.";
+        rhythmSummary = uiText.rhythmSummaryMixed;
       } else if (resolvedCount > 0) {
-        rhythmSummary = "Je hebt vandaag bewust dingen afgerond.";
+        rhythmSummary = uiText.rhythmSummaryDone;
       } else if (snoozedCount > 0) {
-        rhythmSummary = "Je hebt vandaag bewust dingen naar later geschoven.";
+        rhythmSummary = uiText.rhythmSummarySnoozed;
       } else if ((missionControl.day_log.handled_count || 0) > 0) {
-        rhythmSummary = "Finn zag vandaag beweging in je werkritme.";
+        rhythmSummary = uiText.rhythmSummaryActive;
       }
 
       if (rhythmSummary) {
         performanceCards.push({
           key: "day-log",
-          title: "Werkritme vandaag",
+          title: uiText.rhythmToday,
           summary: rhythmSummary,
           tone: "neutral",
         });
@@ -2642,7 +2750,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     if (missionControl?.behavioral_insight?.coaching) {
       performanceCards.push({
         key: "behavior",
-        title: "Gedrag & discipline",
+        title: uiText.behaviorDiscipline,
         summary: missionControl.behavioral_insight.coaching.primary_reflection,
         status: behavioralStatusLabel(missionControl?.behavioral_insight?.status),
         tone: missionControl?.behavioral_insight?.status === "attention" ? "attention" : "positive",
@@ -2702,7 +2810,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-[10px] font-black text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-60 dark:border-emerald-900/50 dark:bg-slate-950/40 dark:text-emerald-300"
               >
                 <CheckCircle2 size={11} />
-                Markeer klaar
+                {uiText.markDone}
               </button>
             )}
             {snooze && (
@@ -2713,7 +2821,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300"
               >
                 <Activity size={11} />
-                Later bekijken
+                {uiText.reviewLater}
               </button>
             )}
           </div>
@@ -2790,7 +2898,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         {item.behavioral_priority_reason && (
           <div className="mt-2 rounded-lg border border-white/80 dark:border-slate-900/40 bg-white/70 dark:bg-slate-950/35 px-2.5 py-2">
             <div className="text-[7px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-              Finn remt hierom
+              {uiText.finnBrakesBecause}
             </div>
             <p className="mt-1 text-[9px] font-semibold leading-snug text-slate-600 dark:text-slate-300">
               {item.behavioral_priority_reason}
@@ -2859,13 +2967,13 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
     if (action?.handoff === "bot_execution_console" || type.includes("bot") || title.includes("bot")) {
       return {
-        label: asset ? `Open ${asset} bot flow` : "Open bot flow",
+        label: asset ? uiText.openBotFlowFor.replace("{asset}", asset) : uiText.openBotFlow,
         run: () => openExecutionConsole({ ...action, asset }),
       };
     }
     if (type.includes("setup") || title.includes("setup")) {
       return {
-        label: asset ? `Open ${asset} setup` : "Open setup",
+        label: asset ? uiText.openSetupFor.replace("{asset}", asset) : uiText.openSetup,
         run: () => {
           router.push(asset ? `/setup?symbol=${asset}` : "/setup");
           setIsOpen(false);
@@ -2874,7 +2982,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     }
     if (type.includes("strategy") || title.includes("strategie") || title.includes("strategy") || type.includes("blocked_plan")) {
       return {
-        label: asset ? `Open ${asset} strategy` : "Open strategy",
+        label: asset ? uiText.openStrategyFor.replace("{asset}", asset) : uiText.openStrategy,
         run: () => {
           router.push(asset ? `/strategy?symbol=${asset}` : "/strategy");
           setIsOpen(false);
@@ -3488,9 +3596,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       try {
         trackFinnConfirmEvent("finn_confirm_opened", "setup_draft");
         openConfirm({
-          title: `Bewerk Setup Concept`,
+          title: at("modals.editSetupTitle"),
           tone: "primary",
-          confirmText: "Opslaan & Creëren",
+          confirmText: at("modals.saveCreate"),
           cancelText: "Annuleren",
           description: (
             <div className="space-y-6 pt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
@@ -3498,7 +3606,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 mode="new"
                 initialData={draft.payload}
                 onSaved={() => {
-                  showSnackbar("Setup succesvol aangemaakt!", "success");
+                  showSnackbar(at("modals.setupCreatedSuccess"), "success");
                   onSuccess();
                 }}
               />
@@ -3518,9 +3626,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         const setupsList = await fetchSetups();
         trackFinnConfirmEvent("finn_confirm_opened", "strategy_draft");
         openConfirm({
-          title: `Bewerk Strategie Concept`,
+          title: at("modals.editStrategyTitle"),
           tone: "primary",
-          confirmText: "Opslaan & Creëren",
+          confirmText: at("modals.saveCreate"),
           cancelText: "Annuleren",
           description: (
             <div className="space-y-6 pt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
@@ -3540,7 +3648,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 }}
                 onSubmit={async (payload) => {
                   await createStrategy(payload);
-                  showSnackbar("Strategie succesvol aangemaakt!", "success");
+                  showSnackbar(at("modals.strategyCreatedSuccess"), "success");
                   onSuccess();
                 }}
               />
@@ -3561,9 +3669,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         let currentFormVal = {};
         trackFinnConfirmEvent("finn_confirm_opened", "bot_draft");
         openConfirm({
-          title: `Bewerk Bot Concept`,
+          title: at("modals.editBotTitle"),
           tone: "primary",
-          confirmText: "Opslaan & Creëren",
+          confirmText: at("modals.saveCreate"),
           cancelText: "Annuleren",
           description: (
             <div className="space-y-6 pt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
@@ -3653,7 +3761,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         }
         setMessages(prev => [...prev, {
           role: "assistant",
-          text: res.message || "Bot-decision overgeslagen en geverifieerd.",
+          text: res.message || uiText.botDecisionSkippedVerified,
           intent: "bot_decision_skipped",
           operatorResolution: res.operator_resolution,
         }]);
@@ -3665,11 +3773,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
       if (action.type === "paper_execute_bot_decision") {
         if (!res?.ok || !res?.verified?.paper_execution) {
-          throw new Error("Paper execution is nog niet verifieerbaar.");
+          throw new Error(uiText.paperExecutionPendingVerification);
         }
         setMessages(prev => [...prev, {
           role: "assistant",
-          text: res.message || "Bot-decision als paper/manual execution verwerkt.",
+          text: res.message || uiText.botDecisionPaperExecuted,
           intent: "bot_decision_executed",
         }]);
         await loadInsight();
@@ -3816,43 +3924,77 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const planDeviationRequiresAck = Boolean(planDeviation?.requires_ack && !planDeviation?.acknowledged);
     const visibleMissingFields = (message.missingFields || []).filter((field) => field !== "plan_deviation_ack");
     const visibleNextQuestion = message.nextQuestion === "plan_deviation_ack" ? null : message.nextQuestion;
+    const yesLabel = at("draftRows.yes");
+    const noLabel = at("draftRows.no");
+    const draftRowsText = {
+      type: at("draftRows.type"),
+      action: at("draftRows.action"),
+      category: at("draftRows.category"),
+      scoreMode: at("draftRows.scoreMode"),
+      weight: at("draftRows.weight"),
+      buckets: at("draftRows.buckets"),
+      nodeActive: at("draftRows.nodeActive"),
+      botId: at("draftRows.botId"),
+      strategy: at("draftRows.strategy"),
+      setup: at("draftRows.setup"),
+      setupType: at("draftRows.setupType"),
+      bot: at("draftRows.bot"),
+      environment: at("draftRows.environment"),
+      risk: at("draftRows.risk"),
+      cadence: at("draftRows.cadence"),
+      name: at("draftRows.name"),
+      timeframe: at("draftRows.timeframe"),
+      amount: at("draftRows.amount"),
+      technical: at("draftRows.technical"),
+      market: at("draftRows.market"),
+      execution: at("draftRows.execution"),
+      marketConfirmation: at("draftRows.marketConfirmation"),
+      entry: at("draftRows.entry"),
+      stop: at("draftRows.stop"),
+      targets: at("draftRows.targets"),
+      automation: at("draftRows.automation"),
+      create: at("draftRows.create"),
+      update: at("draftRows.update"),
+      add: at("draftRows.add"),
+      reset: at("draftRows.reset"),
+    };
 
     const rows = [
-      ["Type", isFinnIndicator ? "indicator_config" : (isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type))],
-      isFinnIndicator ? ["Actie", draft.operation === "reset" ? "reset naar standaard" : (draft.operation === "update" ? "bijwerken" : "toevoegen")] : null,
-      isFinnIndicator ? ["Categorie", draft.category] : null,
+      [draftRowsText.type, isFinnIndicator ? "indicator_config" : (isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type))],
+      isFinnIndicator ? [draftRowsText.action, draft.operation === "reset" ? draftRowsText.reset : (draft.operation === "update" ? draftRowsText.update : draftRowsText.add)] : null,
+      isFinnIndicator ? [draftRowsText.category, draft.category] : null,
       isFinnIndicator ? ["Node", draft.indicator ? `${draft.display_name || draft.indicator} (${draft.indicator})` : null] : null,
-      isFinnIndicator ? ["Score mode", draft.score_mode] : null,
-      isFinnIndicator ? ["Weight", draft.weight] : null,
-      isFinnIndicator ? ["Buckets", Array.isArray(draft.rules) ? draft.rules.map((rule) => rule.score).join(" / ") : null] : null,
-      isFinnIndicator ? ["Node actief", draft.activate_node ? "ja" : "nee"] : null,
-      isFinnStrategy ? ["Actie", draft.operation === "update" ? "bijwerken" : "aanmaken"] : null,
-      isFinnBot ? ["Actie", draft.operation === "update" ? "bijwerken" : "aanmaken"] : null,
-      isFinnBot && draft.operation === "update" ? ["Bot ID", draft.bot_id ? `#${draft.bot_id}` : null] : null,
-      isFinnBot ? ["Strategie", draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
-      isFinnStrategy ? ["Setup", draft.setup_id ? `#${draft.setup_id}` : null] : null,
-      isFinnStrategy && draft.operation === "update" ? ["Strategie", draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
-      isFinnStrategy ? ["Setup type", draft.setup_type] : null,
-      isFinnBot ? ["Bot", bot.name] : null,
-      isFinnBot ? ["Omgeving", bot.is_live ? "live" : "paper"] : null,
-      isFinnBot ? ["Mode", bot.mode] : null,
-      isFinnBot ? ["Risk", bot.risk_profile] : null,
-      isFinnBot ? ["Cadence", bot.cadence] : null,
-      !isFinnIndicator ? ["Asset", draft.asset] : null,
-      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? ["Naam", setup.name] : null,
-      !isFinnIndicator ? ["Timeframe", isFinnStrategy || isFinnBot ? draft.timeframe : setup.timeframe] : null,
-      !isFinnIndicator ? ["Bedrag", isFinnBot ? (bot.budget_total_eur ? `€${bot.budget_total_eur}` : null) : (strategy.base_amount_eur ? `€${strategy.base_amount_eur}` : null)] : null,
+      isFinnIndicator ? [draftRowsText.scoreMode, draft.score_mode] : null,
+      isFinnIndicator ? [draftRowsText.weight, draft.weight] : null,
+      isFinnIndicator ? [draftRowsText.buckets, Array.isArray(draft.rules) ? draft.rules.map((rule) => rule.score).join(" / ") : null] : null,
+      isFinnIndicator ? [draftRowsText.nodeActive, draft.activate_node ? yesLabel : noLabel] : null,
+      isFinnStrategy ? [draftRowsText.action, draft.operation === "update" ? draftRowsText.update : draftRowsText.create] : null,
+      isFinnBot ? [draftRowsText.action, draft.operation === "update" ? draftRowsText.update : draftRowsText.create] : null,
+      isFinnBot && draft.operation === "update" ? [draftRowsText.botId, draft.bot_id ? `#${draft.bot_id}` : null] : null,
+      isFinnBot ? [draftRowsText.strategy, draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
+      isFinnStrategy ? [draftRowsText.setup, draft.setup_id ? `#${draft.setup_id}` : null] : null,
+      isFinnStrategy && draft.operation === "update" ? [draftRowsText.strategy, draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
+      isFinnStrategy ? [draftRowsText.setupType, draft.setup_type] : null,
+      isFinnBot ? [draftRowsText.bot, bot.name] : null,
+      isFinnBot ? [draftRowsText.environment, bot.is_live ? "live" : "paper"] : null,
+      isFinnBot ? [uiText.mode, bot.mode] : null,
+      isFinnBot ? [draftRowsText.risk, bot.risk_profile] : null,
+      isFinnBot ? [draftRowsText.cadence, bot.cadence] : null,
+      !isFinnIndicator ? [uiText.asset, draft.asset] : null,
+      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? [draftRowsText.name, setup.name] : null,
+      !isFinnIndicator ? [draftRowsText.timeframe, isFinnStrategy || isFinnBot ? draft.timeframe : setup.timeframe] : null,
+      !isFinnIndicator ? [draftRowsText.amount, isFinnBot ? (bot.budget_total_eur ? `€${bot.budget_total_eur}` : null) : (strategy.base_amount_eur ? `€${strategy.base_amount_eur}` : null)] : null,
       !isFinnStrategy && !isFinnBot && !isFinnIndicator ? ["Macro", Array.isArray(setup.macro_score_range) ? setup.macro_score_range.join(" - ") : null] : null,
-      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? ["Technical", Array.isArray(setup.technical_score_range) ? setup.technical_score_range.join(" - ") : null] : null,
-      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? ["Market", Array.isArray(setup.market_score_range) ? setup.market_score_range.join(" - ") : null] : null,
+      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? [draftRowsText.technical, Array.isArray(setup.technical_score_range) ? setup.technical_score_range.join(" - ") : null] : null,
+      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? [draftRowsText.market, Array.isArray(setup.market_score_range) ? setup.market_score_range.join(" - ") : null] : null,
       isDca && !isFinnStrategy && !isFinnBot ? ["DCA", [dca.frequency, dca.day || dca.month_day].filter(Boolean).join(" · ")] : null,
-      isTrade && !isFinnBot ? ["Uitvoering", strategy.entry_type || strategy.trade_execution_mode || "limit"] : null,
-      isTrade && !isFinnBot && strategy.entry_type === "market" ? ["Market akkoord", strategy.market_execution_ack ? "ja" : "nee"] : null,
-      isTrade && !isFinnBot ? ["Entry", strategy.entry] : null,
-      isTrade && !isFinnBot ? ["Stop", strategy.stop_loss] : null,
-      isTrade && !isFinnBot ? ["Targets", Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
-      !isFinnBot && !isFinnIndicator ? ["Automatisering", isFinnStrategy ? strategy.automation : (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only"))] : null,
-      !isFinnStrategy && !isFinnBot && bot.create_bot ? ["Bot", `${bot.is_live ? "Live" : "Paper"} · ${bot.mode} · ${bot.risk_profile}`] : null,
+      isTrade && !isFinnBot ? [draftRowsText.execution, strategy.entry_type || strategy.trade_execution_mode || "limit"] : null,
+      isTrade && !isFinnBot && strategy.entry_type === "market" ? [draftRowsText.marketConfirmation, strategy.market_execution_ack ? yesLabel : noLabel] : null,
+      isTrade && !isFinnBot ? [draftRowsText.entry, strategy.entry] : null,
+      isTrade && !isFinnBot ? [draftRowsText.stop, strategy.stop_loss] : null,
+      isTrade && !isFinnBot ? [draftRowsText.targets, Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
+      !isFinnBot && !isFinnIndicator ? [draftRowsText.automation, isFinnStrategy ? strategy.automation : (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only"))] : null,
+      !isFinnStrategy && !isFinnBot && bot.create_bot ? [draftRowsText.bot, `${bot.is_live ? "Live" : "Paper"} · ${bot.mode} · ${bot.risk_profile}`] : null,
     ].filter(Boolean);
 
     return (
@@ -3964,7 +4106,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             </div>
             {Array.isArray(planDeviation.reasons) && planDeviation.reasons.length > 0 && (
               <div className="space-y-1.5">
-                <div className="text-[9px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-300">Waarom Finn remt</div>
+                <div className="text-[9px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-300">{uiText.whyFinnBrakes}</div>
                 <div className="grid grid-cols-1 gap-1">
                   {planDeviation.reasons.slice(0, 4).map((reason, index) => (
                     <div key={`${reason}-${index}`} className="rounded-lg border border-rose-100 dark:border-rose-900/40 bg-white/75 dark:bg-slate-950/35 px-2.5 py-2 text-[11px] font-bold leading-snug text-slate-800 dark:text-slate-100">
@@ -3987,7 +4129,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                   className="flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-rose-600/15 transition-colors hover:bg-rose-700 disabled:opacity-60"
                 >
                   <Shield size={14} />
-                  Bewuste override
+                  {at("behavioralMemory.consciousOverride")}
                 </button>
                 <button
                   onClick={() => handleChat("annuleer")}
@@ -3995,7 +4137,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                   className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/40 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200 transition-colors hover:border-slate-300 dark:hover:border-slate-700 disabled:opacity-60"
                 >
                   <X size={14} />
-                  Annuleer
+                  {at("behavioralMemory.cancel")}
                 </button>
               </div>
             )}
@@ -4079,17 +4221,17 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
         <div className="space-y-1">
           <div className="text-sm font-black text-slate-950 dark:text-slate-50">
-            Finn remt deze actie eerst af.
+            {at("behavioralMemory.slowsDown")}
           </div>
           <p className="text-xs font-semibold leading-relaxed text-amber-900 dark:text-amber-100">
-            {friction.message || "Je recente gedrag laat een patroon zien waar Finn extra voorzichtig mee wil zijn."}
+            {friction.message || at("behavioralMemory.patternCaution")}
           </p>
         </div>
 
         {evidence.length > 0 && (
           <div className="space-y-1.5">
             <div className="text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
-              Bewijs uit je recente Finn-activiteit
+              {at("behavioralMemory.evidence")}
             </div>
             <div className="grid grid-cols-1 gap-1">
               {evidence.slice(0, 4).map((item, index) => (
@@ -4162,19 +4304,19 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
             <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">{uiText.impact}</div>
             <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-              Finn werkt pas iets bij nadat jij expliciet bevestigt welke voorgestelde stap door mag.
+              {at("inlineAction.updatesAfterConfirm")}
             </p>
           </div>
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
             <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">{uiText.safety}</div>
             <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-              Er worden vanuit deze kaart geen live trades geplaatst. Gevoelige acties blijven review-first.
+              {at("inlineAction.noLiveTrades")}
             </p>
           </div>
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
             <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">{uiText.afterThis}</div>
             <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-              Na bevestigen geeft Finn een korte statusupdate en de eerstvolgende veilige stap.
+              {at("inlineAction.afterConfirmation")}
             </p>
           </div>
         </div>
@@ -4195,7 +4337,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           ))}
         </div>
         <p className="text-[10px] font-semibold text-blue-700/80 dark:text-blue-200/80 leading-snug">
-          Finn voert deze actie pas uit na bevestiging. Er worden geen trades geplaatst vanuit deze stap.
+          {at("inlineAction.confirmationFooter")}
         </p>
       </div>
     );
@@ -4444,16 +4586,14 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                   <p className="text-sm font-bold text-foreground dark:text-slate-100 leading-snug">
                     {/* 🎖️ CELEBRATION MODE */}
                     {stepStatus?.[`has_${pathname.split('/').pop()}`] ? (
-                      locale === "en"
-                        ? `Good. The ${pathname.split('/').pop()} flow is stable now. Go back to the start overview for the next step.`
-                        : `Mooi. De ${pathname.split('/').pop()}-stroom draait nu stabiel. Ga terug naar het startoverzicht voor de volgende stap.`
+                      at("onboarding.done", "", { flow: pathname.split('/').pop() })
                     ) : (
-                      pathname.includes("market") ? (locale === "en" ? "Market data is needed to follow live price action. Search for BTC and add it to your monitor." : "Marktdata is nodig om live prijsactie te volgen. Zoek BTC en voeg het toe aan je monitor.") :
-                      pathname.includes("macro") ? (locale === "en" ? "Macro indicators help Finn weigh liquidity, dollar strength, and regime. Add something like DXY to your monitor." : "Macro-indicatoren helpen Finn liquiditeit, dollarsterkte en regime te wegen. Voeg bijvoorbeeld DXY toe aan je monitor.") :
-                      pathname.includes("technical") ? (locale === "en" ? "Technical signals help Finn judge momentum and trend. Search for something like RSI and add it." : "Technische signalen helpen Finn momentum en trend te beoordelen. Zoek bijvoorbeeld RSI en voeg het toe.") :
-                      pathname.includes("setup") ? (locale === "en" ? "Setups define your entry, exit, and risk rules. Click 'New setup' to create your first rule set." : "Setups leggen je instap-, uitstap- en risicoregels vast. Klik op 'Nieuwe setup' om je eerste set regels te maken.") :
-                      pathname.includes("strategy") ? (locale === "en" ? "The strategy layer builds your execution model. Click 'Generate strategy' to prepare your next step." : "De strategielaag bouwt je uitvoeringsmodel. Klik op 'Strategie genereren' om je volgende stap klaar te zetten.") :
-                      (locale === "en" ? "I will guide you step by step until your workspace is ready. After that, your dashboard will fill with live data and relevant Finn context." : "Ik begeleid je stap voor stap totdat je werkplek klaarstaat. Daarna wordt je dashboard gevuld met live data en relevante Finn-context.")
+                      pathname.includes("market") ? at("onboarding.market") :
+                      pathname.includes("macro") ? at("onboarding.macro") :
+                      pathname.includes("technical") ? at("onboarding.technical") :
+                      pathname.includes("setup") ? at("onboarding.setup") :
+                      pathname.includes("strategy") ? at("onboarding.strategy") :
+                      at("onboarding.default")
                     )}
                   </p>
                </div>
@@ -4535,7 +4675,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                     {primaryProfileHabitAlignment && compactBehavioralReason && (
                       <div className="mt-2 rounded-lg border border-amber-200/80 bg-amber-50/70 px-2.5 py-2 dark:border-amber-900/40 dark:bg-amber-950/20">
                         <div className="text-[7px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
-                          FINN remt op {primaryBehaviorLabel}
+                          {at("cards.finnSlowsDownOn")} {primaryBehaviorLabel}
                         </div>
                         <p className="mt-1 text-[9px] font-semibold leading-snug text-slate-700 dark:text-slate-200">
                           {compactBehavioralReason}
@@ -4625,7 +4765,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                       overlayMissionSections.riskItems.map((item) => renderMissionSectionCard(item, "risk"))
                     ) : (
                       <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
-                        Er zijn nu geen extra blokkades of conflicten die je eerst moet oplossen.
+                        {at("cards.noExtraBlockers")}
                       </div>
                     )}
                   </div>
@@ -4755,12 +4895,12 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 )}
                 {m.draft && m.draftCanceled && m.isComplete !== false && (
                   <div className="mt-3 p-3 bg-slate-100/50 dark:bg-slate-950/20 border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl text-center text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    ✕ Concept geannuleerd
+                    {at("draftStatus.canceled")}
                   </div>
                 )}
                 {m.draft && m.draftExecuted && m.isComplete !== false && (
                   <div className="mt-3 p-3 bg-emerald-500/10 dark:bg-emerald-950/20 border border-emerald-500/30 rounded-xl text-center text-[10px] text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-widest flex items-center justify-center gap-1.5 animate-pulse">
-                    ✓ Concept Succesvol Opgeslagen!
+                    {at("draftStatus.saved")}
                   </div>
                 )}
                 {renderBehavioralMemoryAckCard(m)}
@@ -4886,8 +5026,40 @@ export default function AIAssistant(props) {
 
 function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
   const { openConfirm, showSnackbar } = useModal();
+  const { t } = useTranslation();
   const [status, setStatus] = useState("pending"); // pending, executing, success, error, canceled
   const [errorMessage, setErrorMessage] = useState("");
+  const assistantCopy = t?.assistant || {};
+  const at = (path, fallback = "", vars = {}) => interpolateTranslation(getDictionaryValue(assistantCopy, path) ?? fallback, vars);
+  const uiText = {
+    actionCanceled: at("uiText.actionCanceled"),
+    actionSucceeded: at("uiText.actionSucceeded"),
+    aiCommandCenter: at("uiText.aiCommandCenter"),
+    conceptSuffix: at("uiText.conceptSuffix"),
+    draftLabel: at("uiText.draftLabel"),
+    actionLabel: at("uiText.actionLabel"),
+    asset: at("uiText.asset"),
+    setupType: at("uiText.setupType"),
+    dcaParameters: at("uiText.dcaParameters"),
+    scoreThresholds: at("uiText.scoreThresholds"),
+    baseBudget: at("uiText.baseBudget"),
+    entryTarget: at("uiText.entryTarget"),
+    stopLoss: at("uiText.stopLoss"),
+    takeProfitTargets: at("uiText.takeProfitTargets"),
+    dcaMultiplierMode: at("uiText.dcaMultiplierMode"),
+    targetAsset: at("uiText.targetAsset"),
+    noDetailedParameters: at("uiText.noDetailedParameters"),
+    loadingShort: at("uiText.loadingShort"),
+    edit: at("uiText.edit"),
+    cancel: at("uiText.cancel"),
+    approve: at("uiText.approve"),
+    safetyProfile: at("uiText.safetyProfile"),
+    budget: at("uiText.budget"),
+    environment: at("uiText.environment"),
+    mode: at("uiText.mode"),
+    liveReal: at("uiText.liveReal"),
+    paperSandbox: at("uiText.paperSandbox"),
+  };
 
   const cardType = card.card_type || "";
   const payload = card.payload || {};
@@ -4900,16 +5072,16 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
     try {
       const res = await executePendingAction(card.action_id);
       if (res && res.error) {
-        throw new Error(res.error || "Execution failed.");
+        throw new Error(res.error || at("universalAction.executionFailed"));
       }
       setStatus("success");
-      showSnackbar("✓ Actie succesvol uitgevoerd!", "success");
+      showSnackbar(at("universalAction.executionSucceeded"), "success");
       if (onSuccess) onSuccess();
     } catch (err) {
       console.error("Action execution failed:", err);
       setStatus("error");
-      setErrorMessage(err.message || "Fout bij het uitvoeren van deze actie.");
-      showSnackbar("Uitvoering mislukt", "danger");
+      setErrorMessage(err.message || at("universalAction.executionError"));
+      showSnackbar(at("universalAction.executionFailed"), "danger");
     }
   };
 
@@ -4943,23 +5115,23 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
     if (baseType === "setup") {
       const isDca = payload.setup_type === "dca";
       return isDca 
-        ? { text: "Laag Risico", class: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20" }
-        : { text: "Medium Risico", class: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20" };
+        ? { text: uiText.riskLow, class: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20" }
+        : { text: uiText.riskMedium, class: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20" };
     }
     if (baseType === "strategy") {
       const sl = parseFloat(payload.stop_loss);
       const isHighSl = sl && sl > 12;
       return isHighSl
-        ? { text: "Hoog Risico", class: "bg-rose-500/10 text-rose-500 dark:text-rose-400 border-rose-500/20" }
-        : { text: "Medium Risico", class: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20" };
+        ? { text: uiText.riskHigh, class: "bg-rose-500/10 text-rose-500 dark:text-rose-400 border-rose-500/20" }
+        : { text: uiText.riskMedium, class: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20" };
     }
     if (baseType === "bot") {
       const risk = payload.risk_profile || "balanced";
-      if (risk === "aggressive") return { text: "Actief Risico", class: "bg-rose-500/10 text-rose-500 dark:text-rose-400 border-rose-500/20" };
-      if (risk === "conservative") return { text: "Behoedzaam", class: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20" };
-      return { text: "Gebalanceerd", class: "bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/20" };
+      if (risk === "aggressive") return { text: uiText.riskActive, class: "bg-rose-500/10 text-rose-500 dark:text-rose-400 border-rose-500/20" };
+      if (risk === "conservative") return { text: uiText.riskConservative, class: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20" };
+      return { text: uiText.riskBalanced, class: "bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/20" };
     }
-    return { text: "Operationeel", class: "bg-violet-500/10 text-violet-500 dark:text-violet-400 border-violet-500/20" };
+    return { text: uiText.operational, class: "bg-violet-500/10 text-violet-500 dark:text-violet-400 border-violet-500/20" };
   };
 
   const riskBadge = getRiskBadge();
@@ -4967,7 +5139,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
   if (status === "canceled") {
     return (
       <div className="mt-4 p-4 bg-slate-100/50 dark:bg-slate-950/20 border border-dashed border-slate-200 dark:border-slate-800/80 rounded-2xl text-center text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider animate-in fade-in duration-200">
-        ✕ Actie Geannuleerd
+        ✕ {uiText.actionCanceled}
       </div>
     );
   }
@@ -4978,7 +5150,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
         <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center text-lg font-black shadow-lg shadow-emerald-500/20 animate-bounce">
           ✓
         </div>
-        <span>Actie Succesvol Uitgevoerd!</span>
+        <span>{uiText.actionSucceeded}</span>
       </div>
     );
   }
@@ -4996,12 +5168,12 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
               {uiText.aiCommandCenter}
             </span>
             <h4 className="text-xs font-black text-foreground dark:text-slate-200 tracking-tight leading-snug">
-              {payload.name || (baseType === "add_to_watchlist" ? `Watchlist Activatie: ${payload.symbol}` : baseType === "remove_from_watchlist" ? `Watchlist Deactivatie: ${payload.symbol}` : `${payload.symbol || "Asset"} Concept`)}
+              {payload.name || (baseType === "add_to_watchlist" ? at("universalAction.watchlistActivation", "", { symbol: payload.symbol }) : baseType === "remove_from_watchlist" ? at("universalAction.watchlistDeactivation", "", { symbol: payload.symbol }) : `${payload.symbol || uiText.asset} ${uiText.conceptSuffix}`)}
             </h4>
           </div>
           <div className="flex flex-col items-end gap-1.5">
             <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm text-white bg-gradient-to-r ${getAccentGradient()}`}>
-              {baseType} {isDraft ? "draft" : "actie"}
+              {baseType} {isDraft ? uiText.draftLabel : uiText.actionLabel}
             </span>
             <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded border ${riskBadge.class}`}>
               {riskBadge.text}
@@ -5014,16 +5186,16 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
           {baseType === "setup" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Asset</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
                 <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || "SOL"}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Setup Type</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.setupType}</span>
                 <span className="uppercase text-xs text-foreground dark:text-slate-200">{payload.setup_type || "dca"}</span>
               </div>
               {payload.setup_type === "dca" && (
                 <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">DCA Parameters</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaParameters}</span>
                   <span className="text-xs text-foreground dark:text-slate-200">
                     {payload.dca_frequency || "weekly"} {payload.dca_day ? `op ${payload.dca_day}` : ""}
                   </span>
@@ -5031,7 +5203,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
               )}
               {(payload.min_macro_score !== undefined || payload.min_technical_score !== undefined) && (
                 <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2 space-y-1">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Score Drempelwaarden</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
                   <div className="grid grid-cols-3 gap-2 mt-1">
                     <div className="bg-white dark:bg-slate-900 rounded-lg p-1.5 text-center border border-slate-100 dark:border-slate-800">
                       <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Macro</div>
@@ -5054,25 +5226,25 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
           {baseType === "strategy" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Asset</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
                 <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || "SOL"}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Base Budget</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.baseBudget}</span>
                 <span className="text-xs text-foreground dark:text-slate-200">€{payload.base_amount || 100.0}</span>
               </div>
               {payload.setup_type === "trade" ? (
                 <>
                   <div className="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Entry Target</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.entryTarget}</span>
                     <span className="text-xs text-foreground dark:text-slate-200">€{payload.entry}</span>
                   </div>
                   <div className="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Stop Loss</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.stopLoss}</span>
                     <span className="text-xs text-rose-500">€{payload.stop_loss}</span>
                   </div>
                   <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Take Profit Targets</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.takeProfitTargets}</span>
                     <span className="text-xs text-emerald-500 font-mono">
                       {Array.isArray(payload.targets) ? payload.targets.map(t => `€${t}`).join(" · ") : `€${payload.targets}`}
                     </span>
@@ -5080,7 +5252,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
                 </>
               ) : (
                 <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">DCA Multiplier Mode</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaMultiplierMode}</span>
                   <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{payload.execution_mode || "fixed"}</span>
                 </div>
               )}
@@ -5090,21 +5262,21 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
           {baseType === "bot" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Veiligheidsprofiel</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.safetyProfile}</span>
                 <span className="text-xs text-foreground dark:text-slate-200 capitalize">{payload.risk_profile || "balanced"}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Budget</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.budget}</span>
                 <span className="text-xs text-foreground dark:text-slate-200">€{payload.budget_total_eur || 500.0}</span>
               </div>
               <div className="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Environment</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.environment}</span>
                 <span className="text-xs text-foreground dark:text-slate-200">
-                  {payload.is_live ? "⚡ LIVE Real" : "📝 PAPER Sandbox"}
+                  {payload.is_live ? uiText.liveReal : uiText.paperSandbox}
                 </span>
               </div>
               <div className="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Mode</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.mode}</span>
                 <span className="text-xs text-foreground dark:text-slate-200 capitalize">{payload.mode || "manual"}</span>
               </div>
             </div>
@@ -5114,7 +5286,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
             <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-3">
               <Activity size={18} className="text-violet-500 animate-pulse" />
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Doel Asset</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.targetAsset}</span>
                 <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol}</span>
               </div>
             </div>
@@ -5122,7 +5294,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
 
           {!["setup", "strategy", "bot"].includes(baseType) && !baseType.includes("watchlist") && (
             <div className="text-xs text-slate-500 dark:text-slate-400 font-bold leading-relaxed">
-              {payload.description || "Geen gedetailleerde parameters beschikbaar."}
+              {payload.description || uiText.noDetailedParameters}
             </div>
           )}
         </div>
@@ -5144,10 +5316,10 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
             {status === "executing" ? (
               <>
                 <Loader2 size={12} className="animate-spin" />
-                <span>Laden...</span>
+                <span>{uiText.loadingShort}</span>
               </>
             ) : (
-              "APPROVE"
+              uiText.approve
             )}
           </button>
 
@@ -5157,7 +5329,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
               disabled={status === "executing"}
               className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-50 flex items-center justify-center"
             >
-              EDIT
+              {uiText.edit}
             </button>
           ) : (
             <div className="col-span-1" /> // Placeholder to maintain exact symmetrical grid alignment
@@ -5168,7 +5340,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
             disabled={status === "executing"}
             className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-red-500 hover:text-red-500 dark:hover:border-red-500/30 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-50 flex items-center justify-center"
           >
-            CANCEL
+            {uiText.cancel}
           </button>
         </div>
       </div>
@@ -5177,8 +5349,15 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
 }
 
 function ActionCard({ action, onAction }) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const assistantCopy = t?.assistant || {};
+  const at = (path, fallback = "", vars = {}) => interpolateTranslation(getDictionaryValue(assistantCopy, path) ?? fallback, vars);
+  const uiText = {
+    actionCheck: at("uiText.actionCheck"),
+    actionCheckBody: at("uiText.actionCheckBody"),
+  };
   
   // State for bundle execution
   const [steps, setSteps] = useState([]);
@@ -5247,24 +5426,24 @@ function ActionCard({ action, onAction }) {
 
   const getActionLabel = (act = action) => {
     switch (act.type) {
-      case "add_to_watchlist": return `Voeg ${act.symbol || ""} toe aan watchlist`;
-      case "remove_from_watchlist": return `Verwijder ${act.symbol || ""} uit watchlist`;
-      case "open_setup_page": return `Open setup voor ${act.symbol || ""}`;
-      case "generate_strategy": return `Genereer strategie voor ${act.symbol || ""}`;
-      case "open_bot_draft": return `Zet ${act.symbol || ""} paper bot klaar`;
-      case "navigate_to_page": return `Ga naar ${act.params?.label || "Pagina"}`;
-      default: return "Voer actie uit";
+      case "add_to_watchlist": return at("actionLabels.add_to_watchlist", "", { symbol: act.symbol || "" });
+      case "remove_from_watchlist": return at("actionLabels.remove_from_watchlist", "", { symbol: act.symbol || "" });
+      case "open_setup_page": return at("actionLabels.open_setup_page", "", { symbol: act.symbol || "" });
+      case "generate_strategy": return at("actionLabels.generate_strategy", "", { symbol: act.symbol || "" });
+      case "open_bot_draft": return at("actionLabels.open_bot_draft", "", { symbol: act.symbol || "" });
+      case "navigate_to_page": return at("actionLabels.navigate_to_page", "", { label: act.params?.label || at("actionLabels.page") });
+      default: return at("actionLabels.default");
     }
   };
 
   const getActionDescription = (act = action) => {
     switch (act.type) {
-      case "add_to_watchlist": return `Voeg ${act.symbol || ""} toe aan je live volglijst.`;
-      case "remove_from_watchlist": return `Verwijder ${act.symbol || ""} uit je live volglijst.`;
-      case "open_setup_page": return `Open de setup-pagina om regels voor ${act.symbol || ""} vast te leggen.`;
-      case "generate_strategy": return `Laat Finn een strategievoorstel opbouwen voor ${act.symbol || ""}.`;
-      case "open_bot_draft": return `Open het botconcept met alvast ingevulde aanbevolen parameters.`;
-      case "navigate_to_page": return `Navigeer direct naar de ${act.params?.label || "pagina"} in het dashboard.`;
+      case "add_to_watchlist": return at("actionDescriptions.add_to_watchlist", "", { symbol: act.symbol || "" });
+      case "remove_from_watchlist": return at("actionDescriptions.remove_from_watchlist", "", { symbol: act.symbol || "" });
+      case "open_setup_page": return at("actionDescriptions.open_setup_page", "", { symbol: act.symbol || "" });
+      case "generate_strategy": return at("actionDescriptions.generate_strategy", "", { symbol: act.symbol || "" });
+      case "open_bot_draft": return at("actionDescriptions.open_bot_draft");
+      case "navigate_to_page": return at("actionDescriptions.navigate_to_page", "", { label: act.params?.label || at("actionLabels.page") });
       default: return "";
     }
   };
@@ -5280,10 +5459,10 @@ function ActionCard({ action, onAction }) {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
               </span>
-              Actiecontrole
+              {uiText.actionCheck}
             </h4>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-1">
-              Controleer en voer de voorgestelde reeks acties stap voor stap uit.
+              {uiText.actionCheckBody}
             </p>
           </div>
         </div>
@@ -5368,7 +5547,7 @@ function ActionCard({ action, onAction }) {
   return (
     <div className="mt-3 p-4 bg-blue-100/10 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-900/40 rounded-2xl flex flex-col gap-3">
       <div>
-        <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-blue-600 dark:text-blue-400">Proposed Action</h4>
+        <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-blue-600 dark:text-blue-400">{uiText.proposedAction}</h4>
         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1 leading-snug">{getActionDescription()}</p>
       </div>
       
@@ -5389,6 +5568,9 @@ function ActionCard({ action, onAction }) {
 
 function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
   const { openConfirm, showSnackbar } = useModal();
+  const { t } = useTranslation();
+  const at = createAssistantTranslator(t);
+  const uiText = buildAssistantUiText(at);
   const [approving, setApproving] = useState(false);
 
   const handleApprove = async () => {
@@ -5396,13 +5578,13 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
     try {
       if (draft.type === "setup") {
         await saveNewSetup(draft.payload);
-        showSnackbar("Concept setup succesvol goedgekeurd!", "success");
+        showSnackbar(uiText.draftSetupApproved, "success");
         onSuccess();
       } else if (draft.type === "strategy") {
         const setups = await fetchSetups();
         const matching = setups.filter(s => s.symbol?.toUpperCase() === draft.payload.symbol?.toUpperCase());
         if (matching.length === 0) {
-          showSnackbar(`Geen actieve setup gevonden voor ${draft.payload.symbol}. Maak eerst een setup concept aan.`, "danger");
+          showSnackbar(uiText.missingSetupForStrategy.replace("{symbol}", draft.payload.symbol || ""), "danger");
           setApproving(false);
           return;
         }
@@ -5411,7 +5593,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
           setup_id: matching[0].id
         };
         await createStrategy(payload);
-        showSnackbar("Concept strategie succesvol goedgekeurd!", "success");
+        showSnackbar(uiText.draftStrategyApproved, "success");
         onSuccess();
       } else if (draft.type === "bot") {
         const strategies = await fetchStrategies();
@@ -5421,7 +5603,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
           stratId = strategies[0].id;
         }
         if (!stratId) {
-          showSnackbar(`Geen actieve strategie gevonden. Maak eerst een strategie concept aan.`, "danger");
+          showSnackbar(uiText.missingStrategyForBot, "danger");
           setApproving(false);
           return;
         }
@@ -5430,12 +5612,12 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
           strategy_id: stratId
         };
         await createBotConfig(payload);
-        showSnackbar("Concept bot succesvol goedgekeurd!", "success");
+        showSnackbar(uiText.draftBotApproved, "success");
         onSuccess();
       }
     } catch (err) {
       console.error(err);
-      showSnackbar(`Fout bij goedkeuren van ${draft.type} concept.`, "danger");
+      showSnackbar(uiText.draftApproveError.replace("{type}", draft.type), "danger");
     } finally {
       setApproving(false);
     }
@@ -5461,10 +5643,10 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
         <div className="flex items-start justify-between">
           <div className="space-y-0.5">
             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-              Concept review
+              {uiText.conceptReview}
             </span>
             <h4 className="text-xs font-black text-foreground dark:text-slate-200 tracking-tight leading-snug">
-              {draft.payload.name || "Nieuw Concept"}
+              {draft.payload.name || uiText.newConcept}
             </h4>
           </div>
           <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm text-white bg-gradient-to-r ${getAccentGradient()}`}>
@@ -5477,23 +5659,23 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
           {draft.type === "setup" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Asset</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
                 <span className="font-mono text-xs text-foreground dark:text-slate-200">{draft.payload.symbol || "SOL"}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Setup Type</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.setupType}</span>
                 <span className="uppercase text-xs text-foreground dark:text-slate-200">{draft.payload.setup_type || "dca"}</span>
               </div>
               {draft.payload.setup_type === "dca" && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">DCA Parameters</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaParameters}</span>
                   <span className="text-xs text-foreground dark:text-slate-200">
                     {draft.payload.dca_frequency || "weekly"} {draft.payload.dca_day ? `op ${draft.payload.dca_day}` : ""}
                   </span>
                 </div>
               )}
               <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2 space-y-1">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Score Drempelwaarden</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
                 <div className="grid grid-cols-3 gap-2 mt-1">
                   <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
                     <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Macro</div>
@@ -5515,25 +5697,25 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
           {draft.type === "strategy" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Asset</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
                 <span className="font-mono text-xs text-foreground dark:text-slate-200">{draft.payload.symbol || "SOL"}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Base Budget</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.baseBudget}</span>
                 <span className="text-xs text-foreground dark:text-slate-200">€{draft.payload.base_amount || 100.0}</span>
               </div>
               {draft.payload.setup_type === "trade" ? (
                 <>
                   <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Entry Target</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.entryTarget}</span>
                     <span className="text-xs text-foreground dark:text-slate-200">€{draft.payload.entry}</span>
                   </div>
                   <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Stop Loss</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.stopLoss}</span>
                     <span className="text-xs text-rose-500">€{draft.payload.stop_loss}</span>
                   </div>
                   <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Take Profit Targets</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.takeProfitTargets}</span>
                     <span className="text-xs text-emerald-500 font-mono">
                       {Array.isArray(draft.payload.targets) ? draft.payload.targets.map(t => `€${t}`).join(" · ") : `€${draft.payload.targets}`}
                     </span>
@@ -5541,7 +5723,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
                 </>
               ) : (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">DCA Multiplier Mode</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaMultiplierMode}</span>
                   <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{draft.payload.execution_mode || "fixed"}</span>
                 </div>
               )}
@@ -5551,21 +5733,21 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
           {draft.type === "bot" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Veiligheidsprofiel</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.safetyProfile}</span>
                 <span className="text-xs text-foreground dark:text-slate-200 capitalize">{draft.payload.risk_profile || "balanced"}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Budget</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.budget}</span>
                 <span className="text-xs text-foreground dark:text-slate-200">€{draft.payload.budget_total_eur || 500.0}</span>
               </div>
               <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Environment</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.environment}</span>
                 <span className="text-xs text-foreground dark:text-slate-200">
-                  {draft.payload.is_live ? "⚡ LIVE Real" : "📝 PAPER Sandbox"}
+                  {draft.payload.is_live ? uiText.liveReal : uiText.paperSandbox}
                 </span>
               </div>
               <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Mode</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.mode}</span>
                 <span className="text-xs text-foreground dark:text-slate-200 capitalize">{draft.payload.mode || "manual"}</span>
               </div>
             </div>
@@ -5582,7 +5764,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
             {approving ? (
               <Loader2 size={12} className="animate-spin" />
             ) : (
-              "APPROVE"
+              uiText.approve
             )}
           </button>
           
@@ -5591,7 +5773,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
             disabled={approving}
             className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 flex items-center justify-center"
           >
-            EDIT
+            {uiText.edit}
           </button>
 
           <button
@@ -5599,7 +5781,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
             disabled={approving}
             className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-red-500 hover:text-red-500 dark:hover:border-red-500/30 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 flex items-center justify-center"
           >
-            CANCEL
+            {uiText.cancel}
           </button>
         </div>
       </div>
@@ -5608,6 +5790,9 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
 }
 
 function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
+  const { t } = useTranslation();
+  const at = createAssistantTranslator(t);
+  const uiText = buildAssistantUiText(at);
   const { current_flow, slots } = state;
   const flowType = current_flow?.split("_")?.[0] || "setup"; // setup, strategy, bot
 
@@ -5625,16 +5810,16 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
           <div className="space-y-0.5">
             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              Actief concept
+              {uiText.activeConcept}
             </span>
             <h4 className="text-xs font-black text-foreground dark:text-slate-200 tracking-tight leading-snug">
-              {flowType === "setup" ? `${slots?.symbol || "..."} Setup Concept` :
-               flowType === "strategy" ? `${slots?.symbol || "..."} Strategie Concept` :
-               `${slots?.name || "..."} Bot Concept`}
+              {flowType === "setup" ? `${slots?.symbol || "..."} ${uiText.setupConceptSuffix}` :
+               flowType === "strategy" ? `${slots?.symbol || "..."} ${uiText.strategyConceptSuffix}` :
+               `${slots?.name || "..."} ${uiText.botConceptSuffix}`}
             </h4>
           </div>
           <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm text-white bg-gradient-to-r ${getAccentGradient()}`}>
-            {flowType} concept
+            {flowType} {uiText.conceptSuffix}
           </span>
         </div>
 
@@ -5643,12 +5828,12 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
           {flowType === "setup" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Asset</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || <span className="text-slate-400 italic font-normal">[Vereist]</span>}</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}</span>
               </div>
               
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">Setup Type</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">{uiText.setupType}</span>
                 <div className="flex gap-1.5">
                   {['dca', 'trade'].map((type) => (
                     <button
@@ -5668,7 +5853,7 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
 
               {slots?.setup_type === "dca" && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800/80 pt-2.5">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1.5">DCA Frequency</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1.5">{uiText.dcaFrequency}</span>
                   <div className="flex gap-1.5">
                     {['daily', 'weekly', 'monthly'].map((freq) => (
                       <button
@@ -5680,7 +5865,7 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
                             : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
                         }`}
                       >
-                        {freq === 'daily' ? 'Dagelijks' : freq === 'weekly' ? 'Wekelijks' : 'Maandelijks'}
+                        {freq === "daily" ? uiText.daily : freq === "weekly" ? uiText.weekly : uiText.monthly}
                       </button>
                     ))}
                   </div>
@@ -5692,39 +5877,39 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
           {flowType === "strategy" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Asset</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
                 <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || "SOL"}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Base Budget</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.baseBudget}</span>
                 <span className="text-xs text-foreground dark:text-slate-200">
-                  {slots?.base_amount ? `€${slots.base_amount}` : <span className="text-slate-400 italic font-normal">[Kies inleg]</span>}
+                  {slots?.base_amount ? `€${slots.base_amount}` : <span className="text-slate-400 italic font-normal">{uiText.chooseAmount}</span>}
                 </span>
               </div>
               {slots?.setup_type === "trade" ? (
                 <>
                   <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Entry Target</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.entryTarget}</span>
                     <span className="text-xs text-foreground dark:text-slate-200">
-                      {slots?.entry ? `€${slots.entry}` : <span className="text-slate-400 italic font-normal">[Optioneel]</span>}
+                      {slots?.entry ? `€${slots.entry}` : <span className="text-slate-400 italic font-normal">{uiText.optional}</span>}
                     </span>
                   </div>
                   <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Stop Loss</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.stopLoss}</span>
                     <span className="text-xs text-rose-500">
-                      {slots?.stop_loss ? `€${slots.stop_loss}` : <span className="text-slate-400 italic font-normal">[Optioneel]</span>}
+                      {slots?.stop_loss ? `€${slots.stop_loss}` : <span className="text-slate-400 italic font-normal">{uiText.optional}</span>}
                     </span>
                   </div>
                   <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Take Profit Targets</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.takeProfitTargets}</span>
                     <span className="text-xs text-emerald-500 font-mono">
-                      {slots?.targets ? (Array.isArray(slots.targets) ? slots.targets.map(t => `€${t}`).join(" · ") : `€${slots.targets}`) : <span className="text-slate-400 italic font-normal">[Optioneel]</span>}
+                      {slots?.targets ? (Array.isArray(slots.targets) ? slots.targets.map(t => `€${t}`).join(" · ") : `€${slots.targets}`) : <span className="text-slate-400 italic font-normal">{uiText.optional}</span>}
                     </span>
                   </div>
                 </>
               ) : (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">DCA Multiplier Mode</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaMultiplierMode}</span>
                   <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{slots?.execution_mode || "fixed"}</span>
                 </div>
               )}
@@ -5734,17 +5919,17 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
           {flowType === "bot" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col col-span-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Bot Naam</span>
-                <span className="text-xs text-foreground dark:text-slate-200">{slots?.name || "SOL Bot"}</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.botName}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">{slots?.name || uiText.defaultBotName}</span>
               </div>
               <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Veiligheidsprofiel</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.safetyProfile}</span>
                 <span className="text-xs text-foreground dark:text-slate-200 capitalize">{slots?.risk_profile || "balanced"}</span>
               </div>
               <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Budget</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.budget}</span>
                 <span className="text-xs text-foreground dark:text-slate-200">
-                  {slots?.budget_total_eur ? `€${slots.budget_total_eur}` : <span className="text-slate-400 italic font-normal">[Vereist]</span>}
+                  {slots?.budget_total_eur ? `€${slots.budget_total_eur}` : <span className="text-slate-400 italic font-normal">{uiText.required}</span>}
                 </span>
               </div>
             </div>
@@ -5757,21 +5942,21 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
             onClick={onCancel}
             className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 flex items-center justify-center"
           >
-            CANCEL
+            {uiText.cancel}
           </button>
           
           <button
             onClick={onEdit}
             className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 flex items-center justify-center"
           >
-            EDIT
+            {uiText.edit}
           </button>
 
           <button
             onClick={onFinalize}
             className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider text-white transition-all shadow-md flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 active:scale-95"
           >
-            APPROVE
+            {uiText.approve}
           </button>
         </div>
       </div>
@@ -5794,6 +5979,9 @@ function ReasoningWidget({ reasoning }) {
 }
 
 function DebugExplainabilityCard({ reasoning }) {
+  const { t } = useTranslation();
+  const at = createAssistantTranslator(t);
+  const uiText = buildAssistantUiText(at);
   const [isOpen, setIsOpen] = useState(false);
   if (!reasoning) return null;
 
@@ -5807,7 +5995,7 @@ function DebugExplainabilityCard({ reasoning }) {
       >
         <span className="flex items-center gap-1.5 font-mono">
           <Brain size={12} className="text-rose-500" />
-          [DEBUG] GEDACHTEGANG & DIAGNOSTICS
+          {uiText.debugReasoning}
         </span>
         <ChevronDown size={12} className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
       </button>
@@ -5816,20 +6004,20 @@ function DebugExplainabilityCard({ reasoning }) {
         <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-2.5 font-mono text-[10px]">
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-2 text-center border border-slate-100 dark:border-slate-800">
-              <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 block">Confidence</span>
-              <span className="text-[11px] font-black text-blue-500">{confidence_score ? `${confidence_score}%` : 'N/A'}</span>
+              <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 block">{uiText.confidence}</span>
+              <span className="text-[11px] font-black text-blue-500">{confidence_score ? `${confidence_score}%` : uiText.notAvailable}</span>
             </div>
             
             <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-2 text-center border border-slate-100 dark:border-slate-800">
-              <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 block">Risico</span>
+              <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 block">{uiText.risk}</span>
               <span className={`text-[10px] font-black ${risk_detected ? 'text-rose-500 animate-pulse' : 'text-emerald-500'}`}>
-                {risk_detected ? 'GEDETECTEERD' : 'VEILIG'}
+                {risk_detected ? uiText.detected : uiText.safe}
               </span>
             </div>
             
             <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-2 text-center border border-slate-100 dark:border-slate-800">
-              <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 block">Coaching</span>
-              <span className="text-[10px] font-black text-amber-500 uppercase">{coaching_level || 'ALGEMEEN'}</span>
+              <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 block">{uiText.coaching}</span>
+              <span className="text-[10px] font-black text-amber-500 uppercase">{coaching_level || uiText.general}</span>
             </div>
           </div>
 

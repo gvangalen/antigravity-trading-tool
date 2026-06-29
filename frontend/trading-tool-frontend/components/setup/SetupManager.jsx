@@ -4,6 +4,7 @@ import { useSetupData } from "@/hooks/useSetupData";
 import SetupForm from "./SetupForm";
 import SetupList from "./SetupList";
 import CardWrapper from "@/components/ui/CardWrapper";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 // Icons
 import { Settings, PlusCircle, BarChart3 } from "lucide-react";
@@ -12,6 +13,8 @@ import { Settings, PlusCircle, BarChart3 } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
 
 export default function SetupManager() {
+  const { t } = useTranslation();
+  const copy = t?.setups?.manager || {};
   const {
     reloadSetups,
     setups,
@@ -27,7 +30,7 @@ export default function SetupManager() {
   const handleRefresh = async () => {
     await reloadSetups();
 
-    showSnackbar("Setup succesvol opgeslagen!", "success");
+    showSnackbar(copy.savedSuccess, "success");
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -38,7 +41,7 @@ export default function SetupManager() {
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-3xl font-semibold text-[var(--text-dark)] tracking-tight">
           <Settings size={26} className="text-[var(--primary)]" />
-          Setupbeheer
+          {copy.title}
         </h2>
       </div>
 
@@ -47,12 +50,12 @@ export default function SetupManager() {
         title={
           <span className="flex items-center gap-2">
             <PlusCircle size={18} className="text-[var(--primary)]" />
-            Nieuwe Setup
+            {copy.newTitle}
           </span>
         }
       >
         <p className="text-sm text-[var(--text-light)] mb-4">
-          Vul hieronder alle details in om een nieuwe trading-setup toe te voegen.
+          {copy.newDescription}
         </p>
 
         <SetupForm mode="new" onSaved={handleRefresh} />
@@ -63,12 +66,12 @@ export default function SetupManager() {
         title={
           <span className="flex items-center gap-2">
             <BarChart3 size={18} className="text-[var(--primary)]" />
-            Actieve Setups
+            {copy.listTitle}
           </span>
         }
       >
         <p className="text-sm text-[var(--text-light)] mb-4">
-          Bekijk, bewerk of verwijder bestaande setups.
+          {copy.listDescription}
         </p>
 
         <SetupList

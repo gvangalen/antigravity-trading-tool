@@ -1,27 +1,30 @@
 'use client';
 
 import ReportCard from '@/components/report/sections/ReportCard';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 export default function QuarterlyCyclePositionCard({ report }) {
+  const { t } = useTranslation();
+  const copy = t?.reports?.blocks?.quarterlyCyclePosition || {};
   if (!report) return null;
 
   return (
-    <ReportCard title="Cyclus & positionering">
+    <ReportCard title={copy.title}>
       <div className="space-y-4 text-sm">
 
         <CycleRow
-          label="Marktcyclus"
-          value={inferCycle(report.market_overview)}
+          label={copy.marketCycle}
+          value={inferCycle(report.market_overview, copy)}
         />
 
         <CycleRow
-          label="Macro-fase"
-          value={inferMacro(report.macro_trends)}
+          label={copy.macroPhase}
+          value={inferMacro(report.macro_trends, copy)}
         />
 
         <CycleRow
-          label="Strategische houding"
-          value={inferStance(report.executive_summary)}
+          label={copy.strategicStance}
+          value={inferStance(report.executive_summary, copy)}
         />
 
       </div>
@@ -38,27 +41,27 @@ function CycleRow({ label, value }) {
   );
 }
 
-function inferCycle(text = '') {
+function inferCycle(text = '', copy = {}) {
   const t = text.toLowerCase();
-  if (t.includes('accumul')) return 'Accumulation / bodemvorming';
-  if (t.includes('bull')) return 'Expansie / bullfase';
-  if (t.includes('top') || t.includes('oververh')) return 'Distributie / verzwakking';
-  if (t.includes('bear') || t.includes('dalend')) return 'Correctie / bearfase';
-  return 'Overgangsfase';
+  if (t.includes('accumul')) return copy.accumulation;
+  if (t.includes('bull')) return copy.expansion;
+  if (t.includes('top') || t.includes('oververh')) return copy.distribution;
+  if (t.includes('bear') || t.includes('dalend')) return copy.correction;
+  return copy.transition;
 }
 
-function inferMacro(text = '') {
+function inferMacro(text = '', copy = {}) {
   const t = text.toLowerCase();
-  if (t.includes('ondersteun')) return 'Ondersteunend';
-  if (t.includes('verkrapp')) return 'Verkrappend';
-  if (t.includes('neutraal')) return 'Neutraal';
-  return 'Gemengd';
+  if (t.includes('ondersteun')) return copy.supportive;
+  if (t.includes('verkrapp')) return copy.tightening;
+  if (t.includes('neutraal')) return copy.neutral;
+  return copy.mixed;
 }
 
-function inferStance(text = '') {
+function inferStance(text = '', copy = {}) {
   const t = text.toLowerCase();
-  if (t.includes('defens')) return 'Defensief';
-  if (t.includes('selectief')) return 'Selectief offensief';
-  if (t.includes('agress')) return 'Offensief';
-  return 'Gebalanceerd';
+  if (t.includes('defens')) return copy.defensive;
+  if (t.includes('selectief')) return copy.selectiveOffensive;
+  if (t.includes('agress')) return copy.offensive;
+  return copy.balanced;
 }

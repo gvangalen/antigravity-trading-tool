@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Layers } from "lucide-react";
 import { TradingSlider } from "@/components/ui/Slider";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 /* =====================================================
    Field wrapper
@@ -22,6 +23,8 @@ function Field({ label, children }) {
 ===================================================== */
 
 export default function BotBudgetForm({ initialBudget, onChange }) {
+  const { t } = useTranslation();
+  const copy = t?.botPage?.budgetForm || {};
 
   const [form, setForm] = useState({
     total_eur: 0,
@@ -52,7 +55,7 @@ export default function BotBudgetForm({ initialBudget, onChange }) {
           <Layers size={20} strokeWidth={2.5} />
         </div>
         <p className="text-xs font-bold text-blue-700/80 leading-relaxed italic">
-          This budget configuration acts as a hard safety ceiling. The bot will automatically scale or block trades that exceed these limits.
+          {copy.description}
         </p>
       </div>
 
@@ -60,7 +63,7 @@ export default function BotBudgetForm({ initialBudget, onChange }) {
         {/* Total budget */}
         <div className="space-y-2">
           <label className="text-[10px] font-black text-secondary uppercase tracking-widest pl-1">
-            Global Limit (€)
+            {copy.globalLimit}
           </label>
           <input
             type="number"
@@ -78,7 +81,7 @@ export default function BotBudgetForm({ initialBudget, onChange }) {
         {/* Daily limit */}
         <div className="space-y-2">
           <label className="text-[10px] font-black text-secondary uppercase tracking-widest pl-1">
-            Daily Cap (€)
+            {copy.dailyCap}
           </label>
           <input
             type="number"
@@ -96,7 +99,7 @@ export default function BotBudgetForm({ initialBudget, onChange }) {
         {/* Max order */}
         <div className="space-y-2">
           <label className="text-[10px] font-black text-secondary uppercase tracking-widest pl-1">
-            Order MAX (€)
+            {copy.orderMax}
           </label>
           <input
             type="number"
@@ -115,9 +118,9 @@ export default function BotBudgetForm({ initialBudget, onChange }) {
       {/* Asset exposure slider */}
       <div className="space-y-4 pt-4 border-t border-slate-100">
         <div className="flex items-center justify-between">
-          <label className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Asset Exposure Sensor</label>
+          <label className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">{copy.assetExposure}</label>
           <div className="text-xs font-black text-[var(--primary)] font-mono bg-blue-50 px-2 py-0.5 rounded-md">
-            {form.max_asset_exposure_pct}% MAX
+            {form.max_asset_exposure_pct}% {copy.maxSuffix}
           </div>
         </div>
 
@@ -135,7 +138,7 @@ export default function BotBudgetForm({ initialBudget, onChange }) {
         </div>
 
         <div className="text-[9px] font-bold text-secondary uppercase tracking-tight text-center italic">
-          Maximum allocation of total bot capital per single asset node.
+          {copy.assetExposureDescription}
         </div>
       </div>
     </div>

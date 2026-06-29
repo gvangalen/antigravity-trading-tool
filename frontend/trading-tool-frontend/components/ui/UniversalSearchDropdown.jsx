@@ -1,14 +1,17 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function UniversalSearchDropdown({
-  label = 'Zoek een item',
+  label,
   items = [],
   selected = null,
   onSelect,
-  placeholder = 'Typ om te zoeken…',
+  placeholder,
 }) {
+  const { t } = useTranslation();
+  const dropdownCopy = t?.ui?.searchDropdown || {};
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -89,13 +92,13 @@ export default function UniversalSearchDropdown({
     <div className="relative mb-4" ref={wrapperRef}>
       {label && (
         <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-200">
-          {label}
+          {label || dropdownCopy.label}
         </label>
       )}
 
       <input
         type="text"
-        placeholder={placeholder}
+        placeholder={placeholder || dropdownCopy.placeholder}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => query && results.length > 0 && setIsOpen(true)}

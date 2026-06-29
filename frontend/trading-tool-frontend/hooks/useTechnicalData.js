@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 import {
   technicalDataDay,
@@ -18,21 +19,23 @@ import { getDailyScores } from "@/lib/api/scores";
 /* --------------------------------------------------------
    Advies logica
 -------------------------------------------------------- */
-const getAdvies = (score) =>
+const getAdvies = (score, commonT = {}) =>
   score >= 75
-    ? "🟢 Bullish"
+    ? `🟢 ${commonT.bullish}`
     : score <= 25
-    ? "🔴 Bearish"
-    : "⚖️ Neutraal";
+    ? `🔴 ${commonT.bearish}`
+    : `⚖️ ${commonT.neutral}`;
 
 /* ========================================================
    MAIN HOOK — TECHNICAL (CONSISTENT MET MARKET & MACRO)
 ======================================================== */
-export function useTechnicalData(activeTab = "Dag", symbol = "BTC", options = {}) {
+export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}) {
+  const { t } = useTranslation();
+  const commonT = t?.common || {};
   const { includeScoreSummary = true } = options;
   const [technicalData, setTechnicalData] = useState([]);
   const [avgScore, setAvgScore] = useState("N/A");
-  const [advies, setAdvies] = useState("⚖️ Neutraal");
+  const [advies, setAdvies] = useState(() => getAdvies(50, commonT));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -98,7 +101,7 @@ export function useTechnicalData(activeTab = "Dag", symbol = "BTC", options = {}
         if (backendScore !== null) {
           const rounded = parseFloat(backendScore).toFixed(1);
           setAvgScore(rounded);
-          setAdvies(getAdvies(backendScore));
+          setAdvies(getAdvies(backendScore, commonT));
         } else {
           updateScore(normalized);
         }
@@ -109,8 +112,8 @@ export function useTechnicalData(activeTab = "Dag", symbol = "BTC", options = {}
       console.error(`❌ Fout bij technical data (${symbol}):`, err);
       setTechnicalData([]);
       setAvgScore("N/A");
-      setAdvies("⚖️ Neutraal");
-      setError("Fout bij laden van technische data");
+      setAdvies(getAdvies(50, commonT));
+      setError(t?.pages?.technical?.loadError);
     } finally {
       setLoading(false);
     }
@@ -174,7 +177,7 @@ export function useTechnicalData(activeTab = "Dag", symbol = "BTC", options = {}
 
     const avg = (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(1);
     setAvgScore(avg);
-    setAdvies(getAdvies(avg));
+    setAdvies(getAdvies(avg, commonT));
   }
 
   /* ======================================================

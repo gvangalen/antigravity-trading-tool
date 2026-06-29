@@ -68,8 +68,7 @@ ROLES = {
 }
 
 def _response_language_name(preferences: dict) -> str:
-    locale = str((preferences or {}).get("locale") or "nl").lower()
-    return "English" if locale.startswith("en") else "Dutch"
+    return response_language_name_for_locale((preferences or {}).get("locale"))
 
 
 def get_role_prompt(role_key: str, preferences: dict, intent: str = "chat", user_name: str = "Handelaar") -> str:
@@ -105,3 +104,4 @@ def get_role_prompt(role_key: str, preferences: dict, intent: str = "chat", user
     system_prompt += f"\n\nROL: {role['name']}\n{role['task']}"
     
     return system_prompt
+from backend.services.locale_config import response_language_name as response_language_name_for_locale

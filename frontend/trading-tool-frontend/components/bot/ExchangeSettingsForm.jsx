@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import { Shield, Zap, Info, CheckCircle2, AlertCircle } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 const EXCHANGES = [
-  { id: "bybit", name: "Bybit", logo: "🚀", description: "Aanbevolen voor snelle AI-uitvoering" },
-  { id: "bitvavo", name: "Bitvavo", logo: "🏦", description: "Eenvoudige EUR-gateway voor direct traden" },
+  { id: "bybit", name: "Bybit", logo: "🚀", descriptionKey: "bybitDescription" },
+  { id: "bitvavo", name: "Bitvavo", logo: "🏦", descriptionKey: "bitvavoDescription" },
 ];
 
 export default function ExchangeSettingsForm({ onSave, onCancel }) {
+  const { t } = useTranslation();
+  const copy = t?.botPage?.exchangeSettings || {};
   const [step, setStep] = useState(1);
   const [selectedExchange, setSelectedExchange] = useState(null);
   const [form, setForm] = useState({
@@ -27,9 +30,18 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
         exchange_name: selectedExchange.id,
         ...form
       });
-      setStatus({ type: "success", message: "Succesvol verbonden met " + selectedExchange.name });
+      setStatus({
+        type: "success",
+        message: copy.statusSuccess.replace(
+          "{exchange}",
+          selectedExchange.name
+        ),
+      });
     } catch (err) {
-      setStatus({ type: "error", message: err?.message || "Verbinding mislukt. Controleer je sleutels." });
+      setStatus({
+        type: "error",
+        message: err?.message || copy.statusError,
+      });
     } finally {
       setTesting(false);
     }
@@ -50,7 +62,7 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
               </div>
               <div>
                 <div className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">{ex.name}</div>
-                <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">{ex.description}</div>
+                <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">{copy[ex.descriptionKey] || ex.name}</div>
               </div>
               <div className="absolute right-6 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Zap size={16} className="text-blue-600" />
@@ -69,23 +81,23 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
           {selectedExchange.logo}
         </div>
         <div>
-           <div className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">Geselecteerde node</div>
+           <div className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">{copy.selectedNode}</div>
            <div className="text-sm font-black text-slate-900 dark:text-white uppercase">{selectedExchange.name}</div>
         </div>
         <button 
           onClick={() => setStep(1)}
           className="ml-auto text-[9px] font-black text-slate-400 uppercase tracking-tighter hover:text-slate-600 underline"
         >
-          Wijzigen
+          {copy.change}
         </button>
       </div>
 
       <div className="space-y-5">
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">API Key</label>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{copy.apiKeyLabel}</label>
           <input 
             type="text" 
-            placeholder="Plak hier je API-key"
+            placeholder={copy.apiKeyPlaceholder}
             className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 outline-none transition-all"
             value={form.api_key}
             onChange={e => setForm({...form, api_key: e.target.value})}
@@ -93,10 +105,10 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
         </div>
 
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">API Secret</label>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{copy.apiSecretLabel}</label>
           <input 
             type="password" 
-            placeholder="Plak hier je API-secret"
+            placeholder={copy.apiSecretPlaceholder}
             className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 outline-none transition-all"
             value={form.api_secret}
             onChange={e => setForm({...form, api_secret: e.target.value})}
@@ -105,10 +117,10 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
 
         {selectedExchange.id === 'bybit' && (
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Passphrase (optioneel)</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{copy.passphraseLabel}</label>
             <input 
               type="password" 
-              placeholder="API-passphrase indien vereist"
+              placeholder={copy.passphrasePlaceholder}
               className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 outline-none transition-all"
               value={form.api_passphrase}
               onChange={e => setForm({...form, api_passphrase: e.target.value})}
@@ -120,10 +132,10 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
       <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border-2 border-slate-100 dark:border-slate-800 rounded-2xl space-y-3">
          <div className="flex items-center gap-3">
             <Shield size={16} className="text-emerald-500" />
-            <span className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest">Beveiligingsprotocol</span>
+            <span className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest">{copy.securityTitle}</span>
          </div>
          <p className="text-[11px] font-medium text-slate-400 leading-relaxed italic">
-           Sleutels worden met AES-256 versleuteld voordat ze worden opgeslagen. We raden aan om "Withdrawals: Disabled" voor deze API-key op je exchange aan te zetten voor maximale veiligheid.
+           {copy.securityBody}
          </p>
       </div>
 
@@ -139,7 +151,7 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
            onClick={onCancel}
            className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
          >
-           Annuleren
+           {copy.cancel}
          </button>
          <button 
            onClick={handleConnect}
@@ -151,8 +163,8 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
            ) : (
              <Zap size={14} />
            )}
-           {testing ? "Verbinding testen..." : "Verifiëren en verbinden"}
-         </button>
+           {testing ? copy.testing : copy.submit}
+        </button>
       </div>
     </div>
   );

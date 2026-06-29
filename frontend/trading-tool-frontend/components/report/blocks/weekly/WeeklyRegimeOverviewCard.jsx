@@ -2,6 +2,7 @@
 
 import ReportCard from '@/components/report/sections/ReportCard';
 import { ArrowDown, ArrowRight, ArrowUp } from 'lucide-react';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 /**
  * WeeklyRegimeOverviewCard
@@ -12,37 +13,39 @@ import { ArrowDown, ArrowRight, ArrowUp } from 'lucide-react';
  * - Geen backend-wijzigingen nodig
  */
 export default function WeeklyRegimeOverviewCard({ report }) {
+  const { t } = useTranslation();
+  const copy = t?.reports?.blocks?.weeklyRegime || {};
   if (!report) return null;
 
-  const regime = deriveWeeklyRegime(report);
+  const regime = deriveWeeklyRegime(report, copy);
 
   return (
-    <ReportCard title="Weekregime Overzicht">
+    <ReportCard title={copy.title}>
       <div className="grid grid-cols-2 gap-4">
 
         <RegimePill
-          label="Markt"
+          label={copy.market}
           value={regime.market.label}
           tone={regime.market.tone}
           icon={regime.market.icon}
         />
 
         <RegimePill
-          label="Macro"
+          label={copy.macro}
           value={regime.macro.label}
           tone={regime.macro.tone}
           icon={regime.macro.icon}
         />
 
         <RegimePill
-          label="Technisch"
+          label={copy.technical}
           value={regime.technical.label}
           tone={regime.technical.tone}
           icon={regime.technical.icon}
         />
 
         <RegimePill
-          label="Setups"
+          label={copy.setups}
           value={regime.setups.label}
           tone={regime.setups.tone}
           icon={regime.setups.icon}
@@ -57,21 +60,21 @@ export default function WeeklyRegimeOverviewCard({ report }) {
  * Helpers — regime afleiding
  * ====================================================== */
 
-function deriveWeeklyRegime(report) {
+function deriveWeeklyRegime(report, copy = {}) {
   return {
-    market: deriveFromText(report.market_overview),
-    macro: deriveFromText(report.macro_trends),
-    technical: deriveFromText(report.technical_structure),
-    setups: deriveFromText(report.setup_performance),
+    market: deriveFromText(report.market_overview, copy),
+    macro: deriveFromText(report.macro_trends, copy),
+    technical: deriveFromText(report.technical_structure, copy),
+    setups: deriveFromText(report.setup_performance, copy),
   };
 }
 
-function deriveFromText(text = '') {
+function deriveFromText(text = '', copy = {}) {
   const t = text.toLowerCase();
 
   if (t.includes('bear') || t.includes('zwak') || t.includes('druk')) {
     return {
-      label: 'Bearish / defensief',
+      label: copy.bearish,
       tone: 'negative',
       icon: ArrowDown,
     };
@@ -79,14 +82,14 @@ function deriveFromText(text = '') {
 
   if (t.includes('bull') || t.includes('sterk') || t.includes('impuls')) {
     return {
-      label: 'Bullish / momentum',
+      label: copy.bullish,
       tone: 'positive',
       icon: ArrowUp,
     };
   }
 
   return {
-    label: 'Neutraal / range',
+    label: copy.neutral,
     tone: 'neutral',
     icon: ArrowRight,
   };

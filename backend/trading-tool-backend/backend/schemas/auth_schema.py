@@ -14,6 +14,20 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
 
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+    locale: Optional[str] = None
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+class PasswordResetValidationOut(BaseModel):
+    valid: bool
+
 class UserOut(BaseModel):
     id: int
     email: EmailStr

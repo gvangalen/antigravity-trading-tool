@@ -1,7 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function OnboardingProgress() {
+  const { t } = useTranslation();
+  const copy = t?.ui?.onboardingProgress || {};
   const totalSteps = 4; // ✅ Makkelijk later uitbreidbaar
   const [steps, setSteps] = useState({ 1: false, 2: false, 3: false, 4: false });
   const [loading, setLoading] = useState(true);
@@ -31,7 +34,7 @@ export default function OnboardingProgress() {
 
   return (
     <div className="max-w-xl mx-auto space-y-4">
-      <h2 className="text-xl font-bold">🚀 Onboarding voortgang</h2>
+      <h2 className="text-xl font-bold">{copy.title}</h2>
 
       <div className="flex gap-4">
         {[...Array(totalSteps)].map((_, idx) => {
@@ -41,7 +44,7 @@ export default function OnboardingProgress() {
               key={step}
               className={`px-4 py-2 rounded text-white ${steps[step] ? 'bg-green-600' : 'bg-gray-400'}`}
             >
-              {steps[step] ? '✅' : '⬜'} Stap {step}
+              {steps[step] ? '✅' : '⬜'} {copy.stepLabel} {step}
             </div>
           );
         })}
@@ -56,11 +59,11 @@ export default function OnboardingProgress() {
 
       {completed === totalSteps && (
         <div className="p-4 bg-green-100 border border-green-400 rounded text-green-800">
-          🎯 Alle {totalSteps} stappen voltooid! Je bent klaar om te starten.
+          {copy.complete.replace("{count}", totalSteps)}
         </div>
       )}
 
-      {loading && <p className="text-sm text-gray-500">📡 Laden...</p>}
+      {loading && <p className="text-sm text-gray-500">{copy.loading}</p>}
     </div>
   );
 }

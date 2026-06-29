@@ -1,48 +1,51 @@
 // ==============================================================================
 // Central Frontend Intelligence Semantics Helper (Single Source of Truth)
 // ==============================================================================
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export function useIntelligenceSemantics() {
+  const { t } = useTranslation();
+  const semanticsT = t?.dashboard?.intelligenceSemantics || {};
   const getMacroSemantics = (score) => {
     const val = score === null || score === undefined ? 50 : Number(score);
     const conviction = Math.round(val);
 
     if (val >= 70) {
       return {
-        regime: "Expansion Regime",
-        posture: "Aggressive Growth",
-        riskState: "Minimal Macro Risk",
+        regime: semanticsT?.macro?.expansion?.regime,
+        posture: semanticsT?.macro?.expansion?.posture,
+        riskState: semanticsT?.macro?.expansion?.riskState,
         conviction,
-        explanation: "Markt toont sterke trendcontinuatie, gezonde liquiditeit en gunstige macro-economische condities.",
+        explanation: semanticsT?.macro?.expansion?.explanation,
         badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
       };
     }
     if (val >= 45) {
       return {
-        regime: "Recovery Phase",
-        posture: "Constructive Alignment",
-        riskState: "Controlled Risk",
+        regime: semanticsT?.macro?.recovery?.regime,
+        posture: semanticsT?.macro?.recovery?.posture,
+        riskState: semanticsT?.macro?.recovery?.riskState,
         conviction,
-        explanation: "Macro-indicatoren stabiliseren na een correctie met toenemende kapitaalinstroom.",
+        explanation: semanticsT?.macro?.recovery?.explanation,
         badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
       };
     }
     if (val >= 30) {
       return {
-        regime: "Stagflation Risk",
-        posture: "Cautious Stance",
-        riskState: "Elevated Uncertainty",
+        regime: semanticsT?.macro?.stagflation?.regime,
+        posture: semanticsT?.macro?.stagflation?.posture,
+        riskState: semanticsT?.macro?.stagflation?.riskState,
         conviction,
-        explanation: "Tegenstrijdige signalen in inflatie en rentebeleid vereisen een verlaagde handelsfrequentie.",
+        explanation: semanticsT?.macro?.stagflation?.explanation,
         badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
       };
     }
     return {
-      regime: "Contraction Regime",
-      posture: "Defensive Posture",
-      riskState: "Severe Contraction",
+      regime: semanticsT?.macro?.contraction?.regime,
+      posture: semanticsT?.macro?.contraction?.posture,
+      riskState: semanticsT?.macro?.contraction?.riskState,
       conviction,
-      explanation: "Macro-omgeving vertoont zware liquiditeitskrimp. Positiegroottes worden automatisch afgeschaald (0.2x).",
+      explanation: semanticsT?.macro?.contraction?.explanation,
       badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
     };
   };
@@ -53,36 +56,36 @@ export function useIntelligenceSemantics() {
 
     if (val >= 70) {
       return {
-        structure: "Bullish Expansion",
+        structure: semanticsT?.technical?.strong?.structure,
         conviction,
-        momentum: "Strong Upward Bias",
-        explanation: "Prijsactie en voortschrijdende gemiddelden wijzen op krachtig institutioneel opwaarts momentum.",
+        momentum: semanticsT?.technical?.strong?.momentum,
+        explanation: semanticsT?.technical?.strong?.explanation,
         badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
       };
     }
     if (val >= 50) {
       return {
-        structure: "Bullish Recovery",
+        structure: semanticsT?.technical?.recovery?.structure,
         conviction,
-        momentum: "Positive Divergence",
-        explanation: "Technische structuur herstelt van oversold condities en bouwt hogere bodems op.",
+        momentum: semanticsT?.technical?.recovery?.momentum,
+        explanation: semanticsT?.technical?.recovery?.explanation,
         badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
       };
     }
     if (val >= 30) {
       return {
-        structure: "Consolidation",
+        structure: semanticsT?.technical?.neutral?.structure,
         conviction,
-        momentum: "Neutral / Sideways",
-        explanation: "Prijs beweegt in een krappe bandbreedte zonder duidelijke richting. Uitbraak wordt afgewacht.",
+        momentum: semanticsT?.technical?.neutral?.momentum,
+        explanation: semanticsT?.technical?.neutral?.explanation,
         badgeClass: "bg-slate-50 text-slate-700 border-slate-200",
       };
     }
     return {
-      structure: "Bearish Structure",
+      structure: semanticsT?.technical?.weak?.structure,
       conviction,
-      momentum: "Downward Pressure",
-      explanation: "Dominante neerwaartse trend met zwakke koopkracht. Short-posities of cash-allocatie aanbevolen.",
+      momentum: semanticsT?.technical?.weak?.momentum,
+      explanation: semanticsT?.technical?.weak?.explanation,
       badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
     };
   };
@@ -93,36 +96,36 @@ export function useIntelligenceSemantics() {
 
     if (val >= 70) {
       return {
-        posture: "Capital Inflow",
+        posture: semanticsT?.market?.strong?.posture,
         conviction,
-        liquidity: "Premium Liquidity",
-        explanation: "Hoge handelsvolumes en brede marktparticipatie bevestigen robuuste institutionele steun.",
+        liquidity: semanticsT?.market?.strong?.liquidity,
+        explanation: semanticsT?.market?.strong?.explanation,
         badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
       };
     }
     if (val >= 50) {
       return {
-        posture: "Stable Participation",
+        posture: semanticsT?.market?.recovery?.posture,
         conviction,
-        liquidity: "Standard Volume",
-        explanation: "Gemiddelde liquiditeit en orderboekdiepte ondersteunen reguliere DCA-uitvoering.",
+        liquidity: semanticsT?.market?.recovery?.liquidity,
+        explanation: semanticsT?.market?.recovery?.explanation,
         badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
       };
     }
     if (val >= 30) {
       return {
-        posture: "Liquidity Divergence",
+        posture: semanticsT?.market?.cautious?.posture,
         conviction,
-        liquidity: "Thin Orderbooks",
-        explanation: "Afnemend volume en oplopende spreads duiden op verminderde institutionele interesse.",
+        liquidity: semanticsT?.market?.cautious?.liquidity,
+        explanation: semanticsT?.market?.cautious?.explanation,
         badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
       };
     }
     return {
-      posture: "Risk Aversion",
+      posture: semanticsT?.market?.defensive?.posture,
       conviction,
-      liquidity: "Capital Flight",
-      explanation: "Kapitaalvlucht waargenomen met verhoogde marktbrede volatiliteit en verkoopdruk.",
+      liquidity: semanticsT?.market?.defensive?.liquidity,
+      explanation: semanticsT?.market?.defensive?.explanation,
       badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
     };
   };

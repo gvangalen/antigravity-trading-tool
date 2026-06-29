@@ -7,9 +7,12 @@ import {
 
 import MarketConditionsPanel from "@/components/bot/MarketConditionsPanel";
 import { useIntelligenceSemantics } from "@/hooks/useIntelligenceSemantics";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function MarketDecisionCard({ data, symbol = "BTC" }) {
+  const { t } = useTranslation();
   if (!data) return null;
+  const copy = t?.ui?.marketDecision || {};
 
   /* ======================================
      API DATA (DE ENIGE SOURCE)
@@ -44,24 +47,26 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
   const trendMid = trend?.mid || "trading range";
   const trendLong = trend?.long || "trading range";
 
-  const formatTrend = (t) => {
-    const v = String(t).toLowerCase();
+  const formatTrend = (trendValue) => {
+    const v = String(trendValue).toLowerCase();
+    const trendLabels = copy.trendLabels || {};
 
-    if (v === "bullish") return "Positief";
-    if (v === "bearish") return "Negatief";
-
-    return "Zijwaarts";
+    if (v === "bullish") return trendLabels.bullish;
+    if (v === "bearish") return trendLabels.bearish;
+    if (v === "trading_range" || v === "trading range" || v === "ranging") return trendLabels.sideways;
+    return trendLabels.sideways;
   };
 
   /* ======================================
      MARKET CYCLE
   ====================================== */
 
+  const phaseCopy = copy.phases || {};
   const phases = [
-    "Accumulation",
-    "Expansion",
-    "Distribution",
-    "Correction",
+    phaseCopy.accumulation,
+    phaseCopy.expansion,
+    phaseCopy.distribution,
+    phaseCopy.correction,
   ];
 
   const phaseIndex =
@@ -85,13 +90,13 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
             <Activity size={18} />
           </div>
           <div>
-            <div className="text-[10px] font-black text-muted uppercase tracking-widest mb-0.5">Marktanalyse</div>
-            <div className="text-sm font-bold text-foreground tracking-tight">Marktcontext en globale analyse</div>
+            <div className="text-[10px] font-black text-muted uppercase tracking-widest mb-0.5">{copy.title}</div>
+            <div className="text-sm font-bold text-foreground tracking-tight">{copy.subtitle}</div>
           </div>
         </div>
 
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border shadow-sm ${macroData.badgeClass}`}>
-          <span className="text-[9px] font-black uppercase tracking-tighter opacity-70">Risicostatus:</span>
+          <span className="text-[9px] font-black uppercase tracking-tighter opacity-70">{copy.riskStatus}</span>
           <span className="text-[10px] font-black uppercase tracking-widest">
             {macroData.riskState}
           </span>
@@ -104,7 +109,7 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Structurele fase</div>
+            <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">{copy.structuralPhase}</div>
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -116,11 +121,11 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
               }}
               className="opacity-0 group-hover/cycle:opacity-100 flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all hover:scale-105 active:scale-95 shadow-sm"
             >
-              <Sparkles size={10} /> Vraag Finn
+              <Sparkles size={10} /> {copy.askFinn}
             </button>
           </div>
           <div className="text-[10px] font-black text-[var(--primary)] uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-md border border-blue-100 dark:border-blue-800">
-             Actief: {macroData.regime}
+             {copy.active}: {macroData.regime}
           </div>
         </div>
 
@@ -158,9 +163,9 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
       {/* 📊 TREND TELEMETRY */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
         {[
-          { label: "Korte termijn", value: trendShort },
-          { label: "Middellange termijn", value: trendMid },
-          { label: "Lange termijn", value: trendLong }
+          { label: copy.shortTerm, value: trendShort },
+          { label: copy.mediumTerm, value: trendMid },
+          { label: copy.longTerm, value: trendLong }
         ].map((t) => {
           const val = String(t.value || "trading range").toLowerCase();
           const colorClass = val === 'bullish' ? 'text-green-600' : val === 'bearish' ? 'text-red-600' : 'text-slate-600';
@@ -173,7 +178,7 @@ export default function MarketDecisionCard({ data, symbol = "BTC" }) {
               </div>
               <div className={`text-xs font-black uppercase tracking-tight flex items-center gap-2 ${colorClass}`}>
                 <div className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
-                {t.value}
+                {formatTrend(t.value)}
               </div>
             </div>
           );

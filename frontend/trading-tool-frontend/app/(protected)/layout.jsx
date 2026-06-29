@@ -6,9 +6,11 @@ import AIAssistant from "@/components/ui/AIAssistant";
 import AIFloatingButton from "@/components/ui/AIFloatingButton";
 import ScrollToTop from "@/components/ui/ScrollToTop";
 import { useState } from "react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function ProtectedLayout({ children }) {
   const [isAIOpen, setIsAIOpen] = useState(false);
+  const { locale } = useTranslation();
   return (
     <>
       {/* 🧱 SIDEBAR (NAVBAR handles its own mobile/desktop state) */}
@@ -28,7 +30,10 @@ export default function ProtectedLayout({ children }) {
         </div>
 
         {/* 📄 PAGE CONTENT */}
-        <main className="pt-16 lg:pt-16 min-h-screen px-4 lg:px-10 h-auto overflow-visible">
+        <main
+          key={locale}
+          className="pt-16 lg:pt-16 min-h-screen px-4 lg:px-10 h-auto overflow-visible"
+        >
           {children}
         </main>
         

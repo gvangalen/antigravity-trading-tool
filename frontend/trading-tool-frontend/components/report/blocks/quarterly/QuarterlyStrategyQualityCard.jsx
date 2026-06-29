@@ -1,27 +1,30 @@
 'use client';
 
 import ReportCard from '@/components/report/sections/ReportCard';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 export default function QuarterlyStrategyQualityCard({ report }) {
+  const { t } = useTranslation();
+  const copy = t?.reports?.blocks?.quarterlyStrategyQuality || {};
   if (!report) return null;
 
   return (
-    <ReportCard title="Strategiekwaliteit">
+    <ReportCard title={copy.title}>
       <div className="space-y-4 text-sm">
 
         <QualityRow
-          label="Setups"
-          value={grade(report.setup_performance)}
+          label={copy.setups}
+          value={grade(report.setup_performance, copy)}
         />
 
         <QualityRow
-          label="Bot-executie"
-          value={grade(report.bot_performance)}
+          label={copy.botExecution}
+          value={grade(report.bot_performance, copy)}
         />
 
         <QualityRow
-          label="Consistentie"
-          value={inferConsistency(report.strategic_lessons)}
+          label={copy.consistency}
+          value={inferConsistency(report.strategic_lessons, copy)}
         />
 
       </div>
@@ -38,17 +41,17 @@ function QualityRow({ label, value }) {
   );
 }
 
-function grade(text = '') {
+function grade(text = '', copy = {}) {
   const t = text.toLowerCase();
-  if (t.includes('sterk') || t.includes('consistent')) return 'Sterk';
-  if (t.includes('gemengd') || t.includes('wisselend')) return 'Wisselend';
-  if (t.includes('zwak') || t.includes('onder druk')) return 'Zwak';
-  return 'Neutraal';
+  if (t.includes('sterk') || t.includes('consistent')) return copy.strong;
+  if (t.includes('gemengd') || t.includes('wisselend')) return copy.variable;
+  if (t.includes('zwak') || t.includes('onder druk')) return copy.weak;
+  return copy.neutral;
 }
 
-function inferConsistency(text = '') {
+function inferConsistency(text = '', copy = {}) {
   const t = text.toLowerCase();
-  if (t.includes('discipline') || t.includes('structuur')) return 'Hoog';
-  if (t.includes('afwijk') || t.includes('emotie')) return 'Afnemend';
-  return 'Gemiddeld';
+  if (t.includes('discipline') || t.includes('structuur')) return copy.high;
+  if (t.includes('afwijk') || t.includes('emotie')) return copy.declining;
+  return copy.average;
 }

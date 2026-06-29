@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import CardWrapper from "@/components/ui/CardWrapper";
 import UniversalSearchDropdown from "@/components/ui/UniversalSearchDropdown";
 import IndicatorScorePanel from "@/components/scoring/IndicatorScorePanel";
 import { Coins, Plus } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function MarketIndicatorScoreView({
   availableIndicators = [],
@@ -15,6 +15,7 @@ export default function MarketIndicatorScoreView({
   activeIndicators = [],
 }) {
   const { showSnackbar } = useModal();
+  const { t } = useTranslation();
   const [indicator, setIndicator] = useState(selectedIndicator || null);
 
   /* --------------------------------------------------
@@ -48,9 +49,9 @@ export default function MarketIndicatorScoreView({
 
     try {
       await addMarketIndicator(indicator.name);
-      showSnackbar("Indicator toegevoegd", "success");
+      showSnackbar(panelCopy.addSuccess, "success");
     } catch {
-      showSnackbar("Toevoegen mislukt", "danger");
+      showSnackbar(panelCopy.addError, "danger");
     }
   };
 
@@ -62,6 +63,19 @@ export default function MarketIndicatorScoreView({
     indicator?.label ||
     indicator?.name;
 
+  const panelCopy = t?.pages?.market?.indicatorPanel || {};
+  const copy = {
+    eyebrow: panelCopy.eyebrow,
+    title: panelCopy.title,
+    configBadge: panelCopy.configBadge || panelCopy.configId,
+    selectLabel: panelCopy.selectLabel,
+    searchPlaceholder: panelCopy.searchPlaceholder,
+    emptyHint: panelCopy.emptyHint,
+    tuningLabel: panelCopy.tuningLabel,
+    active: t?.ui?.terminalGrid?.active,
+    attach: panelCopy.attach,
+  };
+
   return (
     <div className="bg-card border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden">
       {/* TERMINAL HEADER */}
@@ -71,12 +85,16 @@ export default function MarketIndicatorScoreView({
              <Coins size={20} className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">Indicatoroverzicht</div>
-            <h2 className="text-xl font-black text-foreground tracking-tight uppercase leading-none mt-1">Marktindicatoren</h2>
+            <div className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">
+              {copy.eyebrow}
+            </div>
+            <h2 className="text-xl font-black text-foreground tracking-tight uppercase leading-none mt-1">
+              {copy.title}
+            </h2>
           </div>
         </div>
         <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] bg-card px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
-           SYSTEM_ID: MARKET_CFG_V2.0
+          {copy.configBadge}
         </div>
       </div>
 
@@ -84,8 +102,8 @@ export default function MarketIndicatorScoreView({
         {/* SEARCH BLOCK */}
         <div className="max-w-xl">
           <UniversalSearchDropdown
-            label="SELECT_MARKET_NODE"
-            placeholder="Zoek indicatoren (prijs, volume, 24u-verandering)..."
+            label={copy.selectLabel}
+            placeholder={copy.searchPlaceholder}
             items={availableIndicators}
             selected={indicator}
             onSelect={handleSelect}
@@ -94,7 +112,7 @@ export default function MarketIndicatorScoreView({
           {!indicator && (
             <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-secondary uppercase tracking-widest italic opacity-60">
                <div className="w-1 h-1 rounded-full bg-slate-400 animate-pulse" />
-               Awaiting node selection for signal configuration...
+               {copy.emptyHint}
             </div>
           )}
         </div>
@@ -108,7 +126,7 @@ export default function MarketIndicatorScoreView({
                   {displayName}
                 </span>
                 <span className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">
-                  Live parameterafstemming
+                  {copy.tuningLabel}
                 </span>
               </div>
 
@@ -118,7 +136,7 @@ export default function MarketIndicatorScoreView({
                 className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[var(--primary)] text-white text-[10px] font-black uppercase tracking-[0.2em] hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg active:scale-95"
               >
                 <Plus size={14} />
-                {isAdded ? "ACTIEF" : "KOPPEL AAN MARKTOVERZICHT"}
+                {isAdded ? copy.active : copy.attach}
               </button>
             </div>
 

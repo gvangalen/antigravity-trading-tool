@@ -6,8 +6,10 @@ import CardLoader from "@/components/ui/CardLoader";
 import Link from "next/link";
 import { useReportData } from "@/hooks/useReportData";
 import AIInsightBlock from "@/components/ui/AIInsightBlock";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function ReportCard() {
+  const { t } = useTranslation();
   const { report, loading, error } = useReportData("daily");
 
   // ✅ Report moet object zijn
@@ -25,7 +27,7 @@ export default function ReportCard() {
       ? safeReport.ai_summary_short
       : typeof safeReport?.headline === "string"
       ? safeReport.headline
-      : "Nieuw rapport is klaar!";
+      : t?.dashboard?.cards?.reportReady;
 
   return (
     <CardWrapper

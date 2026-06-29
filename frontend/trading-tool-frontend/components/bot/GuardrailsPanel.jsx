@@ -3,19 +3,13 @@
 import { Shield, AlertTriangle } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatCurrency } from "@/lib/i18n";
 
-const BEHAVIOR_FLAG_LABELS = {
-  fomo: "FOMO",
-  overtrades: "Overtrading",
-  leverage_seeking: "Leverage-neiging",
-  holds_losers_too_long: "Verlies te lang laten lopen",
-  takes_profit_too_early: "Winst te vroeg nemen",
-};
+const humanizeBehaviorLabel = (flag, fallbackLabel = "", labels = {}) =>
+  fallbackLabel || labels[String(flag || "").trim()] || String(flag || "").replaceAll("_", " ");
 
-const humanizeBehaviorLabel = (flag, fallbackLabel = "") =>
-  fallbackLabel || BEHAVIOR_FLAG_LABELS[String(flag || "").trim()] || String(flag || "").replaceAll("_", " ");
-
-const extractBehavioralFriction = (decision = {}, result = {}) => {
+const extractBehavioralFriction = (decision = {}, result = {}, labels = {}) => {
   const direct =
     decision?.pending_behavioral_memory_friction ||
     decision?.memory_friction ||
@@ -32,7 +26,7 @@ const extractBehavioralFriction = (decision = {}, result = {}) => {
       source: "profile_habit_alignment",
       message: alignment.behavioral_cost || alignment.summary,
       safe_alternative: alignment.recommended_rule,
-      label: humanizeBehaviorLabel(alignment.flag, alignment.label),
+      label: humanizeBehaviorLabel(alignment.flag, alignment.label, labels),
     };
   }
   return null;
@@ -43,6 +37,9 @@ export default function GuardrailsPanel({
   bot = {},
   onRefresh,
 }) {
+  const { t, locale } = useTranslation();
+  const copy = t?.botPage?.guardrailsPanel || {};
+  const behaviorLabels = copy.behaviorLabels || {};
   const telemetryKeyRef = useRef("");
 
   const result = decision?.guardrails_result || {};
@@ -83,8 +80,8 @@ export default function GuardrailsPanel({
     strategyReason ||
     warnings?.[0] ||
     blockedBy ||
-    "within risk limits";
-  const behavioralFriction = extractBehavioralFriction(decision, result);
+    copy.withinRiskLimits;
+  const behavioralFriction = extractBehavioralFriction(decision, result, behaviorLabels);
 
   useEffect(() => {
     if (!behavioralFriction?.message) return;
@@ -137,10 +134,7 @@ export default function GuardrailsPanel({
   const eur = (v) => {
     const n = Number(v);
     if (!Number.isFinite(n)) return "€0";
-
-    return n.toLocaleString("nl-NL", {
-      style: "currency",
-      currency: "EUR",
+    return formatCurrency(n, locale, "EUR", {
       maximumFractionDigits: 0,
     });
   };
@@ -164,23 +158,23 @@ export default function GuardrailsPanel({
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2 text-[10px] font-black text-secondary uppercase tracking-widest">
           <Shield size={14} className="text-slate-300" />
-          Safety Check
+          {copy.safetyCheck}
         </div>
         <div className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${allowed ? "bg-green-100 text-green-600 border border-green-200" : "bg-red-100 text-red-600 border border-red-200"}`}>
-          {allowed ? "GO / CLEAR" : "SYSTEM BLOCKED"}
+          {allowed ? copy.goClear : copy.systemBlocked}
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         {/* SENSOR 1: TRADE LIMITS */}
         <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-xl p-3 flex flex-col justify-between">
-           <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-2">Max Risk / Trade</div>
+           <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-2">{copy.maxRiskPerTrade}</div>
            <div className="text-sm font-black text-foreground font-mono tracking-tighter">{eur(maxRisk)}</div>
         </div>
 
         {/* SENSOR 2: ASSET EXPOSURE */}
         <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-xl p-3 flex flex-col justify-between">
-           <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-1">Exposureratio</div>
+           <div className="text-[9px] font-black text-secondary uppercase tracking-tighter mb-1">{copy.exposureRatio}</div>
            <div className="text-[11px] font-black text-foreground font-mono tracking-tighter opacity-80 mb-1">
              {currentExposure}% / {maxExposure}%
            </div>
@@ -196,16 +190,16 @@ export default function GuardrailsPanel({
 
       <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-xl p-3 space-y-2">
          <div className="flex justify-between items-center">
-            <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">Aangepaste inzet</div>
+            <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.adjustedPositionSize}</div>
             <div className={`text-[10px] font-black px-1.5 py-0.5 rounded ${tradeAdjusted ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
-              {tradeAdjusted ? "AFGESCHAALD" : "OPTIMALE GROOTTE"}
+              {tradeAdjusted ? copy.scaledDown : copy.optimalSize}
             </div>
          </div>
          <div className="text-sm font-black text-foreground font-mono tracking-tighter">
             {eur(adjustedAmount)}
             {tradeAdjusted && (
                <span className="text-[10px] text-secondary font-normal ml-2 italic">
-                 (Req: {eur(originalAmount)})
+                 ({copy.requestedPrefix}: {eur(originalAmount)})
                </span>
             )}
          </div>
@@ -213,16 +207,16 @@ export default function GuardrailsPanel({
 
       {/* SYSTEM FEEDBACK SECTION */}
       <div className="pt-2">
-        <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1 mx-1">Reden van interlock</div>
+        <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1 mx-1">{copy.interlockReason}</div>
         <div className={`p-3 rounded-xl border italic text-xs font-bold tracking-tight min-h-[44px] flex items-center ${allowed ? "bg-blue-50/50 border-blue-100/50 text-blue-600" : "bg-orange-100/50 border-orange-200/50 text-orange-600"}`}>
-           {reason === "within risk limits" ? "✓ Alle veiligheidsparameters zijn normaal" : reason}
+           {reason === copy.withinRiskLimits ? copy.allSafetyParametersNormal : reason}
         </div>
       </div>
 
       {behavioralFriction && (
         <div className="rounded-xl border border-amber-200/70 bg-amber-50/70 p-3 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
           <div className="text-[9px] font-black uppercase tracking-widest">
-            Gedragsrem{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
+            {copy.behavioralBrake}{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
           </div>
           {behavioralFriction?.message && (
             <p className="mt-2 text-xs font-semibold leading-relaxed">

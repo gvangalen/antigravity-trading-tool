@@ -15,16 +15,22 @@ import {
 } from "recharts";
 import { useScoresData } from "@/hooks/useScoresData";
 import { TrendingUp, Activity } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatDate } from "@/lib/i18n";
 
 export default function ScoreHistoryChart({ symbol = "BTC" }) {
   const { history, loading } = useScoresData(symbol);
+  const { t, locale } = useTranslation();
+  const copy = t?.dashboard?.scoreHistory || {};
 
   if (loading || !history || history.length === 0) {
     return (
       <div className="w-full h-[400px] bg-card rounded-[2.5rem] border border-[var(--color-border)] p-10 flex items-center justify-center">
          <div className="flex flex-col items-center gap-4">
             <Activity className="animate-pulse text-blue-500/20" size={40} />
-            <p className="text-[11px] font-black uppercase tracking-widest text-secondary/40">Synchronizing {symbol} History...</p>
+            <p className="text-[11px] font-black uppercase tracking-widest text-secondary/40">
+              {copy.loadingHistory.replace("{symbol}", symbol)}
+            </p>
          </div>
       </div>
     );
@@ -33,7 +39,7 @@ export default function ScoreHistoryChart({ symbol = "BTC" }) {
   // Formatting for Recharts
   const data = history.map(item => ({
     ...item,
-    formattedDate: new Date(item.date).toLocaleDateString('nl-NL', { day: '2-digit', month: 'short' }),
+    formattedDate: formatDate(item.date, locale, { day: '2-digit', month: 'short' }),
   }));
 
   return (
@@ -46,19 +52,23 @@ export default function ScoreHistoryChart({ symbol = "BTC" }) {
             <TrendingUp size={24} strokeWidth={1.5} />
           </div>
           <div>
-            <div className="text-[11px] font-bold text-secondary/60 uppercase tracking-[0.2em] mb-0.5">Performance Analytics</div>
-            <div className="text-2xl font-black text-foreground tracking-tight uppercase leading-none">{symbol} Intelligence Correlation</div>
+            <div className="text-[11px] font-bold text-secondary/60 uppercase tracking-[0.2em] mb-0.5">{copy.analyticsEyebrow}</div>
+            <div className="text-2xl font-black text-foreground tracking-tight uppercase leading-none">
+              {copy.correlationTitle.replace("{symbol}", symbol)}
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-6">
            <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-secondary">Master Score</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-secondary">{copy.masterScore}</span>
            </div>
            <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-slate-300" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-secondary">{symbol} Price</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-secondary">
+                {copy.priceLabel.replace("{symbol}", symbol)}
+              </span>
            </div>
         </div>
       </div>
@@ -137,7 +147,7 @@ export default function ScoreHistoryChart({ symbol = "BTC" }) {
 
       <div className="mt-8 pt-6 border-t border-[var(--color-border-subtle)] relative z-10">
          <p className="text-[10px] text-secondary/50 leading-relaxed font-bold uppercase tracking-wider italic text-center">
-            Historische correlatie tussen technische intelligencescores en de prijsactie van {symbol} over de afgelopen 30 dagen.
+            {copy.historyCaption.replace("{symbol}", symbol)}
          </p>
       </div>
     </div>

@@ -5,6 +5,7 @@ import WeeklyScoreTrendCard from '@/components/report/blocks/weekly/WeeklyScoreT
 import WeeklyBotBehaviorCard from '@/components/report/blocks/weekly/WeeklyBotBehaviorCard';
 
 import ReportSection from '@/components/report/sections/ReportSection';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 /**
  * WeeklyReportLayout — v2.1
@@ -30,7 +31,10 @@ import ReportSection from '@/components/report/sections/ReportSection';
  * - outlook
  */
 export default function WeeklyReportLayout({ report }) {
+  const { t } = useTranslation();
   if (!report) return null;
+
+  const copy = t?.reports?.layouts?.weekly || {};
 
   return (
     <div className="max-w-6xl mx-auto px-4 space-y-20">
@@ -40,7 +44,7 @@ export default function WeeklyReportLayout({ report }) {
       ====================================================== */}
       <section>
         <h2 className="text-lg font-semibold mb-4">
-          Weekoverzicht in één oogopslag
+          {copy.summaryTitle || 'Weekly overview at a glance'}
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -54,7 +58,7 @@ export default function WeeklyReportLayout({ report }) {
       ====================================================== */}
       <section>
         <h2 className="text-lg font-semibold mb-4">
-          Botgedrag & uitvoering
+          {copy.behaviorTitle || 'Bot behavior & execution'}
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -70,39 +74,39 @@ export default function WeeklyReportLayout({ report }) {
       ====================================================== */}
       <section className="max-w-3xl mx-auto space-y-14">
 
-        <ReportSection title="Weekoverzicht">
+        <ReportSection title={copy.sections?.overview || 'Weekly overview'}>
           <p className="leading-relaxed text-[15px] text-neutral-800">
-            {report.executive_summary || 'Geen weekoverzicht beschikbaar.'}
+            {report.executive_summary || copy.fallbacks?.overview || 'No weekly overview is available yet.'}
           </p>
         </ReportSection>
 
-        <ReportSection title="Marktontwikkeling">
+        <ReportSection title={copy.sections?.marketDevelopment || 'Market development'}>
           <p className="leading-relaxed text-[15px] text-neutral-800">
-            {report.market_overview || 'Geen marktanalyse beschikbaar.'}
+            {report.market_overview || copy.fallbacks?.marketDevelopment || 'No market analysis is available yet.'}
           </p>
         </ReportSection>
 
-        <ReportSection title="Macro-context">
+        <ReportSection title={copy.sections?.macroContext || 'Macro context'}>
           <p className="leading-relaxed text-[15px] text-neutral-800">
-            {report.macro_trends || 'Geen macro-analyse beschikbaar.'}
+            {report.macro_trends || copy.fallbacks?.macroContext || 'No macro analysis is available yet.'}
           </p>
         </ReportSection>
 
-        <ReportSection title="Technische structuur">
+        <ReportSection title={copy.sections?.technicalStructure || 'Technical structure'}>
           <p className="leading-relaxed text-[15px] text-neutral-800">
-            {report.technical_structure || 'Geen technische analyse beschikbaar.'}
+            {report.technical_structure || copy.fallbacks?.technicalStructure || 'No technical analysis is available yet.'}
           </p>
         </ReportSection>
 
-        <ReportSection title="Setups & strategische lessen">
+        <ReportSection title={copy.sections?.strategicLessons || 'Setups & strategic lessons'}>
           <p className="leading-relaxed text-[15px] text-neutral-800">
-            {report.strategic_lessons || 'Geen strategische lessen beschikbaar.'}
+            {report.strategic_lessons || copy.fallbacks?.strategicLessons || 'No strategic lessons are available yet.'}
           </p>
         </ReportSection>
 
-        <ReportSection title="Vooruitblik">
+        <ReportSection title={copy.sections?.outlook || 'Outlook'}>
           <p className="leading-relaxed text-[15px] text-neutral-800">
-            {report.outlook || 'Geen vooruitblik beschikbaar.'}
+            {report.outlook || copy.fallbacks?.outlook || 'No outlook is available yet.'}
           </p>
         </ReportSection>
 

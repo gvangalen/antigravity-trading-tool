@@ -1,14 +1,20 @@
 "use client";
 
+import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatCurrency } from "@/lib/i18n";
+
 export default function BotBudgetBar({
   total = 0,
   spent = 0,
   label = "Budget",
 }) {
+  const { t, locale } = useTranslation();
+  const copy = t?.botPage?.budgetBar || {};
+
   if (total <= 0) {
     return (
       <div className="text-xs text-[var(--text-muted)]">
-        Geen budget ingesteld
+        {copy.noBudget}
       </div>
     );
   }
@@ -29,7 +35,8 @@ export default function BotBudgetBar({
       <div className="flex justify-between text-xs">
         <span className="text-[var(--text-muted)]">{label}</span>
         <span>
-          €{spent.toFixed(0)} / €{total.toFixed(0)}
+          {formatCurrency(Number(spent), locale, "EUR", { maximumFractionDigits: 0 })} /{" "}
+          {formatCurrency(Number(total), locale, "EUR", { maximumFractionDigits: 0 })}
         </span>
       </div>
 
@@ -43,8 +50,8 @@ export default function BotBudgetBar({
 
       {/* AVAILABLE */}
       <div className="flex justify-between text-xs text-[var(--text-muted)]">
-        <span>Beschikbaar</span>
-        <span>€{remaining.toFixed(0)}</span>
+        <span>{copy.available}</span>
+        <span>{formatCurrency(Number(remaining), locale, "EUR", { maximumFractionDigits: 0 })}</span>
       </div>
 
     </div>

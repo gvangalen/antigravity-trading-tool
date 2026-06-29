@@ -4,6 +4,7 @@ import { Calendar, Globe, Zap, Activity, Target, Info } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { HUDSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { formatDateTime } from "@/lib/i18n";
 
 export default function ReportTerminalHUD({ report, type = "daily", loading = false }) {
   const { user } = useAuth();
@@ -60,10 +61,10 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
         </div>
 
         <div className="bg-blue-50/20 border-2 border-blue-600/5 rounded-[2rem] p-6 flex flex-wrap items-center gap-4">
-          <ScoreItem label="Macro" value={macro_score} icon={Globe} colorClass="bg-blue-600" />
-          <ScoreItem label="Technisch" value={technical_score} icon={Zap} colorClass="bg-amber-500" />
-          <ScoreItem label="Markt" value={market_score} icon={Activity} colorClass="bg-indigo-600" />
-          <ScoreItem label="Setup" value={setup_score} icon={Target} colorClass="bg-emerald-600" />
+          <ScoreItem label={reportT.hudMacro} value={macro_score} icon={Globe} colorClass="bg-blue-600" />
+          <ScoreItem label={reportT.hudTechnical} value={technical_score} icon={Zap} colorClass="bg-amber-500" />
+          <ScoreItem label={reportT.hudMarket} value={market_score} icon={Activity} colorClass="bg-indigo-600" />
+          <ScoreItem label={reportT.hudSetup} value={setup_score} icon={Target} colorClass="bg-emerald-600" />
         </div>
 
       </div>
@@ -76,7 +77,7 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
          <div className="flex items-center gap-4">
             <span>{reportT.hudUser}: {user?.name || reportT.hudSystem}</span>
             <span className="w-1 h-1 rounded-full bg-slate-300" />
-            <span>{reportT.hudUpdated}: {generated_at ? new Date(generated_at).toLocaleTimeString(locale === "nl" ? "nl-NL" : "en-US", { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
+            <span>{reportT.hudUpdated}: {generated_at ? formatDateTime(generated_at, locale, { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
          </div>
       </footer>
     </div>

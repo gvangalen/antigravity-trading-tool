@@ -1,6 +1,7 @@
 'use client';
 
 import ReportCard from '@/components/report/sections/ReportCard';
+import { useTranslation } from '@/app/providers/I18nProvider';
 
 /**
  * WeeklyBotBehaviorCard — v2.0
@@ -16,30 +17,32 @@ import ReportCard from '@/components/report/sections/ReportCard';
  * - technical_score (discipline / volgen structuur)
  */
 export default function WeeklyBotBehaviorCard({ report }) {
+  const { t } = useTranslation();
+  const copy = t?.reports?.blocks?.weeklyBotBehavior || {};
   if (!report) return null;
 
-  const activity = deriveActivity(report);
-  const selectivity = deriveSelectivity(report);
-  const discipline = deriveDiscipline(report);
+  const activity = deriveActivity(report, copy);
+  const selectivity = deriveSelectivity(report, copy);
+  const discipline = deriveDiscipline(report, copy);
 
   return (
-    <ReportCard title="Botgedrag (Week)">
+    <ReportCard title={copy.title}>
       <div className="space-y-4">
 
         {/* GEDRAGSOVERZICHT */}
         <div className="grid grid-cols-3 gap-3 text-sm">
           <BehaviorPill
-            label="Activiteit"
+            label={copy.activity}
             value={activity.label}
             tone={activity.tone}
           />
           <BehaviorPill
-            label="Selectiviteit"
+            label={copy.selectivity}
             value={selectivity.label}
             tone={selectivity.tone}
           />
           <BehaviorPill
-            label="Discipline"
+            label={copy.discipline}
             value={discipline.label}
             tone={discipline.tone}
           />
@@ -61,56 +64,56 @@ export default function WeeklyBotBehaviorCard({ report }) {
    🔹 Behavior logic (frontend-only, safe defaults)
 ===================================================== */
 
-function deriveActivity(report) {
+function deriveActivity(report, copy = {}) {
   // Later: echte trade-counts
   if (!report.bot_performance) {
-    return { label: 'Onbekend', tone: 'neutral' };
+    return { label: copy.unknown, tone: 'neutral' };
   }
 
   const text = report.bot_performance.toLowerCase();
 
   if (text.includes('weinig') || text.includes('terughoudend')) {
-    return { label: 'Laag', tone: 'neutral' };
+    return { label: copy.low, tone: 'neutral' };
   }
   if (text.includes('actief') || text.includes('meerdere')) {
-    return { label: 'Hoog', tone: 'positive' };
+    return { label: copy.high, tone: 'positive' };
   }
 
-  return { label: 'Gemiddeld', tone: 'neutral' };
+  return { label: copy.average, tone: 'neutral' };
 }
 
-function deriveSelectivity(report) {
+function deriveSelectivity(report, copy = {}) {
   const score = report.setup_score;
 
   if (typeof score !== 'number') {
-    return { label: 'Onbekend', tone: 'neutral' };
+    return { label: copy.unknown, tone: 'neutral' };
   }
 
   if (score >= 65) {
-    return { label: 'Hoog', tone: 'positive' };
+    return { label: copy.high, tone: 'positive' };
   }
   if (score <= 45) {
-    return { label: 'Laag', tone: 'negative' };
+    return { label: copy.low, tone: 'negative' };
   }
 
-  return { label: 'Gemiddeld', tone: 'neutral' };
+  return { label: copy.average, tone: 'neutral' };
 }
 
-function deriveDiscipline(report) {
+function deriveDiscipline(report, copy = {}) {
   const score = report.technical_score;
 
   if (typeof score !== 'number') {
-    return { label: 'Onbekend', tone: 'neutral' };
+    return { label: copy.unknown, tone: 'neutral' };
   }
 
   if (score >= 65) {
-    return { label: 'Consistent', tone: 'positive' };
+    return { label: copy.consistent, tone: 'positive' };
   }
   if (score <= 45) {
-    return { label: 'Wisselend', tone: 'negative' };
+    return { label: copy.variable, tone: 'negative' };
   }
 
-  return { label: 'Redelijk', tone: 'neutral' };
+  return { label: copy.fair, tone: 'neutral' };
 }
 
 /* =====================================================

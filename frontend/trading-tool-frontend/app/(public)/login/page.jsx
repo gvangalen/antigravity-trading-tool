@@ -7,6 +7,29 @@ import { Mail, Lock, LogIn, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import Link from "next/link";
+import { getOnboardingStatus } from "@/lib/api/onboarding";
+
+async function resolvePostLoginDestination(nextPath) {
+  try {
+    const status = await getOnboardingStatus();
+    const isComplete = status?.onboarding_complete ?? (
+      status?.has_profile &&
+      status?.has_setup &&
+      status?.has_technical &&
+      status?.has_macro &&
+      status?.has_market &&
+      status?.has_strategy
+    );
+    if (!isComplete) return "/onboarding";
+  } catch (error) {
+    console.warn("⚠️ Could not resolve onboarding status after login:", error);
+  }
+
+  if (!nextPath || nextPath.startsWith("/login") || nextPath.startsWith("/register")) {
+    return "/dashboard";
+  }
+  return nextPath;
+}
 
 function LoginPageContent() {
   const router = useRouter();
@@ -15,6 +38,7 @@ function LoginPageContent() {
   const { showSnackbar } = useModal();
   const { t } = useTranslation();
   const nextPath = searchParams.get("next") || "/dashboard";
+  const reason = searchParams.get("reason");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,10 +52,11 @@ function LoginPageContent() {
      🚀 Als al ingelogd EN geverifieerd → dashboard
   ------------------------------------------------------- */
   useEffect(() => {
-    if (sessionChecked && isAuthenticated && !redirected.current) {
-      redirected.current = true;
-      router.push(nextPath);
-    }
+    if (!sessionChecked || !isAuthenticated || redirected.current) return;
+    redirected.current = true;
+    void resolvePostLoginDestination(nextPath).then((destination) => {
+      router.push(destination);
+    });
   }, [isAuthenticated, sessionChecked, nextPath, router]);
 
   /* -------------------------------------------------------
@@ -53,9 +78,8 @@ function LoginPageContent() {
     }
 
     showSnackbar(t?.auth?.welcomeBack, "success");
-
-    // 🔥 HARD REDIRECT: Zorgt dat middleware direct de nieuwe cookies ziet
-    router.push(nextPath);
+    const destination = await resolvePostLoginDestination(nextPath);
+    router.push(destination);
   };
 
   return (
@@ -81,11 +105,11 @@ function LoginPageContent() {
                   <ShieldCheck size={18} strokeWidth={2.5} />
                 </div>
                 <div className="text-[11px] font-black uppercase tracking-[0.3em]">
-                  Professional
+                  {t?.auth?.professional}
                 </div>
               </div>
               <div className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] opacity-80 border-t border-slate-100 dark:border-slate-800 pt-2 w-full">
-                Trade Smarter. Follow your plan.<br/>Win consistently.
+                {t?.auth?.taglineLine1}<br/>{t?.auth?.taglineLine2}
               </div>
             </div>
           </div>
@@ -96,6 +120,11 @@ function LoginPageContent() {
           <p className="page-subtitle mx-auto mt-4">
             {t?.auth?.brandLoginDescription}
           </p>
+          {reason === "session_expired" ? (
+            <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+              {t?.auth?.sessionExpired}
+            </p>
+          ) : null}
         </div>
 
         {/* Form */}
@@ -172,6 +201,11 @@ function LoginPageContent() {
               className="text-blue-600 font-bold hover:underline ml-2 uppercase tracking-widest text-[10px]"
             >
               {t?.auth?.createOne}
+            </Link>
+          </p>
+          <p className="mt-4 text-sm font-semibold text-slate-500">
+            <Link href="/forgot-password" className="text-blue-600 hover:underline">
+              {t?.auth?.forgotPassword}
             </Link>
           </p>
         </div>

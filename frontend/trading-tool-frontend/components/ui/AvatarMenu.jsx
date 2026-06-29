@@ -6,12 +6,13 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { getLocaleLabel } from "@/lib/i18n";
 
 import { User, LogOut, Loader2, Moon, Sun, Languages } from "lucide-react";
 import NotificationToggle from "@/components/NotificationToggle";
 
 export default function AvatarMenu() {
-  const { t, locale, setLocale } = useTranslation();
+  const { t, locale, setLocale, supportedLocales } = useTranslation();
   const [showDropdown, setShowDropdown] = useState(false);
   const [loadingLogout, setLoadingLogout] = useState(false);
   const dropdownRef = useRef(null);
@@ -32,6 +33,8 @@ export default function AvatarMenu() {
     }
   }, []);
 
+  const menuText = t?.ui?.avatarMenu || {};
+
   function toggleTheme() {
     const newTheme = isDark ? 'light' : 'dark';
     localStorage.setItem('theme', newTheme);
@@ -43,16 +46,13 @@ export default function AvatarMenu() {
     }
     setIsDark(!isDark);
     
-    const msg = locale === 'nl' 
-      ? `Thema gewijzigd naar ${newTheme === 'dark' ? 'Donker' : 'Licht'}` 
-      : `Theme changed to ${newTheme === 'dark' ? 'Dark' : 'Light'}`;
-    showSnackbar(msg, "success");
+    const themeLabel = newTheme === "dark" ? menuText.themeDark : menuText.themeLight;
+    showSnackbar(`${menuText.themeChanged} ${themeLabel}`, "success");
   }
 
-  function toggleLanguage() {
-    const newLocale = locale === 'en' ? 'nl' : 'en';
+  function selectLanguage(newLocale) {
     setLocale(newLocale);
-    showSnackbar(newLocale === 'nl' ? "Taal gewijzigd naar Nederlands" : "Language changed to English", "success");
+    showSnackbar(`${menuText.languageChanged} ${getLocaleLabel(newLocale)}`, "success");
   }
 
   /* Close on click outside */
@@ -74,7 +74,7 @@ export default function AvatarMenu() {
 
     await logout();
 
-    showSnackbar(locale === 'nl' ? "Je bent veilig uitgelogd ✔" : "You have been safely logged out ✔", "success");
+    showSnackbar(menuText.loggedOut, "success");
 
     window.location.href = "/login";
   };
@@ -95,7 +95,7 @@ export default function AvatarMenu() {
           shadow-lg shadow-blue-900/20
           relative overflow-hidden
         "
-        title={locale === 'nl' ? "Profiel menu openen" : "Open profile menu"}
+        title={menuText.openMenu}
       >
         {/* Subtle Inner Glow */}
         <div className="absolute inset-x-0 top-0 h-1/2 bg-white/10" />
@@ -125,7 +125,7 @@ export default function AvatarMenu() {
             {/* User info (Industrial Header) */}
             {user && (
               <li className="px-5 py-4 bg-[var(--color-border-subtle)] dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
-                <p className="text-[10px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-widest mb-1">{locale === 'nl' ? "Geïdentificeerd als" : "Identified as"}</p>
+                <p className="text-[10px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-widest mb-1">{menuText.identifiedAs}</p>
                 <p className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">
                   {user.first_name
                     ? `${user.first_name} ${user.last_name || ""}`
@@ -133,37 +133,55 @@ export default function AvatarMenu() {
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                    <span className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[9px] font-black uppercase tracking-tighter border border-blue-200 dark:border-blue-800">
-                     {locale === 'nl' ? "Rol" : "Role"}: {user.role || 'PRO'}
+                     {menuText.role}: {user.role || 'PRO'}
                    </span>
                 </div>
               </li>
             )}
 
             <DropdownItem href="/profile" icon={<User size={16} />}>
-              {locale === 'nl' ? "Account en Finn-profiel" : "Account & trader profile"}
+              {menuText.profile}
             </DropdownItem>
 
             <div className="h-px bg-[var(--color-border-subtle)] dark:bg-slate-800 my-1 mx-4" />
 
-            {/* LANGUAGE TOGGLE */}
-            <DropdownButton 
-              icon={<Languages size={16} />}
-              onClick={toggleLanguage}
-            >
-              <div className="flex flex-col items-start leading-none">
-                <span className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">{t.common.language}</span>
-                <span className="font-bold">
-                  {locale === "nl" ? "Nederlands actief, wissel naar Engels" : "English active, switch to Dutch"}
-                </span>
+            <li className="px-4 py-2.5 mx-2 my-1 rounded-lg">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-secondary dark:text-slate-500"><Languages size={16} /></span>
+                <div className="flex flex-col items-start leading-none">
+                  <span className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">{t.common.language}</span>
+                  <span className="font-bold text-[13px]">
+                    {menuText.chooseLanguage}
+                  </span>
+                </div>
               </div>
-            </DropdownButton>
+              <div className="grid grid-cols-1 gap-2">
+                {supportedLocales.map((supportedLocale) => {
+                  const isActive = locale === supportedLocale;
+                  return (
+                    <button
+                      key={supportedLocale}
+                      type="button"
+                      onClick={() => selectLanguage(supportedLocale)}
+                      className={`w-full rounded-lg border px-3 py-2 text-left text-[13px] font-semibold transition-all ${
+                        isActive
+                          ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
+                          : "border-slate-200 text-dim hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900"
+                      }`}
+                    >
+                      {getLocaleLabel(supportedLocale)}
+                    </button>
+                  );
+                })}
+              </div>
+            </li>
 
             {/* THEME TOGGLE (V2 ALIVE STYLE) */}
             <DropdownButton 
               icon={isDark ? <Sun size={16} /> : <Moon size={16} />}
               onClick={toggleTheme}
             >
-              {isDark ? (locale === 'nl' ? "Lichte modus" : "Light mode") : (locale === 'nl' ? "Donkere modus" : "Dark mode")}
+              {isDark ? menuText.lightMode : menuText.darkMode}
             </DropdownButton>
 
             <div className="h-px bg-[var(--color-border-subtle)] dark:bg-slate-800 my-1 mx-4" />
@@ -187,7 +205,7 @@ export default function AvatarMenu() {
               danger
               onClick={loadingLogout ? undefined : handleLogout}
             >
-              {loadingLogout ? (locale === 'nl' ? "Uitloggen…" : "Signing out…") : (locale === 'nl' ? "Uitloggen" : "Sign out")}
+              {loadingLogout ? menuText.signingOut : menuText.signOut}
             </DropdownButton>
           </ul>
         </div>

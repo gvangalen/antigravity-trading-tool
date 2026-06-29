@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 import {
   fetchMarketData7d,
@@ -23,13 +24,19 @@ import { getDailyScores } from "@/lib/api/scores";
 /* --------------------------------------------------------
    Advies logica
 -------------------------------------------------------- */
-const getAdvies = (score) =>
-  score >= 75 ? "🟢 Bullish" : score <= 25 ? "🔴 Bearish" : "⚖️ Neutraal";
+const getAdvies = (score, commonT = {}) =>
+  score >= 75
+    ? `🟢 ${commonT.bullish}`
+    : score <= 25
+    ? `🔴 ${commonT.bearish}`
+    : `⚖️ ${commonT.neutral}`;
 
 /* ========================================================
    MAIN HOOK
 ======================================================== */
 export function useMarketData(symbol = "BTC", options = {}) {
+  const { t } = useTranslation();
+  const commonT = t?.common || {};
   const {
     includeExtendedData = true,
     mode = "full",
@@ -44,13 +51,13 @@ export function useMarketData(symbol = "BTC", options = {}) {
 
   const [forwardReturns, setForwardReturns] = useState({
     week: [],
-    maand: [],
-    kwartaal: [],
-    jaar: [],
+    month: [],
+    quarter: [],
+    year: [],
   });
 
   const [marketScore, setMarketScore] = useState("N/A");
-  const [advies, setAdviesState] = useState("⚖️ Neutraal");
+  const [advies, setAdviesState] = useState(() => getAdvies(50, commonT));
 
   const [marketDayData, setMarketDayData] = useState([]);
   const [activeMarketIndicators, setActiveMarketIndicators] = useState([]);
@@ -141,16 +148,16 @@ export function useMarketData(symbol = "BTC", options = {}) {
       if (shouldLoadForwardData) {
         setForwardReturns({
           week: unwrapSettled(forwardWeekResult, []),
-          maand: unwrapSettled(forwardMonthResult, []),
-          kwartaal: unwrapSettled(forwardQuarterResult, []),
-          jaar: unwrapSettled(forwardYearResult, []),
+          month: unwrapSettled(forwardMonthResult, []),
+          quarter: unwrapSettled(forwardQuarterResult, []),
+          year: unwrapSettled(forwardYearResult, []),
         });
       } else {
         setForwardReturns({
           week: [],
-          maand: [],
-          kwartaal: [],
-          jaar: [],
+          month: [],
+          quarter: [],
+          year: [],
         });
       }
 
@@ -158,7 +165,7 @@ export function useMarketData(symbol = "BTC", options = {}) {
         const dailyScores = unwrapSettled(dailyScoresResult, null);
         const score = dailyScores?.market?.score ?? 50;
         setMarketScore(score);
-        setAdviesState(getAdvies(score));
+        setAdviesState(getAdvies(score, commonT));
       }
 
       if (shouldLoadMarketDayData) {
@@ -193,11 +200,11 @@ export function useMarketData(symbol = "BTC", options = {}) {
 
       if (failedResults.length > 0) {
         console.warn(`⚠️ loadAll partial failures (${symbol}):`, failedResults);
-        setError("Een deel van de market data kon niet direct geladen worden.");
+        setError(t?.pages?.market?.partialLoadError);
       }
     } catch (err) {
       console.error(`❌ loadAll error (${symbol}):`, err);
-      setError("Kon market data niet laden.");
+      setError(t?.pages?.market?.loadError);
     } finally {
       setLoading(false);
     }
@@ -213,7 +220,7 @@ export function useMarketData(symbol = "BTC", options = {}) {
       await loadAll();
     } catch (err) {
       console.error(`❌ syncHistory error (${targetSymbol}):`, err);
-      setError("Kon history niet synchroniseren.");
+      setError(t?.pages?.market?.syncHistoryError);
     } finally {
       setLoading(false);
     }

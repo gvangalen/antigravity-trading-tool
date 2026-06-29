@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 import { fetchAdminAiStats } from "@/lib/api/admin";
 import { 
   Zap, 
@@ -37,13 +38,6 @@ import {
   Legend
 } from "recharts";
 
-const MODE_LABELS = {
-  "cache_exact": "Exacte hit",
-  "cache_semantic": "Semantische hit",
-  "full_ai": "Volledige AI-call",
-  "fallback": "Platformfallback"
-};
-
 const MODE_COLORS = {
   "cache_exact": "#10b981",
   "cache_semantic": "#3b82f6",
@@ -51,40 +45,59 @@ const MODE_COLORS = {
   "fallback": "#ef4444"
 };
 
-const SOURCE_LABELS = {
-  live_user: "Live gebruiker",
-  qa_user: "QA / smoke",
-  staging_user: "Staging gebruiker",
-  background_job: "Achtergrondtaak",
-  system: "Systeem",
-  unclassified: "Legacy / old logs",
-};
-
-const SOURCE_HINTS = {
-  live_user: "Echte productie-interactie vanuit de app.",
-  qa_user: "Testgebruikers, smoke-runs en QA-verkeer.",
-  staging_user: "Gebruik op de staging-omgeving.",
-  background_job: "Automatische rapporten, agents en Celery jobs.",
-  system: "Platforminterne AI-calls zonder user-flow.",
-  unclassified: "Oude logs van voor de nieuwe bronlabels.",
-};
-
-function formatSourceLabel(source) {
-  return SOURCE_LABELS[source] || source.replaceAll("_", " ");
+function humanizeKey(value) {
+  return String(value || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
-function formatEntryPointLabel(entryPoint) {
+function getModeLabel(mode, copy) {
+  return copy?.modeLabels?.[mode] || humanizeKey(mode);
+}
+
+function getSourceLabel(source, copy) {
+  return copy?.sourceLabels?.[source] || humanizeKey(source);
+}
+
+function getSourceHint(source, copy) {
+  return copy?.sourceHints?.[source] || copy?.unknownSource || humanizeKey(source);
+}
+
+function getEntryPointLabel(entryPoint, copy) {
   const value = String(entryPoint || "unclassified");
-  if (value === "unclassified") return "Legacy / oude logs";
-  if (value === "scheduled_job") return "Geplande taak";
+  if (value === "unclassified") return copy?.entryPointLabels?.unclassified || humanizeKey(value);
+  if (value === "scheduled_job") return copy?.entryPointLabels?.scheduledJob || humanizeKey(value);
   return value
-    .replaceAll("assistant_service:", "Finn / ")
-    .replaceAll("report_service:", "Rapporten / ")
-    .replaceAll("_task", " taak")
+    .replaceAll("assistant_service:", copy?.entryPointPrefixes?.assistantService || "Finn / ")
+    .replaceAll("report_service:", copy?.entryPointPrefixes?.reportService || "Reports / ")
+    .replaceAll("_task", copy?.entryPointLabels?.taskSuffix || " task")
     .replaceAll("_", " ");
 }
 
+function getSeverityLabel(severity, copy) {
+  return copy?.severityLabels?.[severity] || humanizeKey(severity);
+}
+
+function getAnomalyTypeLabel(type, copy) {
+  return copy?.anomalyTypeLabels?.[type] || humanizeKey(type);
+}
+
+function getRejectionReasonLabel(reason, copy) {
+  return copy?.rejectionReasons?.[reason] || humanizeKey(reason);
+}
+
+function getPlanLabel(plan, copy) {
+  return copy?.planLabels?.[plan] || humanizeKey(plan);
+}
+
+function getFeaturePurposeLabel(purpose, copy) {
+  const normalized = String(purpose || "").replace(/^chat_/, "");
+  return copy?.featurePurposeLabels?.[normalized] || humanizeKey(normalized);
+}
+
 export default function AdminAiDashboard() {
+  const { t } = useTranslation();
+  const copy = t.adminAiPage;
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -100,7 +113,7 @@ export default function AdminAiDashboard() {
       setStats(data);
     } catch (err) {
       console.error("Admin AI-statistieken laden mislukt", err);
-      setError("Je hebt geen admin rechten of de API is offline.");
+      setError(copy.loadError);
     } finally {
       setLoading(false);
     }
@@ -109,7 +122,7 @@ export default function AdminAiDashboard() {
   if (loading) return (
     <div className="p-10 flex flex-col items-center justify-center min-h-[60vh]">
       <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-4" />
-      <p className="text-slate-400 font-bold uppercase tracking-widest text-xs italic">AI-statistieken laden...</p>
+      <p className="text-slate-400 font-bold uppercase tracking-widest text-xs italic">{copy.loading}</p>
     </div>
   );
 
@@ -118,7 +131,7 @@ export default function AdminAiDashboard() {
       <div className="inline-flex p-4 bg-rose-50 rounded-full text-rose-500 mb-4">
         <ShieldCheck size={32} />
       </div>
-      <h1 className="text-2xl font-black text-slate-900 mb-2 italic">Geen toegang</h1>
+      <h1 className="text-2xl font-black text-slate-900 mb-2 italic">{copy.noAccess}</h1>
       <p className="text-slate-500 max-w-md mx-auto">{error}</p>
     </div>
   );
@@ -136,7 +149,7 @@ export default function AdminAiDashboard() {
   } = stats;
 
   const rejectionData = Object.entries(overview.rejection_breakdown || {}).map(([reason, count]) => ({
-    reason: reason.replace('_', ' '),
+    reason: getRejectionReasonLabel(reason, copy),
     count
   }));
 
@@ -150,24 +163,24 @@ export default function AdminAiDashboard() {
               <BrainCircuit size={22} />
             </div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight italic">
-              AI-gebruik <span className="text-blue-600">en prestaties</span>
+              {copy.titlePrefix} <span className="text-blue-600">{copy.titleAccent}</span>
             </h1>
           </div>
           <p className="text-slate-500 font-medium max-w-2xl text-sm">
-            Overzicht van AI-verbruik, cachegedrag, latency en opvallende afwijkingen in productie.
+            {copy.subtitle}
           </p>
         </div>
         
         <div className="flex items-center gap-4">
           <div className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl flex items-center gap-3 shadow-lg shadow-blue-600/20">
              <div className="w-2.5 h-2.5 rounded-full bg-blue-200 animate-pulse" />
-             <span className="text-[11px] font-black uppercase tracking-widest italic">AI-monitoring actief</span>
+             <span className="text-[11px] font-black uppercase tracking-widest italic">{copy.monitoringActive}</span>
           </div>
           <button 
             onClick={loadStats}
             className="px-6 py-3 bg-white border border-slate-200 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-600 hover:border-blue-600 hover:text-blue-600 transition-all shadow-sm active:scale-95"
           >
-            Vernieuwen
+            {copy.refresh}
           </button>
         </div>
       </div>
@@ -176,70 +189,70 @@ export default function AdminAiDashboard() {
       {/* 📊 SUMMARY RIBBON */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7 gap-6 mb-10">
         <MetricCard 
-          title="MTD resultaat" 
+          title={copy.metrics.mtdResult} 
           value={`€${overview.total_profit_month_eur.toFixed(2)}`} 
           icon={<DollarSign size={18} className="text-green-500" />}
           trend="positive"
-          subtitle={`${((overview.total_profit_month_eur / (overview.total_revenue_month_eur || 1)) * 100).toFixed(1)}% brutomarge`}
+          subtitle={`${((overview.total_profit_month_eur / (overview.total_revenue_month_eur || 1)) * 100).toFixed(1)}% ${copy.metrics.grossMargin}`}
         />
         <MetricCard 
-          title="Exacte hits" 
+          title={copy.metrics.exactHits} 
           value={overview.exact_hits} 
           icon={<Hash size={18} className="text-emerald-500" />}
-          subtitle="Query-hash match"
+          subtitle={copy.metrics.queryHashMatch}
           trend="positive"
         />
         <MetricCard 
-          title="Semantische hits" 
+          title={copy.metrics.semanticHits} 
           value={overview.semantic_hits} 
           icon={<BrainCircuit size={18} className="text-blue-500" />}
-          subtitle="Vector-overeenkomst"
+          subtitle={copy.metrics.vectorMatch}
           trend="positive"
         />
         <MetricCard 
-          title="Gem. latency" 
+          title={copy.metrics.avgLatency} 
           value={`${overview.avg_latency_ms.toFixed(0)} ms`} 
           icon={<Clock size={18} className="text-amber-500" />}
-          subtitle="Platformgemiddelde"
+          subtitle={copy.metrics.platformAverage}
           trend={overview.avg_latency_ms < 500 ? "positive" : "negative"}
         />
         <MetricCard 
-          title="Gem. kosten / AI-call" 
+          title={copy.metrics.avgCostPerCall} 
           value={`€${overview.avg_cost_per_full_request.toFixed(4)}`} 
           icon={<Zap size={18} className="text-violet-500" />}
-          subtitle="Alleen niet-gecachede calls"
+          subtitle={copy.metrics.nonCachedOnly}
           trend="neutral"
         />
         <MetricCard 
-          title="Geblokkeerde AI-kosten" 
+          title={copy.metrics.blockedAiCost} 
           value={`€${overview.blocked_estimated_cost_month_eur.toFixed(2)}`} 
           icon={<AlertOctagon size={18} className="text-rose-500" />}
-          subtitle={`${overview.blocked_requests_month} quota-geblokkeerde pogingen`}
+          subtitle={`${overview.blocked_requests_month} ${copy.metrics.quotaBlockedAttempts}`}
           trend={overview.blocked_requests_month > 0 ? "negative" : "positive"}
         />
         <MetricCard 
-          title="Totale besparing" 
+          title={copy.metrics.totalSavings} 
           value={`€${overview.total_savings_month_eur.toFixed(2)}`} 
           icon={<PiggyBank size={18} className="text-blue-600" />}
-          subtitle="Bespaarde AI-kosten"
+          subtitle={copy.metrics.savedAiCost}
           trend="positive"
           isHighlight
         />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
-        <MiniSourceCard label="Live gebruikers" value={`€${overview.live_user_cost_month_eur.toFixed(2)}`} tone="emerald" />
-        <MiniSourceCard label="QA / smoke" value={`€${overview.qa_cost_month_eur.toFixed(2)}`} tone="amber" />
-        <MiniSourceCard label="Achtergrondtaken" value={`€${overview.background_cost_month_eur.toFixed(2)}`} tone="violet" />
-        <MiniSourceCard label="Staging gebruikers" value={`€${overview.staging_cost_month_eur.toFixed(2)}`} tone="blue" />
+        <MiniSourceCard label={copy.sourceCards.liveUsers} value={`€${overview.live_user_cost_month_eur.toFixed(2)}`} tone="emerald" />
+        <MiniSourceCard label={copy.sourceCards.qaSmoke} value={`€${overview.qa_cost_month_eur.toFixed(2)}`} tone="amber" />
+        <MiniSourceCard label={copy.sourceCards.backgroundJobs} value={`€${overview.background_cost_month_eur.toFixed(2)}`} tone="violet" />
+        <MiniSourceCard label={copy.sourceCards.stagingUsers} value={`€${overview.staging_cost_month_eur.toFixed(2)}`} tone="blue" />
       </div>
 
       <div className="mb-10 p-5 bg-slate-50 border border-slate-100 rounded-[28px]">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {Object.entries(SOURCE_LABELS).map(([key, label]) => (
+          {Object.keys(copy.sourceLabels || {}).map((key) => (
             <div key={key} className="bg-white border border-slate-100 rounded-2xl p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 italic">{label}</p>
-              <p className="text-sm font-bold text-slate-600 mt-2">{SOURCE_HINTS[key]}</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 italic">{getSourceLabel(key, copy)}</p>
+              <p className="text-sm font-bold text-slate-600 mt-2">{getSourceHint(key, copy)}</p>
             </div>
           ))}
         </div>
@@ -254,13 +267,13 @@ export default function AdminAiDashboard() {
             </div>
             <div>
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider italic">
-                AI-afwijkingen
+                {copy.anomalies.title}
               </h3>
-              <p className="text-slate-400 text-xs">Signalen die extra aandacht vragen in het huidige AI-gebruik.</p>
+              <p className="text-slate-400 text-xs">{copy.anomalies.subtitle}</p>
             </div>
           </div>
           <span className="px-4 py-1.5 bg-slate-100 rounded-xl text-[10px] font-black uppercase text-slate-500 tracking-widest">
-            {stats.anomalies?.length || 0} Incidenten gedetecteerd
+            {stats.anomalies?.length || 0} {copy.anomalies.detectedIncidents}
           </span>
         </div>
 
@@ -291,10 +304,10 @@ export default function AdminAiDashboard() {
                   <div className="flex-grow">
                     <div className="flex items-center gap-2 mb-2">
                       <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${severityBadge[anomaly.severity] || "bg-slate-200 text-slate-800"}`}>
-                        {anomaly.severity}
+                        {getSeverityLabel(anomaly.severity, copy)}
                       </span>
                       <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 italic">
-                        {anomaly.type.replace('_', ' ')}
+                        {getAnomalyTypeLabel(anomaly.type, copy)}
                       </span>
                     </div>
                     <p className="text-xs font-black leading-relaxed tracking-tight italic">{anomaly.message}</p>
@@ -302,22 +315,22 @@ export default function AdminAiDashboard() {
                       <div className="mt-3 bg-white/40 p-2.5 rounded-lg border border-black/5 flex flex-wrap gap-x-4 gap-y-1.5">
                         {anomaly.details.email && (
                           <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                            Email: <span className="text-slate-800 lowercase font-bold">{anomaly.details.email}</span>
+                            {copy.anomalies.email}: <span className="text-slate-800 lowercase font-bold">{anomaly.details.email}</span>
                           </div>
                         )}
                         {anomaly.details.trace_id && (
                           <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                            Trace: <span className="text-slate-800 font-mono text-[9px]">{anomaly.details.trace_id.slice(0, 16)}...</span>
+                            {copy.anomalies.trace}: <span className="text-slate-800 font-mono text-[9px]">{anomaly.details.trace_id.slice(0, 16)}...</span>
                           </div>
                         )}
                         {anomaly.details.confidence_score !== undefined && (
                           <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                            Confidence: <span className="text-slate-800 font-bold">{anomaly.details.confidence_score}%</span>
+                            {copy.anomalies.confidence}: <span className="text-slate-800 font-bold">{anomaly.details.confidence_score}%</span>
                           </div>
                         )}
                         {anomaly.details.response_time_ms && (
                           <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                            Latency: <span className="text-slate-800 font-bold">{anomaly.details.response_time_ms}ms</span>
+                            {copy.anomalies.latency}: <span className="text-slate-800 font-bold">{anomaly.details.response_time_ms}ms</span>
                           </div>
                         )}
                       </div>
@@ -330,8 +343,8 @@ export default function AdminAiDashboard() {
         ) : (
           <div className="p-10 border border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400">
             <ShieldCheck size={48} className="text-emerald-500 stroke-1 mb-3 animate-pulse" />
-            <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Systeemstatus: Normaal</p>
-            <p className="text-[10px] font-semibold text-slate-400 mt-1 uppercase tracking-widest">Geen actieve afwijkingen gedetecteerd op de Oracle Cloud Node.</p>
+            <p className="text-xs font-black uppercase tracking-widest text-emerald-600">{copy.anomalies.normalStatus}</p>
+            <p className="text-[10px] font-semibold text-slate-400 mt-1 uppercase tracking-widest">{copy.anomalies.noActiveAnomalies}</p>
           </div>
         )}
       </div>
@@ -342,7 +355,7 @@ export default function AdminAiDashboard() {
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
               <PieChartIcon size={14} className="text-blue-600" />
-              Gateway Selection Mix
+              {copy.sections.gatewaySelectionMix}
             </h3>
           </div>
           <div className="h-[280px] w-full">
@@ -364,9 +377,9 @@ export default function AdminAiDashboard() {
                 </Pie>
                 <Tooltip 
                   contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.15)' }}
-                  formatter={(val, name) => [val, MODE_LABELS[name] || name]}
+                  formatter={(val, name) => [val, getModeLabel(name, copy)]}
                 />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" formatter={(v) => MODE_LABELS[v] || v} />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" formatter={(v) => getModeLabel(v, copy)} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -377,14 +390,14 @@ export default function AdminAiDashboard() {
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
               <Clock size={14} className="text-amber-500" />
-              Latency Response Map (ms)
+              {copy.sections.latencyResponseMap}
             </h3>
           </div>
           <div className="space-y-6">
             {latency_stats.sort((a,b) => b.avg_ms - a.avg_ms).map((item, idx) => (
               <div key={idx}>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">{MODE_LABELS[item.mode] || item.mode}</span>
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">{getModeLabel(item.mode, copy)}</span>
                   <span className="text-[11px] font-black text-slate-900">{item.avg_ms.toFixed(0)}ms</span>
                 </div>
                 <div className="h-2 w-full bg-slate-50 rounded-full overflow-hidden">
@@ -406,7 +419,7 @@ export default function AdminAiDashboard() {
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
               <XCircle size={14} className="text-rose-500" />
-              Afwijzingsanalyse
+              {copy.sections.rejectionAnalysis}
             </h3>
           </div>
           {rejectionData.length > 0 ? (
@@ -430,7 +443,7 @@ export default function AdminAiDashboard() {
           ) : (
              <div className="h-[280px] flex flex-col items-center justify-center text-slate-300">
                <ShieldCheck size={48} strokeWidth={1} />
-               <p className="text-[10px] font-black uppercase tracking-widest mt-4 italic">Vandaag geen afwijzingen</p>
+               <p className="text-[10px] font-black uppercase tracking-widest mt-4 italic">{copy.sections.noRejectionsToday}</p>
              </div>
           )}
         </div>
@@ -441,25 +454,25 @@ export default function AdminAiDashboard() {
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
               <Activity size={14} className="text-emerald-600" />
-              Spend by Source
+              {copy.sections.spendBySource}
             </h3>
           </div>
           <div className="space-y-4">
             {source_breakdown.map((item, idx) => (
               <div key={`${item.source}-${idx}`} className="border border-slate-100 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-black text-slate-900 italic tracking-tight">{formatSourceLabel(item.source)}</p>
+                  <p className="text-sm font-black text-slate-900 italic tracking-tight">{getSourceLabel(item.source, copy)}</p>
                   <span className="text-sm font-black text-slate-900">€{item.total_cost.toFixed(2)}</span>
                 </div>
-                <p className="text-[11px] text-slate-500 font-medium mb-3">{SOURCE_HINTS[item.source] || "Onbekende bron."}</p>
+                <p className="text-[11px] text-slate-500 font-medium mb-3">{getSourceHint(item.source, copy)}</p>
                 <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  <span>{item.total_requests} requests</span>
-                  <span>{item.unique_users} users</span>
+                  <span>{item.total_requests} {copy.requests}</span>
+                  <span>{item.unique_users} {copy.users}</span>
                   <span>{item.percentage.toFixed(1)}%</span>
                 </div>
                 <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-rose-400 mt-2">
-                  <span>{item.blocked_requests} blocked</span>
-                  <span>€{item.blocked_estimated_cost.toFixed(2)} est.</span>
+                  <span>{item.blocked_requests} {copy.blocked}</span>
+                  <span>€{item.blocked_estimated_cost.toFixed(2)} {copy.estimate}</span>
                 </div>
                 <div className="h-2 w-full bg-slate-50 rounded-full overflow-hidden mt-3">
                   <div
@@ -476,31 +489,31 @@ export default function AdminAiDashboard() {
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
               <Target size={14} className="text-violet-600" />
-              Duurste entry points
+              {copy.sections.costliestEntryPoints}
             </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-50">
-                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Entry point</th>
-                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Bron</th>
-                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">MTD-kosten</th>
-                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Geblokkeerd</th>
-                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Gem. / call</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.table.entryPoint}</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.table.source}</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.table.mtdCost}</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.table.blocked}</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.table.avgPerCall}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {top_entry_points.map((item, idx) => (
                   <tr key={`${item.entry_point}-${idx}`} className="group hover:bg-slate-50/50 transition-colors">
                     <td className="py-5 pr-4">
-                      <p className="text-sm font-black text-slate-900 italic tracking-tight">{formatEntryPointLabel(item.entry_point)}</p>
-                      <p className="text-[10px] font-medium text-slate-500 mt-1">{SOURCE_HINTS[item.source] || "Onbekende bron."}</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{item.total_requests} calls</p>
+                      <p className="text-sm font-black text-slate-900 italic tracking-tight">{getEntryPointLabel(item.entry_point, copy)}</p>
+                      <p className="text-[10px] font-medium text-slate-500 mt-1">{getSourceHint(item.source, copy)}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{item.total_requests} {copy.calls}</p>
                     </td>
                     <td className="py-5">
                       <span className="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border bg-slate-50 text-slate-600 border-slate-100">
-                        {formatSourceLabel(item.source)}
+                        {getSourceLabel(item.source, copy)}
                       </span>
                     </td>
                     <td className="py-5">
@@ -508,8 +521,8 @@ export default function AdminAiDashboard() {
                     </td>
                     <td className="py-5">
                       <div className="text-[10px] font-black uppercase tracking-widest text-rose-500">
-                        <div>{item.blocked_requests} hits</div>
-                        <div>€{item.blocked_estimated_cost.toFixed(2)} schatting</div>
+                        <div>{item.blocked_requests} {copy.hits}</div>
+                        <div>€{item.blocked_estimated_cost.toFixed(2)} {copy.estimate}</div>
                       </div>
                     </td>
                     <td className="py-5">
@@ -531,7 +544,7 @@ export default function AdminAiDashboard() {
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
               <BarChart3 size={14} className="text-slate-900" />
-              Profitability Tier Distribution
+              {copy.sections.profitabilityTierDistribution}
             </h3>
           </div>
           <div className="h-[300px] w-full">
@@ -554,16 +567,16 @@ export default function AdminAiDashboard() {
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
               <Users size={14} className="text-blue-600" />
-              Unit Economics Per User
+              {copy.sections.unitEconomicsPerUser}
             </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-50">
-                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Partner</th>
-                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Net Margin</th>
-                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Status</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.table.partner}</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.table.netMargin}</th>
+                  <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.table.status}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -571,7 +584,7 @@ export default function AdminAiDashboard() {
                   <tr key={idx} className="group hover:bg-slate-50/50 transition-colors">
                     <td className="py-5 pr-4">
                        <p className="text-sm font-black text-slate-900 italic tracking-tight truncate max-w-[180px]" title={user.email}>{user.email}</p>
-                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{user.plan} asset tier</p>
+                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{getPlanLabel(user.plan, copy)} {copy.assetTier}</p>
                     </td>
                     <td className="py-5">
                       <div className={`text-sm font-black flex items-center gap-1 ${user.profit_month_eur > 0 ? 'text-green-600' : 'text-rose-600'}`}>
@@ -579,23 +592,23 @@ export default function AdminAiDashboard() {
                         {user.profit_month_eur > 50 && <ArrowUpRight size={14} strokeWidth={3} />}
                       </div>
                       <div className="flex flex-col">
-                        <p className="text-[9px] font-black uppercase text-slate-300 italic">Mnd: €{user.usage_month_eur.toFixed(2)}</p>
-                        <p className="text-[9px] font-black uppercase text-blue-400 italic">Vandaag: €{user.usage_today_eur.toFixed(2)}</p>
-                        <p className="text-[9px] font-black uppercase text-violet-400 italic">Achtergrond: €{user.background_usage_month_eur.toFixed(2)}</p>
-                        <p className="text-[9px] font-black uppercase text-emerald-500 italic">Interactive: €{user.interactive_usage_month_eur.toFixed(2)}</p>
-                        <p className="text-[9px] font-black uppercase text-rose-500 italic">Geblokkeerd: {user.blocked_requests_month} / €{user.blocked_estimated_cost_month_eur.toFixed(2)} schatting</p>
+                        <p className="text-[9px] font-black uppercase text-slate-300 italic">{copy.monthShort}: €{user.usage_month_eur.toFixed(2)}</p>
+                        <p className="text-[9px] font-black uppercase text-blue-400 italic">{copy.today}: €{user.usage_today_eur.toFixed(2)}</p>
+                        <p className="text-[9px] font-black uppercase text-violet-400 italic">{copy.background}: €{user.background_usage_month_eur.toFixed(2)}</p>
+                        <p className="text-[9px] font-black uppercase text-emerald-500 italic">{copy.interactive}: €{user.interactive_usage_month_eur.toFixed(2)}</p>
+                        <p className="text-[9px] font-black uppercase text-rose-500 italic">{copy.blocked}: {user.blocked_requests_month} / €{user.blocked_estimated_cost_month_eur.toFixed(2)} {copy.estimate}</p>
                       </div>
                     </td>
                     <td className="py-5">
                       {user.requests_today >= user.requests_limit ? (
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-rose-50 text-rose-600 rounded-xl w-fit">
                           <AlertTriangle size={12} strokeWidth={3} />
-                          <span className="text-[9px] font-black uppercase tracking-widest italic">Over Quota</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest italic">{copy.overQuota}</span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl w-fit">
                           <Target size={12} strokeWidth={3} />
-                          <span className="text-[9px] font-black uppercase tracking-widest italic">Optimized</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest italic">{copy.optimized}</span>
                         </div>
                       )}
                     </td>
@@ -612,30 +625,30 @@ export default function AdminAiDashboard() {
         <div className="flex items-center justify-between mb-8">
           <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
             <Zap size={14} className="text-violet-500" />
-            Feature Economics & Margin Contribution
+            {copy.sections.featureEconomics}
           </h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-50">
-                <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Feature type / Purpose</th>
-                <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Usage volume</th>
-                <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Total Cost MTD</th>
-                <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Avg Cost / Call</th>
+                <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.table.featureType}</th>
+                <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.table.usageVolume}</th>
+                <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.table.totalCostMtd}</th>
+                <th className="pb-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{copy.table.avgCostPerCall}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {feature_breakdown.map((item, idx) => (
                 <tr key={idx} className="group hover:bg-slate-50/50 transition-colors">
                   <td className="py-5 pr-4">
-                    <p className="text-sm font-black text-slate-900 italic tracking-tight uppercase">{item.purpose.replace('chat_', '').replace('_', ' ')}</p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Actief orchestration-model</p>
+                    <p className="text-sm font-black text-slate-900 italic tracking-tight uppercase">{getFeaturePurposeLabel(item.purpose, copy)}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{copy.activeOrchestrationModel}</p>
                   </td>
                   <td className="py-5">
                     <div className="text-sm font-black text-slate-900 flex items-center gap-2">
                       {item.total_requests}
-                      <span className="text-[10px] font-bold text-slate-400">calls</span>
+                      <span className="text-[10px] font-bold text-slate-400">{copy.calls}</span>
                     </div>
                   </td>
                   <td className="py-5">

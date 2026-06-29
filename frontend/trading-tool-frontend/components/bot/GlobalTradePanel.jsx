@@ -2,7 +2,8 @@
 
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import TradePanelContainer from "./TradePanelContainer";
-import { Cpu, Target } from "lucide-react";
+import { Target } from "lucide-react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function GlobalTradePanel({
   decision,
@@ -10,12 +11,14 @@ export default function GlobalTradePanel({
   onManualTrade,
 }) {
   const { activeBot } = useActiveBot();
+  const { t } = useTranslation();
+  const copy = t?.botPage?.globalTradePanel || {};
 
   if (!activeBot) {
     return (
       <div className="card card-p text-center">
         <p className="text-xs font-black text-secondary uppercase tracking-widest opacity-60">
-           Selecteer een bot om te handelen
+           {copy.selectBot}
         </p>
       </div>
     );
@@ -35,8 +38,8 @@ export default function GlobalTradePanel({
                  <Target size={20} />
               </div>
               <div>
-                 <p className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none mb-1">Handelen met</p>
-                 <h2 className="text-sm font-extrabold text-foreground tracking-tight">{activeBot?.name || "Bot"}</h2>
+                 <p className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none mb-1">{copy.tradingWith}</p>
+                 <h2 className="text-sm font-extrabold text-foreground tracking-tight">{activeBot?.name || copy.botFallback}</h2>
               </div>
            </div>
            

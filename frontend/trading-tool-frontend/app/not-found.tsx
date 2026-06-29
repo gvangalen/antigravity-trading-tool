@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function NotFoundPage() {
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center px-6 text-white transition-colors">
       {/* 404 Backdrop */}
@@ -14,24 +16,25 @@ export default function NotFoundPage() {
       <div className="mt-[-40px] bg-white/5 backdrop-blur-2xl border-2 border-white/10 p-10 rounded-3xl max-w-md text-center shadow-2xl relative z-10">
         <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-20 h-20 bg-blue-600/30 blur-3xl rounded-full" />
         
-        <h2 className="text-3xl font-black mb-4 tracking-tight">Oops… Pagina niet gevonden</h2>
+        <h2 className="text-3xl font-black mb-4 tracking-tight">
+          {t?.publicPages?.notFound?.title}
+        </h2>
         <p className="text-slate-400 text-[15px] font-medium mb-8 leading-relaxed">
-          Deze pagina bestaat niet meer in Tradamind.
-          Controleer de URL of ga terug naar het dashboard.
+          {t?.publicPages?.notFound?.body}
         </p>
 
         <Link
           href="/dashboard"
           className="inline-block bg-blue-600 hover:bg-blue-700 transition-all px-8 py-3 rounded-xl text-[12px] font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 active:scale-95"
         >
-          Terug naar dashboard
+          {t?.publicPages?.notFound?.cta}
         </Link>
       </div>
 
       {/* Subtext Logo */}
       <div className="mt-12 opacity-30 flex flex-col items-center gap-2">
          <p className="text-[10px] font-black uppercase tracking-[0.4em]">
-           Tradamind — Pro
+           {t?.publicPages?.notFound?.brand}
          </p>
          <div className="w-8 h-1 bg-blue-600 rounded-full" />
       </div>
