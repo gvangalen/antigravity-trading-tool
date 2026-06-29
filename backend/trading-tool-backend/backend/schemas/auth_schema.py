@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    locale: Optional[str] = None
 
 class RefreshRequest(BaseModel):
     refresh_token: str
@@ -13,6 +14,7 @@ class RegisterRequest(BaseModel):
     last_name: Optional[str] = None
     email: EmailStr
     password: str
+    locale: Optional[str] = None
 
 
 class ForgotPasswordRequest(BaseModel):

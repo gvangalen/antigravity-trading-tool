@@ -2,17 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { fetchMarketIntelligence } from "@/lib/api/marketIntelligence";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 const INTELLIGENCE_CACHE_TTL_MS = 60_000;
 const intelligenceCache = new Map();
 const inflightIntelligenceRequests = new Map();
 
 export function useMarketIntelligence(symbol = "BTC") {
+  const { locale } = useTranslation();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const cacheKey = String(symbol || "BTC").toUpperCase();
+  const cacheKey = `${String(symbol || "BTC").toUpperCase()}:${String(locale || "nl").toLowerCase()}`;
 
   const load = async (forceRefresh = false) => {
     const cached = intelligenceCache.get(cacheKey);
@@ -61,7 +63,7 @@ export function useMarketIntelligence(symbol = "BTC") {
 
   useEffect(() => {
     load();
-  }, [symbol]);
+  }, [locale, symbol]);
 
   return { data, loading, reload: load };
 }

@@ -1,9 +1,13 @@
 'use client';
 
+import { useTranslation } from "@/app/providers/I18nProvider";
 import { Star } from "lucide-react";
 import CardWrapper from "@/components/ui/CardWrapper";
 
 export default function SetupScoreCard() {
+  const { t } = useTranslation();
+  const copy = t?.legacyComponents?.setupScoreCard || {};
+
   return (
     <CardWrapper>
       <div
@@ -23,15 +27,15 @@ export default function SetupScoreCard() {
           </div>
 
           <h2 className="text-sm font-semibold text-[var(--text-dark)]">
-            Actieve setup
+            {copy.title}
           </h2>
         </div>
 
         {/* Setup Info */}
         <p className="text-sm text-[var(--text-dark)] leading-relaxed">
-          A-Plus Setup —  
+          {copy.setupName}{" "}
           <span className="font-semibold text-green-600">
-            Score 85,0
+            {copy.scoreLabel}
           </span>
         </p>
 

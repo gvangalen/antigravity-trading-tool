@@ -11,7 +11,7 @@ import {
   loadRefreshTokenLocal,
   clearTokenLocal,
 } from "@/lib/api/user";
-import { normalizeLocale } from "@/lib/i18n";
+import { getActiveLocale, normalizeLocale } from "@/lib/i18n";
 
 /* =======================================================
    📌 Native Token Helpers
@@ -101,9 +101,14 @@ export async function ensureCsrfCookie() {
 export function buildAuthHeaders(headers?: HeadersInit, method: string = "GET") {
   const merged = new Headers(headers || {});
   const accessToken = loadAccessToken();
+  const activeLocale = normalizeLocale(getActiveLocale(typeof window !== "undefined" ? window : undefined));
 
   if (accessToken && !merged.has("Authorization")) {
     merged.set("Authorization", `Bearer ${accessToken}`);
+  }
+
+  if (activeLocale && !merged.has("X-Locale")) {
+    merged.set("X-Locale", activeLocale);
   }
 
   const normalizedMethod = String(method || "GET").toUpperCase();
@@ -244,8 +249,9 @@ export const fetchAuth = fetchAuthInternal;
    🔐 LOGIN
 ======================================================= */
 
-export async function apiLogin(email: string, password: string) {
+export async function apiLogin(email: string, password: string, locale?: string | null) {
   try {
+    const normalizedLocale = normalizeLocale(locale) || getActiveLocale(typeof window !== "undefined" ? window : undefined);
     const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
       method: "POST",
       credentials: "include",
@@ -253,7 +259,7 @@ export async function apiLogin(email: string, password: string) {
         "Content-Type": "application/json",
         ...Object.fromEntries(buildAuthHeaders(undefined, "POST").entries()),
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, locale: normalizedLocale }),
     });
 
     if (!res.ok) {

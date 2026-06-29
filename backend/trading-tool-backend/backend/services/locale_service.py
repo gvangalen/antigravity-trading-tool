@@ -69,6 +69,43 @@ _DUTCH_TO_ENGLISH_REPLACEMENTS = [
     ("punt", "point"),
 ]
 
+_ENGLISH_TO_DUTCH_REPLACEMENTS = [
+    ("Expansion Regime", "Expansieregime"),
+    ("Recovery Phase", "Herstelfase"),
+    ("Stagflation Risk", "Stagflatierisico"),
+    ("Contraction Regime", "Contractieregime"),
+    ("Aggressive Growth", "Agressieve groei"),
+    ("Constructive Alignment", "Constructieve alignering"),
+    ("Cautious Stance", "Voorzichtige houding"),
+    ("Defensive Posture", "Defensieve houding"),
+    ("Severe Contraction", "Zware contractie"),
+    ("Bullish Structure", "Bullish structuur"),
+    ("Neutral Structure", "Neutrale structuur"),
+    ("Weak Structure", "Zwakke structuur"),
+    ("Strong Upward Bias", "Sterke opwaartse bias"),
+    ("Positive Divergence", "Positieve divergentie"),
+    ("Neutral / Sideways", "Neutraal / zijwaarts"),
+    ("Downward Pressure", "Neerwaartse druk"),
+    ("Momentum Rising", "Momentum neemt toe"),
+    ("Compression", "Compressie"),
+    ("Rangebound", "Rangebound"),
+    ("Expansion", "Expansie"),
+    ("Premium Liquidity", "Premium liquiditeit"),
+    ("Standard Volume", "Standaard volume"),
+    ("Thin Orderbooks", "Dunne orderboeken"),
+    ("Capital Flight", "Kapitaalvlucht"),
+    ("Risk Elevated", "Risico verhoogd"),
+    ("AI Confidence", "AI-vertrouwen"),
+    ("Entry", "Instap"),
+    ("Targets", "Doelen"),
+    ("Stop Loss", "Stop-loss"),
+    ("Risk Level", "Risiconiveau"),
+    ("Medium", "Gemiddeld"),
+    ("No specific signals", "Geen specifieke signalen"),
+    ("Master snippet", "Master-snippet"),
+    ("Live", "Live"),
+]
+
 _FINN_TEXT_KEYS = {
     "response",
     "summary",
@@ -103,6 +140,8 @@ _REPORT_TEXT_KEYS = {
     "outlook_compact",
 }
 
+_NON_TRANSLATABLE_PATTERN = re.compile(r"^[A-Z0-9_:/.\-\[\]%+ ]{2,}$")
+
 
 def resolve_locale(preferences: Optional[dict] = None, context: Optional[dict] = None) -> str:
     locale = (
@@ -115,6 +154,20 @@ def resolve_locale(preferences: Optional[dict] = None, context: Optional[dict] =
 
 def response_language_name(locale: str) -> str:
     return LOCALE_TO_FINN_LANGUAGE[resolve_locale({"locale": locale})]
+
+
+def resolve_request_locale(
+    header_locale: Optional[str] = None,
+    preferences: Optional[dict] = None,
+    context: Optional[dict] = None,
+) -> str:
+    locale = (
+        header_locale
+        or (preferences or {}).get("locale")
+        or (context or {}).get("locale")
+        or DEFAULT_LOCALE
+    )
+    return resolve_supported_locale(locale)
 
 
 def _rule_based_translate_to_english(text: str) -> str:
@@ -137,12 +190,28 @@ def _rule_based_translate_to_english(text: str) -> str:
     return translated
 
 
+def _rule_based_translate_to_dutch(text: str) -> str:
+    translated = text
+    for source, target in _ENGLISH_TO_DUTCH_REPLACEMENTS:
+        translated = translated.replace(source, target)
+
+    translated = re.sub(r"\bVery low range\b", "Zeer lage range", translated)
+    translated = re.sub(r"\bThe daily report for\b", "Het dagrapport voor", translated)
+    translated = re.sub(r"\bFor the next 24 to 48 hours, the focus is on\b", "Voor de komende 24 tot 48 uur ligt de focus op", translated)
+    translated = re.sub(r"\bNo active strategy found for today\b", "Geen actieve strategie voor vandaag gevonden", translated)
+    translated = re.sub(r"\bDo not force it: wait until the blocker scores move back inside your ranges\b", "Niet forceren: wacht tot de blocker-scores binnen je ranges vallen", translated)
+    translated = re.sub(r"\bSafe next step:\b", "Veilige volgende stap:", translated)
+    return translated
+
+
 async def translate_text_if_needed(text: Any, target_locale: str) -> Any:
     if not isinstance(text, str):
         return text
     stripped = text.strip()
     normalized_locale = resolve_locale({"locale": target_locale})
-    if not stripped or normalized_locale == DEFAULT_LOCALE:
+    if not stripped:
+        return text
+    if _NON_TRANSLATABLE_PATTERN.match(stripped):
         return text
 
     cache_key = hashlib.sha256(f"{normalized_locale}::{stripped}".encode("utf-8")).hexdigest()
@@ -150,13 +219,26 @@ async def translate_text_if_needed(text: Any, target_locale: str) -> Any:
     if cached:
         return cached
 
-    rule_based = _rule_based_translate_to_english(stripped) if normalized_locale == "en" else stripped
+    if normalized_locale == "en":
+        rule_based = _rule_based_translate_to_english(stripped)
+    elif normalized_locale == "nl":
+        rule_based = _rule_based_translate_to_dutch(stripped)
+    else:
+        rule_based = stripped
+
     if normalized_locale == "en" and rule_based != stripped and any(token in rule_based for token in ("The ", "For ", "Blocked", "Strategy", "Macro", "Safe next step", "Within the")):
         _translation_cache[cache_key] = rule_based
         return rule_based
 
+    if normalized_locale == "nl" and rule_based != stripped and any(token in rule_based for token in ("Het ", "Voor ", "Geen ", "Veilige ", "risico", "structuur", "liquiditeit", "houding")):
+        _translation_cache[cache_key] = rule_based
+        return rule_based
+
+    if normalized_locale == DEFAULT_LOCALE:
+        return text
+
     prompt = (
-        f"Translate the following Tradamind/Finn trading product text from Dutch to natural {response_language_name(normalized_locale)}.\n"
+        f"Translate the following Tradamind/Finn trading product text into natural {response_language_name(normalized_locale)}.\n"
         "Rules:\n"
         "- Keep the meaning exactly the same.\n"
         "- Keep bullet points, line breaks, numbers, ids, percentages, and asset tickers exactly intact.\n"
@@ -180,6 +262,21 @@ async def translate_text_if_needed(text: Any, target_locale: str) -> Any:
 
     _translation_cache[cache_key] = translated
     return translated
+
+
+async def localize_generic_payload(payload: Any, target_locale: str) -> Any:
+    locale = resolve_locale({"locale": target_locale})
+
+    if isinstance(payload, dict):
+        localized = {}
+        for key, value in payload.items():
+            localized[key] = await localize_generic_payload(value, locale)
+        return localized
+
+    if isinstance(payload, list):
+        return [await localize_generic_payload(value, locale) for value in payload]
+
+    return await translate_text_if_needed(payload, locale)
 
 
 async def _translate_string_list(values: Iterable[Any], target_locale: str) -> list[Any]:

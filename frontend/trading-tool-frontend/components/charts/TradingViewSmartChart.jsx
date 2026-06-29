@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { createChart, ColorType, CandlestickSeries, createSeriesMarkers, HistogramSeries } from "lightweight-charts";
+import { useTranslation } from "@/app/providers/I18nProvider";
 import TradingViewChart from "./TradingViewChart";
 import { useMarketOHLCV } from "@/hooks/useMarketOHLCV";
 import { useBotTrades } from "@/hooks/useBotTrades";
@@ -22,6 +23,8 @@ export default function TradingViewSmartChart({
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const [hoveredData, setHoveredData] = useState(null);
+  const { t } = useTranslation();
+  const copy = t?.legacyComponents?.tradingViewSmartChart || {};
   const { candles, loading: candlesLoading } = useMarketOHLCV();
   const { trades, loading: tradesLoading } = useBotTrades(focusedBotId);
 
@@ -236,7 +239,7 @@ export default function TradingViewSmartChart({
           <div className="flex items-center gap-2 pr-4 border-r border-slate-200">
             <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center text-[10px] text-white font-bold italic">₿</div>
             <span className="text-sm font-bold text-slate-700">{symbol.split(":")[1] || symbol}</span>
-            <span className="text-xs font-medium text-slate-400">Botmodus</span>
+            <span className="text-xs font-medium text-slate-400">{copy.botMode}</span>
           </div>
           
           <div className="flex items-center gap-3">
@@ -245,7 +248,7 @@ export default function TradingViewSmartChart({
             </button>
             <div className="flex items-center gap-2 text-slate-400">
               <BarChart3 size={16} className="cursor-not-allowed opacity-50" />
-              <Info size={16} className="cursor-help" title="Execution history is overlayed on OHLCV data" />
+              <Info size={16} className="cursor-help" title={copy.overlayHint} />
             </div>
           </div>
         </div>
@@ -253,7 +256,7 @@ export default function TradingViewSmartChart({
         <div className="flex items-center gap-3 text-slate-400">
           <button onClick={() => setFocusedBotId(null)} className="flex items-center gap-2 px-3 py-1 hover:bg-slate-200/50 rounded transition-colors group">
              <Layout size={14} />
-             <span className="text-xs font-bold text-slate-500 group-hover:text-blue-600">Back</span>
+             <span className="text-xs font-bold text-slate-500 group-hover:text-blue-600">{copy.back}</span>
           </button>
           <Settings2 size={16} className="cursor-pointer hover:text-slate-600" />
           <Maximize2 size={16} className="cursor-pointer hover:text-slate-600" />
@@ -299,15 +302,15 @@ export default function TradingViewSmartChart({
             <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-4 text-blue-600">
               <BotIcon size={32} />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Nog geen historie gevonden</h3>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">{copy.emptyTitle}</h3>
             <p className="text-sm text-slate-500 max-w-xs">
-              Deze bot heeft nog geen trades vastgelegd. Start een cyclus of gebruik simulatie om hier de uitvoer terug te zien.
+              {copy.emptyBody}
             </p>
             <button 
               onClick={() => setFocusedBotId(null)}
               className="mt-6 text-xs font-bold text-blue-600 hover:underline uppercase tracking-widest"
             >
-              Terug naar analyse
+              {copy.backToAnalysis}
             </button>
           </div>
         )}

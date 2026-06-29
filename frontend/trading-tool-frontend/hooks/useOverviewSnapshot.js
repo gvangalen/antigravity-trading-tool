@@ -3,17 +3,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchLatestPrice } from "@/lib/api/market";
 import { fetchMarketIntelligence } from "@/lib/api/marketIntelligence";
+import { useTranslation } from "@/app/providers/I18nProvider";
 
 const SNAPSHOT_TTL_MS = 60_000;
 const snapshotCache = new Map();
 const inflightSnapshotRequests = new Map();
 
-function getCacheKey(symbol = "BTC") {
-  return String(symbol || "BTC").toUpperCase();
+function getCacheKey(symbol = "BTC", locale = "nl") {
+  return `${String(symbol || "BTC").toUpperCase()}:${String(locale || "nl").toLowerCase()}`;
 }
 
 export function useOverviewSnapshot(symbol = "BTC") {
-  const cacheKey = getCacheKey(symbol);
+  const { locale } = useTranslation();
+  const cacheKey = getCacheKey(symbol, locale);
   const [snapshot, setSnapshot] = useState(() => {
     const cached = snapshotCache.get(cacheKey);
     return cached?.data ?? null;
@@ -49,7 +51,7 @@ export function useOverviewSnapshot(symbol = "BTC") {
         ]);
 
         const nextSnapshot = {
-          symbol: cacheKey,
+          symbol: String(symbol || "BTC").toUpperCase(),
           live: liveRes.status === "fulfilled" ? liveRes.value : cached?.data?.live ?? null,
           liveLoading: false,
           intelligence:
@@ -77,12 +79,12 @@ export function useOverviewSnapshot(symbol = "BTC") {
         setLoading(false);
       }
     },
-    [cacheKey, symbol]
+    [cacheKey, locale, symbol]
   );
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, locale]);
 
   return {
     snapshot,

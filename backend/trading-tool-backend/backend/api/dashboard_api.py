@@ -1,9 +1,10 @@
 import logging
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from backend.infrastructure.database import get_db
+from backend.services.locale_service import localize_generic_payload, resolve_request_locale
 from backend.utils.auth_utils import get_current_user
 from backend.schemas.dashboard_schema import (
     DashboardResponse,
@@ -90,6 +91,7 @@ async def get_setup_summary(
 @router.get("/dashboard/mobile-overview", response_model=MobileOverviewResponse)
 async def get_mobile_overview(
     bypass_cache: bool = False,
+    x_locale: str | None = Header(default=None, alias="X-Locale"),
     current_user: dict = Depends(get_current_user),
     service: DashboardService = Depends(get_dashboard_service)
 ):
@@ -98,4 +100,6 @@ async def get_mobile_overview(
     in één snelle request voor mobiele startschermen met ingebouwde in-memory caching.
     """
     user_id = current_user["id"]
-    return await service.get_mobile_overview(user_id, bypass_cache=bypass_cache)
+    payload = await service.get_mobile_overview(user_id, bypass_cache=bypass_cache)
+    locale = resolve_request_locale(x_locale, current_user.get("ai_preferences") or {})
+    return await localize_generic_payload(payload.model_dump(), locale)

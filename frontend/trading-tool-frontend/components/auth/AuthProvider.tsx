@@ -20,6 +20,7 @@ import {
   clearStoredAuth,
   apiRefresh,
 } from "@/lib/api/auth";
+import { getActiveLocale, normalizeLocale } from "@/lib/i18n";
 
 /* ===========================================================
    CONTEXT
@@ -166,11 +167,12 @@ export function AuthProvider({ children }) {
   /* -------------------------------------------------------
      LOGIN  ✅ FIXED
   ------------------------------------------------------- */
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string, locale?: string | null) => {
     try {
+      const normalizedLocale = normalizeLocale(locale) || getActiveLocale(typeof window !== "undefined" ? window : undefined);
       const res = await fetchWithAuth(`${API_BASE_URL}/api/auth/login`, {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, locale: normalizedLocale }),
       });
 
       if (!res.ok) {

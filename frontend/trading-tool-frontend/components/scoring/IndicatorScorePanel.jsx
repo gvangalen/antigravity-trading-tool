@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 import IndicatorScoreEditor from "./IndicatorScoreEditor";
 import { useModal } from "@/components/modal/ModalProvider";
 
@@ -36,6 +37,8 @@ function normalizeIndicatorName(name) {
 
 export default function IndicatorScorePanel({ indicator, category }) {
   const { showSnackbar } = useModal();
+  const { t } = useTranslation();
+  const copy = t?.legacyComponents?.indicatorScore || {};
 
   const normalizedIndicator = useMemo(
     () => normalizeIndicatorName(indicator),
@@ -75,10 +78,10 @@ export default function IndicatorScorePanel({ indicator, category }) {
 
       const msg =
         e?.message ||
-        "Config laden mislukt. Check API / indicator key / backend logs.";
+        copy.configLoadFailedBody;
 
       setErrorMsg(msg);
-      showSnackbar("Kon score-config niet laden", "danger");
+      showSnackbar(copy.loadConfigToast, "danger");
     } finally {
       setLoading(false);
     }
@@ -118,11 +121,11 @@ export default function IndicatorScorePanel({ indicator, category }) {
 
         // ✅ only show snackbar if not silent
         if (!settings?.__silent) {
-          showSnackbar("Instellingen opgeslagen", "success");
+          showSnackbar(copy.settingsSaved, "success");
         }
       } catch (e) {
         console.error("Save failed", e);
-        showSnackbar("Opslaan mislukt", "danger");
+        showSnackbar(copy.saveFailed, "danger");
       }
     },
     [category, normalizedIndicator, showSnackbar]
@@ -165,10 +168,10 @@ export default function IndicatorScorePanel({ indicator, category }) {
           weight: nextWeight,
         }));
 
-        showSnackbar("Custom rules opgeslagen", "success");
+        showSnackbar(copy.customRulesSaved, "success");
       } catch (e) {
         console.error("Custom save failed", e);
-        showSnackbar("Custom opslaan mislukt", "danger");
+        showSnackbar(copy.customSaveFailed, "danger");
       }
     },
     [category, normalizedIndicator, showSnackbar]
@@ -178,13 +181,13 @@ export default function IndicatorScorePanel({ indicator, category }) {
      UI states
   --------------------------- */
   if (loading) {
-    return <div className="p-6 text-sm text-[var(--text-light)]">Laden…</div>;
+    return <div className="p-6 text-sm text-[var(--text-light)]">{t?.common?.loading}</div>;
   }
 
   if (!config) {
     return (
       <div className="p-6 text-sm text-[var(--text-light)]">
-        Kon config niet initialiseren.
+        {copy.configInitFailed}
       </div>
     );
   }
@@ -194,12 +197,12 @@ export default function IndicatorScorePanel({ indicator, category }) {
       {errorMsg ? (
         <div className="card-surface p-4 text-sm">
           <div className="font-semibold text-[var(--text-dark)]">
-            Laden mislukt
+            {copy.loadFailedTitle}
           </div>
           <div className="mt-1 text-[var(--text-light)]">{errorMsg}</div>
 
           <button onClick={loadConfig} className="btn-secondary mt-3">
-            Opnieuw proberen
+            {t?.common?.retry}
           </button>
         </div>
       ) : null}

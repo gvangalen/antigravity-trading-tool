@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo } from "react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
 import { 
@@ -21,10 +22,15 @@ const DEFAULT_POINTS = [
 export default function CurveEditor({
   value,
   onChange,
-  xLabel = "Market Score (0-100)",
-  yLabel = "Scaling Factor",
+  xLabel,
+  yLabel,
   disabled = false,
 }) {
+  const { t } = useTranslation();
+  const copy = t?.legacyComponents?.curveEditor || {};
+  const resolvedXLabel = xLabel || copy.defaultXLabel;
+  const resolvedYLabel = yLabel || copy.defaultYLabel;
+
   const curve = useMemo(() => {
     if (!value || !Array.isArray(value.points)) {
       return {
@@ -78,10 +84,10 @@ export default function CurveEditor({
           </div>
           <div>
             <h4 className="text-xs font-black text-foreground uppercase tracking-widest">
-              Investment Scaling Console
+              {copy.title}
             </h4>
             <p className="text-[10px] text-secondary font-bold uppercase tracking-tight">
-              Dynamic position sizing based on {xLabel}
+              {copy.subtitlePrefix} {resolvedXLabel}
             </p>
           </div>
         </div>
@@ -92,7 +98,7 @@ export default function CurveEditor({
             onClick={addPoint}
             className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest bg-card text-muted px-3 py-1.5 rounded-xl border border-slate-200 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all shadow-sm"
           >
-            <Plus size={12} /> Add Point
+            <Plus size={12} /> {copy.addPoint}
           </button>
         )}
       </div>
@@ -100,9 +106,9 @@ export default function CurveEditor({
       <div className="p-6 space-y-8">
         {/* AXIS LABELS */}
         <div className="grid grid-cols-[80px_1fr_100px_40px] gap-6 text-[9px] font-black text-secondary uppercase tracking-[0.2em] px-2">
-          <div>{xLabel}</div>
-          <div className="text-center">Sizing Weights</div>
-          <div className="text-right">{yLabel}</div>
+          <div>{resolvedXLabel}</div>
+          <div className="text-center">{copy.sizingWeights}</div>
+          <div className="text-right">{resolvedYLabel}</div>
           <div />
         </div>
 
@@ -162,7 +168,7 @@ export default function CurveEditor({
                   onChange={(e) => updatePoint(i, { y: Number(e.target.value) })}
                   className="w-full bg-[var(--color-border-subtle)] border border-slate-200 text-[var(--primary-dark)] font-black text-right py-2.5 px-3 rounded-xl focus:ring-2 focus:ring-[var(--primary)] focus:bg-white transition-all outline-none"
                 />
-                <div className="absolute -top-1.5 -right-1.5 bg-[var(--primary-soft)] text-[8px] font-black text-[var(--primary-dark)] px-1.5 py-0.5 rounded border border-[var(--primary-soft)] uppercase tracking-tighter">x Size</div>
+                <div className="absolute -top-1.5 -right-1.5 bg-[var(--primary-soft)] text-[8px] font-black text-[var(--primary-dark)] px-1.5 py-0.5 rounded border border-[var(--primary-soft)] uppercase tracking-tighter">{copy.sizeMultiplier}</div>
               </div>
 
               {/* DELETE */}
@@ -183,7 +189,7 @@ export default function CurveEditor({
         <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
            <div className="flex items-center gap-2 mb-4 text-slate-400">
               <Layers size={14} />
-              <span className="text-[10px] font-black uppercase tracking-widest leading-none">Preview van uitvoeringsmapping</span>
+              <span className="text-[10px] font-black uppercase tracking-widest leading-none">{copy.mappingPreview}</span>
            </div>
            
            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -193,7 +199,7 @@ export default function CurveEditor({
                    <div className="flex items-end gap-1.5">
                       <div className="text-xl font-black text-foreground leading-none">{(p.y).toFixed(2)}x</div>
                       <div className={`text-[9px] font-bold pb-0.5 ${p.y >= 1 ? "text-green-500" : "text-red-400"}`}>
-                         {p.y > 1.2 ? "Agressief" : p.y > 0.8 ? "Standaard" : "Defensief"}
+                         {p.y > 1.2 ? copy.labels.aggressive : p.y > 0.8 ? copy.labels.standard : copy.labels.defensive}
                       </div>
                    </div>
                 </div>
@@ -206,7 +212,7 @@ export default function CurveEditor({
         <div className="bg-[var(--color-border-subtle)] px-6 py-3 flex items-center gap-2 border-t border-slate-100">
            <Info size={12} className="text-secondary" />
            <span className="text-[10px] font-bold text-secondary uppercase tracking-tight italic">
-             Vaste bedraginzet actief — curveparameters worden overgeslagen
+             {copy.fixedAmountNotice}
            </span>
         </div>
       )}

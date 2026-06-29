@@ -1,15 +1,18 @@
 "use client";
 
+import { useTranslation } from "@/app/providers/I18nProvider";
 import { Settings } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
 import IndicatorScorePanel from "./IndicatorScorePanel";
 
 export default function IndicatorScoreButton({ indicator, category }) {
   const { openModal } = useModal();
+  const { t } = useTranslation();
+  const copy = t?.legacyComponents?.indicatorScore || {};
 
   const openEditor = () => {
     openModal({
-      title: `Score instellingen — ${indicator}`,
+      title: `${copy.buttonTitle} — ${indicator}`,
       content: (
         <IndicatorScorePanel
           indicator={indicator}
@@ -31,7 +34,7 @@ export default function IndicatorScoreButton({ indicator, category }) {
         hover:bg-[var(--surface-2)]
         transition
       "
-      title="Score instellingen"
+      title={copy.buttonTitle}
     >
       <Settings size={16} />
     </button>

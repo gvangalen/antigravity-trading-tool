@@ -1,9 +1,13 @@
 'use client';
 
+import { useTranslation } from "@/app/providers/I18nProvider";
 import CardWrapper from "@/components/ui/CardWrapper";
 import { Gauge } from "lucide-react";
 
 export default function TechnicalScoreCard({ score = 14.3 }) {
+  const { t } = useTranslation();
+  const copy = t?.legacyComponents?.macroScoreCard || {};
+
   // Score kleur
   const color =
     score >= 70
@@ -25,7 +29,7 @@ export default function TechnicalScoreCard({ score = 14.3 }) {
         {/* Header */}
         <div className="flex items-center gap-2 mb-2 text-[var(--text-dark)]">
           <Gauge className="w-4 h-4" />
-          <span className="text-sm font-semibold">Technische Score</span>
+          <span className="text-sm font-semibold">{copy.title}</span>
         </div>
 
         {/* Score */}
@@ -33,7 +37,7 @@ export default function TechnicalScoreCard({ score = 14.3 }) {
           {score}
         </p>
 
-        <p className="text-xs mt-1 text-[var(--text-light)]">Gecombineerde technische analyse score</p>
+        <p className="text-xs mt-1 text-[var(--text-light)]">{copy.subtitle}</p>
       </div>
     </CardWrapper>
   );

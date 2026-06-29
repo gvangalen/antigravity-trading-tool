@@ -3153,5 +3153,103 @@
       "promptBadge": "Prompt",
       "unknown": "Onbekend"
     }
+  },
+  "legacyComponents": {
+    "macroScoreCard": {
+      "title": "Technische score",
+      "subtitle": "Gecombineerde technische analysescore"
+    },
+    "setupScoreCard": {
+      "title": "Actieve setup",
+      "setupName": "A-plus setup —",
+      "scoreLabel": "Score 85,0"
+    },
+    "tradingViewSmartChart": {
+      "botMode": "Botmodus",
+      "overlayHint": "Uitvoeringshistorie wordt als overlay op de OHLCV-data getoond",
+      "back": "Terug",
+      "emptyTitle": "Nog geen historie gevonden",
+      "emptyBody": "Deze bot heeft nog geen trades vastgelegd. Start een cyclus of gebruik simulatie om hier de uitvoer terug te zien.",
+      "backToAnalysis": "Terug naar analyse"
+    },
+    "curveEditor": {
+      "defaultXLabel": "Marktscore (0-100)",
+      "defaultYLabel": "Scalingfactor",
+      "title": "Investerings-schalingsconsole",
+      "subtitlePrefix": "Dynamische positiegrootte op basis van",
+      "addPoint": "Punt toevoegen",
+      "sizingWeights": "Schaalgewichten",
+      "sizeMultiplier": "x grootte",
+      "mappingPreview": "Preview van uitvoeringsmapping",
+      "fixedAmountNotice": "Vaste bedraginzet actief — curveparameters worden overgeslagen",
+      "labels": {
+        "aggressive": "Agressief",
+        "standard": "Standaard",
+        "defensive": "Defensief"
+      }
+    },
+    "indicatorScore": {
+      "buttonTitle": "Score-instellingen",
+      "configLoadFailedBody": "Config laden mislukt. Controleer API, indicator-key of backend-logs.",
+      "loadConfigToast": "Kon score-config niet laden",
+      "settingsSaved": "Instellingen opgeslagen",
+      "saveFailed": "Opslaan mislukt",
+      "customRulesSaved": "Custom rules opgeslagen",
+      "customSaveFailed": "Custom opslaan mislukt",
+      "configInitFailed": "Kon config niet initialiseren.",
+      "loadFailedTitle": "Laden mislukt",
+      "signalGenerationLogic": "Signaalgeneratielogica",
+      "nodeId": "Node-id",
+      "telemetryVersion": "Telemetry v2.5",
+      "weightNode": "Weight-node",
+      "impact": "Impact",
+      "impactModes": {
+        "customOverride": "custom override",
+        "systemDefault": "system default"
+      },
+      "normalizedValue": "Genormaliseerde waarde (0–100)",
+      "normalizedValueWithUnitPrefix": "Genormaliseerde waarde (0–100,",
+      "modes": {
+        "standard": "Standaard",
+        "contrarian": "Contrair",
+        "custom": "Aangepast"
+      },
+      "engineModeSelector": "Engine mode selector",
+      "engineStatus": {
+        "standard": "Standaardtemplate actief. Consistente scoringsschalen zijn geladen.",
+        "contrarian": "Contrarian-inversie actief. De bronscore wordt gespiegeld als 100 minus score.",
+        "custom": "Custom override actief. Handmatige parameters en regels zijn ingeschakeld."
+      },
+      "parameterTuning": "Parameterafstelling",
+      "weightValue": "W-waarde",
+      "lowImpact": "Laag effect",
+      "mid": "Midden",
+      "highImpact": "Hoog effect",
+      "deployingLogic": "LOGICA WORDT UITGEROLD...",
+      "commitCustomManifest": "CUSTOM MANIFEST OPSLAAN",
+      "logicManifestTelemetry": "Logic manifest telemetry",
+      "inputRange": "Inputbereik",
+      "outputSignal": "Outputsignaal",
+      "unit": "eenheid",
+      "value": "Waarde",
+      "readonlyMode": "Alleen lezen — schakel naar aangepast om te bewerken",
+      "indicatorLabels": {
+        "volumeRelative": "Volume (relatief)",
+        "volumeChange": "Volumeverandering",
+        "change24h": "Verandering 24u",
+        "change7d": "Verandering 7d",
+        "fearGreed": "Fear & Greed",
+        "sp500": "S&P 500",
+        "dxy": "DXY",
+        "price": "Prijs"
+      },
+      "trends": {
+        "veryLow": "Zeer laag",
+        "low": "Laag",
+        "neutral": "Neutraal",
+        "active": "Actief",
+        "high": "Hoog"
+      }
+    }
   }
 }

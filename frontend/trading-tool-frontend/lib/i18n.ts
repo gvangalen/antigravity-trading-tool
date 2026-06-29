@@ -82,6 +82,18 @@ export function resolveInitialLocale(win: Window): Locale {
   );
 }
 
+export function getActiveLocale(win?: Window | null): Locale {
+  if (win) {
+    return resolveInitialLocale(win);
+  }
+
+  if (typeof window !== "undefined") {
+    return resolveInitialLocale(window);
+  }
+
+  return DEFAULT_LOCALE;
+}
+
 export function applyLocaleToDocument(locale: Locale, doc: Document) {
   doc.documentElement.lang = locale;
   doc.documentElement.dataset.locale = locale;

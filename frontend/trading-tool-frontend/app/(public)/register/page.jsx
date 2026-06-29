@@ -33,11 +33,12 @@ export default function RegisterPage() {
   const router = useRouter();
   const { login, isAuthenticated, sessionChecked } = useAuth();
   const { showSnackbar } = useModal();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
 
   const [name, setName] = useState(""); 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   // voorkomt dubbele redirects zoals bij login
@@ -55,6 +56,17 @@ export default function RegisterPage() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
+
+    if (password.length < 8) {
+      showSnackbar(t?.auth?.passwordTooShort, "danger");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      showSnackbar(t?.auth?.passwordMismatch, "danger");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -66,7 +78,8 @@ export default function RegisterPage() {
         body: JSON.stringify({
           first_name: name,
           email,
-          password
+          password,
+          locale,
         }),
       });
 
@@ -83,7 +96,7 @@ export default function RegisterPage() {
       showSnackbar(t?.auth?.registerSuccess, "success");
 
       // 2️⃣ Automatisch inloggen
-      const loginRes = await login(email, password);
+      const loginRes = await login(email, password, locale);
 
       if (!loginRes.success) {
         showSnackbar(t?.auth?.registerManualLogin, "info");
@@ -205,7 +218,7 @@ export default function RegisterPage() {
               <input
                 type="password"
                 required
-                minLength={6}
+                minLength={8}
                 className="trade-input pr-14"
                 placeholder="•••••••••"
                 value={password}
@@ -214,10 +227,37 @@ export default function RegisterPage() {
             </div>
           </div>
 
+          {/* Bevestig wachtwoord */}
+          <div className="space-y-3">
+            <label className="metric-label ml-1">
+              {t?.auth?.confirmPassword}
+            </label>
+            <div className="relative group">
+              <Lock 
+                size={18} 
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors z-10" 
+              />
+              <input
+                type="password"
+                required
+                minLength={8}
+                className="trade-input pr-14"
+                placeholder="•••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+            {confirmPassword && password !== confirmPassword ? (
+              <p className="text-sm font-semibold text-red-500 ml-1">
+                {t?.auth?.passwordMismatch}
+              </p>
+            ) : null}
+          </div>
+
           {/* Submit */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || password !== confirmPassword}
             className="btn-primary w-full flex items-center justify-center gap-3 py-5 text-[13px] mt-4"
           >
             {loading ? (

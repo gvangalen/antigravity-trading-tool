@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useTranslation } from "@/app/providers/I18nProvider";
 import { RefreshCw, Info, Activity, Terminal, Layers, Box, Sliders } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
 import ScoreModeBadge from "./ScoreModeBadge";
@@ -53,15 +54,15 @@ const NAME_ALIASES = {
 
 // Meta map for unit display (extend when needed)
 const INDICATOR_META = {
-  volume: { unit: "%", label: "Volume (relatief)" },
-  market_volume: { unit: "%", label: "Volume (relatief)" },
-  volume_change: { unit: "%", label: "Volume change" },
-  change_24h: { unit: "%", label: "Change 24h" },
-  change_7d: { unit: "%", label: "Change 7d" },
-  fear_greed_index: { unit: "index", label: "Fear & Greed" },
-  sp500: { unit: "index", label: "S&P 500" },
-  dxy: { unit: "index", label: "DXY" },
-  price: { unit: "USD", label: "Price" },
+  volume: { unit: "%", labelKey: "volumeRelative" },
+  market_volume: { unit: "%", labelKey: "volumeRelative" },
+  volume_change: { unit: "%", labelKey: "volumeChange" },
+  change_24h: { unit: "%", labelKey: "change24h" },
+  change_7d: { unit: "%", labelKey: "change7d" },
+  fear_greed_index: { unit: "index", labelKey: "fearGreed" },
+  sp500: { unit: "index", labelKey: "sp500" },
+  dxy: { unit: "index", labelKey: "dxy" },
+  price: { unit: "USD", labelKey: "price" },
 };
 
 function normalizeIndicatorName(name) {
@@ -87,11 +88,11 @@ const clampScore = (v) => {
 
 const getTrend = (score) => {
   const s = Number(score);
-  if (s <= 20) return "Zeer laag";
-  if (s <= 40) return "Laag";
-  if (s <= 60) return "Neutraal";
-  if (s <= 80) return "Actief";
-  return "Hoog";
+  if (s <= 20) return "veryLow";
+  if (s <= 40) return "low";
+  if (s <= 60) return "neutral";
+  if (s <= 80) return "active";
+  return "high";
 };
 
 /**
@@ -140,6 +141,8 @@ export default function IndicatorScoreEditor({
   onSaveCustom,
 }) {
   const { showSnackbar } = useModal();
+  const { t } = useTranslation();
+  const copy = t?.legacyComponents?.indicatorScore || {};
 
   const normalizedIndicator = useMemo(
     () => normalizeIndicatorName(indicator),
@@ -147,6 +150,7 @@ export default function IndicatorScoreEditor({
   );
 
   const meta = INDICATOR_META[normalizedIndicator] || null;
+  const metaLabel = meta?.labelKey ? copy.indicatorLabels?.[meta.labelKey] : null;
 
   const [mode, setMode] = useState(scoreMode);
   const [localWeight, setLocalWeight] = useState(weight);
@@ -262,7 +266,7 @@ export default function IndicatorScoreEditor({
       // Hier alleen errors tonen om dubbel snackbar te voorkomen.
     } catch (e) {
       console.error("Save custom rules failed", e);
-      showSnackbar("Custom opslaan mislukt", "danger");
+      showSnackbar(copy.customSaveFailed, "danger");
     } finally {
       setSavingCustom(false);
     }
@@ -277,17 +281,17 @@ export default function IndicatorScoreEditor({
   ]);
 
   if (loading) {
-    return <div className="p-6 text-sm text-[var(--text-light)]">Laden…</div>;
+    return <div className="p-6 text-sm text-[var(--text-light)]">{t?.common?.loading}</div>;
   }
 
   const valueLabel = meta?.unit
-    ? `Genormaliseerde waarde (0–100, ${meta.unit})`
-    : "Genormaliseerde waarde (0–100)";
+    ? `${copy.normalizedValueWithUnitPrefix} ${meta.unit})`
+    : copy.normalizedValue;
 
   const modes = [
-    { key: "standard", label: "Standaard" },
-    { key: "contrarian", label: "Contrair" },
-    { key: "custom", label: "Aangepast" },
+    { key: "standard", label: copy.modes?.standard },
+    { key: "contrarian", label: copy.modes?.contrarian },
+    { key: "custom", label: copy.modes?.custom },
   ];
 
   return (
@@ -300,13 +304,13 @@ export default function IndicatorScoreEditor({
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Signaalgeneratielogica</h3>
+              <h3 className="text-xl font-black text-foreground uppercase tracking-tight">{copy.signalGenerationLogic}</h3>
               <ScoreModeBadge mode={mode} />
             </div>
             <p className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">
-              Node_ID: <span className="text-dim font-mono">{normalizedIndicator || "—"}</span>
-              {meta?.label ? <span className="ml-2">• {meta.label}</span> : null}
-              <span className="ml-2">• Telemetry_v2.5</span>
+              {copy.nodeId}: <span className="text-dim font-mono">{normalizedIndicator || "—"}</span>
+              {metaLabel ? <span className="ml-2">• {metaLabel}</span> : null}
+              <span className="ml-2">• {copy.telemetryVersion}</span>
             </p>
           </div>
         </div>
@@ -314,13 +318,13 @@ export default function IndicatorScoreEditor({
         {/* PARAMETER NODE (Weight) */}
         <div className="flex flex-col items-end gap-1.5 p-3 rounded-2xl bg-[var(--color-border-subtle)] border border-slate-100">
           <div className="flex items-center gap-3">
-             <div className="text-[10px] font-black text-secondary uppercase tracking-widest">Weight_Node</div>
+             <div className="text-[10px] font-black text-secondary uppercase tracking-widest">{copy.weightNode}</div>
              <div className="text-sm font-black text-foreground tabular-nums bg-card px-3 py-0.5 rounded-lg border border-slate-200 shadow-sm">
                 0{Number(localWeight).toFixed(1)}
              </div>
           </div>
           <div className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
-             Impact: {isCustom ? "CUSTOM_OVERRIDE" : "SYSTEM_DEFAULT"}
+             {copy.impact}: {isCustom ? copy.impactModes?.customOverride : copy.impactModes?.systemDefault}
           </div>
         </div>
       </div>
@@ -329,7 +333,7 @@ export default function IndicatorScoreEditor({
         <div className="space-y-8">
            {/* 🔹 LOGIC MODE: SEGMENTED CONTROL */}
            <div className="space-y-3">
-              <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">Engine_Mode_Selector</div>
+              <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">{copy.engineModeSelector}</div>
               <div className="flex bg-[var(--color-border-subtle)] p-1.5 rounded-2xl border border-slate-100 w-fit">
                 {modes.map((m) => (
                   <button
@@ -355,7 +359,7 @@ export default function IndicatorScoreEditor({
                       <Box size={16} />
                    </div>
                    <p className="text-[10px] font-black text-muted uppercase tracking-widest leading-relaxed">
-                      STANDARD_ARRAY: SYSTEM-WIDE TEMPLATE DEPLOYED. CONSISTENT SCORING SCALES.
+                      {copy.engineStatus.standard}
                    </p>
                 </div>
               )}
@@ -365,7 +369,7 @@ export default function IndicatorScoreEditor({
                       <RefreshCw size={16} />
                    </div>
                    <p className="text-[10px] font-black text-orange-600/70 uppercase tracking-widest leading-relaxed">
-                      CONTRARIAN_SWAP: INVERSE DATA TUNNEL ACTIVE. (100 - SOURCE_SCORE).
+                      {copy.engineStatus.contrarian}
                    </p>
                 </div>
               )}
@@ -375,7 +379,7 @@ export default function IndicatorScoreEditor({
                       <Layers size={16} />
                    </div>
                    <p className="text-[10px] font-black text-purple-600/70 uppercase tracking-widest leading-relaxed">
-                      CUSTOM_OVERRIDE: MANUAL LOGIC MANIFEST DETECTED. PARAMETER OVERRIDES ENABLED.
+                      {copy.engineStatus.custom}
                    </p>
                 </div>
               )}
@@ -384,11 +388,11 @@ export default function IndicatorScoreEditor({
            {/* 🔹 NODE TUNING (Weight Slider) */}
            {isCustom && (
               <div className="space-y-4 pt-4">
-                <div className="flex items-center justify-between">
+                   <div className="flex items-center justify-between">
                    <div className="text-[10px] font-black text-foreground uppercase tracking-widest flex items-center gap-2">
-                      <Sliders size={14} className="text-secondary" /> Parameter Tuning
+                      <Sliders size={14} className="text-secondary" /> {copy.parameterTuning}
                    </div>
-                   <div className="text-[10px] font-black text-secondary uppercase tracking-widest">W_VAL: 0{Number(localWeight).toFixed(1)}</div>
+                   <div className="text-[10px] font-black text-secondary uppercase tracking-widest">{copy.weightValue}: 0{Number(localWeight).toFixed(1)}</div>
                 </div>
                 <div className="p-6 bg-[var(--color-border-subtle)] border border-slate-100 rounded-[2rem]">
                    <input
@@ -401,9 +405,9 @@ export default function IndicatorScoreEditor({
                      className="w-full h-1.5 bg-slate-200 rounded-full appearance-none cursor-pointer accent-blue-600"
                    />
                    <div className="flex justify-between mt-3 text-[9px] font-black text-slate-300 uppercase tracking-widest font-mono">
-                      <span>Low_Impact</span>
-                      <span>Mid</span>
-                      <span>High_Impact</span>
+                      <span>{copy.lowImpact}</span>
+                      <span>{copy.mid}</span>
+                      <span>{copy.highImpact}</span>
                    </div>
                 </div>
               </div>
@@ -416,20 +420,20 @@ export default function IndicatorScoreEditor({
                 disabled={savingCustom}
                 className="w-full flex items-center justify-center gap-3 bg-[var(--primary)] text-white py-4 rounded-[1.5rem] text-xs font-black uppercase tracking-[0.2em] hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-blue-500/20"
               >
-                {savingCustom ? "DEPLOING_LOGIC..." : "COMMIT_CUSTOM_MANIFEST"}
+                {savingCustom ? copy.deployingLogic : copy.commitCustomManifest}
               </button>
            )}
         </div>
 
         {/* 🔹 LOGIC MANIFEST GRID */}
         <div className="space-y-4">
-           <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">Logic_Manifest_Telemetry</div>
+           <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">{copy.logicManifestTelemetry}</div>
            <div className="bg-slate-50/50 border border-slate-100 rounded-[2.5rem] overflow-hidden">
              {/* Grid Header */}
              <div className="grid grid-cols-12 gap-2 px-8 py-4 bg-[var(--color-border-subtle)] border-b border-slate-100">
-               <div className="col-span-5 text-[10px] font-black text-secondary uppercase tracking-widest">Input_Range</div>
-               <div className="col-span-4 text-[10px] font-black text-secondary uppercase tracking-widest text-center">Output_Signal</div>
-               <div className="col-span-3 text-[10px] font-black text-secondary uppercase tracking-widest text-right">Trend</div>
+               <div className="col-span-5 text-[10px] font-black text-secondary uppercase tracking-widest">{copy.inputRange}</div>
+               <div className="col-span-4 text-[10px] font-black text-secondary uppercase tracking-widest text-center">{copy.outputSignal}</div>
+               <div className="col-span-3 text-[10px] font-black text-secondary uppercase tracking-widest text-right">{t?.common?.trend}</div>
              </div>
 
              {/* Grid Content */}
@@ -448,7 +452,7 @@ export default function IndicatorScoreEditor({
                     <div key={idx} className="grid grid-cols-12 gap-4 items-center group">
                       <div className="col-span-5">
                          <div className="text-xs font-black text-foreground font-mono tracking-tighter opacity-80">
-                            [{String(b.min).padStart(2, '0')}—{String(b.max).padStart(3, '0')}] {meta?.unit || "UNIT"}
+                            [{String(b.min).padStart(2, '0')}—{String(b.max).padStart(3, '0')}] {meta?.unit || copy.unit}
                          </div>
                       </div>
 
@@ -474,7 +478,7 @@ export default function IndicatorScoreEditor({
                                 <div className={`h-full rounded-full transition-all duration-700 ${signal.bg}`} style={{ width: `${shownScore}%` }} />
                              </div>
                              <div className={`text-[8px] font-black uppercase tracking-widest text-center ${signal.color}`}>
-                                Val: {shownScore}
+                                {copy.value}: {shownScore}
                              </div>
                           </div>
                         )}
@@ -482,7 +486,7 @@ export default function IndicatorScoreEditor({
 
                       <div className="col-span-3 text-right">
                          <div className={`text-[10px] font-black uppercase tracking-widest ${signal.color}`}>
-                            {getTrend(shownScore)}
+                            {copy.trends?.[getTrend(shownScore)]}
                          </div>
                       </div>
                     </div>
@@ -492,7 +496,7 @@ export default function IndicatorScoreEditor({
 
              {!isCustom && (
                <div className="px-8 py-4 bg-[var(--color-border-subtle)] border-t border-slate-100 text-[9px] font-black text-slate-300 uppercase tracking-widest text-center italic">
-                  READONLY_MODE — SWITCH_TO_CUSTOM_TO_EDIT
+                  {copy.readonlyMode}
                </div>
              )}
            </div>
