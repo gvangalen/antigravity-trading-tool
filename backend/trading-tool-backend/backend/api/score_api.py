@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
@@ -7,6 +7,7 @@ from backend.utils.auth_utils import get_current_user
 from backend.schemas.score_schema import DailyCombinedScoreResponse, MasterScoreResponse, IntelligenceWeightsRequest
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.services.locale_service import localize_generic_payload, resolve_request_locale
 from backend.services.score_service import ScoreService
 
 router = APIRouter()
@@ -73,11 +74,14 @@ async def get_market_score(
 async def get_daily_scores(
     symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
-    service: ScoreService = Depends(get_score_service)
+    service: ScoreService = Depends(get_score_service),
+    x_locale: str | None = Header(default=None, alias="X-Locale"),
 ):
     try:
         user_id = current_user["id"]
-        return await service.get_daily_scores(user_id=user_id, symbol=symbol)
+        payload = await service.get_daily_scores(user_id=user_id, symbol=symbol)
+        locale = resolve_request_locale(x_locale, current_user.get("ai_preferences") or {})
+        return await localize_generic_payload(payload.model_dump(), locale)
     except Exception as e:
         logger.error(f"❌ Fout bij /scores/daily ({symbol}): {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij ophalen daily scores")
@@ -127,11 +131,14 @@ async def update_intelligence_weights(
 async def get_ai_master_score(
     symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
-    service: ScoreService = Depends(get_score_service)
+    service: ScoreService = Depends(get_score_service),
+    x_locale: str | None = Header(default=None, alias="X-Locale"),
 ):
     try:
         user_id = current_user["id"]
-        return await service.get_master_score(user_id=user_id, symbol=symbol)
+        payload = await service.get_master_score(user_id=user_id, symbol=symbol)
+        locale = resolve_request_locale(x_locale, current_user.get("ai_preferences") or {})
+        return await localize_generic_payload(payload.model_dump(), locale)
     except Exception as e:
         logger.error(f"❌ Fout bij ophalen AI Master Score: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij ophalen master score")

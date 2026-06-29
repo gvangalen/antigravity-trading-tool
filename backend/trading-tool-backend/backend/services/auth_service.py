@@ -114,13 +114,15 @@ class AuthService:
         count = await self.repository.count_users()
         role = "admin" if count == 0 else "user"
         hashed_pw = hash_password(data.password)
+        locale = resolve_supported_locale(data.locale)
 
         new_user = await self.repository.create_user(
             email=data.email,
             password_hash=hashed_pw,
             role=role,
             first_name=data.first_name,
-            last_name=data.last_name
+            last_name=data.last_name,
+            ai_preferences={"locale": locale},
         )
 
         return self._user_out(new_user)
@@ -145,6 +147,10 @@ class AuthService:
         refresh_token, _ = await self._issue_refresh_session(user)
 
         await self.repository.update_last_login(user.id, self._db_utc_now())
+        requested_locale = resolve_supported_locale(data.locale)
+        current_locale = resolve_supported_locale((user.ai_preferences or {}).get("locale"))
+        if requested_locale != current_locale:
+            user = await self.repository.update_ai_preferences(user.id, {"locale": requested_locale}) or user
 
         return {
             "access_token": access_token,

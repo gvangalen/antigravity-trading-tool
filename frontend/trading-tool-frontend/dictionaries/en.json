@@ -3090,6 +3090,104 @@
       "unknown": "Unknown"
     }
   },
+  "legacyComponents": {
+    "macroScoreCard": {
+      "title": "Technical score",
+      "subtitle": "Combined technical analysis score"
+    },
+    "setupScoreCard": {
+      "title": "Active setup",
+      "setupName": "A-plus setup —",
+      "scoreLabel": "Score 85.0"
+    },
+    "tradingViewSmartChart": {
+      "botMode": "Bot mode",
+      "overlayHint": "Execution history is shown as an overlay on the OHLCV data",
+      "back": "Back",
+      "emptyTitle": "No history found yet",
+      "emptyBody": "This bot has not logged any trades yet. Start a cycle or use simulation to review execution here.",
+      "backToAnalysis": "Back to analysis"
+    },
+    "curveEditor": {
+      "defaultXLabel": "Market score (0-100)",
+      "defaultYLabel": "Scaling factor",
+      "title": "Investment scaling console",
+      "subtitlePrefix": "Dynamic position sizing based on",
+      "addPoint": "Add point",
+      "sizingWeights": "Sizing weights",
+      "sizeMultiplier": "x size",
+      "mappingPreview": "Execution mapping preview",
+      "fixedAmountNotice": "Fixed-amount sizing is active — curve parameters are skipped",
+      "labels": {
+        "aggressive": "Aggressive",
+        "standard": "Standard",
+        "defensive": "Defensive"
+      }
+    },
+    "indicatorScore": {
+      "buttonTitle": "Score settings",
+      "configLoadFailedBody": "Loading config failed. Check the API, indicator key, or backend logs.",
+      "loadConfigToast": "Could not load score config",
+      "settingsSaved": "Settings saved",
+      "saveFailed": "Saving failed",
+      "customRulesSaved": "Custom rules saved",
+      "customSaveFailed": "Saving custom rules failed",
+      "configInitFailed": "Could not initialize config.",
+      "loadFailedTitle": "Loading failed",
+      "signalGenerationLogic": "Signal generation logic",
+      "nodeId": "Node ID",
+      "telemetryVersion": "Telemetry v2.5",
+      "weightNode": "Weight node",
+      "impact": "Impact",
+      "impactModes": {
+        "customOverride": "custom override",
+        "systemDefault": "system default"
+      },
+      "normalizedValue": "Normalized value (0–100)",
+      "normalizedValueWithUnitPrefix": "Normalized value (0–100,",
+      "modes": {
+        "standard": "Standard",
+        "contrarian": "Contrarian",
+        "custom": "Custom"
+      },
+      "engineModeSelector": "Engine mode selector",
+      "engineStatus": {
+        "standard": "Standard template active. Consistent scoring scales are loaded.",
+        "contrarian": "Contrarian inversion active. The source score is mirrored as 100 minus score.",
+        "custom": "Custom override active. Manual parameters and rules are enabled."
+      },
+      "parameterTuning": "Parameter tuning",
+      "weightValue": "W-value",
+      "lowImpact": "Low impact",
+      "mid": "Mid",
+      "highImpact": "High impact",
+      "deployingLogic": "DEPLOYING LOGIC...",
+      "commitCustomManifest": "SAVE CUSTOM MANIFEST",
+      "logicManifestTelemetry": "Logic manifest telemetry",
+      "inputRange": "Input range",
+      "outputSignal": "Output signal",
+      "unit": "unit",
+      "value": "Value",
+      "readonlyMode": "Read-only mode — switch to custom to edit",
+      "indicatorLabels": {
+        "volumeRelative": "Relative volume",
+        "volumeChange": "Volume change",
+        "change24h": "24h change",
+        "change7d": "7d change",
+        "fearGreed": "Fear & Greed",
+        "sp500": "S&P 500",
+        "dxy": "DXY",
+        "price": "Price"
+      },
+      "trends": {
+        "veryLow": "Very low",
+        "low": "Low",
+        "neutral": "Neutral",
+        "active": "Active",
+        "high": "High"
+      }
+    }
+  },
   "publicPages": {
     "notFound": {
       "title": "Oops… Page not found",

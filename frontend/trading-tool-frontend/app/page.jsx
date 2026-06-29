@@ -171,7 +171,7 @@ export default function LandingPage() {
               <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/20 to-transparent blur-2xl opacity-50 group-hover:opacity-100 transition duration-1000" />
               <div className="relative bg-card border-2 border-[var(--color-border)] rounded-[3rem] overflow-hidden shadow-2xl">
                 <Image 
-                  src="/dashboard_mockup.png"
+                  src="/dashboard_real_preview.png"
                   alt={copy.previewAlt}
                   width={1920}
                   height={1080}

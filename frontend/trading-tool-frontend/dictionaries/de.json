@@ -3152,5 +3152,103 @@
       "promptBadge": "Prompt",
       "unknown": "Unbekannt"
     }
+  },
+  "legacyComponents": {
+    "macroScoreCard": {
+      "title": "Technischer Score",
+      "subtitle": "Kombinierter technischer Analyse-Score"
+    },
+    "setupScoreCard": {
+      "title": "Aktives Setup",
+      "setupName": "A-Plus-Setup —",
+      "scoreLabel": "Score 85,0"
+    },
+    "tradingViewSmartChart": {
+      "botMode": "Bot-Modus",
+      "overlayHint": "Die Ausführungshistorie wird als Overlay über den OHLCV-Daten angezeigt",
+      "back": "Zurück",
+      "emptyTitle": "Noch keine Historie gefunden",
+      "emptyBody": "Dieser Bot hat noch keine Trades gespeichert. Starte einen Zyklus oder nutze die Simulation, um hier die Ausführung zu sehen.",
+      "backToAnalysis": "Zurück zur Analyse"
+    },
+    "curveEditor": {
+      "defaultXLabel": "Marktscore (0-100)",
+      "defaultYLabel": "Skalierungsfaktor",
+      "title": "Investment-Skalierungskonsole",
+      "subtitlePrefix": "Dynamische Positionsgröße basierend auf",
+      "addPoint": "Punkt hinzufügen",
+      "sizingWeights": "Skalierungsgewichte",
+      "sizeMultiplier": "x Größe",
+      "mappingPreview": "Vorschau der Ausführungszuordnung",
+      "fixedAmountNotice": "Feste Einsatzgröße aktiv — Kurvenparameter werden übersprungen",
+      "labels": {
+        "aggressive": "Aggressiv",
+        "standard": "Standard",
+        "defensive": "Defensiv"
+      }
+    },
+    "indicatorScore": {
+      "buttonTitle": "Score-Einstellungen",
+      "configLoadFailedBody": "Konfiguration konnte nicht geladen werden. Prüfe API, Indicator-Key oder Backend-Logs.",
+      "loadConfigToast": "Score-Konfiguration konnte nicht geladen werden",
+      "settingsSaved": "Einstellungen gespeichert",
+      "saveFailed": "Speichern fehlgeschlagen",
+      "customRulesSaved": "Custom-Regeln gespeichert",
+      "customSaveFailed": "Custom-Regeln konnten nicht gespeichert werden",
+      "configInitFailed": "Konfiguration konnte nicht initialisiert werden.",
+      "loadFailedTitle": "Laden fehlgeschlagen",
+      "signalGenerationLogic": "Signalgenerierungslogik",
+      "nodeId": "Node-ID",
+      "telemetryVersion": "Telemetry v2.5",
+      "weightNode": "Weight-Node",
+      "impact": "Impact",
+      "impactModes": {
+        "customOverride": "custom override",
+        "systemDefault": "system default"
+      },
+      "normalizedValue": "Normalisierter Wert (0–100)",
+      "normalizedValueWithUnitPrefix": "Normalisierter Wert (0–100,",
+      "modes": {
+        "standard": "Standard",
+        "contrarian": "Konträr",
+        "custom": "Benutzerdefiniert"
+      },
+      "engineModeSelector": "Engine mode selector",
+      "engineStatus": {
+        "standard": "Standardvorlage aktiv. Konsistente Scoring-Skalen sind geladen.",
+        "contrarian": "Konträre Invertierung aktiv. Der Quell-Score wird als 100 minus Score gespiegelt.",
+        "custom": "Custom Override aktiv. Manuelle Parameter und Regeln sind eingeschaltet."
+      },
+      "parameterTuning": "Parameter-Tuning",
+      "weightValue": "W-Wert",
+      "lowImpact": "Niedrige Wirkung",
+      "mid": "Mittel",
+      "highImpact": "Hohe Wirkung",
+      "deployingLogic": "LOGIK WIRD AUSGEROLLT...",
+      "commitCustomManifest": "CUSTOM MANIFEST SPEICHERN",
+      "logicManifestTelemetry": "Logic manifest telemetry",
+      "inputRange": "Input-Bereich",
+      "outputSignal": "Output-Signal",
+      "unit": "Einheit",
+      "value": "Wert",
+      "readonlyMode": "Nur-Lesen-Modus — wechsle zu benutzerdefiniert zum Bearbeiten",
+      "indicatorLabels": {
+        "volumeRelative": "Relatives Volumen",
+        "volumeChange": "Volumenänderung",
+        "change24h": "24h-Veränderung",
+        "change7d": "7d-Veränderung",
+        "fearGreed": "Fear & Greed",
+        "sp500": "S&P 500",
+        "dxy": "DXY",
+        "price": "Preis"
+      },
+      "trends": {
+        "veryLow": "Sehr niedrig",
+        "low": "Niedrig",
+        "neutral": "Neutral",
+        "active": "Aktiv",
+        "high": "Hoch"
+      }
+    }
   }
 }

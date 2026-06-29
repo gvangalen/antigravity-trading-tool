@@ -16,7 +16,7 @@ const normalizeArray = (v) => {
 };
 
 export function useScoresData(symbol = "BTC", options = {}) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const { includeHistory = true } = options;
   const gaugesT = t?.dashboard?.gauges || {};
   const commonT = t?.common || {};
@@ -43,7 +43,7 @@ export function useScoresData(symbol = "BTC", options = {}) {
 
   const [loading, setLoading] = useState(true);
 
-  const cacheKey = `${symbol}:history:${includeHistory ? "1" : "0"}`;
+  const cacheKey = `${symbol}:history:${includeHistory ? "1" : "0"}:locale:${String(locale || "nl").toLowerCase()}`;
 
   async function loadScores(forceRefresh = false) {
     const cached = scoreCache.get(cacheKey);
@@ -176,7 +176,7 @@ export function useScoresData(symbol = "BTC", options = {}) {
 
   useEffect(() => {
     fetchScores();
-  }, [symbol]);
+  }, [locale, symbol]);
 
   return { ...scores, loading, saveWeights, refresh: fetchScores };
 }

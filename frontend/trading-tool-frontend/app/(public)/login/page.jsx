@@ -36,7 +36,7 @@ function LoginPageContent() {
   const searchParams = useSearchParams();
   const { login, isAuthenticated, sessionChecked } = useAuth();
   const { showSnackbar } = useModal();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const nextPath = searchParams.get("next") || "/dashboard";
   const reason = searchParams.get("reason");
 
@@ -69,7 +69,7 @@ function LoginPageContent() {
 
     setSubmitting(true);
 
-    const res = await login(email, password);
+    const res = await login(email, password, locale);
 
     if (!res.success) {
       showSnackbar(res.message || t?.auth?.loginFailed, "danger");

@@ -23,14 +23,23 @@ class UserRepository:
         result = await self.db.execute(select(func.count()).select_from(User))
         return result.scalar() or 0
 
-    async def create_user(self, email: str, password_hash: str, role: str, first_name: str, last_name: Optional[str]) -> User:
+    async def create_user(
+        self,
+        email: str,
+        password_hash: str,
+        role: str,
+        first_name: str,
+        last_name: Optional[str],
+        ai_preferences: Optional[dict] = None,
+    ) -> User:
         new_user = User(
             email=email,
             password_hash=password_hash,
             role=role,
             is_active=True,
             first_name=first_name,
-            last_name=last_name
+            last_name=last_name,
+            ai_preferences=deepcopy(ai_preferences or {}),
         )
         self.db.add(new_user)
         await self.db.commit()
