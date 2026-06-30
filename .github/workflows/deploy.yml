@@ -23,13 +23,9 @@ jobs:
 
             cd ~/antigravity-trading-tool || exit 1
 
-            echo "=== PULL CODE ==="
-            git fetch origin main
-            git reset --hard origin/main
-
-            echo "=== RUN DEPLOY.SH ==="
-            chmod +x deploy.sh
-            ./deploy.sh
+            echo "=== RUN PRODUCTION DEPLOY ==="
+            chmod +x deploy_live.sh
+            ./deploy_live.sh "GitHub Actions production deploy"
 
             echo "=== PM2 STATUS ==="
             pm2 status
