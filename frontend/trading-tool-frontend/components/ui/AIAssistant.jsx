@@ -227,20 +227,6 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
   const uiText = buildAssistantUiText(at);
 
-  const humanizeSurfaceStatus = (value) => {
-    const raw = String(value || "").toLowerCase();
-    if (!raw) return locale === "en" ? "quiet" : "rustig";
-    if (raw.includes("active")) return locale === "en" ? "active" : "actief";
-    if (raw.includes("quiet")) return locale === "en" ? "quiet" : "rustig";
-    if (raw.includes("early")) return locale === "en" ? "early" : "vroeg";
-    if (raw.includes("high")) return locale === "en" ? "high" : "hoog";
-    if (raw.includes("stable")) return locale === "en" ? "stable" : "stabiel";
-    if (raw.includes("guarded")) return locale === "en" ? "guarded" : "waakzaam";
-    if (raw.includes("defensive")) return locale === "en" ? "defensive" : "defensief";
-    if (raw.includes("balanced")) return locale === "en" ? "balanced" : "gebalanceerd";
-    return value;
-  };
-
   const uiText = locale === "en" ? {
     activeBriefing: "Active briefing",
     defensivePosture: "Defensive posture",
