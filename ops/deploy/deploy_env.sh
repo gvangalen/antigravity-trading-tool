@@ -128,6 +128,7 @@ if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
 
   cd ../../frontend/trading-tool-frontend
   pkill -f '$REMOTE_DIR/frontend/trading-tool-frontend/node_modules/.bin/next build' || true
+  pkill -f '$REMOTE_DIR/frontend/trading-tool-frontend/node_modules/next/dist/compiled/jest-worker/processChild.js' || true
   rm -rf .next out
   npm run build
 
