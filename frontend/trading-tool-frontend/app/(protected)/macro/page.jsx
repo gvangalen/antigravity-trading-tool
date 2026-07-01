@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
 // 🔥 Onboarding
@@ -61,6 +62,7 @@ import { useCurrentAsset } from "@/hooks/useCurrentAsset";
 export default function MacroPage() {
   const [activeTab, setActiveTab] = useState("day");
   const { symbol: selectedAsset } = useCurrentAsset();
+  const searchParams = useSearchParams();
   const { t } = useTranslation();
   const macroT = t.pages.macro;
 
@@ -84,6 +86,8 @@ export default function MacroPage() {
     error,
   } = useMacroData(activeTab, selectedAsset);
   const macroNeedsSetup = status?.has_macro === false && activeMacroIndicatorNames?.length === 0;
+  const onboardingGuidedMode = searchParams.get("onboarding") === "1";
+  const showOnboardingGuide = onboardingGuidedMode || macroNeedsSetup;
 
   // ===============================
   // 📈 SCORE DATA
@@ -203,6 +207,10 @@ export default function MacroPage() {
         </p>
       </header>
 
+      {showOnboardingGuide ? (
+        <OnboardingStepGuide copy={macroT.onboardingGuide} anchorId="macro-config" guidedMode={onboardingGuidedMode} />
+      ) : null}
+
       <div className="space-y-12">
         {/* 🛰️ MACRO HUD */}
         <DashboardErrorBoundary>
@@ -227,10 +235,6 @@ export default function MacroPage() {
         </DashboardErrorBoundary>
       </div>
 
-      {macroNeedsSetup ? (
-        <OnboardingStepGuide copy={macroT.onboardingGuide} anchorId="macro-config" />
-      ) : null}
-
       <div className="grid grid-cols-1 gap-12 pt-8 pb-24">
          {/* 🛠️ CONFIGURATION */}
          <div id="macro-config" className="space-y-4 scroll-mt-32">
@@ -238,6 +242,11 @@ export default function MacroPage() {
                <Activity size={14} className="text-slate-400 dark:text-slate-500" />
                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{macroT.configuration}</span>
             </div>
+            {showOnboardingGuide ? (
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700">
+                {macroT.onboardingGuide.guidedConfigHint}
+              </div>
+            ) : null}
             <MacroIndicatorScoreView
                addMacroIndicator={addMacroIndicator}
                activeMacroIndicatorNames={activeMacroIndicatorNames}

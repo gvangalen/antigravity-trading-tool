@@ -33,6 +33,8 @@ const ICONS = {
   strategy: Bot,
 };
 
+const buildOnboardingLink = (path, stepKey) => `${path}?onboarding=1&step=${stepKey}`;
+
 export default function OnboardingPage() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -86,7 +88,7 @@ export default function OnboardingPage() {
       finnHelp: stepText?.profile?.finnHelp,
       unlocks: stepText?.profile?.unlocks,
       done: status.has_profile,
-      link: "/onboarding/profile",
+      link: buildOnboardingLink("/onboarding/profile", "profile"),
       unlocked: allowedSteps.profile,
     },
     {
@@ -96,7 +98,7 @@ export default function OnboardingPage() {
       finnHelp: stepText?.market?.finnHelp,
       unlocks: stepText?.market?.unlocks,
       done: status.has_market,
-      link: "/market",
+      link: buildOnboardingLink("/market", "market"),
       unlocked: allowedSteps.market,
     },
     {
@@ -106,7 +108,7 @@ export default function OnboardingPage() {
       finnHelp: stepText?.macro?.finnHelp,
       unlocks: stepText?.macro?.unlocks,
       done: status.has_macro,
-      link: "/macro",
+      link: buildOnboardingLink("/macro", "macro"),
       unlocked: allowedSteps.macro,
     },
     {
@@ -116,7 +118,7 @@ export default function OnboardingPage() {
       finnHelp: stepText?.technical?.finnHelp,
       unlocks: stepText?.technical?.unlocks,
       done: status.has_technical,
-      link: "/technical",
+      link: buildOnboardingLink("/technical", "technical"),
       unlocked: allowedSteps.technical,
     },
     {
@@ -126,7 +128,7 @@ export default function OnboardingPage() {
       finnHelp: stepText?.setup?.finnHelp,
       unlocks: stepText?.setup?.unlocks,
       done: status.has_setup,
-      link: "/setup",
+      link: buildOnboardingLink("/setup", "setup"),
       unlocked: allowedSteps.setup,
     },
     {
@@ -136,7 +138,7 @@ export default function OnboardingPage() {
       finnHelp: stepText?.strategy?.finnHelp,
       unlocks: stepText?.strategy?.unlocks,
       done: status.has_strategy,
-      link: "/strategy",
+      link: buildOnboardingLink("/strategy", "strategy"),
       unlocked: allowedSteps.strategy,
     },
   ];

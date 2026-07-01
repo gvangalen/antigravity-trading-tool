@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Settings,
   Search,
@@ -25,6 +26,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function SetupPage() {
   const [search, setSearch] = useState("");
+  const searchParams = useSearchParams();
   const { t } = useTranslation();
   const copy = t?.setupPage || {};
 
@@ -84,6 +86,8 @@ export default function SetupPage() {
 
   const safeSetups = Array.isArray(setups) ? setups : [];
   const setupNeedsSetup = status?.has_setup === false && safeSetups.length === 0;
+  const onboardingGuidedMode = searchParams.get("onboarding") === "1";
+  const showOnboardingGuide = onboardingGuidedMode || setupNeedsSetup;
 
   /* =====================================================
      RENDER
@@ -104,8 +108,8 @@ export default function SetupPage() {
         </p>
       </header>
 
-      {setupNeedsSetup ? (
-        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="setup-create" />
+      {showOnboardingGuide ? (
+        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="setup-create" guidedMode={onboardingGuidedMode} />
       ) : null}
 
       {/* 🧠 AI INSIGHT + SETUP MATCH */}
@@ -162,6 +166,11 @@ export default function SetupPage() {
             </div>
           </div>
           <div className="card-p p-8">
+            {showOnboardingGuide ? (
+              <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700">
+                {copy.onboardingGuide.guidedConfigHint}
+              </div>
+            ) : null}
             <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6 border-b border-slate-50 dark:border-slate-800/50 pb-4">
               {copy.newDescription}
             </p>

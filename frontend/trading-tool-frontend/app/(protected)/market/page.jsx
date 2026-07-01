@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Activity, LayoutGrid, History, TrendingUp } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
@@ -25,6 +26,7 @@ import { useCurrentAsset } from "@/hooks/useCurrentAsset";
 
 export default function MarketPage() {
   const { symbol: activeSymbol } = useCurrentAsset();
+  const searchParams = useSearchParams();
   const { t } = useTranslation();
   const marketT = t.pages.market;
 
@@ -32,7 +34,6 @@ export default function MarketPage() {
   // 🧭 ONBOARDING HOOK
   // ===============================
   const { status, completeStep } = useOnboarding();
-  const marketNeedsSetup = status?.has_market === false && activeMarketIndicatorNames?.length === 0;
 
   // ===============================
   // 📊 MARKET DATA
@@ -45,6 +46,9 @@ export default function MarketPage() {
     btcLive,
     loading
   } = useMarketData(activeSymbol);
+  const marketNeedsSetup = status?.has_market === false && activeMarketIndicatorNames?.length === 0;
+  const onboardingGuidedMode = searchParams.get("onboarding") === "1";
+  const showOnboardingGuide = onboardingGuidedMode || marketNeedsSetup;
 
   // ===============================
   // 📈 SCORE DATA
@@ -104,8 +108,8 @@ export default function MarketPage() {
         </div>
       </header>
 
-      {marketNeedsSetup ? (
-        <OnboardingStepGuide copy={marketT.onboardingGuide} anchorId="market-config" />
+      {showOnboardingGuide ? (
+        <OnboardingStepGuide copy={marketT.onboardingGuide} anchorId="market-config" guidedMode={onboardingGuidedMode} />
       ) : null}
 
       {/* 🚀 MARKET HUD */}
@@ -132,7 +136,14 @@ export default function MarketPage() {
 
       <div className="grid grid-cols-1 gap-20 pt-16">
         {/* 🛠️ CONFIG */}
-        <div id="market-config" className="card scroll-mt-32 bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+        <div
+          id="market-config"
+          className={`card scroll-mt-32 rounded-3xl overflow-hidden border-2 bg-white shadow-sm dark:bg-[#0f172a] ${
+            showOnboardingGuide
+              ? "border-blue-200 ring-4 ring-blue-100/70 dark:border-blue-700 dark:ring-blue-900/30"
+              : "border-slate-100 dark:border-slate-800"
+          }`}
+        >
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
              <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                <LayoutGrid size={16} className="text-blue-600" />
@@ -140,6 +151,11 @@ export default function MarketPage() {
              </div>
           </div>
           <div className="card-p p-8">
+            {showOnboardingGuide ? (
+              <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700">
+                {marketT.onboardingGuide.guidedConfigHint}
+              </div>
+            ) : null}
             <MarketIndicatorScoreView
               availableIndicators={availableIndicators || []}
               loading={loading}
