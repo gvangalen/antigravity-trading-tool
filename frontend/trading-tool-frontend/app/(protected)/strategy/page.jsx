@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useModal } from "@/components/modal/ModalProvider";
 
 import { 
@@ -34,6 +35,7 @@ import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function StrategyPage() {
+  const searchParams = useSearchParams();
   const { showSnackbar } = useModal();
   const { t } = useTranslation();
   const { status, completeStep } = useOnboarding();
@@ -50,6 +52,8 @@ export default function StrategyPage() {
   const safeSetups = Array.isArray(setups) ? setups : [];
   const safeStrategies = Array.isArray(strategies) ? strategies : [];
   const strategyNeedsSetup = status?.has_strategy === false && safeStrategies.length === 0;
+  const onboardingGuidedMode = searchParams.get("onboarding") === "1";
+  const showOnboardingGuide = onboardingGuidedMode || strategyNeedsSetup;
 
   useEffect(() => {
     loadSetups();
@@ -126,8 +130,8 @@ export default function StrategyPage() {
         </p>
       </header>
 
-      {strategyNeedsSetup ? (
-        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="strategy-create" />
+      {showOnboardingGuide ? (
+        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="strategy-create" guidedMode={onboardingGuidedMode} />
       ) : null}
 
       {/* 🚀 QUICK STATS GRID */}
@@ -208,6 +212,11 @@ export default function StrategyPage() {
            </div>
 
            <div className="card-p p-8">
+             {showOnboardingGuide ? (
+               <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700">
+                 {copy.onboardingGuide.guidedConfigHint}
+               </div>
+             ) : null}
              <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6 border-b border-slate-50 dark:border-slate-800/50 pb-4">
                {copy.newDescription}
              </p>

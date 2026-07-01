@@ -98,9 +98,12 @@ class OnboardingRepository:
 
         return {
             "profile": has_trader_profile(profile),
-            "market": await _has_rows("market_data_indicators"),
-            "macro": await _has_rows("macro_data"),
-            "technical": await _has_rows("technical_indicators"),
+            # These tables can be filled by background sync/bootstrap jobs, so
+            # row presence is not a reliable signal that the user consciously
+            # completed the onboarding action on that page.
+            "market": False,
+            "macro": False,
+            "technical": False,
             "setup": await _has_rows("setups"),
             "strategy": await _has_rows("strategies"),
         }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Activity, Brain, LayoutGrid, AlertTriangle, LineChart } from "lucide-react";
 import TradingViewChart from "@/components/charts/TradingViewChart";
 import { useTranslation } from "@/app/providers/I18nProvider";
@@ -32,6 +33,7 @@ import { useCurrentAsset } from "@/hooks/useCurrentAsset";
 
 export default function TechnicalPage() {
   const [activeTab, setActiveTab] = useState("day");
+  const searchParams = useSearchParams();
   const { openConfirm, showSnackbar } = useModal();
   const { symbol: selectedAsset } = useCurrentAsset();
   const { t } = useTranslation();
@@ -51,6 +53,8 @@ export default function TechnicalPage() {
   const { technical: technicalScore } = useScoresData(selectedAsset);
   const { status, completeStep } = useOnboarding();
   const technicalNeedsSetup = status?.has_technical === false && technicalData?.length === 0;
+  const onboardingGuidedMode = searchParams.get("onboarding") === "1";
+  const showOnboardingGuide = onboardingGuidedMode || technicalNeedsSetup;
 
   useEffect(() => {
     trackAssistantEvent({
@@ -147,8 +151,8 @@ export default function TechnicalPage() {
         </p>
       </header>
 
-      {technicalNeedsSetup ? (
-        <OnboardingStepGuide copy={technicalT.onboardingGuide} anchorId="technical-config" />
+      {showOnboardingGuide ? (
+        <OnboardingStepGuide copy={technicalT.onboardingGuide} anchorId="technical-config" guidedMode={onboardingGuidedMode} />
       ) : null}
 
       {/* 🚀 TECHNICAL HUD */}
@@ -182,6 +186,11 @@ export default function TechnicalPage() {
                <Activity size={14} className="text-slate-400 dark:text-slate-500" />
                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{technicalT.configuration}</span>
             </div>
+            {showOnboardingGuide ? (
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700">
+                {technicalT.onboardingGuide.guidedConfigHint}
+              </div>
+            ) : null}
             <TechnicalIndicatorScoreView
                addTechnicalIndicator={addTechnicalIndicator}
                activeTechnicalIndicatorNames={technicalData.map(i => i.name)}
