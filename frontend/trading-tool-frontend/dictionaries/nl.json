@@ -953,6 +953,21 @@
       "partialLoadError": "Een deel van de marktdata kon niet direct geladen worden.",
       "loadError": "Kon marktdata niet laden.",
       "processing": "{symbol} wordt verwerkt...",
+      "onboardingGuide": {
+        "eyebrow": "Eerste marktstap",
+        "title": "Voeg eerst je eerste marktindicator toe",
+        "body": "Begin met één marktsignaal zodat Finn eerst een live marktbeeld kan opbouwen voordat de volgende stappen daarop leunen.",
+        "examples": ["BTC prijs", "24u-verandering", "Volume"],
+        "steps": [
+          "Kies hieronder één marktindicator in het configuratieblok.",
+          "Koppel hem aan je marktoverzicht zodat hij onderdeel wordt van je live context.",
+          "Bekijk daarna de signaaltabel of ga terug naar onboarding voor de volgende stap."
+        ],
+        "primaryCta": "Open marktconfiguratie",
+        "secondaryCta": "Terug naar onboarding",
+        "finnLabel": "Finn helpt:",
+        "finnHint": "Twijfel je wat je moet kiezen, begin dan met het duidelijkste live marktsignaal en vraag Finn daarna wat nog ontbreekt."
+      },
       "biasPositive": "Positief",
       "biasNegative": "Negatief",
       "biasNeutral": "Neutraal",
@@ -1021,8 +1036,23 @@
         "active": "Actief",
         "sync": "Synchroniseer met macro",
         "loadError": "Kon macro-indicatoren niet ophalen.",
+        "alreadyAdded": "{name} staat al actief in je macro-overzicht.",
         "addSuccess": "{name} toegevoegd aan macro-analyse.",
+        "addSuccessPendingRefresh": "{name} is toegevoegd. Je macro-overzicht ververst zodra de nieuwste data binnen is.",
         "addError": "Toevoegen mislukt."
+      },
+      "onboardingGuide": {
+        "eyebrow": "Eerste macrostap",
+        "title": "Voeg eerst één macro-indicator toe",
+        "body": "Begin met één duidelijk contextsignaal zodat Finn eerst het grotere plaatje begrijpt voordat de rest van je setup zich vult.",
+        "examples": ["DXY", "US10Y", "Inflatie"],
+        "steps": [
+          "Kies hieronder één macro-indicator uit de selector.",
+          "Klik op synchroniseren zodat hij onderdeel wordt van je macro-overzicht.",
+          "Bekijk daarna de signaaltabel of ga terug naar onboarding voor de volgende stap."
+        ],
+        "primaryCta": "Open macro-configuratie",
+        "secondaryCta": "Terug naar onboarding"
       },
       "hud": {
         "environment": "Macroomgeving",
@@ -1093,6 +1123,21 @@
         "addSuccess": "{name} gesynchroniseerd met terminal.",
         "alreadyAddedSuccess": "{name} was al gesynchroniseerd. Terminal ververst.",
         "addError": "Toevoegen mislukt. Probeer opnieuw."
+      },
+      "onboardingGuide": {
+        "eyebrow": "Eerste technical-stap",
+        "title": "Voeg eerst één technische indicator toe",
+        "body": "Begin met één herkenbaar technisch signaal zodat Finn trend en timing concreet kan uitleggen in plaats van algemeen te blijven.",
+        "examples": ["RSI", "MA 200", "VIX"],
+        "steps": [
+          "Kies hieronder één technische indicator in het configuratieblok.",
+          "Synchroniseer hem met de terminal zodat hij onderdeel wordt van je technische context.",
+          "Bekijk daarna de signaaltabel of ga terug naar onboarding voor de volgende stap."
+        ],
+        "primaryCta": "Open technical-configuratie",
+        "secondaryCta": "Terug naar onboarding",
+        "finnLabel": "Finn helpt:",
+        "finnHint": "Weet je niet welke je moet kiezen, begin dan met RSI. Daarmee kan Finn al momentum en timing beginnen uit te leggen."
       },
       "hud": {
         "strongPositive": "Sterk positief",
@@ -1300,7 +1345,22 @@
     "activeTitle": "Actieve setups",
     "searchPlaceholder": "Zoek setups...",
     "newTitle": "Nieuwe setup",
-    "newDescription": "Voeg een nieuw tradingmodel toe aan het systeem"
+    "newDescription": "Voeg een nieuw tradingmodel toe aan het systeem",
+    "onboardingGuide": {
+      "eyebrow": "Eerste setupstap",
+      "title": "Maak eerst één simpele setup",
+      "body": "Hier worden je regels concreet. Begin met één duidelijke setup zodat Finn context kan koppelen aan een echt tradingkader.",
+      "examples": ["BTC swing setup", "ETH DCA setup", "SOL breakout setup"],
+      "steps": [
+        "Scroll naar het blok voor een nieuwe setup hieronder.",
+        "Vul één simpele setup in met asset, timeframe en kernvoorwaarden.",
+        "Sla hem eerst op en ga daarna terug naar onboarding of verfijn hem hier verder."
+      ],
+      "primaryCta": "Open nieuwe setup",
+      "secondaryCta": "Terug naar onboarding",
+      "finnLabel": "Finn helpt:",
+      "finnHint": "Twijfel je hoeveel detail nodig is, houd de eerste setup dan simpel. Finn kan hem daarna helpen aanscherpen."
+    }
   },
   "strategyPage": {
     "eyebrow": "Uitvoering",
@@ -1312,6 +1372,21 @@
     "searchPlaceholder": "Zoek strategieën...",
     "newTitle": "Nieuwe strategie",
     "newDescription": "Voeg een nieuwe strategie toe die past bij je setup en uitvoeringsstijl",
+    "onboardingGuide": {
+      "eyebrow": "Eerste strategiestap",
+      "title": "Maak eerst één uitvoeringsstrategie",
+      "body": "Een strategie maakt van je setup een uitvoeringsplan. Begin met één basisstrategie zodat Finn beslissingen meteen in de juiste context kan reviewen.",
+      "examples": ["BTC swing execution", "ETH DCA execution", "SOL breakout execution"],
+      "steps": [
+        "Scroll naar het blok voor een nieuwe strategie hieronder.",
+        "Kies bij welke setup hij hoort en vul de belangrijkste uitvoervelden in.",
+        "Sla de strategie eerst op en ga daarna terug naar onboarding of stem hem hier verder af."
+      ],
+      "primaryCta": "Open nieuwe strategie",
+      "secondaryCta": "Terug naar onboarding",
+      "finnLabel": "Finn helpt:",
+      "finnHint": "Weet je niet hoe uitgebreid hij moet zijn, houd de eerste strategie dan simpel. Finn kan de uitvoerlogica daarna verder verfijnen."
+    },
     "editTitle": "Strategie aanpassen",
     "editSubtitle": "Instellingen",
     "feedback": {

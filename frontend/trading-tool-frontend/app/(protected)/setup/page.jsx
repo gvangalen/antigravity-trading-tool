@@ -17,6 +17,7 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 
 // ⭐ Onboarding component
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
+import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
@@ -82,6 +83,7 @@ export default function SetupPage() {
   };
 
   const safeSetups = Array.isArray(setups) ? setups : [];
+  const setupNeedsSetup = status?.has_setup === false && safeSetups.length === 0;
 
   /* =====================================================
      RENDER
@@ -102,6 +104,10 @@ export default function SetupPage() {
         </p>
       </header>
 
+      {setupNeedsSetup ? (
+        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="setup-create" />
+      ) : null}
+
       {/* 🧠 AI INSIGHT + SETUP MATCH */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch py-8">
         <DashboardErrorBoundary>
@@ -115,7 +121,7 @@ export default function SetupPage() {
       <div className="grid grid-cols-1 gap-10 pb-24">
         
         {/* 📋 SETUP LIST */}
-        <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+        <div id="setup-create" className="card scroll-mt-32 bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6 flex items-center justify-between">
             <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
               <ClipboardList className="text-blue-600" size={16} />

@@ -19,7 +19,14 @@ export default function OnboardingBanner({ step }) {
   const { status, loading, onboardingComplete } = useOnboarding();
 
   const Icon = ICONS[step];
-  const conf = t?.traderProfile?.banner?.steps?.[step];
+  const bannerConf = t?.traderProfile?.banner?.steps?.[step];
+  const overviewConf = t?.traderProfile?.onboardingOverview?.steps?.[step];
+  const conf = {
+    title: overviewConf?.title || bannerConf?.title,
+    action: bannerConf?.action || overviewConf?.description,
+    help: bannerConf?.help || overviewConf?.finnHelp,
+    unlocks: overviewConf?.unlocks || bannerConf?.unlocks,
+  };
   const isComplete = status?.[`has_${step}`];
 
   if (loading || !status || onboardingComplete || !Icon || !conf) return null;
