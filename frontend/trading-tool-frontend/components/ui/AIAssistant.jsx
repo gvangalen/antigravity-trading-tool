@@ -3812,6 +3812,22 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const visibleNextQuestion = message.nextQuestion === "plan_deviation_ack" ? null : message.nextQuestion;
     const yesLabel = at("draftRows.yes");
     const noLabel = at("draftRows.no");
+    const fieldLabel = (field, fallback = null) => at(`fieldLabels.${field}`, fallback || field);
+    const fieldQuestion = (field, fallback = null) => at(`fieldQuestions.${field}`, fallback || field);
+    const valueLabel = (value, fallback = null) => {
+      if (value === undefined || value === null || value === "") return null;
+      const normalized = String(value).trim();
+      if (!normalized) return null;
+      const translated = at(`valueLabels.${normalized}`, normalized);
+      return translated || fallback || normalized;
+    };
+    const draftTitle = isFinnIndicator
+      ? at("draftTitles.indicator", "Finn indicator draft")
+      : isFinnBot
+        ? at("draftTitles.bot", "Finn bot draft")
+        : isFinnStrategy
+          ? at("draftTitles.strategy", "Finn strategy draft")
+          : at("draftTitles.plan", "Finn plan draft");
     const draftRowsText = {
       type: at("draftRows.type"),
       action: at("draftRows.action"),
@@ -3844,9 +3860,32 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       add: at("draftRows.add"),
       reset: at("draftRows.reset"),
     };
+    const isCollecting = !message.canConfirm;
+    const defaultPlanName = draft.asset && draft.plan_type
+      ? `${draft.asset} ${draft.plan_type === "dca" ? "Smart DCA" : "Trade Plan"}`
+      : null;
+    const hideDefaultPlanName = isCollecting && setup.name && defaultPlanName && setup.name === defaultPlanName;
+    const hideDefaultTimeframe = isCollecting && isDca && setup.timeframe === "1W";
+    const hideScoreRanges = isCollecting;
+    const hideDefaultAutomation = isCollecting && !isFinnBot && !isFinnIndicator && (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only")) === "bot_assisted";
+    const hideDefaultBotSummary = isCollecting && !isFinnStrategy && !isFinnBot && bot.create_bot && !bot.is_live && bot.mode === "manual" && bot.risk_profile === "balanced";
+    const dcaScheduleParts = [
+      valueLabel(dca.frequency),
+      dca.month_day ? String(dca.month_day) : (dca.day && (!isCollecting || dca.day !== "monday") ? valueLabel(dca.day) : null),
+    ].filter(Boolean);
+    const formatRange = (range) => Array.isArray(range) ? range.join(" - ") : null;
+    const formatCurrency = (amount) => (amount ? `€${amount}` : null);
+    const formatChangeLabel = (field) => fieldLabel(field, field);
+    const formatValue = (value) => {
+      if (value === undefined || value === null || value === "") return "—";
+      if (Array.isArray(value)) return value.join(", ");
+      if (typeof value === "boolean") return value ? yesLabel : noLabel;
+      if (typeof value === "string") return valueLabel(value, value);
+      return String(value);
+    };
 
     const rows = [
-      [draftRowsText.type, isFinnIndicator ? "indicator_config" : (isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type))],
+      [draftRowsText.type, valueLabel(isFinnIndicator ? "indicator_config" : (isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type)))],
       isFinnIndicator ? [draftRowsText.action, draft.operation === "reset" ? draftRowsText.reset : (draft.operation === "update" ? draftRowsText.update : draftRowsText.add)] : null,
       isFinnIndicator ? [draftRowsText.category, draft.category] : null,
       isFinnIndicator ? ["Node", draft.indicator ? `${draft.display_name || draft.indicator} (${draft.indicator})` : null] : null,
@@ -3860,34 +3899,34 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       isFinnBot ? [draftRowsText.strategy, draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
       isFinnStrategy ? [draftRowsText.setup, draft.setup_id ? `#${draft.setup_id}` : null] : null,
       isFinnStrategy && draft.operation === "update" ? [draftRowsText.strategy, draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
-      isFinnStrategy ? [draftRowsText.setupType, draft.setup_type] : null,
+      isFinnStrategy ? [draftRowsText.setupType, valueLabel(draft.setup_type, draft.setup_type)] : null,
       isFinnBot ? [draftRowsText.bot, bot.name] : null,
-      isFinnBot ? [draftRowsText.environment, bot.is_live ? "live" : "paper"] : null,
-      isFinnBot ? [uiText.mode, bot.mode] : null,
-      isFinnBot ? [draftRowsText.risk, bot.risk_profile] : null,
-      isFinnBot ? [draftRowsText.cadence, bot.cadence] : null,
+      isFinnBot ? [draftRowsText.environment, valueLabel(bot.is_live ? "live" : "paper")] : null,
+      isFinnBot ? [uiText.mode, valueLabel(bot.mode, bot.mode)] : null,
+      isFinnBot ? [draftRowsText.risk, valueLabel(bot.risk_profile, bot.risk_profile)] : null,
+      isFinnBot ? [draftRowsText.cadence, valueLabel(bot.cadence, bot.cadence)] : null,
       !isFinnIndicator ? [uiText.asset, draft.asset] : null,
-      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? [draftRowsText.name, setup.name] : null,
-      !isFinnIndicator ? [draftRowsText.timeframe, isFinnStrategy || isFinnBot ? draft.timeframe : setup.timeframe] : null,
-      !isFinnIndicator ? [draftRowsText.amount, isFinnBot ? (bot.budget_total_eur ? `€${bot.budget_total_eur}` : null) : (strategy.base_amount_eur ? `€${strategy.base_amount_eur}` : null)] : null,
-      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? ["Macro", Array.isArray(setup.macro_score_range) ? setup.macro_score_range.join(" - ") : null] : null,
-      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? [draftRowsText.technical, Array.isArray(setup.technical_score_range) ? setup.technical_score_range.join(" - ") : null] : null,
-      !isFinnStrategy && !isFinnBot && !isFinnIndicator ? [draftRowsText.market, Array.isArray(setup.market_score_range) ? setup.market_score_range.join(" - ") : null] : null,
-      isDca && !isFinnStrategy && !isFinnBot ? ["DCA", [dca.frequency, dca.day || dca.month_day].filter(Boolean).join(" · ")] : null,
-      isTrade && !isFinnBot ? [draftRowsText.execution, strategy.entry_type || strategy.trade_execution_mode || "limit"] : null,
+      !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideDefaultPlanName ? [draftRowsText.name, setup.name] : null,
+      !isFinnIndicator && !hideDefaultTimeframe ? [draftRowsText.timeframe, isFinnStrategy || isFinnBot ? draft.timeframe : setup.timeframe] : null,
+      !isFinnIndicator ? [draftRowsText.amount, isFinnBot ? formatCurrency(bot.budget_total_eur) : formatCurrency(strategy.base_amount_eur)] : null,
+      !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideScoreRanges ? [fieldLabel("setup.macro_score_range", "Macro"), formatRange(setup.macro_score_range)] : null,
+      !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideScoreRanges ? [draftRowsText.technical, formatRange(setup.technical_score_range)] : null,
+      !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideScoreRanges ? [draftRowsText.market, formatRange(setup.market_score_range)] : null,
+      isDca && !isFinnStrategy && !isFinnBot ? [valueLabel("dca", "DCA"), dcaScheduleParts.join(" · ")] : null,
+      isTrade && !isFinnBot ? [draftRowsText.execution, valueLabel(strategy.entry_type || strategy.trade_execution_mode || "limit")] : null,
       isTrade && !isFinnBot && strategy.entry_type === "market" ? [draftRowsText.marketConfirmation, strategy.market_execution_ack ? yesLabel : noLabel] : null,
       isTrade && !isFinnBot ? [draftRowsText.entry, strategy.entry] : null,
       isTrade && !isFinnBot ? [draftRowsText.stop, strategy.stop_loss] : null,
       isTrade && !isFinnBot ? [draftRowsText.targets, Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
-      !isFinnBot && !isFinnIndicator ? [draftRowsText.automation, isFinnStrategy ? strategy.automation : (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only"))] : null,
-      !isFinnStrategy && !isFinnBot && bot.create_bot ? [draftRowsText.bot, `${bot.is_live ? "Live" : "Paper"} · ${bot.mode} · ${bot.risk_profile}`] : null,
+      !isFinnBot && !isFinnIndicator && !hideDefaultAutomation ? [draftRowsText.automation, valueLabel(isFinnStrategy ? strategy.automation : (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only")))] : null,
+      !isFinnStrategy && !isFinnBot && bot.create_bot && !hideDefaultBotSummary ? [draftRowsText.bot, `${valueLabel(bot.is_live ? "live" : "paper")} · ${valueLabel(bot.mode, bot.mode)} · ${valueLabel(bot.risk_profile, bot.risk_profile)}`] : null,
     ].filter(Boolean);
 
     return (
       <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-4">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-300">
           <ListChecks size={13} />
-          {isFinnIndicator ? "Finn Indicator Config Draft" : (isFinnBot ? "Finn Bot Draft" : (isFinnStrategy ? "Finn Strategy Draft" : "Finn Plan Draft"))}
+          {draftTitle}
         </div>
         <div className="grid grid-cols-1 gap-2">
           {rows.map(([label, value]) => (
@@ -3909,7 +3948,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 >
                   <div className="text-xs font-black text-slate-800 dark:text-slate-100">{option.name || `Setup #${option.id}`}</div>
                   <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-500 dark:text-blue-300">
-                    #{option.id} · {option.symbol} · {option.setup_type} · {option.timeframe}
+                    #{option.id} · {option.symbol} · {valueLabel(option.setup_type, option.setup_type)} · {option.timeframe}
                   </div>
                 </button>
               ))}
@@ -3928,7 +3967,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 >
                   <div className="text-xs font-black text-slate-800 dark:text-slate-100">{option.name || `Strategy #${option.id}`}</div>
                   <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-500 dark:text-blue-300">
-                    #{option.id} · {option.symbol} · {option.setup_type} · {option.timeframe}
+                    #{option.id} · {option.symbol} · {valueLabel(option.setup_type, option.setup_type)} · {option.timeframe}
                   </div>
                 </button>
               ))}
@@ -3960,8 +3999,8 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             <div className="space-y-1">
               {changes.map((change, index) => (
                 <div key={`${change.field}-${index}`} className="flex items-center justify-between gap-3 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-                  <span className="font-black text-emerald-700 dark:text-emerald-300">{change.field}</span>
-                  <span className="text-right">{String(change.from ?? "—")} → {String(change.to ?? "—")}</span>
+                  <span className="font-black text-emerald-700 dark:text-emerald-300">{formatChangeLabel(change.field)}</span>
+                  <span className="text-right">{formatValue(change.from)} → {formatValue(change.to)}</span>
                 </div>
               ))}
             </div>
@@ -4037,7 +4076,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {visibleMissingFields.map((field) => (
                     <span key={field} className="px-2 py-1 rounded-lg bg-white/80 dark:bg-slate-950/50 text-[10px] font-bold text-amber-800 dark:text-amber-200 border border-amber-100 dark:border-amber-900/40">
-                      {field}
+                      {fieldLabel(field, field)}
                     </span>
                   ))}
                 </div>
@@ -4049,7 +4088,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 <div className="mt-1 space-y-1">
                   {message.invalidFields.map((item, index) => (
                     <div key={`${item.field}-${index}`} className="text-[11px] font-semibold text-rose-700 dark:text-rose-200">
-                      {item.field}: {item.reason}
+                      {fieldLabel(item.field, item.field)}: {item.reason}
                     </div>
                   ))}
                 </div>
@@ -4057,7 +4096,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             )}
             {visibleNextQuestion && (
               <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                {visibleNextQuestion}
+                {fieldQuestion(visibleNextQuestion, visibleNextQuestion)}
               </div>
             )}
           </div>
