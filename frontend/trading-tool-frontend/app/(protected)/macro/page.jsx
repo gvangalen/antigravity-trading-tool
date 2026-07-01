@@ -5,6 +5,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 
 // 🔥 Onboarding
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
+import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 import { useOnboarding } from "@/hooks/useOnboarding";
 
 // Hooks
@@ -82,6 +83,7 @@ export default function MacroPage() {
     loading: loadingIndicators,
     error,
   } = useMacroData(activeTab, selectedAsset);
+  const macroNeedsSetup = status?.has_macro === false && activeMacroIndicatorNames?.length === 0;
 
   // ===============================
   // 📈 SCORE DATA
@@ -167,11 +169,15 @@ export default function MacroPage() {
       cancelText: t.common.cancel,
       tone: "danger",
       onConfirm: async () => {
-        try {
-          await removeMacroIndicator(name);
+        const result = await removeMacroIndicator(name);
+
+        if (result?.ok) {
           showSnackbar(macroT.removeSuccess.replace("{name}", name), "success");
-        } catch (err) {
-          console.error("❌ Removal failed:", err);
+          return;
+        }
+
+        if (result?.reason !== "missing_name") {
+          console.error("❌ Removal failed:", result?.error);
           showSnackbar(macroT.removeError, "danger");
         }
       },
@@ -183,6 +189,7 @@ export default function MacroPage() {
   // ===============================
   return (
     <div className="page-container bg-white dark:bg-[#020617] transition-colors min-h-screen">
+      <OnboardingBanner step="macro" />
       
       {/* 📡 STANDARD PAGE HEADER */}
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
@@ -220,9 +227,13 @@ export default function MacroPage() {
         </DashboardErrorBoundary>
       </div>
 
+      {macroNeedsSetup ? (
+        <OnboardingStepGuide copy={macroT.onboardingGuide} anchorId="macro-config" />
+      ) : null}
+
       <div className="grid grid-cols-1 gap-12 pt-8 pb-24">
          {/* 🛠️ CONFIGURATION */}
-         <div className="space-y-4">
+         <div id="macro-config" className="space-y-4 scroll-mt-32">
             <div className="flex items-center gap-2 mb-2">
                <Activity size={14} className="text-slate-400 dark:text-slate-500" />
                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{macroT.configuration}</span>
@@ -256,7 +267,6 @@ export default function MacroPage() {
          </div>
       </div>
 
-      <OnboardingBanner step="macro" />
     </div>
   );
 }

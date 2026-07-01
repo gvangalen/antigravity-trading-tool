@@ -17,6 +17,7 @@ import MarketSevenDayTable from "@/components/market/MarketSevenDayTable";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
+import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
@@ -31,6 +32,7 @@ export default function MarketPage() {
   // 🧭 ONBOARDING HOOK
   // ===============================
   const { status, completeStep } = useOnboarding();
+  const marketNeedsSetup = status?.has_market === false && activeMarketIndicatorNames?.length === 0;
 
   // ===============================
   // 📊 MARKET DATA
@@ -39,6 +41,7 @@ export default function MarketPage() {
     sevenDayData, 
     forwardReturns, 
     availableIndicators,
+    activeMarketIndicatorNames,
     btcLive,
     loading
   } = useMarketData(activeSymbol);
@@ -63,13 +66,13 @@ export default function MarketPage() {
   // ===============================
   useEffect(() => {
     if (
-      availableIndicators?.length > 0 && 
+      activeMarketIndicatorNames?.length > 0 &&
       status && 
       status.has_market === false
     ) {
       completeStep("market");
     }
-  }, [availableIndicators, status, completeStep]);
+  }, [activeMarketIndicatorNames, status, completeStep]);
 
   // ===============================
   // 🛡️ SAFE FALLBACKS
@@ -101,6 +104,10 @@ export default function MarketPage() {
         </div>
       </header>
 
+      {marketNeedsSetup ? (
+        <OnboardingStepGuide copy={marketT.onboardingGuide} anchorId="market-config" />
+      ) : null}
+
       {/* 🚀 MARKET HUD */}
       <DashboardErrorBoundary>
         <MarketTerminalHUD 
@@ -125,7 +132,7 @@ export default function MarketPage() {
 
       <div className="grid grid-cols-1 gap-20 pt-16">
         {/* 🛠️ CONFIG */}
-        <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+        <div id="market-config" className="card scroll-mt-32 bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
              <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                <LayoutGrid size={16} className="text-blue-600" />

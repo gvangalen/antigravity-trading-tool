@@ -10,6 +10,7 @@ import TechnicalTabs from "@/components/technical/TechnicalTabs";
 import TechnicalTerminalGrid from "@/components/technical/TechnicalTerminalGrid";
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
+import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 
 import { useTechnicalData } from "@/hooks/useTechnicalData";
 import { useScoresData } from "@/hooks/useScoresData";
@@ -49,6 +50,7 @@ export default function TechnicalPage() {
 
   const { technical: technicalScore } = useScoresData(selectedAsset);
   const { status, completeStep } = useOnboarding();
+  const technicalNeedsSetup = status?.has_technical === false && technicalData?.length === 0;
 
   useEffect(() => {
     trackAssistantEvent({
@@ -145,6 +147,10 @@ export default function TechnicalPage() {
         </p>
       </header>
 
+      {technicalNeedsSetup ? (
+        <OnboardingStepGuide copy={technicalT.onboardingGuide} anchorId="technical-config" />
+      ) : null}
+
       {/* 🚀 TECHNICAL HUD */}
       <div className="space-y-12">
         <DashboardErrorBoundary>
@@ -171,7 +177,7 @@ export default function TechnicalPage() {
  
       <div className="grid grid-cols-1 gap-12 pt-8 pb-24">
          {/* 🛠️ CONFIGURATION */}
-         <div className="space-y-4">
+         <div id="technical-config" className="space-y-4 scroll-mt-32">
             <div className="flex items-center gap-2 mb-2">
                <Activity size={14} className="text-slate-400 dark:text-slate-500" />
                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{technicalT.configuration}</span>

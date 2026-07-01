@@ -952,6 +952,21 @@
       "partialLoadError": "A portion of the market data could not be loaded right away.",
       "loadError": "Could not load market data.",
       "processing": "{symbol} is being processed...",
+      "onboardingGuide": {
+        "eyebrow": "First market step",
+        "title": "Add your first market indicator",
+        "body": "Start by adding one market signal so Finn can build a live market picture before the later steps depend on it.",
+        "examples": ["BTC price", "24h change", "Volume"],
+        "steps": [
+          "Choose one market indicator in the configuration block below.",
+          "Attach it to your market overview so it becomes part of your live context.",
+          "Then review the signal table or go back to onboarding for the next step."
+        ],
+        "primaryCta": "Open market configuration",
+        "secondaryCta": "Back to onboarding",
+        "finnLabel": "Finn helps:",
+        "finnHint": "If you are unsure what to choose, start with the clearest live market signal first and ask Finn after that what still matters."
+      },
       "biasPositive": "Positive",
       "biasNegative": "Negative",
       "biasNeutral": "Neutral",
@@ -1020,8 +1035,23 @@
         "active": "Active",
         "sync": "Sync to macro",
         "loadError": "Could not load macro indicators.",
+        "alreadyAdded": "{name} is already active in your macro overview.",
         "addSuccess": "{name} added to macro analysis.",
+        "addSuccessPendingRefresh": "{name} added. Your macro overview will refresh as soon as the latest data arrives.",
         "addError": "Adding failed."
+      },
+      "onboardingGuide": {
+        "eyebrow": "First macro step",
+        "title": "Add one macro indicator first",
+        "body": "Start with one clear context signal so Finn can understand the bigger picture before the rest of your setup fills in.",
+        "examples": ["DXY", "US10Y", "Inflation"],
+        "steps": [
+          "Choose one macro indicator from the selector below.",
+          "Click sync so it becomes part of your macro overview.",
+          "Then review the signal table or return to onboarding for the next step."
+        ],
+        "primaryCta": "Open macro configuration",
+        "secondaryCta": "Back to onboarding"
       },
       "hud": {
         "environment": "Macro environment",
@@ -1092,6 +1122,21 @@
         "addSuccess": "{name} synchronized with terminal.",
         "alreadyAddedSuccess": "{name} was already synchronized. Terminal refreshed.",
         "addError": "Adding failed. Please try again."
+      },
+      "onboardingGuide": {
+        "eyebrow": "First technical step",
+        "title": "Add one technical indicator first",
+        "body": "Start with one familiar technical signal so Finn can explain trend and timing in a concrete way instead of staying generic.",
+        "examples": ["RSI", "MA 200", "VIX"],
+        "steps": [
+          "Choose one technical indicator in the configuration block below.",
+          "Sync it to the terminal so it becomes part of your technical context.",
+          "Then review the signal table or return to onboarding for the next step."
+        ],
+        "primaryCta": "Open technical configuration",
+        "secondaryCta": "Back to onboarding",
+        "finnLabel": "Finn helps:",
+        "finnHint": "If you do not know which one to pick, start with RSI. That already gives Finn enough to begin explaining momentum and timing."
       },
       "hud": {
         "strongPositive": "Strong positive",
@@ -1299,7 +1344,22 @@
     "activeTitle": "Active setups",
     "searchPlaceholder": "Search setups...",
     "newTitle": "New setup",
-    "newDescription": "Add a new trading model to the system"
+    "newDescription": "Add a new trading model to the system",
+    "onboardingGuide": {
+      "eyebrow": "First setup step",
+      "title": "Create one simple setup first",
+      "body": "This is where your rules become concrete. Start with one clear setup so Finn can connect context to a real trading framework.",
+      "examples": ["BTC swing setup", "ETH DCA setup", "SOL breakout setup"],
+      "steps": [
+        "Scroll to the new setup block below.",
+        "Fill in one simple setup with asset, timeframe, and core conditions.",
+        "Save it first, then return to onboarding or continue refining it here."
+      ],
+      "primaryCta": "Open new setup",
+      "secondaryCta": "Back to onboarding",
+      "finnLabel": "Finn helps:",
+      "finnHint": "If you are unsure how detailed it should be, keep the first setup simple. Finn can help sharpen it after you save it."
+    }
   },
   "strategyPage": {
     "eyebrow": "Execution",
@@ -1311,6 +1371,21 @@
     "searchPlaceholder": "Search strategies...",
     "newTitle": "New strategy",
     "newDescription": "Add a new strategy that fits your setup and execution style",
+    "onboardingGuide": {
+      "eyebrow": "First strategy step",
+      "title": "Create one execution strategy first",
+      "body": "A strategy turns your setup into an execution plan. Start with one basic strategy so Finn can begin reviewing decisions in the right context.",
+      "examples": ["BTC swing execution", "ETH DCA execution", "SOL breakout execution"],
+      "steps": [
+        "Scroll to the new strategy block below.",
+        "Choose the setup it belongs to and fill in the key execution fields.",
+        "Save the strategy first, then return to onboarding or continue tuning it here."
+      ],
+      "primaryCta": "Open new strategy",
+      "secondaryCta": "Back to onboarding",
+      "finnLabel": "Finn helps:",
+      "finnHint": "If you are unsure how advanced it needs to be, keep the first strategy simple. Finn can refine the execution logic afterward."
+    },
     "editTitle": "Edit strategy",
     "editSubtitle": "Settings",
     "feedback": {

@@ -13,8 +13,6 @@ import {
   deleteMacroIndicator,
 } from "@/lib/api/macro";
 
-import { useModal } from "@/components/modal/ModalProvider";
-
 /* ============================================================
    ⭐ OFFICIËLE MACRO HOOK — ACTION-DRIVEN (FIXED)
    - Volledig in lijn met Technical & Market
@@ -30,8 +28,6 @@ export function useMacroData(activeTab = "Dag") {
 
   const [indicatorNames, setIndicatorNames] = useState([]);
   const [scoreRules, setScoreRules] = useState([]);
-
-  const { showSnackbar, openConfirm } = useModal();
 
   /* ------------------------------------------------------------
      🔑 Helpers
@@ -61,7 +57,8 @@ export function useMacroData(activeTab = "Dag") {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  async function loadData() {
+  async function loadData(options = {}) {
+    const { preserveExisting = false } = options;
     setLoading(true);
     setError("");
 
@@ -103,10 +100,14 @@ export function useMacroData(activeTab = "Dag") {
       }));
 
       setMacroData(normalized);
+      return true;
     } catch (err) {
       console.error("❌ Macrodata load error:", err);
-      setMacroData([]);
+      if (!preserveExisting) {
+        setMacroData([]);
+      }
       setError("Fout bij laden van macrodata");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -130,52 +131,67 @@ export function useMacroData(activeTab = "Dag") {
      ➕ 4. Macro-indicator toevoegen (duplicate-safe)
   ------------------------------------------------------------ */
   async function addMacroIndicator(name) {
-    if (!name) return;
+    if (!name) {
+      return { ok: false, reason: "missing_name" };
+    }
 
     if (activeMacroIndicatorNames.includes(name)) {
-      showSnackbar(`'${name}' is al toegevoegd`, "info");
-      return;
+      return { ok: true, duplicate: true, refreshed: true };
     }
 
     try {
       await macroDataAdd(name);
-      await loadData();
-      showSnackbar(`Macro-indicator '${name}' toegevoegd ✔️`, "success");
+      const refreshed = await loadData({ preserveExisting: true });
+
+      if (!refreshed) {
+        setMacroData((prev) => {
+          if (prev.some((item) => item.name === name)) {
+            return prev;
+          }
+
+          return [
+            ...prev,
+            {
+              name,
+              value: null,
+              score: null,
+              trend: null,
+              interpretation: null,
+              action: null,
+              timestamp: null,
+            },
+          ];
+        });
+      }
+
+      return { ok: true, duplicate: false, refreshed };
     } catch (err) {
       console.error("❌ Fout bij toevoegen macro-indicator:", err);
 
-      if (err?.response?.status === 409) {
-        showSnackbar(`'${name}' is al toegevoegd`, "info");
-        return;
+      if (err?.status === 409) {
+        return { ok: true, duplicate: true, refreshed: true };
       }
 
-      showSnackbar(`Toevoegen mislukt voor '${name}'`, "danger");
+      return { ok: false, reason: "request_failed", error: err };
     }
   }
 
   /* ------------------------------------------------------------
      🗑️ 5. Macro-indicator verwijderen
   ------------------------------------------------------------ */
-  function removeMacroIndicator(name) {
-    if (!name || name === "–") return;
+  async function removeMacroIndicator(name) {
+    if (!name || name === "–") {
+      return { ok: false, reason: "missing_name" };
+    }
 
-    openConfirm({
-      title: "Macro-indicator verwijderen",
-      description: `Weet je zeker dat je '${name}' wilt verwijderen?`,
-      tone: "danger",
-      confirmText: "Verwijderen",
-      cancelText: "Annuleren",
-      onConfirm: async () => {
-        try {
-          await deleteMacroIndicator(name);
-          setMacroData((prev) => prev.filter((m) => m.name !== name));
-          showSnackbar(`'${name}' verwijderd ✔️`, "success");
-        } catch (err) {
-          console.error("❌ Fout bij verwijderen macro-indicator:", err);
-          showSnackbar(`Verwijderen mislukt voor '${name}'`, "danger");
-        }
-      },
-    });
+    try {
+      await deleteMacroIndicator(name);
+      setMacroData((prev) => prev.filter((m) => m.name !== name));
+      return { ok: true };
+    } catch (err) {
+      console.error("❌ Fout bij verwijderen macro-indicator:", err);
+      return { ok: false, reason: "request_failed", error: err };
+    }
   }
 
   /* ------------------------------------------------------------

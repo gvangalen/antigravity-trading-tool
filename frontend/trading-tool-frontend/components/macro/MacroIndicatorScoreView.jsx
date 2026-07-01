@@ -62,13 +62,28 @@ export default function MacroIndicatorScoreView({
   const handleAdd = async () => {
     if (!selected?.name || isAlreadyAdded) return;
 
-    try {
-      await addMacroIndicator(selected.name);
+    const result = await addMacroIndicator(selected.name);
+
+    if (result?.duplicate) {
       showSnackbar(
-        copy.addSuccess.replace("{name}", selected.display_name || selected.name),
+        copy.alreadyAdded.replace("{name}", selected.display_name || selected.name),
+        "info"
+      );
+      return;
+    }
+
+    if (result?.ok) {
+      showSnackbar(
+        (result?.refreshed ? copy.addSuccess : copy.addSuccessPendingRefresh).replace(
+          "{name}",
+          selected.display_name || selected.name
+        ),
         "success"
       );
-    } catch {
+      return;
+    }
+
+    if (result?.reason !== "missing_name") {
       showSnackbar(copy.addError, "danger");
     }
   };

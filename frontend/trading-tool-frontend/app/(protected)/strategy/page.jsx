@@ -28,6 +28,7 @@ import {
 
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
+import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 import Drawer from "@/components/ui/Drawer";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import { useTranslation } from "@/app/providers/I18nProvider";
@@ -48,6 +49,7 @@ export default function StrategyPage() {
 
   const safeSetups = Array.isArray(setups) ? setups : [];
   const safeStrategies = Array.isArray(strategies) ? strategies : [];
+  const strategyNeedsSetup = status?.has_strategy === false && safeStrategies.length === 0;
 
   useEffect(() => {
     loadSetups();
@@ -124,6 +126,10 @@ export default function StrategyPage() {
         </p>
       </header>
 
+      {strategyNeedsSetup ? (
+        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="strategy-create" />
+      ) : null}
+
       {/* 🚀 QUICK STATS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-8">
         <div className="card p-8 flex flex-col items-center justify-center text-center bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl shadow-sm transition-all">
@@ -157,7 +163,7 @@ export default function StrategyPage() {
       <div className="grid grid-cols-1 gap-12 pt-12 pb-24">
         
         {/* 📋 STRATEGY LIST */}
-        <section className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+        <section id="strategy-create" className="card scroll-mt-32 bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6 flex items-center justify-between">
              <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                <ClipboardList size={16} className="text-blue-600" />
