@@ -2227,6 +2227,32 @@ def test_dca_follow_up_merges_missing_amount_into_existing_draft():
     assert second["actions"][0]["payload"]["bot"]["create_bot"] is True
 
 
+def test_short_plan_follow_up_phrase_is_recognized_with_existing_draft():
+    service = _service()
+    first = service.build_response("Kan je een dca setup maken voor BTC?")
+
+    assert service.looks_like_plan_request("elke week", first["draft"]) is True
+
+    second = service.build_response("elke week", {"finn_draft": first["draft"]})
+
+    assert second["draft"]["dca"]["frequency"] == "weekly"
+    assert second["next_question"] == "strategy.base_amount_eur"
+    assert second["response"] == "Met welk basisbedrag in euro wil je dit plan uitvoeren?"
+
+
+def test_short_plan_follow_up_amount_is_recognized_with_existing_draft():
+    service = _service()
+    first = service.build_response("Kan je een dca setup maken voor BTC?")
+    second = service.build_response("elke week", {"finn_draft": first["draft"]})
+
+    assert service.looks_like_plan_request("75 euro", second["draft"]) is True
+
+    third = service.build_response("75 euro", {"finn_draft": second["draft"]})
+
+    assert third["draft"]["strategy"]["base_amount_eur"] == 75
+    assert third["can_confirm"] is True
+
+
 def test_trade_plan_with_entry_stop_and_targets_is_confirmable():
     result = _service().build_response(
         "Maak een SOL trade 4H met 100 euro entry 160 stop loss 145 targets 180, 200"

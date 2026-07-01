@@ -1388,12 +1388,56 @@ class FinnPlanService:
 
         if re.fullmatch(r"\s*(ja|nee|ok|prima|doe maar|bevestig|confirm|annuleer|cancel|stop|\d+)\s*", q):
             return True
+        if draft and len(q.split()) <= 6:
+            short_follow_up_terms = [
+                "elke week",
+                "iedere week",
+                "elke dag",
+                "iedere dag",
+                "elke maand",
+                "iedere maand",
+                "dagelijks",
+                "wekelijks",
+                "maandelijks",
+                "daily",
+                "weekly",
+                "monthly",
+                "maandag",
+                "dinsdag",
+                "woensdag",
+                "donderdag",
+                "vrijdag",
+                "zaterdag",
+                "zondag",
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+                "sunday",
+                "euro",
+                "eur",
+                "bedrag",
+            ]
+            if any(term in q for term in short_follow_up_terms):
+                return True
+            if re.search(r"\d", q):
+                return True
 
         continuation_terms = {
             "bot": ["bot", "strategie", "strategy", "paper", "live", "manual", "auto", "budget", "daglimiet", "min order", "max order", "cadence", "risk", "risico"],
             "strategy": ["strategie", "strategy", "setup", "entry", "stop", "target", "basisbedrag", "base amount", "market akkoord"],
             "indicator_config": ["indicator", "macro", "technical", "node", "weging", "weight", "rule", "regel", "contrarian"],
-            "plan": ["setup", "dca", "trade", "entry", "stop", "target", "wekelijks", "maandelijks", "dagelijks", "btc", "eth", "sol"],
+            "plan": [
+                "setup", "dca", "trade", "entry", "stop", "target",
+                "wekelijks", "maandelijks", "dagelijks",
+                "elke week", "iedere week", "elke dag", "iedere dag", "elke maand", "iedere maand",
+                "weekly", "monthly", "daily",
+                "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag",
+                "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+                "btc", "eth", "sol", "euro", "eur", "bedrag",
+            ],
         }
         draft_kind = draft.get("draft_kind")
         if draft_kind == "bot":
