@@ -1,5 +1,6 @@
 import os
 import logging
+from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import HTTPException
@@ -8,7 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=False)
 
 # Omzetten van de conventionele connectiestring naar asyncpg structuur
 db_host = os.getenv("DB_HOST", "127.0.0.1")
