@@ -82,6 +82,45 @@ def test_setup_strategy_listing_detection_matches_real_prompt():
     assert api._looks_like_setup_strategy_listing_request("Laat mijn actieve setups en strategieën zien.") is True
 
 
+def test_transactional_legacy_state_does_not_get_rescued_into_general_help():
+    class _Finn:
+        def looks_like_general_capability_request(self, query): return False
+        def looks_like_product_refresh_help_request(self, query): return False
+        def looks_like_product_help_request(self, query, context): return True
+        def looks_like_education_request(self, query): return False
+        def looks_like_plan_adherence_review_request(self, query): return False
+        def looks_like_outcome_tracking_request(self, query): return False
+        def looks_like_governed_action_review_request(self, query, context): return False
+        def looks_like_outcome_memory_request(self, query): return False
+        def looks_like_personal_performance_request(self, query): return False
+        def looks_like_trade_journal_intelligence_request(self, query): return False
+        def looks_like_personal_coach_request(self, query): return False
+        def looks_like_portfolio_intelligence_request(self, query, context): return False
+        def looks_like_priority_engine_request(self, query, context): return False
+        def looks_like_portfolio_operating_system_request(self, query): return False
+        def looks_like_decision_review_request(self, query, context): return False
+        def looks_like_ultra_implicit_review_prompt(self, query): return False
+        def looks_like_mission_control_explain_request(self, query, context): return False
+        def looks_like_entity_explain_request(self, query, context): return False
+        def looks_like_behavioral_intelligence_request(self, query): return False
+        def looks_like_weekly_reflection_request(self, query): return False
+        def looks_like_behavioral_memory_request(self, query): return False
+        def looks_like_finn_report_request(self, query): return False
+        def looks_like_daily_coach_request(self, query): return False
+        def looks_like_indicator_insight_request(self, query): return False
+        def looks_like_status_request(self, query): return False
+
+    assert api._legacy_response_needs_finn_rescue(
+        _Finn(),
+        "Maak een setup voor BTC.",
+        {},
+        response_text="Wil je een DCA of een actieve Trade setup maken?",
+        action=None,
+        draft=None,
+        state={"current_flow": "setup_creation", "status": "collecting", "slots": {"symbol": "BTC"}},
+    ) is False
+
+
 class _FakeStateRepo:
     def __init__(self):
         self.saved = []
