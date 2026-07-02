@@ -9,6 +9,7 @@ import backend.services.finn_plan_service as finn_plan_module
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.finn_plan_service import _utc_now
 from backend.services.finn_plan_service import empty_indicator_config_draft
+from backend.services.finn_plan_service import empty_plan_draft
 from backend.services.ai_action_engine import _utc_db_timestamp
 from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.strategy_service import StrategyService
@@ -428,7 +429,7 @@ def test_build_product_help_response_includes_supported_and_not_supported_capabi
     assert result["intent"] == "product_help"
     assert result["flow"] == "product_help"
     assert result["analysis"]["product_help"]["current_entity"]["strategy_id"] == 257
-    assert "watchlist_wijzigen_via_finn" in result["analysis"]["product_help"]["not_supported_yet"]
+    assert "brede_portfolio_mutaties" in result["analysis"]["product_help"]["not_supported_yet"]
     assert "uitleg van je huidige scherm" in result["response"]
 
 
@@ -2253,6 +2254,54 @@ def test_short_plan_follow_up_amount_is_recognized_with_existing_draft():
     assert third["can_confirm"] is True
 
 
+def test_plan_request_does_not_swallow_indicator_config_query():
+    service = _service()
+
+    assert service.looks_like_indicator_config_request("voeg dxy toe aan macro", {}) is True
+    assert service.looks_like_plan_request("voeg dxy toe aan macro") is False
+
+
+def test_plan_request_does_not_swallow_watchlist_query():
+    service = _service()
+
+    assert service.looks_like_plan_request("voeg btc toe aan mijn watchlist") is False
+
+
+def test_plan_request_does_not_swallow_strategy_or_bot_queries():
+    service = _service()
+
+    assert service.looks_like_strategy_request("maak een strategie voor btc op basis van mijn setup", {}) is True
+    assert service.looks_like_plan_request("maak een strategie voor btc op basis van mijn setup") is False
+
+    assert service.looks_like_bot_request("maak een bot voor mijn btc strategie", {}) is True
+    assert service.looks_like_plan_request("maak een bot voor mijn btc strategie") is False
+
+
+def test_plan_request_does_not_swallow_setup_creation_prompt():
+    service = _service()
+
+    assert service.looks_like_plan_request("Maak een setup voor BTC swing trading met daily trend en 4H entry.") is False
+
+
+def test_plan_summary_hides_internal_default_ranges_and_automation_labels():
+    service = _service()
+    draft = empty_plan_draft()
+    draft["plan_type"] = "dca"
+    draft["asset"] = "BTC"
+    draft["setup"]["name"] = "BTC Smart DCA"
+    draft["strategy"]["base_amount_eur"] = 100
+    draft["dca"]["frequency"] = "weekly"
+    service._apply_defaults(draft)
+
+    summary = service._summary(draft)
+
+    assert "Macro:" not in summary
+    assert "Technical:" not in summary
+    assert "Market:" not in summary
+    assert "Automatisering:" not in summary
+    assert "bot_assisted" not in summary
+
+
 def test_trade_plan_with_entry_stop_and_targets_is_confirmable():
     result = _service().build_response(
         "Maak een SOL trade 4H met 100 euro entry 160 stop loss 145 targets 180, 200"
@@ -3623,6 +3672,8 @@ def test_daily_coach_request_detection_is_separate_from_status_and_plan_creation
     assert service.looks_like_plan_request("Geef mijn daily brief") is False
     assert service.looks_like_status_request("Welke score blokkeert mijn BTC setup?") is True
     assert service.looks_like_daily_coach_request("Welke score blokkeert mijn BTC setup?") is False
+    assert service.looks_like_daily_coach_request("Maak een setup voor BTC swing trading met daily trend en 4H entry") is False
+    assert service.looks_like_plan_request("Maak een setup voor BTC swing trading met daily trend en 4H entry") is False
     assert service.looks_like_daily_score_refresh_request("Ververs daily scores voor BTC") is True
     assert service.looks_like_bot_decision_request("Maak bot-decision voor BTC") is True
 

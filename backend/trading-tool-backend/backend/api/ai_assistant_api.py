@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import time
 import uuid
 from copy import deepcopy
@@ -143,6 +144,308 @@ def _audit_response_type(response: Optional[dict]) -> str:
     if response.get("state"):
         return "stateful_response"
     return "text_response"
+
+
+KNOWN_FINN_ASSETS = ("BTC", "ETH", "SOL")
+PROFILE_VALUE_LABELS = {
+    "swing_trader": "swing trader",
+    "day_trader": "day trader",
+    "scalper": "scalper",
+    "investor": "investeerder",
+    "dca_investor": "DCA-investeerder",
+    "1h": "1H",
+    "4h": "4H",
+    "1d": "1D",
+    "1w": "1W",
+    "1m": "1M",
+    "15m": "15m",
+    "5m": "5m",
+    "bitcoin": "BTC",
+    "crypto_general": "crypto",
+    "fomo": "FOMO / jagen",
+    "takes_profit_too_early": "winst te vroeg nemen",
+    "holds_losers_too_long": "verliezers te lang laten lopen",
+    "overtrades": "overtraden",
+}
+
+
+def _extract_asset_from_query(query: str) -> Optional[str]:
+    upper = str(query or "").upper()
+    for symbol in KNOWN_FINN_ASSETS:
+        if re.search(rf"\b{re.escape(symbol)}\b", upper):
+            return symbol
+    return None
+
+
+def _looks_like_watchlist_mutation(query: str) -> bool:
+    q = str(query or "").lower()
+    has_watchlist = "watchlist" in q or "volglijst" in q
+    has_mutation = any(term in q for term in [
+        "voeg", "toe", "add", "zet", "plaats", "verwijder", "haal", "remove",
+    ])
+    return has_watchlist and has_mutation
+
+
+def _looks_like_setup_strategy_listing_request(query: str) -> bool:
+    q = str(query or "").lower()
+    has_listing_intent = any(term in q for term in ["laat", "toon", "geef", "welke", "wat zijn", "overzicht"])
+    has_entity = any(term in q for term in [
+        "actieve setups",
+        "mijn setups",
+        " set-ups",
+        "setups",
+        "actieve strategie",
+        "actieve strategieën",
+        "mijn strategie",
+        "mijn strategieën",
+        "strategieën",
+        "strategies",
+    ])
+    return has_listing_intent and has_entity
+
+
+def _humanize_profile_values(values: Optional[list]) -> str:
+    return ", ".join(PROFILE_VALUE_LABELS.get(str(value), str(value)) for value in (values or []))
+
+
+def _build_watchlist_mutation_envelope(query: str, context_payload: Optional[dict] = None) -> Optional[Dict[str, Any]]:
+    q = str(query or "").lower()
+    context_payload = context_payload or {}
+    symbol = _extract_asset_from_query(query) or str(context_payload.get("symbol") or context_payload.get("asset") or "").upper() or None
+    if not symbol:
+        return {
+            "response": "Noem eerst het asset dat je aan je watchlist wilt toevoegen of eruit wilt halen, bijvoorbeeld BTC, ETH of SOL.",
+            "intent": "watchlist_mutation",
+            "flow": "general_help",
+            "actions": [],
+            "suggested_actions": ["Voeg BTC toe aan mijn watchlist", "Voeg ETH toe aan mijn watchlist"],
+        }
+
+    is_remove = any(term in q for term in ["verwijder", "haal", "remove"])
+    action_type = "remove_from_watchlist" if is_remove else "add_to_watchlist"
+    response = (
+        f"Ik kan {symbol} {'uit' if is_remove else 'aan'} je watchlist {'halen' if is_remove else 'toevoegen'}. "
+        "Bevestig dat via de actie hieronder."
+    )
+    return {
+        "response": response,
+        "intent": "watchlist_mutation",
+        "flow": "general_help",
+        "actions": [{
+            "type": action_type,
+            "symbol": symbol,
+            "label": f"{'Verwijder' if is_remove else 'Voeg'} {symbol} {'uit' if is_remove else 'aan'} watchlist",
+        }],
+        "suggested_actions": [],
+    }
+
+
+async def _build_setup_strategy_listing_envelope(
+    db: AsyncSession,
+    user_id: int,
+) -> Dict[str, Any]:
+    setup_repo = SetupRepository(db)
+    strategy_repo = StrategyRepository(db)
+    setups = await setup_repo.get_top_setups(user_id, 3)
+    strategies = await strategy_repo.query_strategies(user_id, {})
+
+    setup_lines = []
+    for setup in setups[:3]:
+        symbol = str(setup.get("symbol") or "").upper()
+        timeframe = setup.get("timeframe") or "?"
+        name = setup.get("name") or f"{symbol} setup"
+        setup_lines.append(f"- Setup #{setup.get('id')}: {name} ({symbol} · {timeframe})")
+
+    strategy_lines = []
+    for strategy in strategies[:3]:
+        symbol = str(strategy.get("setup_symbol") or "").upper()
+        timeframe = strategy.get("setup_timeframe") or "?"
+        name = strategy.get("name") or f"{symbol} strategie"
+        strategy_lines.append(f"- Strategie #{strategy.get('id')}: {name} ({symbol} · {timeframe})")
+
+    if not setup_lines and not strategy_lines:
+        response = (
+            "Je hebt nog geen opgeslagen setups of strategieën. "
+            "Begin met een asset in je watchlist of vraag Finn om eerst een setup voor je te maken."
+        )
+    else:
+        sections = []
+        if setup_lines:
+            sections.append("Je recente setups:\n" + "\n".join(setup_lines))
+        if strategy_lines:
+            sections.append("Je recente strategieën:\n" + "\n".join(strategy_lines))
+        response = "\n\n".join(sections)
+
+    return {
+        "response": response,
+        "intent": "entity_list",
+        "flow": "general_help",
+        "state": {
+            "current_flow": "general_help",
+            "setup_count": len(setups),
+            "strategy_count": len(strategies),
+        },
+        "actions": [],
+    }
+
+
+def _extract_profile_update_from_query(query: str) -> Dict[str, Any]:
+    q = str(query or "").lower()
+    payload: Dict[str, Any] = {}
+
+    trader_types = []
+    if "swing trader" in q or "swingtrader" in q:
+        trader_types.append("swing_trader")
+    if "day trader" in q or "daytrader" in q:
+        trader_types.append("day_trader")
+    if "scalper" in q:
+        trader_types.append("scalper")
+    if "investeerder" in q or re.search(r"\binvestor\b", q):
+        trader_types.append("investor")
+    if "dca" in q and "invest" in q:
+        trader_types.append("dca_investor")
+    if trader_types:
+        payload["trader_types"] = trader_types
+
+    timeframe_map = {
+        "4h": "4h",
+        "4u": "4h",
+        "1d": "1d",
+        "daily": "1d",
+        "dag": "1d",
+        "1w": "1w",
+        "week": "1w",
+        "1m": "1m",
+        "maand": "1m",
+        "1h": "1h",
+        "15m": "15m",
+        "5m": "5m",
+    }
+    primary_timeframes = []
+    for needle, canonical in timeframe_map.items():
+        if needle in q and canonical not in primary_timeframes:
+            primary_timeframes.append(canonical)
+    if primary_timeframes:
+        payload["primary_timeframes"] = primary_timeframes
+
+    asset_focus = []
+    if "btc" in q or "bitcoin" in q:
+        asset_focus.append("bitcoin")
+    elif any(token in q for token in ["eth", "sol", "crypto", "altcoin"]):
+        asset_focus.append("crypto_general")
+    if asset_focus:
+        payload["asset_focus"] = asset_focus
+
+    behavior_flags = []
+    if "fomo" in q:
+        behavior_flags.append("fomo")
+    if "te vroeg winst" in q or "profit too early" in q:
+        behavior_flags.append("takes_profit_too_early")
+    if "verliezers te lang" in q or "hold losers too long" in q:
+        behavior_flags.append("holds_losers_too_long")
+    if "overtrade" in q or "overtraden" in q:
+        behavior_flags.append("overtrades")
+    if behavior_flags:
+        payload["behavior_flags"] = behavior_flags
+
+    return normalize_trader_profile_preferences(payload)
+
+
+def _looks_like_profile_capture(query: str) -> bool:
+    q = str(query or "").lower()
+    identity_cues = [
+        "ik ben een",
+        "ik ben ",
+        "mijn profiel",
+        "ik wil ",
+        "ik trade",
+        "ik handel",
+    ]
+    return any(cue in q for cue in identity_cues) and bool(_extract_profile_update_from_query(query))
+
+
+def _looks_like_profile_explain(query: str) -> bool:
+    q = str(query or "").lower()
+    return (
+        "wat is mijn profiel" in q
+        or "hoe gebruik je dat in je advies" in q
+        or ("mijn profiel" in q and any(term in q for term in ["gebruik", "advies", "samenvat", "uitleg"]))
+    )
+
+
+def _build_profile_saved_envelope(profile: Dict[str, Any]) -> Dict[str, Any]:
+    summary = build_trader_profile_summary(profile)
+    lines = []
+    if profile.get("trader_types"):
+        lines.append(f"stijl: {_humanize_profile_values(profile['trader_types'])}")
+    if profile.get("primary_timeframes"):
+        lines.append(f"timeframes: {_humanize_profile_values(profile['primary_timeframes'])}")
+    if profile.get("asset_focus"):
+        lines.append(f"focus: {_humanize_profile_values(profile['asset_focus'])}")
+    if profile.get("behavior_flags"):
+        lines.append(f"coachingpunten: {_humanize_profile_values(profile['behavior_flags'])}")
+    details = "; ".join(lines) if lines else summary
+    return {
+        "response": (
+            "Ik heb je traderprofiel bijgewerkt. "
+            f"Ik gebruik dit nu in coaching, uitleg en waarschuwingen. {details}."
+        ),
+        "intent": "profile_updated",
+        "flow": "general_help",
+        "state": {
+            "current_flow": "profile_updated",
+            "profile_summary": summary,
+        },
+        "actions": [],
+    }
+
+
+def _build_profile_explain_envelope(profile: Dict[str, Any]) -> Dict[str, Any]:
+    summary = build_trader_profile_summary(profile)
+    if not has_trader_profile(profile):
+        return {
+            "response": (
+                "Ik zie nog geen ingevuld traderprofiel. Vul eerst je stijl, timeframes of focus in, "
+                "dan kan ik coaching en waarschuwingen daarop afstemmen."
+            ),
+            "intent": "profile_explain",
+            "flow": "general_help",
+            "actions": [],
+        }
+    return {
+        "response": (
+            f"Je huidige profiel is: {summary}. "
+            "Ik gebruik dat om uitleg, coaching, frictie en prioriteiten beter op jouw handelsstijl af te stemmen."
+        ),
+        "intent": "profile_explain",
+        "flow": "general_help",
+        "state": {
+            "current_flow": "profile_explain",
+            "profile_summary": summary,
+        },
+        "actions": [],
+    }
+
+
+async def _continue_transactional_follow_up(
+    finn: FinnPlanService,
+    user_id: int,
+    query: str,
+    context_payload: Optional[dict],
+) -> Optional[Dict[str, Any]]:
+    payload = context_payload or {}
+    draft = payload.get("finn_draft") if isinstance(payload.get("finn_draft"), dict) else None
+    if not draft or not finn._looks_like_transactional_follow_up(query, draft):
+        return None
+
+    draft_kind = draft.get("draft_kind")
+    if draft_kind == "strategy":
+        return await finn.build_strategy_response_for_user(user_id, query, payload)
+    if draft_kind == "bot":
+        return await finn.build_bot_response_for_user(user_id, query, payload)
+    if draft_kind == "indicator_config":
+        return await finn.build_indicator_config_response_for_user(user_id, query, payload)
+    return finn.build_response(query, payload)
 
 
 def _attach_trader_profile_metadata(response: Optional[dict], context_payload: Optional[dict]) -> dict:
@@ -880,6 +1183,44 @@ async def assistant_chat(
             prompt_text=request.query,
             metadata=_trader_profile_event_metadata(context_payload),
         )
+        if _looks_like_profile_capture(request.query):
+            user_repo = UserRepository(db)
+            profile_patch = _extract_profile_update_from_query(request.query)
+            current_user_row = await user_repo.get_by_id(user_id)
+            current_prefs = getattr(current_user_row, "ai_preferences", {}) or {}
+            merged_profile = normalize_trader_profile_preferences({**current_prefs, **profile_patch})
+            await user_repo.update_ai_preferences(user_id, {
+                "trader_types": merged_profile.get("trader_types", []),
+                "primary_timeframes": merged_profile.get("primary_timeframes", []),
+                "asset_focus": merged_profile.get("asset_focus", []),
+                "behavior_flags": merged_profile.get("behavior_flags", []),
+            })
+            finn_response = _build_profile_saved_envelope(merged_profile)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+            )
+        if _looks_like_profile_explain(request.query):
+            user_row = await UserRepository(db).get_by_id(user_id)
+            prefs = getattr(user_row, "ai_preferences", {}) or {}
+            finn_response = _build_profile_explain_envelope(normalize_trader_profile_preferences(prefs))
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+            )
+        if _looks_like_setup_strategy_listing_request(request.query):
+            finn_response = await _build_setup_strategy_listing_envelope(db, user_id)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+            )
+        if _looks_like_watchlist_mutation(request.query):
+            finn_response = _build_watchlist_mutation_envelope(request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+            )
+        follow_up = await _continue_transactional_follow_up(finn, user_id, request.query, context_payload)
+        if follow_up:
+            return await _finalize_finn_response(
+                finn, user_id, follow_up, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
+            )
         if finn.looks_like_daily_score_refresh_request(request.query):
             finn_response = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
             return await _finalize_finn_response(
@@ -1018,11 +1359,6 @@ async def assistant_chat(
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
             )
-        if finn.looks_like_daily_coach_request(request.query):
-            finn_response = await finn.build_daily_coach_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
         if finn.is_cancel_request(request.query):
             finn_response = await finn.build_cancel_response(user_id, context_payload)
             if finn_response:
@@ -1058,6 +1394,11 @@ async def assistant_chat(
             finn_response = finn.build_response(request.query, context_payload)
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
+            )
+        if finn.looks_like_daily_coach_request(request.query):
+            finn_response = await finn.build_daily_coach_response(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
             )
 
         try:
@@ -1356,6 +1697,51 @@ async def assistant_chat_stream(
                 prompt_text=request.query,
                 metadata=_trader_profile_event_metadata(context_payload),
             )
+            if _looks_like_profile_capture(request.query):
+                user_repo = UserRepository(db)
+                profile_patch = _extract_profile_update_from_query(request.query)
+                current_user_row = await user_repo.get_by_id(user_id)
+                current_prefs = getattr(current_user_row, "ai_preferences", {}) or {}
+                merged_profile = normalize_trader_profile_preferences({**current_prefs, **profile_patch})
+                await user_repo.update_ai_preferences(user_id, {
+                    "trader_types": merged_profile.get("trader_types", []),
+                    "primary_timeframes": merged_profile.get("primary_timeframes", []),
+                    "asset_focus": merged_profile.get("asset_focus", []),
+                    "behavior_flags": merged_profile.get("behavior_flags", []),
+                })
+                envelope = _build_profile_saved_envelope(merged_profile)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if _looks_like_profile_explain(request.query):
+                user_row = await UserRepository(db).get_by_id(user_id)
+                prefs = getattr(user_row, "ai_preferences", {}) or {}
+                envelope = _build_profile_explain_envelope(normalize_trader_profile_preferences(prefs))
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if _looks_like_setup_strategy_listing_request(request.query):
+                envelope = await _build_setup_strategy_listing_envelope(db, user_id)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if _looks_like_watchlist_mutation(request.query):
+                envelope = _build_watchlist_mutation_envelope(request.query, context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            follow_up = await _continue_transactional_follow_up(finn, user_id, request.query, context_payload)
+            if follow_up:
+                envelope = await _prepare_finn_envelope(
+                    finn, user_id, follow_up, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
+                )
+                yield _sse_event("envelope", envelope)
+                return
+
             if finn.looks_like_daily_score_refresh_request(request.query):
                 envelope = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
                 envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
@@ -1521,12 +1907,6 @@ async def assistant_chat_stream(
                 yield _sse_event("envelope", envelope)
                 return
 
-            if finn.looks_like_daily_coach_request(request.query):
-                envelope = await finn.build_daily_coach_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
             if finn.is_cancel_request(request.query):
                 envelope = await finn.build_cancel_response(user_id, context_payload)
                 if envelope:
@@ -1567,6 +1947,12 @@ async def assistant_chat_stream(
             if finn.looks_like_plan_request(request.query, context_payload.get("finn_draft")):
                 envelope = finn.build_response(request.query, context_payload)
                 envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_daily_coach_request(request.query):
+                envelope = await finn.build_daily_coach_response(user_id, request.query, context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
                 yield _sse_event("envelope", envelope)
                 return
 

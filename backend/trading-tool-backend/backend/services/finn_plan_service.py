@@ -1701,6 +1701,42 @@ class FinnPlanService:
             return True
         if draft and draft.get("draft_kind") == "strategy":
             return False
+        has_setup_word = "setup" in q
+        has_explicit_plan_fields = any(word in q for word in [
+            "dca",
+            "trade plan",
+            "stop loss",
+            "stoploss",
+            "targets",
+            "target",
+            "basisbedrag",
+            "base amount",
+            "elke week",
+            "iedere week",
+            "dagelijks",
+            "wekelijks",
+            "maandelijks",
+            "euro",
+            "eur",
+        ])
+        if has_setup_word and not has_explicit_plan_fields:
+            return False
+        if self.looks_like_indicator_config_request(query):
+            return False
+        if self.looks_like_strategy_request(query, {}):
+            return False
+        if self.looks_like_bot_request(query, {}):
+            return False
+        if any(term in q for term in [
+            "watchlist toevoegen",
+            "zet op watchlist",
+            "voeg toe aan watchlist",
+            "watchlist verwijderen",
+            "haal van watchlist",
+            "verwijder uit watchlist",
+            "watchlist",
+        ]):
+            return False
         if self.looks_like_general_capability_request(query) or self.looks_like_product_help_request(query) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query) or self.looks_like_mission_control_explain_request(query):
             return False
         if self.looks_like_daily_coach_request(query):
@@ -1801,6 +1837,13 @@ class FinnPlanService:
 
     def looks_like_daily_coach_request(self, query: str) -> bool:
         q = (query or "").lower()
+        explicit_transactional_intent = any(word in q for word in [
+            "maak", "aanmaken", "creeer", "creeër", "bouw", "voeg", "toevoegen", "configureer", "instellen",
+        ]) and any(word in q for word in [
+            "setup", "strategie", "strategy", "bot", "indicator", "node", "watchlist",
+        ])
+        if explicit_transactional_intent:
+            return False
         portfolio_risk_terms = [
             "grootste portfolio risico", "grootste risico", "portfolio risico",
             "portefeuille risico", "portfolio exposure", "te veel exposure",
@@ -2914,9 +2957,9 @@ class FinnPlanService:
                 "strategie_genereren",
                 "bot_aanmaken",
                 "bot_decision_review",
+                "watchlist_wijzigen",
             ],
             "not_supported_yet": [
-                "watchlist_wijzigen_via_finn",
                 "brede_portfolio_mutaties",
             ],
         }
@@ -2937,6 +2980,7 @@ class FinnPlanService:
             "strategie genereren",
             "bot aanmaken",
             "bot-decisions reviewen",
+            "watchlist aanpassen",
         ])
         profile_line = self._profile_focus_line(context, asset, mode="general")
         profile_next_step = self._profile_next_step(context, asset, default_step="")
@@ -2944,7 +2988,7 @@ class FinnPlanService:
             f"Je zit nu op {page}. Hier help ik je vooral met begrijpen en veilig beslissen. "
             f"Wat ik nu direct voor je kan doen: {supported_now}. "
             f"Als je echt iets wilt bouwen of wijzigen, kan ik ook helpen met: {mutations}. "
-            "Wat ik nog niet breed zelf doet: watchlists aanpassen en vrije portfolio-mutaties."
+            "Wat ik nog niet breed zelf doet: vrije portfolio-mutaties buiten de kernflows."
         )
         if profile_line:
             response = f"{response} {profile_line}"
@@ -18076,13 +18120,18 @@ class FinnPlanService:
             f"- Asset: {draft.get('asset')}",
             f"- Naam: {draft['setup'].get('name')}",
             f"- Timeframe: {draft['setup'].get('timeframe')}",
-            f"- Bedrag: €{draft['strategy'].get('base_amount_eur')}",
-            f"- Macro: {draft['setup'].get('macro_score_range')}",
-            f"- Technical: {draft['setup'].get('technical_score_range')}",
-            f"- Market: {draft['setup'].get('market_score_range')}",
         ]
+        amount = draft["strategy"].get("base_amount_eur")
+        if amount not in (None, "", 0):
+            lines.append(f"- Bedrag: €{amount}")
         if draft.get("plan_type") == "dca":
-            lines.append(f"- DCA: {draft['dca'].get('frequency')} {draft['dca'].get('day') or draft['dca'].get('month_day') or ''}".strip())
+            schedule = " ".join(
+                str(part)
+                for part in [draft["dca"].get("frequency"), draft["dca"].get("day") or draft["dca"].get("month_day")]
+                if part not in (None, "", 0)
+            ).strip()
+            if schedule:
+                lines.append(f"- DCA: {schedule}")
         if draft.get("plan_type") == "trade":
             lines.extend([
                 f"- Uitvoering: {draft['strategy'].get('entry_type')}",
@@ -18090,10 +18139,9 @@ class FinnPlanService:
                 f"- Stop-loss: {draft['strategy'].get('stop_loss')}",
                 f"- Targets: {draft['strategy'].get('targets')}",
             ])
-        lines.append(f"- Automatisering: {draft['bot'].get('automation') or ('bot_assisted' if draft['bot'].get('create_bot') else 'manual_only')}")
         if draft["bot"].get("create_bot"):
             env = "live" if draft["bot"].get("is_live") else "paper"
-            lines.append(f"- Bot: {env}, {draft['bot'].get('mode')}, {draft['bot'].get('risk_profile')}")
+            lines.append(f"- Botmodus: {env}, {draft['bot'].get('mode')}, {draft['bot'].get('risk_profile')}")
         return "\n".join(lines)
 
     async def execute_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:

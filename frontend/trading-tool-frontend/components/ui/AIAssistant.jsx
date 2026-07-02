@@ -3310,7 +3310,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
       await assistantChatStream(
         activeQuery,
-        { ...requestContext, session_id: sessionId },
+        requestContext,
         cleanHistory,
         (token) => {
           // onChunk
@@ -3422,7 +3422,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             return copy;
           });
           activeStreamIdRef.current = null;
-        }
+        },
+        2,
+        sessionId,
       );
     } catch (err) {
       if (activeStreamIdRef.current !== streamId) return;
@@ -3802,9 +3804,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const draftType = isFinnStrategy || isFinnBot ? draft.setup_type : draft.plan_type;
     const isDca = draftType === "dca";
     const isTrade = draftType === "trade";
-    const setupOptions = message.state?.setup_options || [];
-    const strategyOptions = message.state?.strategy_options || [];
-    const indicatorOptions = message.state?.indicator_options || draft.indicator_options || [];
+    const setupOptions = (message.state?.setup_options || []).filter((option) => option && option.id);
+    const strategyOptions = (message.state?.strategy_options || []).filter((option) => option && option.id);
+    const indicatorOptions = (message.state?.indicator_options || draft.indicator_options || []).filter(
+      (option) => option && option.name
+    );
     const changes = draft.changes || message.state?.changes || [];
     const planDeviation = message.state?.plan_deviation || draft.plan_deviation || null;
     const planDeviationRequiresAck = Boolean(planDeviation?.requires_ack && !planDeviation?.acknowledged);
@@ -3812,7 +3816,20 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const visibleNextQuestion = message.nextQuestion === "plan_deviation_ack" ? null : message.nextQuestion;
     const yesLabel = at("draftRows.yes");
     const noLabel = at("draftRows.no");
-    const fieldLabel = (field, fallback = null) => at(`fieldLabels.${field}`, fallback || field);
+    const humanizeFieldFallback = (field) => {
+      const raw = String(field || "").trim();
+      if (!raw) return "";
+      const explicit = {
+        "dca.frequency": at("fieldLabels.dca.frequency", "DCA frequentie"),
+        "strategy.base_amount_eur": at("fieldLabels.strategy.base_amount_eur", "Basisbedrag"),
+        "setup.name": at("fieldLabels.setup.name", "Naam"),
+      };
+      if (explicit[raw]) return explicit[raw];
+      const parts = raw.split(".");
+      const lastPart = parts[parts.length - 1] || raw;
+      return lastPart.replace(/_/g, " ");
+    };
+    const fieldLabel = (field, fallback = null) => at(`fieldLabels.${field}`, fallback || humanizeFieldFallback(field));
     const fieldQuestion = (field, fallback = null) => at(`fieldQuestions.${field}`, fallback || field);
     const valueLabel = (value, fallback = null) => {
       if (value === undefined || value === null || value === "") return null;
@@ -3883,6 +3900,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       if (typeof value === "string") return valueLabel(value, value);
       return String(value);
     };
+    const hasMeaningfulValue = (value) => {
+      if (value === undefined || value === null || value === "") return false;
+      if (Array.isArray(value)) return value.length > 0;
+      return true;
+    };
 
     const rows = [
       [draftRowsText.type, valueLabel(isFinnIndicator ? "indicator_config" : (isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type)))],
@@ -3920,7 +3942,12 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       isTrade && !isFinnBot ? [draftRowsText.targets, Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
       !isFinnBot && !isFinnIndicator && !hideDefaultAutomation ? [draftRowsText.automation, valueLabel(isFinnStrategy ? strategy.automation : (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only")))] : null,
       !isFinnStrategy && !isFinnBot && bot.create_bot && !hideDefaultBotSummary ? [draftRowsText.bot, `${valueLabel(bot.is_live ? "live" : "paper")} · ${valueLabel(bot.mode, bot.mode)} · ${valueLabel(bot.risk_profile, bot.risk_profile)}`] : null,
-    ].filter(Boolean);
+    ].filter((row) => {
+      if (!row) return false;
+      const [, value] = row;
+      if (!isCollecting) return true;
+      return hasMeaningfulValue(value);
+    });
 
     return (
       <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-4">
