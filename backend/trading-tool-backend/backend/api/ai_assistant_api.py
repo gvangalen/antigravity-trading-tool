@@ -491,6 +491,14 @@ async def _continue_transactional_follow_up(
     active_flow = _modern_transactional_flow_name(payload.get("finn_state"), payload)
     if not draft or not active_flow or not finn._looks_like_transactional_follow_up(query, draft):
         return None
+    if active_flow != "plan_creation" and finn.looks_like_plan_request(query, None):
+        return None
+    if active_flow != "strategy_creation" and finn.looks_like_strategy_request(query, {}):
+        return None
+    if active_flow != "bot_creation" and finn.looks_like_bot_request(query, {}):
+        return None
+    if active_flow != "indicator_config" and finn.looks_like_indicator_config_request(query, {}):
+        return None
 
     if active_flow == "strategy_creation":
         return await finn.build_strategy_response_for_user(user_id, query, payload)

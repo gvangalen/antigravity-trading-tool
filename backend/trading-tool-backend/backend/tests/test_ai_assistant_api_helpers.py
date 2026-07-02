@@ -85,6 +85,35 @@ def test_trading_stop_input_is_not_abort_like():
     assert assistant_module._looks_like_trading_stop_input("annuleer dit") is False
 
 
+def test_continue_transactional_follow_up_does_not_swallow_explicit_new_plan_request():
+    class _Finn:
+        def _looks_like_transactional_follow_up(self, query, draft):
+            return True
+        def looks_like_plan_request(self, query, draft):
+            return "dca" in query.lower()
+        def looks_like_strategy_request(self, query, context):
+            return False
+        def looks_like_bot_request(self, query, context):
+            return False
+        def looks_like_indicator_config_request(self, query, context):
+            return False
+        async def build_strategy_response_for_user(self, user_id, query, payload):
+            return {"intent": "strategy_creation"}
+
+    result = asyncio.run(api._continue_transactional_follow_up(
+        _Finn(),
+        12,
+        "Maak een wekelijkse BTC DCA van 100 euro.",
+        {
+            "current_flow": "strategy_creation",
+            "finn_state": {"current_flow": "strategy_creation"},
+            "finn_draft": {"draft_kind": "strategy", "setup_id": 1},
+        },
+    ))
+
+    assert result is None
+
+
 def test_score_api_payload_to_dict_supports_pydantic_v1_and_v2():
     class V1Payload:
         def dict(self):
