@@ -1701,6 +1701,58 @@ class FinnPlanService:
             return True
         if draft and draft.get("draft_kind") == "strategy":
             return False
+        has_setup_word = "setup" in q
+        has_strategy_or_bot_scope = any(word in q for word in [
+            "strategie",
+            "strategy",
+            "bot",
+            "base amount",
+            "basisbedrag",
+            "entry",
+            "stop loss",
+            "stoploss",
+            "target",
+            "targets",
+            "uitvoering",
+            "execution",
+        ])
+        has_explicit_plan_fields = any(word in q for word in [
+            "dca",
+            "trade plan",
+            "stop loss",
+            "stoploss",
+            "targets",
+            "target",
+            "basisbedrag",
+            "base amount",
+            "elke week",
+            "iedere week",
+            "dagelijks",
+            "wekelijks",
+            "maandelijks",
+            "euro",
+            "eur",
+        ])
+        if has_setup_word and not has_strategy_or_bot_scope:
+            return False
+        if has_setup_word and not has_explicit_plan_fields:
+            return False
+        if self.looks_like_indicator_config_request(query):
+            return False
+        if self.looks_like_strategy_request(query, {}):
+            return False
+        if self.looks_like_bot_request(query, {}):
+            return False
+        if any(term in q for term in [
+            "watchlist toevoegen",
+            "zet op watchlist",
+            "voeg toe aan watchlist",
+            "watchlist verwijderen",
+            "haal van watchlist",
+            "verwijder uit watchlist",
+            "watchlist",
+        ]):
+            return False
         if self.looks_like_general_capability_request(query) or self.looks_like_product_help_request(query) or self.looks_like_education_request(query) or self.looks_like_entity_explain_request(query) or self.looks_like_mission_control_explain_request(query):
             return False
         if self.looks_like_daily_coach_request(query):
