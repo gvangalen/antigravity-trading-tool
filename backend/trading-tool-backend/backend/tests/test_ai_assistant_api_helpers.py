@@ -160,6 +160,35 @@ def test_deterministic_pre_parse_marks_trading_prompt_as_trade_setup():
     assert conv_state["current_flow"] == "setup_creation"
     assert conv_state["slots"]["symbol"] == "BTC"
     assert conv_state["slots"]["setup_type"] == "trade"
+    assert "dca_frequency" not in conv_state["slots"]
+
+
+def test_explicit_setup_request_overrides_stale_general_help_state():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+
+    conv_state = asyncio.run(
+        assistant._deterministic_pre_parse_slots(
+            "Maak een setup voor BTC swing trading met daily trend en 4H entry.",
+            {"current_flow": "general_help", "slots": {}, "status": "collecting"},
+            "BTC",
+            13,
+        )
+    )
+
+    assert conv_state["current_flow"] == "setup_creation"
+    assert conv_state["slots"]["symbol"] == "BTC"
+    assert conv_state["slots"]["setup_type"] == "trade"
 
 
 def test_deterministic_flow_turn_asks_next_setup_question_without_llm():

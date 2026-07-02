@@ -1331,8 +1331,12 @@ class AiAssistantService:
         """
         q_lower = user_query.strip().lower()
         
-        # 1. Pre-initialize active flow if user requests to start one and there is no active flow
-        if not conv_state or not conv_state.get("current_flow") or conv_state.get("current_flow") == "none":
+        # 1. Pre-initialize or override active flow for explicit creation requests.
+        current_flow = str((conv_state or {}).get("current_flow") or "").strip().lower()
+        transactional_flows = {"setup_creation", "strategy_creation", "bot_creation"}
+        has_active_transactional_flow = current_flow in transactional_flows
+
+        if (not conv_state or not current_flow or current_flow == "none" or not has_active_transactional_flow):
             if any(w in q_lower for w in ["maak setup", "start setup", "setup voor", "setup aanmaken", "nieuwe setup", "setup maken"]):
                 conv_state = {
                     "current_flow": "setup_creation",
@@ -1455,13 +1459,14 @@ class AiAssistantService:
             slots["setup_type"] = "dca"
             updated = True
 
-        if any(w in q_lower for w in ["dagelijks", "daily", "dag"]):
+        should_parse_dca_frequency = flow_name != "setup_creation" or slots.get("setup_type") == "dca" or "dca" in q_lower
+        if should_parse_dca_frequency and any(w in q_lower for w in ["dagelijks", "daily", "dag"]):
             slots["dca_frequency"] = "daily"
             updated = True
-        elif any(w in q_lower for w in ["wekelijks", "weekly", "week"]):
+        elif should_parse_dca_frequency and any(w in q_lower for w in ["wekelijks", "weekly", "week"]):
             slots["dca_frequency"] = "weekly"
             updated = True
-        elif any(w in q_lower for w in ["maandelijks", "monthly", "maand"]):
+        elif should_parse_dca_frequency and any(w in q_lower for w in ["maandelijks", "monthly", "maand"]):
             slots["dca_frequency"] = "monthly"
             updated = True
 
