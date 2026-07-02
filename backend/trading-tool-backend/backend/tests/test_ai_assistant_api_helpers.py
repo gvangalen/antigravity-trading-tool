@@ -1,11 +1,14 @@
 import importlib
+import asyncio
 import os
-
+from types import SimpleNamespace
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key-with-32-plus-chars")
 
 api = importlib.import_module("backend.api.ai_assistant_api")
 score_api = importlib.import_module("backend.api.score_api")
+assistant_module = importlib.import_module("backend.services.ai_assistant_service")
+AiAssistantService = assistant_module.AiAssistantService
 
 
 def test_profile_capture_extracts_canonical_values():
@@ -77,3 +80,125 @@ def test_watchlist_mutation_returns_action_card():
 
 def test_setup_strategy_listing_detection_matches_real_prompt():
     assert api._looks_like_setup_strategy_listing_request("Laat mijn actieve setups en strategieën zien.") is True
+
+
+class _FakeStateRepo:
+    def __init__(self):
+        self.saved = []
+        self.cleared = []
+        self.session = SimpleNamespace()
+
+    async def save_state(self, user_id, flow_name, asset_val, slots):
+        self.saved.append((user_id, flow_name, asset_val, dict(slots)))
+
+    async def clear_state(self, user_id):
+        self.cleared.append(user_id)
+
+
+def test_deterministic_pre_parse_marks_trading_prompt_as_trade_setup():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+
+    conv_state = asyncio.run(
+        assistant._deterministic_pre_parse_slots(
+            "Maak een setup voor BTC swing trading met daily trend en 4H entry.",
+            None,
+            "BTC",
+            12,
+        )
+    )
+
+    assert conv_state["current_flow"] == "setup_creation"
+    assert conv_state["slots"]["symbol"] == "BTC"
+    assert conv_state["slots"]["setup_type"] == "trade"
+
+
+def test_deterministic_flow_turn_asks_next_setup_question_without_llm():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+    assistant._active_preferences = {"locale": "nl", "experience_level": "beginner"}
+
+    response, action, draft, state, suggested_actions = asyncio.run(
+        assistant._build_deterministic_flow_turn(
+            user_id=21,
+            user_query="Maak een setup voor BTC.",
+            conv_state={
+                "current_flow": "setup_creation",
+                "slots": {"symbol": "BTC"},
+                "status": "collecting",
+            },
+            resolved_symbol="BTC",
+        )
+    )
+
+    assert response == "Wil je een DCA of een actieve Trade setup maken?"
+    assert action is None
+    assert draft is None
+    assert state["current_flow"] == "setup_creation"
+    assert state["missing_slots"][0] == "setup_type"
+    assert suggested_actions is None
+
+
+def test_deterministic_flow_turn_finishes_setup_without_llm_when_slots_complete():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+    assistant._active_preferences = {"locale": "nl", "experience_level": "beginner"}
+
+    response, action, draft, state, suggested_actions = asyncio.run(
+        assistant._build_deterministic_flow_turn(
+            user_id=22,
+            user_query="wekelijks",
+            conv_state={
+                "current_flow": "setup_creation",
+                "slots": {
+                    "symbol": "BTC",
+                    "setup_type": "dca",
+                    "dca_frequency": "weekly",
+                    "market_condition": "neutral",
+                    "name": "BTC DCA",
+                },
+                "status": "collecting",
+            },
+            resolved_symbol="BTC",
+        )
+    )
+
+    assert "staat klaar" in response
+    assert action is None
+    assert draft["type"] == "setup"
+    assert draft["payload"]["symbol"] == "BTC"
+    assert draft["payload"]["setup_type"] == "dca"
+    assert draft["payload"]["dca_frequency"] == "weekly"
+    assert state["current_flow"] == "none"
+    assert state_repo.cleared == [22]
+    assert suggested_actions == ["Opslaan", "Pas aan"]

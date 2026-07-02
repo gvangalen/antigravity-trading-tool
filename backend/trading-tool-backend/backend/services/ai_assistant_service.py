@@ -140,6 +140,16 @@ def _localized_example_text(preferences: Optional[dict], key: str, symbol: str) 
     }
     return examples.get(key, {}).get(locale) or examples.get(key, {}).get(DEFAULT_LOCALE) or ""
 
+
+def _localized_flow_acknowledgement(preferences: Optional[dict]) -> str:
+    locale = _resolve_locale(preferences)
+    labels = {
+        "nl": "Helder.",
+        "en": "Got it.",
+        "de": "Verstanden.",
+    }
+    return labels.get(locale) or labels.get(DEFAULT_LOCALE) or "Got it."
+
 class AiAssistantService:
     def __init__(
         self,
@@ -328,6 +338,9 @@ class AiAssistantService:
         
         self.db_duration_ms = (time.perf_counter() - start_db) * 1000
         logger.info(f"⚡ [Ai-Assistant-Service] SEQUENTIAL DATABASE CONTEXT GATHER took {self.db_duration_ms:.2f}ms (Resolved Asset: {resolved_symbol})")
+
+        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+        self._active_preferences = preferences
  
         # Deterministic slot pre-parsing (Hybrid AI + Confirm UX)
         conv_state = await self._deterministic_pre_parse_slots(user_query, conv_state, resolved_symbol, user_id)
@@ -349,6 +362,39 @@ class AiAssistantService:
                 await self.state_repo.session.commit()
 
             return response_text, None, draft, state_reset, None, ["Activeer setup", "Vraag over macro"], actual_session_id
+
+        deterministic_turn = await self._build_deterministic_flow_turn(
+            user_id=user_id,
+            user_query=user_query,
+            conv_state=conv_state,
+            resolved_symbol=resolved_symbol,
+        )
+        if deterministic_turn is not None:
+            chat_text, action, draft, state, suggested_actions = deterministic_turn
+
+            if actual_session_id:
+                user_msg = ChatMessage(
+                    session_id=actual_session_id,
+                    role="user",
+                    content=user_query,
+                    created_at=datetime.utcnow(),
+                    intent=intent,
+                )
+                assistant_msg = ChatMessage(
+                    session_id=actual_session_id,
+                    role="assistant",
+                    content=chat_text,
+                    created_at=datetime.utcnow(),
+                    intent=intent,
+                    actions=draft or action,
+                )
+                self.state_repo.session.add(user_msg)
+                self.state_repo.session.add(assistant_msg)
+                session_stmt = update(ChatSession).where(ChatSession.id == actual_session_id).values(updated_at=datetime.utcnow())
+                await self.state_repo.session.execute(session_stmt)
+                await self.state_repo.session.commit()
+
+            return chat_text, action, draft, state, None, suggested_actions, actual_session_id
         # Process Live Market Context
         live_context = "No live market data available in database."
         if live_data:
@@ -389,7 +435,6 @@ class AiAssistantService:
         role_key = self._route_role(intent)
         
         # Get User Preferences
-        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
         user_name = user.first_name if (user and getattr(user, "first_name", None)) else "Handelaar"
         response_language = _response_language_name(preferences)
 
@@ -399,8 +444,6 @@ class AiAssistantService:
 
         # 5. Build System Prompt
         system_role = get_role_prompt(role_key, preferences, intent=intent, user_name=user_name)
-        self._active_preferences = preferences
-
         # 5.5 Synthesise Chronological Continuity and Event Memory Context
         continuity_str = await self._build_continuity_context_str(user_id)
 
@@ -837,6 +880,9 @@ class AiAssistantService:
         self.db_duration_ms = (time.perf_counter() - start_db) * 1000
         logger.info(f"⚡ [Ai-Assistant-Service] SEQUENTIAL DATABASE CONTEXT GATHER (Stream) took {self.db_duration_ms:.2f}ms (Resolved Asset: {resolved_symbol})")
 
+        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+        self._active_preferences = preferences
+
         # Deterministic slot pre-parsing (Hybrid AI + Confirm UX)
         conv_state = await self._deterministic_pre_parse_slots(user_query, conv_state, resolved_symbol, user_id)
 
@@ -856,6 +902,25 @@ class AiAssistantService:
                 "draft": draft,
                 "state": state_reset,
                 "reasoning": None
+            }}
+            return
+
+        deterministic_turn = await self._build_deterministic_flow_turn(
+            user_id=user_id,
+            user_query=user_query,
+            conv_state=conv_state,
+            resolved_symbol=resolved_symbol,
+        )
+        if deterministic_turn is not None:
+            chat_text, action, draft, state, suggested_actions = deterministic_turn
+            yield {"event": "text", "data": chat_text}
+            yield {"event": "envelope", "data": {
+                "response": chat_text,
+                "action": action,
+                "draft": draft,
+                "state": state,
+                "reasoning": None,
+                "suggested_actions": suggested_actions,
             }}
             return
 
@@ -898,7 +963,6 @@ class AiAssistantService:
         role_key = self._route_role(intent)
         
         # Get User Preferences
-        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
         user_name = user.first_name if (user and getattr(user, "first_name", None)) else "Handelaar"
         response_language = _response_language_name(preferences)
 
@@ -908,8 +972,6 @@ class AiAssistantService:
 
         # 5. Build System Prompt
         system_role = get_role_prompt(role_key, preferences, intent=intent, user_name=user_name)
-        self._active_preferences = preferences
-
         # 5.5 Synthesise Chronological Continuity and Event Memory Context
         continuity_str = await self._build_continuity_context_str(user_id)
 
@@ -1386,7 +1448,7 @@ class AiAssistantService:
         updated = False
 
         # Unconditional slot updating (allows toggling selections / chip clicks!)
-        if any(w in q_lower for w in ["trade", "actief", "actieve", "manual", "handmatig"]):
+        if any(w in q_lower for w in ["trade", "trading", "actief", "actieve", "manual", "handmatig"]):
             slots["setup_type"] = "trade"
             updated = True
         elif any(w in q_lower for w in ["dca", "periodiek", "passief", "bijkopen"]):
@@ -1530,6 +1592,118 @@ class AiAssistantService:
             logger.info(f"🎯 [Deterministic-Pre-Parser] Saved updated slots to DB for user {user_id}: {slots}")
 
         return conv_state
+
+    def _get_missing_flow_slots(self, flow_name: str, slots: Optional[dict]) -> List[str]:
+        from backend.ai_agents.flow_registry import FLOW_DEFINITIONS
+
+        flow = FLOW_DEFINITIONS.get(flow_name) or {}
+        current_slots = slots or {}
+        missing: List[str] = []
+
+        for step in flow.get("question_sequence", []):
+            slot_key = step["slot"]
+            if flow_name == "setup_creation" and slot_key == "dca_frequency" and current_slots.get("setup_type") != "dca":
+                continue
+            if flow_name == "strategy_creation" and slot_key in ["entry", "targets", "stop_loss"] and current_slots.get("setup_type") != "trade":
+                continue
+            if slot_key not in current_slots or current_slots[slot_key] is None or current_slots[slot_key] == "":
+                missing.append(slot_key)
+
+        return missing
+
+    def _build_deterministic_flow_prompt(self, flow_name: str, slot_key: str, slots: Optional[dict], preferences: Optional[dict]) -> str:
+        from backend.ai_agents.flow_registry import FLOW_DEFINITIONS
+
+        flow = FLOW_DEFINITIONS.get(flow_name) or {}
+        stated_exp = str((preferences or {}).get("experience_level", "beginner"))
+        question_key = "question_advanced" if stated_exp == "advanced" else "question_beginner"
+
+        for step in flow.get("question_sequence", []):
+            if step.get("slot") != slot_key:
+                continue
+            question = str(step.get(question_key) or step.get("question_beginner") or "").strip()
+            symbol = str((slots or {}).get("symbol") or "BTC")
+            if "{symbol}" in question:
+                question = question.format(symbol=symbol)
+            return question
+
+        return ""
+
+    async def _build_deterministic_flow_turn(
+        self,
+        *,
+        user_id: int,
+        user_query: str,
+        conv_state: Optional[dict],
+        resolved_symbol: str,
+    ) -> Optional[tuple[str, Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[List[str]]]]:
+        if not conv_state:
+            return None
+
+        flow_name = str(conv_state.get("current_flow") or "").strip().lower()
+        if flow_name not in {"setup_creation", "strategy_creation", "bot_creation"}:
+            return None
+        if str(conv_state.get("status") or "").strip().lower() != "collecting":
+            return None
+
+        slots = dict(conv_state.get("slots") or {})
+        missing_slots = self._get_missing_flow_slots(flow_name, slots)
+        state_payload = {
+            "current_flow": flow_name,
+            "asset": slots.get("symbol") or resolved_symbol,
+            "slots": slots,
+            "missing_slots": missing_slots,
+            "status": "collecting",
+        }
+
+        if not missing_slots:
+            draft = self._build_deterministic_draft(conv_state)
+            await self.state_repo.clear_state(user_id)
+            state_reset = {"current_flow": "none", "slots": {}, "status": "none"}
+            flow_word = flow_name.split("_")[0]
+            locale = _resolve_locale(getattr(self, "_active_preferences", None))
+            response_text = {
+                "nl": f"Je {flow_word} staat klaar. Controleer de kaart en sla hem op als dit klopt.",
+                "en": f"Your {flow_word} draft is ready. Review the card and save it if it looks right.",
+                "de": f"Dein {flow_word}-Entwurf ist bereit. Pruefe die Karte und speichere sie, wenn alles stimmt.",
+            }.get(locale) or f"Your {flow_word} draft is ready. Review the card and save it if it looks right."
+            return response_text, None, draft, state_reset, ["Opslaan", "Pas aan"]
+
+        next_slot = missing_slots[0]
+        question = self._build_deterministic_flow_prompt(
+            flow_name,
+            next_slot,
+            slots,
+            getattr(self, "_active_preferences", None),
+        )
+        if not question:
+            return None
+
+        redirect_reason = str(conv_state.get("redirect_reason") or "").strip().lower()
+        if redirect_reason == "no_setup":
+            prefix = _localized_example_text(getattr(self, "_active_preferences", None), "no_setup", slots.get("symbol") or resolved_symbol)
+            response_text = f"{prefix} {question}".strip()
+        elif redirect_reason == "no_strategy":
+            prefix = _localized_example_text(getattr(self, "_active_preferences", None), "no_strategy", slots.get("symbol") or resolved_symbol)
+            response_text = f"{prefix} {question}".strip()
+        elif redirect_reason == "no_setup_nor_strategy":
+            prefix = _localized_example_text(getattr(self, "_active_preferences", None), "no_setup_nor_strategy", slots.get("symbol") or resolved_symbol)
+            response_text = f"{prefix} {question}".strip()
+        else:
+            normalized_query = (user_query or "").strip().lower()
+            is_bootstrap_turn = any(
+                phrase in normalized_query
+                for phrase in ["maak setup", "setup voor", "setup maken", "maak strategie", "strategie voor", "maak bot", "bot voor"]
+            )
+            response_text = question if is_bootstrap_turn else f"{_localized_flow_acknowledgement(getattr(self, '_active_preferences', None))} {question}"
+
+        await self.state_repo.save_state(
+            user_id,
+            flow_name,
+            slots.get("symbol") or resolved_symbol,
+            slots,
+        )
+        return response_text, None, None, state_payload, None
 
     def _build_deterministic_draft(self, conv_state: dict) -> dict:
         """
