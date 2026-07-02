@@ -38,7 +38,7 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "setup_creation": {
         "page": "/setup",
         "assistant_role": "Setup Wizard",
-        "required_slots": ["symbol", "setup_type", "market_condition", "name"],
+        "required_slots": ["symbol", "setup_type", "timeframe"],
         "conditional_slots": {
             "dca_frequency": {
                 "depends_on": "setup_type",
@@ -57,19 +57,14 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "question_advanced": "DCA of trade?"
             },
             {
+                "slot": "timeframe",
+                "question_beginner": "Welke timeframe wil je voor deze setup gebruiken? Voor DCA is 1W of 1M logisch; voor een trade bijvoorbeeld 4H of 1D.",
+                "question_advanced": "Welke timeframe hoort bij deze setup?"
+            },
+            {
                 "slot": "dca_frequency",
                 "question_beginner": "Hoe vaak wil je bijkopen? (dagelijks, wekelijks of maandelijks)",
                 "question_advanced": "Frequentie?"
-            },
-            {
-                "slot": "market_condition",
-                "question_beginner": "Onder welke marktomstandigheden wil je deze setup activeren? (bijv. Extreme fear, Bull market, of Neutraal)",
-                "question_advanced": "Marktconditie?"
-            },
-            {
-                "slot": "name",
-                "question_beginner": "Welke naam wil je deze setup geven? Ik stel voor: '{symbol} Blueprint'. Akkoord of wil je een andere naam?",
-                "question_advanced": "Setup naam? (Suggestie: {symbol} Blueprint)"
             }
         ],
         "draft_type": "setup",

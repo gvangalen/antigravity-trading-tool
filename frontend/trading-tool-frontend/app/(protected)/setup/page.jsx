@@ -109,7 +109,7 @@ export default function SetupPage() {
       </header>
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="setup-create" guidedMode={onboardingGuidedMode} />
+        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="setup-new" guidedMode={onboardingGuidedMode} />
       ) : null}
 
       {/* 🧠 AI INSIGHT + SETUP MATCH */}
@@ -125,7 +125,7 @@ export default function SetupPage() {
       <div className="grid grid-cols-1 gap-10 pb-24">
         
         {/* 📋 SETUP LIST */}
-        <div id="setup-create" className="card scroll-mt-32 bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+        <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6 flex items-center justify-between">
             <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
               <ClipboardList className="text-blue-600" size={16} />
@@ -158,7 +158,7 @@ export default function SetupPage() {
         </div>
 
         {/* ➕ NEW SETUP */}
-        <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+        <div id="setup-new" className="card scroll-mt-32 bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
             <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
               <PlusCircle className="text-blue-600" size={16} />

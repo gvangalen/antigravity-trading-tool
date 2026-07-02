@@ -131,7 +131,7 @@ export default function StrategyPage() {
       </header>
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="strategy-create" guidedMode={onboardingGuidedMode} />
+        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="strategy-new" guidedMode={onboardingGuidedMode} />
       ) : null}
 
       {/* 🚀 QUICK STATS GRID */}
@@ -167,7 +167,7 @@ export default function StrategyPage() {
       <div className="grid grid-cols-1 gap-12 pt-12 pb-24">
         
         {/* 📋 STRATEGY LIST */}
-        <section id="strategy-create" className="card scroll-mt-32 bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+        <section className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6 flex items-center justify-between">
              <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                <ClipboardList size={16} className="text-blue-600" />
@@ -203,7 +203,7 @@ export default function StrategyPage() {
         </section>
 
         {/* ➕ CREATE NEW STRATEGY */}
-        <section className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+        <section id="strategy-new" className="card scroll-mt-32 bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
            <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
               <div className="card-title text-slate-900 dark:text-white flex items-center gap-3">
                 <PlusCircle size={16} className="text-blue-600" />

@@ -167,6 +167,67 @@ def _localized_flow_acknowledgement(preferences: Optional[dict]) -> str:
     }
     return labels.get(locale) or labels.get(DEFAULT_LOCALE) or "Got it."
 
+
+def _extract_setup_timeframe_hint(query: str, *, setup_type: Optional[str] = None) -> Optional[str]:
+    q = str(query or "").lower()
+    ordered_patterns = [
+        (r"\b1m\b", "1M"),
+        (r"\bmaand(?:elijks)?\b", "1M"),
+        (r"\b1w\b", "1W"),
+        (r"\bweek(?:elijks)?\b", "1W"),
+        (r"\b1d\b", "1D"),
+        (r"\bdaily\b", "1D"),
+        (r"\bdag\b", "1D"),
+        (r"\b4h\b", "4H"),
+        (r"\b4u\b", "4H"),
+        (r"\b1h\b", "1H"),
+        (r"\b30m\b", "30M"),
+        (r"\b15m\b", "15M"),
+        (r"\b5m\b", "5M"),
+    ]
+    found: List[str] = []
+    for pattern, canonical in ordered_patterns:
+        if re.search(pattern, q) and canonical not in found:
+            found.append(canonical)
+
+    if setup_type == "dca":
+        for candidate in found:
+            if candidate in {"1W", "1M", "1D"}:
+                return candidate
+        if any(token in q for token in ["dagelijks", "daily"]):
+            return "1D"
+        if any(token in q for token in ["wekelijks", "weekly"]):
+            return "1W"
+        if any(token in q for token in ["maandelijks", "monthly"]):
+            return "1M"
+        return None
+
+    entry_pattern = re.search(r"\b(4h|4u|1h|30m|15m|5m)\s+(entry|instap)\b", q)
+    if entry_pattern:
+        token = entry_pattern.group(1).lower()
+        return {
+            "4h": "4H",
+            "4u": "4H",
+            "1h": "1H",
+            "30m": "30M",
+            "15m": "15M",
+            "5m": "5M",
+        }.get(token, "4H")
+
+    for candidate in found:
+        if candidate in {"4H", "1H", "30M", "15M", "5M", "1D", "1W"}:
+            return candidate
+    return None
+
+
+def _default_setup_name(symbol: str, setup_type: str, timeframe: Optional[str]) -> str:
+    clean_symbol = str(symbol or "BTC").upper()
+    clean_type = str(setup_type or "trade").lower()
+    clean_timeframe = str(timeframe or ("1W" if clean_type == "dca" else "4H")).upper()
+    if clean_type == "dca":
+        return f"{clean_symbol} DCA {clean_timeframe}"
+    return f"{clean_symbol} Trade {clean_timeframe}"
+
 class AiAssistantService:
     def __init__(
         self,
@@ -1472,6 +1533,11 @@ class AiAssistantService:
             slots["setup_type"] = "dca"
             updated = True
 
+        timeframe_hint = _extract_setup_timeframe_hint(q_lower, setup_type=slots.get("setup_type"))
+        if timeframe_hint and flow_name == "setup_creation":
+            slots["timeframe"] = timeframe_hint
+            updated = True
+
         should_parse_dca_frequency = flow_name != "setup_creation" or slots.get("setup_type") == "dca" or "dca" in q_lower
         if should_parse_dca_frequency and any(w in q_lower for w in ["dagelijks", "daily", "dag"]):
             slots["dca_frequency"] = "daily"
@@ -1533,20 +1599,6 @@ class AiAssistantService:
             slots["risk_profile"] = "aggressive"
             updated = True
 
-        # Market Condition
-        if any(w in q_lower for w in ["extreme fear", "extreme angst", "fear", "angst"]):
-            slots["market_condition"] = "extreme_fear"
-            updated = True
-        elif any(w in q_lower for w in ["bull market", "bull", "stijgend", "stijgende"]):
-            slots["market_condition"] = "bull_market"
-            updated = True
-        elif any(w in q_lower for w in ["bear market", "bear", "dalend", "dalende"]):
-            slots["market_condition"] = "bear_market"
-            updated = True
-        elif any(w in q_lower for w in ["neutral", "neutraal", "zijwaarts"]):
-            slots["market_condition"] = "neutral"
-            updated = True
-
         # Budget Daily Limit
         if any(w in q_lower for w in ["dagelijks limiet", "daily limit", "daglimiet", "dagelijks"]):
             nums = extract_numbers(q_lower)
@@ -1570,8 +1622,8 @@ class AiAssistantService:
             
             if not is_trigger and not is_slot_keyword and 2 < len(user_query.strip()) < 40:
                 if flow_name == "setup_creation":
-                    # Only capture as name if we already have setup_type and market_condition!
-                    if "setup_type" in slots and "market_condition" in slots:
+                    # Only capture as setup name once the core fields are known.
+                    if "setup_type" in slots and ("timeframe" in slots or slots.get("setup_type") == "dca"):
                         should_greedy_capture = True
                 elif flow_name == "bot_creation":
                     # For bot creation, name is the first question. Capture it!
@@ -1665,6 +1717,15 @@ class AiAssistantService:
             return None
 
         slots = dict(conv_state.get("slots") or {})
+        if flow_name == "setup_creation" and slots.get("setup_type") == "dca" and not slots.get("timeframe"):
+            frequency_to_timeframe = {
+                "daily": "1D",
+                "weekly": "1W",
+                "monthly": "1M",
+            }
+            inferred_timeframe = frequency_to_timeframe.get(str(slots.get("dca_frequency") or "").lower())
+            if inferred_timeframe:
+                slots["timeframe"] = inferred_timeframe
         missing_slots = self._get_missing_flow_slots(flow_name, slots)
         state_payload = {
             "current_flow": flow_name,
@@ -1732,16 +1793,25 @@ class AiAssistantService:
         symbol = slots.get("symbol", "BTC")
 
         if flow_name == "setup_creation":
+            setup_type = slots.get("setup_type", "trade")
+            timeframe = slots.get("timeframe") or ("1W" if setup_type == "dca" else "4H")
             payload = {
-                "name": slots.get("name") or f"{symbol} Setup",
+                "name": slots.get("name") or _default_setup_name(symbol, setup_type, timeframe),
                 "symbol": symbol,
-                "setup_type": slots.get("setup_type", "trade"),
-                "timeframe": "1W",
-                "market_condition": slots.get("market_condition", "extreme_fear")
+                "setup_type": setup_type,
+                "timeframe": timeframe,
+                "market_condition": slots.get("market_condition", "neutral"),
             }
-            if slots.get("setup_type") == "dca":
+            if setup_type == "dca":
                 payload["dca_frequency"] = slots.get("dca_frequency", "weekly")
                 payload["dca_day"] = "monday"
+                payload["min_macro_score"] = 30
+                payload["max_macro_score"] = 70
+                payload["min_technical_score"] = 40
+                payload["max_technical_score"] = 80
+                payload["min_market_score"] = 20
+                payload["max_market_score"] = 60
+            else:
                 payload["min_macro_score"] = 30
                 payload["max_macro_score"] = 70
                 payload["min_technical_score"] = 40

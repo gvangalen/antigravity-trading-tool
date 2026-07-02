@@ -9,6 +9,7 @@ api = importlib.import_module("backend.api.ai_assistant_api")
 score_api = importlib.import_module("backend.api.score_api")
 assistant_module = importlib.import_module("backend.services.ai_assistant_service")
 AiAssistantService = assistant_module.AiAssistantService
+FinnPlanService = importlib.import_module("backend.services.finn_plan_service").FinnPlanService
 state_repo_module = importlib.import_module("backend.infrastructure.repositories.conversation_state_repository")
 ConversationStateRepository = state_repo_module.ConversationStateRepository
 
@@ -54,6 +55,13 @@ def test_setup_creation_queries_prefer_legacy_setup_flow():
     assert api._should_prefer_legacy_setup_flow("Maak een setup voor BTC swing trading met daily trend en 4H entry.", {}) is True
     assert api._should_prefer_legacy_setup_flow("kan je een dca setup maken voor btc?", {}) is True
     assert api._should_prefer_legacy_setup_flow("Wat is mijn profiel?", {"current_flow": "setup_creation"}) is True
+
+
+def test_finn_plan_service_does_not_treat_setup_request_as_full_plan_request():
+    service = FinnPlanService(None)
+
+    assert service.looks_like_plan_request("Kan je een dca setup maken voor BTC?") is False
+    assert service.looks_like_plan_request("Maak een wekelijkse BTC DCA van 100 euro.") is True
 
 
 def test_modern_transactional_state_record_is_not_treated_as_legacy_resume():
@@ -352,6 +360,57 @@ def test_deterministic_flow_turn_finishes_setup_without_llm_when_slots_complete(
     assert draft["payload"]["dca_frequency"] == "weekly"
     assert state["current_flow"] == "none"
     assert state_repo.cleared == [22]
+    assert suggested_actions == ["Opslaan", "Pas aan"]
+
+
+def test_trade_setup_prompt_parses_entry_timeframe_and_builds_trade_draft():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+    assistant._active_preferences = {"locale": "nl", "experience_level": "beginner"}
+
+    conv_state = asyncio.run(
+        assistant._deterministic_pre_parse_slots(
+            "Maak een setup voor BTC swing trading met daily trend en 4H entry.",
+            None,
+            "BTC",
+            44,
+        )
+    )
+
+    assert conv_state["slots"]["setup_type"] == "trade"
+    assert conv_state["slots"]["timeframe"] == "4H"
+
+    response, action, draft, state, suggested_actions = asyncio.run(
+        assistant._build_deterministic_flow_turn(
+            user_id=44,
+            user_query="Maak een setup voor BTC swing trading met daily trend en 4H entry.",
+            conv_state={
+                "current_flow": "setup_creation",
+                "slots": conv_state["slots"],
+                "status": "collecting",
+            },
+            resolved_symbol="BTC",
+        )
+    )
+
+    assert "staat klaar" in response
+    assert action is None
+    assert draft["type"] == "setup"
+    assert draft["payload"]["setup_type"] == "trade"
+    assert draft["payload"]["timeframe"] == "4H"
+    assert draft["payload"]["name"] == "BTC Trade 4H"
+    assert draft["payload"]["market_condition"] == "neutral"
+    assert state["current_flow"] == "none"
     assert suggested_actions == ["Opslaan", "Pas aan"]
 
 

@@ -1715,6 +1715,20 @@ class FinnPlanService:
         if draft and draft.get("draft_kind") == "strategy":
             return False
         has_setup_word = "setup" in q
+        has_strategy_or_bot_scope = any(word in q for word in [
+            "strategie",
+            "strategy",
+            "bot",
+            "base amount",
+            "basisbedrag",
+            "entry",
+            "stop loss",
+            "stoploss",
+            "target",
+            "targets",
+            "uitvoering",
+            "execution",
+        ])
         has_explicit_plan_fields = any(word in q for word in [
             "dca",
             "trade plan",
@@ -1732,6 +1746,8 @@ class FinnPlanService:
             "euro",
             "eur",
         ])
+        if has_setup_word and not has_strategy_or_bot_scope:
+            return False
         if has_setup_word and not has_explicit_plan_fields:
             return False
         if self.looks_like_indicator_config_request(query):
