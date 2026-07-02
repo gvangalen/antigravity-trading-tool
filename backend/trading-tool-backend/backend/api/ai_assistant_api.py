@@ -397,6 +397,15 @@ def _should_prefer_legacy_setup_flow(query: str, context_payload: Optional[dict]
     return _looks_like_explicit_setup_creation_request(query)
 
 
+def _is_legacy_transactional_flow_name(flow_name: Optional[str]) -> bool:
+    return str(flow_name or "").strip().lower() in {
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config",
+    }
+
+
 def _build_profile_saved_envelope(profile: Dict[str, Any]) -> Dict[str, Any]:
     summary = build_trader_profile_summary(profile)
     lines = []
@@ -1371,7 +1380,11 @@ async def assistant_chat(
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
             )
-        if _should_prefer_legacy_setup_flow(request.query, context_payload):
+        active_legacy_state = await service.state_repo.get_state(user_id)
+        active_legacy_flow = str((active_legacy_state or {}).get("current_flow") or "").lower()
+        if _is_legacy_transactional_flow_name(active_legacy_flow):
+            context_payload["current_flow"] = active_legacy_flow
+        if _should_prefer_legacy_setup_flow(request.query, context_payload) or _is_legacy_transactional_flow_name(active_legacy_flow):
             response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
                 user_id, request.query, request.history, context_payload, trace_id=trace_id, session_id=request.session_id
             )
@@ -1909,7 +1922,11 @@ async def assistant_chat_stream(
                 yield _sse_event("envelope", envelope)
                 return
 
-            if _should_prefer_legacy_setup_flow(request.query, context_payload):
+            active_legacy_state = await service.state_repo.get_state(user_id)
+            active_legacy_flow = str((active_legacy_state or {}).get("current_flow") or "").lower()
+            if _is_legacy_transactional_flow_name(active_legacy_flow):
+                context_payload["current_flow"] = active_legacy_flow
+            if _should_prefer_legacy_setup_flow(request.query, context_payload) or _is_legacy_transactional_flow_name(active_legacy_flow):
                 async for chunk in service.get_chat_response_stream(
                     user_id,
                     request.query,
