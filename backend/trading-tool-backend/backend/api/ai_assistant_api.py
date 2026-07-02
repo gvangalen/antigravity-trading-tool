@@ -426,6 +426,33 @@ def _modern_transactional_flow_name(state: Optional[dict], context_payload: Opti
     return None
 
 
+def _clear_modern_transactional_context(context_payload: Optional[dict]) -> None:
+    if not isinstance(context_payload, dict):
+        return
+    context_payload.pop("finn_draft", None)
+    context_payload.pop("finn_state", None)
+    if _modern_transactional_flow_name(None, context_payload):
+        context_payload.pop("current_flow", None)
+
+
+def _looks_like_explicit_new_plan_request(query: str) -> bool:
+    q = str(query or "").lower()
+    return any(trigger in q for trigger in [
+        "maak een dca",
+        "maak een wekelijkse",
+        "maak een maandelijkse",
+        "maak een dagelijkse",
+        "wekelijkse dca",
+        "maandelijkse dca",
+        "dagelijkse dca",
+        "elke week",
+        "iedere week",
+        "elke maand",
+        "iedere maand",
+        "dca van",
+    ])
+
+
 def _build_profile_saved_envelope(profile: Dict[str, Any]) -> Dict[str, Any]:
     summary = build_trader_profile_summary(profile)
     lines = []
@@ -491,13 +518,17 @@ async def _continue_transactional_follow_up(
     active_flow = _modern_transactional_flow_name(payload.get("finn_state"), payload)
     if not draft or not active_flow or not finn._looks_like_transactional_follow_up(query, draft):
         return None
-    if active_flow != "plan_creation" and finn.looks_like_plan_request(query, None):
+    if active_flow != "plan_creation" and (finn.looks_like_plan_request(query, None) or _looks_like_explicit_new_plan_request(query)):
+        _clear_modern_transactional_context(payload)
         return None
     if active_flow != "strategy_creation" and finn.looks_like_strategy_request(query, {}):
+        _clear_modern_transactional_context(payload)
         return None
     if active_flow != "bot_creation" and finn.looks_like_bot_request(query, {}):
+        _clear_modern_transactional_context(payload)
         return None
     if active_flow != "indicator_config" and finn.looks_like_indicator_config_request(query, {}):
+        _clear_modern_transactional_context(payload)
         return None
 
     if active_flow == "strategy_creation":

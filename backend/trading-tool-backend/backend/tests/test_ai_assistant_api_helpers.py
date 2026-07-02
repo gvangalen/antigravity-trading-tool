@@ -100,18 +100,22 @@ def test_continue_transactional_follow_up_does_not_swallow_explicit_new_plan_req
         async def build_strategy_response_for_user(self, user_id, query, payload):
             return {"intent": "strategy_creation"}
 
+    payload = {
+        "current_flow": "strategy_creation",
+        "finn_state": {"current_flow": "strategy_creation"},
+        "finn_draft": {"draft_kind": "strategy", "setup_id": 1},
+    }
+
     result = asyncio.run(api._continue_transactional_follow_up(
         _Finn(),
         12,
         "Maak een wekelijkse BTC DCA van 100 euro.",
-        {
-            "current_flow": "strategy_creation",
-            "finn_state": {"current_flow": "strategy_creation"},
-            "finn_draft": {"draft_kind": "strategy", "setup_id": 1},
-        },
+        payload,
     ))
 
     assert result is None
+    assert "finn_draft" not in payload
+    assert "finn_state" not in payload
 
 
 def test_score_api_payload_to_dict_supports_pydantic_v1_and_v2():
