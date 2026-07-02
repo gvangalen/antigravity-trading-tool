@@ -227,88 +227,6 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
   const uiText = buildAssistantUiText(at);
 
-  const uiText = locale === "en" ? {
-    activeBriefing: "Active briefing",
-    defensivePosture: "Defensive posture",
-    alignedTo: "Aligned to",
-    workspaceOverview: "Workspace overview",
-    loadingWorkspace: "Finn is loading your workspace",
-    todayFirst: "Today first",
-    why: "Why",
-    noActions: "No direct actions are open right now. As soon as something needs attention, Finn will place it here first.",
-    noReviews: "No extra reviews right now. Anything that needs review already appears in Today first.",
-    noPerformance: "No day-status or discipline signal is available yet.",
-    noHistory: "No recent Finn history yet. Once you complete, postpone, or review actions with Finn, it will appear here.",
-    retry: "Retry",
-    inputPlaceholder: "Ask Finn for context, risk, or the next step...",
-    setupWizard: "Setup wizard",
-    startGuide: "Start guide",
-    decisionReviewFallback: "Finn is reviewing this decision.",
-    missionControlUnavailable: "Finn overview is temporarily unavailable.",
-    chooseSetup: "Choose setup",
-    chooseStrategy: "Choose strategy",
-    chooseIndicatorNode: "Choose indicator node",
-    planDeviation: "Plan deviation",
-    overrideConfirmed: "Override confirmed",
-    overrideRequired: "Override required",
-    planDeviationTitle: "You are not following your own plan right now.",
-    safeRoute: "Safe route",
-    missingStill: "Still missing",
-    invalid: "Invalid",
-    confirm: "Confirm",
-    behavioralMemoryCheck: "Behavioral memory check",
-    consciousConfirmationNeeded: "Conscious confirmation required",
-    consciouslyContinue: "Continue consciously",
-    reviewFirst: "Review first",
-    finnActionNeedsConfirmation: "Finn action awaiting confirmation",
-    context: "Context",
-    impact: "Impact",
-    safety: "Safety",
-    afterThis: "After this",
-    aiCommandCenter: "Finn command center",
-    reasoningChains: "Reasoning chains",
-  } : {
-    activeBriefing: "Actieve briefing",
-    defensivePosture: "Defensieve houding",
-    alignedTo: "Afgestemd op",
-    workspaceOverview: "Werkoverzicht",
-    loadingWorkspace: "Finn haalt je werkoverzicht op",
-    todayFirst: "Vandaag eerst",
-    why: "Waarom",
-    noActions: "Geen directe acties open. Zodra er weer iets nu aandacht vraagt, zet Finn het hier bovenaan.",
-    noReviews: "Geen extra reviews op dit moment. Alles wat nu jouw review vraagt staat al in Vandaag.",
-    noPerformance: "Nog geen dagstatus of discipline-signaal om te tonen.",
-    noHistory: "Nog geen recente Finn-historie. Zodra je dingen afrondt, uitstelt of met Finn terugkijkt, verschijnt dat hier.",
-    retry: "Opnieuw",
-    inputPlaceholder: "Vraag Finn om context, risico of een volgende stap...",
-    setupWizard: "Setupwizard",
-    startGuide: "Startgids",
-    decisionReviewFallback: "Finn reviewt deze beslissing.",
-    missionControlUnavailable: "Finn overzicht tijdelijk niet beschikbaar.",
-    chooseSetup: "Kies setup",
-    chooseStrategy: "Kies strategie",
-    chooseIndicatorNode: "Kies indicator-node",
-    planDeviation: "Plan afwijking",
-    overrideConfirmed: "Override bevestigd",
-    overrideRequired: "Override vereist",
-    planDeviationTitle: "Je houdt je nu niet aan je eigen plan.",
-    safeRoute: "Veilige route",
-    missingStill: "Ontbreekt nog",
-    invalid: "Ongeldig",
-    confirm: "Bevestigen",
-    behavioralMemoryCheck: "Behavioral memory check",
-    consciousConfirmationNeeded: "Bewuste bevestiging nodig",
-    consciouslyContinue: "Bewust doorgaan",
-    reviewFirst: "Eerst reviewen",
-    finnActionNeedsConfirmation: "Finn actie ter bevestiging",
-    context: "Context",
-    impact: "Impact",
-    safety: "Veiligheid",
-    afterThis: "Daarna",
-    aiCommandCenter: "Finn command center",
-    reasoningChains: "Reasoning chains",
-  };
-
   useEffect(() => {
     if (!isOpen) return;
     trackAssistantEvent({
@@ -367,24 +285,6 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   };
 
   const getMetricAnalysisText = (metric, symbol = "BTC", tf = "1W") => {
-    if (locale === "en") {
-      switch (metric) {
-        case "transition_risk":
-          return `FINN detects rising regime instability for ${symbol} through weaker trend strength and higher volatility. New aggressive entries are not recommended on the ${tf} timeframe right now.`;
-        case "setup_quality":
-          return `The setup quality score reflects solid confluence and favorable risk-reward conditions for ${symbol}. It currently meets the core institutional entry requirements.`;
-        case "market_pressure":
-          return `Sell pressure is rising in the ${symbol} order books while volume fades on upward moves. FINN recommends tighter stop-loss levels on ${tf}.`;
-        case "structural_cycle":
-          return `${symbol} is in an early recovery phase structurally. Accumulation around key support levels is backed by stable capital inflow.`;
-        case "position_size":
-          return `The recommended position size for ${symbol} is currently defensive at 50%. Reduce active exposure when volatility rises to protect capital.`;
-        case "trend_strength":
-          return `Trend strength shows weaker short-term momentum for ${symbol}. Expect more consolidation before a clear breakout is confirmed.`;
-        default:
-          return `FINN is currently analyzing the live data streams for ${symbol} (${tf}). Background models and risk parameters are running within normal thresholds.`;
-      }
-    }
     switch (metric) {
       case "transition_risk":
         return at("metricAnalysis.transition_risk", "", { symbol, tf });
