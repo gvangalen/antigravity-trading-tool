@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
+from backend.infrastructure.repositories.dashboard_repository import DashboardRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.ai_gateway import AiGateway
 from backend.services.ai_assistant_service import AiAssistantService
@@ -14,6 +15,9 @@ from backend.services import portfolio_snapshot_service
 class _ExecResult:
     def fetchone(self):
         return None
+
+    def fetchall(self):
+        return []
 
 
 class _FakeAsyncSession:
@@ -63,6 +67,21 @@ class _FakeAsyncSessionFactory:
 
     async def __aexit__(self, exc_type, exc, tb):
         return False
+
+
+def test_dashboard_top_setups_uses_current_strategy_storage_shape():
+    session = _FakeAsyncSession()
+    repo = DashboardRepository(session)
+
+    asyncio.run(repo.get_top_setups(7, limit=5))
+
+    sql = session.executed[0]["sql"].lower()
+    assert "from strategies s" in sql
+    assert "left join setups st on st.id = s.setup_id" in sql
+    assert "s.created_at as timestamp" in sql
+    assert "coalesce(nullif(s.data->>'score', '')::float, 0) as score" in sql
+    assert "select name, score, timeframe, symbol, explanation, timestamp" not in sql
+    assert session.executed[0]["params"] == {"user_id": 7, "limit": 5}
 
 
 def test_conversation_state_save_uses_single_user_upsert():
