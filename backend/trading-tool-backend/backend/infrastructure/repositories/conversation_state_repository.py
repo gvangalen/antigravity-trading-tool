@@ -30,10 +30,12 @@ class ConversationStateRepository:
             slots = row["slots"]
             if isinstance(slots, str):
                 slots = json.loads(slots)
+            current_flow = row["current_flow"]
             return {
-                "current_flow": row["current_flow"],
+                "current_flow": current_flow,
                 "asset": row["asset"],
                 "slots": slots or {},
+                "status": "collecting" if current_flow and str(current_flow).lower() != "none" else "none",
                 "updated_at": row["updated_at"],
             }
         return None

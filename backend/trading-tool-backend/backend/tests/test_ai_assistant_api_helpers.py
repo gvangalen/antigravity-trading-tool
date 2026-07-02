@@ -9,6 +9,8 @@ api = importlib.import_module("backend.api.ai_assistant_api")
 score_api = importlib.import_module("backend.api.score_api")
 assistant_module = importlib.import_module("backend.services.ai_assistant_service")
 AiAssistantService = assistant_module.AiAssistantService
+state_repo_module = importlib.import_module("backend.infrastructure.repositories.conversation_state_repository")
+ConversationStateRepository = state_repo_module.ConversationStateRepository
 
 
 def test_profile_capture_extracts_canonical_values():
@@ -132,6 +134,25 @@ class _FakeStateRepo:
 
     async def clear_state(self, user_id):
         self.cleared.append(user_id)
+
+
+class _FakeResult:
+    def __init__(self, row):
+        self._row = row
+
+    def mappings(self):
+        return self
+
+    def first(self):
+        return self._row
+
+
+class _FakeSession:
+    def __init__(self, row):
+        self._row = row
+
+    async def execute(self, query, params):
+        return _FakeResult(self._row)
 
 
 def test_deterministic_pre_parse_marks_trading_prompt_as_trade_setup():
@@ -270,3 +291,20 @@ def test_deterministic_flow_turn_finishes_setup_without_llm_when_slots_complete(
     assert state["current_flow"] == "none"
     assert state_repo.cleared == [22]
     assert suggested_actions == ["Opslaan", "Pas aan"]
+
+
+def test_conversation_state_repo_restores_collecting_status_from_saved_flow():
+    repo = ConversationStateRepository(
+        _FakeSession({
+            "current_flow": "setup_creation",
+            "asset": "BTC",
+            "slots": {"symbol": "BTC", "setup_type": "trade"},
+            "updated_at": "2026-07-02T15:00:00Z",
+        })
+    )
+
+    state = asyncio.run(repo.get_state(55))
+
+    assert state["current_flow"] == "setup_creation"
+    assert state["status"] == "collecting"
+    assert state["slots"]["setup_type"] == "trade"
