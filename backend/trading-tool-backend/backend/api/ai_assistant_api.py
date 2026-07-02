@@ -361,7 +361,9 @@ def _looks_like_profile_capture(query: str) -> bool:
         "ik trade",
         "ik handel",
     ]
-    return any(cue in q for cue in identity_cues) and bool(_extract_profile_update_from_query(query))
+    if not any(cue in q for cue in identity_cues):
+        return False
+    return has_trader_profile(_extract_profile_update_from_query(query))
 
 
 def _looks_like_profile_explain(query: str) -> bool:
@@ -371,6 +373,28 @@ def _looks_like_profile_explain(query: str) -> bool:
         or "hoe gebruik je dat in je advies" in q
         or ("mijn profiel" in q and any(term in q for term in ["gebruik", "advies", "samenvat", "uitleg"]))
     )
+
+
+def _looks_like_explicit_setup_creation_request(query: str) -> bool:
+    q = str(query or "").lower()
+    setup_terms = [
+        "maak een setup",
+        "maak setup",
+        "setup voor",
+        "setup aanmaken",
+        "nieuwe setup",
+        "setup maken",
+        "dca setup",
+    ]
+    return any(term in q for term in setup_terms)
+
+
+def _should_prefer_legacy_setup_flow(query: str, context_payload: Optional[dict] = None) -> bool:
+    context_payload = context_payload or {}
+    current_flow = str(context_payload.get("current_flow") or "").lower()
+    if current_flow == "setup_creation":
+        return True
+    return _looks_like_explicit_setup_creation_request(query)
 
 
 def _build_profile_saved_envelope(profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -1142,6 +1166,135 @@ async def _prepare_finn_envelope(
     return envelope
 
 
+async def _finalize_legacy_response(
+    *,
+    response: Optional[str],
+    action: Optional[dict],
+    draft: Optional[dict],
+    state: Optional[dict],
+    reasoning: Optional[str],
+    suggested_actions: Optional[list],
+    session_id: Optional[str],
+    finn: FinnPlanService,
+    user_id: int,
+    trace_id: str,
+    query: str,
+    context_payload: Optional[dict],
+    started_at: float,
+) -> AssistantChatResponse:
+    service = AiAssistantService()
+    intent = service._classify_intent(query)
+    if not isinstance(action, dict):
+        action = None
+    if not isinstance(draft, dict):
+        draft = None
+    if not isinstance(state, dict):
+        state = None
+    reasoning = None
+    if not isinstance(suggested_actions, list):
+        suggested_actions = None
+    if _legacy_response_needs_finn_rescue(
+        finn,
+        query,
+        context_payload,
+        response_text=response,
+        action=action,
+        draft=draft,
+        state=state,
+    ):
+        rescue = await _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=user_id,
+            query=query,
+            context_payload=context_payload,
+        )
+        return await _finalize_finn_response(
+            finn,
+            user_id,
+            rescue,
+            trace_id,
+            prompt=query,
+            context_payload=context_payload,
+            route_source="finn_core_rescue_legacy",
+            legacy_rescue_reason="legacy_non_transactional_misroute_or_generic_failure",
+            latency_ms=(time.perf_counter() - started_at) * 1000,
+        )
+    legacy_response = {
+        "response": response,
+        "intent": intent,
+        "flow": (state or {}).get("current_flow"),
+        "draft": draft,
+        "state": state,
+        "actions": action and [action] or [],
+    }
+    legacy_response = finn._build_response_analysis_metadata(
+        legacy_response,
+        context_payload,
+        route_source="legacy",
+    )
+    legacy_response = _attach_trader_profile_metadata(legacy_response, context_payload)
+    legacy_response = _normalize_finn_response_contract(legacy_response)
+    _log_finn_prompt_audit(
+        trace_id=trace_id,
+        user_id=user_id,
+        prompt=query,
+        route_source="legacy_assistant",
+        detected_intent=intent,
+        intent_confidence=None,
+        selected_flow=(state or {}).get("current_flow"),
+        selected_entity=_audit_selected_entity(legacy_response, context_payload),
+        context_payload=context_payload,
+        used_draft=bool(draft),
+        draft_summary=_audit_draft_summary(draft),
+        response_type=_audit_response_type(legacy_response),
+        success=_audit_success_label(legacy_response),
+        mode=(legacy_response.get("analysis") or {}).get("mode") or finn._response_mode_for_flow((state or {}).get("current_flow"), draft),
+        context_confidence=(legacy_response.get("analysis") or {}).get("context_confidence"),
+        draft_rejected_reason=(context_payload.get("_finn_sanitization") or {}).get("draft_rejected_reason"),
+        latency_ms=(time.perf_counter() - started_at) * 1000,
+    )
+    _record_finn_product_event(
+        user_id=user_id,
+        event_name="finn_response_received",
+        session_id=session_id,
+        surface="legacy_assistant",
+        page=context_payload.get("page"),
+        asset=context_payload.get("symbol") or context_payload.get("asset"),
+        flow_type=(state or {}).get("current_flow"),
+        bot_id=(state or {}).get("bot_id") or context_payload.get("bot_id"),
+        setup_id=(state or {}).get("setup_id") or context_payload.get("setup_id"),
+        strategy_id=(state or {}).get("strategy_id") or context_payload.get("strategy_id"),
+        trace_id=trace_id,
+        next_best_action=legacy_response.get("next_best_action"),
+        metadata={
+            "intent": intent,
+            **_trader_profile_event_metadata(context_payload),
+        },
+    )
+    _record_behavioral_response_events(
+        user_id=user_id,
+        response=legacy_response,
+        context_payload=context_payload,
+        route_source="legacy_assistant",
+        trace_id=trace_id,
+    )
+    return AssistantChatResponse(
+        response=legacy_response.get("response") or response,
+        intent=intent,
+        action=action,
+        draft=draft,
+        state=legacy_response.get("state"),
+        reasoning=reasoning,
+        suggested_actions=suggested_actions,
+        trace_id=trace_id,
+        session_id=session_id,
+        summary=legacy_response.get("summary"),
+        risk_summary=legacy_response.get("risk_summary"),
+        next_best_action=legacy_response.get("next_best_action"),
+        review_reason=legacy_response.get("review_reason"),
+    )
+
+
 @router.post("/assistant/chat", response_model=AssistantChatResponse)
 async def assistant_chat(
     request: AssistantChatRequest,
@@ -1215,6 +1368,25 @@ async def assistant_chat(
             finn_response = _build_watchlist_mutation_envelope(request.query, context_payload)
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+            )
+        if _should_prefer_legacy_setup_flow(request.query, context_payload):
+            response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
+                user_id, request.query, request.history, context_payload, trace_id=trace_id, session_id=request.session_id
+            )
+            return await _finalize_legacy_response(
+                response=response,
+                action=action,
+                draft=draft,
+                state=state,
+                reasoning=reasoning,
+                suggested_actions=suggested_actions,
+                session_id=actual_session_id or request.session_id,
+                finn=finn,
+                user_id=user_id,
+                trace_id=trace_id,
+                query=request.query,
+                context_payload=context_payload,
+                started_at=started_at,
             )
         follow_up = await _continue_transactional_follow_up(finn, user_id, request.query, context_payload)
         if follow_up:
@@ -1732,6 +1904,21 @@ async def assistant_chat_stream(
                 envelope = _build_watchlist_mutation_envelope(request.query, context_payload)
                 envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
                 yield _sse_event("envelope", envelope)
+                return
+
+            if _should_prefer_legacy_setup_flow(request.query, context_payload):
+                async for chunk in service.get_chat_response_stream(
+                    user_id,
+                    request.query,
+                    request.history,
+                    context_payload,
+                    trace_id=trace_id,
+                    background_tasks=background_tasks,
+                ):
+                    if await raw_request.is_disconnected():
+                        logger.warning(f"🔌 Client disconnected mid-stream | Trace: {trace_id}. Aborting stream generator.")
+                        return
+                    yield chunk
                 return
 
             follow_up = await _continue_transactional_follow_up(finn, user_id, request.query, context_payload)
