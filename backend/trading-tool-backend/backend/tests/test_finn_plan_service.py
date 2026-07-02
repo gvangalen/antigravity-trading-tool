@@ -209,6 +209,27 @@ def test_sanitize_context_keeps_bot_draft_for_real_transactional_follow_up():
     assert sanitized["current_flow"] == "bot_creation"
 
 
+def test_sanitize_context_keeps_strategy_draft_for_short_risk_profile_answer():
+    service = _service()
+    context = {
+        "finn_draft": {
+            "draft_kind": "strategy",
+            "operation": "create",
+            "setup_id": 257,
+        },
+        "finn_state": {
+            "current_flow": "strategy_creation",
+            "updated_at": _utc_now().isoformat(),
+        },
+        "current_flow": "strategy_creation",
+    }
+
+    sanitized = service.sanitize_context_for_query("balanced", context)
+
+    assert sanitized["finn_draft"]["draft_kind"] == "strategy"
+    assert sanitized["current_flow"] == "strategy_creation"
+
+
 def test_sanitize_context_drops_stale_plan_draft_for_setup_explain_prompt():
     service = _service()
     context = {

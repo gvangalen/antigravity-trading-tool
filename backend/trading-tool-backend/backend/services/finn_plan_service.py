@@ -1390,6 +1390,19 @@ class FinnPlanService:
             return True
         if draft and len(q.split()) <= 6:
             short_follow_up_terms = [
+                "balanced",
+                "conservative",
+                "aggressive",
+                "gebalanceerd",
+                "conservatief",
+                "agressief",
+                "manual",
+                "paper",
+                "live",
+                "bot assisted",
+                "bot_assisted",
+                "auto",
+                "automatisch",
                 "elke week",
                 "iedere week",
                 "elke dag",
@@ -1426,8 +1439,8 @@ class FinnPlanService:
                 return True
 
         continuation_terms = {
-            "bot": ["bot", "strategie", "strategy", "paper", "live", "manual", "auto", "budget", "daglimiet", "min order", "max order", "cadence", "risk", "risico"],
-            "strategy": ["strategie", "strategy", "setup", "entry", "stop", "target", "basisbedrag", "base amount", "market akkoord"],
+            "bot": ["bot", "strategie", "strategy", "paper", "live", "manual", "auto", "budget", "daglimiet", "min order", "max order", "cadence", "risk", "risico", "balanced", "conservative", "aggressive", "gebalanceerd", "conservatief", "agressief"],
+            "strategy": ["strategie", "strategy", "setup", "entry", "stop", "target", "basisbedrag", "base amount", "market akkoord", "balanced", "conservative", "aggressive", "gebalanceerd", "conservatief", "agressief", "eur", "euro", "per trade"],
             "indicator_config": ["indicator", "macro", "technical", "node", "weging", "weight", "rule", "regel", "contrarian"],
             "plan": [
                 "setup", "dca", "trade", "entry", "stop", "target",
@@ -1436,7 +1449,7 @@ class FinnPlanService:
                 "weekly", "monthly", "daily",
                 "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag",
                 "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-                "btc", "eth", "sol", "euro", "eur", "bedrag",
+                "btc", "eth", "sol", "euro", "eur", "bedrag", "balanced", "conservative", "aggressive",
             ],
         }
         draft_kind = draft.get("draft_kind")

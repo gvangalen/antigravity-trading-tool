@@ -70,6 +70,21 @@ def test_modern_transactional_state_record_is_not_treated_as_legacy_resume():
     assert api._is_modern_transactional_state_record(state) is True
 
 
+def test_modern_transactional_flow_name_prefers_supported_active_flow():
+    state = {
+        "current_flow": "strategy_creation",
+        "slots": {"draft": {"draft_kind": "strategy"}},
+    }
+
+    assert api._modern_transactional_flow_name(state, {}) == "strategy_creation"
+
+
+def test_trading_stop_input_is_not_abort_like():
+    assert assistant_module._looks_like_trading_stop_input("stop 88000") is True
+    assert assistant_module._looks_like_trading_stop_input("entry 92000 target 98000 stop 88000") is True
+    assert assistant_module._looks_like_trading_stop_input("annuleer dit") is False
+
+
 def test_score_api_payload_to_dict_supports_pydantic_v1_and_v2():
     class V1Payload:
         def dict(self):

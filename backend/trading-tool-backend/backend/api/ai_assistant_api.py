@@ -419,6 +419,13 @@ def _is_modern_transactional_state_record(state: Optional[dict]) -> bool:
     return bool(slots.get("version"))
 
 
+def _modern_transactional_flow_name(state: Optional[dict], context_payload: Optional[dict] = None) -> Optional[str]:
+    flow_name = str((state or {}).get("current_flow") or (context_payload or {}).get("current_flow") or "").strip().lower()
+    if flow_name in {"strategy_creation", "bot_creation", "indicator_config", "plan_creation"}:
+        return flow_name
+    return None
+
+
 def _build_profile_saved_envelope(profile: Dict[str, Any]) -> Dict[str, Any]:
     summary = build_trader_profile_summary(profile)
     lines = []
@@ -481,15 +488,15 @@ async def _continue_transactional_follow_up(
 ) -> Optional[Dict[str, Any]]:
     payload = context_payload or {}
     draft = payload.get("finn_draft") if isinstance(payload.get("finn_draft"), dict) else None
-    if not draft or not finn._looks_like_transactional_follow_up(query, draft):
+    active_flow = _modern_transactional_flow_name(payload.get("finn_state"), payload)
+    if not draft or not active_flow or not finn._looks_like_transactional_follow_up(query, draft):
         return None
 
-    draft_kind = draft.get("draft_kind")
-    if draft_kind == "strategy":
+    if active_flow == "strategy_creation":
         return await finn.build_strategy_response_for_user(user_id, query, payload)
-    if draft_kind == "bot":
+    if active_flow == "bot_creation":
         return await finn.build_bot_response_for_user(user_id, query, payload)
-    if draft_kind == "indicator_config":
+    if active_flow == "indicator_config":
         return await finn.build_indicator_config_response_for_user(user_id, query, payload)
     return finn.build_response(query, payload)
 

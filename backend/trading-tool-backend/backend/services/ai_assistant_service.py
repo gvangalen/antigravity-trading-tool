@@ -3,6 +3,7 @@ import time
 import uuid
 import asyncio
 import os
+import re
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional, AsyncGenerator
 from sqlalchemy import select, update, and_, desc, text
@@ -34,6 +35,22 @@ logger = logging.getLogger(__name__)
 ASSISTANT_CONTEXT_CACHE_TTL_SECONDS = int(os.getenv("ASSISTANT_CONTEXT_CACHE_TTL_SECONDS", "20"))
 _assistant_context_cache: Dict[str, Dict[str, Any]] = {}
 _ai_usage_log_supported_columns: Optional[set[str]] = None
+
+
+def _looks_like_trading_stop_input(query: str) -> bool:
+    q = str(query or "").strip().lower()
+    if not q:
+        return False
+    trading_stop_terms = ["stop-loss", "stop loss", "stoploss", "stop-limit", "stop limit", "stoplimit"]
+    if any(term in q for term in trading_stop_terms):
+        return True
+    if re.search(r"\bstop\s*[=:]?\s*[0-9][0-9.,]*\b", q):
+        return True
+    if "entry" in q and "stop" in q:
+        return True
+    if "target" in q and "stop" in q:
+        return True
+    return False
 
 
 def _get_cached_assistant_context(cache_key: str) -> Optional[str]:
@@ -277,9 +294,7 @@ class AiAssistantService:
         
         is_abort = False
         if any(trigger in q_clean for trigger in abort_triggers):
-            # Exclude trading stop terms that contain 'stop'
-            trading_stop_terms = ["stop-loss", "stop loss", "stoploss", "stop-limit", "stop limit", "stoplimit"]
-            if any(term in q_lower for term in trading_stop_terms):
+            if _looks_like_trading_stop_input(user_query):
                 is_abort = False
             else:
                 is_abort = True
@@ -765,9 +780,7 @@ class AiAssistantService:
         
         is_abort = False
         if any(trigger in q_clean for trigger in abort_triggers):
-            # Exclude trading stop terms that contain 'stop'
-            trading_stop_terms = ["stop-loss", "stop loss", "stoploss", "stop-limit", "stop limit", "stoplimit"]
-            if any(term in q_lower for term in trading_stop_terms):
+            if _looks_like_trading_stop_input(user_query):
                 is_abort = False
             else:
                 is_abort = True
