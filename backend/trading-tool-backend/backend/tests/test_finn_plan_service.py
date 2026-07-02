@@ -3070,6 +3070,56 @@ def test_strategy_market_execution_requires_explicit_ack():
     assert second["draft"]["strategy"]["market_execution_ack"] is True
 
 
+def test_strategy_flow_autoselects_single_matching_setup(monkeypatch):
+    service = _service()
+    service.session = object()
+
+    class _SetupRepo:
+        async def get_all_setups(self, user_id, setup_type=None):
+            return [{
+                "id": 236,
+                "name": "BTC Swing Blueprint",
+                "symbol": "BTC",
+                "timeframe": "1W",
+                "setup_type": "trade",
+            }]
+
+        async def get_setup_by_id(self, setup_id, user_id):
+            return {
+                "id": setup_id,
+                "name": "BTC Swing Blueprint",
+                "symbol": "BTC",
+                "timeframe": "1W",
+                "setup_type": "trade",
+            }
+
+    class _SetupService:
+        def __init__(self, session):
+            self.repository = _SetupRepo()
+
+    class _StrategyRepo:
+        async def get_strategy_by_setup(self, setup_id, user_id):
+            return None
+
+    class _StrategyService:
+        def __init__(self, session):
+            self.repository = _StrategyRepo()
+
+    monkeypatch.setattr(finn_plan_module, "SetupService", _SetupService)
+    monkeypatch.setattr(finn_plan_module, "StrategyService", _StrategyService)
+
+    response = asyncio.run(service.build_strategy_response_for_user(
+        5,
+        "Maak hier een strategie van met duidelijke entry, invalidatie en risk management.",
+        {"asset": "BTC"},
+    ))
+
+    assert response["draft"]["setup_id"] == 236
+    assert response["state"]["setup_id"] == 236
+    assert response["next_question"] == "strategy.base_amount_eur"
+    assert "setup_id" not in response["missing_fields"]
+
+
 def test_read_after_write_marks_absent_bot_as_not_verified_but_valid():
     result = asyncio.run(_service()._verify_created_objects(
         user_id=1,

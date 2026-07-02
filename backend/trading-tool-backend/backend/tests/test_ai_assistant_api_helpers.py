@@ -56,6 +56,20 @@ def test_setup_creation_queries_prefer_legacy_setup_flow():
     assert api._should_prefer_legacy_setup_flow("Wat is mijn profiel?", {"current_flow": "setup_creation"}) is True
 
 
+def test_modern_transactional_state_record_is_not_treated_as_legacy_resume():
+    state = {
+        "current_flow": "strategy_creation",
+        "slots": {
+            "version": 2,
+            "state_bucket": "transactional_state",
+            "draft": {"draft_kind": "strategy"},
+        },
+    }
+
+    assert api._is_legacy_transactional_flow_name("strategy_creation") is True
+    assert api._is_modern_transactional_state_record(state) is True
+
+
 def test_score_api_payload_to_dict_supports_pydantic_v1_and_v2():
     class V1Payload:
         def dict(self):
@@ -291,6 +305,40 @@ def test_deterministic_flow_turn_finishes_setup_without_llm_when_slots_complete(
     assert state["current_flow"] == "none"
     assert state_repo.cleared == [22]
     assert suggested_actions == ["Opslaan", "Pas aan"]
+
+
+def test_deterministic_flow_turn_ignores_modern_strategy_flow_state():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+
+    result = asyncio.run(
+        assistant._build_deterministic_flow_turn(
+            user_id=23,
+            user_query="voor mijn setup BTC Swing Blueprint",
+            conv_state={
+                "current_flow": "strategy_creation",
+                "slots": {
+                    "draft": {"draft_kind": "strategy"},
+                    "state_bucket": "transactional_state",
+                    "version": 2,
+                },
+                "status": "collecting",
+            },
+            resolved_symbol="BTC",
+        )
+    )
+
+    assert result is None
 
 
 def test_conversation_state_repo_restores_collecting_status_from_saved_flow():

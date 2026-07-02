@@ -1646,7 +1646,7 @@ class AiAssistantService:
             return None
 
         flow_name = str(conv_state.get("current_flow") or "").strip().lower()
-        if flow_name not in {"setup_creation", "strategy_creation", "bot_creation"}:
+        if flow_name not in {"setup_creation"}:
             return None
         if str(conv_state.get("status") or "").strip().lower() != "collecting":
             return None

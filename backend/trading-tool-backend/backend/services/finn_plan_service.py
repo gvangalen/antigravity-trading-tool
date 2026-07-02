@@ -5207,6 +5207,17 @@ class FinnPlanService:
         setup_options = []
         if "setup_id" in validation["missing_fields"]:
             setup_options = await self._strategy_setup_options(user_id, draft)
+            if len(setup_options) == 1 and draft.get("operation") != "update":
+                draft["setup_id"] = setup_options[0].get("id")
+                if not draft.get("asset"):
+                    draft["asset"] = setup_options[0].get("symbol")
+                if not draft.get("timeframe"):
+                    draft["timeframe"] = setup_options[0].get("timeframe")
+                if not draft.get("setup_type"):
+                    draft["setup_type"] = setup_options[0].get("setup_type")
+                await self._hydrate_strategy_draft_from_db(user_id, draft)
+                validation = self._validate_strategy_draft(draft)
+                setup_options = []
 
         actions = []
         if validation["can_confirm"]:

@@ -406,6 +406,19 @@ def _is_legacy_transactional_flow_name(flow_name: Optional[str]) -> bool:
     }
 
 
+def _is_modern_transactional_state_record(state: Optional[dict]) -> bool:
+    if not isinstance(state, dict):
+        return False
+    slots = state.get("slots")
+    if not isinstance(slots, dict):
+        return False
+    if slots.get("state_bucket") == "transactional_state":
+        return True
+    if isinstance(slots.get("draft"), dict):
+        return True
+    return bool(slots.get("version"))
+
+
 def _build_profile_saved_envelope(profile: Dict[str, Any]) -> Dict[str, Any]:
     summary = build_trader_profile_summary(profile)
     lines = []
@@ -1382,9 +1395,13 @@ async def assistant_chat(
             )
         active_legacy_state = await service.state_repo.get_state(user_id)
         active_legacy_flow = str((active_legacy_state or {}).get("current_flow") or "").lower()
-        if _is_legacy_transactional_flow_name(active_legacy_flow):
+        should_resume_legacy_transaction = (
+            _is_legacy_transactional_flow_name(active_legacy_flow)
+            and not _is_modern_transactional_state_record(active_legacy_state)
+        )
+        if should_resume_legacy_transaction:
             context_payload["current_flow"] = active_legacy_flow
-        if _should_prefer_legacy_setup_flow(request.query, context_payload) or _is_legacy_transactional_flow_name(active_legacy_flow):
+        if _should_prefer_legacy_setup_flow(request.query, context_payload) or should_resume_legacy_transaction:
             response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
                 user_id, request.query, request.history, context_payload, trace_id=trace_id, session_id=request.session_id
             )
@@ -1924,9 +1941,13 @@ async def assistant_chat_stream(
 
             active_legacy_state = await service.state_repo.get_state(user_id)
             active_legacy_flow = str((active_legacy_state or {}).get("current_flow") or "").lower()
-            if _is_legacy_transactional_flow_name(active_legacy_flow):
+            should_resume_legacy_transaction = (
+                _is_legacy_transactional_flow_name(active_legacy_flow)
+                and not _is_modern_transactional_state_record(active_legacy_state)
+            )
+            if should_resume_legacy_transaction:
                 context_payload["current_flow"] = active_legacy_flow
-            if _should_prefer_legacy_setup_flow(request.query, context_payload) or _is_legacy_transactional_flow_name(active_legacy_flow):
+            if _should_prefer_legacy_setup_flow(request.query, context_payload) or should_resume_legacy_transaction:
                 async for chunk in service.get_chat_response_stream(
                     user_id,
                     request.query,
