@@ -1168,6 +1168,7 @@ async def _prepare_finn_envelope(
 
 async def _finalize_legacy_response(
     *,
+    service: AiAssistantService,
     response: Optional[str],
     action: Optional[dict],
     draft: Optional[dict],
@@ -1182,7 +1183,6 @@ async def _finalize_legacy_response(
     context_payload: Optional[dict],
     started_at: float,
 ) -> AssistantChatResponse:
-    service = AiAssistantService()
     intent = service._classify_intent(query)
     if not isinstance(action, dict):
         action = None
@@ -1374,6 +1374,7 @@ async def assistant_chat(
                 user_id, request.query, request.history, context_payload, trace_id=trace_id, session_id=request.session_id
             )
             return await _finalize_legacy_response(
+                service=service,
                 response=response,
                 action=action,
                 draft=draft,
