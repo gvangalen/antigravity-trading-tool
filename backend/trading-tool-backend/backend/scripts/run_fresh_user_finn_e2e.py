@@ -154,9 +154,55 @@ def find_saved_setup(setups: List[Dict[str, Any]], symbol: str) -> Optional[Dict
 
 def find_saved_bot(configs: List[Dict[str, Any]], strategy_id: int) -> Optional[Dict[str, Any]]:
     for config in configs:
-        if int(config.get("strategy_id") or 0) == int(strategy_id):
+        config_strategy_id = (
+            config.get("strategy_id")
+            or ((config.get("strategy") or {}).get("id") if isinstance(config.get("strategy"), dict) else None)
+        )
+        if int(config_strategy_id or 0) == int(strategy_id):
             return config
     return None
+
+
+def onboarding_completed(payload: Dict[str, Any]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("completed") is True:
+        return True
+    return bool(payload.get("onboarding_complete"))
+
+
+def normalize_watchlist(payload: Any) -> List[str]:
+    if isinstance(payload, list):
+        return [str(item).upper() for item in payload]
+    return []
+
+
+def step_ok_from_execute(payload: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("ok") is True:
+        return True
+    if str(payload.get("status") or "").lower() == "success":
+        return True
+    result = payload.get("result")
+    if isinstance(result, dict) and str(result.get("status") or "").lower() == "success":
+        return True
+    return False
+
+
+def nested_setup_id(payload: Any) -> int:
+    if not isinstance(payload, dict):
+        return 0
+    setup = payload.get("setup")
+    if isinstance(setup, dict):
+        return int(setup.get("id") or 0)
+    return 0
+
+
+def nested_strategy_id(payload: Any) -> int:
+    if not isinstance(payload, dict):
+        return 0
+    return int(payload.get("id") or 0)
 
 
 def create_or_follow_up_setup(api: ApiSession, symbol: str = "BTC") -> Dict[str, Any]:
@@ -206,6 +252,7 @@ def create_or_follow_up_setup(api: ApiSession, symbol: str = "BTC") -> Dict[str,
 
 
 def create_or_follow_up_strategy(api: ApiSession, setup_id: int, symbol: str = "BTC") -> Dict[str, Any]:
+    session_id = f"fresh-strategy-{uuid.uuid4().hex[:8]}"
     ctx = {"page": "strategy", "setup_id": setup_id, "setup_symbol": symbol}
     _, payload = api.request(
         "POST",
@@ -214,7 +261,7 @@ def create_or_follow_up_strategy(api: ApiSession, setup_id: int, symbol: str = "
             "query": "Maak hier een strategie van met duidelijke entry, invalidatie en risk management.",
             "context": ctx,
             "history": [],
-            "session_id": f"fresh-strategy-{uuid.uuid4().hex[:8]}",
+            "session_id": session_id,
         },
     )
 
@@ -223,9 +270,9 @@ def create_or_follow_up_strategy(api: ApiSession, setup_id: int, symbol: str = "
         "timeframe": "4H",
         "setup_id": str(setup_id),
         "strategy.base_amount_eur": "100 euro",
-        "strategy.entry": "entry 4H pullback",
-        "strategy.stop_loss": "stop loss 3 procent onder invalidatie",
-        "strategy.targets": "targets 1.5R en 2R",
+        "strategy.entry": "Entry 62000",
+        "strategy.stop_loss": "Stop loss 59800",
+        "strategy.targets": "Targets 64500 en 67000",
         "strategy.entry_type": "limit entry",
         "strategy.market_execution_ack": "ik wil limit entry",
     }
@@ -243,13 +290,14 @@ def create_or_follow_up_strategy(api: ApiSession, setup_id: int, symbol: str = "
                 "query": answer,
                 "context": {"finn_draft": current.get("draft"), "page": "strategy", "setup_id": setup_id, "setup_symbol": symbol},
                 "history": [],
-                "session_id": f"fresh-strategy-{uuid.uuid4().hex[:8]}",
+                "session_id": session_id,
             },
         )
     return current
 
 
 def create_or_follow_up_bot(api: ApiSession, strategy_id: int, symbol: str = "BTC") -> Dict[str, Any]:
+    session_id = f"fresh-bot-{uuid.uuid4().hex[:8]}"
     ctx = {"page": "bot", "strategy_id": strategy_id, "symbol": symbol}
     _, payload = api.request(
         "POST",
@@ -258,7 +306,7 @@ def create_or_follow_up_bot(api: ApiSession, strategy_id: int, symbol: str = "BT
             "query": "Maak een wekelijkse BTC DCA van 100 euro.",
             "context": ctx,
             "history": [],
-            "session_id": f"fresh-bot-{uuid.uuid4().hex[:8]}",
+            "session_id": session_id,
         },
     )
 
@@ -285,7 +333,7 @@ def create_or_follow_up_bot(api: ApiSession, strategy_id: int, symbol: str = "BT
                 "query": answer,
                 "context": {"finn_draft": current.get("draft"), "page": "bot", "strategy_id": strategy_id, "symbol": symbol},
                 "history": [],
-                "session_id": f"fresh-bot-{uuid.uuid4().hex[:8]}",
+                "session_id": session_id,
             },
         )
     return current
@@ -362,9 +410,9 @@ def run_flow(api: ApiSession, first_name: str, email: str, password: str) -> Tup
     collected["onboarding_finish"] = finish
     add(
         "onboarding_finish",
-        bool(finish.get("completed")),
+        onboarding_completed(finish),
         "Nieuwe user kan onboarding afronden",
-        f"completed={finish.get('completed')} progress={finish.get('progress_percent')}",
+        f"completed={finish.get('completed')} onboarding_complete={finish.get('onboarding_complete')} progress={finish.get('progress_percent')}",
         {"response": finish},
     )
 
@@ -401,16 +449,22 @@ def run_flow(api: ApiSession, first_name: str, email: str, password: str) -> Tup
         _, setup_exec = api.request("POST", "/api/assistant/actions/execute", json_body={"action_id": setup_action})
     _, setups = api.request("GET", "/api/setups")
     saved_setup = find_saved_setup(setups if isinstance(setups, list) else [], "BTC")
-    collected["setup"] = {"chat": setup_payload, "execute": setup_exec, "setups": setups}
+    setup_saved_ok = bool(saved_setup) and step_ok_from_execute(setup_exec)
+    collected["setup"] = {"chat": setup_payload, "execute": setup_exec, "setups": setups, "saved_ok": setup_saved_ok}
     add(
         "setup_save",
-        bool(saved_setup and (setup_exec or {}).get("ok")),
+        setup_saved_ok,
         "Setup wordt echt opgeslagen en blijft leesbaar",
         pretty({"execute": setup_exec, "saved_setup": saved_setup}),
-        {"chat": setup_payload, "execute": setup_exec, "setups": setups},
+        {"chat": setup_payload, "execute": setup_exec, "setups": setups, "saved_setup": saved_setup, "saved_ok": setup_saved_ok},
     )
 
-    setup_id = int((setup_exec or {}).get("setup_id") or (saved_setup or {}).get("id") or 0)
+    setup_id = int(
+        (setup_exec or {}).get("setup_id")
+        or nested_setup_id((setup_exec or {}).get("result"))
+        or (saved_setup or {}).get("id")
+        or 0
+    )
     # strategy creation
     strategy_payload = create_or_follow_up_strategy(api, setup_id, "BTC")
     strategy_action = extract_action_id(strategy_payload)
@@ -419,16 +473,22 @@ def run_flow(api: ApiSession, first_name: str, email: str, password: str) -> Tup
         _, strategy_exec = api.request("POST", "/api/assistant/actions/execute", json_body={"action_id": strategy_action})
     _, strategies = api.request("GET", f"/api/strategies/by_setup/{setup_id}")
     strategy_ok = isinstance(strategies, dict) and int(strategies.get("id") or 0) > 0
-    collected["strategy"] = {"chat": strategy_payload, "execute": strategy_exec, "strategy": strategies}
+    strategy_saved_ok = bool(strategy_ok) and step_ok_from_execute(strategy_exec)
+    collected["strategy"] = {"chat": strategy_payload, "execute": strategy_exec, "strategy": strategies, "saved_ok": strategy_saved_ok}
     add(
         "strategy_save",
-        bool(strategy_ok and (strategy_exec or {}).get("ok")),
+        strategy_saved_ok,
         "Strategie wordt echt opgeslagen en gekoppeld aan setup",
         pretty({"execute": strategy_exec, "strategy": strategies}),
-        {"chat": strategy_payload, "execute": strategy_exec, "strategy": strategies},
+        {"chat": strategy_payload, "execute": strategy_exec, "strategy": strategies, "saved_ok": strategy_saved_ok},
     )
 
-    strategy_id = int((strategy_exec or {}).get("strategy_id") or (strategies or {}).get("id") or 0)
+    strategy_id = int(
+        (strategy_exec or {}).get("strategy_id")
+        or nested_strategy_id((strategy_exec or {}).get("result"))
+        or (strategies or {}).get("id")
+        or 0
+    )
     # bot/dca creation
     bot_payload = create_or_follow_up_bot(api, strategy_id, "BTC")
     bot_action = extract_action_id(bot_payload)
@@ -437,13 +497,14 @@ def run_flow(api: ApiSession, first_name: str, email: str, password: str) -> Tup
         _, bot_exec = api.request("POST", "/api/assistant/actions/execute", json_body={"action_id": bot_action})
     _, bots = api.request("GET", "/api/bot/configs")
     saved_bot = find_saved_bot(bots if isinstance(bots, list) else [], strategy_id)
-    collected["bot"] = {"chat": bot_payload, "execute": bot_exec, "bots": bots}
+    bot_saved_ok = bool(step_ok_from_execute(bot_exec) and (saved_bot or (bot_exec or {}).get("bot_id")))
+    collected["bot"] = {"chat": bot_payload, "execute": bot_exec, "bots": bots, "saved_bot": saved_bot, "saved_ok": bot_saved_ok}
     add(
         "bot_save",
-        bool(saved_bot and (bot_exec or {}).get("ok")),
+        bot_saved_ok,
         "Bot/DCA-draft wordt echt opgeslagen of confirmable bot wordt aangemaakt",
         pretty({"execute": bot_exec, "saved_bot": saved_bot}),
-        {"chat": bot_payload, "execute": bot_exec, "bots": bots},
+        {"chat": bot_payload, "execute": bot_exec, "bots": bots, "saved_bot": saved_bot, "saved_ok": bot_saved_ok},
     )
 
     # dashboard and persistence
@@ -459,7 +520,7 @@ def run_flow(api: ApiSession, first_name: str, email: str, password: str) -> Tup
         "strategy_last": strategy_last,
         "bot_today": bot_today,
     }
-    dashboard_ok = "BTC" in [str(item).upper() for item in watchlist_after]
+    dashboard_ok = "BTC" in normalize_watchlist(watchlist_after)
     add(
         "dashboard_check",
         dashboard_ok,
@@ -474,7 +535,7 @@ def run_flow(api: ApiSession, first_name: str, email: str, password: str) -> Tup
     _, watchlist_relogin = api.request("GET", "/api/watchlist")
     _, setup_last_relogin = api.request("GET", "/api/setups/last")
     _, strategy_last_relogin = api.request("GET", "/api/strategies/last")
-    persisted = "BTC" in [str(item).upper() for item in watchlist_relogin]
+    persisted = "BTC" in normalize_watchlist(watchlist_relogin)
     add(
         "logout_login_persistence",
         persisted,
@@ -500,18 +561,21 @@ def run_isolation_check(
     _, setup_last_b = user_b.request("GET", "/api/setups/last")
     _, strategy_last_b = user_b.request("GET", "/api/strategies/last")
 
-    a_watchlist = [str(item).upper() for item in user_a_data.get("dashboard", {}).get("watchlist", [])]
-    b_watchlist = [str(item).upper() for item in watchlist_b]
+    a_watchlist = normalize_watchlist(user_a_data.get("dashboard", {}).get("watchlist"))
+    b_watchlist = normalize_watchlist(watchlist_b)
     leak = False
     reasons = []
     if "BTC" in b_watchlist and "BTC" in a_watchlist:
         # BTC alone is too generic to prove a leak; compare ids too.
         pass
 
-    a_setup_id = int((user_a_data.get("dashboard", {}).get("setup_last") or {}).get("setup", {}).get("id") or 0)
-    b_setup_id = int((setup_last_b or {}).get("setup", {}).get("id") or 0)
-    a_strategy_id = int((user_a_data.get("dashboard", {}).get("strategy_last") or {}).get("id") or 0)
-    b_strategy_id = int((strategy_last_b or {}).get("id") or 0)
+    a_setup = (user_a_data.get("dashboard", {}).get("setup_last") or {}).get("setup")
+    a_setup_id = int((a_setup or {}).get("id") or 0) if isinstance(a_setup, dict) else 0
+    b_setup = (setup_last_b or {}).get("setup") if isinstance(setup_last_b, dict) else None
+    b_setup_id = int((b_setup or {}).get("id") or 0)
+    a_strategy = user_a_data.get("dashboard", {}).get("strategy_last")
+    a_strategy_id = int((a_strategy or {}).get("id") or 0) if isinstance(a_strategy, dict) else 0
+    b_strategy_id = int((strategy_last_b or {}).get("id") or 0) if isinstance(strategy_last_b, dict) else 0
 
     if a_setup_id and b_setup_id and a_setup_id == b_setup_id:
         leak = True

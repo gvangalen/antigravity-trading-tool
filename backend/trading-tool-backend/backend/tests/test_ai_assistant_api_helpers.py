@@ -212,6 +212,60 @@ def test_ensure_pending_action_ids_turns_legacy_setup_draft_into_confirmable_act
     assert payload["actions"][0]["label"] == "Setup opslaan"
 
 
+def test_finalize_legacy_response_returns_confirmable_action_payload(monkeypatch):
+    class _Service:
+        def _classify_intent(self, query):
+            return "setup_creation"
+
+    class _Finn:
+        def _build_response_analysis_metadata(self, response, context_payload, route_source="legacy"):
+            return response
+
+        def _response_mode_for_flow(self, flow, draft):
+            return "transactional"
+
+    async def _fake_register(self, user_id, action_type, payload, trace_id=None, ttl_seconds=600):
+        assert user_id == 7
+        assert action_type == "setup"
+        return "act_setup_final"
+
+    monkeypatch.setattr(api.AiActionEngine, "register_pending_action", _fake_register)
+    monkeypatch.setattr(api, "_log_finn_prompt_audit", lambda **kwargs: None)
+    monkeypatch.setattr(api, "_record_finn_product_event", lambda **kwargs: {})
+    monkeypatch.setattr(api, "_record_behavioral_response_events", lambda **kwargs: None)
+
+    result = asyncio.run(api._finalize_legacy_response(
+        service=_Service(),
+        response="Je setup staat klaar.",
+        action=None,
+        draft={
+            "type": "setup",
+            "payload": {
+                "name": "BTC Trade 4H",
+                "symbol": "BTC",
+                "setup_type": "trade",
+                "timeframe": "4H",
+            },
+        },
+        state={"current_flow": "setup_creation"},
+        reasoning=None,
+        suggested_actions=["Opslaan"],
+        session_id="sess-1",
+        finn=_Finn(),
+        user_id=7,
+        trace_id="trace-legacy-final",
+        db=object(),
+        query="Maak een setup voor BTC.",
+        context_payload={"locale": "nl"},
+        started_at=0.0,
+    ))
+
+    assert result.can_confirm is True
+    assert result.actions[0]["action_id"] == "act_setup_final"
+    assert result.action["type"] == "setup"
+    assert result.draft["type"] == "setup"
+
+
 def test_setup_strategy_listing_detection_matches_real_prompt():
     assert api._looks_like_setup_strategy_listing_request("Laat mijn actieve setups en strategieën zien.") is True
 
