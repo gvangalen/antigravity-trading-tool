@@ -1582,12 +1582,9 @@ class AiAssistantService:
         if not flow:
             return conv_state
 
-        # Check for immediate finalization override ("maak de setup", "finaliseer")
+        # Explicit confirmation requests may finalize the flow, but only once the
+        # required slots are actually present. Otherwise we stay in collection mode.
         is_explicit_finalize = any(w in q_lower for w in ["maak de setup", "maak nu", "opslaan", "finaliseer", "bevestig", "approve", "akkoord", "bevestig setup"])
-        if is_explicit_finalize:
-            conv_state["status"] = "complete"
-            logger.info(f"🏁 [Deterministic-Pre-Parser] Forced completion for flow '{flow_name}' upon request: {user_query}")
-            return conv_state
 
         updated = False
 
@@ -1765,6 +1762,17 @@ class AiAssistantService:
 
         return ""
 
+    def _setup_slots_ready_for_draft(self, slots: Optional[dict]) -> bool:
+        current_slots = slots or {}
+        setup_type = str(current_slots.get("setup_type") or "").lower()
+        if not current_slots.get("symbol") or not setup_type:
+            return False
+        if setup_type == "trade":
+            return bool(current_slots.get("timeframe"))
+        if setup_type == "dca":
+            return bool(current_slots.get("timeframe")) and bool(current_slots.get("dca_frequency"))
+        return False
+
     async def _build_deterministic_flow_turn(
         self,
         *,
@@ -1783,25 +1791,17 @@ class AiAssistantService:
             return None
 
         slots = dict(conv_state.get("slots") or {})
-        if flow_name == "setup_creation" and slots.get("setup_type") == "dca" and not slots.get("timeframe"):
-            frequency_to_timeframe = {
-                "daily": "1D",
-                "weekly": "1W",
-                "monthly": "1M",
-            }
-            inferred_timeframe = frequency_to_timeframe.get(str(slots.get("dca_frequency") or "").lower())
-            if inferred_timeframe:
-                slots["timeframe"] = inferred_timeframe
         missing_slots = self._get_missing_flow_slots(flow_name, slots)
         state_payload = {
             "current_flow": flow_name,
             "asset": slots.get("symbol") or resolved_symbol,
             "slots": slots,
             "missing_slots": missing_slots,
+            "missing_fields": missing_slots,
             "status": "collecting",
         }
 
-        if not missing_slots:
+        if not missing_slots and self._setup_slots_ready_for_draft(slots):
             draft = self._build_deterministic_draft(conv_state)
             await self.state_repo.clear_state(user_id)
             state_reset = {"current_flow": "none", "slots": {}, "status": "none"}
@@ -1824,6 +1824,7 @@ class AiAssistantService:
         if not question:
             return None
 
+        state_payload["next_question"] = next_slot
         redirect_reason = str(conv_state.get("redirect_reason") or "").strip().lower()
         if redirect_reason == "no_setup":
             prefix = _localized_example_text(getattr(self, "_active_preferences", None), "no_setup", slots.get("symbol") or resolved_symbol)
@@ -1860,30 +1861,38 @@ class AiAssistantService:
 
         if flow_name == "setup_creation":
             setup_type = slots.get("setup_type", "trade")
-            timeframe = slots.get("timeframe") or ("1W" if setup_type == "dca" else "4H")
+            timeframe = slots.get("timeframe")
             payload = {
-                "name": slots.get("name") or _default_setup_name(symbol, setup_type, timeframe),
                 "symbol": symbol,
                 "setup_type": setup_type,
-                "timeframe": timeframe,
-                "market_condition": slots.get("market_condition", "neutral"),
             }
+            if timeframe:
+                payload["timeframe"] = timeframe
+            if slots.get("name"):
+                payload["name"] = slots.get("name")
+            elif timeframe:
+                payload["name"] = _default_setup_name(symbol, setup_type, timeframe)
+            if slots.get("market_condition"):
+                payload["market_condition"] = slots.get("market_condition")
             if setup_type == "dca":
-                payload["dca_frequency"] = slots.get("dca_frequency", "weekly")
-                payload["dca_day"] = "monday"
-                payload["min_macro_score"] = 30
-                payload["max_macro_score"] = 70
-                payload["min_technical_score"] = 40
-                payload["max_technical_score"] = 80
-                payload["min_market_score"] = 20
-                payload["max_market_score"] = 60
-            else:
-                payload["min_macro_score"] = 30
-                payload["max_macro_score"] = 70
-                payload["min_technical_score"] = 40
-                payload["max_technical_score"] = 80
-                payload["min_market_score"] = 20
-                payload["max_market_score"] = 60
+                if slots.get("dca_frequency"):
+                    payload["dca_frequency"] = slots.get("dca_frequency")
+                if slots.get("dca_day"):
+                    payload["dca_day"] = slots.get("dca_day")
+                if slots.get("dca_month_day"):
+                    payload["dca_month_day"] = slots.get("dca_month_day")
+            if slots.get("min_macro_score") is not None:
+                payload["min_macro_score"] = slots.get("min_macro_score")
+            if slots.get("max_macro_score") is not None:
+                payload["max_macro_score"] = slots.get("max_macro_score")
+            if slots.get("min_technical_score") is not None:
+                payload["min_technical_score"] = slots.get("min_technical_score")
+            if slots.get("max_technical_score") is not None:
+                payload["max_technical_score"] = slots.get("max_technical_score")
+            if slots.get("min_market_score") is not None:
+                payload["min_market_score"] = slots.get("min_market_score")
+            if slots.get("max_market_score") is not None:
+                payload["max_market_score"] = slots.get("max_market_score")
             return {
                 "type": "setup",
                 "payload": payload

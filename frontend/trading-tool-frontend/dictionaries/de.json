@@ -2914,7 +2914,8 @@
     },
     "draftStatus": {
       "canceled": "✕ Concept canceled",
-      "saved": "✓ Concept saved successfully!"
+      "saved": "✓ Concept saved successfully!",
+      "collectingDetails": "Finn sammelt zuerst die Kernentscheidungen und zeigt danach erst die vollstaendige Entwurfskarte."
     },
     "universalAction": {
       "executionError": "Error while executing this action.",

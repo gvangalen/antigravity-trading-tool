@@ -247,7 +247,7 @@ def test_finalize_legacy_response_returns_confirmable_action_payload(monkeypatch
                 "timeframe": "4H",
             },
         },
-        state={"current_flow": "setup_creation"},
+        state={"current_flow": "setup_creation", "missing_slots": ["timeframe"], "next_question": "timeframe"},
         reasoning=None,
         suggested_actions=["Opslaan"],
         session_id="sess-1",
@@ -264,6 +264,8 @@ def test_finalize_legacy_response_returns_confirmable_action_payload(monkeypatch
     assert result.actions[0]["action_id"] == "act_setup_final"
     assert result.action["type"] == "setup"
     assert result.draft["type"] == "setup"
+    assert result.missing_fields == ["timeframe"]
+    assert result.next_question == "timeframe"
 
 
 def test_setup_strategy_listing_detection_matches_real_prompt():
@@ -494,14 +496,13 @@ def test_deterministic_flow_turn_keeps_dca_setup_in_same_flow_after_frequency_an
         )
     )
 
-    assert "staat klaar" in response
+    assert "Welke timeframe" in response
     assert action is None
-    assert draft["type"] == "setup"
-    assert draft["payload"]["symbol"] == "BTC"
-    assert draft["payload"]["setup_type"] == "dca"
-    assert draft["payload"]["dca_frequency"] == "weekly"
-    assert state["current_flow"] == "none"
-    assert suggested_actions == ["Opslaan", "Pas aan"]
+    assert draft is None
+    assert state["current_flow"] == "setup_creation"
+    assert state["missing_slots"] == ["timeframe"]
+    assert state["next_question"] == "timeframe"
+    assert suggested_actions is None
 
 
 def test_deterministic_flow_turn_finishes_setup_without_llm_when_slots_complete():
@@ -528,6 +529,7 @@ def test_deterministic_flow_turn_finishes_setup_without_llm_when_slots_complete(
                 "slots": {
                     "symbol": "BTC",
                     "setup_type": "dca",
+                    "timeframe": "1W",
                     "dca_frequency": "weekly",
                     "market_condition": "neutral",
                     "name": "BTC DCA",
@@ -543,7 +545,10 @@ def test_deterministic_flow_turn_finishes_setup_without_llm_when_slots_complete(
     assert draft["type"] == "setup"
     assert draft["payload"]["symbol"] == "BTC"
     assert draft["payload"]["setup_type"] == "dca"
+    assert draft["payload"]["timeframe"] == "1W"
     assert draft["payload"]["dca_frequency"] == "weekly"
+    assert "min_macro_score" not in draft["payload"]
+    assert "dca_day" not in draft["payload"]
     assert state["current_flow"] == "none"
     assert state_repo.cleared == [22]
     assert suggested_actions == ["Opslaan", "Pas aan"]
@@ -595,9 +600,40 @@ def test_trade_setup_prompt_parses_entry_timeframe_and_builds_trade_draft():
     assert draft["payload"]["setup_type"] == "trade"
     assert draft["payload"]["timeframe"] == "4H"
     assert draft["payload"]["name"] == "BTC Trade 4H"
-    assert draft["payload"]["market_condition"] == "neutral"
+    assert "market_condition" not in draft["payload"]
     assert state["current_flow"] == "none"
     assert suggested_actions == ["Opslaan", "Pas aan"]
+
+
+def test_explicit_finalize_does_not_complete_incomplete_setup_flow():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+
+    conv_state = asyncio.run(
+        assistant._deterministic_pre_parse_slots(
+            "maak de setup",
+            {
+                "current_flow": "setup_creation",
+                "slots": {"symbol": "BTC", "setup_type": "dca"},
+                "status": "collecting",
+            },
+            "BTC",
+            90,
+        )
+    )
+
+    assert conv_state["status"] == "collecting"
+    assert conv_state["current_flow"] == "setup_creation"
 
 
 def test_deterministic_flow_turn_ignores_modern_strategy_flow_state():

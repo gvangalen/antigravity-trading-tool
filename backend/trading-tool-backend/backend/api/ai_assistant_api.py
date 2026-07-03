@@ -1433,6 +1433,9 @@ async def _finalize_legacy_response(
         "draft": draft,
         "state": state,
         "actions": action and [action] or [],
+        "missing_fields": (state or {}).get("missing_fields") or (state or {}).get("missing_slots") or [],
+        "next_question": (state or {}).get("next_question"),
+        "can_confirm": False,
     }
     if db is not None:
         legacy_response = await _ensure_pending_action_ids(

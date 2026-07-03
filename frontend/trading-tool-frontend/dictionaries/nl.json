@@ -2915,7 +2915,8 @@
     },
     "draftStatus": {
       "canceled": "✕ Concept geannuleerd",
-      "saved": "✓ Concept succesvol opgeslagen!"
+      "saved": "✓ Concept succesvol opgeslagen!",
+      "collectingDetails": "Finn verzamelt eerst de kernkeuzes en laat daarna pas de volledige conceptkaart zien."
     },
     "universalAction": {
       "executionError": "Fout bij het uitvoeren van deze actie.",

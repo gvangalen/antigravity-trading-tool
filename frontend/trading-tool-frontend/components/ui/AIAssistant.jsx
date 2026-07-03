@@ -3834,8 +3834,19 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       if (!raw) return "";
       const explicit = {
         "dca.frequency": at("fieldLabels.dca.frequency", "DCA frequentie"),
+        "dca_frequency": at("fieldLabels.dca.frequency", "DCA frequentie"),
+        "dca.day": at("fieldLabels.dca.day", "DCA weekdag"),
+        "dca_day": at("fieldLabels.dca.day", "DCA weekdag"),
+        "dca.month_day": at("fieldLabels.dca.month_day", "DCA maanddag"),
+        "dca_month_day": at("fieldLabels.dca.month_day", "DCA maanddag"),
         "strategy.base_amount_eur": at("fieldLabels.strategy.base_amount_eur", "Basisbedrag"),
+        "base_amount": at("fieldLabels.strategy.base_amount_eur", "Basisbedrag"),
+        "base_amount_eur": at("fieldLabels.strategy.base_amount_eur", "Basisbedrag"),
         "setup.name": at("fieldLabels.setup.name", "Naam"),
+        "name": at("fieldLabels.setup.name", "Naam"),
+        "timeframe": at("fieldLabels.setup.timeframe", "Timeframe"),
+        "setup_type": at("draftRows.setupType", "Setup type"),
+        "symbol": at("fieldLabels.asset", "Asset"),
       };
       if (explicit[raw]) return explicit[raw];
       const parts = raw.split(".");
@@ -3918,6 +3929,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       if (Array.isArray(value)) return value.length > 0;
       return true;
     };
+    const showMissingFieldBadges = !isCollecting || !visibleNextQuestion;
 
     const rows = [
       [draftRowsText.type, valueLabel(isFinnIndicator ? "indicator_config" : (isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type)))],
@@ -3961,6 +3973,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       if (!isCollecting) return true;
       return hasMeaningfulValue(value);
     });
+    const shouldRenderDraftRows = rows.length > 0;
 
     return (
       <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-4">
@@ -3968,14 +3981,20 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <ListChecks size={13} />
           {draftTitle}
         </div>
-        <div className="grid grid-cols-1 gap-2">
-          {rows.map(([label, value]) => (
-            <div key={label} className="flex items-center justify-between gap-4 border-b border-blue-100/70 dark:border-blue-900/30 pb-2 last:border-b-0 last:pb-0">
-              <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{label}</span>
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-100 text-right">{value || "—"}</span>
-            </div>
-          ))}
-        </div>
+        {shouldRenderDraftRows ? (
+          <div className="grid grid-cols-1 gap-2">
+            {rows.map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-4 border-b border-blue-100/70 dark:border-blue-900/30 pb-2 last:border-b-0 last:pb-0">
+                <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{label}</span>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-100 text-right">{value || "—"}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/70 dark:bg-slate-950/30 px-3 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200">
+            {at("draftStatus.collectingDetails", "Finn verzamelt eerst de kernkeuzes en laat daarna pas de volledige conceptkaart zien.")}
+          </div>
+        )}
         {isFinnStrategy && setupOptions.length > 0 && (
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/70 dark:bg-slate-950/30 p-3 space-y-2">
             <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">{uiText.chooseSetup}</div>
@@ -4110,7 +4129,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         )}
         {(visibleMissingFields.length > 0 || message.invalidFields?.length > 0 || visibleNextQuestion) && (
           <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-950/20 p-3 space-y-2">
-            {visibleMissingFields.length > 0 && (
+            {showMissingFieldBadges && visibleMissingFields.length > 0 && (
               <div>
                 <div className="text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">{uiText.missingStill}</div>
                 <div className="mt-1 flex flex-wrap gap-1.5">
@@ -4890,7 +4909,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             let shouldShowCard = false;
             
             if (flow === "setup_creation") {
-              shouldShowCard = !!(slots.setup_type && slots.market_condition);
+              const hasCoreChoice = !!slots.setup_type;
+              const hasMeaningfulProgress = !!(slots.timeframe || slots.dca_frequency || slots.name);
+              shouldShowCard = hasCoreChoice && hasMeaningfulProgress;
             } else if (flow === "strategy_creation") {
               shouldShowCard = !!(slots.setup_type && slots.base_amount);
             } else if (flow === "bot_creation") {

@@ -2851,7 +2851,8 @@
     },
     "draftStatus": {
       "canceled": "✕ Concept canceled",
-      "saved": "✓ Concept saved successfully!"
+      "saved": "✓ Concept saved successfully!",
+      "collectingDetails": "Finn first collects the core choices and only then shows the full draft card."
     },
     "universalAction": {
       "executionError": "Error while executing this action.",
