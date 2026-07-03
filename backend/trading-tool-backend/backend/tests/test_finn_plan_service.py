@@ -2299,10 +2299,10 @@ def test_plan_request_does_not_swallow_strategy_or_bot_queries():
     assert service.looks_like_plan_request("maak een bot voor mijn btc strategie") is False
 
 
-def test_plan_request_does_not_swallow_setup_creation_prompt():
+def test_plan_request_routes_setup_creation_prompt_into_modern_plan_flow():
     service = _service()
 
-    assert service.looks_like_plan_request("Maak een setup voor BTC swing trading met daily trend en 4H entry.") is False
+    assert service.looks_like_plan_request("Maak een setup voor BTC swing trading met daily trend en 4H entry.") is True
 
 
 def test_plan_summary_hides_internal_default_ranges_and_automation_labels():
@@ -3744,7 +3744,7 @@ def test_daily_coach_request_detection_is_separate_from_status_and_plan_creation
     assert service.looks_like_status_request("Welke score blokkeert mijn BTC setup?") is True
     assert service.looks_like_daily_coach_request("Welke score blokkeert mijn BTC setup?") is False
     assert service.looks_like_daily_coach_request("Maak een setup voor BTC swing trading met daily trend en 4H entry") is False
-    assert service.looks_like_plan_request("Maak een setup voor BTC swing trading met daily trend en 4H entry") is False
+    assert service.looks_like_plan_request("Maak een setup voor BTC swing trading met daily trend en 4H entry") is True
     assert service.looks_like_daily_score_refresh_request("Ververs daily scores voor BTC") is True
     assert service.looks_like_bot_decision_request("Maak bot-decision voor BTC") is True
 

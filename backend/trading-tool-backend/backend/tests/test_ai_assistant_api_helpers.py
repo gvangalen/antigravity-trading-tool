@@ -51,17 +51,18 @@ def test_profile_explain_query_does_not_trigger_profile_capture():
     assert api._looks_like_profile_capture(query) is False
 
 
-def test_setup_creation_queries_prefer_legacy_setup_flow():
-    assert api._should_prefer_legacy_setup_flow("Maak een setup voor BTC swing trading met daily trend en 4H entry.", {}) is True
-    assert api._should_prefer_legacy_setup_flow("kan je een dca setup maken voor btc?", {}) is True
-    assert api._should_prefer_legacy_setup_flow("Kun je voor BTC een swing setup bouwen met daily trend en 4H entry?", {}) is True
+def test_new_setup_creation_queries_do_not_force_legacy_setup_flow():
+    assert api._should_prefer_legacy_setup_flow("Maak een setup voor BTC swing trading met daily trend en 4H entry.", {}) is False
+    assert api._should_prefer_legacy_setup_flow("kan je een dca setup maken voor btc?", {}) is False
+    assert api._should_prefer_legacy_setup_flow("Kun je voor BTC een swing setup bouwen met daily trend en 4H entry?", {}) is False
     assert api._should_prefer_legacy_setup_flow("Wat is mijn profiel?", {"current_flow": "setup_creation"}) is True
 
 
-def test_finn_plan_service_does_not_treat_setup_request_as_full_plan_request():
+def test_finn_plan_service_routes_modern_setup_prompts_into_plan_creation():
     service = FinnPlanService(None)
 
-    assert service.looks_like_plan_request("Kan je een dca setup maken voor BTC?") is False
+    assert service.looks_like_plan_request("Kan je een dca setup maken voor BTC?") is True
+    assert service.looks_like_plan_request("Maak een setup voor BTC swing trading met daily trend en 4H entry.") is True
     assert service.looks_like_plan_request("Maak een wekelijkse BTC DCA van 100 euro.") is True
 
 

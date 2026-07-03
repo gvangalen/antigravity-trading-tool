@@ -502,7 +502,7 @@ def _should_prefer_legacy_setup_flow(query: str, context_payload: Optional[dict]
     current_flow = str(context_payload.get("current_flow") or "").lower()
     if current_flow == "setup_creation":
         return True
-    return _looks_like_explicit_setup_creation_request(query)
+    return False
 
 
 def _is_legacy_transactional_flow_name(flow_name: Optional[str]) -> bool:

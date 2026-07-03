@@ -4155,7 +4155,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             )}
             {visibleNextQuestion && (
               <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                {fieldQuestion(visibleNextQuestion, visibleNextQuestion)}
+                {fieldQuestion(visibleNextQuestion, fieldLabel(visibleNextQuestion, visibleNextQuestion))}
               </div>
             )}
           </div>
