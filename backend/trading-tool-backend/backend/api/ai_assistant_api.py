@@ -4,7 +4,7 @@ import re
 import time
 import uuid
 from copy import deepcopy
-from typing import Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,10 +39,7 @@ from backend.schemas.assistant_schema import (
     ChatMessageResponse,
     ChatSessionDetailResponse,
 )
-from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.finn_product_analytics_service import finn_product_analytics
-from backend.services.finn_plan_service import FinnPlanService
-from backend.services.ai_gateway import AiGateway
 from backend.services.locale_service import localize_finn_payload, resolve_locale
 from backend.services.trader_profile_service import (
     build_trader_profile_context,
@@ -59,6 +56,10 @@ from backend.infrastructure.repositories.market_data_repository import MarketDat
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.assistant_context_repository import AssistantContextRepository
+
+if TYPE_CHECKING:
+    from backend.services.ai_assistant_service import AiAssistantService
+    from backend.services.finn_plan_service import FinnPlanService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -533,7 +534,7 @@ def _build_profile_explain_envelope(profile: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def _continue_transactional_follow_up(
-    finn: FinnPlanService,
+    finn: Any,
     user_id: int,
     query: str,
     context_payload: Optional[dict],
@@ -786,7 +787,7 @@ def _legacy_response_is_generic_failure(response_text: Optional[str]) -> bool:
 
 
 def _query_prefers_non_transactional_finn_response(
-    finn: FinnPlanService,
+    finn: Any,
     query: str,
     context_payload: Optional[dict],
 ) -> bool:
@@ -821,7 +822,7 @@ def _query_prefers_non_transactional_finn_response(
 
 
 def _legacy_response_needs_finn_rescue(
-    finn: FinnPlanService,
+    finn: Any,
     query: str,
     context_payload: Optional[dict],
     *,
@@ -846,7 +847,7 @@ def _legacy_response_needs_finn_rescue(
 
 async def _build_finn_core_rescue_envelope(
     *,
-    finn: FinnPlanService,
+    finn: Any,
     user_id: int,
     query: str,
     context_payload: Optional[dict],
@@ -1039,6 +1040,9 @@ def _invalidate_mission_control_cache(user_id: int) -> None:
     _mission_control_cache.pop(int(user_id), None)
 
 async def get_assistant_service(db: AsyncSession = Depends(get_db)):
+    from backend.services.ai_assistant_service import AiAssistantService
+    from backend.services.ai_gateway import AiGateway
+
     score_repo = ScoreRepository(db)
     setup_repo = SetupRepository(db)
     report_repo = ReportRepository(db)
@@ -1055,8 +1059,14 @@ async def get_assistant_service(db: AsyncSession = Depends(get_db)):
     )
 
 
+def _new_finn_plan_service(db: AsyncSession, *, trace_id: Optional[str] = None):
+    from backend.services.finn_plan_service import FinnPlanService
+
+    return FinnPlanService(db, trace_id=trace_id)
+
+
 async def _finalize_finn_response(
-    finn: FinnPlanService,
+    finn: Any,
     user_id: int,
     response: dict,
     trace_id: str,
@@ -1159,7 +1169,7 @@ async def _finalize_finn_response(
 
 
 async def _prepare_finn_envelope(
-    finn: FinnPlanService,
+    finn: Any,
     user_id: int,
     envelope: dict,
     trace_id: str,
@@ -1263,7 +1273,7 @@ async def _prepare_finn_envelope(
 
 async def _finalize_legacy_response(
     *,
-    service: AiAssistantService,
+    service: Any,
     response: Optional[str],
     action: Optional[dict],
     draft: Optional[dict],
@@ -1271,7 +1281,7 @@ async def _finalize_legacy_response(
     reasoning: Optional[str],
     suggested_actions: Optional[list],
     session_id: Optional[str],
-    finn: FinnPlanService,
+    finn: Any,
     user_id: int,
     trace_id: str,
     query: str,
@@ -1396,14 +1406,14 @@ async def assistant_chat(
     raw_request: Request,
     x_trace_id: Optional[str] = Header(None),
     current_user: dict = Depends(get_current_user),
-    service: AiAssistantService = Depends(get_assistant_service),
+    service: Any = Depends(get_assistant_service),
     db: AsyncSession = Depends(get_db),
 ):
     trace_id = x_trace_id or f"trdm-trace-{uuid.uuid4().hex[:8]}-{hex(int(time.time()))[2:]}"
     started_at = time.perf_counter()
     try:
         user_id = current_user["id"]
-        finn = FinnPlanService(db)
+        finn = _new_finn_plan_service(db)
         context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
         context_payload = finn.sanitize_context_for_query(request.query, context_payload)
         context_payload = await _enrich_with_trader_profile(db, user_id, context_payload, query=request.query)
@@ -1934,7 +1944,7 @@ async def assistant_chat_stream(
     raw_request: Request,
     x_trace_id: Optional[str] = Header(None),
     current_user: dict = Depends(get_current_user),
-    service: AiAssistantService = Depends(get_assistant_service),
+    service: Any = Depends(get_assistant_service),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -1947,7 +1957,7 @@ async def assistant_chat_stream(
 
     async def event_generator():
         try:
-            finn = FinnPlanService(db)
+            finn = _new_finn_plan_service(db)
             context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
             context_payload = finn.sanitize_context_for_query(request.query, context_payload)
             context_payload = await _enrich_with_trader_profile(db, user_id, context_payload, query=request.query)
@@ -2391,7 +2401,7 @@ async def update_preferences(
 async def get_insight(
     context: dict,
     current_user: dict = Depends(get_current_user),
-    service: AiAssistantService = Depends(get_assistant_service)
+    service: Any = Depends(get_assistant_service)
 ):
     try:
         user_id = current_user["id"]
@@ -2430,9 +2440,10 @@ async def execute_pending_action(
     _apply_assistant_execute_rate_limit(user_id=user_id, raw_request=request)
     if str(action_id).startswith("finn-"):
         try:
-            finn = FinnPlanService(db, trace_id=trace_id)
+            finn = _new_finn_plan_service(db, trace_id=trace_id)
             result = await finn.execute_issued_action(user_id, str(action_id))
             _invalidate_mission_control_cache(user_id)
+            from backend.services.finn_plan_service import FinnPlanService
             FinnPlanService.invalidate_runtime_caches_for_user(user_id)
             _record_finn_product_event(
                 user_id=user_id,
@@ -2483,7 +2494,7 @@ async def get_finn_state(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    finn = FinnPlanService(db)
+    finn = _new_finn_plan_service(db)
     response = await finn.get_open_plan_state(current_user["id"])
     return await _enrich_with_trader_profile(db, current_user["id"], response)
 
@@ -2498,7 +2509,7 @@ async def get_finn_mission_control(
     cached = _get_cached_mission_control(current_user["id"])
     if cached:
         return cached
-    finn = FinnPlanService(db, trace_id=trace_id)
+    finn = _new_finn_plan_service(db, trace_id=trace_id)
     response = await finn.build_mission_control_response(
         current_user["id"],
         {"page": "assistant", "scope": "mission_control"},
