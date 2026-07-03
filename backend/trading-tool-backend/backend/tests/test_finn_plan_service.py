@@ -2216,19 +2216,19 @@ def test_mission_control_backfills_behavioral_balance_score_from_memory(monkeypa
     assert result["behavioral_balance_score"] is not None
 
 
-def test_one_shot_weekly_dca_is_confirmable_and_creates_bot_by_default():
+def test_one_shot_weekly_dca_stays_in_follow_up_until_schedule_and_bot_choice_are_clear():
     result = _service().build_response("Maak een wekelijkse BTC DCA van 100 euro")
 
-    assert result["can_confirm"] is True
-    assert result["missing_fields"] == []
+    assert result["can_confirm"] is False
+    assert result["missing_fields"] == ["setup.timeframe", "dca.day", "bot.create_bot"]
     assert result["invalid_fields"] == []
     assert result["draft"]["plan_type"] == "dca"
     assert result["draft"]["asset"] == "BTC"
     assert result["draft"]["dca"]["frequency"] == "weekly"
-    assert result["draft"]["dca"]["day"] == "monday"
     assert result["draft"]["strategy"]["base_amount_eur"] == 100
-    assert result["draft"]["bot"]["create_bot"] is True
-    assert result["actions"][0]["type"] == "create_plan"
+    assert result["draft"]["bot"]["create_bot"] is None
+    assert result["next_question"] == "setup.timeframe"
+    assert result["actions"] == []
 
 
 def test_dca_follow_up_merges_missing_amount_into_existing_draft():
@@ -2236,17 +2236,17 @@ def test_dca_follow_up_merges_missing_amount_into_existing_draft():
     first = service.build_response("Maak een wekelijkse ETH DCA")
 
     assert first["can_confirm"] is False
-    assert first["next_question"] == "strategy.base_amount_eur"
+    assert first["next_question"] == "setup.timeframe"
 
     second = service.build_response(
         "Doe maar 75 euro",
         {"finn_draft": first["draft"]},
     )
 
-    assert second["can_confirm"] is True
+    assert second["can_confirm"] is False
     assert second["draft"]["asset"] == "ETH"
     assert second["draft"]["strategy"]["base_amount_eur"] == 75
-    assert second["actions"][0]["payload"]["bot"]["create_bot"] is True
+    assert second["next_question"] == "setup.timeframe"
 
 
 def test_short_plan_follow_up_phrase_is_recognized_with_existing_draft():
@@ -2258,8 +2258,8 @@ def test_short_plan_follow_up_phrase_is_recognized_with_existing_draft():
     second = service.build_response("elke week", {"finn_draft": first["draft"]})
 
     assert second["draft"]["dca"]["frequency"] == "weekly"
-    assert second["next_question"] == "strategy.base_amount_eur"
-    assert second["response"] == "Met welk basisbedrag in euro wil je dit plan uitvoeren?"
+    assert second["next_question"] == "setup.timeframe"
+    assert second["response"] == "Welke timeframe hoort bij dit plan? Bijvoorbeeld 1W voor DCA of 4H/1D voor een trade."
 
 
 def test_short_plan_follow_up_amount_is_recognized_with_existing_draft():
@@ -2272,7 +2272,8 @@ def test_short_plan_follow_up_amount_is_recognized_with_existing_draft():
     third = service.build_response("75 euro", {"finn_draft": second["draft"]})
 
     assert third["draft"]["strategy"]["base_amount_eur"] == 75
-    assert third["can_confirm"] is True
+    assert third["can_confirm"] is False
+    assert third["next_question"] == "setup.timeframe"
 
 
 def test_plan_request_does_not_swallow_indicator_config_query():
@@ -2336,7 +2337,8 @@ def test_trade_plan_with_entry_stop_and_targets_is_confirmable():
     assert result["draft"]["strategy"]["entry"] == 160
     assert result["draft"]["strategy"]["stop_loss"] == 145
     assert result["draft"]["strategy"]["targets"] == [180, 200]
-    assert result["draft"]["bot"]["automation"] == "bot_assisted"
+    assert result["draft"]["bot"]["create_bot"] is None
+    assert result["draft"]["bot"]["automation"] is None
 
 
 def test_trade_plan_understands_natural_breakout_language():
@@ -3236,7 +3238,7 @@ def test_user_can_correct_asset_and_amount_in_follow_up():
 
     corrected = service.build_response("Nee toch ETH en 50 euro", {"finn_draft": first["draft"]})
 
-    assert corrected["can_confirm"] is True
+    assert corrected["can_confirm"] is False
     assert corrected["draft"]["asset"] == "ETH"
     assert corrected["draft"]["strategy"]["base_amount_eur"] == 50
 
@@ -3248,9 +3250,9 @@ def test_user_can_disable_bot_explicitly():
 
     result = service.build_response("Maak een wekelijkse BTC DCA van 100 euro zonder bot")
 
-    assert result["can_confirm"] is True
+    assert result["can_confirm"] is False
     assert result["draft"]["bot"]["create_bot"] is False
-    assert "Bot:" not in result["response"]
+    assert result["next_question"] == "setup.timeframe"
 
 
 def test_bot_strategy_switch_resets_previous_bot_state():
@@ -3370,11 +3372,10 @@ def test_draft_status_analysis_explains_score_ranges():
 def test_plan_response_includes_state_reasoning_and_guardrails():
     result = _service().build_response("Maak een wekelijkse BTC DCA van 100 euro")
 
-    assert result["state"]["status"] == "ready_for_confirmation"
+    assert result["state"]["status"] == "collecting"
     assert result["state"]["autonomy_level"] == "confirm_required"
-    assert result["reasoning"]["confidence_score"] == 0.9
-    assert result["actions"][0]["guardrails"]["can_execute_without_user"] is False
-    assert result["actions"][0]["risk_level"] == "low"
+    assert result["reasoning"]["confidence_score"] == 0.55
+    assert result["actions"] == []
 
 
 def test_live_bot_action_is_high_risk():

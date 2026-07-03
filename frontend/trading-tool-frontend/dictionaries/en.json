@@ -2783,6 +2783,7 @@
       "dca.day": "DCA weekday",
       "dca.month_day": "DCA month day",
       "dca.buy_score_threshold": "Extra buy score",
+      "bot.create_bot": "Bot draft",
       "bot.automation": "Automation",
       "bot.mode": "Bot mode",
       "bot.risk_profile": "Risk profile"
@@ -2792,6 +2793,7 @@
       "plan_type": "Do you want a DCA plan or a trade plan?",
       "setup.timeframe": "Which timeframe belongs to this plan?",
       "strategy.base_amount_eur": "What base amount in euro do you want to use for this plan?",
+      "bot.create_bot": "Do you want this as a plan only, or should Finn also prepare a bot draft right away?",
       "dca.frequency": "How often should this DCA run: daily, weekly, or monthly?",
       "dca.day": "On which weekday should this DCA run?",
       "dca.month_day": "On which day of the month should it buy? Use day 1 through 28.",

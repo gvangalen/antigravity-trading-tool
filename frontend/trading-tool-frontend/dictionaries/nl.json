@@ -2847,6 +2847,7 @@
       "dca.day": "DCA-weekdag",
       "dca.month_day": "DCA-maanddag",
       "dca.buy_score_threshold": "Extra koopscore",
+      "bot.create_bot": "Botdraft",
       "bot.automation": "Automatisering",
       "bot.mode": "Botmodus",
       "bot.risk_profile": "Risicoprofiel"
@@ -2856,6 +2857,7 @@
       "plan_type": "Wil je een DCA-plan of een trade-plan maken?",
       "setup.timeframe": "Welke timeframe hoort bij dit plan?",
       "strategy.base_amount_eur": "Met welk basisbedrag in euro wil je dit plan uitvoeren?",
+      "bot.create_bot": "Wil je hier alleen een plan van maken, of wil je ook meteen een botdraft klaarzetten?",
       "dca.frequency": "Hoe vaak wil je deze DCA uitvoeren: dagelijks, wekelijks of maandelijks?",
       "dca.day": "Op welke weekdag wil je deze DCA uitvoeren?",
       "dca.month_day": "Op welke dag van de maand wil je kopen? Gebruik dag 1 t/m 28.",

@@ -2846,6 +2846,7 @@
       "dca.day": "DCA-Wochentag",
       "dca.month_day": "DCA-Monatstag",
       "dca.buy_score_threshold": "Zusatzkauf-Score",
+      "bot.create_bot": "Bot-Entwurf",
       "bot.automation": "Automatisierung",
       "bot.mode": "Botmodus",
       "bot.risk_profile": "Risikoprofil"
@@ -2855,6 +2856,7 @@
       "plan_type": "Moechtest du einen DCA-Plan oder einen Trade-Plan?",
       "setup.timeframe": "Welcher Zeitrahmen gehoert zu diesem Plan?",
       "strategy.base_amount_eur": "Welchen Basisbetrag in Euro moechtest du fuer diesen Plan verwenden?",
+      "bot.create_bot": "Willst du das nur als Plan anlegen, oder soll Finn direkt auch einen Bot-Entwurf vorbereiten?",
       "dca.frequency": "Wie oft soll dieser DCA laufen: taeglich, woechentlich oder monatlich?",
       "dca.day": "An welchem Wochentag soll dieser DCA laufen?",
       "dca.month_day": "An welchem Tag des Monats soll gekauft werden? Nutze Tag 1 bis 28.",

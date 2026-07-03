@@ -3908,8 +3908,8 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const hideDefaultPlanName = isCollecting && setup.name && defaultPlanName && setup.name === defaultPlanName;
     const hideDefaultTimeframe = isCollecting && isDca && setup.timeframe === "1W";
     const hideScoreRanges = isCollecting;
-    const hideDefaultAutomation = isCollecting && !isFinnBot && !isFinnIndicator && (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only")) === "bot_assisted";
-    const hideDefaultBotSummary = isCollecting && !isFinnStrategy && !isFinnBot && bot.create_bot && !bot.is_live && bot.mode === "manual" && bot.risk_profile === "balanced";
+    const hideDefaultAutomation = isCollecting && !isFinnBot && !isFinnIndicator && !bot.automation;
+    const hideDefaultBotSummary = isCollecting && !isFinnStrategy && !isFinnBot && !hasMeaningfulValue(bot.create_bot);
     const dcaScheduleParts = [
       valueLabel(dca.frequency),
       dca.month_day ? String(dca.month_day) : (dca.day && (!isCollecting || dca.day !== "monday") ? valueLabel(dca.day) : null),
@@ -3960,13 +3960,13 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideScoreRanges ? [draftRowsText.technical, formatRange(setup.technical_score_range)] : null,
       !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideScoreRanges ? [draftRowsText.market, formatRange(setup.market_score_range)] : null,
       isDca && !isFinnStrategy && !isFinnBot ? [valueLabel("dca", "DCA"), dcaScheduleParts.join(" · ")] : null,
-      isTrade && !isFinnBot ? [draftRowsText.execution, valueLabel(strategy.entry_type || strategy.trade_execution_mode || "limit")] : null,
+      isTrade && !isFinnBot ? [draftRowsText.execution, strategy.entry_type || strategy.trade_execution_mode ? valueLabel(strategy.entry_type || strategy.trade_execution_mode) : null] : null,
       isTrade && !isFinnBot && strategy.entry_type === "market" ? [draftRowsText.marketConfirmation, strategy.market_execution_ack ? yesLabel : noLabel] : null,
       isTrade && !isFinnBot ? [draftRowsText.entry, strategy.entry] : null,
       isTrade && !isFinnBot ? [draftRowsText.stop, strategy.stop_loss] : null,
       isTrade && !isFinnBot ? [draftRowsText.targets, Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
-      !isFinnBot && !isFinnIndicator && !hideDefaultAutomation ? [draftRowsText.automation, valueLabel(isFinnStrategy ? strategy.automation : (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only")))] : null,
-      !isFinnStrategy && !isFinnBot && bot.create_bot && !hideDefaultBotSummary ? [draftRowsText.bot, `${valueLabel(bot.is_live ? "live" : "paper")} · ${valueLabel(bot.mode, bot.mode)} · ${valueLabel(bot.risk_profile, bot.risk_profile)}`] : null,
+      !isFinnBot && !isFinnIndicator && !hideDefaultAutomation ? [draftRowsText.automation, valueLabel(isFinnStrategy ? strategy.automation : bot.automation)] : null,
+      !isFinnStrategy && !isFinnBot && bot.create_bot && !hideDefaultBotSummary ? [draftRowsText.bot, `${valueLabel(bot.is_live ? "live" : "paper")} · ${valueLabel(bot.mode, bot.mode)}${bot.risk_profile ? ` · ${valueLabel(bot.risk_profile, bot.risk_profile)}` : ""}`] : null,
     ].filter((row) => {
       if (!row) return false;
       const [, value] = row;
@@ -5183,7 +5183,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
                 <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaParameters}</span>
                   <span className="text-xs text-foreground dark:text-slate-200">
-                    {payload.dca_frequency || "weekly"} {payload.dca_day ? `op ${payload.dca_day}` : ""}
+                    {[payload.dca_frequency, payload.dca_day ? `op ${payload.dca_day}` : null].filter(Boolean).join(" ") || "—"}
                   </span>
                 </div>
               )}
@@ -5656,7 +5656,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaParameters}</span>
                   <span className="text-xs text-foreground dark:text-slate-200">
-                    {draft.payload.dca_frequency || "weekly"} {draft.payload.dca_day ? `op ${draft.payload.dca_day}` : ""}
+                    {[draft.payload.dca_frequency, draft.payload.dca_day ? `op ${draft.payload.dca_day}` : null].filter(Boolean).join(" ") || uiText.required}
                   </span>
                 </div>
               )}

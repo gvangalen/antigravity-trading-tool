@@ -5148,7 +5148,7 @@ class FinnPlanService:
         if bot_patch.get("create_bot") is True and not draft["strategy"].get("automation"):
             draft["strategy"]["automation"] = "bot_assisted"
 
-        self._apply_strategy_defaults(draft)
+        self._apply_strategy_defaults(draft, for_save=True)
         validation = self._validate_strategy_draft(draft)
         message = self._build_strategy_message(draft, validation)
 
@@ -8463,29 +8463,28 @@ class FinnPlanService:
 
         return patch
 
-    def _apply_defaults(self, draft: Dict[str, Any]) -> None:
+    def _apply_defaults(self, draft: Dict[str, Any], *, for_save: bool = False) -> None:
         if draft.get("asset"):
             draft["asset"] = str(draft["asset"]).upper()
-        if draft.get("plan_type") in {"dca", "trade"} and draft["bot"].get("create_bot") is None:
-            draft["bot"]["create_bot"] = True
         if draft.get("plan_type") == "trade" and not draft["strategy"].get("direction"):
             draft["strategy"]["direction"] = "long"
-        if draft.get("plan_type") == "trade" and not draft["strategy"].get("entry_type"):
-            draft["strategy"]["entry_type"] = "limit"
-        if draft["bot"].get("automation") is None:
+        if draft["bot"].get("create_bot") is True:
+            if draft["bot"].get("automation") is None:
+                draft["bot"]["automation"] = "bot_assisted"
+            if not draft["bot"].get("risk_profile"):
+                draft["bot"]["risk_profile"] = "balanced"
+        elif draft["bot"].get("create_bot") is False and draft["bot"].get("automation") is None:
+            draft["bot"]["automation"] = "manual_only"
+        if not for_save:
+            return
+        if draft["bot"].get("automation") is None and draft["bot"].get("create_bot") is not None:
             draft["bot"]["automation"] = "bot_assisted" if draft["bot"].get("create_bot") else "manual_only"
-        if not draft["setup"].get("timeframe"):
-            draft["setup"]["timeframe"] = "1W" if draft.get("plan_type") == "dca" else None
-        draft["setup"]["macro_score_range"] = draft["setup"].get("macro_score_range") or [30, 70]
-        draft["setup"]["technical_score_range"] = draft["setup"].get("technical_score_range") or [40, 80]
-        draft["setup"]["market_score_range"] = draft["setup"].get("market_score_range") or [20, 60]
-        if not draft["setup"].get("name") and draft.get("asset") and draft.get("plan_type"):
-            label = "Smart DCA" if draft["plan_type"] == "dca" else "Trade Plan"
-            draft["setup"]["name"] = f"{draft['asset']} {label}"
-        if draft.get("plan_type") == "dca" and draft["dca"].get("frequency") == "weekly" and not draft["dca"].get("day"):
-            draft["dca"]["day"] = "monday"
-        if draft["bot"].get("create_bot") and not draft["bot"].get("risk_profile"):
-            draft["bot"]["risk_profile"] = "balanced"
+        if draft["setup"].get("macro_score_range") is None:
+            draft["setup"]["macro_score_range"] = [30, 70]
+        if draft["setup"].get("technical_score_range") is None:
+            draft["setup"]["technical_score_range"] = [40, 80]
+        if draft["setup"].get("market_score_range") is None:
+            draft["setup"]["market_score_range"] = [20, 60]
 
     def _action_id(self, payload: Dict[str, Any]) -> str:
         normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
@@ -8556,20 +8555,18 @@ class FinnPlanService:
         elif context.get("timeframe") and not draft.get("timeframe"):
             draft["timeframe"] = context.get("timeframe")
 
-    def _apply_strategy_defaults(self, draft: Dict[str, Any]) -> None:
+    def _apply_strategy_defaults(self, draft: Dict[str, Any], *, for_save: bool = False) -> None:
         if draft.get("operation") not in {"create", "update"}:
             draft["operation"] = "create"
         if draft.get("asset"):
             draft["asset"] = str(draft["asset"]).upper()
         if draft.get("setup_type"):
             draft["setup_type"] = str(draft["setup_type"]).lower()
-        if draft.get("setup_type") == "trade" and not draft["strategy"].get("entry_type"):
-            draft["strategy"]["entry_type"] = "limit"
         if draft.get("setup_type") == "trade" and not draft["strategy"].get("direction"):
             draft["strategy"]["direction"] = "long"
-        if not draft["strategy"].get("automation"):
+        if for_save and not draft["strategy"].get("automation"):
             draft["strategy"]["automation"] = "manual_only"
-        if not draft["strategy"].get("risk_profile"):
+        if for_save and not draft["strategy"].get("risk_profile"):
             draft["strategy"]["risk_profile"] = "balanced"
 
     async def _hydrate_bot_draft_from_db(self, user_id: int, draft: Dict[str, Any]) -> None:
@@ -9939,14 +9936,17 @@ class FinnPlanService:
             invalid.append({"field": "asset", "reason": "asset wordt nog niet ondersteund"})
         if clarification.get("field") == "asset":
             invalid.append({"field": "asset", "reason": clarification.get("reason", "asset moet verduidelijkt worden")})
-        if not draft["setup"].get("name"):
-            missing.append("setup.name")
         if not draft["setup"].get("timeframe"):
             missing.append("setup.timeframe")
 
-        self._validate_range("setup.macro_score_range", draft["setup"].get("macro_score_range"), invalid)
-        self._validate_range("setup.technical_score_range", draft["setup"].get("technical_score_range"), invalid)
-        self._validate_range("setup.market_score_range", draft["setup"].get("market_score_range"), invalid)
+        for field in (
+            "macro_score_range",
+            "technical_score_range",
+            "market_score_range",
+        ):
+            value = draft["setup"].get(field)
+            if value is not None:
+                self._validate_range(f"setup.{field}", value, invalid)
 
         if draft.get("plan_type") == "dca":
             frequency = draft["dca"].get("frequency")
@@ -10009,6 +10009,9 @@ class FinnPlanService:
         elif not isinstance(amount, (int, float)) or amount <= 0:
             invalid.append({"field": "strategy.base_amount_eur", "reason": "bedrag moet groter dan 0 zijn"})
 
+        if draft.get("plan_type") == "dca" and draft["bot"].get("create_bot") is None:
+            missing.append("bot.create_bot")
+
         next_question = priority_question or (missing[0] if missing else (invalid[0]["field"] if invalid else None))
         return {
             "missing_fields": missing,
@@ -10031,6 +10034,8 @@ class FinnPlanService:
             return "Welke timeframe hoort bij dit plan? Bijvoorbeeld 1W voor DCA of 4H/1D voor een trade."
         if next_question == "strategy.base_amount_eur":
             return "Met welk basisbedrag in euro wil je dit plan uitvoeren?"
+        if next_question == "bot.create_bot":
+            return "Wil je hier alleen een plan van maken, of wil je ook meteen een botdraft klaarzetten?"
         if next_question == "dca.frequency":
             return "Hoe vaak wil je deze DCA uitvoeren: dagelijks, wekelijks of maandelijks?"
         if next_question == "dca.day":
@@ -17650,6 +17655,10 @@ class FinnPlanService:
             check["blocker_reason"] = f"{label} score of range ontbreekt"
         return check
 
+    def _draft_score_range(self, setup: Dict[str, Any], field: str, fallback: List[float]) -> List[float]:
+        value = setup.get(field)
+        return value if isinstance(value, list) and len(value) == 2 else fallback
+
     def _finalize_score_analysis(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
         checks = analysis.get("checks") or {}
         known = [check.get("pass") for check in checks.values() if check.get("pass") is not None]
@@ -17683,9 +17692,24 @@ class FinnPlanService:
     ) -> Dict[str, Any]:
         setup = draft.get("setup") or {}
         checks = {
-            "macro": self._score_check("macro", self._score_value(daily_scores, "macro"), setup.get("macro_score_range"), daily_scores),
-            "technical": self._score_check("technical", self._score_value(daily_scores, "technical"), setup.get("technical_score_range"), daily_scores),
-            "market": self._score_check("market", self._score_value(daily_scores, "market"), setup.get("market_score_range"), daily_scores),
+            "macro": self._score_check(
+                "macro",
+                self._score_value(daily_scores, "macro"),
+                self._draft_score_range(setup, "macro_score_range", [30, 70]),
+                daily_scores,
+            ),
+            "technical": self._score_check(
+                "technical",
+                self._score_value(daily_scores, "technical"),
+                self._draft_score_range(setup, "technical_score_range", [40, 80]),
+                daily_scores,
+            ),
+            "market": self._score_check(
+                "market",
+                self._score_value(daily_scores, "market"),
+                self._draft_score_range(setup, "market_score_range", [20, 60]),
+                daily_scores,
+            ),
         }
         return self._finalize_score_analysis({
             "checks": checks,
@@ -18158,16 +18182,33 @@ class FinnPlanService:
         lines = [
             f"- Type: {draft.get('plan_type')}",
             f"- Asset: {draft.get('asset')}",
-            f"- Naam: {draft['setup'].get('name')}",
             f"- Timeframe: {draft['setup'].get('timeframe')}",
         ]
+        if draft["setup"].get("name"):
+            lines.insert(2, f"- Naam: {draft['setup'].get('name')}")
         amount = draft["strategy"].get("base_amount_eur")
         if amount not in (None, "", 0):
             lines.append(f"- Bedrag: €{amount}")
         if draft.get("plan_type") == "dca":
+            frequency = draft["dca"].get("frequency")
+            frequency_label = {
+                "daily": "dagelijks",
+                "weekly": "wekelijks",
+                "monthly": "maandelijks",
+            }.get(str(frequency or "").lower(), frequency)
+            weekday = str(draft["dca"].get("day") or "").lower()
+            weekday_label = {
+                "monday": "maandag",
+                "tuesday": "dinsdag",
+                "wednesday": "woensdag",
+                "thursday": "donderdag",
+                "friday": "vrijdag",
+                "saturday": "zaterdag",
+                "sunday": "zondag",
+            }.get(weekday, draft["dca"].get("day"))
             schedule = " ".join(
                 str(part)
-                for part in [draft["dca"].get("frequency"), draft["dca"].get("day") or draft["dca"].get("month_day")]
+                for part in [frequency_label, weekday_label or draft["dca"].get("month_day")]
                 if part not in (None, "", 0)
             ).strip()
             if schedule:
@@ -18179,9 +18220,12 @@ class FinnPlanService:
                 f"- Stop-loss: {draft['strategy'].get('stop_loss')}",
                 f"- Targets: {draft['strategy'].get('targets')}",
             ])
-        if draft["bot"].get("create_bot"):
+        if draft["bot"].get("create_bot") is True:
             env = "live" if draft["bot"].get("is_live") else "paper"
-            lines.append(f"- Botmodus: {env}, {draft['bot'].get('mode')}, {draft['bot'].get('risk_profile')}")
+            env_label = "live" if env == "live" else "paper"
+            mode_label = {"manual": "handmatig", "semi-auto": "semi-automatisch", "auto": "automatisch"}.get(draft["bot"].get("mode"), draft["bot"].get("mode"))
+            risk_label = {"conservative": "voorzichtig", "balanced": "gebalanceerd", "aggressive": "agressief"}.get(draft["bot"].get("risk_profile"), draft["bot"].get("risk_profile"))
+            lines.append(f"- Botmodus: {env_label}, {mode_label}, {risk_label}")
         return "\n".join(lines)
 
     async def execute_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
@@ -18211,7 +18255,7 @@ class FinnPlanService:
             raise HTTPException(400, "Onbekende Finn action")
 
         draft = _deep_merge(empty_plan_draft(), action.get("payload") or {})
-        self._apply_defaults(draft)
+        self._apply_defaults(draft, for_save=True)
         action_id = f"{action.get('id') or self._action_id(draft)}-u{user_id}"
         acquired = await self._try_create_pending_action(user_id, action_id, action)
         if not acquired:
@@ -19704,34 +19748,43 @@ class FinnPlanService:
         setup = draft["setup"]
         dca = draft["dca"]
         plan_type = draft["plan_type"]
+        setup_name = setup.get("name") or f"{draft['asset']} {'Smart DCA' if plan_type == 'dca' else 'Trade Plan'}"
+        macro_range = setup.get("macro_score_range") or [30, 70]
+        technical_range = setup.get("technical_score_range") or [40, 80]
+        market_range = setup.get("market_score_range") or [20, 60]
         return {
-            "name": setup["name"],
+            "name": setup_name,
             "symbol": draft["asset"],
             "setup_type": plan_type,
             "timeframe": setup["timeframe"],
             "dca_frequency": dca.get("frequency") if plan_type == "dca" else None,
             "dca_day": str(WEEKDAY_NUMBERS.get(str(dca.get("day") or "").lower(), dca.get("day"))) if plan_type == "dca" and dca.get("frequency") == "weekly" and dca.get("day") is not None else None,
             "dca_month_day": dca.get("month_day") if plan_type == "dca" and dca.get("frequency") == "monthly" else None,
-            "min_macro_score": setup["macro_score_range"][0],
-            "max_macro_score": setup["macro_score_range"][1],
-            "min_technical_score": setup["technical_score_range"][0],
-            "max_technical_score": setup["technical_score_range"][1],
-            "min_market_score": setup["market_score_range"][0],
-            "max_market_score": setup["market_score_range"][1],
+            "min_macro_score": macro_range[0],
+            "max_macro_score": macro_range[1],
+            "min_technical_score": technical_range[0],
+            "max_technical_score": technical_range[1],
+            "min_market_score": market_range[0],
+            "max_market_score": market_range[1],
             "description": "Aangemaakt via Finn",
             "category": "finn_plan",
         }
 
     def _strategy_payload(self, draft: Dict[str, Any], setup_id: int) -> Dict[str, Any]:
         strategy = draft["strategy"]
+        setup_name = draft["setup"].get("name") or f"{draft['asset']} {'Smart DCA' if draft['plan_type'] == 'dca' else 'Trade Plan'}"
+        risk_profile = draft["bot"].get("risk_profile") or "balanced"
+        automation = draft["bot"].get("automation")
+        if automation is None and draft["bot"].get("create_bot") is not None:
+            automation = "bot_assisted" if draft["bot"].get("create_bot") else "manual_only"
         payload = {
-            "name": f"{draft['setup']['name']} Strategy",
+            "name": f"{setup_name} Strategy",
             "setup_id": setup_id,
             "setup_type": draft["plan_type"],
             "execution_mode": strategy.get("execution_mode") or "fixed",
             "base_amount": float(strategy["base_amount_eur"]),
             "decision_curve": strategy.get("decision_curve"),
-            "risk_profile": draft["bot"].get("risk_profile") or "balanced",
+            "risk_profile": risk_profile,
             "explanation": "Aangemaakt via Finn",
         }
         if draft["plan_type"] == "trade":
@@ -19739,7 +19792,7 @@ class FinnPlanService:
                 "direction": strategy.get("direction") or "long",
                 "entry_type": strategy.get("entry_type") or "limit",
                 "trade_execution_mode": strategy.get("entry_type") or "limit",
-                "automation": draft["bot"].get("automation") or ("bot_assisted" if draft["bot"].get("create_bot") else "manual_only"),
+                "automation": automation or "manual_only",
                 "entry": strategy.get("entry"),
                 "stop_loss": strategy.get("stop_loss"),
                 "targets": strategy.get("targets"),
@@ -19778,8 +19831,9 @@ class FinnPlanService:
 
     def _bot_payload(self, draft: Dict[str, Any], strategy_id: int) -> Dict[str, Any]:
         bot = draft["bot"]
+        setup_name = draft["setup"].get("name") or f"{draft['asset']} {'Smart DCA' if draft['plan_type'] == 'dca' else 'Trade Plan'}"
         return {
-            "name": f"{draft['setup']['name']} Bot",
+            "name": bot.get("name") or f"{setup_name} Bot",
             "strategy_id": strategy_id,
             "mode": bot.get("mode") or "manual",
             "is_live": bool(bot.get("is_live")),
