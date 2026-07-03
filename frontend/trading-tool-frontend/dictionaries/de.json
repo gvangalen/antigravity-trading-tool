@@ -1060,7 +1060,9 @@
           "Then review the signal table or return to onboarding for the next step."
         ],
         "primaryCta": "Open macro configuration",
-        "secondaryCta": "Back to onboarding"
+        "secondaryCta": "Back to onboarding",
+        "finnLabel": "Finn helps:",
+        "finnHint": "If you are unsure what to pick, start with DXY. Then ask Finn what that indicator adds to your market context."
       },
       "hud": {
         "environment": "Macro environment",

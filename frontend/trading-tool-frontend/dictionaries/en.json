@@ -1050,16 +1050,18 @@
         "body": "Start with one clear context signal so Finn can understand the bigger picture before the rest of your setup fills in.",
         "guidedBadge": "Onboarding is guiding you here",
         "guidedIntro": "You arrived here from onboarding. Only finish this one action now: add one macro indicator in the configuration block below.",
-        "guidedConfigHint": "Search below for something like DXY, US10Y, or inflation and sync one indicator. After that this step counts as complete.",
+        "guidedConfigHint": "Keep it simple: search for DXY below, click sync, and confirm it shows as active in your macro overview. Only then is this step really done.",
         "completionHint": "After your first synced macro indicator, this step is done. Then you can return to onboarding for the next step.",
-        "examples": ["DXY", "US10Y", "Inflation"],
+        "examples": ["Add DXY", "Add US10Y", "Add inflation"],
         "steps": [
-          "Choose one macro indicator from the selector below.",
-          "Click sync so it becomes part of your macro overview.",
-          "Then review the signal table or return to onboarding for the next step."
+          "Pick one macro indicator from the selector below, for example DXY.",
+          "Click sync and wait until it appears as active in your macro overview.",
+          "Once you see one active indicator, return to onboarding for the next step."
         ],
         "primaryCta": "Open macro configuration",
-        "secondaryCta": "Back to onboarding"
+        "secondaryCta": "Back to onboarding",
+        "finnLabel": "Finn helps:",
+        "finnHint": "If you do not know what to start with, use DXY first. Then ask Finn what that indicator adds to your market context."
       },
       "hud": {
         "environment": "Macro environment",
@@ -1363,18 +1365,18 @@
       "body": "This is where your rules become concrete. Start with one clear setup so Finn can connect context to a real trading framework.",
       "guidedBadge": "Onboarding is guiding you here",
       "guidedIntro": "You arrived here from onboarding. Only finish this one action now: create one simple setup below.",
-      "guidedConfigHint": "Use this form for one simple first setup. Asset, timeframe, and core conditions are enough to complete this step.",
+      "guidedConfigHint": "Use the setup form below or ask Finn for one focused first setup. Start small: asset, type, and timeframe are enough for version one.",
       "completionHint": "As soon as your first setup is saved, this step is done. Then you can return to onboarding or refine it further.",
-      "examples": ["BTC swing setup", "ETH DCA setup", "SOL breakout setup"],
+      "examples": ["Create a BTC swing setup with 4H entry", "Create an ETH DCA setup", "Create a SOL breakout setup"],
       "steps": [
         "Scroll to the new setup block below.",
-        "Fill in one simple setup with asset, timeframe, and core conditions.",
-        "Save it first, then return to onboarding or continue refining it here."
+        "Choose one asset, one setup type, and one timeframe, or let Finn ask for those step by step.",
+        "Save only your first base setup. You can refine it afterwards."
       ],
       "primaryCta": "Open new setup",
       "secondaryCta": "Back to onboarding",
       "finnLabel": "Finn helps:",
-      "finnHint": "If you are unsure how detailed it should be, keep the first setup simple. Finn can help sharpen it after you save it."
+      "finnHint": "Use this prompt if needed: 'Create a BTC swing setup with daily trend and 4H entry.' Finn should ask follow-up questions after that instead of filling everything in by itself."
     }
   },
   "strategyPage": {
@@ -1393,18 +1395,18 @@
       "body": "A strategy turns your setup into an execution plan. Start with one basic strategy so Finn can begin reviewing decisions in the right context.",
       "guidedBadge": "Onboarding is guiding you here",
       "guidedIntro": "You arrived here from onboarding. Only finish this one action now: create one first strategy based on your setup below.",
-      "guidedConfigHint": "Use this form for one simple first strategy. Link it to a setup and fill only the key execution choices first.",
+      "guidedConfigHint": "Use this form for one simple first strategy. Pick the right setup first, then fill in entry, invalidation, and risk management.",
       "completionHint": "As soon as your first strategy is saved, this step is done and onboarding can finish cleanly.",
-      "examples": ["BTC swing execution", "ETH DCA execution", "SOL breakout execution"],
+      "examples": ["Create a strategy for my BTC setup", "Turn this into a DCA strategy", "Add entry, invalidation, and risk management"],
       "steps": [
         "Scroll to the new strategy block below.",
-        "Choose the setup it belongs to and fill in the key execution fields.",
-        "Save the strategy first, then return to onboarding or continue tuning it here."
+        "Choose which setup it belongs to first.",
+        "Then fill in only the key execution fields and save it."
       ],
       "primaryCta": "Open new strategy",
       "secondaryCta": "Back to onboarding",
       "finnLabel": "Finn helps:",
-      "finnHint": "If you are unsure how advanced it needs to be, keep the first strategy simple. Finn can refine the execution logic afterward."
+      "finnHint": "Use this prompt if needed: 'Turn this into a strategy with a clear entry, invalidation, and risk management.'"
     },
     "editTitle": "Edit strategy",
     "editSubtitle": "Settings",

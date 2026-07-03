@@ -1051,16 +1051,18 @@
         "body": "Begin met één duidelijk contextsignaal zodat Finn eerst het grotere plaatje begrijpt voordat de rest van je setup zich vult.",
         "guidedBadge": "Onboarding begeleidt je hier",
         "guidedIntro": "Je bent hier vanuit onboarding. Rond alleen deze ene actie af: voeg één macro-indicator toe in het configuratieblok hieronder.",
-        "guidedConfigHint": "Zoek hieronder bijvoorbeeld DXY, US10Y of inflatie en synchroniseer één indicator. Daarna telt deze stap als afgerond.",
+        "guidedConfigHint": "Begin simpel: zoek hieronder bijvoorbeeld DXY, klik op synchroniseren en controleer daarna of hij in je macro-overzicht actief staat. Pas dan is deze stap echt klaar.",
         "completionHint": "Na je eerste gesynchroniseerde macro-indicator is deze stap klaar. Daarna kun je terug naar onboarding voor de volgende stap.",
-        "examples": ["DXY", "US10Y", "Inflatie"],
+        "examples": ["Voeg DXY toe", "Voeg US10Y toe", "Voeg inflatie toe"],
         "steps": [
-          "Kies hieronder één macro-indicator uit de selector.",
-          "Klik op synchroniseren zodat hij onderdeel wordt van je macro-overzicht.",
-          "Bekijk daarna de signaaltabel of ga terug naar onboarding voor de volgende stap."
+          "Kies hieronder één macro-indicator uit de selector, bijvoorbeeld DXY.",
+          "Klik op synchroniseren en wacht tot hij actief verschijnt in je macro-overzicht.",
+          "Zie je één actieve indicator? Ga dan terug naar onboarding voor de volgende stap."
         ],
         "primaryCta": "Open macro-configuratie",
-        "secondaryCta": "Terug naar onboarding"
+        "secondaryCta": "Terug naar onboarding",
+        "finnLabel": "Finn helpt:",
+        "finnHint": "Weet je niet welke je moet kiezen, begin met DXY. Vraag Finn daarna wat deze indicator toevoegt aan je marktcontext."
       },
       "hud": {
         "environment": "Macroomgeving",
@@ -1364,18 +1366,18 @@
       "body": "Hier worden je regels concreet. Begin met één duidelijke setup zodat Finn context kan koppelen aan een echt tradingkader.",
       "guidedBadge": "Onboarding begeleidt je hier",
       "guidedIntro": "Je bent hier vanuit onboarding. Rond alleen deze ene actie af: maak hieronder één simpele setup aan.",
-      "guidedConfigHint": "Gebruik dit formulier voor één eenvoudige eerste setup. Asset, timeframe en kernvoorwaarden zijn genoeg om deze stap af te ronden.",
+      "guidedConfigHint": "Gebruik hieronder het setup-formulier of vraag Finn heel gericht om één eerste setup. Begin klein: asset, type en timeframe zijn genoeg voor je eerste versie.",
       "completionHint": "Zodra je eerste setup is opgeslagen, is deze stap klaar. Daarna kun je terug naar onboarding of de setup verder verfijnen.",
-      "examples": ["BTC swing setup", "ETH DCA setup", "SOL breakout setup"],
+      "examples": ["Maak een BTC swing setup met 4H entry", "Maak een ETH DCA setup", "Maak een SOL breakout setup"],
       "steps": [
         "Scroll naar het blok voor een nieuwe setup hieronder.",
-        "Vul één simpele setup in met asset, timeframe en kernvoorwaarden.",
-        "Sla hem eerst op en ga daarna terug naar onboarding of verfijn hem hier verder."
+        "Kies één asset, een setup-type en een timeframe of laat Finn je die drie dingen stap voor stap uitvragen.",
+        "Sla alleen je eerste basissetup op. Verfijnen kan daarna altijd nog."
       ],
       "primaryCta": "Open nieuwe setup",
       "secondaryCta": "Terug naar onboarding",
       "finnLabel": "Finn helpt:",
-      "finnHint": "Twijfel je hoeveel detail nodig is, houd de eerste setup dan simpel. Finn kan hem daarna helpen aanscherpen."
+      "finnHint": "Gebruik desnoods deze prompt: 'Maak een BTC swing setup met daily trend en 4H entry.' Finn hoort daarna eerst vervolgvragen te stellen in plaats van alles zelf in te vullen."
     }
   },
   "strategyPage": {
@@ -1394,18 +1396,18 @@
       "body": "Een strategie maakt van je setup een uitvoeringsplan. Begin met één basisstrategie zodat Finn beslissingen meteen in de juiste context kan reviewen.",
       "guidedBadge": "Onboarding begeleidt je hier",
       "guidedIntro": "Je bent hier vanuit onboarding. Rond alleen deze ene actie af: maak hieronder één eerste strategie op basis van je setup.",
-      "guidedConfigHint": "Gebruik dit formulier voor één eenvoudige eerste strategie. Koppel hem aan een setup en vul alleen de belangrijkste uitvoerkeuzes in.",
+      "guidedConfigHint": "Gebruik dit formulier voor één eenvoudige eerste strategie. Kies eerst de juiste setup en vul daarna alleen entry, invalidatie en risk management in.",
       "completionHint": "Zodra je eerste strategie is opgeslagen, is deze stap klaar en kan onboarding netjes afronden.",
-      "examples": ["BTC swing execution", "ETH DCA execution", "SOL breakout execution"],
+      "examples": ["Maak een strategie voor mijn BTC setup", "Maak hier een DCA-strategie van", "Geef entry, invalidatie en risk management"],
       "steps": [
         "Scroll naar het blok voor een nieuwe strategie hieronder.",
-        "Kies bij welke setup hij hoort en vul de belangrijkste uitvoervelden in.",
-        "Sla de strategie eerst op en ga daarna terug naar onboarding of stem hem hier verder af."
+        "Kies eerst bij welke setup hij hoort.",
+        "Vul daarna alleen de belangrijkste uitvoervelden in en sla hem op."
       ],
       "primaryCta": "Open nieuwe strategie",
       "secondaryCta": "Terug naar onboarding",
       "finnLabel": "Finn helpt:",
-      "finnHint": "Weet je niet hoe uitgebreid hij moet zijn, houd de eerste strategie dan simpel. Finn kan de uitvoerlogica daarna verder verfijnen."
+      "finnHint": "Gebruik desnoods deze prompt: 'Maak hier een strategie van met duidelijke entry, invalidatie en risk management.'"
     },
     "editTitle": "Strategie aanpassen",
     "editSubtitle": "Instellingen",

@@ -599,7 +599,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     
     const flowSlots = {
       user_onboarding: ["experience_level", "risk_profile", "investment_goals"],
-      setup_creation: ["symbol", "setup_type", "dca_frequency"],
+      setup_creation: ["symbol", "setup_type", "timeframe", "dca_frequency"],
       strategy_creation: ["symbol", "setup_type", "base_amount", "entry", "targets", "stop_loss"],
       bot_creation: ["name", "budget_total_eur"],
       macro_analysis_walkthrough: ["symbol"],
@@ -618,7 +618,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     let totalSlots = slots.length;
     const setupType = state.slots?.setup_type;
     if (state.current_flow === "setup_creation" && setupType === "trade") {
-      totalSlots = 2; // symbol, setup_type (no dca_frequency)
+      totalSlots = 3; // symbol, setup_type, timeframe
+    }
+    if (state.current_flow === "setup_creation" && setupType === "dca") {
+      totalSlots = 4; // symbol, setup_type, timeframe, dca_frequency
     }
     if (state.current_flow === "strategy_creation" && setupType === "dca") {
       totalSlots = 3; // symbol, setup_type, base_amount
@@ -3384,11 +3387,21 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             });
           }
 
+          const transactionalFlows = ["plan_creation", "strategy_creation", "bot_creation", "indicator_config"];
+          const legacyTransactionalFlows = ["setup_creation"];
+
           if (["plan_creation_cancelled", "strategy_creation_cancelled", "bot_creation_cancelled", "indicator_config_cancelled"].includes(envelope.intent)) {
             setFinnDraft(null);
             setActiveState(null);
-          } else if (["plan_creation", "strategy_creation", "bot_creation", "indicator_config"].includes(envelope.flow)) {
+          } else if (transactionalFlows.includes(envelope.flow)) {
             setFinnDraft(envelope.draft || null);
+          } else if (
+            legacyTransactionalFlows.includes(envelope?.state?.current_flow) ||
+            legacyTransactionalFlows.includes(envelope.flow) ||
+            !envelope?.draft
+          ) {
+            // Prevent old modern drafts from visually "sticking" under a new legacy setup conversation.
+            setFinnDraft(null);
           }
 
           if (

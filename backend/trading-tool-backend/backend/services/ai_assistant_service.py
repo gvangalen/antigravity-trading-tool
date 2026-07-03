@@ -1404,6 +1404,72 @@ class AiAssistantService:
         Allows users to specify any slot in any order with immediate asynchronous PostgreSQL persistence.
         """
         q_lower = user_query.strip().lower()
+
+        def _looks_like_setup_start() -> bool:
+            if "setup" not in q_lower:
+                return False
+            explicit_phrases = [
+                "maak setup",
+                "start setup",
+                "setup voor",
+                "setup aanmaken",
+                "nieuwe setup",
+                "setup maken",
+            ]
+            if any(phrase in q_lower for phrase in explicit_phrases):
+                return True
+            create_terms = [
+                "maak",
+                "maken",
+                "aanmaken",
+                "creeer",
+                "creeër",
+                "bouw",
+                "wil",
+                "kan je",
+                "kun je",
+                "help me",
+                "help mij",
+                "start",
+            ]
+            setup_modifiers = ["dca", "trade", "swing", "entry", "trend", "blueprint"]
+            return any(term in q_lower for term in create_terms) and any(term in q_lower for term in setup_modifiers)
+
+        def _looks_like_strategy_start() -> bool:
+            if "strategie" not in q_lower and "strategy" not in q_lower:
+                return False
+            explicit_phrases = [
+                "maak strategie",
+                "start strategie",
+                "strategie voor",
+                "nieuwe strategie",
+                "strategie maken",
+                "make strategy",
+                "create strategy",
+            ]
+            if any(phrase in q_lower for phrase in explicit_phrases):
+                return True
+            create_terms = ["maak", "maken", "aanmaken", "creeer", "creeër", "bouw", "wil", "kan je", "kun je", "help me", "start", "make", "create"]
+            strategy_modifiers = ["entry", "invalidatie", "risk", "risk management", "targets", "stop", "dca", "trade", "setup"]
+            return any(term in q_lower for term in create_terms) and any(term in q_lower for term in strategy_modifiers)
+
+        def _looks_like_bot_start() -> bool:
+            if "bot" not in q_lower:
+                return False
+            explicit_phrases = [
+                "maak bot",
+                "start bot",
+                "bot voor",
+                "nieuwe bot",
+                "bot maken",
+                "make bot",
+                "create bot",
+            ]
+            if any(phrase in q_lower for phrase in explicit_phrases):
+                return True
+            create_terms = ["maak", "maken", "aanmaken", "creeer", "creeër", "bouw", "wil", "kan je", "kun je", "help me", "start", "make", "create"]
+            bot_modifiers = ["dca", "weekelijks", "wekelijks", "maandelijks", "dagelijks", "budget", "strategie", "strategy", "paper", "live"]
+            return any(term in q_lower for term in create_terms) and any(term in q_lower for term in bot_modifiers)
         
         # 1. Pre-initialize or override active flow for explicit creation requests.
         current_flow = str((conv_state or {}).get("current_flow") or "").strip().lower()
@@ -1411,7 +1477,7 @@ class AiAssistantService:
         has_active_transactional_flow = current_flow in transactional_flows
 
         if (not conv_state or not current_flow or current_flow == "none" or not has_active_transactional_flow):
-            if any(w in q_lower for w in ["maak setup", "start setup", "setup voor", "setup aanmaken", "nieuwe setup", "setup maken"]):
+            if _looks_like_setup_start():
                 conv_state = {
                     "current_flow": "setup_creation",
                     "slots": {"symbol": resolved_symbol},
@@ -1420,7 +1486,7 @@ class AiAssistantService:
                 # PERSIST INITIALIZATION STATE TO DB IMMEDIATELY
                 await self.state_repo.save_state(user_id, "setup_creation", resolved_symbol, conv_state["slots"])
                 logger.info(f"🎯 [Deterministic-Pre-Parser] Persisted newly initialized setup flow to DB for user {user_id}")
-            elif any(w in q_lower for w in ["maak strategie", "start strategie", "strategie voor", "nieuwe strategie", "strategie maken"]):
+            elif _looks_like_strategy_start():
                 # CHECK SETUP DEPENDENCY
                 existing_setups = await self.setup_repo.get_all_setups(user_id)
                 symbol_setups = [s for s in existing_setups if s.get("symbol") == resolved_symbol]
@@ -1447,7 +1513,7 @@ class AiAssistantService:
                     }
                     await self.state_repo.save_state(user_id, "strategy_creation", resolved_symbol, conv_state["slots"])
                     logger.info(f"🎯 [Chain-of-Dependence] Setup found with ID {symbol_setups[0]['id']} for {resolved_symbol}. Initialized strategy_creation for user {user_id}.")
-            elif any(w in q_lower for w in ["maak bot", "start bot", "bot voor", "nieuwe bot", "bot maken"]):
+            elif _looks_like_bot_start():
                 # CHECK STRATEGY DEPENDENCY
                 existing_strategies = await self.strategy_repo.query_strategies(user_id, {"symbol": resolved_symbol})
                 

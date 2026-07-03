@@ -377,7 +377,9 @@ def _looks_like_profile_explain(query: str) -> bool:
 
 def _looks_like_explicit_setup_creation_request(query: str) -> bool:
     q = str(query or "").lower()
-    setup_terms = [
+    if "setup" not in q:
+        return False
+    if any(term in q for term in [
         "maak een setup",
         "maak setup",
         "setup voor",
@@ -385,8 +387,31 @@ def _looks_like_explicit_setup_creation_request(query: str) -> bool:
         "nieuwe setup",
         "setup maken",
         "dca setup",
+    ]):
+        return True
+    create_terms = [
+        "maak",
+        "maken",
+        "aanmaken",
+        "creeer",
+        "creeër",
+        "bouw",
+        "wil",
+        "kan je",
+        "kun je",
+        "help me",
+        "help mij",
+        "start",
     ]
-    return any(term in q for term in setup_terms)
+    setup_modifiers = [
+        "dca",
+        "trade",
+        "swing",
+        "entry",
+        "trend",
+        "blueprint",
+    ]
+    return any(term in q for term in create_terms) and any(term in q for term in setup_modifiers)
 
 
 def _should_prefer_legacy_setup_flow(query: str, context_payload: Optional[dict] = None) -> bool:
@@ -1448,6 +1473,8 @@ async def assistant_chat(
         if should_resume_legacy_transaction:
             context_payload["current_flow"] = active_legacy_flow
         if _should_prefer_legacy_setup_flow(request.query, context_payload) or should_resume_legacy_transaction:
+            if _should_prefer_legacy_setup_flow(request.query, context_payload):
+                _clear_modern_transactional_context(context_payload)
             response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
                 user_id, request.query, request.history, context_payload, trace_id=trace_id, session_id=request.session_id
             )
@@ -1994,6 +2021,8 @@ async def assistant_chat_stream(
             if should_resume_legacy_transaction:
                 context_payload["current_flow"] = active_legacy_flow
             if _should_prefer_legacy_setup_flow(request.query, context_payload) or should_resume_legacy_transaction:
+                if _should_prefer_legacy_setup_flow(request.query, context_payload):
+                    _clear_modern_transactional_context(context_payload)
                 async for chunk in service.get_chat_response_stream(
                     user_id,
                     request.query,

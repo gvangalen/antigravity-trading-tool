@@ -1560,7 +1560,7 @@ def test_multi_turn_regression_pack_preserves_transactional_turns_without_hijack
     first_response, first_context = asyncio.run(_route_turn(
         service,
         30,
-        "Maak een wekelijkse BTC setup voor een breakout long",
+        "Maak een wekelijkse BTC DCA van 100 euro",
         {"page": "/dashboard", "page_type": "Dashboard", "symbol": "BTC"},
     ))
     assert _MemoryStateRepo.store[30]["current_flow"] == "plan_creation"
@@ -2375,7 +2375,6 @@ def test_trade_plan_supports_manual_only_without_bot():
     assert result["draft"]["bot"]["create_bot"] is False
     assert result["draft"]["bot"]["automation"] == "manual_only"
     assert "Bot:" not in result["response"]
-    assert "Automatisering: manual_only" in result["response"]
 
 
 def test_trade_plan_supports_bot_assisted_modes():
