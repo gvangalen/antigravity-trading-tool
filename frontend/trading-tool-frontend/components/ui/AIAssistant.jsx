@@ -3089,7 +3089,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       if (!envelope?.has_draft || !envelope.draft) return;
 
       setFinnDraft(envelope.draft);
-      setActiveState(envelope.state || null);
+      setActiveState(envelope.state ? { ...envelope.state, can_confirm: envelope.can_confirm } : null);
       setMessages(prev => {
         const alreadyVisible = prev.some(m => (m.intent === envelope.intent || m.flow === envelope.flow) && m.draft);
         if (alreadyVisible) return prev;
@@ -3413,7 +3413,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
               envelope.next_question === "behavioral_memory_ack"
             )
           ) {
-            setActiveState(envelope.state);
+            setActiveState({ ...envelope.state, can_confirm: envelope.can_confirm });
           } else {
             setActiveState(null);
           }
@@ -4906,18 +4906,19 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           {activeState && activeState.current_flow && activeState.current_flow !== "none" && activeState.current_flow !== "plan_creation" && activeState.current_flow !== "strategy_creation" && (() => {
             const flow = activeState.current_flow;
             const slots = activeState.slots || {};
+            const canConfirmActiveFlow = Boolean(activeState.can_confirm);
             let shouldShowCard = false;
             
             if (flow === "setup_creation") {
               const hasCoreChoice = !!slots.setup_type;
-              const hasMeaningfulProgress = !!(slots.timeframe || slots.dca_frequency || slots.name);
-              shouldShowCard = hasCoreChoice && hasMeaningfulProgress;
+              const hasMeaningfulProgress = !!(slots.timeframe && (slots.dca_frequency || slots.entry || slots.stop_loss || slots.base_amount));
+              shouldShowCard = canConfirmActiveFlow && hasCoreChoice && hasMeaningfulProgress;
             } else if (flow === "strategy_creation") {
-              shouldShowCard = !!(slots.setup_type && slots.base_amount);
+              shouldShowCard = canConfirmActiveFlow && !!(slots.setup_type && slots.base_amount && slots.entry && slots.stop_loss);
             } else if (flow === "bot_creation") {
-              shouldShowCard = !!slots.budget_total_eur;
+              shouldShowCard = canConfirmActiveFlow && !!slots.budget_total_eur;
             } else {
-              shouldShowCard = true;
+              shouldShowCard = canConfirmActiveFlow;
             }
 
             if (!shouldShowCard) return null;
@@ -5864,7 +5865,7 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || "SOL"}</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}</span>
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.baseBudget}</span>
@@ -5896,7 +5897,7 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
               ) : (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaMultiplierMode}</span>
-                  <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{slots?.execution_mode || "fixed"}</span>
+                    <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{slots?.execution_mode || <span className="text-slate-400 italic font-normal">{uiText.optional}</span>}</span>
                 </div>
               )}
             </div>
@@ -5910,7 +5911,7 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
               </div>
               <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.safetyProfile}</span>
-                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{slots?.risk_profile || "balanced"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{slots?.risk_profile || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}</span>
               </div>
               <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.budget}</span>

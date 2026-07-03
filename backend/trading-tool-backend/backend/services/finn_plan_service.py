@@ -10043,17 +10043,17 @@ class FinnPlanService:
             return f"Ik zie een probleem met {issue['field']}: {issue['reason']}. Wat wil je hiervoor instellen?"
 
         if next_question == "plan_type":
-            return "Bedoel je een DCA-plan om periodiek te accumuleren, of een trade-plan met entry, stop-loss en targets?"
+            return "Wil je dat Finn hier eerst een DCA-plan van maakt, of een trade-plan met entry, stop-loss en targets? Ik vraag dit eerst uit voordat ik de rest invul."
         if next_question == "setup.timeframe":
-            return "Welke timeframe hoort bij dit plan? Bijvoorbeeld 1W voor DCA of 4H/1D voor een trade."
+            return "Welke timeframe hoort bij dit plan? Bijvoorbeeld 1W voor DCA of 4H/1D voor een trade. Daarna vraag ik pas de volgende ontbrekende keuze."
         if next_question == "strategy.base_amount_eur":
-            return "Met welk basisbedrag in euro wil je dit plan uitvoeren?"
+            return "Met welk basisbedrag in euro wil je dit plan uitvoeren? Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
         if next_question == "bot.create_bot":
-            return "Wil je hier alleen een plan van maken, of wil je ook meteen een botdraft klaarzetten?"
+            return "Wil je hier alleen een plan van maken, of wil je ook meteen een botdraft klaarzetten? Ik bevestig dat pas nadat de basis klopt."
         if next_question == "dca.frequency":
-            return "Hoe vaak wil je deze DCA uitvoeren: dagelijks, wekelijks of maandelijks?"
+            return "Hoe vaak wil je deze DCA uitvoeren: dagelijks, wekelijks of maandelijks? Ik vul nog niets anders in voordat je dit kiest."
         if next_question == "dca.day":
-            return "Op welke weekdag wil je deze DCA uitvoeren?"
+            return "Op welke weekdag wil je deze DCA uitvoeren? Noem gewoon bijvoorbeeld maandag of vrijdag."
         if next_question == "dca.month_day":
             return "Op welke dag van de maand wil je kopen? Gebruik dag 1 t/m 28."
         if next_question == "dca.buy_score_threshold":

@@ -2259,7 +2259,7 @@ def test_short_plan_follow_up_phrase_is_recognized_with_existing_draft():
 
     assert second["draft"]["dca"]["frequency"] == "weekly"
     assert second["next_question"] == "setup.timeframe"
-    assert second["response"] == "Welke timeframe hoort bij dit plan? Bijvoorbeeld 1W voor DCA of 4H/1D voor een trade."
+    assert second["response"] == "Welke timeframe hoort bij dit plan? Bijvoorbeeld 1W voor DCA of 4H/1D voor een trade. Daarna vraag ik pas de volgende ontbrekende keuze."
 
 
 def test_short_plan_follow_up_amount_is_recognized_with_existing_draft():

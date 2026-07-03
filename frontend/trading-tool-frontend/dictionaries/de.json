@@ -1060,9 +1060,11 @@
           "Then review the signal table or return to onboarding for the next step."
         ],
         "primaryCta": "Open macro configuration",
+        "assistantCta": "Open Finn help",
         "secondaryCta": "Back to onboarding",
         "finnLabel": "Finn helps:",
-        "finnHint": "If you are unsure what to pick, start with DXY. Then ask Finn what that indicator adds to your market context."
+        "finnHint": "If you are unsure what to pick, start with DXY. Then ask Finn what that indicator adds to your market context.",
+        "assistantPrompt": "Help me with this macro step. Which indicator should I add first and what exactly should I click here?"
       },
       "hud": {
         "environment": "Macro environment",
@@ -1375,9 +1377,11 @@
         "Save it first, then return to onboarding or continue refining it here."
       ],
       "primaryCta": "Open new setup",
+      "assistantCta": "Open Finn help",
       "secondaryCta": "Back to onboarding",
       "finnLabel": "Finn helps:",
-      "finnHint": "If you are unsure how detailed it should be, keep the first setup simple. Finn can help sharpen it after you save it."
+      "finnHint": "If you are unsure how detailed it should be, keep the first setup simple. Finn can help sharpen it after you save it.",
+      "assistantPrompt": "Guide me through this setup step by step. Ask only the next required question and do not fill the rest in yet."
     }
   },
   "strategyPage": {
@@ -1405,9 +1409,11 @@
         "Save the strategy first, then return to onboarding or continue tuning it here."
       ],
       "primaryCta": "Open new strategy",
+      "assistantCta": "Open Finn help",
       "secondaryCta": "Back to onboarding",
       "finnLabel": "Finn helps:",
-      "finnHint": "If you are unsure how advanced it needs to be, keep the first strategy simple. Finn can refine the execution logic afterward."
+      "finnHint": "If you are unsure how advanced it needs to be, keep the first strategy simple. Finn can refine the execution logic afterward.",
+      "assistantPrompt": "Guide me through this strategy step by step. Ask only for what is still missing and do not finalize anything yet."
     },
     "editTitle": "Edit strategy",
     "editSubtitle": "Settings",

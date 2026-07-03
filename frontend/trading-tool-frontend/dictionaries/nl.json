@@ -1060,9 +1060,11 @@
           "Zie je één actieve indicator? Ga dan terug naar onboarding voor de volgende stap."
         ],
         "primaryCta": "Open macro-configuratie",
+        "assistantCta": "Open Finn-hulp",
         "secondaryCta": "Terug naar onboarding",
         "finnLabel": "Finn helpt:",
-        "finnHint": "Weet je niet welke je moet kiezen, begin met DXY. Vraag Finn daarna wat deze indicator toevoegt aan je marktcontext."
+        "finnHint": "Weet je niet welke je moet kiezen, begin met DXY. Vraag Finn daarna wat deze indicator toevoegt aan je marktcontext.",
+        "assistantPrompt": "Help me met deze macrostap. Welke indicator moet ik als eerste toevoegen en wat moet ik hier precies klikken?"
       },
       "hud": {
         "environment": "Macroomgeving",
@@ -1375,9 +1377,11 @@
         "Sla alleen je eerste basissetup op. Verfijnen kan daarna altijd nog."
       ],
       "primaryCta": "Open nieuwe setup",
+      "assistantCta": "Open Finn-hulp",
       "secondaryCta": "Terug naar onboarding",
       "finnLabel": "Finn helpt:",
-      "finnHint": "Gebruik desnoods deze prompt: 'Maak een BTC swing setup met daily trend en 4H entry.' Finn hoort daarna eerst vervolgvragen te stellen in plaats van alles zelf in te vullen."
+      "finnHint": "Gebruik desnoods deze prompt: 'Maak een BTC swing setup met daily trend en 4H entry.' Finn hoort daarna eerst vervolgvragen te stellen in plaats van alles zelf in te vullen.",
+      "assistantPrompt": "Begeleid me stap voor stap bij deze setup. Stel alleen de eerstvolgende noodzakelijke vraag en vul nog niets anders zelf in."
     }
   },
   "strategyPage": {
@@ -1405,9 +1409,11 @@
         "Vul daarna alleen de belangrijkste uitvoervelden in en sla hem op."
       ],
       "primaryCta": "Open nieuwe strategie",
+      "assistantCta": "Open Finn-hulp",
       "secondaryCta": "Terug naar onboarding",
       "finnLabel": "Finn helpt:",
-      "finnHint": "Gebruik desnoods deze prompt: 'Maak hier een strategie van met duidelijke entry, invalidatie en risk management.'"
+      "finnHint": "Gebruik desnoods deze prompt: 'Maak hier een strategie van met duidelijke entry, invalidatie en risk management.'",
+      "assistantPrompt": "Begeleid me stap voor stap bij deze strategie. Vraag eerst alleen wat nog ontbreekt en maak nog niets definitief."
     },
     "editTitle": "Strategie aanpassen",
     "editSubtitle": "Instellingen",

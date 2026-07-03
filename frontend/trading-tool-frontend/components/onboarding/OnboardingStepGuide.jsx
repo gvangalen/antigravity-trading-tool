@@ -6,6 +6,18 @@ import { ArrowDown, CheckCircle2, Sparkles } from "lucide-react";
 export default function OnboardingStepGuide({ copy, anchorId, guidedMode = false }) {
   if (!copy) return null;
 
+  const openFinnGuide = () => {
+    if (typeof window === "undefined" || !copy.assistantPrompt) return;
+    window.dispatchEvent(
+      new CustomEvent("finn-action-trigger", {
+        detail: {
+          query: copy.assistantPrompt,
+          openAssistant: true,
+        },
+      })
+    );
+  };
+
   return (
     <div className="mb-10 overflow-hidden rounded-[2rem] border border-blue-100 bg-blue-50/70 shadow-sm">
       <div className="flex flex-col gap-6 p-8 lg:flex-row lg:items-center lg:justify-between">
@@ -89,6 +101,15 @@ export default function OnboardingStepGuide({ copy, anchorId, guidedMode = false
                 {copy.primaryCta}
               </span>
             </a>
+          ) : null}
+          {copy.assistantPrompt && copy.assistantCta ? (
+            <button
+              type="button"
+              onClick={openFinnGuide}
+              className="rounded-2xl border border-blue-200 bg-white px-6 py-4 text-center text-[11px] font-black uppercase tracking-[0.2em] text-blue-700 shadow-sm transition-all hover:border-blue-300 hover:bg-blue-50 active:scale-95"
+            >
+              {copy.assistantCta}
+            </button>
           ) : null}
           <Link
             href="/onboarding"

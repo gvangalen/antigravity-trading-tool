@@ -1059,9 +1059,11 @@
           "Once you see one active indicator, return to onboarding for the next step."
         ],
         "primaryCta": "Open macro configuration",
+        "assistantCta": "Open Finn help",
         "secondaryCta": "Back to onboarding",
         "finnLabel": "Finn helps:",
-        "finnHint": "If you do not know what to start with, use DXY first. Then ask Finn what that indicator adds to your market context."
+        "finnHint": "If you do not know what to start with, use DXY first. Then ask Finn what that indicator adds to your market context.",
+        "assistantPrompt": "Help me with this macro step. Which indicator should I add first and what exactly should I click here?"
       },
       "hud": {
         "environment": "Macro environment",
@@ -1374,9 +1376,11 @@
         "Save only your first base setup. You can refine it afterwards."
       ],
       "primaryCta": "Open new setup",
+      "assistantCta": "Open Finn help",
       "secondaryCta": "Back to onboarding",
       "finnLabel": "Finn helps:",
-      "finnHint": "Use this prompt if needed: 'Create a BTC swing setup with daily trend and 4H entry.' Finn should ask follow-up questions after that instead of filling everything in by itself."
+      "finnHint": "Use this prompt if needed: 'Create a BTC swing setup with daily trend and 4H entry.' Finn should ask follow-up questions after that instead of filling everything in by itself.",
+      "assistantPrompt": "Guide me through this setup step by step. Ask only the next required question and do not fill the rest in yet."
     }
   },
   "strategyPage": {
@@ -1404,9 +1408,11 @@
         "Then fill in only the key execution fields and save it."
       ],
       "primaryCta": "Open new strategy",
+      "assistantCta": "Open Finn help",
       "secondaryCta": "Back to onboarding",
       "finnLabel": "Finn helps:",
-      "finnHint": "Use this prompt if needed: 'Turn this into a strategy with a clear entry, invalidation, and risk management.'"
+      "finnHint": "Use this prompt if needed: 'Turn this into a strategy with a clear entry, invalidation, and risk management.'",
+      "assistantPrompt": "Guide me through this strategy step by step. Ask only for what is still missing and do not finalize anything yet."
     },
     "editTitle": "Edit strategy",
     "editSubtitle": "Settings",
