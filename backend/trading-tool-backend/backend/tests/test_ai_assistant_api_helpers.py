@@ -151,6 +151,67 @@ def test_watchlist_mutation_returns_action_card():
     assert envelope["actions"][0]["symbol"] == "BTC"
 
 
+def test_ensure_pending_action_ids_registers_watchlist_action(monkeypatch):
+    async def _fake_register(self, user_id, action_type, payload, trace_id=None, ttl_seconds=600):
+        assert user_id == 42
+        assert action_type == "add_to_watchlist"
+        assert payload == {"symbol": "BTC"}
+        return "act_watch_btc"
+
+    monkeypatch.setattr(api.AiActionEngine, "register_pending_action", _fake_register)
+
+    payload = asyncio.run(api._ensure_pending_action_ids(
+        db=object(),
+        user_id=42,
+        response={
+            "intent": "watchlist_mutation",
+            "actions": [{"type": "add_to_watchlist", "symbol": "BTC", "label": "Voeg BTC toe"}],
+        },
+        locale="nl",
+        trace_id="trace-watch",
+    ))
+
+    assert payload["can_confirm"] is True
+    assert payload["actions"][0]["action_id"] == "act_watch_btc"
+    assert payload["action"]["id"] == "act_watch_btc"
+
+
+def test_ensure_pending_action_ids_turns_legacy_setup_draft_into_confirmable_action(monkeypatch):
+    async def _fake_register(self, user_id, action_type, payload, trace_id=None, ttl_seconds=600):
+        assert user_id == 7
+        assert action_type == "setup"
+        assert payload["symbol"] == "BTC"
+        assert payload["setup_type"] == "trade"
+        return "act_setup_btc"
+
+    monkeypatch.setattr(api.AiActionEngine, "register_pending_action", _fake_register)
+
+    payload = asyncio.run(api._ensure_pending_action_ids(
+        db=object(),
+        user_id=7,
+        response={
+            "response": "Je setup staat klaar.",
+            "draft": {
+                "type": "setup",
+                "payload": {
+                    "name": "BTC Trade 4H",
+                    "symbol": "BTC",
+                    "setup_type": "trade",
+                    "timeframe": "4H",
+                },
+            },
+            "actions": [],
+        },
+        locale="nl",
+        trace_id="trace-setup",
+    ))
+
+    assert payload["can_confirm"] is True
+    assert payload["actions"][0]["type"] == "setup"
+    assert payload["actions"][0]["action_id"] == "act_setup_btc"
+    assert payload["actions"][0]["label"] == "Setup opslaan"
+
+
 def test_setup_strategy_listing_detection_matches_real_prompt():
     assert api._looks_like_setup_strategy_listing_request("Laat mijn actieve setups en strategieën zien.") is True
 

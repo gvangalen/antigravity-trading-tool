@@ -56,6 +56,7 @@ from backend.infrastructure.repositories.market_data_repository import MarketDat
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.assistant_context_repository import AssistantContextRepository
+from backend.services.ai_action_engine import AiActionEngine
 
 if TYPE_CHECKING:
     from backend.services.ai_assistant_service import AiAssistantService
@@ -145,6 +146,87 @@ def _audit_response_type(response: Optional[dict]) -> str:
     if response.get("state"):
         return "stateful_response"
     return "text_response"
+
+
+def _legacy_draft_action_label(draft_type: str, locale: str) -> str:
+    labels = {
+        "setup": {
+            "nl": "Setup opslaan",
+            "en": "Save setup",
+            "de": "Setup speichern",
+        },
+        "strategy": {
+            "nl": "Strategie opslaan",
+            "en": "Save strategy",
+            "de": "Strategie speichern",
+        },
+        "bot": {
+            "nl": "Bot opslaan",
+            "en": "Save bot",
+            "de": "Bot speichern",
+        },
+    }
+    return labels.get(draft_type, {}).get(locale) or labels.get(draft_type, {}).get("en") or "Save draft"
+
+
+async def _ensure_pending_action_ids(
+    db: AsyncSession,
+    user_id: int,
+    response: Optional[dict],
+    *,
+    locale: str = "nl",
+    trace_id: Optional[str] = None,
+) -> dict:
+    payload = deepcopy(response or {})
+    engine = AiActionEngine(db)
+    actions = payload.get("actions") if isinstance(payload.get("actions"), list) else []
+    draft = payload.get("draft") if isinstance(payload.get("draft"), dict) else None
+
+    normalized_actions: List[Dict[str, Any]] = []
+    for raw_action in actions:
+        if not isinstance(raw_action, dict):
+            continue
+        action = dict(raw_action)
+        action_type = str(action.get("type") or "").strip()
+        existing_action_id = action.get("action_id") or action.get("id")
+        if not existing_action_id and action_type in {"add_to_watchlist", "remove_from_watchlist"}:
+            registration_payload = {"symbol": str(action.get("symbol") or "").upper()}
+            pending_action_id = await engine.register_pending_action(
+                user_id,
+                action_type,
+                registration_payload,
+                trace_id=trace_id,
+            )
+            action["action_id"] = pending_action_id
+            action["id"] = pending_action_id
+        normalized_actions.append(action)
+
+    if not normalized_actions and draft:
+        draft_type = str(draft.get("type") or "").strip().lower()
+        draft_payload = draft.get("payload") if isinstance(draft.get("payload"), dict) else None
+        supported_draft_types = {"setup": "setup", "strategy": "strategy", "bot": "bot"}
+        mapped_action_type = supported_draft_types.get(draft_type)
+        if mapped_action_type and draft_payload:
+            pending_action_id = await engine.register_pending_action(
+                user_id,
+                mapped_action_type,
+                dict(draft_payload),
+                trace_id=trace_id,
+            )
+            normalized_actions = [{
+                "type": mapped_action_type,
+                "action_id": pending_action_id,
+                "id": pending_action_id,
+                "label": _legacy_draft_action_label(draft_type, locale),
+                "requires_confirmation": True,
+            }]
+
+    if normalized_actions:
+        payload["actions"] = normalized_actions
+        payload["action"] = normalized_actions[0]
+        payload["can_confirm"] = True
+
+    return payload
 
 
 KNOWN_FINN_ASSETS = ("BTC", "ETH", "SOL")
@@ -1071,6 +1153,7 @@ async def _finalize_finn_response(
     response: dict,
     trace_id: str,
     *,
+    db: Optional[AsyncSession] = None,
     persist_state: bool = True,
     prompt: Optional[str] = None,
     context_payload: Optional[dict] = None,
@@ -1079,6 +1162,14 @@ async def _finalize_finn_response(
     latency_ms: Optional[float] = None,
 ) -> AssistantChatResponse:
     response["trace_id"] = trace_id
+    if db is not None:
+        response = await _ensure_pending_action_ids(
+            db,
+            user_id,
+            response,
+            locale=(context_payload or {}).get("locale") or "nl",
+            trace_id=trace_id,
+        )
     response = finn._build_response_analysis_metadata(response, context_payload, route_source=route_source)
     response = _attach_trader_profile_metadata(response, context_payload)
     response = _normalize_finn_response_contract(response)
@@ -1174,6 +1265,7 @@ async def _prepare_finn_envelope(
     envelope: dict,
     trace_id: str,
     *,
+    db: Optional[AsyncSession] = None,
     persist_state: bool = True,
     prompt: Optional[str] = None,
     context_payload: Optional[dict] = None,
@@ -1182,6 +1274,14 @@ async def _prepare_finn_envelope(
     latency_ms: Optional[float] = None,
 ) -> dict:
     envelope["trace_id"] = trace_id
+    if db is not None:
+        envelope = await _ensure_pending_action_ids(
+            db,
+            user_id,
+            envelope,
+            locale=(context_payload or {}).get("locale") or "nl",
+            trace_id=trace_id,
+        )
     envelope = finn._build_response_analysis_metadata(envelope, context_payload, route_source=route_source)
     envelope = _attach_trader_profile_metadata(envelope, context_payload)
     envelope = _normalize_finn_response_contract(envelope)
@@ -1284,6 +1384,7 @@ async def _finalize_legacy_response(
     finn: Any,
     user_id: int,
     trace_id: str,
+    db: Optional[AsyncSession],
     query: str,
     context_payload: Optional[dict],
     started_at: float,
@@ -1318,6 +1419,7 @@ async def _finalize_legacy_response(
             user_id,
             rescue,
             trace_id,
+            db=db,
             prompt=query,
             context_payload=context_payload,
             route_source="finn_core_rescue_legacy",
@@ -1332,6 +1434,14 @@ async def _finalize_legacy_response(
         "state": state,
         "actions": action and [action] or [],
     }
+    if db is not None:
+        legacy_response = await _ensure_pending_action_ids(
+            db,
+            user_id,
+            legacy_response,
+            locale=(context_payload or {}).get("locale") or "nl",
+            trace_id=trace_id,
+        )
     legacy_response = finn._build_response_analysis_metadata(
         legacy_response,
         context_payload,
@@ -1472,7 +1582,7 @@ async def assistant_chat(
         if _looks_like_watchlist_mutation(request.query):
             finn_response = _build_watchlist_mutation_envelope(request.query, context_payload)
             return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+                finn, user_id, finn_response, trace_id, db=db, prompt=request.query, context_payload=context_payload
             )
         active_legacy_state = await service.state_repo.get_state(user_id)
         active_legacy_flow = str((active_legacy_state or {}).get("current_flow") or "").lower()
@@ -1500,6 +1610,7 @@ async def assistant_chat(
                 finn=finn,
                 user_id=user_id,
                 trace_id=trace_id,
+                db=db,
                 query=request.query,
                 context_payload=context_payload,
                 started_at=started_at,
@@ -2018,7 +2129,7 @@ async def assistant_chat_stream(
 
             if _looks_like_watchlist_mutation(request.query):
                 envelope = _build_watchlist_mutation_envelope(request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, db=db, prompt=request.query, context_payload=context_payload)
                 yield _sse_event("envelope", envelope)
                 return
 
