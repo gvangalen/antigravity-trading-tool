@@ -16,9 +16,10 @@ DEFAULT_STEPS: List[str] = [
     "technical",
     "setup",
     "strategy",
+    "bot",
 ]
 
-PIPELINE_STEP = "strategy"
+PIPELINE_STEP = "bot"
 
 STEP_FLAG_MAP = {
     "profile": "has_profile",
@@ -28,6 +29,7 @@ STEP_FLAG_MAP = {
     "technical": "has_technical",
     "setup": "has_setup",
     "strategy": "has_strategy",
+    "bot": "has_bot",
 }
 
 REQUIRED_COMPLETION_STEPS: List[str] = [
@@ -37,6 +39,7 @@ REQUIRED_COMPLETION_STEPS: List[str] = [
     "technical",
     "setup",
     "strategy",
+    "bot",
 ]
 
 class OnboardingService:
