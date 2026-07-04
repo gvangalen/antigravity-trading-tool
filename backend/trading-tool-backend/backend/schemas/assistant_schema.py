@@ -66,6 +66,8 @@ class AssistantActionExecuteResponse(BaseModel):
 
 class AssistantPreferenceUpdate(BaseModel):
     locale: Optional[str] = None
+    onboarding_asset: Optional[str] = None
+    selected_asset: Optional[str] = None
     report_style: Optional[str] = None
     tone: Optional[str] = None
     detail_level: Optional[str] = None

@@ -9,12 +9,14 @@ import { Settings, BarChart3, Save, Info, Rocket, Target } from "lucide-react";
 import { saveNewSetup, updateSetup } from "@/lib/api/setups";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { useAsset } from "@/app/providers/AssetProvider";
 
 export default function SetupForm({ onSaved, mode = "new", initialData = null }) {
   const isEdit = mode === "edit";
   const { t } = useTranslation();
   const copy = t?.setups?.form || {};
   const { showSnackbar } = useModal();
+  const { selectedAsset } = useAsset();
 
   // ----------------------------------------------------
   // SCORE MEANING
@@ -49,6 +51,19 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
   const [technicalScore, setTechnicalScore] = useState([40, 80]);
   const [marketScore, setMarketScore] = useState([20, 60]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isEdit) return;
+    const normalized = String(selectedAsset || "").trim().toUpperCase();
+    if (!normalized) return;
+    setFormData((current) => {
+      if (current.symbol === normalized) return current;
+      return {
+        ...current,
+        symbol: normalized,
+      };
+    });
+  }, [isEdit, selectedAsset]);
 
   // ----------------------------------------------------
   // LOAD FOR EDIT
@@ -140,7 +155,10 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
       } else {
         await saveNewSetup(payload);
         showSnackbar(copy.savedSuccess, "success");
-        setFormData(emptyForm);
+        setFormData({
+          ...emptyForm,
+          symbol: selectedAsset || emptyForm.symbol,
+        });
         setMacroScore([30, 70]);
         setTechnicalScore([40, 80]);
         setMarketScore([20, 60]);

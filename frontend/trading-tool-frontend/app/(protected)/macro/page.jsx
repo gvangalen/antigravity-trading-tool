@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
 // 🔥 Onboarding
@@ -61,10 +61,26 @@ import { useCurrentAsset } from "@/hooks/useCurrentAsset";
 
 export default function MacroPage() {
   const [activeTab, setActiveTab] = useState("day");
+  const router = useRouter();
   const { symbol: selectedAsset } = useCurrentAsset();
   const searchParams = useSearchParams();
   const { t } = useTranslation();
   const macroT = t.pages.macro;
+  const guideCopy = macroT.onboardingGuide
+    ? {
+        ...macroT.onboardingGuide,
+        title: macroT.onboardingGuide.title?.replace("{symbol}", selectedAsset),
+        body: macroT.onboardingGuide.body?.replace("{symbol}", selectedAsset),
+        guidedIntro: macroT.onboardingGuide.guidedIntro?.replace("{symbol}", selectedAsset),
+        guidedConfigHint: macroT.onboardingGuide.guidedConfigHint?.replace("{symbol}", selectedAsset),
+        completionHint: macroT.onboardingGuide.completionHint?.replace("{symbol}", selectedAsset),
+        finnHint: macroT.onboardingGuide.finnHint?.replace("{symbol}", selectedAsset),
+        assistantPrompt: macroT.onboardingGuide.assistantPrompt?.replace("{symbol}", selectedAsset),
+        steps: Array.isArray(macroT.onboardingGuide.steps)
+          ? macroT.onboardingGuide.steps.map((step) => step.replace("{symbol}", selectedAsset))
+          : [],
+      }
+    : null;
 
   // ===============================
   // 🧭 ONBOARDING HOOK
@@ -88,6 +104,11 @@ export default function MacroPage() {
   const macroNeedsSetup = status?.has_macro === false && activeMacroIndicatorNames?.length === 0;
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
   const showOnboardingGuide = onboardingGuidedMode || macroNeedsSetup;
+
+  useEffect(() => {
+    if (!status || status.has_asset) return;
+    router.replace("/onboarding/asset?onboarding=1&step=asset");
+  }, [status, router]);
 
   // ===============================
   // 📈 SCORE DATA
@@ -208,7 +229,7 @@ export default function MacroPage() {
       </header>
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide copy={macroT.onboardingGuide} anchorId="macro-config" guidedMode={onboardingGuidedMode} />
+        <OnboardingStepGuide copy={guideCopy} anchorId="macro-config" guidedMode={onboardingGuidedMode} />
       ) : null}
 
       <div className="space-y-12">
@@ -244,7 +265,7 @@ export default function MacroPage() {
             </div>
             {showOnboardingGuide ? (
               <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700">
-                {macroT.onboardingGuide.guidedConfigHint}
+                {guideCopy?.guidedConfigHint}
               </div>
             ) : null}
             <MacroIndicatorScoreView

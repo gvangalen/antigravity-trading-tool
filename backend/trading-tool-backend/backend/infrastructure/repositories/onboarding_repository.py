@@ -90,6 +90,11 @@ class OnboardingRepository:
         user = await self.db.get(User, user_id)
         preferences = getattr(user, "ai_preferences", {}) or {}
         profile = normalize_trader_profile_preferences(preferences)
+        onboarding_asset = str(
+            preferences.get("onboarding_asset")
+            or preferences.get("selected_asset")
+            or ""
+        ).strip().upper()
 
         async def _has_rows(table_name: str) -> bool:
             query = text(f"SELECT EXISTS (SELECT 1 FROM {table_name} WHERE user_id = :user_id)")
@@ -98,6 +103,7 @@ class OnboardingRepository:
 
         return {
             "profile": has_trader_profile(profile),
+            "asset": bool(onboarding_asset) or await _has_rows("watchlists"),
             # These tables can be filled by background sync/bootstrap jobs, so
             # row presence is not a reliable signal that the user consciously
             # completed the onboarding action on that page.

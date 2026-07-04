@@ -43,6 +43,7 @@ def test_get_status_dict_backfills_legacy_completion_from_existing_user_data():
     repo = FakeOnboardingRepository(
         steps=[
             SimpleNamespace(step_key="profile", completed=False, pipeline_started=False),
+            SimpleNamespace(step_key="asset", completed=False, pipeline_started=False),
             SimpleNamespace(step_key="market", completed=False, pipeline_started=False),
             SimpleNamespace(step_key="macro", completed=False, pipeline_started=False),
             SimpleNamespace(step_key="technical", completed=False, pipeline_started=False),
@@ -51,6 +52,7 @@ def test_get_status_dict_backfills_legacy_completion_from_existing_user_data():
         ],
         inferred_completed={
             "profile": True,
+            "asset": True,
             "market": True,
             "macro": True,
             "technical": True,
@@ -63,8 +65,9 @@ def test_get_status_dict_backfills_legacy_completion_from_existing_user_data():
 
     status = asyncio.run(service.get_status_dict(user_id=42))
 
-    assert repo.marked_steps == [["profile", "market", "macro", "technical", "setup", "strategy"]]
+    assert repo.marked_steps == [["profile", "asset", "market", "macro", "technical", "setup", "strategy"]]
     assert status.has_profile is True
+    assert status.has_asset is True
     assert status.has_market is True
     assert status.has_macro is True
     assert status.has_technical is True
@@ -77,6 +80,7 @@ def test_get_status_dict_only_backfills_missing_legacy_steps():
     repo = FakeOnboardingRepository(
         steps=[
             SimpleNamespace(step_key="profile", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="asset", completed=False, pipeline_started=False),
             SimpleNamespace(step_key="market", completed=False, pipeline_started=False),
             SimpleNamespace(step_key="macro", completed=False, pipeline_started=False),
             SimpleNamespace(step_key="technical", completed=False, pipeline_started=False),
@@ -85,6 +89,7 @@ def test_get_status_dict_only_backfills_missing_legacy_steps():
         ],
         inferred_completed={
             "profile": True,
+            "asset": True,
             "market": False,
             "macro": False,
             "technical": True,
@@ -97,8 +102,9 @@ def test_get_status_dict_only_backfills_missing_legacy_steps():
 
     status = asyncio.run(service.get_status_dict(user_id=7))
 
-    assert repo.marked_steps == [["technical", "setup"]]
+    assert repo.marked_steps == [["asset", "technical", "setup"]]
     assert status.has_profile is True
+    assert status.has_asset is True
     assert status.has_market is False
     assert status.has_macro is False
     assert status.has_technical is True
@@ -111,6 +117,7 @@ def test_get_status_dict_marks_legacy_user_complete_without_profile_if_core_step
     repo = FakeOnboardingRepository(
         steps=[
             SimpleNamespace(step_key="profile", completed=False, pipeline_started=False),
+            SimpleNamespace(step_key="asset", completed=False, pipeline_started=False),
             SimpleNamespace(step_key="market", completed=True, pipeline_started=False),
             SimpleNamespace(step_key="macro", completed=True, pipeline_started=False),
             SimpleNamespace(step_key="technical", completed=True, pipeline_started=False),
@@ -119,6 +126,7 @@ def test_get_status_dict_marks_legacy_user_complete_without_profile_if_core_step
         ],
         inferred_completed={
             "profile": False,
+            "asset": True,
             "market": True,
             "macro": True,
             "technical": True,
@@ -131,8 +139,9 @@ def test_get_status_dict_marks_legacy_user_complete_without_profile_if_core_step
 
     status = asyncio.run(service.get_status_dict(user_id=2))
 
-    assert repo.marked_steps == []
+    assert repo.marked_steps == [["asset"]]
     assert status.has_profile is False
+    assert status.has_asset is True
     assert status.has_market is True
     assert status.has_macro is True
     assert status.has_technical is True

@@ -10,6 +10,7 @@ DEFAULT_FLOW = "default"
 
 DEFAULT_STEPS: List[str] = [
     "profile",
+    "asset",
     "market",
     "macro",
     "technical",
@@ -21,6 +22,7 @@ PIPELINE_STEP = "strategy"
 
 STEP_FLAG_MAP = {
     "profile": "has_profile",
+    "asset": "has_asset",
     "market": "has_market",
     "macro": "has_macro",
     "technical": "has_technical",
@@ -29,6 +31,7 @@ STEP_FLAG_MAP = {
 }
 
 REQUIRED_COMPLETION_STEPS: List[str] = [
+    "asset",
     "market",
     "macro",
     "technical",

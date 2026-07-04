@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useOnboarding } from "@/hooks/useOnboarding";
-import { BarChart3, Globe, Activity, Wand2, Bot, Sparkles, User } from "lucide-react";
+import { BarChart3, Globe, Activity, Wand2, Bot, Sparkles, User, Coins } from "lucide-react";
 
 const ICONS = {
   profile: User,
+  asset: Coins,
   market: BarChart3,
   macro: Globe,
   technical: Activity,

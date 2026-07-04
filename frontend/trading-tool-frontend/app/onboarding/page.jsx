@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { useAsset } from "@/app/providers/AssetProvider";
 import {
   CheckCircle2,
   Lock,
@@ -20,12 +21,14 @@ import {
   Shield,
   TrendingUp,
   User,
+  Coins,
 } from "lucide-react";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 const ICONS = {
   profile: User,
+  asset: Coins,
   market: Globe,
   macro: Activity,
   technical: LineChart,
@@ -33,17 +36,20 @@ const ICONS = {
   strategy: Bot,
 };
 
-const buildOnboardingLink = (path, stepKey) => `${path}?onboarding=1&step=${stepKey}`;
+const buildOnboardingLink = (path, stepKey, symbol) =>
+  `${path}?onboarding=1&step=${stepKey}${symbol ? `&symbol=${encodeURIComponent(symbol)}` : ""}`;
 
 export default function OnboardingPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const { selectedAsset } = useAsset();
   const { status, loading, onboardingComplete, allowedSteps, finish, saving } = useOnboarding();
 
   useEffect(() => {
     if (loading || !status) return;
     const stepsComplete = [
       status.has_profile,
+      status.has_asset,
       status.has_market,
       status.has_macro,
       status.has_technical,
@@ -88,8 +94,18 @@ export default function OnboardingPage() {
       finnHelp: stepText?.profile?.finnHelp,
       unlocks: stepText?.profile?.unlocks,
       done: status.has_profile,
-      link: buildOnboardingLink("/onboarding/profile", "profile"),
+      link: buildOnboardingLink("/onboarding/profile", "profile", selectedAsset),
       unlocked: allowedSteps.profile,
+    },
+    {
+      key: "asset",
+      title: stepText?.asset?.title,
+      description: stepText?.asset?.description,
+      finnHelp: stepText?.asset?.finnHelp,
+      unlocks: stepText?.asset?.unlocks,
+      done: status.has_asset,
+      link: buildOnboardingLink("/onboarding/asset", "asset", selectedAsset),
+      unlocked: allowedSteps.asset,
     },
     {
       key: "market",
@@ -98,7 +114,7 @@ export default function OnboardingPage() {
       finnHelp: stepText?.market?.finnHelp,
       unlocks: stepText?.market?.unlocks,
       done: status.has_market,
-      link: buildOnboardingLink("/market", "market"),
+      link: buildOnboardingLink("/market", "market", selectedAsset),
       unlocked: allowedSteps.market,
     },
     {
@@ -108,7 +124,7 @@ export default function OnboardingPage() {
       finnHelp: stepText?.macro?.finnHelp,
       unlocks: stepText?.macro?.unlocks,
       done: status.has_macro,
-      link: buildOnboardingLink("/macro", "macro"),
+      link: buildOnboardingLink("/macro", "macro", selectedAsset),
       unlocked: allowedSteps.macro,
     },
     {
@@ -118,7 +134,7 @@ export default function OnboardingPage() {
       finnHelp: stepText?.technical?.finnHelp,
       unlocks: stepText?.technical?.unlocks,
       done: status.has_technical,
-      link: buildOnboardingLink("/technical", "technical"),
+      link: buildOnboardingLink("/technical", "technical", selectedAsset),
       unlocked: allowedSteps.technical,
     },
     {
@@ -128,7 +144,7 @@ export default function OnboardingPage() {
       finnHelp: stepText?.setup?.finnHelp,
       unlocks: stepText?.setup?.unlocks,
       done: status.has_setup,
-      link: buildOnboardingLink("/setup", "setup"),
+      link: buildOnboardingLink("/setup", "setup", selectedAsset),
       unlocked: allowedSteps.setup,
     },
     {
@@ -138,7 +154,7 @@ export default function OnboardingPage() {
       finnHelp: stepText?.strategy?.finnHelp,
       unlocks: stepText?.strategy?.unlocks,
       done: status.has_strategy,
-      link: buildOnboardingLink("/strategy", "strategy"),
+      link: buildOnboardingLink("/strategy", "strategy", selectedAsset),
       unlocked: allowedSteps.strategy,
     },
   ];

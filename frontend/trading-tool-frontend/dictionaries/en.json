@@ -696,7 +696,7 @@
       }
     },
     "onboardingStep": {
-      "stepNumber": "Step 1 of 6",
+      "stepNumber": "Step 1 of 7",
       "title": "Who are you as a trader?",
       "description": "Finn uses this profile to tune explanations, warnings, and setup guidance to your style right away. That gives you less noise and more relevant advice.",
       "finnSaysLabel": "Finn says",
@@ -706,6 +706,21 @@
       "saving": "Saving profile...",
       "validationError": "Please complete all profile fields first so Finn can guide you properly.",
       "saveError": "Saving your trader profile failed. Please try again."
+    },
+    "assetOnboardingStep": {
+      "stepNumber": "Step 2 of 7",
+      "title": "Choose the first asset you want to build around",
+      "description": "Your first asset becomes the anchor for the rest of onboarding. Finn uses this symbol to keep market, macro, technical, setup, and strategy guidance aligned to the same context.",
+      "finnSaysLabel": "Finn says",
+      "finnSaysBody": "Pick the asset you actually want to trade first. I will add it to your watchlist and keep the next onboarding steps scoped to that same symbol.",
+      "assetGroupTitle": "Choose your first onboarding asset",
+      "assetGroupSubtitle": "This immediately becomes your watchlist anchor and the active asset for the next context-building steps.",
+      "assetLabel": "Asset",
+      "footer": "After saving, Finn adds this asset to your watchlist and uses it as the anchor for market, macro, technical, setup, and strategy onboarding.",
+      "saveAndContinue": "Save asset and continue",
+      "saving": "Saving asset...",
+      "validationError": "Choose one asset first so Finn can anchor the next onboarding steps correctly.",
+      "saveError": "Saving your onboarding asset failed. Please try again."
     },
     "profilePage": {
       "eyebrow": "Trading profile",
@@ -763,39 +778,45 @@
       "backToOverviewCta": "Back to overview →",
       "steps": {
         "profile": {
-          "title": "Step 1 of 6 — Your trading profile",
+          "title": "Step 1 of 7 — Your trading profile",
           "action": "Start by sharing what kind of trader you are, which horizon you use, and what Finn should watch.",
           "help": "Finn uses this to adapt setups, explanations, and risk warnings to your style.",
           "unlocks": "More personal coaching"
         },
+        "asset": {
+          "title": "Step 2 of 7 — Choose your first asset",
+          "action": "Pick the first asset you want to trade so onboarding stops floating on defaults and every next step points to the same symbol.",
+          "help": "Finn adds this asset to your watchlist and keeps market, macro, technical, setup, and strategy guidance scoped to it.",
+          "unlocks": "Asset-scoped context building"
+        },
         "market": {
-          "title": "Step 2 of 6 — Market context",
-          "action": "Open the market page and let Finn establish the current market picture first.",
-          "help": "Without market context, Finn stays too generic in the advice that follows.",
+          "title": "Step 3 of 7 — Market context",
+          "action": "Open the market page for your chosen asset and let Finn establish the live market picture first.",
+          "help": "Without market context for your chosen asset, Finn stays too generic in the advice that follows.",
           "unlocks": "Your first market briefing"
         },
         "macro": {
-          "title": "Step 3 of 6 — Macro picture",
-          "action": "Add macro context so Finn can weigh regime and risk more accurately.",
-          "help": "Think DXY, yields, or liquidity: Finn uses this for the bigger picture.",
+          "title": "Step 4 of 7 — Macro picture",
+          "action": "Add macro context so Finn can judge the broader regime around your chosen asset more accurately.",
+          "help": "Think DXY, yields, or liquidity: Finn uses this bigger picture to judge the asset you picked.",
           "unlocks": "Better risk assessment"
         },
         "technical": {
-          "title": "Step 4 of 6 — Technical signals",
-          "action": "Check technical signals so Finn can judge entries and timing more accurately.",
-          "help": "This step gives Finn evidence for trend, momentum, and timing.",
+          "title": "Step 5 of 7 — Technical signals",
+          "action": "Check technical signals for your chosen asset so Finn can judge entries and timing more accurately.",
+          "help": "This step gives Finn concrete evidence for trend, momentum, and timing on your chosen asset.",
           "unlocks": "Stronger timing explanations"
         },
         "setup": {
-          "title": "Step 5 of 6 — Create a setup",
-          "action": "Create your first setup so Finn can connect your rules to real situations.",
-          "help": "This is where Finn becomes more specific: not just context, but your preferences too.",
+          "title": "Step 6 of 7 — Create a setup",
+          "action": "Create your first setup for your chosen asset so Finn can connect your rules to real situations.",
+          "help": "This is where Finn becomes more specific: not just context, but your asset-specific rules too.",
           "unlocks": "More personal reviews"
         },
         "strategy": {
-          "title": "Step 6 of 6 — Choose a strategy",
-          "action": "Create your first strategy so dashboard, reviews, and reports become truly useful.",
-          "help": "After this step Finn can review and prioritize your decisions much better.",
+          "title": "Step 7 of 7 — Choose a strategy",
+          "action": "Create your first strategy for that setup so dashboard, reviews, and reports become truly useful.",
+          "help": "After this step Finn can review and prioritize decisions for your chosen asset much better.",
           "unlocks": "Full review flow"
         }
       }
@@ -803,8 +824,8 @@
     "onboardingOverview": {
       "loading": "Finn is preparing your workspace...",
       "eyebrow": "Finn guides your setup",
-      "title": "Start in six clear steps",
-      "description": "You do not have to understand everything at once. Work through the steps calmly from top to bottom. Finn uses this route to build your market context, setup, and strategy so advice, reviews, and reports become truly useful afterward.",
+      "title": "Start in seven clear steps",
+      "description": "You do not have to understand everything at once. Work through the steps calmly from top to bottom. First choose the asset you want to trade, then build market, macro, and technical context around that same symbol before you create a setup and strategy.",
       "chips": {
         "duration": "3-5 minutes",
         "safe": "No live trades in onboarding",
@@ -844,34 +865,40 @@
           "finnHelp": "Finn uses this profile to tailor advice, warnings, and explanations to your style right away.",
           "unlocks": "More personal coaching and more relevant signals"
         },
+        "asset": {
+          "title": "Choose your first asset",
+          "description": "Pick the first asset you actually want to trade so onboarding, watchlist, and Finn all anchor on the same symbol.",
+          "finnHelp": "Finn adds this asset to your watchlist and uses it as the anchor for the rest of your onboarding context.",
+          "unlocks": "A shared asset anchor for market, macro, technical, setup, and strategy"
+        },
         "market": {
           "title": "Market context",
-          "description": "Review live market data and let Finn establish the market picture first.",
-          "finnHelp": "Finn uses this to build your first context and priorities.",
+          "description": "Review live market data for your chosen asset and let Finn establish the market picture first.",
+          "finnHelp": "Finn uses this to build the first live context and priorities around your chosen asset.",
           "unlocks": "First market briefing and live context"
         },
         "macro": {
           "title": "Macro picture",
-          "description": "Add macro context so Finn can weigh regime and risk more accurately.",
-          "finnHelp": "Think DXY, yields, and liquidity: this gives Finn the bigger picture.",
+          "description": "Add macro context so Finn can weigh regime and risk around your chosen asset more accurately.",
+          "finnHelp": "Think DXY, yields, and liquidity: this gives Finn the bigger picture around the asset you want to trade.",
           "unlocks": "Better risk assessment and regime context"
         },
         "technical": {
           "title": "Technical signals",
-          "description": "Check technical signals so Finn can explain entries and timing more clearly.",
-          "finnHelp": "This gives Finn structure for trend, momentum, and timing.",
+          "description": "Check technical signals for your chosen asset so Finn can explain entries and timing more clearly.",
+          "finnHelp": "This gives Finn structure for trend, momentum, and timing on that same asset.",
           "unlocks": "Stronger timing, trend, and momentum guidance"
         },
         "setup": {
           "title": "Create a setup",
-          "description": "Save your first setup so Finn can attach your context to concrete rules.",
-          "finnHelp": "This is where Finn becomes more specific: not just context, but your preferences too.",
+          "description": "Save your first setup for your chosen asset so Finn can attach your context to concrete rules.",
+          "finnHelp": "This is where Finn becomes more specific: not just context, but your asset-specific preferences too.",
           "unlocks": "More personal reviews and sharper next steps"
         },
         "strategy": {
           "title": "Choose a strategy",
-          "description": "Create your first strategy so dashboard, reports, and reviews become truly useful.",
-          "finnHelp": "After this step Finn can review, block, and prioritize decisions much better.",
+          "description": "Create your first strategy so dashboard, reports, and reviews become truly useful for that same asset.",
+          "finnHelp": "After this step Finn can review, block, and prioritize decisions for that same asset much better.",
           "unlocks": "Full dashboard, report, and review flow"
         }
       }
@@ -954,22 +981,22 @@
       "processing": "{symbol} is being processed...",
       "onboardingGuide": {
         "eyebrow": "First market step",
-        "title": "Add your first market indicator",
-        "body": "Start by adding one market signal so Finn can build a live market picture before the later steps depend on it.",
+        "title": "Add your first market indicator for {symbol}",
+        "body": "Start by adding one market signal for {symbol} so Finn can build a live market picture before the later steps depend on it.",
         "guidedBadge": "Onboarding is guiding you here",
-        "guidedIntro": "You arrived here from onboarding. Only finish this one action now: add one market indicator in the configuration block below.",
-        "guidedConfigHint": "Search below for one clear market indicator and add it. As soon as one is active, this step counts as complete.",
-        "completionHint": "After your first active indicator, this step is done. You can go straight back to onboarding or keep exploring this page.",
+        "guidedIntro": "You arrived here from onboarding. Only finish this one action now: add one market indicator for {symbol} in the configuration block below.",
+        "guidedConfigHint": "Search below for one clear market indicator for {symbol} and add it. As soon as one is active, this step counts as complete.",
+        "completionHint": "After your first active market indicator for {symbol}, this step is done. You can go straight back to onboarding or keep exploring this page.",
         "examples": ["BTC price", "24h change", "Volume"],
         "steps": [
-          "Choose one market indicator in the configuration block below.",
-          "Attach it to your market overview so it becomes part of your live context.",
+          "Choose one market indicator in the configuration block below for {symbol}.",
+          "Attach it to your market overview so it becomes part of your live context for {symbol}.",
           "Then review the signal table or go back to onboarding for the next step."
         ],
         "primaryCta": "Open market configuration",
         "secondaryCta": "Back to onboarding",
         "finnLabel": "Finn helps:",
-        "finnHint": "If you are unsure what to choose, start with the clearest live market signal first and ask Finn after that what still matters."
+        "finnHint": "If you are unsure what to choose for {symbol}, start with the clearest live market signal first and ask Finn after that what still matters."
       },
       "biasPositive": "Positive",
       "biasNegative": "Negative",
@@ -1046,24 +1073,24 @@
       },
       "onboardingGuide": {
         "eyebrow": "First macro step",
-        "title": "Add one macro indicator first",
-        "body": "Start with one clear context signal so Finn can understand the bigger picture before the rest of your setup fills in.",
+        "title": "Add one macro indicator for your {symbol} view",
+        "body": "Macro is broader than {symbol}, but this step helps Finn judge the bigger regime around the asset you chose before the rest of your setup fills in.",
         "guidedBadge": "Onboarding is guiding you here",
-        "guidedIntro": "You arrived here from onboarding. Only finish this one action now: add one macro indicator in the configuration block below.",
-        "guidedConfigHint": "Keep it simple: search for DXY below, click sync, and confirm it shows as active in your macro overview. Only then is this step really done.",
-        "completionHint": "After your first synced macro indicator, this step is done. Then you can return to onboarding for the next step.",
+        "guidedIntro": "You arrived here from onboarding. Only finish this one action now: add one macro indicator in the configuration block below so Finn can judge {symbol} in the right regime.",
+        "guidedConfigHint": "Keep it simple: search for DXY below, click sync, and confirm it shows as active in your macro overview for {symbol}. Only then is this step really done.",
+        "completionHint": "After your first synced macro indicator for {symbol}, this step is done. Then you can return to onboarding for the next step.",
         "examples": ["Add DXY", "Add US10Y", "Add inflation"],
         "steps": [
           "Pick one macro indicator from the selector below, for example DXY.",
-          "Click sync and wait until it appears as active in your macro overview.",
+          "Click sync and wait until it appears as active in your macro overview for {symbol}.",
           "Once you see one active indicator, return to onboarding for the next step."
         ],
         "primaryCta": "Open macro configuration",
         "assistantCta": "Open Finn help",
         "secondaryCta": "Back to onboarding",
         "finnLabel": "Finn helps:",
-        "finnHint": "If you do not know what to start with, use DXY first. Then ask Finn what that indicator adds to your market context.",
-        "assistantPrompt": "Help me with this macro step. Which indicator should I add first and what exactly should I click here?"
+        "finnHint": "If you do not know what to start with for {symbol}, use DXY first. Then ask Finn what that indicator adds to your market context.",
+        "assistantPrompt": "Help me with this macro step for my chosen asset. Which indicator should I add first and what exactly should I click here?"
       },
       "hud": {
         "environment": "Macro environment",
@@ -1137,22 +1164,22 @@
       },
       "onboardingGuide": {
         "eyebrow": "First technical step",
-        "title": "Add one technical indicator first",
-        "body": "Start with one familiar technical signal so Finn can explain trend and timing in a concrete way instead of staying generic.",
+        "title": "Add one technical indicator for {symbol}",
+        "body": "Start with one familiar technical signal for {symbol} so Finn can explain trend and timing in a concrete way instead of staying generic.",
         "guidedBadge": "Onboarding is guiding you here",
-        "guidedIntro": "You arrived here from onboarding. Only finish this one action now: add one technical indicator in the configuration block below.",
-        "guidedConfigHint": "Search below for something like RSI or MA 200 and sync one indicator. After that this step counts as complete.",
-        "completionHint": "After your first technical indicator, this step is done. Then you can return to onboarding or keep exploring here.",
+        "guidedIntro": "You arrived here from onboarding. Only finish this one action now: add one technical indicator for {symbol} in the configuration block below.",
+        "guidedConfigHint": "Search below for something like RSI or MA 200 and sync one indicator for {symbol}. After that this step counts as complete.",
+        "completionHint": "After your first technical indicator for {symbol}, this step is done. Then you can return to onboarding or keep exploring here.",
         "examples": ["RSI", "MA 200", "VIX"],
         "steps": [
-          "Choose one technical indicator in the configuration block below.",
-          "Sync it to the terminal so it becomes part of your technical context.",
+          "Choose one technical indicator in the configuration block below for {symbol}.",
+          "Sync it to the terminal so it becomes part of your technical context for {symbol}.",
           "Then review the signal table or return to onboarding for the next step."
         ],
         "primaryCta": "Open technical configuration",
         "secondaryCta": "Back to onboarding",
         "finnLabel": "Finn helps:",
-        "finnHint": "If you do not know which one to pick, start with RSI. That already gives Finn enough to begin explaining momentum and timing."
+        "finnHint": "If you do not know which one to pick for {symbol}, start with RSI. That already gives Finn enough to begin explaining momentum and timing."
       },
       "hud": {
         "strongPositive": "Strong positive",
@@ -1363,11 +1390,11 @@
     "newDescription": "Add a new trading model to the system",
     "onboardingGuide": {
       "eyebrow": "First setup step",
-      "title": "Create one simple setup first",
-      "body": "This is where your rules become concrete. Start with one clear setup so Finn can connect context to a real trading framework.",
+      "title": "Create one simple setup for your chosen asset",
+      "body": "This is where your rules become concrete. Start with one clear setup for your chosen asset so Finn can connect context to a real trading framework.",
       "guidedBadge": "Onboarding is guiding you here",
       "guidedIntro": "You arrived here from onboarding. Only finish this one action now: create one simple setup below.",
-      "guidedConfigHint": "Use the setup form below or ask Finn for one focused first setup. Start small: asset, type, and timeframe are enough for version one.",
+      "guidedConfigHint": "Use the setup form below or ask Finn for one focused first setup for your chosen asset. Start small: asset, type, and timeframe are enough for version one.",
       "completionHint": "As soon as your first setup is saved, this step is done. Then you can return to onboarding or refine it further.",
       "examples": ["Create a BTC swing setup with 4H entry", "Create an ETH DCA setup", "Create a SOL breakout setup"],
       "steps": [
@@ -1380,7 +1407,7 @@
       "secondaryCta": "Back to onboarding",
       "finnLabel": "Finn helps:",
       "finnHint": "Use this prompt if needed: 'Create a BTC swing setup with daily trend and 4H entry.' Finn should ask follow-up questions after that instead of filling everything in by itself.",
-      "assistantPrompt": "Guide me through this setup step by step. Ask only the next required question and do not fill the rest in yet."
+      "assistantPrompt": "Guide me through this setup step by step for my chosen asset. Ask only the next required question and do not fill the rest in yet."
     }
   },
   "strategyPage": {
@@ -1395,11 +1422,11 @@
     "newDescription": "Add a new strategy that fits your setup and execution style",
     "onboardingGuide": {
       "eyebrow": "First strategy step",
-      "title": "Create one execution strategy first",
-      "body": "A strategy turns your setup into an execution plan. Start with one basic strategy so Finn can begin reviewing decisions in the right context.",
+      "title": "Create one execution strategy for your chosen asset",
+      "body": "A strategy turns your setup into an execution plan. Start with one basic strategy for your chosen asset so Finn can begin reviewing decisions in the right context.",
       "guidedBadge": "Onboarding is guiding you here",
       "guidedIntro": "You arrived here from onboarding. Only finish this one action now: create one first strategy based on your setup below.",
-      "guidedConfigHint": "Use this form for one simple first strategy. Pick the right setup first, then fill in entry, invalidation, and risk management.",
+      "guidedConfigHint": "Use this form for one simple first strategy for your chosen asset. Pick the right setup first, then fill in entry, invalidation, and risk management.",
       "completionHint": "As soon as your first strategy is saved, this step is done and onboarding can finish cleanly.",
       "examples": ["Create a strategy for my BTC setup", "Turn this into a DCA strategy", "Add entry, invalidation, and risk management"],
       "steps": [
@@ -1412,7 +1439,7 @@
       "secondaryCta": "Back to onboarding",
       "finnLabel": "Finn helps:",
       "finnHint": "Use this prompt if needed: 'Turn this into a strategy with a clear entry, invalidation, and risk management.'",
-      "assistantPrompt": "Guide me through this strategy step by step. Ask only for what is still missing and do not finalize anything yet."
+      "assistantPrompt": "Guide me through this strategy step by step for my chosen asset. Ask only for what is still missing and do not finalize anything yet."
     },
     "editTitle": "Edit strategy",
     "editSubtitle": "Settings",

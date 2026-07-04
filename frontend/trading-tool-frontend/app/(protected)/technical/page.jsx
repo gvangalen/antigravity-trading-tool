@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Activity, Brain, LayoutGrid, AlertTriangle, LineChart } from "lucide-react";
 import TradingViewChart from "@/components/charts/TradingViewChart";
 import { useTranslation } from "@/app/providers/I18nProvider";
@@ -33,11 +33,26 @@ import { useCurrentAsset } from "@/hooks/useCurrentAsset";
 
 export default function TechnicalPage() {
   const [activeTab, setActiveTab] = useState("day");
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { openConfirm, showSnackbar } = useModal();
   const { symbol: selectedAsset } = useCurrentAsset();
   const { t } = useTranslation();
   const technicalT = t.pages.technical;
+  const guideCopy = technicalT.onboardingGuide
+    ? {
+        ...technicalT.onboardingGuide,
+        title: technicalT.onboardingGuide.title?.replace("{symbol}", selectedAsset),
+        body: technicalT.onboardingGuide.body?.replace("{symbol}", selectedAsset),
+        guidedIntro: technicalT.onboardingGuide.guidedIntro?.replace("{symbol}", selectedAsset),
+        guidedConfigHint: technicalT.onboardingGuide.guidedConfigHint?.replace("{symbol}", selectedAsset),
+        completionHint: technicalT.onboardingGuide.completionHint?.replace("{symbol}", selectedAsset),
+        finnHint: technicalT.onboardingGuide.finnHint?.replace("{symbol}", selectedAsset),
+        steps: Array.isArray(technicalT.onboardingGuide.steps)
+          ? technicalT.onboardingGuide.steps.map((step) => step.replace("{symbol}", selectedAsset))
+          : [],
+      }
+    : null;
 
   // ===============================
   // ⚙️ TECHNICAL DATA
@@ -55,6 +70,11 @@ export default function TechnicalPage() {
   const technicalNeedsSetup = status?.has_technical === false && technicalData?.length === 0;
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
   const showOnboardingGuide = onboardingGuidedMode || technicalNeedsSetup;
+
+  useEffect(() => {
+    if (!status || status.has_asset) return;
+    router.replace("/onboarding/asset?onboarding=1&step=asset");
+  }, [status, router]);
 
   useEffect(() => {
     trackAssistantEvent({
@@ -152,7 +172,7 @@ export default function TechnicalPage() {
       </header>
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide copy={technicalT.onboardingGuide} anchorId="technical-config" guidedMode={onboardingGuidedMode} />
+        <OnboardingStepGuide copy={guideCopy} anchorId="technical-config" guidedMode={onboardingGuidedMode} />
       ) : null}
 
       {/* 🚀 TECHNICAL HUD */}
@@ -188,7 +208,7 @@ export default function TechnicalPage() {
             </div>
             {showOnboardingGuide ? (
               <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700">
-                {technicalT.onboardingGuide.guidedConfigHint}
+                {guideCopy?.guidedConfigHint}
               </div>
             ) : null}
             <TechnicalIndicatorScoreView

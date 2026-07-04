@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Settings,
   Search,
@@ -26,6 +26,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function SetupPage() {
   const [search, setSearch] = useState("");
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { t } = useTranslation();
   const copy = t?.setupPage || {};
@@ -88,6 +89,11 @@ export default function SetupPage() {
   const setupNeedsSetup = status?.has_setup === false && safeSetups.length === 0;
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
   const showOnboardingGuide = onboardingGuidedMode || setupNeedsSetup;
+
+  useEffect(() => {
+    if (!status || status.has_asset) return;
+    router.replace("/onboarding/asset?onboarding=1&step=asset");
+  }, [status, router]);
 
   /* =====================================================
      RENDER
