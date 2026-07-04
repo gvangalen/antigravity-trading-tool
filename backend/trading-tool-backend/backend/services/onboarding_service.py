@@ -140,8 +140,15 @@ class OnboardingService:
 
     async def finish_onboarding(self, user_id: int) -> OnboardingStatusResponse:
         await self._ensure_steps_for_user(user_id)
-        await self.repository.mark_flow_completed(user_id, DEFAULT_FLOW)
-        
+        status = await self.get_status_dict(user_id)
+
+        if not status.onboarding_complete:
+            logger.info(
+                "[Onboarding] Finish genegeerd voor user_id=%s omdat de flow nog niet compleet is",
+                user_id,
+            )
+            return status
+
         await self._kickstart_user_pipeline(user_id)
         return await self.get_status_dict(user_id)
 

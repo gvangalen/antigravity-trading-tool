@@ -44,11 +44,13 @@ export default function AuthGuard({ children }) {
       // ✅ Use explicit master flag from backend if available, fallback to manual check
       const isComplete = status?.onboarding_complete ?? (
         status?.has_profile &&
+        status?.has_asset &&
+        status?.has_market &&
+        status?.has_macro &&
         status?.has_setup &&
         status?.has_technical &&
-        status?.has_macro &&
-        status?.has_market &&
-        status?.has_strategy
+        status?.has_strategy &&
+        status?.has_bot
       );
 
       debug("🧭 AuthGuard Onboarding Sync:", { isComplete, pathname });
@@ -61,7 +63,8 @@ export default function AuthGuard({ children }) {
           !pathname.startsWith("/technical") && 
           !pathname.startsWith("/macro") && 
           !pathname.startsWith("/market") && 
-          !pathname.startsWith("/strategy")) {
+          !pathname.startsWith("/strategy") &&
+          !pathname.startsWith("/bot")) {
         debug("🚧 AuthGuard: Onboarding niet compleet -> naar /onboarding");
         router.push("/onboarding");
       }
