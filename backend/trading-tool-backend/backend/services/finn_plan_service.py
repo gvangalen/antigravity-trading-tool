@@ -5095,6 +5095,65 @@ class FinnPlanService:
             "actions": actions,
         }
 
+    def build_setup_response(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        context = context or {}
+        previous = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) else {}
+        draft = _deep_merge(empty_plan_draft(), previous)
+        draft["draft_kind"] = "setup"
+
+        q = (query or "").strip()
+        if self.is_cancel_request(q):
+            cancelled_draft = empty_plan_draft()
+            cancelled_draft["draft_kind"] = "setup"
+            return {
+                "response": "Prima, ik heb deze setup-aanmaak gestopt. Er is niets aangemaakt.",
+                "intent": "setup_creation_cancelled",
+                "flow": None,
+                "draft": cancelled_draft,
+                "missing_fields": [],
+                "invalid_fields": [],
+                "next_question": None,
+                "can_confirm": False,
+                "actions": [],
+            }
+
+        extracted = self._extract_from_query(q)
+        draft = _deep_merge(draft, extracted)
+        self._apply_defaults(draft)
+
+        validation = self._validate_setup_only(draft)
+        actions = []
+        if validation["can_confirm"]:
+            action_payload = deepcopy(draft)
+            actions.append({
+                "id": self._setup_action_id(action_payload),
+                "type": "create_setup",
+                "label": "Setup aanmaken",
+                "payload": action_payload,
+                "risk_level": "medium" if draft.get("plan_type") == "trade" else "low",
+                "requires_confirmation": True,
+                "autonomy_level": "confirm_required",
+                "guardrails": {
+                    "requires_confirmation": True,
+                    "can_execute_without_user": False,
+                    "execution_allowed": "setup_creation_only",
+                },
+            })
+
+        return {
+            "response": self._build_setup_only_message(draft, validation),
+            "intent": "setup_creation",
+            "flow": "setup_creation",
+            "draft": draft,
+            "state": self._setup_flow_state(draft, validation),
+            "reasoning": self._setup_reasoning(draft, validation),
+            "missing_fields": validation["missing_fields"],
+            "invalid_fields": validation["invalid_fields"],
+            "next_question": validation["next_question"],
+            "can_confirm": validation["can_confirm"],
+            "actions": actions,
+        }
+
     def build_strategy_response(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
         previous = context.get("finn_draft") if isinstance(context.get("finn_draft"), dict) and context["finn_draft"].get("draft_kind") == "strategy" else {}
@@ -9085,9 +9144,43 @@ class FinnPlanService:
             "coaching_level": "strategy_creation",
         }
 
+    def _setup_flow_state(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "status": "ready_for_confirmation" if validation["can_confirm"] else "collecting",
+            "current_flow": "setup_creation",
+            "asset": draft.get("asset"),
+            "setup_type": draft.get("plan_type"),
+            "timeframe": draft.get("setup", {}).get("timeframe"),
+            "next_question": validation["next_question"],
+            "autonomy_level": "confirm_required",
+            "analysis": {
+                "tool_intent_reason": "explicit_setup_request",
+            },
+            "version": FINN_STATE_VERSION,
+        }
+
+    def _setup_reasoning(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> Dict[str, Any]:
+        reasons = []
+        if validation["missing_fields"]:
+            reasons.append(f"Ontbrekende velden: {', '.join(validation['missing_fields'])}")
+        if validation["invalid_fields"]:
+            reasons.append(f"Ongeldige velden: {', '.join(item['field'] for item in validation['invalid_fields'])}")
+        if not reasons:
+            reasons.append("Alle verplichte setupvelden zijn aanwezig en validatie is geslaagd.")
+        return {
+            "confidence_score": 0.9 if validation["can_confirm"] else 0.55,
+            "risk_detected": bool(validation["invalid_fields"]),
+            "reasons": reasons,
+            "coaching_level": "setup_creation",
+        }
+
     def _strategy_action_id(self, payload: Dict[str, Any]) -> str:
         normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return f"finn-strategy-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:24]}"
+
+    def _setup_action_id(self, payload: Dict[str, Any]) -> str:
+        normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return f"finn-setup-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:24]}"
 
     def _is_new_bot_start_without_target(self, query: str) -> bool:
         q = (query or "").lower()
@@ -10034,6 +10127,53 @@ class FinnPlanService:
             "can_confirm": not missing and not invalid,
         }
 
+    def _validate_setup_only(self, draft: Dict[str, Any]) -> Dict[str, Any]:
+        missing: List[str] = []
+        invalid: List[Dict[str, str]] = []
+
+        if draft.get("plan_type") not in {"dca", "trade"}:
+            missing.append("plan_type")
+        if not draft.get("asset"):
+            missing.append("asset")
+        elif draft["asset"] not in SUPPORTED_ASSETS:
+            invalid.append({"field": "asset", "reason": "asset wordt nog niet ondersteund"})
+
+        timeframe = draft.get("setup", {}).get("timeframe")
+        if not timeframe:
+            missing.append("setup.timeframe")
+
+        for field in ("macro_score_range", "technical_score_range", "market_score_range"):
+            value = draft["setup"].get(field)
+            if value is not None:
+                self._validate_range(f"setup.{field}", value, invalid)
+
+        if draft.get("plan_type") == "trade":
+            if draft["setup"].get("name") and len(str(draft["setup"]["name"]).strip()) < 2:
+                invalid.append({"field": "setup.name", "reason": "setupnaam is te kort"})
+
+        if draft.get("plan_type") == "dca":
+            frequency = draft["dca"].get("frequency")
+            if frequency not in {"daily", "weekly", "monthly"}:
+                missing.append("dca.frequency")
+            if frequency == "weekly" and not draft["dca"].get("day"):
+                missing.append("dca.day")
+            if frequency == "monthly":
+                month_day = draft["dca"].get("month_day")
+                if month_day is None:
+                    missing.append("dca.month_day")
+                elif not isinstance(month_day, int) or month_day < 1 or month_day > 28:
+                    invalid.append({"field": "dca.month_day", "reason": "gebruik dag 1 t/m 28 voor maandelijkse DCA"})
+            if draft["dca"].get("dca_mode") == "custom" and draft["dca"].get("buy_score_threshold") is None:
+                missing.append("dca.buy_score_threshold")
+
+        next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
+        return {
+            "missing_fields": missing,
+            "invalid_fields": invalid,
+            "next_question": next_question,
+            "can_confirm": not missing and not invalid,
+        }
+
     def _build_message(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> str:
         next_question = validation["next_question"]
         if next_question == "asset":
@@ -10069,6 +10209,64 @@ class FinnPlanService:
 
         summary = self._summary(draft)
         return f"Ik heb je plan klaarstaan. Controleer dit even en bevestig als het klopt:\n\n{summary}"
+
+    def _build_setup_only_message(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> str:
+        next_question = validation["next_question"]
+        if validation["invalid_fields"]:
+            issue = validation["invalid_fields"][0]
+            return f"Ik zie een probleem met {issue['field']}: {issue['reason']}. Wat wil je hiervoor instellen?"
+        if next_question == "plan_type":
+            return "Wil je eerst een DCA-setup maken of een trade-setup? Ik vraag alleen de setupbasis uit; strategie en bot komen pas later."
+        if next_question == "asset":
+            return "Voor welk asset wil je deze setup maken? Ik ondersteun nu BTC, ETH en SOL."
+        if next_question == "setup.timeframe":
+            return "Welke timeframe hoort bij deze setup? Bijvoorbeeld 4H of 1D voor trade, of 1W voor DCA."
+        if next_question == "dca.frequency":
+            return "Hoe vaak wil je deze DCA-setup uitvoeren: dagelijks, wekelijks of maandelijks?"
+        if next_question == "dca.day":
+            return "Op welke weekdag wil je deze DCA-setup uitvoeren? Noem bijvoorbeeld maandag of vrijdag."
+        if next_question == "dca.month_day":
+            return "Op welke dag van de maand wil je kopen? Gebruik dag 1 t/m 28."
+        if next_question == "dca.buy_score_threshold":
+            return "Bij welke marktscore wil je extra bijkopen? Noem bijvoorbeeld onder de 30."
+
+        summary = self._setup_only_summary(draft)
+        return f"Ik heb je setup klaarstaan. Controleer dit even en bevestig als het klopt:\n\n{summary}"
+
+    def _setup_only_summary(self, draft: Dict[str, Any]) -> str:
+        lines = [
+            f"- Type: {draft.get('plan_type')}",
+            f"- Asset: {draft.get('asset')}",
+            f"- Timeframe: {draft.get('setup', {}).get('timeframe')}",
+        ]
+        name = draft.get("setup", {}).get("name")
+        if name:
+            lines.insert(2, f"- Naam: {name}")
+        if draft.get("plan_type") == "dca":
+            frequency = draft["dca"].get("frequency")
+            frequency_label = {
+                "daily": "dagelijks",
+                "weekly": "wekelijks",
+                "monthly": "maandelijks",
+            }.get(str(frequency or "").lower(), frequency)
+            weekday = str(draft["dca"].get("day") or "").lower()
+            weekday_label = {
+                "monday": "maandag",
+                "tuesday": "dinsdag",
+                "wednesday": "woensdag",
+                "thursday": "donderdag",
+                "friday": "vrijdag",
+                "saturday": "zaterdag",
+                "sunday": "zondag",
+            }.get(weekday, draft["dca"].get("day"))
+            schedule = " ".join(
+                str(part)
+                for part in [frequency_label, weekday_label or draft["dca"].get("month_day")]
+                if part not in (None, "", 0)
+            ).strip()
+            if schedule:
+                lines.append(f"- DCA: {schedule}")
+        return "\n".join(lines)
 
     def _asset_from_query_or_context(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
         q = (query or "").upper()
@@ -18265,6 +18463,8 @@ class FinnPlanService:
             return await self._execute_bot_action(user_id, action)
         if action and action.get("type") == "create_strategy":
             return await self._execute_strategy_action(user_id, action)
+        if action and action.get("type") == "create_setup":
+            return await self._execute_setup_action(user_id, action)
         if not action or action.get("type") != "create_plan":
             raise HTTPException(400, "Onbekende Finn action")
 
@@ -18384,6 +18584,70 @@ class FinnPlanService:
         }
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         await self._log_intelligence_event(user_id, draft, result)
+        await self.clear_state(user_id)
+        return result
+
+    async def _execute_setup_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        draft = _deep_merge(empty_plan_draft(), action.get("payload") or {})
+        draft["draft_kind"] = "setup"
+        self._apply_defaults(draft, for_save=True)
+        action_id = f"{action.get('id') or self._setup_action_id(draft)}-u{user_id}"
+        acquired = await self._try_create_pending_action(user_id, action_id, action)
+        if not acquired:
+            existing_result = await self._wait_for_action_result(user_id, action_id)
+            if existing_result:
+                return existing_result
+            raise HTTPException(409, "Deze Finn actie wordt al verwerkt. Probeer zo opnieuw.")
+
+        validation = self._validate_setup_only(draft)
+        if not validation["can_confirm"]:
+            await self._upsert_action_audit(user_id, action_id, action, status="failed", result={
+                "ok": False,
+                "message": "Setup is nog niet geldig",
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+            })
+            raise HTTPException(422, {
+                "message": "Setup is nog niet geldig",
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+            })
+
+        setup_service = SetupService(self.session)
+        setup_id = None
+        try:
+            draft["setup"]["name"] = await self._unique_setup_name(setup_service, draft["setup"].get("name"), user_id)
+            setup_payload = self._setup_payload(draft)
+            setup_result = await setup_service.save_setup(
+                SetupCreateSchema(**setup_payload),
+                setup_payload,
+                user_id,
+            )
+            setup_id = setup_result["setup_id"]
+            verified = await self._verify_created_objects(user_id, setup_id, None, None)
+        except Exception:
+            await self.session.rollback()
+            await self._cleanup_created(user_id, setup_id=setup_id, strategy_id=None, bot_id=None)
+            await self._upsert_action_audit(
+                user_id,
+                action_id,
+                action,
+                status="failed",
+                result={"ok": False, "setup_id": setup_id},
+            )
+            raise
+
+        result = {
+            "ok": True,
+            "message": "Setup aangemaakt",
+            "setup_id": setup_id,
+            "strategy_id": None,
+            "bot_id": None,
+            "draft": draft,
+            "action_id": action_id,
+            "verified": verified,
+        }
+        await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
         await self.clear_state(user_id)
         return result
 
@@ -19372,6 +19636,36 @@ class FinnPlanService:
                 "can_confirm": validation["can_confirm"],
                 "actions": actions,
             }
+        if isinstance(draft, dict) and draft.get("draft_kind") == "setup":
+            self._apply_defaults(draft)
+            validation = self._validate_setup_only(draft)
+            actions = []
+            if validation["can_confirm"]:
+                action_payload = deepcopy(draft)
+                actions.append({
+                    "id": self._setup_action_id(action_payload),
+                    "type": "create_setup",
+                    "label": "Setup aanmaken",
+                    "payload": action_payload,
+                    "risk_level": "medium" if draft.get("plan_type") == "trade" else "low",
+                    "requires_confirmation": True,
+                    "autonomy_level": "confirm_required",
+                })
+            return {
+                "ok": True,
+                "has_draft": True,
+                "response": self._build_setup_only_message(draft, validation),
+                "intent": "setup_creation",
+                "flow": "setup_creation",
+                "draft": draft,
+                "state": self._setup_flow_state(draft, validation),
+                "reasoning": self._setup_reasoning(draft, validation),
+                "missing_fields": validation["missing_fields"],
+                "invalid_fields": validation["invalid_fields"],
+                "next_question": validation["next_question"],
+                "can_confirm": validation["can_confirm"],
+                "actions": actions,
+            }
 
         has_recoverable_draft = (
             isinstance(draft, dict)
@@ -19499,6 +19793,7 @@ class FinnPlanService:
             "configure_indicator",
             "create_bot",
             "create_strategy",
+            "create_setup",
         }
 
     def _should_skip_pending_action_issue(self, action: Dict[str, Any]) -> bool:

@@ -58,12 +58,19 @@ def test_new_setup_creation_queries_do_not_force_legacy_setup_flow():
     assert api._should_prefer_legacy_setup_flow("Wat is mijn profiel?", {"current_flow": "setup_creation"}) is True
 
 
-def test_finn_plan_service_routes_modern_setup_prompts_into_plan_creation():
-    service = FinnPlanService(None)
-
-    assert service.looks_like_plan_request("Kan je een dca setup maken voor BTC?") is True
-    assert service.looks_like_plan_request("Maak een setup voor BTC swing trading met daily trend en 4H entry.") is True
-    assert service.looks_like_plan_request("Maak een wekelijkse BTC DCA van 100 euro.") is True
+def test_setup_requests_use_modern_setup_flow_on_setup_page():
+    assert api._should_use_modern_setup_creation_flow(
+        "Kan je een dca setup maken voor BTC?",
+        {"page": "setup"},
+    ) is True
+    assert api._should_use_modern_setup_creation_flow(
+        "Maak een setup voor BTC swing trading met daily trend en 4H entry.",
+        {"onboarding_step": "setup"},
+    ) is True
+    assert api._should_use_modern_setup_creation_flow(
+        "Wat is mijn profiel?",
+        {"current_flow": "setup_creation"},
+    ) is True
 
 
 def test_modern_transactional_state_record_is_not_treated_as_legacy_resume():

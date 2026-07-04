@@ -2299,10 +2299,28 @@ def test_plan_request_does_not_swallow_strategy_or_bot_queries():
     assert service.looks_like_plan_request("maak een bot voor mijn btc strategie") is False
 
 
-def test_plan_request_routes_setup_creation_prompt_into_modern_plan_flow():
+def test_setup_creation_prompt_uses_setup_only_flow():
     service = _service()
+    result = service.build_setup_response("Maak een setup voor BTC swing trading met daily trend en 4H entry.")
 
-    assert service.looks_like_plan_request("Maak een setup voor BTC swing trading met daily trend en 4H entry.") is True
+    assert result["intent"] == "setup_creation"
+    assert result["flow"] == "setup_creation"
+    assert result["draft"]["asset"] == "BTC"
+    assert result["can_confirm"] is True
+    assert result["actions"][0]["type"] == "create_setup"
+    assert "strategy.entry" not in result["missing_fields"]
+    assert "strategy.base_amount_eur" not in result["missing_fields"]
+
+
+def test_dca_setup_flow_asks_only_for_missing_schedule():
+    service = _service()
+    result = service.build_setup_response("Kan je een dca setup maken voor BTC?")
+
+    assert result["intent"] == "setup_creation"
+    assert result["draft"]["plan_type"] == "dca"
+    assert result["draft"]["asset"] == "BTC"
+    assert "dca.frequency" in result["missing_fields"]
+    assert "strategy.base_amount_eur" not in result["missing_fields"]
 
 
 def test_plan_summary_hides_internal_default_ranges_and_automation_labels():

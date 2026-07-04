@@ -206,6 +206,7 @@ def nested_strategy_id(payload: Any) -> int:
 
 
 def create_or_follow_up_setup(api: ApiSession, symbol: str = "BTC") -> Dict[str, Any]:
+    session_id = f"fresh-setup-{uuid.uuid4().hex[:8]}"
     first_ctx = {"page": "setup", "symbol": symbol}
     _, payload = api.request(
         "POST",
@@ -214,7 +215,7 @@ def create_or_follow_up_setup(api: ApiSession, symbol: str = "BTC") -> Dict[str,
             "query": f"Maak een setup voor {symbol} swing trading met daily trend en 4H entry.",
             "context": first_ctx,
             "history": [],
-            "session_id": f"fresh-setup-{uuid.uuid4().hex[:8]}",
+            "session_id": session_id,
         },
     )
 
@@ -245,7 +246,7 @@ def create_or_follow_up_setup(api: ApiSession, symbol: str = "BTC") -> Dict[str,
                 "query": answer,
                 "context": {"finn_draft": current.get("draft"), "page": "setup", "symbol": symbol},
                 "history": [],
-                "session_id": f"fresh-setup-{uuid.uuid4().hex[:8]}",
+                "session_id": session_id,
             },
         )
     return current
@@ -303,7 +304,7 @@ def create_or_follow_up_bot(api: ApiSession, strategy_id: int, symbol: str = "BT
         "POST",
         "/api/assistant/chat",
         json_body={
-            "query": "Maak een wekelijkse BTC DCA van 100 euro.",
+            "query": "Maak een paper bot voor deze strategie met 1000 euro budget.",
             "context": ctx,
             "history": [],
             "session_id": session_id,

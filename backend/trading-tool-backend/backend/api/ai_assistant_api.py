@@ -505,6 +505,23 @@ def _should_prefer_legacy_setup_flow(query: str, context_payload: Optional[dict]
     return False
 
 
+def _should_use_modern_setup_creation_flow(query: str, context_payload: Optional[dict] = None) -> bool:
+    context_payload = context_payload or {}
+    current_flow = str(context_payload.get("current_flow") or "").lower()
+    if current_flow == "setup_creation":
+        return True
+    if not _looks_like_explicit_setup_creation_request(query):
+        return False
+    page = str(context_payload.get("page") or "").strip("/").lower()
+    step = str(
+        context_payload.get("step")
+        or context_payload.get("onboarding_step")
+        or context_payload.get("onboardingStep")
+        or ""
+    ).lower()
+    return page == "setup" or step == "setup"
+
+
 def _is_legacy_transactional_flow_name(flow_name: Optional[str]) -> bool:
     return str(flow_name or "").strip().lower() in {
         "setup_creation",
@@ -529,7 +546,7 @@ def _is_modern_transactional_state_record(state: Optional[dict]) -> bool:
 
 def _modern_transactional_flow_name(state: Optional[dict], context_payload: Optional[dict] = None) -> Optional[str]:
     flow_name = str((state or {}).get("current_flow") or (context_payload or {}).get("current_flow") or "").strip().lower()
-    if flow_name in {"strategy_creation", "bot_creation", "indicator_config", "plan_creation"}:
+    if flow_name in {"setup_creation", "strategy_creation", "bot_creation", "indicator_config", "plan_creation"}:
         return flow_name
     return None
 
@@ -639,6 +656,8 @@ async def _continue_transactional_follow_up(
         _clear_modern_transactional_context(payload)
         return None
 
+    if active_flow == "setup_creation":
+        return finn.build_setup_response(query, payload)
     if active_flow == "strategy_creation":
         return await finn.build_strategy_response_for_user(user_id, query, payload)
     if active_flow == "bot_creation":
@@ -1785,6 +1804,11 @@ async def assistant_chat(
             )
         if finn.looks_like_indicator_config_request(request.query, context_payload):
             finn_response = await finn.build_indicator_config_response_for_user(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
+            )
+        if _should_use_modern_setup_creation_flow(request.query, context_payload):
+            finn_response = finn.build_setup_response(request.query, context_payload)
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
             )
