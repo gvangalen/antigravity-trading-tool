@@ -2250,7 +2250,74 @@ def test_short_plan_follow_up_amount_is_recognized_with_existing_draft():
     third = service.build_response("75 euro", {"finn_draft": second["draft"]})
 
     assert third["draft"]["strategy"]["base_amount_eur"] == 75
-    assert third["can_confirm"] is True
+    assert third["can_confirm"] is False
+    assert third["next_question"] == "setup.timeframe"
+
+
+def test_plan_request_does_not_swallow_indicator_config_query():
+    service = _service()
+
+    assert service.looks_like_indicator_config_request("voeg dxy toe aan macro", {}) is True
+    assert service.looks_like_plan_request("voeg dxy toe aan macro") is False
+
+
+def test_plan_request_does_not_swallow_watchlist_query():
+    service = _service()
+
+    assert service.looks_like_plan_request("voeg btc toe aan mijn watchlist") is False
+
+
+def test_plan_request_does_not_swallow_strategy_or_bot_queries():
+    service = _service()
+
+    assert service.looks_like_strategy_request("maak een strategie voor btc op basis van mijn setup", {}) is True
+    assert service.looks_like_plan_request("maak een strategie voor btc op basis van mijn setup") is False
+
+    assert service.looks_like_bot_request("maak een bot voor mijn btc strategie", {}) is True
+    assert service.looks_like_plan_request("maak een bot voor mijn btc strategie") is False
+
+
+def test_setup_creation_prompt_uses_setup_only_flow():
+    service = _service()
+    result = service.build_setup_response("Maak een setup voor BTC swing trading met daily trend en 4H entry.")
+
+    assert result["intent"] == "setup_creation"
+    assert result["flow"] == "setup_creation"
+    assert result["draft"]["asset"] == "BTC"
+    assert result["can_confirm"] is True
+    assert result["actions"][0]["type"] == "create_setup"
+    assert "strategy.entry" not in result["missing_fields"]
+    assert "strategy.base_amount_eur" not in result["missing_fields"]
+
+
+def test_dca_setup_flow_asks_only_for_missing_schedule():
+    service = _service()
+    result = service.build_setup_response("Kan je een dca setup maken voor BTC?")
+
+    assert result["intent"] == "setup_creation"
+    assert result["draft"]["plan_type"] == "dca"
+    assert result["draft"]["asset"] == "BTC"
+    assert "dca.frequency" in result["missing_fields"]
+    assert "strategy.base_amount_eur" not in result["missing_fields"]
+
+
+def test_plan_summary_hides_internal_default_ranges_and_automation_labels():
+    service = _service()
+    draft = empty_plan_draft()
+    draft["plan_type"] = "dca"
+    draft["asset"] = "BTC"
+    draft["setup"]["name"] = "BTC Smart DCA"
+    draft["strategy"]["base_amount_eur"] = 100
+    draft["dca"]["frequency"] = "weekly"
+    service._apply_defaults(draft)
+
+    summary = service._summary(draft)
+
+    assert "Macro:" not in summary
+    assert "Technical:" not in summary
+    assert "Market:" not in summary
+    assert "Automatisering:" not in summary
+    assert "bot_assisted" not in summary
 
 
 def test_trade_plan_with_entry_stop_and_targets_is_confirmable():

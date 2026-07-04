@@ -144,7 +144,523 @@ def _audit_response_type(response: Optional[dict]) -> str:
         return "stateful_response"
     return "text_response"
 
+def _legacy_draft_action_label(draft_type: str, locale: str) -> str:
+    labels = {
+        "setup": {
+            "nl": "Setup opslaan",
+            "en": "Save setup",
+            "de": "Setup speichern",
+        },
+        "strategy": {
+            "nl": "Strategie opslaan",
+            "en": "Save strategy",
+            "de": "Strategie speichern",
+        },
+        "bot": {
+            "nl": "Bot opslaan",
+            "en": "Save bot",
+            "de": "Bot speichern",
+        },
+    }
+    return labels.get(draft_type, {}).get(locale) or labels.get(draft_type, {}).get("en") or "Save draft"
 
+
+async def _ensure_pending_action_ids(
+    db: AsyncSession,
+    user_id: int,
+    response: Optional[dict],
+    *,
+    locale: str = "nl",
+    trace_id: Optional[str] = None,
+) -> dict:
+    payload = deepcopy(response or {})
+    engine = AiActionEngine(db)
+    actions = payload.get("actions") if isinstance(payload.get("actions"), list) else []
+    draft = payload.get("draft") if isinstance(payload.get("draft"), dict) else None
+
+    normalized_actions: List[Dict[str, Any]] = []
+    for raw_action in actions:
+        if not isinstance(raw_action, dict):
+            continue
+        action = dict(raw_action)
+        action_type = str(action.get("type") or "").strip()
+        existing_action_id = action.get("action_id") or action.get("id")
+        if not existing_action_id and action_type in {"add_to_watchlist", "remove_from_watchlist"}:
+            registration_payload = {"symbol": str(action.get("symbol") or "").upper()}
+            pending_action_id = await engine.register_pending_action(
+                user_id,
+                action_type,
+                registration_payload,
+                trace_id=trace_id,
+            )
+            action["action_id"] = pending_action_id
+            action["id"] = pending_action_id
+        normalized_actions.append(action)
+
+    if not normalized_actions and draft:
+        draft_type = str(draft.get("type") or "").strip().lower()
+        draft_payload = draft.get("payload") if isinstance(draft.get("payload"), dict) else None
+        supported_draft_types = {"setup": "setup", "strategy": "strategy", "bot": "bot"}
+        mapped_action_type = supported_draft_types.get(draft_type)
+        if mapped_action_type and draft_payload:
+            pending_action_id = await engine.register_pending_action(
+                user_id,
+                mapped_action_type,
+                dict(draft_payload),
+                trace_id=trace_id,
+            )
+            normalized_actions = [{
+                "type": mapped_action_type,
+                "action_id": pending_action_id,
+                "id": pending_action_id,
+                "label": _legacy_draft_action_label(draft_type, locale),
+                "requires_confirmation": True,
+            }]
+
+    if normalized_actions:
+        payload["actions"] = normalized_actions
+        payload["action"] = normalized_actions[0]
+        payload["can_confirm"] = True
+
+    return payload
+
+
+KNOWN_FINN_ASSETS = ("BTC", "ETH", "SOL")
+PROFILE_VALUE_LABELS = {
+    "swing_trader": "swing trader",
+    "day_trader": "day trader",
+    "scalper": "scalper",
+    "investor": "investeerder",
+    "dca_investor": "DCA-investeerder",
+    "1h": "1H",
+    "4h": "4H",
+    "1d": "1D",
+    "1w": "1W",
+    "1m": "1M",
+    "15m": "15m",
+    "5m": "5m",
+    "bitcoin": "BTC",
+    "crypto_general": "crypto",
+    "fomo": "FOMO / jagen",
+    "takes_profit_too_early": "winst te vroeg nemen",
+    "holds_losers_too_long": "verliezers te lang laten lopen",
+    "overtrades": "overtraden",
+}
+
+
+def _extract_asset_from_query(query: str) -> Optional[str]:
+    upper = str(query or "").upper()
+    for symbol in KNOWN_FINN_ASSETS:
+        if re.search(rf"\b{re.escape(symbol)}\b", upper):
+            return symbol
+    return None
+
+
+def _looks_like_watchlist_mutation(query: str) -> bool:
+    q = str(query or "").lower()
+    has_watchlist = "watchlist" in q or "volglijst" in q
+    has_mutation = any(term in q for term in [
+        "voeg", "toe", "add", "zet", "plaats", "verwijder", "haal", "remove",
+    ])
+    return has_watchlist and has_mutation
+
+
+def _looks_like_setup_strategy_listing_request(query: str) -> bool:
+    q = str(query or "").lower()
+    has_listing_intent = any(term in q for term in ["laat", "toon", "geef", "welke", "wat zijn", "overzicht"])
+    has_entity = any(term in q for term in [
+        "actieve setups",
+        "mijn setups",
+        " set-ups",
+        "setups",
+        "actieve strategie",
+        "actieve strategieën",
+        "mijn strategie",
+        "mijn strategieën",
+        "strategieën",
+        "strategies",
+    ])
+    return has_listing_intent and has_entity
+
+
+def _humanize_profile_values(values: Optional[list]) -> str:
+    return ", ".join(PROFILE_VALUE_LABELS.get(str(value), str(value)) for value in (values or []))
+
+
+def _build_watchlist_mutation_envelope(query: str, context_payload: Optional[dict] = None) -> Optional[Dict[str, Any]]:
+    q = str(query or "").lower()
+    context_payload = context_payload or {}
+    symbol = _extract_asset_from_query(query) or str(context_payload.get("symbol") or context_payload.get("asset") or "").upper() or None
+    if not symbol:
+        return {
+            "response": "Noem eerst het asset dat je aan je watchlist wilt toevoegen of eruit wilt halen, bijvoorbeeld BTC, ETH of SOL.",
+            "intent": "watchlist_mutation",
+            "flow": "general_help",
+            "actions": [],
+            "suggested_actions": ["Voeg BTC toe aan mijn watchlist", "Voeg ETH toe aan mijn watchlist"],
+        }
+
+    is_remove = any(term in q for term in ["verwijder", "haal", "remove"])
+    action_type = "remove_from_watchlist" if is_remove else "add_to_watchlist"
+    response = (
+        f"Ik kan {symbol} {'uit' if is_remove else 'aan'} je watchlist {'halen' if is_remove else 'toevoegen'}. "
+        "Bevestig dat via de actie hieronder."
+    )
+    return {
+        "response": response,
+        "intent": "watchlist_mutation",
+        "flow": "general_help",
+        "actions": [{
+            "type": action_type,
+            "symbol": symbol,
+            "label": f"{'Verwijder' if is_remove else 'Voeg'} {symbol} {'uit' if is_remove else 'aan'} watchlist",
+        }],
+        "suggested_actions": [],
+    }
+
+
+async def _build_setup_strategy_listing_envelope(
+    db: AsyncSession,
+    user_id: int,
+) -> Dict[str, Any]:
+    setup_repo = SetupRepository(db)
+    strategy_repo = StrategyRepository(db)
+    setups = await setup_repo.get_top_setups(user_id, 3)
+    strategies = await strategy_repo.query_strategies(user_id, {})
+
+    setup_lines = []
+    for setup in setups[:3]:
+        symbol = str(setup.get("symbol") or "").upper()
+        timeframe = setup.get("timeframe") or "?"
+        name = setup.get("name") or f"{symbol} setup"
+        setup_lines.append(f"- Setup #{setup.get('id')}: {name} ({symbol} · {timeframe})")
+
+    strategy_lines = []
+    for strategy in strategies[:3]:
+        symbol = str(strategy.get("setup_symbol") or "").upper()
+        timeframe = strategy.get("setup_timeframe") or "?"
+        name = strategy.get("name") or f"{symbol} strategie"
+        strategy_lines.append(f"- Strategie #{strategy.get('id')}: {name} ({symbol} · {timeframe})")
+
+    if not setup_lines and not strategy_lines:
+        response = (
+            "Je hebt nog geen opgeslagen setups of strategieën. "
+            "Begin met een asset in je watchlist of vraag Finn om eerst een setup voor je te maken."
+        )
+    else:
+        sections = []
+        if setup_lines:
+            sections.append("Je recente setups:\n" + "\n".join(setup_lines))
+        if strategy_lines:
+            sections.append("Je recente strategieën:\n" + "\n".join(strategy_lines))
+        response = "\n\n".join(sections)
+
+    return {
+        "response": response,
+        "intent": "entity_list",
+        "flow": "general_help",
+        "state": {
+            "current_flow": "general_help",
+            "setup_count": len(setups),
+            "strategy_count": len(strategies),
+        },
+        "actions": [],
+    }
+
+
+def _extract_profile_update_from_query(query: str) -> Dict[str, Any]:
+    q = str(query or "").lower()
+    payload: Dict[str, Any] = {}
+
+    trader_types = []
+    if "swing trader" in q or "swingtrader" in q:
+        trader_types.append("swing_trader")
+    if "day trader" in q or "daytrader" in q:
+        trader_types.append("day_trader")
+    if "scalper" in q:
+        trader_types.append("scalper")
+    if "investeerder" in q or re.search(r"\binvestor\b", q):
+        trader_types.append("investor")
+    if "dca" in q and "invest" in q:
+        trader_types.append("dca_investor")
+    if trader_types:
+        payload["trader_types"] = trader_types
+
+    timeframe_map = {
+        "4h": "4h",
+        "4u": "4h",
+        "1d": "1d",
+        "daily": "1d",
+        "dag": "1d",
+        "1w": "1w",
+        "week": "1w",
+        "1m": "1m",
+        "maand": "1m",
+        "1h": "1h",
+        "15m": "15m",
+        "5m": "5m",
+    }
+    primary_timeframes = []
+    for needle, canonical in timeframe_map.items():
+        if needle in q and canonical not in primary_timeframes:
+            primary_timeframes.append(canonical)
+    if primary_timeframes:
+        payload["primary_timeframes"] = primary_timeframes
+
+    asset_focus = []
+    if "btc" in q or "bitcoin" in q:
+        asset_focus.append("bitcoin")
+    elif any(token in q for token in ["eth", "sol", "crypto", "altcoin"]):
+        asset_focus.append("crypto_general")
+    if asset_focus:
+        payload["asset_focus"] = asset_focus
+
+    behavior_flags = []
+    if "fomo" in q:
+        behavior_flags.append("fomo")
+    if "te vroeg winst" in q or "profit too early" in q:
+        behavior_flags.append("takes_profit_too_early")
+    if "verliezers te lang" in q or "hold losers too long" in q:
+        behavior_flags.append("holds_losers_too_long")
+    if "overtrade" in q or "overtraden" in q:
+        behavior_flags.append("overtrades")
+    if behavior_flags:
+        payload["behavior_flags"] = behavior_flags
+
+    return normalize_trader_profile_preferences(payload)
+
+
+def _looks_like_profile_capture(query: str) -> bool:
+    q = str(query or "").lower()
+    identity_cues = [
+        "ik ben een",
+        "ik ben ",
+        "mijn profiel",
+        "ik wil ",
+        "ik trade",
+        "ik handel",
+    ]
+    if not any(cue in q for cue in identity_cues):
+        return False
+    return has_trader_profile(_extract_profile_update_from_query(query))
+
+
+def _looks_like_profile_explain(query: str) -> bool:
+    q = str(query or "").lower()
+    return (
+        "wat is mijn profiel" in q
+        or "hoe gebruik je dat in je advies" in q
+        or ("mijn profiel" in q and any(term in q for term in ["gebruik", "advies", "samenvat", "uitleg"]))
+    )
+
+
+def _looks_like_explicit_setup_creation_request(query: str) -> bool:
+    q = str(query or "").lower()
+    if "setup" not in q:
+        return False
+    if any(term in q for term in [
+        "maak een setup",
+        "maak setup",
+        "setup voor",
+        "setup aanmaken",
+        "nieuwe setup",
+        "setup maken",
+        "dca setup",
+    ]):
+        return True
+    create_terms = [
+        "maak",
+        "maken",
+        "aanmaken",
+        "creeer",
+        "creeër",
+        "bouw",
+        "wil",
+        "kan je",
+        "kun je",
+        "help me",
+        "help mij",
+        "start",
+    ]
+    setup_modifiers = [
+        "dca",
+        "trade",
+        "swing",
+        "entry",
+        "trend",
+        "blueprint",
+    ]
+    return any(term in q for term in create_terms) and any(term in q for term in setup_modifiers)
+
+
+def _should_prefer_legacy_setup_flow(query: str, context_payload: Optional[dict] = None) -> bool:
+    context_payload = context_payload or {}
+    current_flow = str(context_payload.get("current_flow") or "").lower()
+    if current_flow == "setup_creation":
+        return True
+    return False
+
+
+def _should_use_modern_setup_creation_flow(query: str, context_payload: Optional[dict] = None) -> bool:
+    context_payload = context_payload or {}
+    current_flow = str(context_payload.get("current_flow") or "").lower()
+    if current_flow == "setup_creation":
+        return True
+    if not _looks_like_explicit_setup_creation_request(query):
+        return False
+    page = str(context_payload.get("page") or "").strip("/").lower()
+    step = str(
+        context_payload.get("step")
+        or context_payload.get("onboarding_step")
+        or context_payload.get("onboardingStep")
+        or ""
+    ).lower()
+    return page == "setup" or step == "setup"
+
+
+def _is_legacy_transactional_flow_name(flow_name: Optional[str]) -> bool:
+    return str(flow_name or "").strip().lower() in {
+        "setup_creation",
+        "strategy_creation",
+        "bot_creation",
+        "indicator_config",
+    }
+
+
+def _is_modern_transactional_state_record(state: Optional[dict]) -> bool:
+    if not isinstance(state, dict):
+        return False
+    slots = state.get("slots")
+    if not isinstance(slots, dict):
+        return False
+    if slots.get("state_bucket") == "transactional_state":
+        return True
+    if isinstance(slots.get("draft"), dict):
+        return True
+    return bool(slots.get("version"))
+
+
+def _modern_transactional_flow_name(state: Optional[dict], context_payload: Optional[dict] = None) -> Optional[str]:
+    flow_name = str((state or {}).get("current_flow") or (context_payload or {}).get("current_flow") or "").strip().lower()
+    if flow_name in {"setup_creation", "strategy_creation", "bot_creation", "indicator_config", "plan_creation"}:
+        return flow_name
+    return None
+
+
+def _clear_modern_transactional_context(context_payload: Optional[dict]) -> None:
+    if not isinstance(context_payload, dict):
+        return
+    context_payload.pop("finn_draft", None)
+    context_payload.pop("finn_state", None)
+    if _modern_transactional_flow_name(None, context_payload):
+        context_payload.pop("current_flow", None)
+
+
+def _looks_like_explicit_new_plan_request(query: str) -> bool:
+    q = str(query or "").lower()
+    return any(trigger in q for trigger in [
+        "maak een dca",
+        "maak een wekelijkse",
+        "maak een maandelijkse",
+        "maak een dagelijkse",
+        "wekelijkse dca",
+        "maandelijkse dca",
+        "dagelijkse dca",
+        "elke week",
+        "iedere week",
+        "elke maand",
+        "iedere maand",
+        "dca van",
+    ])
+
+
+def _build_profile_saved_envelope(profile: Dict[str, Any]) -> Dict[str, Any]:
+    summary = build_trader_profile_summary(profile)
+    lines = []
+    if profile.get("trader_types"):
+        lines.append(f"stijl: {_humanize_profile_values(profile['trader_types'])}")
+    if profile.get("primary_timeframes"):
+        lines.append(f"timeframes: {_humanize_profile_values(profile['primary_timeframes'])}")
+    if profile.get("asset_focus"):
+        lines.append(f"focus: {_humanize_profile_values(profile['asset_focus'])}")
+    if profile.get("behavior_flags"):
+        lines.append(f"coachingpunten: {_humanize_profile_values(profile['behavior_flags'])}")
+    details = "; ".join(lines) if lines else summary
+    return {
+        "response": (
+            "Ik heb je traderprofiel bijgewerkt. "
+            f"Ik gebruik dit nu in coaching, uitleg en waarschuwingen. {details}."
+        ),
+        "intent": "profile_updated",
+        "flow": "general_help",
+        "state": {
+            "current_flow": "profile_updated",
+            "profile_summary": summary,
+        },
+        "actions": [],
+    }
+
+
+def _build_profile_explain_envelope(profile: Dict[str, Any]) -> Dict[str, Any]:
+    summary = build_trader_profile_summary(profile)
+    if not has_trader_profile(profile):
+        return {
+            "response": (
+                "Ik zie nog geen ingevuld traderprofiel. Vul eerst je stijl, timeframes of focus in, "
+                "dan kan ik coaching en waarschuwingen daarop afstemmen."
+            ),
+            "intent": "profile_explain",
+            "flow": "general_help",
+            "actions": [],
+        }
+    return {
+        "response": (
+            f"Je huidige profiel is: {summary}. "
+            "Ik gebruik dat om uitleg, coaching, frictie en prioriteiten beter op jouw handelsstijl af te stemmen."
+        ),
+        "intent": "profile_explain",
+        "flow": "general_help",
+        "state": {
+            "current_flow": "profile_explain",
+            "profile_summary": summary,
+        },
+        "actions": [],
+    }
+
+
+async def _continue_transactional_follow_up(
+    finn: Any,
+    user_id: int,
+    query: str,
+    context_payload: Optional[dict],
+) -> Optional[Dict[str, Any]]:
+    payload = context_payload or {}
+    draft = payload.get("finn_draft") if isinstance(payload.get("finn_draft"), dict) else None
+    active_flow = _modern_transactional_flow_name(payload.get("finn_state"), payload)
+    if not draft or not active_flow or not finn._looks_like_transactional_follow_up(query, draft):
+        return None
+    if active_flow != "plan_creation" and (finn.looks_like_plan_request(query, None) or _looks_like_explicit_new_plan_request(query)):
+        _clear_modern_transactional_context(payload)
+        return None
+    if active_flow != "strategy_creation" and finn.looks_like_strategy_request(query, {}):
+        _clear_modern_transactional_context(payload)
+        return None
+    if active_flow != "bot_creation" and finn.looks_like_bot_request(query, {}):
+        _clear_modern_transactional_context(payload)
+        return None
+    if active_flow != "indicator_config" and finn.looks_like_indicator_config_request(query, {}):
+        _clear_modern_transactional_context(payload)
+        return None
+
+    if active_flow == "setup_creation":
+        return finn.build_setup_response(query, payload)
+    if active_flow == "strategy_creation":
+        return await finn.build_strategy_response_for_user(user_id, query, payload)
+    if active_flow == "bot_creation":
+        return await finn.build_bot_response_for_user(user_id, query, payload)
+    if active_flow == "indicator_config":
+        return await finn.build_indicator_config_response_for_user(user_id, query, payload)
+    return finn.build_response(query, payload)
 def _attach_trader_profile_metadata(response: Optional[dict], context_payload: Optional[dict]) -> dict:
     payload = dict(response or {})
     analysis = payload.get("analysis") if isinstance(payload.get("analysis"), dict) else {}
@@ -1041,6 +1557,11 @@ async def assistant_chat(
             )
         if finn.looks_like_indicator_config_request(request.query, context_payload):
             finn_response = await finn.build_indicator_config_response_for_user(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
+            )
+        if _should_use_modern_setup_creation_flow(request.query, context_payload):
+            finn_response = finn.build_setup_response(request.query, context_payload)
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
             )
