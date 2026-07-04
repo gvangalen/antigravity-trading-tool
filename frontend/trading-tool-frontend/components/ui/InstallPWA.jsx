@@ -1,9 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Share, PlusSquare, Download, CheckCircle2, Smartphone } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
+
+const DISMISS_KEY = "pwa-prompt-dismissed";
+const SESSION_DISMISS_KEY = "pwa-prompt-dismissed-session";
+const INSTALL_KEY = "pwa-installed";
+const DISMISS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+function hasActiveDismissal() {
+  if (typeof window === "undefined") return false;
+
+  if (window.sessionStorage.getItem(SESSION_DISMISS_KEY) === "1") {
+    return true;
+  }
+
+  const lastDismissed = window.localStorage.getItem(DISMISS_KEY);
+  if (!lastDismissed) return false;
+
+  const timestamp = Number.parseInt(lastDismissed, 10);
+  if (!Number.isFinite(timestamp)) return false;
+
+  return Date.now() - timestamp < DISMISS_WINDOW_MS;
+}
 
 export default function InstallPWA() {
   const { t } = useTranslation();
@@ -11,6 +32,7 @@ export default function InstallPWA() {
   const [show, setShow] = useState(false);
   const [platform, setPlatform] = useState(null);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const dismissedRef = useRef(false);
 
   useEffect(() => {
     // 1. Check if already installed
@@ -20,12 +42,12 @@ export default function InstallPWA() {
 
     if (isStandalone) return;
 
+    if (window.localStorage.getItem(INSTALL_KEY) === "1") return;
+
     // 2. Check dismissal
-    const lastDismissed = localStorage.getItem("pwa-prompt-dismissed");
-    if (lastDismissed) {
-      const now = new Date().getTime();
-      const oneDay = 24 * 60 * 60 * 1000;
-      if (now - parseInt(lastDismissed) < oneDay * 14) return; // Wait 14 days between prompts
+    dismissedRef.current = hasActiveDismissal();
+    if (dismissedRef.current) {
+      return;
     }
 
     // 3. Detect Platform
@@ -41,23 +63,49 @@ export default function InstallPWA() {
     const handler = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      // Logic for when to show the prompt (e.g. after a few seconds)
-      setTimeout(() => setShow(true), 3000);
+      if (dismissedRef.current) return;
+      window.setTimeout(() => {
+        if (!dismissedRef.current) {
+          setShow(true);
+        }
+      }, 3000);
+    };
+
+    const handleInstalled = () => {
+      window.localStorage.setItem(INSTALL_KEY, "1");
+      setShow(false);
+      setDeferredPrompt(null);
     };
 
     window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", handleInstalled);
 
     // 5. iOS manually trigger show (since there's no native prompt)
+    let iosTimer = null;
     if (isiOS) {
-      setTimeout(() => setShow(true), 5000);
+      iosTimer = window.setTimeout(() => {
+        if (!dismissedRef.current) {
+          setShow(true);
+        }
+      }, 5000);
     }
 
-    return () => window.removeEventListener("beforeinstallprompt", handler);
+    return () => {
+      if (iosTimer) {
+        window.clearTimeout(iosTimer);
+      }
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
   }, []);
 
   const handleDismiss = () => {
+    dismissedRef.current = true;
     setShow(false);
-    localStorage.setItem("pwa-prompt-dismissed", new Date().getTime().toString());
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(DISMISS_KEY, Date.now().toString());
+      window.sessionStorage.setItem(SESSION_DISMISS_KEY, "1");
+    }
   };
 
   const handleInstallAndroid = async () => {
@@ -65,7 +113,12 @@ export default function InstallPWA() {
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === "accepted") {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(INSTALL_KEY, "1");
+      }
       setShow(false);
+    } else {
+      handleDismiss();
     }
     setDeferredPrompt(null);
   };
