@@ -9,15 +9,69 @@ const DISMISS_KEY = "pwa-prompt-dismissed";
 const SESSION_DISMISS_KEY = "pwa-prompt-dismissed-session";
 const INSTALL_KEY = "pwa-installed";
 const DISMISS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+const COOKIE_DOMAIN = ".tradamind.com";
+
+function getCookieOptions() {
+  if (typeof window === "undefined") {
+    return "path=/; max-age=31536000; samesite=lax";
+  }
+
+  const hostname = window.location.hostname;
+  const sharedDomain =
+    hostname === "tradamind.com" || hostname.endsWith(".tradamind.com")
+      ? `; domain=${COOKIE_DOMAIN}`
+      : "";
+
+  return `path=/; max-age=31536000; samesite=lax${sharedDomain}`;
+}
+
+function readCookie(name) {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]+)`));
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
+function writeCookie(name, value) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=${encodeURIComponent(value)}; ${getCookieOptions()}`;
+}
+
+function safeSessionGet(key) {
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch (error) {
+    return null;
+  }
+}
+
+function safeSessionSet(key, value) {
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch (error) {}
+}
+
+function safeLocalGet(key) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch (error) {
+    return null;
+  }
+}
+
+function safeLocalSet(key, value) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch (error) {}
+}
 
 function hasActiveDismissal() {
   if (typeof window === "undefined") return false;
 
-  if (window.sessionStorage.getItem(SESSION_DISMISS_KEY) === "1") {
+  if (safeSessionGet(SESSION_DISMISS_KEY) === "1") {
     return true;
   }
 
-  const lastDismissed = window.localStorage.getItem(DISMISS_KEY);
+  const lastDismissed = safeLocalGet(DISMISS_KEY) || readCookie(DISMISS_KEY);
   if (!lastDismissed) return false;
 
   const timestamp = Number.parseInt(lastDismissed, 10);
@@ -42,7 +96,7 @@ export default function InstallPWA() {
 
     if (isStandalone) return;
 
-    if (window.localStorage.getItem(INSTALL_KEY) === "1") return;
+    if (safeLocalGet(INSTALL_KEY) === "1" || readCookie(INSTALL_KEY) === "1") return;
 
     // 2. Check dismissal
     dismissedRef.current = hasActiveDismissal();
@@ -72,7 +126,8 @@ export default function InstallPWA() {
     };
 
     const handleInstalled = () => {
-      window.localStorage.setItem(INSTALL_KEY, "1");
+      safeLocalSet(INSTALL_KEY, "1");
+      writeCookie(INSTALL_KEY, "1");
       setShow(false);
       setDeferredPrompt(null);
     };
@@ -103,8 +158,10 @@ export default function InstallPWA() {
     dismissedRef.current = true;
     setShow(false);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(DISMISS_KEY, Date.now().toString());
-      window.sessionStorage.setItem(SESSION_DISMISS_KEY, "1");
+      const dismissedAt = Date.now().toString();
+      safeLocalSet(DISMISS_KEY, dismissedAt);
+      safeSessionSet(SESSION_DISMISS_KEY, "1");
+      writeCookie(DISMISS_KEY, dismissedAt);
     }
   };
 
@@ -114,7 +171,8 @@ export default function InstallPWA() {
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === "accepted") {
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(INSTALL_KEY, "1");
+        safeLocalSet(INSTALL_KEY, "1");
+        writeCookie(INSTALL_KEY, "1");
       }
       setShow(false);
     } else {
