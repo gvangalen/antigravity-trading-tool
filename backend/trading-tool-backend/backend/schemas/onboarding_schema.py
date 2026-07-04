@@ -5,6 +5,7 @@ class StepRequest(BaseModel):
 
 class OnboardingStatusResponse(BaseModel):
     has_profile: bool
+    has_asset: bool
     has_market: bool
     has_macro: bool
     has_technical: bool

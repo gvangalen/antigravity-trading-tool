@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useModal } from "@/components/modal/ModalProvider";
 
 import { 
@@ -35,6 +35,7 @@ import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function StrategyPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { showSnackbar } = useModal();
   const { t } = useTranslation();
@@ -54,6 +55,11 @@ export default function StrategyPage() {
   const strategyNeedsSetup = status?.has_strategy === false && safeStrategies.length === 0;
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
   const showOnboardingGuide = onboardingGuidedMode || strategyNeedsSetup;
+
+  useEffect(() => {
+    if (!status || status.has_asset) return;
+    router.replace("/onboarding/asset?onboarding=1&step=asset");
+  }, [status, router]);
 
   useEffect(() => {
     loadSetups();

@@ -697,7 +697,7 @@
       }
     },
     "onboardingStep": {
-      "stepNumber": "Stap 1 van 6",
+      "stepNumber": "Stap 1 van 7",
       "title": "Wie ben jij als trader?",
       "description": "Finn gebruikt dit profiel om uitleg, waarschuwingen en setupbegeleiding meteen beter af te stemmen op jouw stijl. Zo krijg je minder ruis en relevanter advies.",
       "finnSaysLabel": "Finn zegt",
@@ -707,6 +707,21 @@
       "saving": "Profiel opslaan...",
       "validationError": "Vul eerst alle profielvelden in zodat Finn je goed kan begeleiden.",
       "saveError": "Opslaan van je traderprofiel is mislukt. Probeer het nog eens."
+    },
+    "assetOnboardingStep": {
+      "stepNumber": "Stap 2 van 7",
+      "title": "Kies eerst het asset waar je omheen wilt bouwen",
+      "description": "Je eerste asset wordt het anker voor de rest van onboarding. Finn gebruikt dit symbool om markt-, macro-, technical-, setup- en strategiebegeleiding op dezelfde context te houden.",
+      "finnSaysLabel": "Finn zegt",
+      "finnSaysBody": "Kies eerst het asset dat je echt wilt traden. Ik zet het op je watchlist en houd de volgende onboardingstappen aan datzelfde symbool gekoppeld.",
+      "assetGroupTitle": "Kies je eerste onboarding-asset",
+      "assetGroupSubtitle": "Dit wordt direct je watchlist-anker en het actieve asset voor de volgende contextstappen.",
+      "assetLabel": "Asset",
+      "footer": "Na opslaan zet Finn dit asset op je watchlist en gebruikt hij het als anker voor market, macro, technical, setup en strategy.",
+      "saveAndContinue": "Asset opslaan en doorgaan",
+      "saving": "Asset opslaan...",
+      "validationError": "Kies eerst één asset zodat Finn de volgende onboardingstappen goed kan ankeren.",
+      "saveError": "Opslaan van je onboarding-asset is mislukt. Probeer het nog eens."
     },
     "profilePage": {
       "eyebrow": "Tradingprofiel",
@@ -764,39 +779,45 @@
       "backToOverviewCta": "Terug naar overzicht →",
       "steps": {
         "profile": {
-          "title": "Stap 1 van 6 — Jouw tradingprofiel",
+          "title": "Stap 1 van 7 — Jouw tradingprofiel",
           "action": "Vertel eerst wat voor trader je bent, welke horizon je gebruikt en waar Finn op moet letten.",
           "help": "Finn gebruikt dit om setups, uitleg en risico-waarschuwingen op jouw stijl af te stemmen.",
           "unlocks": "Persoonlijkere coaching"
         },
+        "asset": {
+          "title": "Stap 2 van 7 — Kies je eerste asset",
+          "action": "Kies eerst het asset dat je wilt traden zodat onboarding stopt met impliciete defaults en elke volgende stap naar hetzelfde symbool wijst.",
+          "help": "Finn zet dit asset op je watchlist en houdt market-, macro-, technical-, setup- en strategiebegeleiding eraan gekoppeld.",
+          "unlocks": "Asset-gebonden contextopbouw"
+        },
         "market": {
-          "title": "Stap 2 van 6 — Marktcontext",
-          "action": "Open de marktpagina en laat Finn eerst het actuele marktbeeld neerzetten.",
-          "help": "Zonder marktcontext blijft Finn te algemeen in zijn volgende adviezen.",
+          "title": "Stap 3 van 7 — Marktcontext",
+          "action": "Open de marktpagina voor je gekozen asset en laat Finn eerst het live marktbeeld neerzetten.",
+          "help": "Zonder marktcontext voor je gekozen asset blijft Finn te algemeen in zijn volgende adviezen.",
           "unlocks": "Eerste marktbriefing"
         },
         "macro": {
-          "title": "Stap 3 van 6 — Macrobeeld",
-          "action": "Voeg macrocontext toe zodat Finn regime en risico beter kan wegen.",
-          "help": "Denk aan DXY, yields of liquiditeit: Finn gebruikt dit voor het grotere plaatje.",
+          "title": "Stap 4 van 7 — Macrobeeld",
+          "action": "Voeg macrocontext toe zodat Finn het bredere regime rond je gekozen asset beter kan wegen.",
+          "help": "Denk aan DXY, yields of liquiditeit: Finn gebruikt dit grotere plaatje om je gekozen asset beter te beoordelen.",
           "unlocks": "Betere risico-inschatting"
         },
         "technical": {
-          "title": "Stap 4 van 6 — Technische signalen",
-          "action": "Controleer technische signalen zodat Finn entries en timing beter kan beoordelen.",
-          "help": "Deze stap geeft Finn bewijs voor trend, momentum en timing.",
+          "title": "Stap 5 van 7 — Technische signalen",
+          "action": "Controleer technische signalen voor je gekozen asset zodat Finn entries en timing beter kan beoordelen.",
+          "help": "Deze stap geeft Finn concreet bewijs voor trend, momentum en timing op je gekozen asset.",
           "unlocks": "Sterkere timing-uitleg"
         },
         "setup": {
-          "title": "Stap 5 van 6 — Setup maken",
-          "action": "Maak je eerste setup zodat Finn jouw regels aan concrete situaties kan koppelen.",
-          "help": "Hier wordt Finn specifieker: niet alleen context, maar ook jouw voorkeuren.",
+          "title": "Stap 6 van 7 — Setup maken",
+          "action": "Maak je eerste setup voor je gekozen asset zodat Finn jouw regels aan concrete situaties kan koppelen.",
+          "help": "Hier wordt Finn specifieker: niet alleen context, maar ook jouw asset-specifieke regels.",
           "unlocks": "Persoonlijkere reviews"
         },
         "strategy": {
-          "title": "Stap 6 van 6 — Strategie kiezen",
-          "action": "Maak je eerste strategie zodat dashboard, reviews en reports echt bruikbaar worden.",
-          "help": "Na deze stap kan Finn je beslissingen veel beter reviewen en prioriteren.",
+          "title": "Stap 7 van 7 — Strategie kiezen",
+          "action": "Maak je eerste strategie voor die setup zodat dashboard, reviews en reports echt bruikbaar worden.",
+          "help": "Na deze stap kan Finn beslissingen voor je gekozen asset veel beter reviewen en prioriteren.",
           "unlocks": "Volledige reviewflow"
         }
       }
@@ -804,8 +825,8 @@
     "onboardingOverview": {
       "loading": "Finn zet je werkplek klaar...",
       "eyebrow": "Finn begeleidt je setup",
-      "title": "Start in zes duidelijke stappen",
-      "description": "Je hoeft hier niet alles tegelijk te snappen. Werk de stappen rustig af van boven naar beneden. Finn gebruikt deze route om jouw marktcontext, setup en strategie op te bouwen zodat advies, reviews en reports daarna echt bruikbaar worden.",
+      "title": "Start in zeven duidelijke stappen",
+      "description": "Je hoeft hier niet alles tegelijk te snappen. Werk de stappen rustig af van boven naar beneden. Kies eerst het asset dat je wilt traden en bouw daarna market-, macro- en technical-context rond datzelfde symbool voordat je een setup en strategie maakt.",
       "chips": {
         "duration": "3-5 minuten",
         "safe": "Geen live trades in onboarding",
@@ -845,34 +866,40 @@
           "finnHelp": "Finn gebruikt dit profiel om advies, waarschuwingen en uitleg direct beter op jouw stijl af te stemmen.",
           "unlocks": "Persoonlijkere coaching en relevantere signalen"
         },
+        "asset": {
+          "title": "Kies je eerste asset",
+          "description": "Kies eerst het asset dat je echt wilt traden zodat onboarding, watchlist en Finn allemaal op hetzelfde symbool ankeren.",
+          "finnHelp": "Finn zet dit asset op je watchlist en gebruikt het als anker voor de rest van je onboardingcontext.",
+          "unlocks": "Eén gedeeld asset-anker voor market, macro, technical, setup en strategy"
+        },
         "market": {
           "title": "Marktcontext",
-          "description": "Bekijk live marktdata en laat Finn eerst het marktbeeld neerzetten.",
-          "finnHelp": "Finn gebruikt dit om jouw eerste context en prioriteiten op te bouwen.",
+          "description": "Bekijk live marktdata voor je gekozen asset en laat Finn eerst het marktbeeld neerzetten.",
+          "finnHelp": "Finn gebruikt dit om de eerste live context en prioriteiten rond je gekozen asset op te bouwen.",
           "unlocks": "Eerste marktbriefing en live context"
         },
         "macro": {
           "title": "Macrobeeld",
-          "description": "Voeg macrocontext toe zodat Finn regime en risico beter kan wegen.",
-          "finnHelp": "Denk aan DXY, yields en liquiditeit: dit geeft Finn het grotere plaatje.",
+          "description": "Voeg macrocontext toe zodat Finn regime en risico rond je gekozen asset beter kan wegen.",
+          "finnHelp": "Denk aan DXY, yields en liquiditeit: dit geeft Finn het grotere plaatje rond het asset dat je wilt traden.",
           "unlocks": "Betere risico-inschatting en regime-duiding"
         },
         "technical": {
           "title": "Technische signalen",
-          "description": "Controleer technische signalen zodat Finn entries en timing beter kan duiden.",
-          "finnHelp": "Deze stap geeft Finn houvast voor trend, momentum en timing.",
+          "description": "Controleer technische signalen voor je gekozen asset zodat Finn entries en timing beter kan duiden.",
+          "finnHelp": "Deze stap geeft Finn houvast voor trend, momentum en timing op datzelfde asset.",
           "unlocks": "Sterkere timing, trend- en momentumuitleg"
         },
         "setup": {
           "title": "Setup maken",
-          "description": "Leg je eerste setup vast zodat Finn jouw context aan concrete regels koppelt.",
-          "finnHelp": "Hier wordt Finn specifieker: niet alleen context, maar ook jouw voorkeuren.",
+          "description": "Leg je eerste setup voor je gekozen asset vast zodat Finn jouw context aan concrete regels koppelt.",
+          "finnHelp": "Hier wordt Finn specifieker: niet alleen context, maar ook jouw asset-specifieke voorkeuren.",
           "unlocks": "Persoonlijkere reviews en scherpere next steps"
         },
         "strategy": {
           "title": "Strategie kiezen",
-          "description": "Maak je eerste strategie zodat dashboard, reports en reviews echt bruikbaar worden.",
-          "finnHelp": "Na deze stap kan Finn beslissingen beter reviewen, blokkeren en prioriteren.",
+          "description": "Maak je eerste strategie zodat dashboard, reports en reviews voor datzelfde asset echt bruikbaar worden.",
+          "finnHelp": "Na deze stap kan Finn beslissingen voor datzelfde asset beter reviewen, blokkeren en prioriteren.",
           "unlocks": "Volledige dashboard-, report- en reviewflow"
         }
       }
@@ -955,22 +982,22 @@
       "processing": "{symbol} wordt verwerkt...",
       "onboardingGuide": {
         "eyebrow": "Eerste marktstap",
-        "title": "Voeg eerst je eerste marktindicator toe",
-        "body": "Begin met één marktsignaal zodat Finn eerst een live marktbeeld kan opbouwen voordat de volgende stappen daarop leunen.",
+        "title": "Voeg eerst een marktindicator toe voor {symbol}",
+        "body": "Begin met één marktsignaal voor {symbol} zodat Finn eerst een live marktbeeld kan opbouwen voordat de volgende stappen daarop leunen.",
         "guidedBadge": "Onboarding begeleidt je hier",
-        "guidedIntro": "Je bent hier vanuit onboarding. Rond alleen deze ene actie af: voeg één marktindicator toe in het configuratieblok hieronder.",
-        "guidedConfigHint": "Zoek hieronder één duidelijke marktindicator en voeg hem toe. Zodra er één actief is, telt deze stap als afgerond.",
-        "completionHint": "Na je eerste actieve indicator is deze stap klaar. Je kunt daarna meteen terug naar onboarding of verder lezen op deze pagina.",
+        "guidedIntro": "Je bent hier vanuit onboarding. Rond alleen deze ene actie af: voeg één marktindicator toe voor {symbol} in het configuratieblok hieronder.",
+        "guidedConfigHint": "Zoek hieronder één duidelijke marktindicator voor {symbol} en voeg hem toe. Zodra er één actief is, telt deze stap als afgerond.",
+        "completionHint": "Na je eerste actieve marktindicator voor {symbol} is deze stap klaar. Je kunt daarna meteen terug naar onboarding of verder lezen op deze pagina.",
         "examples": ["BTC prijs", "24u-verandering", "Volume"],
         "steps": [
-          "Kies hieronder één marktindicator in het configuratieblok.",
-          "Koppel hem aan je marktoverzicht zodat hij onderdeel wordt van je live context.",
+          "Kies hieronder één marktindicator in het configuratieblok voor {symbol}.",
+          "Koppel hem aan je marktoverzicht zodat hij onderdeel wordt van je live context voor {symbol}.",
           "Bekijk daarna de signaaltabel of ga terug naar onboarding voor de volgende stap."
         ],
         "primaryCta": "Open marktconfiguratie",
         "secondaryCta": "Terug naar onboarding",
         "finnLabel": "Finn helpt:",
-        "finnHint": "Twijfel je wat je moet kiezen, begin dan met het duidelijkste live marktsignaal en vraag Finn daarna wat nog ontbreekt."
+        "finnHint": "Twijfel je wat je voor {symbol} moet kiezen, begin dan met het duidelijkste live marktsignaal en vraag Finn daarna wat nog ontbreekt."
       },
       "biasPositive": "Positief",
       "biasNegative": "Negatief",
@@ -1047,20 +1074,24 @@
       },
       "onboardingGuide": {
         "eyebrow": "Eerste macrostap",
-        "title": "Voeg eerst één macro-indicator toe",
-        "body": "Begin met één duidelijk contextsignaal zodat Finn eerst het grotere plaatje begrijpt voordat de rest van je setup zich vult.",
+        "title": "Voeg eerst één macro-indicator toe voor je {symbol}-beeld",
+        "body": "Macro is breder dan {symbol}, maar deze stap helpt Finn wel om het grotere regime rond het asset dat jij koos goed te beoordelen voordat de rest van je setup wordt ingevuld.",
         "guidedBadge": "Onboarding begeleidt je hier",
-        "guidedIntro": "Je bent hier vanuit onboarding. Rond alleen deze ene actie af: voeg één macro-indicator toe in het configuratieblok hieronder.",
-        "guidedConfigHint": "Zoek hieronder bijvoorbeeld DXY, US10Y of inflatie en synchroniseer één indicator. Daarna telt deze stap als afgerond.",
-        "completionHint": "Na je eerste gesynchroniseerde macro-indicator is deze stap klaar. Daarna kun je terug naar onboarding voor de volgende stap.",
-        "examples": ["DXY", "US10Y", "Inflatie"],
+        "guidedIntro": "Je bent hier vanuit onboarding. Rond alleen deze ene actie af: voeg één macro-indicator toe in het configuratieblok hieronder zodat Finn {symbol} in het juiste regime kan plaatsen.",
+        "guidedConfigHint": "Begin simpel: zoek hieronder bijvoorbeeld DXY, klik op synchroniseren en controleer daarna of hij in je macro-overzicht voor {symbol} actief staat. Pas dan is deze stap echt klaar.",
+        "completionHint": "Na je eerste gesynchroniseerde macro-indicator voor {symbol} is deze stap klaar. Daarna kun je terug naar onboarding voor de volgende stap.",
+        "examples": ["Voeg DXY toe", "Voeg US10Y toe", "Voeg inflatie toe"],
         "steps": [
-          "Kies hieronder één macro-indicator uit de selector.",
-          "Klik op synchroniseren zodat hij onderdeel wordt van je macro-overzicht.",
-          "Bekijk daarna de signaaltabel of ga terug naar onboarding voor de volgende stap."
+          "Kies hieronder één macro-indicator uit de selector, bijvoorbeeld DXY.",
+          "Klik op synchroniseren en wacht tot hij actief verschijnt in je macro-overzicht voor {symbol}.",
+          "Zie je één actieve indicator? Ga dan terug naar onboarding voor de volgende stap."
         ],
         "primaryCta": "Open macro-configuratie",
-        "secondaryCta": "Terug naar onboarding"
+        "assistantCta": "Open Finn-hulp",
+        "secondaryCta": "Terug naar onboarding",
+        "finnLabel": "Finn helpt:",
+        "finnHint": "Weet je niet waar je voor {symbol} moet beginnen, begin dan met DXY. Vraag Finn daarna wat deze indicator toevoegt aan je marktcontext.",
+        "assistantPrompt": "Help me met deze macrostap voor mijn gekozen asset. Welke indicator moet ik als eerste toevoegen en wat moet ik hier precies klikken?"
       },
       "hud": {
         "environment": "Macroomgeving",
@@ -1134,22 +1165,22 @@
       },
       "onboardingGuide": {
         "eyebrow": "Eerste technical-stap",
-        "title": "Voeg eerst één technische indicator toe",
-        "body": "Begin met één herkenbaar technisch signaal zodat Finn trend en timing concreet kan uitleggen in plaats van algemeen te blijven.",
+        "title": "Voeg eerst één technische indicator toe voor {symbol}",
+        "body": "Begin met één herkenbaar technisch signaal voor {symbol} zodat Finn trend en timing concreet kan uitleggen in plaats van algemeen te blijven.",
         "guidedBadge": "Onboarding begeleidt je hier",
-        "guidedIntro": "Je bent hier vanuit onboarding. Rond alleen deze ene actie af: voeg één technische indicator toe in het configuratieblok hieronder.",
-        "guidedConfigHint": "Zoek hieronder bijvoorbeeld RSI of MA 200 en synchroniseer één indicator. Daarna telt deze stap als afgerond.",
-        "completionHint": "Na je eerste technische indicator is deze stap klaar. Daarna kun je terug naar onboarding of hier verder verdiepen.",
+        "guidedIntro": "Je bent hier vanuit onboarding. Rond alleen deze ene actie af: voeg één technische indicator toe voor {symbol} in het configuratieblok hieronder.",
+        "guidedConfigHint": "Zoek hieronder bijvoorbeeld RSI of MA 200 en synchroniseer één indicator voor {symbol}. Daarna telt deze stap als afgerond.",
+        "completionHint": "Na je eerste technische indicator voor {symbol} is deze stap klaar. Daarna kun je terug naar onboarding of hier verder verdiepen.",
         "examples": ["RSI", "MA 200", "VIX"],
         "steps": [
-          "Kies hieronder één technische indicator in het configuratieblok.",
-          "Synchroniseer hem met de terminal zodat hij onderdeel wordt van je technische context.",
+          "Kies hieronder één technische indicator in het configuratieblok voor {symbol}.",
+          "Synchroniseer hem met de terminal zodat hij onderdeel wordt van je technische context voor {symbol}.",
           "Bekijk daarna de signaaltabel of ga terug naar onboarding voor de volgende stap."
         ],
         "primaryCta": "Open technical-configuratie",
         "secondaryCta": "Terug naar onboarding",
         "finnLabel": "Finn helpt:",
-        "finnHint": "Weet je niet welke je moet kiezen, begin dan met RSI. Daarmee kan Finn al momentum en timing beginnen uit te leggen."
+        "finnHint": "Weet je niet welke je voor {symbol} moet kiezen, begin dan met RSI. Daarmee kan Finn al momentum en timing beginnen uit te leggen."
       },
       "hud": {
         "strongPositive": "Sterk positief",
@@ -1360,22 +1391,24 @@
     "newDescription": "Voeg een nieuw tradingmodel toe aan het systeem",
     "onboardingGuide": {
       "eyebrow": "Eerste setupstap",
-      "title": "Maak eerst één simpele setup",
-      "body": "Hier worden je regels concreet. Begin met één duidelijke setup zodat Finn context kan koppelen aan een echt tradingkader.",
+      "title": "Maak eerst één simpele setup voor je gekozen asset",
+      "body": "Hier worden je regels concreet. Begin met één duidelijke setup voor je gekozen asset zodat Finn context kan koppelen aan een echt tradingkader.",
       "guidedBadge": "Onboarding begeleidt je hier",
       "guidedIntro": "Je bent hier vanuit onboarding. Rond alleen deze ene actie af: maak hieronder één simpele setup aan.",
-      "guidedConfigHint": "Gebruik dit formulier voor één eenvoudige eerste setup. Asset, timeframe en kernvoorwaarden zijn genoeg om deze stap af te ronden.",
+      "guidedConfigHint": "Gebruik hieronder het setup-formulier of vraag Finn heel gericht om één eerste setup voor je gekozen asset. Begin klein: asset, type en timeframe zijn genoeg voor je eerste versie.",
       "completionHint": "Zodra je eerste setup is opgeslagen, is deze stap klaar. Daarna kun je terug naar onboarding of de setup verder verfijnen.",
-      "examples": ["BTC swing setup", "ETH DCA setup", "SOL breakout setup"],
+      "examples": ["Maak een BTC swing setup met 4H entry", "Maak een ETH DCA setup", "Maak een SOL breakout setup"],
       "steps": [
         "Scroll naar het blok voor een nieuwe setup hieronder.",
-        "Vul één simpele setup in met asset, timeframe en kernvoorwaarden.",
-        "Sla hem eerst op en ga daarna terug naar onboarding of verfijn hem hier verder."
+        "Kies één asset, een setup-type en een timeframe of laat Finn je die drie dingen stap voor stap uitvragen.",
+        "Sla alleen je eerste basissetup op. Verfijnen kan daarna altijd nog."
       ],
       "primaryCta": "Open nieuwe setup",
+      "assistantCta": "Open Finn-hulp",
       "secondaryCta": "Terug naar onboarding",
       "finnLabel": "Finn helpt:",
-      "finnHint": "Twijfel je hoeveel detail nodig is, houd de eerste setup dan simpel. Finn kan hem daarna helpen aanscherpen."
+      "finnHint": "Gebruik desnoods deze prompt: 'Maak een BTC swing setup met daily trend en 4H entry.' Finn hoort daarna eerst vervolgvragen te stellen in plaats van alles zelf in te vullen.",
+      "assistantPrompt": "Begeleid me stap voor stap bij deze setup voor mijn gekozen asset. Stel alleen de eerstvolgende noodzakelijke vraag en vul nog niets anders zelf in."
     }
   },
   "strategyPage": {
@@ -1390,22 +1423,24 @@
     "newDescription": "Voeg een nieuwe strategie toe die past bij je setup en uitvoeringsstijl",
     "onboardingGuide": {
       "eyebrow": "Eerste strategiestap",
-      "title": "Maak eerst één uitvoeringsstrategie",
-      "body": "Een strategie maakt van je setup een uitvoeringsplan. Begin met één basisstrategie zodat Finn beslissingen meteen in de juiste context kan reviewen.",
+      "title": "Maak eerst één uitvoeringsstrategie voor je gekozen asset",
+      "body": "Een strategie maakt van je setup een uitvoeringsplan. Begin met één basisstrategie voor je gekozen asset zodat Finn beslissingen meteen in de juiste context kan reviewen.",
       "guidedBadge": "Onboarding begeleidt je hier",
       "guidedIntro": "Je bent hier vanuit onboarding. Rond alleen deze ene actie af: maak hieronder één eerste strategie op basis van je setup.",
-      "guidedConfigHint": "Gebruik dit formulier voor één eenvoudige eerste strategie. Koppel hem aan een setup en vul alleen de belangrijkste uitvoerkeuzes in.",
+      "guidedConfigHint": "Gebruik dit formulier voor één eenvoudige eerste strategie voor je gekozen asset. Kies eerst de juiste setup en vul daarna alleen entry, invalidatie en risk management in.",
       "completionHint": "Zodra je eerste strategie is opgeslagen, is deze stap klaar en kan onboarding netjes afronden.",
-      "examples": ["BTC swing execution", "ETH DCA execution", "SOL breakout execution"],
+      "examples": ["Maak een strategie voor mijn BTC setup", "Maak hier een DCA-strategie van", "Geef entry, invalidatie en risk management"],
       "steps": [
         "Scroll naar het blok voor een nieuwe strategie hieronder.",
-        "Kies bij welke setup hij hoort en vul de belangrijkste uitvoervelden in.",
-        "Sla de strategie eerst op en ga daarna terug naar onboarding of stem hem hier verder af."
+        "Kies eerst bij welke setup hij hoort.",
+        "Vul daarna alleen de belangrijkste uitvoervelden in en sla hem op."
       ],
       "primaryCta": "Open nieuwe strategie",
+      "assistantCta": "Open Finn-hulp",
       "secondaryCta": "Terug naar onboarding",
       "finnLabel": "Finn helpt:",
-      "finnHint": "Weet je niet hoe uitgebreid hij moet zijn, houd de eerste strategie dan simpel. Finn kan de uitvoerlogica daarna verder verfijnen."
+      "finnHint": "Gebruik desnoods deze prompt: 'Maak hier een strategie van met duidelijke entry, invalidatie en risk management.'",
+      "assistantPrompt": "Begeleid me stap voor stap bij deze strategie voor mijn gekozen asset. Vraag eerst alleen wat nog ontbreekt en maak nog niets definitief."
     },
     "editTitle": "Strategie aanpassen",
     "editSubtitle": "Instellingen",
@@ -2845,6 +2880,7 @@
       "dca.day": "DCA-weekdag",
       "dca.month_day": "DCA-maanddag",
       "dca.buy_score_threshold": "Extra koopscore",
+      "bot.create_bot": "Botdraft",
       "bot.automation": "Automatisering",
       "bot.mode": "Botmodus",
       "bot.risk_profile": "Risicoprofiel"
@@ -2854,6 +2890,7 @@
       "plan_type": "Wil je een DCA-plan of een trade-plan maken?",
       "setup.timeframe": "Welke timeframe hoort bij dit plan?",
       "strategy.base_amount_eur": "Met welk basisbedrag in euro wil je dit plan uitvoeren?",
+      "bot.create_bot": "Wil je hier alleen een plan van maken, of wil je ook meteen een botdraft klaarzetten?",
       "dca.frequency": "Hoe vaak wil je deze DCA uitvoeren: dagelijks, wekelijks of maandelijks?",
       "dca.day": "Op welke weekdag wil je deze DCA uitvoeren?",
       "dca.month_day": "Op welke dag van de maand wil je kopen? Gebruik dag 1 t/m 28.",
@@ -2913,7 +2950,8 @@
     },
     "draftStatus": {
       "canceled": "✕ Concept geannuleerd",
-      "saved": "✓ Concept succesvol opgeslagen!"
+      "saved": "✓ Concept succesvol opgeslagen!",
+      "collectingDetails": "Finn verzamelt eerst de kernkeuzes en laat daarna pas de volledige conceptkaart zien."
     },
     "universalAction": {
       "executionError": "Fout bij het uitvoeren van deze actie.",

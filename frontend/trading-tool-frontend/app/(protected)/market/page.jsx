@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Activity, LayoutGrid, History, TrendingUp } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
@@ -25,10 +25,25 @@ import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { useCurrentAsset } from "@/hooks/useCurrentAsset";
 
 export default function MarketPage() {
+  const router = useRouter();
   const { symbol: activeSymbol } = useCurrentAsset();
   const searchParams = useSearchParams();
   const { t } = useTranslation();
   const marketT = t.pages.market;
+  const guideCopy = marketT.onboardingGuide
+    ? {
+        ...marketT.onboardingGuide,
+        title: marketT.onboardingGuide.title?.replace("{symbol}", activeSymbol),
+        body: marketT.onboardingGuide.body?.replace("{symbol}", activeSymbol),
+        guidedIntro: marketT.onboardingGuide.guidedIntro?.replace("{symbol}", activeSymbol),
+        guidedConfigHint: marketT.onboardingGuide.guidedConfigHint?.replace("{symbol}", activeSymbol),
+        completionHint: marketT.onboardingGuide.completionHint?.replace("{symbol}", activeSymbol),
+        finnHint: marketT.onboardingGuide.finnHint?.replace("{symbol}", activeSymbol),
+        steps: Array.isArray(marketT.onboardingGuide.steps)
+          ? marketT.onboardingGuide.steps.map((step) => step.replace("{symbol}", activeSymbol))
+          : [],
+      }
+    : null;
 
   // ===============================
   // 🧭 ONBOARDING HOOK
@@ -49,6 +64,11 @@ export default function MarketPage() {
   const marketNeedsSetup = status?.has_market === false && activeMarketIndicatorNames?.length === 0;
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
   const showOnboardingGuide = onboardingGuidedMode || marketNeedsSetup;
+
+  useEffect(() => {
+    if (!status || status.has_asset) return;
+    router.replace("/onboarding/asset?onboarding=1&step=asset");
+  }, [status, router]);
 
   // ===============================
   // 📈 SCORE DATA
@@ -109,7 +129,7 @@ export default function MarketPage() {
       </header>
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide copy={marketT.onboardingGuide} anchorId="market-config" guidedMode={onboardingGuidedMode} />
+        <OnboardingStepGuide copy={guideCopy} anchorId="market-config" guidedMode={onboardingGuidedMode} />
       ) : null}
 
       {/* 🚀 MARKET HUD */}
@@ -153,7 +173,7 @@ export default function MarketPage() {
           <div className="card-p p-8">
             {showOnboardingGuide ? (
               <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700">
-                {marketT.onboardingGuide.guidedConfigHint}
+                {guideCopy?.guidedConfigHint}
               </div>
             ) : null}
             <MarketIndicatorScoreView

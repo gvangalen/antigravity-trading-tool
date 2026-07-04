@@ -5112,7 +5112,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || "SOL"}</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || globalSymbol || context.symbol || "—"}</span>
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.setupType}</span>
@@ -5152,7 +5152,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || "SOL"}</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || globalSymbol || context.symbol || "—"}</span>
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.baseBudget}</span>
@@ -5585,7 +5585,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{draft.payload.symbol || "SOL"}</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{draft.payload.symbol || globalSymbol || context.symbol || "—"}</span>
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.setupType}</span>
@@ -5623,7 +5623,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{draft.payload.symbol || "SOL"}</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{draft.payload.symbol || globalSymbol || context.symbol || "—"}</span>
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.baseBudget}</span>

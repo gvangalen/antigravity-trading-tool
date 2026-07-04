@@ -114,6 +114,7 @@ export function useOnboarding() {
 
     const steps = {
       profile: !!status.has_profile,
+      asset: !!status.has_asset,
       market: !!status.has_market,
       macro: !!status.has_macro,
       technical: !!status.has_technical,
@@ -131,6 +132,7 @@ export function useOnboarding() {
     const done = Boolean(
       status?.onboarding_complete ?? (
         stepStatus &&
+        stepStatus.asset &&
         stepStatus.market &&
         stepStatus.macro &&
         stepStatus.technical &&
@@ -154,7 +156,8 @@ export function useOnboarding() {
   // =====================================================
   const allowedSteps = {
     profile: true,
-    market: stepStatus?.profile ?? false,
+    asset: stepStatus?.profile ?? false,
+    market: stepStatus?.asset ?? false,
     macro: stepStatus?.market ?? false,
     technical: stepStatus?.macro ?? false,
     setup: stepStatus?.technical ?? false,
