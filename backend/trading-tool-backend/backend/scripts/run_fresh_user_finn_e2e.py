@@ -406,15 +406,31 @@ def run_flow(api: ApiSession, first_name: str, email: str, password: str) -> Tup
         {"patch_response": prefs, "roundtrip": prefs_roundtrip},
     )
 
-    # onboarding finish
-    _, finish = api.request("POST", "/api/onboarding/finish")
-    collected["onboarding_finish"] = finish
+    # onboarding asset anchor
+    _, asset_prefs = api.request(
+        "PATCH",
+        "/api/assistant/preferences",
+        json_body={"onboarding_asset": "BTC", "selected_asset": "BTC"},
+    )
+    _, watch_seed = api.request("POST", "/api/watchlist", json_body={"symbol": "BTC"})
+    try:
+        api.request("POST", "/api/market/asset/initialize", json_body={"symbol": "BTC"})
+    except Exception:
+        pass
+    _, asset_status = api.request("POST", "/api/onboarding/complete_step", json_body={"step": "asset"})
+    _, watchlist_after_asset = api.request("GET", "/api/watchlist")
+    collected["onboarding_asset"] = {
+        "preferences": asset_prefs,
+        "watch_seed": watch_seed,
+        "status": asset_status,
+        "watchlist": watchlist_after_asset,
+    }
     add(
-        "onboarding_finish",
-        onboarding_completed(finish),
-        "Nieuwe user kan onboarding afronden",
-        f"completed={finish.get('completed')} onboarding_complete={finish.get('onboarding_complete')} progress={finish.get('progress_percent')}",
-        {"response": finish},
+        "onboarding_asset",
+        bool(asset_status.get("has_asset")) and "BTC" in normalize_watchlist(watchlist_after_asset),
+        "Nieuwe user kiest eerst een onboarding-asset die aan watchlist en state wordt gekoppeld",
+        pretty({"status": asset_status, "watchlist": watchlist_after_asset}),
+        {"preferences": asset_prefs, "watch_seed": watch_seed, "status": asset_status, "watchlist": watchlist_after_asset},
     )
 
     # watchlist add via FINN
@@ -422,7 +438,7 @@ def run_flow(api: ApiSession, first_name: str, email: str, password: str) -> Tup
         "POST",
         "/api/assistant/chat",
         json_body={
-            "query": "Voeg BTC toe aan mijn watchlist.",
+            "query": "Voeg ETH toe aan mijn watchlist.",
             "context": {"page": "dashboard"},
             "history": [],
             "session_id": f"fresh-watch-{uuid.uuid4().hex[:8]}",
@@ -436,8 +452,8 @@ def run_flow(api: ApiSession, first_name: str, email: str, password: str) -> Tup
     collected["watchlist"] = {"chat": watch_payload, "execute": watch_exec, "list": watchlist}
     add(
         "watchlist_add",
-        "BTC" in [str(item).upper() for item in watchlist],
-        "BTC wordt via FINN aan volglijst toegevoegd",
+        "ETH" in [str(item).upper() for item in watchlist],
+        "Een extra asset wordt via FINN aan de volglijst toegevoegd",
         pretty(watchlist),
         {"chat": watch_payload, "execute": watch_exec},
     )
