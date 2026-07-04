@@ -697,7 +697,7 @@
       }
     },
     "onboardingStep": {
-      "stepNumber": "Step 1 of 7",
+      "stepNumber": "Step 1 of 8",
       "title": "Who are you as a trader?",
       "description": "Finn uses this profile to tune explanations, warnings, and setup guidance to your style right away. That gives you less noise and more relevant advice.",
       "finnSaysLabel": "Finn says",
@@ -709,15 +709,15 @@
       "saveError": "Saving your trader profile failed. Please try again."
     },
     "assetOnboardingStep": {
-      "stepNumber": "Step 2 of 7",
+      "stepNumber": "Step 2 of 8",
       "title": "Choose the first asset you want to build around",
-      "description": "Your first asset becomes the anchor for the rest of onboarding. Finn uses this symbol to keep market, macro, technical, setup, and strategy guidance aligned to the same context.",
+      "description": "Your first asset becomes the anchor for the rest of onboarding. Finn uses this symbol to keep market, macro, technical, setup, strategy, and bot guidance aligned to the same context.",
       "finnSaysLabel": "Finn says",
       "finnSaysBody": "Pick the asset you actually want to trade first. I will add it to your watchlist and keep the next onboarding steps scoped to that same symbol.",
       "assetGroupTitle": "Choose your first onboarding asset",
       "assetGroupSubtitle": "This immediately becomes your watchlist anchor and the active asset for the next context-building steps.",
       "assetLabel": "Asset",
-      "footer": "After saving, Finn adds this asset to your watchlist and uses it as the anchor for market, macro, technical, setup, and strategy onboarding.",
+      "footer": "After saving, Finn adds this asset to your watchlist and uses it as the anchor for market, macro, technical, setup, strategy, and bot onboarding.",
       "saveAndContinue": "Save asset and continue",
       "saving": "Saving asset...",
       "validationError": "Choose one asset first so Finn can anchor the next onboarding steps correctly.",
@@ -779,54 +779,60 @@
       "backToOverviewCta": "Back to overview →",
       "steps": {
         "profile": {
-          "title": "Step 1 of 7 — Your trading profile",
+          "title": "Step 1 of 8 — Your trading profile",
           "action": "Start by sharing what kind of trader you are, which horizon you use, and what Finn should watch.",
           "help": "Finn uses this to adapt setups, explanations, and risk warnings to your style.",
           "unlocks": "More personal coaching"
         },
         "asset": {
-          "title": "Step 2 of 7 — Choose your first asset",
+          "title": "Step 2 of 8 — Choose your first asset",
           "action": "Pick the first asset you want to trade so onboarding stops floating on defaults and every next step points to the same symbol.",
-          "help": "Finn adds this asset to your watchlist and keeps market, macro, technical, setup, and strategy guidance scoped to it.",
+          "help": "Finn adds this asset to your watchlist and keeps market, macro, technical, setup, strategy, and bot guidance scoped to it.",
           "unlocks": "Asset-scoped context building"
         },
         "market": {
-          "title": "Step 3 of 7 — Market context",
+          "title": "Step 3 of 8 — Market context",
           "action": "Open the market page for your chosen asset and let Finn establish the live market picture first.",
           "help": "Without market context for your chosen asset, Finn stays too generic in the advice that follows.",
           "unlocks": "Your first market briefing"
         },
         "macro": {
-          "title": "Step 4 of 7 — Macro picture",
+          "title": "Step 4 of 8 — Macro picture",
           "action": "Add macro context so Finn can judge the broader regime around your chosen asset more accurately.",
           "help": "Think DXY, yields, or liquidity: Finn uses this bigger picture to judge the asset you picked.",
           "unlocks": "Better risk assessment"
         },
         "technical": {
-          "title": "Step 5 of 7 — Technical signals",
+          "title": "Step 5 of 8 — Technical signals",
           "action": "Check technical signals for your chosen asset so Finn can judge entries and timing more accurately.",
           "help": "This step gives Finn concrete evidence for trend, momentum, and timing on your chosen asset.",
           "unlocks": "Stronger timing explanations"
         },
         "setup": {
-          "title": "Step 6 of 7 — Create a setup",
+          "title": "Step 6 of 8 — Create a setup",
           "action": "Create your first setup for your chosen asset so Finn can connect your rules to real situations.",
           "help": "This is where Finn becomes more specific: not just context, but your asset-specific rules too.",
           "unlocks": "More personal reviews"
         },
         "strategy": {
-          "title": "Step 7 of 7 — Choose a strategy",
+          "title": "Step 7 of 8 — Choose a strategy",
           "action": "Create your first strategy for that setup so dashboard, reviews, and reports become truly useful.",
           "help": "After this step Finn can review and prioritize decisions for your chosen asset much better.",
           "unlocks": "Full review flow"
+        },
+        "bot": {
+          "title": "Step 8 of 8 — Link a bot to your strategy",
+          "action": "Create one bot for your new strategy so Finn can turn your setup and strategy into a repeatable execution lane.",
+          "help": "This is the final bridge from planning to execution. Finn uses the linked bot to review cadence, budget, and live versus paper mode for the same asset.",
+          "unlocks": "A complete execution-ready workflow"
         }
       }
     },
     "onboardingOverview": {
       "loading": "Finn is preparing your workspace...",
       "eyebrow": "Finn guides your setup",
-      "title": "Start in seven clear steps",
-      "description": "You do not have to understand everything at once. Work through the steps calmly from top to bottom. First choose the asset you want to trade, then build market, macro, and technical context around that same symbol before you create a setup and strategy.",
+      "title": "Start in eight clear steps",
+      "description": "You do not have to understand everything at once. Work through the steps calmly from top to bottom. First choose the asset you want to trade, then build market, macro, and technical context around that same symbol before you create a setup, strategy, and final bot lane.",
       "chips": {
         "duration": "3-5 minutes",
         "safe": "No live trades in onboarding",
@@ -834,10 +840,10 @@
       },
       "finnSays": "Finn says",
       "finnHelpsLabel": "Finn hilft:",
-      "finnComplete": "Your foundation is ready. Open your dashboard now, review your first report, and ask Finn for your next step.",
+      "finnComplete": "Your execution foundation is ready. Open your dashboard now, review your first report, and ask Finn for your next step.",
       "completeLabel": "Foundation ready",
       "completeTitle": "You can now really start working with Tradamind",
-      "completeBody": "Your onboarding is complete. Open your dashboard for the full picture, review your report for the summary, and ask Finn for your first concrete next step.",
+      "completeBody": "Your onboarding is complete. You now have profile, context, setup, strategy, and bot wiring in place. Open your dashboard for the full picture, review your report for the summary, and ask Finn for your first concrete next step.",
       "completeActions": {
         "dashboard": "Open dashboard",
         "report": "Read report",
@@ -870,7 +876,7 @@
           "title": "Choose your first asset",
           "description": "Pick the first asset you actually want to trade so onboarding, watchlist, and Finn all anchor on the same symbol.",
           "finnHelp": "Finn adds this asset to your watchlist and uses it as the anchor for the rest of your onboarding context.",
-          "unlocks": "A shared asset anchor for market, macro, technical, setup, and strategy"
+          "unlocks": "A shared asset anchor for market, macro, technical, setup, strategy, and bot"
         },
         "market": {
           "title": "Market context",
@@ -901,6 +907,12 @@
           "description": "Create your first strategy so dashboard, reports, and reviews become truly useful for that same asset.",
           "finnHelp": "After this step Finn can review, block, and prioritize decisions for that same asset much better.",
           "unlocks": "Full dashboard, report, and review flow"
+        },
+        "bot": {
+          "title": "Link a bot to your strategy",
+          "description": "Create one bot for that same strategy so your setup and rules become an execution lane you can actually review and run.",
+          "finnHelp": "Finn uses this final step to connect cadence, budget, and execution mode to the same asset and strategy you just created.",
+          "unlocks": "An execution-ready workflow with dashboard, report, review, and bot control"
         }
       }
     },
@@ -1469,6 +1481,27 @@
     "createBusy": "Saving bot...",
     "createValidation": "Fill in the name and strategy before saving the bot.",
     "createSuccess": "Bot saved. Let Finn briefly review the configuration and risks now.",
+    "onboardingGuide": {
+      "eyebrow": "First bot step",
+      "guidedBadge": "Onboarding guides you here",
+      "title": "Link one bot to your strategy",
+      "body": "This is the final onboarding step. Create one simple bot for the strategy you just made so Finn can connect setup, strategy, cadence, and execution mode into one reviewable lane.",
+      "guidedIntro": "You arrived here from onboarding. Only finish this one action now: create one bot for the strategy you just saved.",
+      "examples": ["Create a BTC paper bot for my swing strategy", "Use weekly cadence first", "Start in paper mode before going live"],
+      "steps": [
+        "Click create bot.",
+        "Choose the strategy you just created for this same asset.",
+        "Start in paper mode and keep the first budget conservative.",
+        "Save the bot so Finn can review and monitor the full lane."
+      ],
+      "completionHint": "As soon as your first bot is saved, this onboarding step is complete and your full execution flow is in place.",
+      "finnLabel": "Finn helps:",
+      "finnHint": "If you are unsure, ask Finn which strategy to link first and what safe starter budget makes sense.",
+      "primaryCta": "Open bot creation",
+      "assistantCta": "Ask Finn for bot help",
+      "secondaryCta": "Back to onboarding",
+      "assistantPrompt": "Help me finish the onboarding bot step for my chosen asset. Which strategy should I link first, which mode should I choose, and what safe starter budget makes sense?"
+    },
     "newBotLabel": "New bot",
     "modeLive": "Live",
     "modeSimulation": "Simulation",

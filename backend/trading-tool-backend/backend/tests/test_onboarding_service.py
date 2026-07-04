@@ -49,6 +49,7 @@ def test_get_status_dict_backfills_legacy_completion_from_existing_user_data():
             SimpleNamespace(step_key="technical", completed=False, pipeline_started=False),
             SimpleNamespace(step_key="setup", completed=False, pipeline_started=False),
             SimpleNamespace(step_key="strategy", completed=False, pipeline_started=False),
+            SimpleNamespace(step_key="bot", completed=False, pipeline_started=False),
         ],
         inferred_completed={
             "profile": True,
@@ -58,6 +59,7 @@ def test_get_status_dict_backfills_legacy_completion_from_existing_user_data():
             "technical": True,
             "setup": True,
             "strategy": True,
+            "bot": True,
         },
     )
 
@@ -65,7 +67,7 @@ def test_get_status_dict_backfills_legacy_completion_from_existing_user_data():
 
     status = asyncio.run(service.get_status_dict(user_id=42))
 
-    assert repo.marked_steps == [["profile", "asset", "market", "macro", "technical", "setup", "strategy"]]
+    assert repo.marked_steps == [["profile", "asset", "market", "macro", "technical", "setup", "strategy", "bot"]]
     assert status.has_profile is True
     assert status.has_asset is True
     assert status.has_market is True
@@ -73,6 +75,7 @@ def test_get_status_dict_backfills_legacy_completion_from_existing_user_data():
     assert status.has_technical is True
     assert status.has_setup is True
     assert status.has_strategy is True
+    assert status.has_bot is True
     assert status.onboarding_complete is True
 
 
@@ -86,6 +89,7 @@ def test_get_status_dict_only_backfills_missing_legacy_steps():
             SimpleNamespace(step_key="technical", completed=False, pipeline_started=False),
             SimpleNamespace(step_key="setup", completed=False, pipeline_started=False),
             SimpleNamespace(step_key="strategy", completed=False, pipeline_started=False),
+            SimpleNamespace(step_key="bot", completed=False, pipeline_started=False),
         ],
         inferred_completed={
             "profile": True,
@@ -95,6 +99,7 @@ def test_get_status_dict_only_backfills_missing_legacy_steps():
             "technical": True,
             "setup": True,
             "strategy": False,
+            "bot": False,
         },
     )
 
@@ -110,6 +115,7 @@ def test_get_status_dict_only_backfills_missing_legacy_steps():
     assert status.has_technical is True
     assert status.has_setup is True
     assert status.has_strategy is False
+    assert status.has_bot is False
     assert status.onboarding_complete is False
 
 
@@ -123,6 +129,7 @@ def test_get_status_dict_marks_legacy_user_complete_without_profile_if_core_step
             SimpleNamespace(step_key="technical", completed=True, pipeline_started=False),
             SimpleNamespace(step_key="setup", completed=True, pipeline_started=False),
             SimpleNamespace(step_key="strategy", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="bot", completed=True, pipeline_started=False),
         ],
         inferred_completed={
             "profile": False,
@@ -132,6 +139,7 @@ def test_get_status_dict_marks_legacy_user_complete_without_profile_if_core_step
             "technical": True,
             "setup": True,
             "strategy": True,
+            "bot": True,
         },
     )
 
@@ -147,4 +155,5 @@ def test_get_status_dict_marks_legacy_user_complete_without_profile_if_core_step
     assert status.has_technical is True
     assert status.has_setup is True
     assert status.has_strategy is True
+    assert status.has_bot is True
     assert status.onboarding_complete is True

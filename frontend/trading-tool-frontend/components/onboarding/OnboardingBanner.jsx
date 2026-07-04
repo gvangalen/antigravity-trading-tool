@@ -13,6 +13,7 @@ const ICONS = {
   technical: Activity,
   setup: Wand2,
   strategy: Bot,
+  bot: Bot,
 };
 
 export default function OnboardingBanner({ step }) {

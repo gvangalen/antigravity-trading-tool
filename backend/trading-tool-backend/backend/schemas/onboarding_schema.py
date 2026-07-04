@@ -11,5 +11,6 @@ class OnboardingStatusResponse(BaseModel):
     has_technical: bool
     has_setup: bool
     has_strategy: bool
+    has_bot: bool
     onboarding_complete: bool
     pipeline_started: bool

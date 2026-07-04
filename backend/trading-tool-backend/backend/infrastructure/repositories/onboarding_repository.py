@@ -112,4 +112,5 @@ class OnboardingRepository:
             "technical": False,
             "setup": await _has_rows("setups"),
             "strategy": await _has_rows("strategies"),
+            "bot": await _has_rows("bot_configs"),
         }

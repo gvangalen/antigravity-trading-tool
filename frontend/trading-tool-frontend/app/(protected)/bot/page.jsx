@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Wallet, Plus } from "lucide-react";
 
 import useBotData from "@/hooks/useBotData";
@@ -26,9 +26,14 @@ import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { useOnboarding } from "@/hooks/useOnboarding";
+import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
+import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 
 function BotPageInner() {
+  const router = useRouter();
   const { t } = useTranslation();
+  const { status, completeStep } = useOnboarding();
   const { openConfirm, showSnackbar } = useModal();
   const searchParams = useSearchParams();
   const formRef = useRef({});
@@ -68,6 +73,20 @@ function BotPageInner() {
     loading: loadingMarketIntelligence,
   } = useMarketIntelligence();
 
+  const botNeedsBot = status?.has_bot === false && bots.length === 0;
+  const onboardingGuidedMode = searchParams.get("onboarding") === "1";
+  const showOnboardingGuide = onboardingGuidedMode || botNeedsBot;
+
+  useEffect(() => {
+    if (!status || status.has_asset) return;
+    router.replace("/onboarding/asset?onboarding=1&step=asset");
+  }, [status, router]);
+
+  useEffect(() => {
+    if (!status || !onboardingGuidedMode || status.has_strategy) return;
+    router.replace(`/strategy?onboarding=1&step=strategy${searchParams.get("symbol") ? `&symbol=${encodeURIComponent(searchParams.get("symbol"))}` : ""}`);
+  }, [status, onboardingGuidedMode, router, searchParams]);
+
   useEffect(() => {
     setCurrentTime(new Date());
     loadStrategies();
@@ -91,6 +110,12 @@ function BotPageInner() {
       setActiveBot(bots[0]);
     }
   }, [bots, activeBot, setActiveBot]);
+
+  useEffect(() => {
+    if (bots.length > 0 && status && status.has_bot === false) {
+      completeStep("bot");
+    }
+  }, [bots, status, completeStep]);
 
   useEffect(() => {
     if (!bots.length) return;
@@ -246,6 +271,8 @@ function BotPageInner() {
   useEffect(() => {
     const action = searchParams.get("action");
     if (action === "new_bot") {
+      if (!strategies.length) return;
+
       const symbol = searchParams.get("symbol") || "";
       const mode = searchParams.get("mode") || "paper";
       const risk = searchParams.get("risk") || "balanced";
@@ -382,6 +409,12 @@ function BotPageInner() {
           </div>
       </header>
 
+      <OnboardingBanner step="bot" />
+
+      {showOnboardingGuide ? (
+        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="bot-create" guidedMode={onboardingGuidedMode} />
+      ) : null}
+
       <div className="max-w-full flex flex-col lg:flex-row gap-10 pb-24 items-start relative">
         
         {/* 🕋 LEFT: MAIN COMMAND CENTER */}
@@ -424,7 +457,7 @@ function BotPageInner() {
                 <p className="text-[13px] font-medium text-slate-400 dark:text-slate-500 mt-1">{copy.myBotsSubtitle}</p>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-6">
+              <div id="bot-create" className="flex flex-wrap items-center justify-between gap-6 scroll-mt-32">
                 <div className="flex gap-4">
                   <div className="flex bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-inner">
                     <button onClick={() => setStatusFilter("all")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "all" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-slate-600"}`}>{copy.filterAll} ({bots.length})</button>

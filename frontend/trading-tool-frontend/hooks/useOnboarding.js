@@ -120,6 +120,7 @@ export function useOnboarding() {
       technical: !!status.has_technical,
       setup: !!status.has_setup,
       strategy: !!status.has_strategy,
+      bot: !!status.has_bot,
     };
     return steps;
   }, [status]);
@@ -137,7 +138,8 @@ export function useOnboarding() {
         stepStatus.macro &&
         stepStatus.technical &&
         stepStatus.setup &&
-        stepStatus.strategy
+        stepStatus.strategy &&
+        stepStatus.bot
       )
     );
     return done;
@@ -162,6 +164,7 @@ export function useOnboarding() {
     technical: stepStatus?.macro ?? false,
     setup: stepStatus?.technical ?? false,
     strategy: stepStatus?.setup ?? false,
+    bot: stepStatus?.strategy ?? false,
   };
 
   // =====================================================

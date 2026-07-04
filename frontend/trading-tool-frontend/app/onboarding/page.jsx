@@ -34,10 +34,14 @@ const ICONS = {
   technical: LineChart,
   setup: Zap,
   strategy: Bot,
+  bot: Bot,
 };
 
 const buildOnboardingLink = (path, stepKey, symbol) =>
   `${path}?onboarding=1&step=${stepKey}${symbol ? `&symbol=${encodeURIComponent(symbol)}` : ""}`;
+
+const buildBotOnboardingLink = (symbol) =>
+  `/bot?onboarding=1&step=bot&action=new_bot${symbol ? `&symbol=${encodeURIComponent(symbol)}` : ""}`;
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -55,6 +59,7 @@ export default function OnboardingPage() {
       status.has_technical,
       status.has_setup,
       status.has_strategy,
+      status.has_bot,
     ].filter(Boolean).length;
 
     trackAssistantEvent({
@@ -156,6 +161,16 @@ export default function OnboardingPage() {
       done: status.has_strategy,
       link: buildOnboardingLink("/strategy", "strategy", selectedAsset),
       unlocked: allowedSteps.strategy,
+    },
+    {
+      key: "bot",
+      title: stepText?.bot?.title,
+      description: stepText?.bot?.description,
+      finnHelp: stepText?.bot?.finnHelp,
+      unlocks: stepText?.bot?.unlocks,
+      done: status.has_bot,
+      link: buildBotOnboardingLink(selectedAsset),
+      unlocked: allowedSteps.bot,
     },
   ];
 
