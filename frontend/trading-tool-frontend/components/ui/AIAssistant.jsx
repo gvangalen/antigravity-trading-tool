@@ -797,15 +797,111 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     return missing[0];
   };
 
+  const getStrategyFlowSlots = (state = {}) => {
+    const rawSlots = state?.slots || {};
+    return {
+      symbol: rawSlots.symbol || state?.asset || state?.symbol || null,
+      setup_id: rawSlots.setup_id || state?.setup_id || null,
+      setup_type: rawSlots.setup_type || state?.setup_type || null,
+      timeframe: rawSlots.timeframe || state?.timeframe || null,
+      base_amount: rawSlots.base_amount || rawSlots.base_amount_eur || state?.base_amount || state?.base_amount_eur || null,
+      base_amount_eur: rawSlots.base_amount_eur || rawSlots.base_amount || state?.base_amount_eur || state?.base_amount || null,
+      entry_type: rawSlots.entry_type || state?.entry_type || null,
+      entry: rawSlots.entry || state?.entry || null,
+      stop_loss: rawSlots.stop_loss || state?.stop_loss || null,
+      targets: rawSlots.targets || state?.targets || null,
+      automation: rawSlots.automation || state?.automation || null,
+    };
+  };
+
+  const getMissingStrategySlots = (slots = {}) => {
+    const missing = [];
+    if (!slots.setup_id) {
+      missing.push("setup_id");
+      return missing;
+    }
+    if (!slots.base_amount_eur && !slots.base_amount) {
+      missing.push("strategy.base_amount_eur");
+    }
+    return missing;
+  };
+
+  const getEffectiveStrategyNextQuestion = (state = {}) => {
+    const slots = getStrategyFlowSlots(state);
+    const missing = getMissingStrategySlots(slots);
+    const declaredNext = state?.next_question || null;
+
+    if (missing.length === 0) {
+      return declaredNext;
+    }
+    if (declaredNext && missing.includes(declaredNext)) {
+      return declaredNext;
+    }
+    if (declaredNext === "base_amount" && missing.includes("strategy.base_amount_eur")) {
+      return "strategy.base_amount_eur";
+    }
+    return missing[0];
+  };
+
   const buildTransactionalFollowUpActions = (message) => {
     const state = message?.state;
     if (!state?.current_flow) return [];
     const flow = state.current_flow;
-    const nextQuestion = getEffectiveSetupNextQuestion(state);
-    const slots = getSetupFlowSlots(state);
+    const slots =
+      flow === "strategy_creation"
+        ? getStrategyFlowSlots(state)
+        : getSetupFlowSlots(state);
+    const nextQuestion =
+      flow === "strategy_creation"
+        ? getEffectiveStrategyNextQuestion(state)
+        : getEffectiveSetupNextQuestion(state);
     const symbol = slots.symbol || context.symbol || globalSymbol || "BTC";
 
-    if (flow !== "setup_creation") return [];
+    if (!["setup_creation", "strategy_creation"].includes(flow)) return [];
+
+    if (flow === "strategy_creation") {
+      const bySlot = {
+        setup_id: [
+          {
+            label: at("followUps.strategy.chooseSetup", "Kies je setup"),
+            prompt: at("followUps.strategy.chooseSetupPrompt", "Gebruik mijn bestaande BTC setup als basis voor deze strategie."),
+          },
+        ],
+        "strategy.base_amount_eur": [
+          {
+            label: at("followUps.strategy.amount100", "Gebruik 100 euro"),
+            prompt: at("followUps.strategy.amount100Prompt", "Gebruik 100 euro per uitvoering."),
+          },
+          {
+            label: at("followUps.strategy.amount250", "Gebruik 250 euro"),
+            prompt: at("followUps.strategy.amount250Prompt", "Gebruik 250 euro per uitvoering."),
+          },
+        ],
+        base_amount: [
+          {
+            label: at("followUps.strategy.amount100", "Gebruik 100 euro"),
+            prompt: at("followUps.strategy.amount100Prompt", "Gebruik 100 euro per uitvoering."),
+          },
+        ],
+      };
+
+      if (state?.status === "collecting" && nextQuestion && bySlot[nextQuestion]) {
+        return normalizeFollowUpActions(bySlot[nextQuestion]);
+      }
+
+      if (state?.status === "collecting") {
+        return [];
+      }
+
+      if (message?.intent === "strategy_created") {
+        return normalizeFollowUpActions([
+          at("followUps.strategy.review", `Bekijk je strategie voor ${symbol}`),
+          at("followUps.strategy.nextBot", `Ga door naar bot voor ${symbol}`),
+        ]);
+      }
+
+      return [];
+    }
 
     const setupType = String(slots.setup_type || "").toLowerCase();
     const marketConditionActions = [
@@ -889,7 +985,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     if (transactionalActions.length > 0) {
       return transactionalActions;
     }
-    if (message?.state?.current_flow === "setup_creation" && message?.state?.status === "collecting") {
+    if (
+      ["setup_creation", "strategy_creation"].includes(message?.state?.current_flow) &&
+      message?.state?.status === "collecting"
+    ) {
       return [];
     }
     const controllerAction = message?.state?.analysis?.agent_controller?.primary_action || message?.state?.agent_controller?.primary_action;
@@ -5124,9 +5223,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           ))}
 
           {/* LIVE INTERACTIVE CONCEPT CARD */}
-          {activeState && activeState.current_flow && activeState.current_flow !== "none" && activeState.current_flow !== "plan_creation" && activeState.current_flow !== "strategy_creation" && (() => {
+          {activeState && activeState.current_flow && activeState.current_flow !== "none" && activeState.current_flow !== "plan_creation" && (() => {
             const flow = activeState.current_flow;
-            const slots = activeState.slots || {};
+            const slots = flow === "strategy_creation" ? getStrategyFlowSlots(activeState) : (activeState.slots || {});
             const canConfirmActiveFlow = Boolean(activeState.can_confirm);
             let shouldShowCard = false;
             
@@ -5135,7 +5234,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
               const hasMeaningfulProgress = !!(slots.timeframe && (slots.dca_frequency || slots.entry || slots.stop_loss || slots.base_amount));
               shouldShowCard = canConfirmActiveFlow && hasCoreChoice && hasMeaningfulProgress;
             } else if (flow === "strategy_creation") {
-              shouldShowCard = canConfirmActiveFlow && !!(slots.setup_type && slots.base_amount && slots.entry && slots.stop_loss);
+              shouldShowCard = canConfirmActiveFlow && !!(slots.setup_id && (slots.base_amount || slots.base_amount_eur));
             } else if (flow === "bot_creation") {
               shouldShowCard = canConfirmActiveFlow && !!slots.budget_total_eur;
             } else {
@@ -5168,10 +5267,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                         await handleChat("ik heb hem zojuist opgeslagen", true);
                       });
                     }}
-                    onFinalize={() => handleChat("maak de setup")}
+                    onFinalize={() => handleChat(flow === "strategy_creation" ? "maak de strategie" : "maak de setup")}
                     onUpdateSlots={(newSlots) => {
                       if (newSlots.setup_type) handleChat(newSlots.setup_type, true);
                       if (newSlots.dca_frequency) handleChat(newSlots.dca_frequency, true);
+                      if (newSlots.base_amount_eur || newSlots.base_amount) handleChat(String(newSlots.base_amount_eur || newSlots.base_amount), true);
                     }}
                   />
                 </div>

@@ -1454,9 +1454,7 @@ class AiAssistantService:
                 "en verliezers niet te lang laat rekken."
             )
         if "holds_losers_too_long" in behavior_flags:
-            return (
-                f"Voor jouw profiel telt nu vooral: houd bij {asset_label} je invalidatie strak."
-            )
+            return f"Tip vanuit je profiel: houd bij {asset_label} je invalidatie strak."
         if "takes_profit_too_early" in behavior_flags:
             return (
                 f"Voor jouw profiel geldt nu: leg voor {asset_label} vooraf je exitplan vast, "

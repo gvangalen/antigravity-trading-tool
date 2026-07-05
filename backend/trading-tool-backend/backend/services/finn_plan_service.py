@@ -9204,6 +9204,20 @@ class FinnPlanService:
 
     def _strategy_flow_state(self, draft: Dict[str, Any], validation: Dict[str, Any], setup_options: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         operation = draft.get("operation") or "create"
+        strategy = draft.get("strategy") or {}
+        slots = {
+            "symbol": draft.get("asset"),
+            "setup_id": draft.get("setup_id"),
+            "setup_type": draft.get("setup_type"),
+            "timeframe": draft.get("timeframe"),
+            "base_amount": strategy.get("base_amount_eur"),
+            "base_amount_eur": strategy.get("base_amount_eur"),
+            "entry_type": strategy.get("entry_type"),
+            "entry": strategy.get("entry"),
+            "stop_loss": strategy.get("stop_loss"),
+            "targets": strategy.get("targets"),
+            "automation": strategy.get("automation"),
+        }
         return {
             "status": "ready_for_confirmation" if validation["can_confirm"] else "collecting",
             "current_flow": "strategy_creation",
@@ -9212,12 +9226,23 @@ class FinnPlanService:
             "strategy_id": draft.get("strategy_id"),
             "operation": operation,
             "setup_type": draft.get("setup_type"),
+            "timeframe": draft.get("timeframe"),
+            "base_amount": strategy.get("base_amount_eur"),
+            "base_amount_eur": strategy.get("base_amount_eur"),
+            "entry_type": strategy.get("entry_type"),
+            "entry": strategy.get("entry"),
+            "stop_loss": strategy.get("stop_loss"),
+            "targets": strategy.get("targets"),
+            "automation": strategy.get("automation"),
+            "slots": slots,
+            "missing_slots": list(validation.get("missing_fields") or []),
             "setup_options": setup_options or [],
             "changes": draft.get("changes") or [],
             "plan_deviation": draft.get("plan_deviation"),
             "plan_deviation_ack": bool(draft.get("plan_deviation_ack")),
             "next_question": validation["next_question"],
             "autonomy_level": "confirm_required",
+            "can_confirm": validation["can_confirm"],
             "analysis": {
                 "tool_intent_reason": "explicit_update_request" if operation == "update" else "explicit_create_request",
             },

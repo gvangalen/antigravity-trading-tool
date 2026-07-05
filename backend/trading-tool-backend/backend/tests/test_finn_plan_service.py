@@ -3160,6 +3160,41 @@ def test_strategy_flow_autoselects_single_matching_setup(monkeypatch):
     assert "setup_id" not in response["missing_fields"]
 
 
+def test_strategy_flow_state_exposes_normalized_slots_for_ui():
+    service = _service()
+
+    draft = {
+        "setup_id": 12,
+        "setup_type": "dca",
+        "asset": "BTC",
+        "timeframe": "1W",
+        "strategy": {
+            "base_amount_eur": 100,
+        },
+    }
+    validation = {
+        "can_confirm": True,
+        "missing_fields": [],
+        "next_question": None,
+    }
+
+    state = service._strategy_flow_state(draft, validation)
+
+    assert state["current_flow"] == "strategy_creation"
+    assert state["setup_id"] == 12
+    assert state["timeframe"] == "1W"
+    assert state["base_amount"] == 100
+    assert state["base_amount_eur"] == 100
+    assert state["slots"]["setup_id"] == 12
+    assert state["slots"]["symbol"] == "BTC"
+    assert state["slots"]["setup_type"] == "dca"
+    assert state["slots"]["timeframe"] == "1W"
+    assert state["slots"]["base_amount"] == 100
+    assert state["slots"]["base_amount_eur"] == 100
+    assert state["missing_slots"] == []
+    assert state["can_confirm"] is True
+
+
 def test_read_after_write_marks_absent_bot_as_not_verified_but_valid():
     result = asyncio.run(_service()._verify_created_objects(
         user_id=1,
