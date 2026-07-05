@@ -462,6 +462,44 @@ def test_deterministic_flow_turn_ignores_modern_strategy_flow_state():
     assert result is None
 
 
+def test_strategy_follow_up_accepts_plain_numeric_amount_without_euro_keyword():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+
+    conv_state = asyncio.run(
+        assistant._deterministic_pre_parse_slots(
+            "100",
+            {
+                "current_flow": "strategy_creation",
+                "slots": {
+                    "symbol": "BTC",
+                    "setup_id": 258,
+                    "setup_type": "dca",
+                    "timeframe": "1W",
+                },
+                "status": "collecting",
+                "next_question": "strategy.base_amount_eur",
+            },
+            "BTC",
+            91,
+        )
+    )
+
+    assert conv_state["current_flow"] == "strategy_creation"
+    assert conv_state["slots"]["base_amount"] == 100
+    assert conv_state["slots"]["base_amount_eur"] == 100
+
+
 def test_conversation_state_repo_restores_collecting_status_from_saved_flow():
     repo = ConversationStateRepository(
         _FakeSession({

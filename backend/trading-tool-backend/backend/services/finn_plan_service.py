@@ -329,6 +329,7 @@ def empty_strategy_draft() -> Dict[str, Any]:
         "operation": "create",
         "setup_id": None,
         "strategy_id": None,
+        "setup_name": None,
         "setup_type": None,
         "asset": None,
         "timeframe": None,
@@ -8797,6 +8798,8 @@ class FinnPlanService:
             draft["asset"] = str(setup_row.get("symbol") or "").upper() or None
         if not draft.get("timeframe"):
             draft["timeframe"] = setup_row.get("timeframe")
+        if not draft.get("setup_name"):
+            draft["setup_name"] = setup_row.get("name")
         self._apply_strategy_defaults(draft)
 
     async def _load_strategy_snapshot_for_diff(
@@ -8819,6 +8822,7 @@ class FinnPlanService:
         draft["operation"] = "update"
         draft["strategy_id"] = draft.get("strategy_id") or existing.get("id")
         draft["setup_id"] = draft.get("setup_id") or existing.get("setup_id")
+        draft["setup_name"] = draft.get("setup_name") or existing.get("setup_name") or existing.get("setup_name_display")
         draft["setup_type"] = draft.get("setup_type") or existing.get("setup_type")
         draft["asset"] = draft.get("asset") or existing.get("symbol")
         draft["timeframe"] = draft.get("timeframe") or existing.get("timeframe")
@@ -8990,32 +8994,53 @@ class FinnPlanService:
 
     def _build_strategy_message(self, draft: Dict[str, Any], validation: Dict[str, Any], setup_options: Optional[List[Dict[str, Any]]] = None) -> str:
         next_question = validation["next_question"]
+        setup_type = str(draft.get("setup_type") or "").lower()
+        asset = draft.get("asset") or "dit asset"
+        timeframe = draft.get("timeframe") or "je gekozen timeframe"
+        strategy = draft.get("strategy") or {}
+
         if validation["invalid_fields"]:
             issue = validation["invalid_fields"][0]
             return f"Ik zie een probleem met {issue['field']}: {issue['reason']}. Wat wil je hiervoor instellen?"
         if next_question == "setup_id":
             if setup_options:
-                lines = ["Voor welke setup wil je deze strategie maken? Ik zie deze opties:"]
+                lines = ["Voor welke setup wil je deze strategie bouwen? Ik zie deze opties voor je huidige asset:"]
                 for option in setup_options:
-                    lines.append(f"- setup {option.get('id')}: {option.get('name')} ({option.get('symbol')} {option.get('setup_type')} {option.get('timeframe')})")
+                    option_name = option.get("name") or f"Setup #{option.get('id')}"
+                    option_symbol = option.get("symbol") or asset
+                    option_type = str(option.get("setup_type") or "").lower()
+                    option_timeframe = option.get("timeframe") or timeframe
+                    option_type_label = "DCA setup" if option_type == "dca" else "trade setup"
+                    lines.append(
+                        f"- setup {option.get('id')}: {option_name} ({option_symbol} · {option_type_label} · {option_timeframe})"
+                    )
                 return "\n".join(lines)
-            return "Voor welke setup wil je deze strategie maken? Noem bijvoorbeeld setup 12 of open eerst de setup."
+            return "Voor welke setup wil je deze strategie maken? Noem bijvoorbeeld setup 12, of open eerst je bestaande setup."
         if next_question == "strategy_id":
             return "Welke bestaande strategie wil je aanpassen? Noem bijvoorbeeld strategie 12 of open eerst de strategie."
         if next_question == "setup_type":
-            return "Is deze strategie voor een DCA-setup of een gewone trade-setup?"
+            return "Wil je hier een DCA-strategie van maken of een trade-strategie met entry, invalidatie en targets?"
         if next_question == "strategy.base_amount_eur":
-            return "Met welk basisbedrag in euro wil je deze strategie uitvoeren?"
+            if setup_type == "dca":
+                if strategy.get("base_amount_eur") is None:
+                    return (
+                        f"Met welk bedrag wil je per aankoop werken voor deze {asset} DCA-strategie op {timeframe}? "
+                        "Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
+                    )
+            return (
+                f"Met welk basisbedrag in euro wil je deze strategie uitvoeren voor {asset} op {timeframe}? "
+                "Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
+            )
         if next_question == "strategy.entry_type":
-            return "Wil je een limit entry, breakout trigger of market execution gebruiken?"
+            return "Hoe wil je instappen bij deze trade: limit, breakout of direct op market?"
         if next_question == "strategy.market_execution_ack":
-            return "Market execution kan direct uitvoeren zodra je bevestigt. Zeg 'market akkoord' als je dit echt zo wilt vastleggen."
+            return "Market execution kan direct zonder wachtende limietprijs doorzetten. Zeg 'market akkoord' als je dat echt zo wilt vastleggen."
         if next_question == "strategy.entry":
-            return "Welke entry-prijs hoort bij deze strategie?"
+            return f"Welke entry-prijs hoort bij deze {asset} trade-strategie?"
         if next_question == "strategy.stop_loss":
-            return "Welke stop-loss hoort bij deze strategie?"
+            return f"Welke invalidatie of stop-loss hoort bij deze {asset} trade-strategie?"
         if next_question == "strategy.targets":
-            return "Welke target(s) wil je gebruiken? Je mag meerdere targets met komma's geven."
+            return f"Welke koersdoelen wil je gebruiken? Je mag meerdere targets geven, bijvoorbeeld gescheiden met komma's."
         if next_question == "plan_deviation_ack":
             warning = draft.get("plan_deviation") or {}
             reasons = warning.get("reasons") or []
@@ -9028,19 +9053,36 @@ class FinnPlanService:
                 lines.extend([f"- {reason}" for reason in reasons[:4]])
             lines.append("Zeg 'bewuste override' als je dit alsnog wilt bevestigen, of 'annuleer' om te stoppen.")
             return "\n".join(lines)
-        summary = self._strategy_summary(draft)
-        return f"Ik heb je strategie klaarstaan. Controleer dit even en bevestig als het klopt:\n\n{summary}"
+        strategy_label = "DCA-strategie" if setup_type == "dca" else "strategie"
+        message = (
+            f"Ik heb je {strategy_label} voor {asset} op {timeframe} klaargezet. "
+            "Controleer de samenvatting hieronder en bevestig alleen als dit echt klopt."
+        )
+        if draft.get("plan_deviation"):
+            warning = draft.get("plan_deviation") or {}
+            message = (
+                f"{message}\n\n"
+                f"Plan-afwijking: ja\n"
+                f"Override bevestigd: {'ja' if draft.get('plan_deviation_ack') else 'nee'}\n"
+                f"Reden: {warning.get('message')}"
+            )
+        return message
 
     def _strategy_summary(self, draft: Dict[str, Any]) -> str:
         strategy = draft.get("strategy") or {}
+        setup_type = str(draft.get("setup_type") or "").lower()
+        setup_label = "DCA setup" if setup_type == "dca" else "trade setup"
+        setup_id = draft.get("setup_id")
+        setup_name = draft.get("setup_name")
+        asset = draft.get("asset") or "onbekend asset"
+        timeframe = draft.get("timeframe") or "onbekende timeframe"
         lines = [
-            f"- Type: strategie {'bijwerken' if draft.get('operation') == 'update' else 'aanmaken'}",
-            f"- Setup: #{draft.get('setup_id')}",
-            f"- Strategie: #{draft.get('strategy_id')}" if draft.get("operation") == "update" else None,
-            f"- Setup type: {draft.get('setup_type')}",
-            f"- Asset: {draft.get('asset')}",
-            f"- Timeframe: {draft.get('timeframe')}",
-            f"- Bedrag: €{strategy.get('base_amount_eur')}",
+            f"- Actie: strategie {'bijwerken' if draft.get('operation') == 'update' else 'aanmaken'}",
+            f"- Setup: {setup_name} (#{setup_id})" if setup_name and setup_id else (f"- Setup: #{setup_id}" if setup_id else None),
+            f"- Setupsoort: {setup_label}",
+            f"- Asset: {asset}",
+            f"- Timeframe: {timeframe}",
+            f"- Bedrag per uitvoering: €{strategy.get('base_amount_eur')}" if strategy.get("base_amount_eur") else None,
         ]
         lines = [line for line in lines if line]
         if draft.get("plan_deviation"):
@@ -10025,8 +10067,6 @@ class FinnPlanService:
             invalid.append({"field": "asset", "reason": "asset wordt nog niet ondersteund"})
         if clarification.get("field") == "asset":
             invalid.append({"field": "asset", "reason": clarification.get("reason", "asset moet verduidelijkt worden")})
-        if not draft["setup"].get("name"):
-            missing.append("setup.name")
         if not draft["setup"].get("timeframe"):
             missing.append("setup.timeframe")
 
@@ -10050,7 +10090,6 @@ class FinnPlanService:
             if draft["dca"].get("dca_mode") == "custom":
                 if draft["dca"].get("buy_score_threshold") is None:
                     missing.append("dca.buy_score_threshold")
-
         if draft.get("plan_type") == "trade":
             is_long_trade = draft["strategy"].get("direction") == "long"
             if not is_long_trade:
