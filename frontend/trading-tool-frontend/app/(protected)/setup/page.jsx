@@ -30,6 +30,7 @@ export default function SetupPage() {
   const searchParams = useSearchParams();
   const { t } = useTranslation();
   const copy = t?.setupPage || {};
+  const setupGuideCopy = copy.onboardingGuide || {};
 
   // ===============================
   // 🧭 ONBOARDING
@@ -86,6 +87,7 @@ export default function SetupPage() {
   };
 
   const safeSetups = Array.isArray(setups) ? setups : [];
+  const setupStepComplete = Boolean(status?.has_setup || safeSetups.length > 0);
   const setupNeedsSetup = status?.has_setup === false && safeSetups.length === 0;
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
   const showOnboardingGuide = onboardingGuidedMode || setupNeedsSetup;
@@ -115,7 +117,13 @@ export default function SetupPage() {
       </header>
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="setup-new" guidedMode={onboardingGuidedMode} />
+        <OnboardingStepGuide
+          copy={setupGuideCopy}
+          anchorId="setup-new"
+          guidedMode={onboardingGuidedMode}
+          isComplete={setupStepComplete}
+          nextHref="/strategy?onboarding=1&step=strategy"
+        />
       ) : null}
 
       {/* 🧠 AI INSIGHT + SETUP MATCH */}
@@ -174,7 +182,7 @@ export default function SetupPage() {
           <div className="card-p p-8">
             {showOnboardingGuide ? (
               <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700">
-                {copy.onboardingGuide.guidedConfigHint}
+                {setupGuideCopy.guidedConfigHint}
               </div>
             ) : null}
             <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6 border-b border-slate-50 dark:border-slate-800/50 pb-4">

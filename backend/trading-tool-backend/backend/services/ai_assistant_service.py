@@ -228,6 +228,109 @@ def _default_setup_name(symbol: str, setup_type: str, timeframe: Optional[str]) 
         return f"{clean_symbol} DCA {clean_timeframe}"
     return f"{clean_symbol} Trade {clean_timeframe}"
 
+
+SETUP_MARKET_CONDITION_PRESETS: Dict[str, Dict[str, Any]] = {
+    "confirmed_strength": {
+        "scores": {
+            "min_macro_score": 40,
+            "max_macro_score": 100,
+            "min_technical_score": 55,
+            "max_technical_score": 100,
+            "min_market_score": 35,
+            "max_market_score": 100,
+        },
+        "aliases": [
+            "bevestigd sterk",
+            "confirmed strength",
+            "confirmed",
+            "sterke trend",
+            "alleen sterk",
+            "defensief",
+            "veilig",
+            "veilige trend",
+        ],
+    },
+    "balanced_pullback": {
+        "scores": {
+            "min_macro_score": 30,
+            "max_macro_score": 70,
+            "min_technical_score": 40,
+            "max_technical_score": 80,
+            "min_market_score": 20,
+            "max_market_score": 60,
+        },
+        "aliases": [
+            "normale pullback",
+            "pullback",
+            "balanced",
+            "gebalanceerd",
+            "standaard",
+            "normaal",
+            "neutraal",
+            "gewone dip",
+        ],
+    },
+    "early_dip": {
+        "scores": {
+            "min_macro_score": 10,
+            "max_macro_score": 65,
+            "min_technical_score": 20,
+            "max_technical_score": 75,
+            "min_market_score": 10,
+            "max_market_score": 55,
+        },
+        "aliases": [
+            "vroege dip",
+            "early dip",
+            "agressief",
+            "opportunistisch",
+            "zwakte",
+            "diepe dip",
+            "buy the dip",
+            "eerder instappen",
+        ],
+    },
+}
+
+
+def _resolve_setup_market_condition(query: str) -> Optional[str]:
+    q = str(query or "").strip().lower()
+    if not q:
+        return None
+
+    numeric_choice_map = {
+        "1": "confirmed_strength",
+        "optie 1": "confirmed_strength",
+        "eerste": "confirmed_strength",
+        "2": "balanced_pullback",
+        "optie 2": "balanced_pullback",
+        "tweede": "balanced_pullback",
+        "3": "early_dip",
+        "optie 3": "early_dip",
+        "derde": "early_dip",
+    }
+    for phrase, key in numeric_choice_map.items():
+        if q == phrase or q.startswith(f"{phrase} "):
+            return key
+
+    for key, preset in SETUP_MARKET_CONDITION_PRESETS.items():
+        if any(alias in q for alias in preset.get("aliases") or []):
+            return key
+
+    return None
+
+
+def _apply_setup_market_condition_preset(slots: Dict[str, Any], condition_key: str, *, force: bool = False) -> bool:
+    preset = SETUP_MARKET_CONDITION_PRESETS.get(condition_key)
+    if not preset:
+        return False
+
+    slots["market_condition"] = condition_key
+    for score_key, score_value in (preset.get("scores") or {}).items():
+        if force or slots.get(score_key) in (None, ""):
+            slots[score_key] = score_value
+    return True
+
 class AiAssistantService:
     def __init__(
         self,
@@ -1352,8 +1455,7 @@ class AiAssistantService:
             )
         if "holds_losers_too_long" in behavior_flags:
             return (
-                f"Voor jouw profiel geldt nu: bewaak bij {asset_label} eerst je invalidatie, "
-                "zodat je verliezers niet langer laat rekken dan je plan toelaat."
+                f"Voor jouw profiel telt nu vooral: houd bij {asset_label} je invalidatie strak."
             )
         if "takes_profit_too_early" in behavior_flags:
             return (
@@ -1384,6 +1486,9 @@ class AiAssistantService:
         resolved_symbol: Optional[str] = None,
     ) -> str:
         if intent not in {"general", "chat", "general_help", "product_help", "analysis", "report", "coach"}:
+            return response_text
+        flow_name = str(((context_data or {}).get("current_flow") or "")).strip().lower()
+        if flow_name in {"setup_creation", "strategy_creation", "bot_creation"}:
             return response_text
         profile_line = self._legacy_general_profile_line(context_data, resolved_symbol)
         if not profile_line:
@@ -1582,6 +1687,21 @@ class AiAssistantService:
         if not flow:
             return conv_state
 
+        current_missing_slots = []
+        for step in flow.get("question_sequence", []):
+            slot_key = step["slot"]
+            if flow_name == "setup_creation" and slot_key == "dca_frequency" and slots.get("setup_type") != "dca":
+                continue
+            if flow_name == "setup_creation" and slot_key == "dca_day" and slots.get("dca_frequency") != "weekly":
+                continue
+            if flow_name == "setup_creation" and slot_key == "dca_month_day" and slots.get("dca_frequency") != "monthly":
+                continue
+            if flow_name == "strategy_creation" and slot_key in ["entry", "targets", "stop_loss"] and slots.get("setup_type") != "trade":
+                continue
+            if slot_key not in slots or slots[slot_key] is None or slots[slot_key] == "":
+                current_missing_slots.append(slot_key)
+        next_expected_slot = current_missing_slots[0] if current_missing_slots else None
+
         # Explicit confirmation requests may finalize the flow, but only once the
         # required slots are actually present. Otherwise we stay in collection mode.
         is_explicit_finalize = any(w in q_lower for w in ["maak de setup", "maak nu", "opslaan", "finaliseer", "bevestig", "approve", "akkoord", "bevestig setup"])
@@ -1601,6 +1721,8 @@ class AiAssistantService:
             slots["timeframe"] = timeframe_hint
             updated = True
 
+        nums = extract_numbers(q_lower)
+
         should_parse_dca_frequency = flow_name != "setup_creation" or slots.get("setup_type") == "dca" or "dca" in q_lower
         if should_parse_dca_frequency and any(w in q_lower for w in ["dagelijks", "daily", "dag"]):
             slots["dca_frequency"] = "daily"
@@ -1612,9 +1734,62 @@ class AiAssistantService:
             slots["dca_frequency"] = "monthly"
             updated = True
 
+        weekday_map = {
+            "maandag": "monday",
+            "dinsdag": "tuesday",
+            "woensdag": "wednesday",
+            "donderdag": "thursday",
+            "vrijdag": "friday",
+            "zaterdag": "saturday",
+            "zondag": "sunday",
+            "monday": "monday",
+            "tuesday": "tuesday",
+            "wednesday": "wednesday",
+            "thursday": "thursday",
+            "friday": "friday",
+            "saturday": "saturday",
+            "sunday": "sunday",
+        }
+        if next_expected_slot == "dca_day":
+            for label, canonical in weekday_map.items():
+                if label in q_lower:
+                    slots["dca_day"] = canonical
+                    updated = True
+                    break
+
+        if next_expected_slot == "dca_month_day":
+            if nums:
+                month_day = int(nums[0])
+                if 1 <= month_day <= 31:
+                    slots["dca_month_day"] = month_day
+                    updated = True
+
+        if flow_name == "setup_creation":
+            market_condition = _resolve_setup_market_condition(q_lower)
+            if market_condition:
+                if _apply_setup_market_condition_preset(slots, market_condition, force=True):
+                    updated = True
+
+        score_defaults = {
+            "min_macro_score": 30,
+            "max_macro_score": 70,
+            "min_technical_score": 40,
+            "max_technical_score": 80,
+            "min_market_score": 20,
+            "max_market_score": 60,
+        }
+        if next_expected_slot in score_defaults:
+            if any(w in q_lower for w in ["standaard", "default", "prima", "goed", "is goed", "laat zo"]):
+                slots[next_expected_slot] = score_defaults[next_expected_slot]
+                updated = True
+            elif nums:
+                score_value = int(nums[0])
+                if 0 <= score_value <= 100:
+                    slots[next_expected_slot] = score_value
+                    updated = True
+
         # Base Amount
         # Look for eur inleg, e.g. "€100", "100 eur", "inleg van 100", "inleg: 100", "inleg 100"
-        nums = extract_numbers(q_lower)
         if nums and any(w in q_lower for w in ["€", "eur", "inleg", "bedrag", "euro", "order", "inleg:"]):
             slots["base_amount"] = nums[0]
             updated = True
@@ -1696,8 +1871,15 @@ class AiAssistantService:
                 slots["name"] = explicit_name
                 updated = True
             elif should_greedy_capture:
-                slots["name"] = user_query.strip()
-                updated = True
+                cleaned_name = re.sub(
+                    r"\b(?:word(?:t)?|is)\s+de\s+naam\b",
+                    "",
+                    user_query,
+                    flags=re.IGNORECASE,
+                ).strip(" -:,.")
+                if cleaned_name:
+                    slots["name"] = cleaned_name
+                    updated = True
 
         if updated:
             conv_state["slots"] = slots
@@ -1708,6 +1890,10 @@ class AiAssistantService:
             for step in flow.get("question_sequence", []):
                 slot_key = step["slot"]
                 if flow_name == "setup_creation" and slot_key == "dca_frequency" and slots.get("setup_type") != "dca":
+                    continue
+                if flow_name == "setup_creation" and slot_key == "dca_day" and slots.get("dca_frequency") != "weekly":
+                    continue
+                if flow_name == "setup_creation" and slot_key == "dca_month_day" and slots.get("dca_frequency") != "monthly":
                     continue
                 if flow_name == "strategy_creation" and slot_key in ["entry", "targets", "stop_loss"] and slots.get("setup_type") != "trade":
                     continue
@@ -1736,6 +1922,10 @@ class AiAssistantService:
         for step in flow.get("question_sequence", []):
             slot_key = step["slot"]
             if flow_name == "setup_creation" and slot_key == "dca_frequency" and current_slots.get("setup_type") != "dca":
+                continue
+            if flow_name == "setup_creation" and slot_key == "dca_day" and current_slots.get("dca_frequency") != "weekly":
+                continue
+            if flow_name == "setup_creation" and slot_key == "dca_month_day" and current_slots.get("dca_frequency") != "monthly":
                 continue
             if flow_name == "strategy_creation" and slot_key in ["entry", "targets", "stop_loss"] and current_slots.get("setup_type") != "trade":
                 continue
@@ -1767,10 +1957,28 @@ class AiAssistantService:
         setup_type = str(current_slots.get("setup_type") or "").lower()
         if not current_slots.get("symbol") or not setup_type:
             return False
+        common_ready = bool(current_slots.get("timeframe")) and bool(current_slots.get("name"))
+        required_score_keys = [
+            "min_macro_score",
+            "max_macro_score",
+            "min_technical_score",
+            "max_technical_score",
+            "min_market_score",
+            "max_market_score",
+        ]
+        has_market_condition = bool(current_slots.get("market_condition"))
+        has_scores = all(current_slots.get(key) is not None for key in required_score_keys)
+
         if setup_type == "trade":
-            return bool(current_slots.get("timeframe"))
+            return common_ready and (has_market_condition or has_scores)
         if setup_type == "dca":
-            return bool(current_slots.get("timeframe")) and bool(current_slots.get("dca_frequency"))
+            if not common_ready or not current_slots.get("dca_frequency"):
+                return False
+            if current_slots.get("dca_frequency") == "weekly" and not current_slots.get("dca_day"):
+                return False
+            if current_slots.get("dca_frequency") == "monthly" and not current_slots.get("dca_month_day"):
+                return False
+            return has_market_condition or has_scores
         return False
 
     async def _build_deterministic_flow_turn(
@@ -1808,7 +2016,7 @@ class AiAssistantService:
             flow_word = flow_name.split("_")[0]
             locale = _resolve_locale(getattr(self, "_active_preferences", None))
             response_text = {
-                "nl": f"Je {flow_word} staat klaar. Controleer de kaart en sla hem op als dit klopt.",
+                "nl": f"Je {flow_word} staat klaar. Controleer de kaart met naam, timeframe en regels en sla hem op als dit klopt.",
                 "en": f"Your {flow_word} draft is ready. Review the card and save it if it looks right.",
                 "de": f"Dein {flow_word}-Entwurf ist bereit. Pruefe die Karte und speichere sie, wenn alles stimmt.",
             }.get(locale) or f"Your {flow_word} draft is ready. Review the card and save it if it looks right."

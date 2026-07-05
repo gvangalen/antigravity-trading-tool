@@ -47,12 +47,15 @@ export default function TechnicalPage() {
         guidedIntro: technicalT.onboardingGuide.guidedIntro?.replace("{symbol}", selectedAsset),
         guidedConfigHint: technicalT.onboardingGuide.guidedConfigHint?.replace("{symbol}", selectedAsset),
         completionHint: technicalT.onboardingGuide.completionHint?.replace("{symbol}", selectedAsset),
+        completedTitle: technicalT.onboardingGuide.completedTitle?.replace("{symbol}", selectedAsset),
+        completedBody: technicalT.onboardingGuide.completedBody?.replace("{symbol}", selectedAsset),
         finnHint: technicalT.onboardingGuide.finnHint?.replace("{symbol}", selectedAsset),
         steps: Array.isArray(technicalT.onboardingGuide.steps)
           ? technicalT.onboardingGuide.steps.map((step) => step.replace("{symbol}", selectedAsset))
           : [],
       }
     : null;
+  const nextSetupHref = `/setup?onboarding=1&step=setup&symbol=${encodeURIComponent(selectedAsset)}`;
 
   // ===============================
   // ⚙️ TECHNICAL DATA
@@ -67,6 +70,7 @@ export default function TechnicalPage() {
 
   const { technical: technicalScore } = useScoresData(selectedAsset);
   const { status, completeStep } = useOnboarding();
+  const technicalStepComplete = Boolean(status?.has_technical || technicalData?.length > 0);
   const technicalNeedsSetup = status?.has_technical === false && technicalData?.length === 0;
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
   const showOnboardingGuide = onboardingGuidedMode || technicalNeedsSetup;
@@ -172,7 +176,13 @@ export default function TechnicalPage() {
       </header>
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide copy={guideCopy} anchorId="technical-config" guidedMode={onboardingGuidedMode} />
+        <OnboardingStepGuide
+          copy={guideCopy}
+          anchorId="technical-config"
+          guidedMode={onboardingGuidedMode}
+          isComplete={technicalStepComplete}
+          nextHref={nextSetupHref}
+        />
       ) : null}
 
       {/* 🚀 TECHNICAL HUD */}

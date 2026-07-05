@@ -38,12 +38,15 @@ export default function MarketPage() {
         guidedIntro: marketT.onboardingGuide.guidedIntro?.replace("{symbol}", activeSymbol),
         guidedConfigHint: marketT.onboardingGuide.guidedConfigHint?.replace("{symbol}", activeSymbol),
         completionHint: marketT.onboardingGuide.completionHint?.replace("{symbol}", activeSymbol),
+        completedTitle: marketT.onboardingGuide.completedTitle?.replace("{symbol}", activeSymbol),
+        completedBody: marketT.onboardingGuide.completedBody?.replace("{symbol}", activeSymbol),
         finnHint: marketT.onboardingGuide.finnHint?.replace("{symbol}", activeSymbol),
         steps: Array.isArray(marketT.onboardingGuide.steps)
           ? marketT.onboardingGuide.steps.map((step) => step.replace("{symbol}", activeSymbol))
           : [],
       }
     : null;
+  const nextMacroHref = `/macro?onboarding=1&step=macro&symbol=${encodeURIComponent(activeSymbol)}`;
 
   // ===============================
   // 🧭 ONBOARDING HOOK
@@ -58,9 +61,13 @@ export default function MarketPage() {
     forwardReturns, 
     availableIndicators,
     activeMarketIndicatorNames,
+    addMarket,
+    selectedIndicator,
+    selectIndicator,
     btcLive,
     loading
   } = useMarketData(activeSymbol);
+  const marketStepComplete = Boolean(status?.has_market || activeMarketIndicatorNames?.length > 0);
   const marketNeedsSetup = status?.has_market === false && activeMarketIndicatorNames?.length === 0;
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
   const showOnboardingGuide = onboardingGuidedMode || marketNeedsSetup;
@@ -129,7 +136,13 @@ export default function MarketPage() {
       </header>
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide copy={guideCopy} anchorId="market-config" guidedMode={onboardingGuidedMode} />
+        <OnboardingStepGuide
+          copy={guideCopy}
+          anchorId="market-config"
+          guidedMode={onboardingGuidedMode}
+          isComplete={marketStepComplete}
+          nextHref={nextMacroHref}
+        />
       ) : null}
 
       {/* 🚀 MARKET HUD */}
@@ -178,7 +191,10 @@ export default function MarketPage() {
             ) : null}
             <MarketIndicatorScoreView
               availableIndicators={availableIndicators || []}
-              loading={loading}
+              selectedIndicator={selectedIndicator}
+              selectIndicator={selectIndicator}
+              addMarketIndicator={addMarket}
+              activeIndicators={activeMarketIndicatorNames || []}
               symbol={activeSymbol}
             />
           </div>

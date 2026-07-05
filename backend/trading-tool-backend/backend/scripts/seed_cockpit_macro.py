@@ -12,7 +12,7 @@ MACRO_INDICATORS = [
         "name": "dxy",
         "display_name": "US Dollar Index (DXY)",
         "source": "yahoo",
-        "link": "https://query1.finance.yahoo.com/v8/finance/chart/%5EDXY",
+        "link": "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB",
         "category": "macro"
     },
     {

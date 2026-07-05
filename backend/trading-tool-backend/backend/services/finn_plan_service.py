@@ -237,6 +237,58 @@ INDICATOR_FIXED_BUCKETS = [
     (80.0, 100.0),
 ]
 
+SETUP_MARKET_CONDITION_PRESETS = {
+    "confirmed_strength": {
+        "label": "Bevestigd sterk",
+        "scores": {
+            "macro_score_range": [40, 100],
+            "technical_score_range": [55, 100],
+            "market_score_range": [35, 100],
+        },
+        "aliases": [
+            "bevestigd sterk",
+            "confirmed strength",
+            "sterke bevestiging",
+            "trend bevestigd",
+            "alleen sterk",
+        ],
+    },
+    "balanced_pullback": {
+        "label": "Normale pullback",
+        "scores": {
+            "macro_score_range": [30, 70],
+            "technical_score_range": [40, 80],
+            "market_score_range": [20, 60],
+        },
+        "aliases": [
+            "normale pullback",
+            "pullback",
+            "gebalanceerd",
+            "balanced",
+            "balanced pullback",
+            "normale markt",
+            "standaard",
+        ],
+    },
+    "early_dip": {
+        "label": "Vroege dip",
+        "scores": {
+            "macro_score_range": [15, 60],
+            "technical_score_range": [25, 75],
+            "market_score_range": [0, 55],
+        },
+        "aliases": [
+            "vroege dip",
+            "early dip",
+            "grote daling",
+            "correctie",
+            "alleen tijdens correcties",
+            "zwakke markt",
+            "dip kopen",
+        ],
+    },
+}
+
 
 def empty_plan_draft() -> Dict[str, Any]:
     return {
@@ -245,6 +297,7 @@ def empty_plan_draft() -> Dict[str, Any]:
         "setup": {
             "name": None,
             "timeframe": None,
+            "market_condition": None,
             "macro_score_range": None,
             "technical_score_range": None,
             "market_score_range": None,
@@ -289,6 +342,7 @@ def empty_plan_patch() -> Dict[str, Any]:
         "setup": {
             "name": None,
             "timeframe": None,
+            "market_condition": None,
             "macro_score_range": None,
             "technical_score_range": None,
             "market_score_range": None,
@@ -444,6 +498,43 @@ def _extract_targets(text: str) -> Optional[List[float]]:
         if value is not None:
             targets.append(value)
     return targets or None
+
+
+def _resolve_setup_market_condition(query: str) -> Optional[str]:
+    q = str(query or "").strip().lower()
+    if not q:
+        return None
+
+    numeric_choice_map = {
+        "1": "confirmed_strength",
+        "optie 1": "confirmed_strength",
+        "eerste": "confirmed_strength",
+        "2": "balanced_pullback",
+        "optie 2": "balanced_pullback",
+        "tweede": "balanced_pullback",
+        "3": "early_dip",
+        "optie 3": "early_dip",
+        "derde": "early_dip",
+    }
+    for phrase, key in numeric_choice_map.items():
+        if q == phrase or q.startswith(f"{phrase} "):
+            return key
+
+    for key, preset in SETUP_MARKET_CONDITION_PRESETS.items():
+        if any(alias in q for alias in preset.get("aliases") or []):
+            return key
+    return None
+
+
+def _apply_setup_market_condition_preset(patch: Dict[str, Any], condition_key: str) -> bool:
+    preset = SETUP_MARKET_CONDITION_PRESETS.get(condition_key)
+    if not preset:
+        return False
+
+    patch["setup"]["market_condition"] = condition_key
+    for field, value in (preset.get("scores") or {}).items():
+        patch["setup"][field] = list(value)
+    return True
 
 
 def _asset_mentions(text: str) -> List[str]:
@@ -8433,6 +8524,10 @@ class FinnPlanService:
         if timeframe:
             patch["setup"]["timeframe"] = timeframe.group(1)
 
+        market_condition = _resolve_setup_market_condition(query)
+        if market_condition:
+            _apply_setup_market_condition_preset(patch, market_condition)
+
         if "dagelijks" in q or "daily" in q or "elke dag" in q or "iedere dag" in q:
             patch["dca"]["frequency"] = "daily"
         elif "wekelijks" in q or "weekly" in q or "elke week" in q or "iedere week" in q:
@@ -8499,6 +8594,8 @@ class FinnPlanService:
             patch["setup"]["technical_score_range"] = technical
         if market:
             patch["setup"]["market_score_range"] = market
+        if macro or technical or market:
+            patch["setup"]["market_condition"] = patch["setup"].get("market_condition") or "custom_manual"
 
         quoted_name = re.search(r"(?:noem|naam|heet)\s+(?:hem|haar|deze)?\s*[\"']?([^\"'.]+)[\"']?", q, re.IGNORECASE)
         if quoted_name:
@@ -9145,14 +9242,34 @@ class FinnPlanService:
         }
 
     def _setup_flow_state(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> Dict[str, Any]:
+        setup = draft.get("setup") or {}
+        dca = draft.get("dca") or {}
+        slots = {
+            "symbol": draft.get("asset"),
+            "setup_type": draft.get("plan_type"),
+            "timeframe": setup.get("timeframe"),
+            "name": setup.get("name"),
+            "market_condition": setup.get("market_condition"),
+            "dca_frequency": dca.get("frequency"),
+            "dca_day": dca.get("day"),
+            "dca_month_day": dca.get("month_day"),
+        }
         return {
             "status": "ready_for_confirmation" if validation["can_confirm"] else "collecting",
             "current_flow": "setup_creation",
             "asset": draft.get("asset"),
             "setup_type": draft.get("plan_type"),
             "timeframe": draft.get("setup", {}).get("timeframe"),
+            "name": setup.get("name"),
+            "market_condition": setup.get("market_condition"),
+            "dca_frequency": dca.get("frequency"),
+            "dca_day": dca.get("day"),
+            "dca_month_day": dca.get("month_day"),
+            "slots": slots,
+            "missing_slots": list(validation.get("missing_fields") or []),
             "next_question": validation["next_question"],
             "autonomy_level": "confirm_required",
+            "can_confirm": validation["can_confirm"],
             "analysis": {
                 "tool_intent_reason": "explicit_setup_request",
             },
@@ -10045,6 +10162,8 @@ class FinnPlanService:
             invalid.append({"field": "asset", "reason": clarification.get("reason", "asset moet verduidelijkt worden")})
         if not draft["setup"].get("timeframe"):
             missing.append("setup.timeframe")
+        if not draft["setup"].get("name"):
+            missing.append("setup.name")
 
         for field in (
             "macro_score_range",
@@ -10068,9 +10187,8 @@ class FinnPlanService:
                 elif not isinstance(month_day, int) or month_day < 1 or month_day > 28:
                     invalid.append({"field": "dca.month_day", "reason": "gebruik dag 1 t/m 28 voor maandelijkse DCA"})
 
-            if draft["dca"].get("dca_mode") == "custom":
-                if draft["dca"].get("buy_score_threshold") is None:
-                    missing.append("dca.buy_score_threshold")
+            if not draft["setup"].get("market_condition"):
+                missing.append("setup.market_condition")
 
         if draft.get("plan_type") == "trade":
             is_long_trade = draft["strategy"].get("direction") == "long"
@@ -10141,15 +10259,16 @@ class FinnPlanService:
         timeframe = draft.get("setup", {}).get("timeframe")
         if not timeframe:
             missing.append("setup.timeframe")
+        if not draft.get("setup", {}).get("name"):
+            missing.append("setup.name")
 
         for field in ("macro_score_range", "technical_score_range", "market_score_range"):
             value = draft["setup"].get(field)
             if value is not None:
                 self._validate_range(f"setup.{field}", value, invalid)
 
-        if draft.get("plan_type") == "trade":
-            if draft["setup"].get("name") and len(str(draft["setup"]["name"]).strip()) < 2:
-                invalid.append({"field": "setup.name", "reason": "setupnaam is te kort"})
+        if draft["setup"].get("name") and len(str(draft["setup"]["name"]).strip()) < 2:
+            invalid.append({"field": "setup.name", "reason": "setupnaam is te kort"})
 
         if draft.get("plan_type") == "dca":
             frequency = draft["dca"].get("frequency")
@@ -10163,8 +10282,8 @@ class FinnPlanService:
                     missing.append("dca.month_day")
                 elif not isinstance(month_day, int) or month_day < 1 or month_day > 28:
                     invalid.append({"field": "dca.month_day", "reason": "gebruik dag 1 t/m 28 voor maandelijkse DCA"})
-            if draft["dca"].get("dca_mode") == "custom" and draft["dca"].get("buy_score_threshold") is None:
-                missing.append("dca.buy_score_threshold")
+            if not draft["setup"].get("market_condition"):
+                missing.append("setup.market_condition")
 
         next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
         return {
@@ -10186,6 +10305,8 @@ class FinnPlanService:
             return "Wil je dat Finn hier eerst een DCA-plan van maakt, of een trade-plan met entry, stop-loss en targets? Ik vraag dit eerst uit voordat ik de rest invul."
         if next_question == "setup.timeframe":
             return "Welke timeframe hoort bij dit plan? Bijvoorbeeld 1W voor DCA of 4H/1D voor een trade. Daarna vraag ik pas de volgende ontbrekende keuze."
+        if next_question == "setup.name":
+            return "Welke naam wil je deze setup geven? Houd hem kort en herkenbaar, bijvoorbeeld BTC swing setup of Bitcoin test DCA."
         if next_question == "strategy.base_amount_eur":
             return "Met welk basisbedrag in euro wil je dit plan uitvoeren? Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
         if next_question == "bot.create_bot":
@@ -10196,8 +10317,8 @@ class FinnPlanService:
             return "Op welke weekdag wil je deze DCA uitvoeren? Noem gewoon bijvoorbeeld maandag of vrijdag."
         if next_question == "dca.month_day":
             return "Op welke dag van de maand wil je kopen? Gebruik dag 1 t/m 28."
-        if next_question == "dca.buy_score_threshold":
-            return "Bij welke marktscore wil je extra bijkopen? (bijv. onder de 30)"
+        if next_question == "setup.market_condition":
+            return "Wanneer wil je vooral instappen? Kies bijvoorbeeld: bevestigd sterk, normale pullback, of vroege dip. Ik vertaal dat daarna zelf naar de juiste filters."
         if next_question == "strategy.entry":
             return "Welke entry-prijs hoort bij deze trade?"
         if next_question == "strategy.stop_loss":
@@ -10221,14 +10342,16 @@ class FinnPlanService:
             return "Voor welk asset wil je deze setup maken? Ik ondersteun nu BTC, ETH en SOL."
         if next_question == "setup.timeframe":
             return "Welke timeframe hoort bij deze setup? Bijvoorbeeld 4H of 1D voor trade, of 1W voor DCA."
+        if next_question == "setup.name":
+            return "Welke naam wil je voor deze setup gebruiken? Kies iets korts en herkenbaars, bijvoorbeeld BTC swing setup of Bitcoin test DCA."
         if next_question == "dca.frequency":
             return "Hoe vaak wil je deze DCA-setup uitvoeren: dagelijks, wekelijks of maandelijks?"
         if next_question == "dca.day":
             return "Op welke weekdag wil je deze DCA-setup uitvoeren? Noem bijvoorbeeld maandag of vrijdag."
         if next_question == "dca.month_day":
             return "Op welke dag van de maand wil je kopen? Gebruik dag 1 t/m 28."
-        if next_question == "dca.buy_score_threshold":
-            return "Bij welke marktscore wil je extra bijkopen? Noem bijvoorbeeld onder de 30."
+        if next_question == "setup.market_condition":
+            return "Wanneer wil je dat deze setup vooral mag instappen? Kies bijvoorbeeld: bevestigd sterk, normale pullback, of vroege dip."
 
         summary = self._setup_only_summary(draft)
         return f"Ik heb je setup klaarstaan. Controleer dit even en bevestig als het klopt:\n\n{summary}"
@@ -10266,6 +10389,14 @@ class FinnPlanService:
             ).strip()
             if schedule:
                 lines.append(f"- DCA: {schedule}")
+        market_condition = draft.get("setup", {}).get("market_condition")
+        if market_condition:
+            if market_condition == "custom_manual":
+                lines.append("- Instapmoment: handmatig ingestelde voorwaarden")
+            else:
+                preset = SETUP_MARKET_CONDITION_PRESETS.get(str(market_condition))
+                if preset:
+                    lines.append(f"- Instapmoment: {preset['label']}")
         return "\n".join(lines)
 
     def _asset_from_query_or_context(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:

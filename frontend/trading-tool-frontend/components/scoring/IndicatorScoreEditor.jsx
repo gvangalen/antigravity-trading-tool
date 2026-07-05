@@ -296,7 +296,6 @@ export default function IndicatorScoreEditor({
 
   return (
     <div className="bg-card border border-slate-200 rounded-[2.5rem] p-8 shadow-sm space-y-10">
-      {/* 🕋 MODULE HEADER */}
       <div className="flex items-start justify-between pb-6 border-b border-slate-100">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-[var(--color-border-subtle)] border border-slate-100 flex items-center justify-center text-slate-400">
@@ -308,17 +307,14 @@ export default function IndicatorScoreEditor({
               <ScoreModeBadge mode={mode} />
             </div>
             <p className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none">
-              {copy.nodeId}: <span className="text-dim font-mono">{normalizedIndicator || "—"}</span>
-              {metaLabel ? <span className="ml-2">• {metaLabel}</span> : null}
-              <span className="ml-2">• {copy.telemetryVersion}</span>
+              {copy.indicatorLabel}: <span className="text-dim">{metaLabel || normalizedIndicator || "—"}</span>
             </p>
           </div>
         </div>
 
-        {/* PARAMETER NODE (Weight) */}
         <div className="flex flex-col items-end gap-1.5 p-3 rounded-2xl bg-[var(--color-border-subtle)] border border-slate-100">
           <div className="flex items-center gap-3">
-             <div className="text-[10px] font-black text-secondary uppercase tracking-widest">{copy.weightNode}</div>
+             <div className="text-[10px] font-black text-secondary uppercase tracking-widest">{copy.weightLabel}</div>
              <div className="text-sm font-black text-foreground tabular-nums bg-card px-3 py-0.5 rounded-lg border border-slate-200 shadow-sm">
                 0{Number(localWeight).toFixed(1)}
              </div>
@@ -331,7 +327,6 @@ export default function IndicatorScoreEditor({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
         <div className="space-y-8">
-           {/* 🔹 LOGIC MODE: SEGMENTED CONTROL */}
            <div className="space-y-3">
               <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">{copy.engineModeSelector}</div>
               <div className="flex bg-[var(--color-border-subtle)] p-1.5 rounded-2xl border border-slate-100 w-fit">
@@ -351,7 +346,6 @@ export default function IndicatorScoreEditor({
               </div>
            </div>
 
-           {/* 🔹 ENGINE STATUS */}
            <div className="p-5 rounded-[2rem] bg-slate-50/50 border border-slate-100 min-h-[80px] flex items-center">
               {mode === "standard" && (
                 <div className="flex items-center gap-4">
@@ -385,7 +379,6 @@ export default function IndicatorScoreEditor({
               )}
            </div>
 
-           {/* 🔹 NODE TUNING (Weight Slider) */}
            {isCustom && (
               <div className="space-y-4 pt-4">
                    <div className="flex items-center justify-between">
@@ -413,7 +406,6 @@ export default function IndicatorScoreEditor({
               </div>
            )}
 
-           {/* 🔹 SAVE ACTION (Custom only) */}
            {isCustom && (
               <button
                 onClick={saveCustom}
@@ -425,18 +417,15 @@ export default function IndicatorScoreEditor({
            )}
         </div>
 
-        {/* 🔹 LOGIC MANIFEST GRID */}
         <div className="space-y-4">
            <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] pl-1">{copy.logicManifestTelemetry}</div>
            <div className="bg-slate-50/50 border border-slate-100 rounded-[2.5rem] overflow-hidden">
-             {/* Grid Header */}
              <div className="grid grid-cols-12 gap-2 px-8 py-4 bg-[var(--color-border-subtle)] border-b border-slate-100">
                <div className="col-span-5 text-[10px] font-black text-secondary uppercase tracking-widest">{copy.inputRange}</div>
                <div className="col-span-4 text-[10px] font-black text-secondary uppercase tracking-widest text-center">{copy.outputSignal}</div>
                <div className="col-span-3 text-[10px] font-black text-secondary uppercase tracking-widest text-right">{t?.common?.trend}</div>
              </div>
 
-             {/* Grid Content */}
              <div className="px-6 py-6 space-y-6">
                 {FIXED_BUCKETS.map((b, idx) => {
                   const rawScore = rows?.[idx]?.score ?? 50;

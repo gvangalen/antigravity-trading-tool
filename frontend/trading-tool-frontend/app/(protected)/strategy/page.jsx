@@ -41,6 +41,7 @@ export default function StrategyPage() {
   const { t } = useTranslation();
   const { status, completeStep } = useOnboarding();
   const copy = t?.strategyPage || {};
+  const strategyGuideCopy = copy.onboardingGuide || {};
   const feedback = copy.feedback || {};
 
   const [search, setSearch] = useState("");
@@ -52,6 +53,7 @@ export default function StrategyPage() {
 
   const safeSetups = Array.isArray(setups) ? setups : [];
   const safeStrategies = Array.isArray(strategies) ? strategies : [];
+  const strategyStepComplete = Boolean(status?.has_strategy || safeStrategies.length > 0);
   const strategyNeedsSetup = status?.has_strategy === false && safeStrategies.length === 0;
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
   const showOnboardingGuide = onboardingGuidedMode || strategyNeedsSetup;
@@ -137,7 +139,13 @@ export default function StrategyPage() {
       </header>
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="strategy-new" guidedMode={onboardingGuidedMode} />
+        <OnboardingStepGuide
+          copy={strategyGuideCopy}
+          anchorId="strategy-new"
+          guidedMode={onboardingGuidedMode}
+          isComplete={strategyStepComplete}
+          nextHref="/bot?onboarding=1&step=bot"
+        />
       ) : null}
 
       {/* 🚀 QUICK STATS GRID */}
@@ -220,7 +228,7 @@ export default function StrategyPage() {
            <div className="card-p p-8">
              {showOnboardingGuide ? (
                <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700">
-                 {copy.onboardingGuide.guidedConfigHint}
+                 {strategyGuideCopy.guidedConfigHint}
                </div>
              ) : null}
              <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6 border-b border-slate-50 dark:border-slate-800/50 pb-4">

@@ -109,6 +109,10 @@ function buildAssistantUiText(at) {
     actionSucceeded: at("uiText.actionSucceeded"),
     asset: at("uiText.asset"),
     setupType: at("uiText.setupType"),
+    marketCondition: at("uiText.marketCondition"),
+    marketConditionConfirmedStrength: at("uiText.marketConditionConfirmedStrength"),
+    marketConditionBalancedPullback: at("uiText.marketConditionBalancedPullback"),
+    marketConditionEarlyDip: at("uiText.marketConditionEarlyDip"),
     dcaParameters: at("uiText.dcaParameters"),
     scoreThresholds: at("uiText.scoreThresholds"),
     baseBudget: at("uiText.baseBudget"),
@@ -172,6 +176,44 @@ function buildAssistantUiText(at) {
     botDecisionSkippedVerified: at("uiText.botDecisionSkippedVerified"),
     defaultBotName: at("uiText.defaultBotName"),
   };
+}
+
+function getSetupMarketConditionLabel(condition, uiText) {
+  switch (condition) {
+    case "confirmed_strength":
+      return uiText.marketConditionConfirmedStrength;
+    case "balanced_pullback":
+      return uiText.marketConditionBalancedPullback;
+    case "early_dip":
+      return uiText.marketConditionEarlyDip;
+    default:
+      return condition || "—";
+  }
+}
+
+function inferSetupMarketConditionFromScores(payload = {}) {
+  const minMacro = Number(payload?.min_macro_score);
+  const maxMacro = Number(payload?.max_macro_score);
+  const minTechnical = Number(payload?.min_technical_score);
+  const maxTechnical = Number(payload?.max_technical_score);
+  const minMarket = Number(payload?.min_market_score);
+  const maxMarket = Number(payload?.max_market_score);
+
+  if ([minMacro, maxMacro, minTechnical, maxTechnical, minMarket, maxMarket].some((value) => Number.isNaN(value))) {
+    return null;
+  }
+
+  if (minMacro === 40 && maxMacro === 100 && minTechnical === 55 && maxTechnical === 100 && minMarket === 35 && maxMarket === 100) {
+    return "confirmed_strength";
+  }
+  if (minMacro === 30 && maxMacro === 70 && minTechnical === 40 && maxTechnical === 80 && minMarket === 20 && maxMarket === 60) {
+    return "balanced_pullback";
+  }
+  if (minMacro === 10 && maxMacro === 65 && minTechnical === 20 && maxTechnical === 75 && minMarket === 10 && maxMarket === 55) {
+    return "early_dip";
+  }
+
+  return null;
 }
 
 function AIAssistantContent({ isOpen, setIsOpen }) {
@@ -599,7 +641,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     
     const flowSlots = {
       user_onboarding: ["experience_level", "risk_profile", "investment_goals"],
-      setup_creation: ["symbol", "setup_type", "timeframe", "dca_frequency"],
+      setup_creation: ["symbol", "setup_type", "timeframe", "market_condition"],
       strategy_creation: ["symbol", "setup_type", "base_amount", "entry", "targets", "stop_loss"],
       bot_creation: ["name", "budget_total_eur"],
       macro_analysis_walkthrough: ["symbol"],
@@ -618,10 +660,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     let totalSlots = slots.length;
     const setupType = state.slots?.setup_type;
     if (state.current_flow === "setup_creation" && setupType === "trade") {
-      totalSlots = 3; // symbol, setup_type, timeframe
+      totalSlots = 4; // symbol, setup_type, timeframe, market_condition
     }
     if (state.current_flow === "setup_creation" && setupType === "dca") {
-      totalSlots = 4; // symbol, setup_type, timeframe, dca_frequency
+      totalSlots = 5; // symbol, setup_type, timeframe, dca_frequency, market_condition
     }
     if (state.current_flow === "strategy_creation" && setupType === "dca") {
       totalSlots = 3; // symbol, setup_type, base_amount
@@ -686,8 +728,168 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       .slice(0, 5);
   };
 
+  const getSetupFlowSlots = (state = {}) => {
+    const rawSlots = state?.slots || {};
+    return {
+      symbol: rawSlots.symbol || state?.asset || state?.symbol || null,
+      setup_type: rawSlots.setup_type || state?.setup_type || null,
+      timeframe: rawSlots.timeframe || state?.timeframe || null,
+      name: rawSlots.name || state?.name || null,
+      dca_frequency: rawSlots.dca_frequency || state?.dca_frequency || null,
+      dca_day: rawSlots.dca_day || state?.dca_day || null,
+      dca_month_day: rawSlots.dca_month_day || state?.dca_month_day || null,
+      market_condition: rawSlots.market_condition || state?.market_condition || null,
+    };
+  };
+
+  const getMissingSetupSlots = (slots = {}) => {
+    const missing = [];
+    if (!slots.setup_type) {
+      missing.push("setup_type");
+      return missing;
+    }
+    if (!slots.timeframe) {
+      missing.push("timeframe");
+    }
+    if (!slots.name) {
+      missing.push("name");
+    }
+    if (String(slots.setup_type || "").toLowerCase() === "dca") {
+      if (!slots.dca_frequency) {
+        missing.push("dca_frequency");
+      } else if (slots.dca_frequency === "weekly" && !slots.dca_day) {
+        missing.push("dca_day");
+      } else if (slots.dca_frequency === "monthly" && !slots.dca_month_day) {
+        missing.push("dca_month_day");
+      }
+    }
+    if (!slots.market_condition) {
+      missing.push("market_condition");
+    }
+    return missing;
+  };
+
+  const getEffectiveSetupNextQuestion = (state = {}) => {
+    const slots = getSetupFlowSlots(state);
+    const missing = getMissingSetupSlots(slots);
+    const declaredNext = state?.next_question || null;
+
+    if (missing.length === 0) {
+      return declaredNext;
+    }
+    if (declaredNext && missing.includes(declaredNext)) {
+      return declaredNext;
+    }
+    if (
+      declaredNext &&
+      [
+        "min_macro_score",
+        "max_macro_score",
+        "min_technical_score",
+        "max_technical_score",
+        "min_market_score",
+        "max_market_score",
+      ].includes(declaredNext) &&
+      missing.includes("market_condition")
+    ) {
+      return "market_condition";
+    }
+    return missing[0];
+  };
+
+  const buildTransactionalFollowUpActions = (message) => {
+    const state = message?.state;
+    if (!state?.current_flow) return [];
+    const flow = state.current_flow;
+    const nextQuestion = getEffectiveSetupNextQuestion(state);
+    const slots = getSetupFlowSlots(state);
+    const symbol = slots.symbol || context.symbol || globalSymbol || "BTC";
+
+    if (flow !== "setup_creation") return [];
+
+    const setupType = String(slots.setup_type || "").toLowerCase();
+    const marketConditionActions = [
+      { label: uiText.followUpConfirmedStrength, prompt: uiText.followUpConfirmedStrengthPrompt.replace("{symbol}", symbol) },
+      { label: uiText.followUpBalancedPullback, prompt: uiText.followUpBalancedPullbackPrompt.replace("{symbol}", symbol) },
+      { label: uiText.followUpEarlyDip, prompt: uiText.followUpEarlyDipPrompt.replace("{symbol}", symbol) },
+    ];
+
+    const bySlot = {
+      setup_type: [
+        { label: uiText.followUpChooseDca, prompt: uiText.followUpChooseDcaPrompt.replace("{symbol}", symbol) },
+        { label: uiText.followUpChooseTrade, prompt: uiText.followUpChooseTradePrompt.replace("{symbol}", symbol) },
+      ],
+      dca_frequency: [
+        { label: uiText.followUpDaily, prompt: uiText.followUpDailyPrompt },
+        { label: uiText.followUpWeekly, prompt: uiText.followUpWeeklyPrompt },
+        { label: uiText.followUpMonthly, prompt: uiText.followUpMonthlyPrompt },
+      ],
+      dca_day: [
+        { label: uiText.followUpMonday, prompt: uiText.followUpMondayPrompt },
+        { label: uiText.followUpTuesday, prompt: uiText.followUpTuesdayPrompt },
+        { label: uiText.followUpWednesday, prompt: uiText.followUpWednesdayPrompt },
+      ],
+      dca_month_day: [
+        { label: uiText.followUpFirstOfMonth, prompt: uiText.followUpFirstOfMonthPrompt },
+        { label: uiText.followUpFifthOfMonth, prompt: uiText.followUpFifthOfMonthPrompt },
+        { label: uiText.followUpFifteenthOfMonth, prompt: uiText.followUpFifteenthOfMonthPrompt },
+      ],
+      timeframe:
+        setupType === "dca"
+          ? [
+              { label: uiText.followUpWeeklyTimeframe, prompt: uiText.followUpWeeklyTimeframePrompt },
+              { label: uiText.followUpMonthlyTimeframe, prompt: uiText.followUpMonthlyTimeframePrompt },
+            ]
+          : [
+              { label: uiText.followUpFourHourTimeframe, prompt: uiText.followUpFourHourTimeframePrompt },
+              { label: uiText.followUpDailyTimeframe, prompt: uiText.followUpDailyTimeframePrompt },
+            ],
+      name: [
+        {
+          label: uiText.followUpNameSetup,
+          prompt: setupType === "dca"
+            ? uiText.followUpNameDcaExample.replace("{symbol}", symbol)
+            : uiText.followUpNameTradeExample.replace("{symbol}", symbol),
+        },
+      ],
+      market_condition: marketConditionActions,
+      min_macro_score: marketConditionActions,
+      max_macro_score: marketConditionActions,
+      min_technical_score: marketConditionActions,
+      max_technical_score: marketConditionActions,
+      min_market_score: marketConditionActions,
+      max_market_score: [
+        { label: uiText.followUpFinalizeSetup, prompt: uiText.followUpFinalizeSetupPrompt },
+      ],
+    };
+
+    if (state?.status === "collecting" && nextQuestion && bySlot[nextQuestion]) {
+      return normalizeFollowUpActions(bySlot[nextQuestion]);
+    }
+
+    if (state?.status === "collecting") {
+      return [];
+    }
+
+    if (message?.intent === "plan_created" || message?.intent === "setup_created") {
+      return normalizeFollowUpActions([
+        `Bekijk je setup voor ${symbol}`,
+        `Ga door naar strategie voor ${symbol}`,
+      ]);
+    }
+
+    return [];
+  };
+
   const getMessageFollowUpActions = (message) => {
     if (Array.isArray(message?.actions) && message.actions.some((action) => action?.requires_confirmation)) {
+      return [];
+    }
+    const transactionalActions = buildTransactionalFollowUpActions(message);
+    if (transactionalActions.length > 0) {
+      return transactionalActions;
+    }
+    if (message?.state?.current_flow === "setup_creation" && message?.state?.status === "collecting") {
       return [];
     }
     const controllerAction = message?.state?.analysis?.agent_controller?.primary_action || message?.state?.agent_controller?.primary_action;
@@ -3051,13 +3253,24 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
   useEffect(() => {
     const handleTrigger = (e) => {
-      const { query: queryText, openAssistant, metric, symbol, timeframe } = e.detail || {};
+      const {
+        query: queryText,
+        hiddenPrompt,
+        openAssistant,
+        metric,
+        symbol,
+        timeframe,
+      } = e.detail || {};
       if (openAssistant) {
         setIsOpen(true);
       }
       if (metric) {
         setContextMetric({ metric, symbol: symbol || globalSymbol || "BTC", timeframe: timeframe || "1W" });
         setIsOpen(true);
+      }
+      if (hiddenPrompt) {
+        handleChat(hiddenPrompt, true);
+        return;
       }
       if (queryText) {
         handleChat(queryText);
@@ -3777,7 +3990,15 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Bot ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en geverifieerd: bot #${res.bot_id} voor strategy #${res.strategy_id}.`
           : isStrategyOnly
           ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Strategie ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en geverifieerd: strategy #${res.strategy_id} voor setup #${res.setup_id}.`
-          : `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Aangemaakt en geverifieerd: setup #${res.setup_id}, strategy #${res.strategy_id}${res.bot_id ? `, bot #${res.bot_id}` : ""}.`,
+          : (() => {
+              const createdSetup = setups.find((setup) => Number(setup.id || setup.setup_id) === Number(res.setup_id));
+              const createdName = createdSetup?.name || action?.payload?.name || "Nieuwe setup";
+              const createdTimeframe = createdSetup?.timeframe || action?.payload?.timeframe || null;
+              const createdSymbol = createdSetup?.symbol || action?.payload?.symbol || context.symbol || globalSymbol || "BTC";
+              const createdType = createdSetup?.setup_type || action?.payload?.setup_type || "setup";
+              const timeframeSuffix = createdTimeframe ? ` op ${createdTimeframe}` : "";
+              return `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Setup '${createdName}' voor ${createdSymbol}${timeframeSuffix} is aangemaakt en geverifieerd (${createdType}).`;
+            })(),
         intent: isBotOnly ? "bot_created" : (isStrategyOnly ? "strategy_created" : "plan_created"),
       }]);
       setFinnDraft(null);
@@ -5172,6 +5393,10 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
         <div className="rounded-xl bg-slate-50 dark:bg-slate-950 p-3.5 border border-slate-100 dark:border-slate-800/80 space-y-2.5 shadow-inner">
           {baseType === "setup" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col col-span-2">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.name || "Naam"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">{payload.name || "—"}</span>
+              </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
                 <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || globalSymbol || context.symbol || "—"}</span>
@@ -5180,6 +5405,18 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.setupType}</span>
                 <span className="uppercase text-xs text-foreground dark:text-slate-200">{payload.setup_type || "dca"}</span>
               </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.timeframe || "Timeframe"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">{payload.timeframe || "—"}</span>
+              </div>
+              {(payload.market_condition || payload.min_macro_score !== undefined) && (
+                <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
+                  <span className="text-xs text-foreground dark:text-slate-200">
+                    {getSetupMarketConditionLabel(payload.market_condition || inferSetupMarketConditionFromScores(payload), uiText)}
+                  </span>
+                </div>
+              )}
               {payload.setup_type === "dca" && (
                 <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaParameters}</span>
@@ -5188,7 +5425,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
                   </span>
                 </div>
               )}
-              {(payload.min_macro_score !== undefined || payload.min_technical_score !== undefined) && (
+              {!(payload.market_condition || inferSetupMarketConditionFromScores(payload)) && (payload.min_macro_score !== undefined || payload.min_technical_score !== undefined) && (
                 <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2 space-y-1">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
                   <div className="grid grid-cols-3 gap-2 mt-1">
@@ -5645,6 +5882,10 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
         <div className="rounded-xl bg-white dark:bg-slate-950 p-3.5 border border-slate-100 dark:border-slate-800/80 space-y-2.5 shadow-sm">
           {draft.type === "setup" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col col-span-2">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.name || "Naam"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">{draft.payload.name || "—"}</span>
+              </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
                 <span className="font-mono text-xs text-foreground dark:text-slate-200">{draft.payload.symbol || globalSymbol || context.symbol || "—"}</span>
@@ -5653,6 +5894,18 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.setupType}</span>
                 <span className="uppercase text-xs text-foreground dark:text-slate-200">{draft.payload.setup_type || "dca"}</span>
               </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.timeframe || "Timeframe"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">{draft.payload.timeframe || uiText.required}</span>
+              </div>
+              {(draft.payload.market_condition || draft.payload.min_macro_score !== undefined) && (
+                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
+                  <span className="text-xs text-foreground dark:text-slate-200">
+                    {getSetupMarketConditionLabel(draft.payload.market_condition || inferSetupMarketConditionFromScores(draft.payload), uiText)}
+                  </span>
+                </div>
+              )}
               {draft.payload.setup_type === "dca" && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaParameters}</span>
@@ -5661,23 +5914,25 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
                   </span>
                 </div>
               )}
-              <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2 space-y-1">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
-                <div className="grid grid-cols-3 gap-2 mt-1">
-                  <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
-                    <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Macro</div>
-                    <div className="text-[10px] font-mono font-black text-blue-500">{draft.payload.min_macro_score ?? 30}-{draft.payload.max_macro_score ?? 70}</div>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
-                    <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Tech</div>
-                    <div className="text-[10px] font-mono font-black text-amber-500">{draft.payload.min_technical_score ?? 40}-{draft.payload.max_technical_score ?? 80}</div>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
-                    <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Market</div>
-                    <div className="text-[10px] font-mono font-black text-emerald-500">{draft.payload.min_market_score ?? 20}-{draft.payload.max_market_score ?? 60}</div>
+              {!(draft.payload.market_condition || inferSetupMarketConditionFromScores(draft.payload)) && (
+                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2 space-y-1">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
+                  <div className="grid grid-cols-3 gap-2 mt-1">
+                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
+                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Macro</div>
+                      <div className="text-[10px] font-mono font-black text-blue-500">{draft.payload.min_macro_score ?? 30}-{draft.payload.max_macro_score ?? 70}</div>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
+                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Tech</div>
+                      <div className="text-[10px] font-mono font-black text-amber-500">{draft.payload.min_technical_score ?? 40}-{draft.payload.max_technical_score ?? 80}</div>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
+                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Market</div>
+                      <div className="text-[10px] font-mono font-black text-emerald-500">{draft.payload.min_market_score ?? 20}-{draft.payload.max_market_score ?? 60}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -5814,6 +6069,12 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
         <div className="rounded-xl bg-white dark:bg-slate-950 p-3.5 border border-slate-100 dark:border-slate-800/80 space-y-2.5 shadow-sm">
           {flowType === "setup" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col col-span-2">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.name}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">
+                  {slots?.name || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}
+                </span>
+              </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
                 <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}</span>
@@ -5838,6 +6099,13 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
                 </div>
               </div>
 
+              <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800/80 pt-2.5">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.timeframe || "Timeframe"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">
+                  {slots?.timeframe || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}
+                </span>
+              </div>
+
               {slots?.setup_type === "dca" && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800/80 pt-2.5">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1.5">{uiText.dcaFrequency}</span>
@@ -5856,6 +6124,15 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {(slots?.market_condition || slots?.min_macro_score !== undefined) && (
+                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800/80 pt-2.5">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
+                  <span className="text-xs text-foreground dark:text-slate-200">
+                    {getSetupMarketConditionLabel(slots?.market_condition, uiText)}
+                  </span>
                 </div>
               )}
             </div>
