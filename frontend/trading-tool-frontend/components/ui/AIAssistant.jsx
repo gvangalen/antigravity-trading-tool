@@ -706,6 +706,16 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     return suggestions.slice(0, 4);
   };
 
+  const stripSuggestedActionsSection = (text) => {
+    if (!text) return text;
+
+    const headerRegex = /(?:Volgende stappen|Suggested actions|Proactieve volgacties):/i;
+    const match = text.match(headerRegex);
+    if (!match || match.index === undefined) return text;
+
+    return text.slice(0, match.index).trim();
+  };
+
   const normalizeFollowUpActions = (items = []) => {
     if (!Array.isArray(items)) return [];
     return items
@@ -3649,13 +3659,19 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         (envelope) => {
           // onEnvelope
           if (activeStreamIdRef.current !== streamId) return;
+          const originalResponse = envelope?.response || "";
+          const sanitizedResponse = stripSuggestedActionsSection(originalResponse);
+          const extractedSuggestedActions =
+            Array.isArray(envelope?.suggested_actions) && envelope.suggested_actions.length > 0
+              ? envelope.suggested_actions
+              : parseSuggestedActions(originalResponse);
           setMessages(prev => {
             const copy = [...prev];
             const msgIndex = copy.findIndex(message => message.streamId === streamId);
             if (msgIndex >= 0 && copy[msgIndex].role === "assistant") {
               copy[msgIndex] = {
                 ...copy[msgIndex],
-                text: envelope.response,
+                text: sanitizedResponse,
                 intent: envelope.intent,
                 flow: envelope.flow,
                 action: envelope.action,
@@ -3669,7 +3685,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                 invalidFields: envelope.invalid_fields || [],
                 nextQuestion: envelope.next_question || null,
                 canConfirm: envelope.can_confirm,
-                suggestedActions: envelope.suggested_actions || [],
+                suggestedActions: extractedSuggestedActions,
                 reasoning: envelope.reasoning,
                 state: envelope.state || null,
                 summary: envelope.summary || null,
@@ -4226,6 +4242,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       reset: at("draftRows.reset"),
     };
     const isCollecting = !message.canConfirm;
+    if (isFinnStrategy && isCollecting) return null;
     const defaultPlanName = draft.asset && draft.plan_type
       ? `${draft.asset} ${draft.plan_type === "dca" ? "Smart DCA" : "Trade Plan"}`
       : null;
@@ -5238,7 +5255,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
               const hasMeaningfulProgress = !!(slots.timeframe && (slots.dca_frequency || slots.entry || slots.stop_loss || slots.base_amount));
               shouldShowCard = canConfirmActiveFlow && hasCoreChoice && hasMeaningfulProgress;
             } else if (flow === "strategy_creation") {
-              shouldShowCard = canConfirmActiveFlow && !!(slots.setup_id && (slots.base_amount || slots.base_amount_eur));
+              shouldShowCard = false;
             } else if (flow === "bot_creation") {
               shouldShowCard = canConfirmActiveFlow && !!slots.budget_total_eur;
             } else {
@@ -5273,9 +5290,13 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                     }}
                     onFinalize={() => handleChat(flow === "strategy_creation" ? "maak de strategie" : "maak de setup")}
                     onUpdateSlots={(newSlots) => {
-                      if (newSlots.setup_type) handleChat(newSlots.setup_type, true);
-                      if (newSlots.dca_frequency) handleChat(newSlots.dca_frequency, true);
-                      if (newSlots.base_amount_eur || newSlots.base_amount) handleChat(String(newSlots.base_amount_eur || newSlots.base_amount), true);
+                      if (flow === "setup_creation") {
+                        if (newSlots.setup_type) handleChat(newSlots.setup_type, true);
+                        if (newSlots.dca_frequency) handleChat(newSlots.dca_frequency, true);
+                      }
+                      if (flow === "bot_creation" && (newSlots.budget_total_eur || newSlots.budget_daily_limit_eur)) {
+                        handleChat(String(newSlots.budget_total_eur || newSlots.budget_daily_limit_eur), true);
+                      }
                     }}
                   />
                 </div>
