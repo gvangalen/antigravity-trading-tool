@@ -2220,7 +2220,7 @@ def test_one_shot_weekly_dca_stays_in_follow_up_until_schedule_and_bot_choice_ar
     result = _service().build_response("Maak een wekelijkse BTC DCA van 100 euro")
 
     assert result["can_confirm"] is False
-    assert result["missing_fields"] == ["setup.timeframe", "dca.day", "bot.create_bot"]
+    assert result["missing_fields"] == ["setup.timeframe", "dca.day"]
     assert result["invalid_fields"] == []
     assert result["draft"]["plan_type"] == "dca"
     assert result["draft"]["asset"] == "BTC"
@@ -2963,6 +2963,51 @@ def test_strategy_setup_options_are_rendered_in_missing_setup_question():
     assert "setup 10" in message
     assert "BTC DCA" in message
     assert "setup 11" in message
+
+
+def test_strategy_dca_amount_question_uses_human_per_purchase_wording():
+    service = _service()
+    draft = {
+        "setup_id": 12,
+        "setup_type": "dca",
+        "asset": "BTC",
+        "timeframe": "1W",
+        "strategy": {},
+    }
+
+    message = service._build_strategy_message(
+        draft,
+        {
+            "missing_fields": ["strategy.base_amount_eur"],
+            "invalid_fields": [],
+            "next_question": "strategy.base_amount_eur",
+            "can_confirm": False,
+        },
+    )
+
+    assert "per aankoop" in message
+    assert "100 euro" in message
+    assert "basisbedrag in euro" not in message.lower()
+
+
+def test_strategy_summary_prefers_setup_name_over_raw_setup_id_only():
+    service = _service()
+    draft = {
+        "operation": "create",
+        "setup_id": 258,
+        "setup_name": "Bitcoin test DCA",
+        "setup_type": "dca",
+        "asset": "BTC",
+        "timeframe": "1W",
+        "strategy": {
+            "base_amount_eur": 100,
+        },
+    }
+
+    summary = service._strategy_summary(draft)
+
+    assert "Bitcoin test DCA (#258)" in summary
+    assert "Bedrag per uitvoering: €100" in summary
 
 
 def test_strategy_update_changes_are_summarized():

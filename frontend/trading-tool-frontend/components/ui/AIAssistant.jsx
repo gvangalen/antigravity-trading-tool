@@ -873,27 +873,30 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       const bySlot = {
         setup_id: [
           {
-            label: at("followUps.strategy.chooseSetup", "Kies je setup"),
-            prompt: at("followUps.strategy.chooseSetupPrompt", "Gebruik mijn bestaande BTC setup als basis voor deze strategie."),
+            label: at("followUps.strategy.chooseSetup", "Gebruik mijn setup"),
+            prompt: at(
+              "followUps.strategy.chooseSetupPrompt",
+              `Gebruik mijn bestaande ${symbol} setup als basis voor deze strategie.`
+            ),
           },
         ],
         "strategy.base_amount_eur": [
           {
-            label: at("followUps.strategy.amount100", "Gebruik 100 euro"),
+            label: at("followUps.strategy.amount100", "100 euro per keer"),
             prompt: at("followUps.strategy.amount100Prompt", "Gebruik 100 euro per uitvoering."),
           },
           {
-            label: at("followUps.strategy.amount250", "Gebruik 250 euro"),
+            label: at("followUps.strategy.amount250", "250 euro per keer"),
             prompt: at("followUps.strategy.amount250Prompt", "Gebruik 250 euro per uitvoering."),
           },
         ],
         base_amount: [
           {
-            label: at("followUps.strategy.amount100", "Gebruik 100 euro"),
+            label: at("followUps.strategy.amount100", "100 euro per keer"),
             prompt: at("followUps.strategy.amount100Prompt", "Gebruik 100 euro per uitvoering."),
           },
           {
-            label: at("followUps.strategy.amount250", "Gebruik 250 euro"),
+            label: at("followUps.strategy.amount250", "250 euro per keer"),
             prompt: at("followUps.strategy.amount250Prompt", "Gebruik 250 euro per uitvoering."),
           },
         ],
@@ -4285,7 +4288,12 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       isFinnBot ? [draftRowsText.action, draft.operation === "update" ? draftRowsText.update : draftRowsText.create] : null,
       isFinnBot && draft.operation === "update" ? [draftRowsText.botId, draft.bot_id ? `#${draft.bot_id}` : null] : null,
       isFinnBot ? [draftRowsText.strategy, draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
-      isFinnStrategy ? [draftRowsText.setup, draft.setup_id ? `#${draft.setup_id}` : null] : null,
+      isFinnStrategy
+        ? [
+            draftRowsText.setup,
+            draft.setup_name && draft.setup_id ? `${draft.setup_name} (#${draft.setup_id})` : (draft.setup_id ? `#${draft.setup_id}` : null),
+          ]
+        : null,
       isFinnStrategy && draft.operation === "update" ? [draftRowsText.strategy, draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
       isFinnStrategy ? [draftRowsText.setupType, valueLabel(draft.setup_type, draft.setup_type)] : null,
       isFinnBot ? [draftRowsText.bot, bot.name] : null,

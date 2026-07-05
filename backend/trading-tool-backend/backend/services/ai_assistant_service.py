@@ -1788,7 +1788,18 @@ class AiAssistantService:
 
         # Base Amount
         # Look for eur inleg, e.g. "€100", "100 eur", "inleg van 100", "inleg: 100", "inleg 100"
-        if nums and any(w in q_lower for w in ["€", "eur", "inleg", "bedrag", "euro", "order", "inleg:"]):
+        # For strategy follow-ups we also accept a plain numeric answer like "100".
+        should_capture_base_amount = bool(
+            nums
+            and (
+                any(w in q_lower for w in ["€", "eur", "inleg", "bedrag", "euro", "order", "inleg:"])
+                or (
+                    flow_name == "strategy_creation"
+                    and next_expected_slot in {"strategy.base_amount_eur", "base_amount"}
+                )
+            )
+        )
+        if should_capture_base_amount:
             slots["base_amount"] = nums[0]
             if flow_name == "strategy_creation":
                 slots["base_amount_eur"] = nums[0]
