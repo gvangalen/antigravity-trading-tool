@@ -642,7 +642,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const flowSlots = {
       user_onboarding: ["experience_level", "risk_profile", "investment_goals"],
       setup_creation: ["symbol", "setup_type", "timeframe", "market_condition"],
-      strategy_creation: ["symbol", "setup_type", "base_amount", "entry", "targets", "stop_loss"],
+      strategy_creation: ["setup_id", "base_amount_eur", "entry", "targets", "stop_loss"],
       bot_creation: ["name", "budget_total_eur"],
       macro_analysis_walkthrough: ["symbol"],
       technical_analysis_walkthrough: ["symbol"],
@@ -881,6 +881,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           {
             label: at("followUps.strategy.amount100", "Gebruik 100 euro"),
             prompt: at("followUps.strategy.amount100Prompt", "Gebruik 100 euro per uitvoering."),
+          },
+          {
+            label: at("followUps.strategy.amount250", "Gebruik 250 euro"),
+            prompt: at("followUps.strategy.amount250Prompt", "Gebruik 250 euro per uitvoering."),
           },
         ],
       };
@@ -4293,7 +4297,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       if (!isCollecting) return true;
       return hasMeaningfulValue(value);
     });
-    const shouldRenderDraftRows = rows.length > 0;
+    const shouldRenderDraftRows = rows.length > 0 && !(isFinnStrategy && isCollecting);
 
     return (
       <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-4">

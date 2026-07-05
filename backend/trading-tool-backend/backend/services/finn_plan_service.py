@@ -9168,8 +9168,14 @@ class FinnPlanService:
                 lines.extend([f"- {reason}" for reason in reasons[:4]])
             lines.append("Zeg 'bewuste override' als je dit alsnog wilt bevestigen, of 'annuleer' om te stoppen.")
             return "\n".join(lines)
-        summary = self._strategy_summary(draft)
-        return f"Ik heb je strategie klaarstaan. Controleer dit even en bevestig als het klopt:\n\n{summary}"
+        asset = draft.get("asset") or "dit asset"
+        timeframe = draft.get("timeframe") or "je gekozen timeframe"
+        setup_type = draft.get("setup_type")
+        strategy_label = "DCA-strategie" if setup_type == "dca" else "strategie"
+        return (
+            f"Ik heb je {strategy_label} voor {asset} op {timeframe} klaargezet. "
+            "Controleer de samenvatting hieronder en bevestig alleen als dit echt klopt."
+        )
 
     def _strategy_summary(self, draft: Dict[str, Any]) -> str:
         strategy = draft.get("strategy") or {}

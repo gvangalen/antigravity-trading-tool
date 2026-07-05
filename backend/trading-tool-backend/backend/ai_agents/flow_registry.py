@@ -108,16 +108,8 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "strategy_creation": {
         "page": "/strategy",
         "assistant_role": "Strategie Architect",
-        "required_slots": ["symbol", "setup_type", "base_amount", "risk_profile"],
+        "required_slots": ["setup_id", "base_amount"],
         "conditional_slots": {
-            "dca_mode": {
-                "depends_on": "setup_type",
-                "equals_value": "dca"
-            },
-            "buy_score_threshold": {
-                "depends_on": "dca_mode",
-                "equals_value": "custom"
-            },
             "entry": {
                 "depends_on": "setup_type",
                 "equals_value": "trade"
@@ -133,49 +125,29 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         },
         "question_sequence": [
             {
-                "slot": "symbol",
-                "question_beginner": "Welke asset?",
-                "question_advanced": "Welke asset?"
-            },
-            {
-                "slot": "setup_type",
-                "question_beginner": "DCA of trade?",
-                "question_advanced": "DCA of trade?"
+                "slot": "setup_id",
+                "question_beginner": "Voor welke setup wil je deze strategie maken?",
+                "question_advanced": "Voor welke setup wil je deze strategie maken?"
             },
             {
                 "slot": "base_amount",
-                "question_beginner": "Basisbedrag?",
-                "question_advanced": "Basisbedrag?"
-            },
-            {
-                "slot": "dca_mode",
-                "question_beginner": "Wil je een standaard DCA (vast bedrag) of een custom DCA (Smart DCA met custom rules voor slim kopen)?",
-                "question_advanced": "Standaard of Custom (Smart) DCA?"
-            },
-            {
-                "slot": "buy_score_threshold",
-                "question_beginner": "Bij welke marktscore wil je extra bijkopen? (bijv. onder de 30)",
-                "question_advanced": "Koop-score drempel?"
-            },
-            {
-                "slot": "risk_profile",
-                "question_beginner": "Welk risicoprofiel wil je hanteren? (conservative, balanced of aggressive)",
-                "question_advanced": "Risicoprofiel?"
+                "question_beginner": "Met welk basisbedrag in euro wil je deze strategie uitvoeren?",
+                "question_advanced": "Met welk basisbedrag in euro wil je deze strategie uitvoeren?"
             },
             {
                 "slot": "entry",
-                "question_beginner": "Gewenste entry?",
-                "question_advanced": "Gewenste entry?"
+                "question_beginner": "Welke entry hoort bij deze trade-strategie?",
+                "question_advanced": "Welke entry hoort bij deze trade-strategie?"
             },
             {
                 "slot": "targets",
-                "question_beginner": "Targets?",
-                "question_advanced": "Targets?"
+                "question_beginner": "Welke target(s) wil je gebruiken?",
+                "question_advanced": "Welke target(s) wil je gebruiken?"
             },
             {
                 "slot": "stop_loss",
-                "question_beginner": "Stop-loss?",
-                "question_advanced": "Stop-loss?"
+                "question_beginner": "Welke stop-loss wil je gebruiken?",
+                "question_advanced": "Welke stop-loss wil je gebruiken?"
             }
         ],
         "draft_type": "strategy",

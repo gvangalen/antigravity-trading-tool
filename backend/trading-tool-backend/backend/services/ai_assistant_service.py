@@ -1790,6 +1790,8 @@ class AiAssistantService:
         # Look for eur inleg, e.g. "€100", "100 eur", "inleg van 100", "inleg: 100", "inleg 100"
         if nums and any(w in q_lower for w in ["€", "eur", "inleg", "bedrag", "euro", "order", "inleg:"]):
             slots["base_amount"] = nums[0]
+            if flow_name == "strategy_creation":
+                slots["base_amount_eur"] = nums[0]
             updated = True
 
         # Entry Price
