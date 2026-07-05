@@ -9,6 +9,7 @@ import backend.services.finn_plan_service as finn_plan_module
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.finn_plan_service import _utc_now
 from backend.services.finn_plan_service import empty_indicator_config_draft
+from backend.services.finn_plan_service import empty_plan_draft
 from backend.services.ai_action_engine import _utc_db_timestamp
 from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.strategy_service import StrategyService
@@ -206,6 +207,27 @@ def test_sanitize_context_keeps_bot_draft_for_real_transactional_follow_up():
 
     assert sanitized["finn_draft"]["draft_kind"] == "bot"
     assert sanitized["current_flow"] == "bot_creation"
+
+
+def test_sanitize_context_keeps_strategy_draft_for_short_risk_profile_answer():
+    service = _service()
+    context = {
+        "finn_draft": {
+            "draft_kind": "strategy",
+            "operation": "create",
+            "setup_id": 257,
+        },
+        "finn_state": {
+            "current_flow": "strategy_creation",
+            "updated_at": _utc_now().isoformat(),
+        },
+        "current_flow": "strategy_creation",
+    }
+
+    sanitized = service.sanitize_context_for_query("balanced", context)
+
+    assert sanitized["finn_draft"]["draft_kind"] == "strategy"
+    assert sanitized["current_flow"] == "strategy_creation"
 
 
 def test_sanitize_context_drops_stale_plan_draft_for_setup_explain_prompt():
@@ -428,7 +450,7 @@ def test_build_product_help_response_includes_supported_and_not_supported_capabi
     assert result["intent"] == "product_help"
     assert result["flow"] == "product_help"
     assert result["analysis"]["product_help"]["current_entity"]["strategy_id"] == 257
-    assert "watchlist_wijzigen_via_finn" in result["analysis"]["product_help"]["not_supported_yet"]
+    assert "brede_portfolio_mutaties" in result["analysis"]["product_help"]["not_supported_yet"]
     assert "uitleg van je huidige scherm" in result["response"]
 
 
@@ -1538,7 +1560,7 @@ def test_multi_turn_regression_pack_preserves_transactional_turns_without_hijack
     first_response, first_context = asyncio.run(_route_turn(
         service,
         30,
-        "Maak een wekelijkse BTC setup voor een breakout long",
+        "Maak een wekelijkse BTC DCA van 100 euro",
         {"page": "/dashboard", "page_type": "Dashboard", "symbol": "BTC"},
     ))
     assert _MemoryStateRepo.store[30]["current_flow"] == "plan_creation"
@@ -2194,19 +2216,19 @@ def test_mission_control_backfills_behavioral_balance_score_from_memory(monkeypa
     assert result["behavioral_balance_score"] is not None
 
 
-def test_one_shot_weekly_dca_is_confirmable_and_creates_bot_by_default():
+def test_one_shot_weekly_dca_stays_in_follow_up_until_schedule_and_bot_choice_are_clear():
     result = _service().build_response("Maak een wekelijkse BTC DCA van 100 euro")
 
-    assert result["can_confirm"] is True
-    assert result["missing_fields"] == []
+    assert result["can_confirm"] is False
+    assert result["missing_fields"] == ["setup.timeframe", "dca.day", "bot.create_bot"]
     assert result["invalid_fields"] == []
     assert result["draft"]["plan_type"] == "dca"
     assert result["draft"]["asset"] == "BTC"
     assert result["draft"]["dca"]["frequency"] == "weekly"
-    assert result["draft"]["dca"]["day"] == "monday"
     assert result["draft"]["strategy"]["base_amount_eur"] == 100
-    assert result["draft"]["bot"]["create_bot"] is True
-    assert result["actions"][0]["type"] == "create_plan"
+    assert result["draft"]["bot"]["create_bot"] is None
+    assert result["next_question"] == "setup.timeframe"
+    assert result["actions"] == []
 
 
 def test_dca_follow_up_merges_missing_amount_into_existing_draft():
@@ -2214,17 +2236,17 @@ def test_dca_follow_up_merges_missing_amount_into_existing_draft():
     first = service.build_response("Maak een wekelijkse ETH DCA")
 
     assert first["can_confirm"] is False
-    assert first["next_question"] == "strategy.base_amount_eur"
+    assert first["next_question"] == "setup.timeframe"
 
     second = service.build_response(
         "Doe maar 75 euro",
         {"finn_draft": first["draft"]},
     )
 
-    assert second["can_confirm"] is True
+    assert second["can_confirm"] is False
     assert second["draft"]["asset"] == "ETH"
     assert second["draft"]["strategy"]["base_amount_eur"] == 75
-    assert second["actions"][0]["payload"]["bot"]["create_bot"] is True
+    assert second["next_question"] == "setup.timeframe"
 
 
 def test_short_plan_follow_up_phrase_is_recognized_with_existing_draft():
@@ -2236,8 +2258,8 @@ def test_short_plan_follow_up_phrase_is_recognized_with_existing_draft():
     second = service.build_response("elke week", {"finn_draft": first["draft"]})
 
     assert second["draft"]["dca"]["frequency"] == "weekly"
-    assert second["next_question"] == "strategy.base_amount_eur"
-    assert second["response"] == "Met welk basisbedrag in euro wil je dit plan uitvoeren?"
+    assert second["next_question"] == "setup.timeframe"
+    assert second["response"] == "Welke timeframe hoort bij dit plan? Bijvoorbeeld 1W voor DCA of 4H/1D voor een trade. Daarna vraag ik pas de volgende ontbrekende keuze."
 
 
 def test_short_plan_follow_up_amount_is_recognized_with_existing_draft():
@@ -2333,7 +2355,8 @@ def test_trade_plan_with_entry_stop_and_targets_is_confirmable():
     assert result["draft"]["strategy"]["entry"] == 160
     assert result["draft"]["strategy"]["stop_loss"] == 145
     assert result["draft"]["strategy"]["targets"] == [180, 200]
-    assert result["draft"]["bot"]["automation"] == "bot_assisted"
+    assert result["draft"]["bot"]["create_bot"] is None
+    assert result["draft"]["bot"]["automation"] is None
 
 
 def test_trade_plan_understands_natural_breakout_language():
@@ -2372,7 +2395,6 @@ def test_trade_plan_supports_manual_only_without_bot():
     assert result["draft"]["bot"]["create_bot"] is False
     assert result["draft"]["bot"]["automation"] == "manual_only"
     assert "Bot:" not in result["response"]
-    assert "Automatisering: manual_only" in result["response"]
 
 
 def test_trade_plan_supports_bot_assisted_modes():
@@ -3088,6 +3110,91 @@ def test_strategy_market_execution_requires_explicit_ack():
     assert second["draft"]["strategy"]["market_execution_ack"] is True
 
 
+def test_strategy_flow_autoselects_single_matching_setup(monkeypatch):
+    service = _service()
+    service.session = object()
+
+    class _SetupRepo:
+        async def get_all_setups(self, user_id, setup_type=None):
+            return [{
+                "id": 236,
+                "name": "BTC Swing Blueprint",
+                "symbol": "BTC",
+                "timeframe": "1W",
+                "setup_type": "trade",
+            }]
+
+        async def get_setup_by_id(self, setup_id, user_id):
+            return {
+                "id": setup_id,
+                "name": "BTC Swing Blueprint",
+                "symbol": "BTC",
+                "timeframe": "1W",
+                "setup_type": "trade",
+            }
+
+    class _SetupService:
+        def __init__(self, session):
+            self.repository = _SetupRepo()
+
+    class _StrategyRepo:
+        async def get_strategy_by_setup(self, setup_id, user_id):
+            return None
+
+    class _StrategyService:
+        def __init__(self, session):
+            self.repository = _StrategyRepo()
+
+    monkeypatch.setattr(finn_plan_module, "SetupService", _SetupService)
+    monkeypatch.setattr(finn_plan_module, "StrategyService", _StrategyService)
+
+    response = asyncio.run(service.build_strategy_response_for_user(
+        5,
+        "Maak hier een strategie van met duidelijke entry, invalidatie en risk management.",
+        {"asset": "BTC"},
+    ))
+
+    assert response["draft"]["setup_id"] == 236
+    assert response["state"]["setup_id"] == 236
+    assert response["next_question"] == "strategy.base_amount_eur"
+    assert "setup_id" not in response["missing_fields"]
+
+
+def test_strategy_flow_state_exposes_normalized_slots_for_ui():
+    service = _service()
+
+    draft = {
+        "setup_id": 12,
+        "setup_type": "dca",
+        "asset": "BTC",
+        "timeframe": "1W",
+        "strategy": {
+            "base_amount_eur": 100,
+        },
+    }
+    validation = {
+        "can_confirm": True,
+        "missing_fields": [],
+        "next_question": None,
+    }
+
+    state = service._strategy_flow_state(draft, validation)
+
+    assert state["current_flow"] == "strategy_creation"
+    assert state["setup_id"] == 12
+    assert state["timeframe"] == "1W"
+    assert state["base_amount"] == 100
+    assert state["base_amount_eur"] == 100
+    assert state["slots"]["setup_id"] == 12
+    assert state["slots"]["symbol"] == "BTC"
+    assert state["slots"]["setup_type"] == "dca"
+    assert state["slots"]["timeframe"] == "1W"
+    assert state["slots"]["base_amount"] == 100
+    assert state["slots"]["base_amount_eur"] == 100
+    assert state["missing_slots"] == []
+    assert state["can_confirm"] is True
+
+
 def test_read_after_write_marks_absent_bot_as_not_verified_but_valid():
     result = asyncio.run(_service()._verify_created_objects(
         user_id=1,
@@ -3184,7 +3291,7 @@ def test_user_can_correct_asset_and_amount_in_follow_up():
 
     corrected = service.build_response("Nee toch ETH en 50 euro", {"finn_draft": first["draft"]})
 
-    assert corrected["can_confirm"] is True
+    assert corrected["can_confirm"] is False
     assert corrected["draft"]["asset"] == "ETH"
     assert corrected["draft"]["strategy"]["base_amount_eur"] == 50
 
@@ -3196,9 +3303,9 @@ def test_user_can_disable_bot_explicitly():
 
     result = service.build_response("Maak een wekelijkse BTC DCA van 100 euro zonder bot")
 
-    assert result["can_confirm"] is True
+    assert result["can_confirm"] is False
     assert result["draft"]["bot"]["create_bot"] is False
-    assert "Bot:" not in result["response"]
+    assert result["next_question"] == "setup.timeframe"
 
 
 def test_bot_strategy_switch_resets_previous_bot_state():
@@ -3318,11 +3425,10 @@ def test_draft_status_analysis_explains_score_ranges():
 def test_plan_response_includes_state_reasoning_and_guardrails():
     result = _service().build_response("Maak een wekelijkse BTC DCA van 100 euro")
 
-    assert result["state"]["status"] == "ready_for_confirmation"
+    assert result["state"]["status"] == "collecting"
     assert result["state"]["autonomy_level"] == "confirm_required"
-    assert result["reasoning"]["confidence_score"] == 0.9
-    assert result["actions"][0]["guardrails"]["can_execute_without_user"] is False
-    assert result["actions"][0]["risk_level"] == "low"
+    assert result["reasoning"]["confidence_score"] == 0.55
+    assert result["actions"] == []
 
 
 def test_live_bot_action_is_high_risk():
@@ -3690,6 +3796,8 @@ def test_daily_coach_request_detection_is_separate_from_status_and_plan_creation
     assert service.looks_like_plan_request("Geef mijn daily brief") is False
     assert service.looks_like_status_request("Welke score blokkeert mijn BTC setup?") is True
     assert service.looks_like_daily_coach_request("Welke score blokkeert mijn BTC setup?") is False
+    assert service.looks_like_daily_coach_request("Maak een setup voor BTC swing trading met daily trend en 4H entry") is False
+    assert service.looks_like_plan_request("Maak een setup voor BTC swing trading met daily trend en 4H entry") is True
     assert service.looks_like_daily_score_refresh_request("Ververs daily scores voor BTC") is True
     assert service.looks_like_bot_decision_request("Maak bot-decision voor BTC") is True
 

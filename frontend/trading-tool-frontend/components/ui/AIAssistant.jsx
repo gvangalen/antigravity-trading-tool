@@ -109,6 +109,10 @@ function buildAssistantUiText(at) {
     actionSucceeded: at("uiText.actionSucceeded"),
     asset: at("uiText.asset"),
     setupType: at("uiText.setupType"),
+    marketCondition: at("uiText.marketCondition"),
+    marketConditionConfirmedStrength: at("uiText.marketConditionConfirmedStrength"),
+    marketConditionBalancedPullback: at("uiText.marketConditionBalancedPullback"),
+    marketConditionEarlyDip: at("uiText.marketConditionEarlyDip"),
     dcaParameters: at("uiText.dcaParameters"),
     scoreThresholds: at("uiText.scoreThresholds"),
     baseBudget: at("uiText.baseBudget"),
@@ -172,6 +176,44 @@ function buildAssistantUiText(at) {
     botDecisionSkippedVerified: at("uiText.botDecisionSkippedVerified"),
     defaultBotName: at("uiText.defaultBotName"),
   };
+}
+
+function getSetupMarketConditionLabel(condition, uiText) {
+  switch (condition) {
+    case "confirmed_strength":
+      return uiText.marketConditionConfirmedStrength;
+    case "balanced_pullback":
+      return uiText.marketConditionBalancedPullback;
+    case "early_dip":
+      return uiText.marketConditionEarlyDip;
+    default:
+      return condition || "—";
+  }
+}
+
+function inferSetupMarketConditionFromScores(payload = {}) {
+  const minMacro = Number(payload?.min_macro_score);
+  const maxMacro = Number(payload?.max_macro_score);
+  const minTechnical = Number(payload?.min_technical_score);
+  const maxTechnical = Number(payload?.max_technical_score);
+  const minMarket = Number(payload?.min_market_score);
+  const maxMarket = Number(payload?.max_market_score);
+
+  if ([minMacro, maxMacro, minTechnical, maxTechnical, minMarket, maxMarket].some((value) => Number.isNaN(value))) {
+    return null;
+  }
+
+  if (minMacro === 40 && maxMacro === 100 && minTechnical === 55 && maxTechnical === 100 && minMarket === 35 && maxMarket === 100) {
+    return "confirmed_strength";
+  }
+  if (minMacro === 30 && maxMacro === 70 && minTechnical === 40 && maxTechnical === 80 && minMarket === 20 && maxMarket === 60) {
+    return "balanced_pullback";
+  }
+  if (minMacro === 10 && maxMacro === 65 && minTechnical === 20 && maxTechnical === 75 && minMarket === 10 && maxMarket === 55) {
+    return "early_dip";
+  }
+
+  return null;
 }
 
 function AIAssistantContent({ isOpen, setIsOpen }) {
@@ -599,7 +641,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     
     const flowSlots = {
       user_onboarding: ["experience_level", "risk_profile", "investment_goals"],
-      setup_creation: ["symbol", "setup_type", "dca_frequency"],
+      setup_creation: ["symbol", "setup_type", "timeframe", "market_condition"],
       strategy_creation: ["symbol", "setup_type", "base_amount", "entry", "targets", "stop_loss"],
       bot_creation: ["name", "budget_total_eur"],
       macro_analysis_walkthrough: ["symbol"],
@@ -618,7 +660,10 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     let totalSlots = slots.length;
     const setupType = state.slots?.setup_type;
     if (state.current_flow === "setup_creation" && setupType === "trade") {
-      totalSlots = 2; // symbol, setup_type (no dca_frequency)
+      totalSlots = 4; // symbol, setup_type, timeframe, market_condition
+    }
+    if (state.current_flow === "setup_creation" && setupType === "dca") {
+      totalSlots = 5; // symbol, setup_type, timeframe, dca_frequency, market_condition
     }
     if (state.current_flow === "strategy_creation" && setupType === "dca") {
       totalSlots = 3; // symbol, setup_type, base_amount
@@ -683,8 +728,267 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       .slice(0, 5);
   };
 
+  const getSetupFlowSlots = (state = {}) => {
+    const rawSlots = state?.slots || {};
+    return {
+      symbol: rawSlots.symbol || state?.asset || state?.symbol || null,
+      setup_type: rawSlots.setup_type || state?.setup_type || null,
+      timeframe: rawSlots.timeframe || state?.timeframe || null,
+      name: rawSlots.name || state?.name || null,
+      dca_frequency: rawSlots.dca_frequency || state?.dca_frequency || null,
+      dca_day: rawSlots.dca_day || state?.dca_day || null,
+      dca_month_day: rawSlots.dca_month_day || state?.dca_month_day || null,
+      market_condition: rawSlots.market_condition || state?.market_condition || null,
+    };
+  };
+
+  const getMissingSetupSlots = (slots = {}) => {
+    const missing = [];
+    if (!slots.setup_type) {
+      missing.push("setup_type");
+      return missing;
+    }
+    if (!slots.timeframe) {
+      missing.push("timeframe");
+    }
+    if (!slots.name) {
+      missing.push("name");
+    }
+    if (String(slots.setup_type || "").toLowerCase() === "dca") {
+      if (!slots.dca_frequency) {
+        missing.push("dca_frequency");
+      } else if (slots.dca_frequency === "weekly" && !slots.dca_day) {
+        missing.push("dca_day");
+      } else if (slots.dca_frequency === "monthly" && !slots.dca_month_day) {
+        missing.push("dca_month_day");
+      }
+    }
+    if (!slots.market_condition) {
+      missing.push("market_condition");
+    }
+    return missing;
+  };
+
+  const getEffectiveSetupNextQuestion = (state = {}) => {
+    const slots = getSetupFlowSlots(state);
+    const missing = getMissingSetupSlots(slots);
+    const declaredNext = state?.next_question || null;
+
+    if (missing.length === 0) {
+      return declaredNext;
+    }
+    if (declaredNext && missing.includes(declaredNext)) {
+      return declaredNext;
+    }
+    if (
+      declaredNext &&
+      [
+        "min_macro_score",
+        "max_macro_score",
+        "min_technical_score",
+        "max_technical_score",
+        "min_market_score",
+        "max_market_score",
+      ].includes(declaredNext) &&
+      missing.includes("market_condition")
+    ) {
+      return "market_condition";
+    }
+    return missing[0];
+  };
+
+  const getStrategyFlowSlots = (state = {}) => {
+    const rawSlots = state?.slots || {};
+    return {
+      symbol: rawSlots.symbol || state?.asset || state?.symbol || null,
+      setup_id: rawSlots.setup_id || state?.setup_id || null,
+      setup_type: rawSlots.setup_type || state?.setup_type || null,
+      timeframe: rawSlots.timeframe || state?.timeframe || null,
+      base_amount: rawSlots.base_amount || rawSlots.base_amount_eur || state?.base_amount || state?.base_amount_eur || null,
+      base_amount_eur: rawSlots.base_amount_eur || rawSlots.base_amount || state?.base_amount_eur || state?.base_amount || null,
+      entry_type: rawSlots.entry_type || state?.entry_type || null,
+      entry: rawSlots.entry || state?.entry || null,
+      stop_loss: rawSlots.stop_loss || state?.stop_loss || null,
+      targets: rawSlots.targets || state?.targets || null,
+      automation: rawSlots.automation || state?.automation || null,
+    };
+  };
+
+  const getMissingStrategySlots = (slots = {}) => {
+    const missing = [];
+    if (!slots.setup_id) {
+      missing.push("setup_id");
+      return missing;
+    }
+    if (!slots.base_amount_eur && !slots.base_amount) {
+      missing.push("strategy.base_amount_eur");
+    }
+    return missing;
+  };
+
+  const getEffectiveStrategyNextQuestion = (state = {}) => {
+    const slots = getStrategyFlowSlots(state);
+    const missing = getMissingStrategySlots(slots);
+    const declaredNext = state?.next_question || null;
+
+    if (missing.length === 0) {
+      return declaredNext;
+    }
+    if (declaredNext && missing.includes(declaredNext)) {
+      return declaredNext;
+    }
+    if (declaredNext === "base_amount" && missing.includes("strategy.base_amount_eur")) {
+      return "strategy.base_amount_eur";
+    }
+    return missing[0];
+  };
+
+  const buildTransactionalFollowUpActions = (message) => {
+    const state = message?.state;
+    if (!state?.current_flow) return [];
+    const flow = state.current_flow;
+    const slots =
+      flow === "strategy_creation"
+        ? getStrategyFlowSlots(state)
+        : getSetupFlowSlots(state);
+    const nextQuestion =
+      flow === "strategy_creation"
+        ? getEffectiveStrategyNextQuestion(state)
+        : getEffectiveSetupNextQuestion(state);
+    const symbol = slots.symbol || context.symbol || globalSymbol || "BTC";
+
+    if (!["setup_creation", "strategy_creation"].includes(flow)) return [];
+
+    if (flow === "strategy_creation") {
+      const bySlot = {
+        setup_id: [
+          {
+            label: at("followUps.strategy.chooseSetup", "Kies je setup"),
+            prompt: at("followUps.strategy.chooseSetupPrompt", "Gebruik mijn bestaande BTC setup als basis voor deze strategie."),
+          },
+        ],
+        "strategy.base_amount_eur": [
+          {
+            label: at("followUps.strategy.amount100", "Gebruik 100 euro"),
+            prompt: at("followUps.strategy.amount100Prompt", "Gebruik 100 euro per uitvoering."),
+          },
+          {
+            label: at("followUps.strategy.amount250", "Gebruik 250 euro"),
+            prompt: at("followUps.strategy.amount250Prompt", "Gebruik 250 euro per uitvoering."),
+          },
+        ],
+        base_amount: [
+          {
+            label: at("followUps.strategy.amount100", "Gebruik 100 euro"),
+            prompt: at("followUps.strategy.amount100Prompt", "Gebruik 100 euro per uitvoering."),
+          },
+        ],
+      };
+
+      if (state?.status === "collecting" && nextQuestion && bySlot[nextQuestion]) {
+        return normalizeFollowUpActions(bySlot[nextQuestion]);
+      }
+
+      if (state?.status === "collecting") {
+        return [];
+      }
+
+      if (message?.intent === "strategy_created") {
+        return normalizeFollowUpActions([
+          at("followUps.strategy.review", `Bekijk je strategie voor ${symbol}`),
+          at("followUps.strategy.nextBot", `Ga door naar bot voor ${symbol}`),
+        ]);
+      }
+
+      return [];
+    }
+
+    const setupType = String(slots.setup_type || "").toLowerCase();
+    const marketConditionActions = [
+      { label: uiText.followUpConfirmedStrength, prompt: uiText.followUpConfirmedStrengthPrompt.replace("{symbol}", symbol) },
+      { label: uiText.followUpBalancedPullback, prompt: uiText.followUpBalancedPullbackPrompt.replace("{symbol}", symbol) },
+      { label: uiText.followUpEarlyDip, prompt: uiText.followUpEarlyDipPrompt.replace("{symbol}", symbol) },
+    ];
+
+    const bySlot = {
+      setup_type: [
+        { label: uiText.followUpChooseDca, prompt: uiText.followUpChooseDcaPrompt.replace("{symbol}", symbol) },
+        { label: uiText.followUpChooseTrade, prompt: uiText.followUpChooseTradePrompt.replace("{symbol}", symbol) },
+      ],
+      dca_frequency: [
+        { label: uiText.followUpDaily, prompt: uiText.followUpDailyPrompt },
+        { label: uiText.followUpWeekly, prompt: uiText.followUpWeeklyPrompt },
+        { label: uiText.followUpMonthly, prompt: uiText.followUpMonthlyPrompt },
+      ],
+      dca_day: [
+        { label: uiText.followUpMonday, prompt: uiText.followUpMondayPrompt },
+        { label: uiText.followUpTuesday, prompt: uiText.followUpTuesdayPrompt },
+        { label: uiText.followUpWednesday, prompt: uiText.followUpWednesdayPrompt },
+      ],
+      dca_month_day: [
+        { label: uiText.followUpFirstOfMonth, prompt: uiText.followUpFirstOfMonthPrompt },
+        { label: uiText.followUpFifthOfMonth, prompt: uiText.followUpFifthOfMonthPrompt },
+        { label: uiText.followUpFifteenthOfMonth, prompt: uiText.followUpFifteenthOfMonthPrompt },
+      ],
+      timeframe:
+        setupType === "dca"
+          ? [
+              { label: uiText.followUpWeeklyTimeframe, prompt: uiText.followUpWeeklyTimeframePrompt },
+              { label: uiText.followUpMonthlyTimeframe, prompt: uiText.followUpMonthlyTimeframePrompt },
+            ]
+          : [
+              { label: uiText.followUpFourHourTimeframe, prompt: uiText.followUpFourHourTimeframePrompt },
+              { label: uiText.followUpDailyTimeframe, prompt: uiText.followUpDailyTimeframePrompt },
+            ],
+      name: [
+        {
+          label: uiText.followUpNameSetup,
+          prompt: setupType === "dca"
+            ? uiText.followUpNameDcaExample.replace("{symbol}", symbol)
+            : uiText.followUpNameTradeExample.replace("{symbol}", symbol),
+        },
+      ],
+      market_condition: marketConditionActions,
+      min_macro_score: marketConditionActions,
+      max_macro_score: marketConditionActions,
+      min_technical_score: marketConditionActions,
+      max_technical_score: marketConditionActions,
+      min_market_score: marketConditionActions,
+      max_market_score: [
+        { label: uiText.followUpFinalizeSetup, prompt: uiText.followUpFinalizeSetupPrompt },
+      ],
+    };
+
+    if (state?.status === "collecting" && nextQuestion && bySlot[nextQuestion]) {
+      return normalizeFollowUpActions(bySlot[nextQuestion]);
+    }
+
+    if (state?.status === "collecting") {
+      return [];
+    }
+
+    if (message?.intent === "plan_created" || message?.intent === "setup_created") {
+      return normalizeFollowUpActions([
+        `Bekijk je setup voor ${symbol}`,
+        `Ga door naar strategie voor ${symbol}`,
+      ]);
+    }
+
+    return [];
+  };
+
   const getMessageFollowUpActions = (message) => {
     if (Array.isArray(message?.actions) && message.actions.some((action) => action?.requires_confirmation)) {
+      return [];
+    }
+    const transactionalActions = buildTransactionalFollowUpActions(message);
+    if (transactionalActions.length > 0) {
+      return transactionalActions;
+    }
+    if (
+      ["setup_creation", "strategy_creation"].includes(message?.state?.current_flow) &&
+      message?.state?.status === "collecting"
+    ) {
       return [];
     }
     const controllerAction = message?.state?.analysis?.agent_controller?.primary_action || message?.state?.agent_controller?.primary_action;
@@ -3048,13 +3352,24 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
   useEffect(() => {
     const handleTrigger = (e) => {
-      const { query: queryText, openAssistant, metric, symbol, timeframe } = e.detail || {};
+      const {
+        query: queryText,
+        hiddenPrompt,
+        openAssistant,
+        metric,
+        symbol,
+        timeframe,
+      } = e.detail || {};
       if (openAssistant) {
         setIsOpen(true);
       }
       if (metric) {
         setContextMetric({ metric, symbol: symbol || globalSymbol || "BTC", timeframe: timeframe || "1W" });
         setIsOpen(true);
+      }
+      if (hiddenPrompt) {
+        handleChat(hiddenPrompt, true);
+        return;
       }
       if (queryText) {
         handleChat(queryText);
@@ -3086,7 +3401,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       if (!envelope?.has_draft || !envelope.draft) return;
 
       setFinnDraft(envelope.draft);
-      setActiveState(envelope.state || null);
+      setActiveState(envelope.state ? { ...envelope.state, can_confirm: envelope.can_confirm } : null);
       setMessages(prev => {
         const alreadyVisible = prev.some(m => (m.intent === envelope.intent || m.flow === envelope.flow) && m.draft);
         if (alreadyVisible) return prev;
@@ -3310,7 +3625,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
       await assistantChatStream(
         activeQuery,
-        { ...requestContext, session_id: sessionId },
+        requestContext,
         cleanHistory,
         (token) => {
           // onChunk
@@ -3384,11 +3699,21 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             });
           }
 
+          const transactionalFlows = ["plan_creation", "strategy_creation", "bot_creation", "indicator_config"];
+          const legacyTransactionalFlows = ["setup_creation"];
+
           if (["plan_creation_cancelled", "strategy_creation_cancelled", "bot_creation_cancelled", "indicator_config_cancelled"].includes(envelope.intent)) {
             setFinnDraft(null);
             setActiveState(null);
-          } else if (["plan_creation", "strategy_creation", "bot_creation", "indicator_config"].includes(envelope.flow)) {
+          } else if (transactionalFlows.includes(envelope.flow)) {
             setFinnDraft(envelope.draft || null);
+          } else if (
+            legacyTransactionalFlows.includes(envelope?.state?.current_flow) ||
+            legacyTransactionalFlows.includes(envelope.flow) ||
+            !envelope?.draft
+          ) {
+            // Prevent old modern drafts from visually "sticking" under a new legacy setup conversation.
+            setFinnDraft(null);
           }
 
           if (
@@ -3400,7 +3725,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
               envelope.next_question === "behavioral_memory_ack"
             )
           ) {
-            setActiveState(envelope.state);
+            setActiveState({ ...envelope.state, can_confirm: envelope.can_confirm });
           } else {
             setActiveState(null);
           }
@@ -3422,7 +3747,9 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             return copy;
           });
           activeStreamIdRef.current = null;
-        }
+        },
+        2,
+        sessionId,
       );
     } catch (err) {
       if (activeStreamIdRef.current !== streamId) return;
@@ -3762,7 +4089,15 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Bot ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en geverifieerd: bot #${res.bot_id} voor strategy #${res.strategy_id}.`
           : isStrategyOnly
           ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Strategie ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en geverifieerd: strategy #${res.strategy_id} voor setup #${res.setup_id}.`
-          : `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Aangemaakt en geverifieerd: setup #${res.setup_id}, strategy #${res.strategy_id}${res.bot_id ? `, bot #${res.bot_id}` : ""}.`,
+          : (() => {
+              const createdSetup = setups.find((setup) => Number(setup.id || setup.setup_id) === Number(res.setup_id));
+              const createdName = createdSetup?.name || action?.payload?.name || "Nieuwe setup";
+              const createdTimeframe = createdSetup?.timeframe || action?.payload?.timeframe || null;
+              const createdSymbol = createdSetup?.symbol || action?.payload?.symbol || context.symbol || globalSymbol || "BTC";
+              const createdType = createdSetup?.setup_type || action?.payload?.setup_type || "setup";
+              const timeframeSuffix = createdTimeframe ? ` op ${createdTimeframe}` : "";
+              return `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Setup '${createdName}' voor ${createdSymbol}${timeframeSuffix} is aangemaakt en geverifieerd (${createdType}).`;
+            })(),
         intent: isBotOnly ? "bot_created" : (isStrategyOnly ? "strategy_created" : "plan_created"),
       }]);
       setFinnDraft(null);
@@ -3802,9 +4137,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const draftType = isFinnStrategy || isFinnBot ? draft.setup_type : draft.plan_type;
     const isDca = draftType === "dca";
     const isTrade = draftType === "trade";
-    const setupOptions = message.state?.setup_options || [];
-    const strategyOptions = message.state?.strategy_options || [];
-    const indicatorOptions = message.state?.indicator_options || draft.indicator_options || [];
+    const setupOptions = (message.state?.setup_options || []).filter((option) => option && option.id);
+    const strategyOptions = (message.state?.strategy_options || []).filter((option) => option && option.id);
+    const indicatorOptions = (message.state?.indicator_options || draft.indicator_options || []).filter(
+      (option) => option && option.name
+    );
     const changes = draft.changes || message.state?.changes || [];
     const planDeviation = message.state?.plan_deviation || draft.plan_deviation || null;
     const planDeviationRequiresAck = Boolean(planDeviation?.requires_ack && !planDeviation?.acknowledged);
@@ -3812,7 +4149,31 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const visibleNextQuestion = message.nextQuestion === "plan_deviation_ack" ? null : message.nextQuestion;
     const yesLabel = at("draftRows.yes");
     const noLabel = at("draftRows.no");
-    const fieldLabel = (field, fallback = null) => at(`fieldLabels.${field}`, fallback || field);
+    const humanizeFieldFallback = (field) => {
+      const raw = String(field || "").trim();
+      if (!raw) return "";
+      const explicit = {
+        "dca.frequency": at("fieldLabels.dca.frequency", "DCA frequentie"),
+        "dca_frequency": at("fieldLabels.dca.frequency", "DCA frequentie"),
+        "dca.day": at("fieldLabels.dca.day", "DCA weekdag"),
+        "dca_day": at("fieldLabels.dca.day", "DCA weekdag"),
+        "dca.month_day": at("fieldLabels.dca.month_day", "DCA maanddag"),
+        "dca_month_day": at("fieldLabels.dca.month_day", "DCA maanddag"),
+        "strategy.base_amount_eur": at("fieldLabels.strategy.base_amount_eur", "Basisbedrag"),
+        "base_amount": at("fieldLabels.strategy.base_amount_eur", "Basisbedrag"),
+        "base_amount_eur": at("fieldLabels.strategy.base_amount_eur", "Basisbedrag"),
+        "setup.name": at("fieldLabels.setup.name", "Naam"),
+        "name": at("fieldLabels.setup.name", "Naam"),
+        "timeframe": at("fieldLabels.setup.timeframe", "Timeframe"),
+        "setup_type": at("draftRows.setupType", "Setup type"),
+        "symbol": at("fieldLabels.asset", "Asset"),
+      };
+      if (explicit[raw]) return explicit[raw];
+      const parts = raw.split(".");
+      const lastPart = parts[parts.length - 1] || raw;
+      return lastPart.replace(/_/g, " ");
+    };
+    const fieldLabel = (field, fallback = null) => at(`fieldLabels.${field}`, fallback || humanizeFieldFallback(field));
     const fieldQuestion = (field, fallback = null) => at(`fieldQuestions.${field}`, fallback || field);
     const valueLabel = (value, fallback = null) => {
       if (value === undefined || value === null || value === "") return null;
@@ -3867,8 +4228,8 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const hideDefaultPlanName = isCollecting && setup.name && defaultPlanName && setup.name === defaultPlanName;
     const hideDefaultTimeframe = isCollecting && isDca && setup.timeframe === "1W";
     const hideScoreRanges = isCollecting;
-    const hideDefaultAutomation = isCollecting && !isFinnBot && !isFinnIndicator && (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only")) === "bot_assisted";
-    const hideDefaultBotSummary = isCollecting && !isFinnStrategy && !isFinnBot && bot.create_bot && !bot.is_live && bot.mode === "manual" && bot.risk_profile === "balanced";
+    const hideDefaultAutomation = isCollecting && !isFinnBot && !isFinnIndicator && !bot.automation;
+    const hideDefaultBotSummary = isCollecting && !isFinnStrategy && !isFinnBot && !hasMeaningfulValue(bot.create_bot);
     const dcaScheduleParts = [
       valueLabel(dca.frequency),
       dca.month_day ? String(dca.month_day) : (dca.day && (!isCollecting || dca.day !== "monday") ? valueLabel(dca.day) : null),
@@ -3883,6 +4244,12 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       if (typeof value === "string") return valueLabel(value, value);
       return String(value);
     };
+    const hasMeaningfulValue = (value) => {
+      if (value === undefined || value === null || value === "") return false;
+      if (Array.isArray(value)) return value.length > 0;
+      return true;
+    };
+    const showMissingFieldBadges = !isCollecting || !visibleNextQuestion;
 
     const rows = [
       [draftRowsText.type, valueLabel(isFinnIndicator ? "indicator_config" : (isFinnBot ? "bot" : (isFinnStrategy ? "strategy" : draft.plan_type)))],
@@ -3913,14 +4280,20 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideScoreRanges ? [draftRowsText.technical, formatRange(setup.technical_score_range)] : null,
       !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideScoreRanges ? [draftRowsText.market, formatRange(setup.market_score_range)] : null,
       isDca && !isFinnStrategy && !isFinnBot ? [valueLabel("dca", "DCA"), dcaScheduleParts.join(" · ")] : null,
-      isTrade && !isFinnBot ? [draftRowsText.execution, valueLabel(strategy.entry_type || strategy.trade_execution_mode || "limit")] : null,
+      isTrade && !isFinnBot ? [draftRowsText.execution, strategy.entry_type || strategy.trade_execution_mode ? valueLabel(strategy.entry_type || strategy.trade_execution_mode) : null] : null,
       isTrade && !isFinnBot && strategy.entry_type === "market" ? [draftRowsText.marketConfirmation, strategy.market_execution_ack ? yesLabel : noLabel] : null,
       isTrade && !isFinnBot ? [draftRowsText.entry, strategy.entry] : null,
       isTrade && !isFinnBot ? [draftRowsText.stop, strategy.stop_loss] : null,
       isTrade && !isFinnBot ? [draftRowsText.targets, Array.isArray(strategy.targets) ? strategy.targets.join(", ") : null] : null,
-      !isFinnBot && !isFinnIndicator && !hideDefaultAutomation ? [draftRowsText.automation, valueLabel(isFinnStrategy ? strategy.automation : (bot.automation || (bot.create_bot ? "bot_assisted" : "manual_only")))] : null,
-      !isFinnStrategy && !isFinnBot && bot.create_bot && !hideDefaultBotSummary ? [draftRowsText.bot, `${valueLabel(bot.is_live ? "live" : "paper")} · ${valueLabel(bot.mode, bot.mode)} · ${valueLabel(bot.risk_profile, bot.risk_profile)}`] : null,
-    ].filter(Boolean);
+      !isFinnBot && !isFinnIndicator && !hideDefaultAutomation ? [draftRowsText.automation, valueLabel(isFinnStrategy ? strategy.automation : bot.automation)] : null,
+      !isFinnStrategy && !isFinnBot && bot.create_bot && !hideDefaultBotSummary ? [draftRowsText.bot, `${valueLabel(bot.is_live ? "live" : "paper")} · ${valueLabel(bot.mode, bot.mode)}${bot.risk_profile ? ` · ${valueLabel(bot.risk_profile, bot.risk_profile)}` : ""}`] : null,
+    ].filter((row) => {
+      if (!row) return false;
+      const [, value] = row;
+      if (!isCollecting) return true;
+      return hasMeaningfulValue(value);
+    });
+    const shouldRenderDraftRows = rows.length > 0;
 
     return (
       <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-4">
@@ -3928,14 +4301,20 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           <ListChecks size={13} />
           {draftTitle}
         </div>
-        <div className="grid grid-cols-1 gap-2">
-          {rows.map(([label, value]) => (
-            <div key={label} className="flex items-center justify-between gap-4 border-b border-blue-100/70 dark:border-blue-900/30 pb-2 last:border-b-0 last:pb-0">
-              <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{label}</span>
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-100 text-right">{value || "—"}</span>
-            </div>
-          ))}
-        </div>
+        {shouldRenderDraftRows ? (
+          <div className="grid grid-cols-1 gap-2">
+            {rows.map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-4 border-b border-blue-100/70 dark:border-blue-900/30 pb-2 last:border-b-0 last:pb-0">
+                <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{label}</span>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-100 text-right">{value || "—"}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/70 dark:bg-slate-950/30 px-3 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200">
+            {at("draftStatus.collectingDetails", "Finn verzamelt eerst de kernkeuzes en laat daarna pas de volledige conceptkaart zien.")}
+          </div>
+        )}
         {isFinnStrategy && setupOptions.length > 0 && (
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/70 dark:bg-slate-950/30 p-3 space-y-2">
             <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">{uiText.chooseSetup}</div>
@@ -4070,7 +4449,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         )}
         {(visibleMissingFields.length > 0 || message.invalidFields?.length > 0 || visibleNextQuestion) && (
           <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-950/20 p-3 space-y-2">
-            {visibleMissingFields.length > 0 && (
+            {showMissingFieldBadges && visibleMissingFields.length > 0 && (
               <div>
                 <div className="text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">{uiText.missingStill}</div>
                 <div className="mt-1 flex flex-wrap gap-1.5">
@@ -4096,7 +4475,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             )}
             {visibleNextQuestion && (
               <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                {fieldQuestion(visibleNextQuestion, visibleNextQuestion)}
+                {fieldQuestion(visibleNextQuestion, fieldLabel(visibleNextQuestion, visibleNextQuestion))}
               </div>
             )}
           </div>
@@ -4844,19 +5223,22 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
           ))}
 
           {/* LIVE INTERACTIVE CONCEPT CARD */}
-          {activeState && activeState.current_flow && activeState.current_flow !== "none" && activeState.current_flow !== "plan_creation" && activeState.current_flow !== "strategy_creation" && (() => {
+          {activeState && activeState.current_flow && activeState.current_flow !== "none" && activeState.current_flow !== "plan_creation" && (() => {
             const flow = activeState.current_flow;
-            const slots = activeState.slots || {};
+            const slots = flow === "strategy_creation" ? getStrategyFlowSlots(activeState) : (activeState.slots || {});
+            const canConfirmActiveFlow = Boolean(activeState.can_confirm);
             let shouldShowCard = false;
             
             if (flow === "setup_creation") {
-              shouldShowCard = !!(slots.setup_type && slots.market_condition);
+              const hasCoreChoice = !!slots.setup_type;
+              const hasMeaningfulProgress = !!(slots.timeframe && (slots.dca_frequency || slots.entry || slots.stop_loss || slots.base_amount));
+              shouldShowCard = canConfirmActiveFlow && hasCoreChoice && hasMeaningfulProgress;
             } else if (flow === "strategy_creation") {
-              shouldShowCard = !!(slots.setup_type && slots.base_amount);
+              shouldShowCard = canConfirmActiveFlow && !!(slots.setup_id && (slots.base_amount || slots.base_amount_eur));
             } else if (flow === "bot_creation") {
-              shouldShowCard = !!slots.budget_total_eur;
+              shouldShowCard = canConfirmActiveFlow && !!slots.budget_total_eur;
             } else {
-              shouldShowCard = true;
+              shouldShowCard = canConfirmActiveFlow;
             }
 
             if (!shouldShowCard) return null;
@@ -4885,10 +5267,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
                         await handleChat("ik heb hem zojuist opgeslagen", true);
                       });
                     }}
-                    onFinalize={() => handleChat("maak de setup")}
+                    onFinalize={() => handleChat(flow === "strategy_creation" ? "maak de strategie" : "maak de setup")}
                     onUpdateSlots={(newSlots) => {
                       if (newSlots.setup_type) handleChat(newSlots.setup_type, true);
                       if (newSlots.dca_frequency) handleChat(newSlots.dca_frequency, true);
+                      if (newSlots.base_amount_eur || newSlots.base_amount) handleChat(String(newSlots.base_amount_eur || newSlots.base_amount), true);
                     }}
                   />
                 </div>
@@ -5110,6 +5493,10 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
         <div className="rounded-xl bg-slate-50 dark:bg-slate-950 p-3.5 border border-slate-100 dark:border-slate-800/80 space-y-2.5 shadow-inner">
           {baseType === "setup" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col col-span-2">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.name || "Naam"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">{payload.name || "—"}</span>
+              </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
                 <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || globalSymbol || context.symbol || "—"}</span>
@@ -5118,15 +5505,27 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.setupType}</span>
                 <span className="uppercase text-xs text-foreground dark:text-slate-200">{payload.setup_type || "dca"}</span>
               </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.timeframe || "Timeframe"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">{payload.timeframe || "—"}</span>
+              </div>
+              {(payload.market_condition || payload.min_macro_score !== undefined) && (
+                <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
+                  <span className="text-xs text-foreground dark:text-slate-200">
+                    {getSetupMarketConditionLabel(payload.market_condition || inferSetupMarketConditionFromScores(payload), uiText)}
+                  </span>
+                </div>
+              )}
               {payload.setup_type === "dca" && (
                 <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaParameters}</span>
                   <span className="text-xs text-foreground dark:text-slate-200">
-                    {payload.dca_frequency || "weekly"} {payload.dca_day ? `op ${payload.dca_day}` : ""}
+                    {[payload.dca_frequency, payload.dca_day ? `op ${payload.dca_day}` : null].filter(Boolean).join(" ") || "—"}
                   </span>
                 </div>
               )}
-              {(payload.min_macro_score !== undefined || payload.min_technical_score !== undefined) && (
+              {!(payload.market_condition || inferSetupMarketConditionFromScores(payload)) && (payload.min_macro_score !== undefined || payload.min_technical_score !== undefined) && (
                 <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2 space-y-1">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
                   <div className="grid grid-cols-3 gap-2 mt-1">
@@ -5583,6 +5982,10 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
         <div className="rounded-xl bg-white dark:bg-slate-950 p-3.5 border border-slate-100 dark:border-slate-800/80 space-y-2.5 shadow-sm">
           {draft.type === "setup" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col col-span-2">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.name || "Naam"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">{draft.payload.name || "—"}</span>
+              </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
                 <span className="font-mono text-xs text-foreground dark:text-slate-200">{draft.payload.symbol || globalSymbol || context.symbol || "—"}</span>
@@ -5591,31 +5994,45 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.setupType}</span>
                 <span className="uppercase text-xs text-foreground dark:text-slate-200">{draft.payload.setup_type || "dca"}</span>
               </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.timeframe || "Timeframe"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">{draft.payload.timeframe || uiText.required}</span>
+              </div>
+              {(draft.payload.market_condition || draft.payload.min_macro_score !== undefined) && (
+                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
+                  <span className="text-xs text-foreground dark:text-slate-200">
+                    {getSetupMarketConditionLabel(draft.payload.market_condition || inferSetupMarketConditionFromScores(draft.payload), uiText)}
+                  </span>
+                </div>
+              )}
               {draft.payload.setup_type === "dca" && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaParameters}</span>
                   <span className="text-xs text-foreground dark:text-slate-200">
-                    {draft.payload.dca_frequency || "weekly"} {draft.payload.dca_day ? `op ${draft.payload.dca_day}` : ""}
+                    {[draft.payload.dca_frequency, draft.payload.dca_day ? `op ${draft.payload.dca_day}` : null].filter(Boolean).join(" ") || uiText.required}
                   </span>
                 </div>
               )}
-              <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2 space-y-1">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
-                <div className="grid grid-cols-3 gap-2 mt-1">
-                  <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
-                    <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Macro</div>
-                    <div className="text-[10px] font-mono font-black text-blue-500">{draft.payload.min_macro_score ?? 30}-{draft.payload.max_macro_score ?? 70}</div>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
-                    <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Tech</div>
-                    <div className="text-[10px] font-mono font-black text-amber-500">{draft.payload.min_technical_score ?? 40}-{draft.payload.max_technical_score ?? 80}</div>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
-                    <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Market</div>
-                    <div className="text-[10px] font-mono font-black text-emerald-500">{draft.payload.min_market_score ?? 20}-{draft.payload.max_market_score ?? 60}</div>
+              {!(draft.payload.market_condition || inferSetupMarketConditionFromScores(draft.payload)) && (
+                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2 space-y-1">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
+                  <div className="grid grid-cols-3 gap-2 mt-1">
+                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
+                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Macro</div>
+                      <div className="text-[10px] font-mono font-black text-blue-500">{draft.payload.min_macro_score ?? 30}-{draft.payload.max_macro_score ?? 70}</div>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
+                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Tech</div>
+                      <div className="text-[10px] font-mono font-black text-amber-500">{draft.payload.min_technical_score ?? 40}-{draft.payload.max_technical_score ?? 80}</div>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
+                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Market</div>
+                      <div className="text-[10px] font-mono font-black text-emerald-500">{draft.payload.min_market_score ?? 20}-{draft.payload.max_market_score ?? 60}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -5752,6 +6169,12 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
         <div className="rounded-xl bg-white dark:bg-slate-950 p-3.5 border border-slate-100 dark:border-slate-800/80 space-y-2.5 shadow-sm">
           {flowType === "setup" && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col col-span-2">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.name}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">
+                  {slots?.name || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}
+                </span>
+              </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
                 <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}</span>
@@ -5776,6 +6199,13 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
                 </div>
               </div>
 
+              <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800/80 pt-2.5">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.timeframe || "Timeframe"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">
+                  {slots?.timeframe || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}
+                </span>
+              </div>
+
               {slots?.setup_type === "dca" && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800/80 pt-2.5">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1.5">{uiText.dcaFrequency}</span>
@@ -5796,6 +6226,15 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
                   </div>
                 </div>
               )}
+
+              {(slots?.market_condition || slots?.min_macro_score !== undefined) && (
+                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800/80 pt-2.5">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
+                  <span className="text-xs text-foreground dark:text-slate-200">
+                    {getSetupMarketConditionLabel(slots?.market_condition, uiText)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -5803,7 +6242,7 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || "SOL"}</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}</span>
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.baseBudget}</span>
@@ -5835,7 +6274,7 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
               ) : (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaMultiplierMode}</span>
-                  <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{slots?.execution_mode || "fixed"}</span>
+                    <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{slots?.execution_mode || <span className="text-slate-400 italic font-normal">{uiText.optional}</span>}</span>
                 </div>
               )}
             </div>
@@ -5849,7 +6288,7 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
               </div>
               <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.safetyProfile}</span>
-                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{slots?.risk_profile || "balanced"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{slots?.risk_profile || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}</span>
               </div>
               <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.budget}</span>

@@ -37,6 +37,22 @@ _assistant_context_cache: Dict[str, Dict[str, Any]] = {}
 _ai_usage_log_supported_columns: Optional[set[str]] = None
 
 
+def _looks_like_trading_stop_input(query: str) -> bool:
+    q = str(query or "").strip().lower()
+    if not q:
+        return False
+    trading_stop_terms = ["stop-loss", "stop loss", "stoploss", "stop-limit", "stop limit", "stoplimit"]
+    if any(term in q for term in trading_stop_terms):
+        return True
+    if re.search(r"\bstop\s*[=:]?\s*[0-9][0-9.,]*\b", q):
+        return True
+    if "entry" in q and "stop" in q:
+        return True
+    if "target" in q and "stop" in q:
+        return True
+    return False
+
+
 def _get_cached_assistant_context(cache_key: str) -> Optional[str]:
     cached = _assistant_context_cache.get(cache_key)
     if not cached:
@@ -141,6 +157,7 @@ def _localized_example_text(preferences: Optional[dict], key: str, symbol: str) 
     }
     return examples.get(key, {}).get(locale) or examples.get(key, {}).get(DEFAULT_LOCALE) or ""
 
+
 def _localized_flow_acknowledgement(preferences: Optional[dict]) -> str:
     locale = _resolve_locale(preferences)
     labels = {
@@ -210,6 +227,110 @@ def _default_setup_name(symbol: str, setup_type: str, timeframe: Optional[str]) 
     if clean_type == "dca":
         return f"{clean_symbol} DCA {clean_timeframe}"
     return f"{clean_symbol} Trade {clean_timeframe}"
+
+
+SETUP_MARKET_CONDITION_PRESETS: Dict[str, Dict[str, Any]] = {
+    "confirmed_strength": {
+        "scores": {
+            "min_macro_score": 40,
+            "max_macro_score": 100,
+            "min_technical_score": 55,
+            "max_technical_score": 100,
+            "min_market_score": 35,
+            "max_market_score": 100,
+        },
+        "aliases": [
+            "bevestigd sterk",
+            "confirmed strength",
+            "confirmed",
+            "sterke trend",
+            "alleen sterk",
+            "defensief",
+            "veilig",
+            "veilige trend",
+        ],
+    },
+    "balanced_pullback": {
+        "scores": {
+            "min_macro_score": 30,
+            "max_macro_score": 70,
+            "min_technical_score": 40,
+            "max_technical_score": 80,
+            "min_market_score": 20,
+            "max_market_score": 60,
+        },
+        "aliases": [
+            "normale pullback",
+            "pullback",
+            "balanced",
+            "gebalanceerd",
+            "standaard",
+            "normaal",
+            "neutraal",
+            "gewone dip",
+        ],
+    },
+    "early_dip": {
+        "scores": {
+            "min_macro_score": 10,
+            "max_macro_score": 65,
+            "min_technical_score": 20,
+            "max_technical_score": 75,
+            "min_market_score": 10,
+            "max_market_score": 55,
+        },
+        "aliases": [
+            "vroege dip",
+            "early dip",
+            "agressief",
+            "opportunistisch",
+            "zwakte",
+            "diepe dip",
+            "buy the dip",
+            "eerder instappen",
+        ],
+    },
+}
+
+
+def _resolve_setup_market_condition(query: str) -> Optional[str]:
+    q = str(query or "").strip().lower()
+    if not q:
+        return None
+
+    numeric_choice_map = {
+        "1": "confirmed_strength",
+        "optie 1": "confirmed_strength",
+        "eerste": "confirmed_strength",
+        "2": "balanced_pullback",
+        "optie 2": "balanced_pullback",
+        "tweede": "balanced_pullback",
+        "3": "early_dip",
+        "optie 3": "early_dip",
+        "derde": "early_dip",
+    }
+    for phrase, key in numeric_choice_map.items():
+        if q == phrase or q.startswith(f"{phrase} "):
+            return key
+
+    for key, preset in SETUP_MARKET_CONDITION_PRESETS.items():
+        if any(alias in q for alias in preset.get("aliases") or []):
+            return key
+
+    return None
+
+
+def _apply_setup_market_condition_preset(slots: Dict[str, Any], condition_key: str, *, force: bool = False) -> bool:
+    preset = SETUP_MARKET_CONDITION_PRESETS.get(condition_key)
+    if not preset:
+        return False
+
+    slots["market_condition"] = condition_key
+    for score_key, score_value in (preset.get("scores") or {}).items():
+        if force or slots.get(score_key) in (None, ""):
+            slots[score_key] = score_value
+    return True
+
 class AiAssistantService:
     def __init__(
         self,
@@ -337,9 +458,7 @@ class AiAssistantService:
         
         is_abort = False
         if any(trigger in q_clean for trigger in abort_triggers):
-            # Exclude trading stop terms that contain 'stop'
-            trading_stop_terms = ["stop-loss", "stop loss", "stoploss", "stop-limit", "stop limit", "stoplimit"]
-            if any(term in q_lower for term in trading_stop_terms):
+            if _looks_like_trading_stop_input(user_query):
                 is_abort = False
             else:
                 is_abort = True
@@ -398,6 +517,9 @@ class AiAssistantService:
         
         self.db_duration_ms = (time.perf_counter() - start_db) * 1000
         logger.info(f"⚡ [Ai-Assistant-Service] SEQUENTIAL DATABASE CONTEXT GATHER took {self.db_duration_ms:.2f}ms (Resolved Asset: {resolved_symbol})")
+
+        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+        self._active_preferences = preferences
  
         # Deterministic slot pre-parsing (Hybrid AI + Confirm UX)
         conv_state = await self._deterministic_pre_parse_slots(user_query, conv_state, resolved_symbol, user_id)
@@ -419,6 +541,39 @@ class AiAssistantService:
                 await self.state_repo.session.commit()
 
             return response_text, None, draft, state_reset, None, ["Activeer setup", "Vraag over macro"], actual_session_id
+
+        deterministic_turn = await self._build_deterministic_flow_turn(
+            user_id=user_id,
+            user_query=user_query,
+            conv_state=conv_state,
+            resolved_symbol=resolved_symbol,
+        )
+        if deterministic_turn is not None:
+            chat_text, action, draft, state, suggested_actions = deterministic_turn
+
+            if actual_session_id:
+                user_msg = ChatMessage(
+                    session_id=actual_session_id,
+                    role="user",
+                    content=user_query,
+                    created_at=datetime.utcnow(),
+                    intent=intent,
+                )
+                assistant_msg = ChatMessage(
+                    session_id=actual_session_id,
+                    role="assistant",
+                    content=chat_text,
+                    created_at=datetime.utcnow(),
+                    intent=intent,
+                    actions=draft or action,
+                )
+                self.state_repo.session.add(user_msg)
+                self.state_repo.session.add(assistant_msg)
+                session_stmt = update(ChatSession).where(ChatSession.id == actual_session_id).values(updated_at=datetime.utcnow())
+                await self.state_repo.session.execute(session_stmt)
+                await self.state_repo.session.commit()
+
+            return chat_text, action, draft, state, None, suggested_actions, actual_session_id
         # Process Live Market Context
         live_context = "No live market data available in database."
         if live_data:
@@ -459,7 +614,6 @@ class AiAssistantService:
         role_key = self._route_role(intent)
         
         # Get User Preferences
-        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
         user_name = user.first_name if (user and getattr(user, "first_name", None)) else "Handelaar"
         response_language = _response_language_name(preferences)
 
@@ -469,8 +623,6 @@ class AiAssistantService:
 
         # 5. Build System Prompt
         system_role = get_role_prompt(role_key, preferences, intent=intent, user_name=user_name)
-        self._active_preferences = preferences
-
         # 5.5 Synthesise Chronological Continuity and Event Memory Context
         continuity_str = await self._build_continuity_context_str(user_id)
 
@@ -792,9 +944,7 @@ class AiAssistantService:
         
         is_abort = False
         if any(trigger in q_clean for trigger in abort_triggers):
-            # Exclude trading stop terms that contain 'stop'
-            trading_stop_terms = ["stop-loss", "stop loss", "stoploss", "stop-limit", "stop limit", "stoplimit"]
-            if any(term in q_lower for term in trading_stop_terms):
+            if _looks_like_trading_stop_input(user_query):
                 is_abort = False
             else:
                 is_abort = True
@@ -907,6 +1057,9 @@ class AiAssistantService:
         self.db_duration_ms = (time.perf_counter() - start_db) * 1000
         logger.info(f"⚡ [Ai-Assistant-Service] SEQUENTIAL DATABASE CONTEXT GATHER (Stream) took {self.db_duration_ms:.2f}ms (Resolved Asset: {resolved_symbol})")
 
+        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+        self._active_preferences = preferences
+
         # Deterministic slot pre-parsing (Hybrid AI + Confirm UX)
         conv_state = await self._deterministic_pre_parse_slots(user_query, conv_state, resolved_symbol, user_id)
 
@@ -926,6 +1079,25 @@ class AiAssistantService:
                 "draft": draft,
                 "state": state_reset,
                 "reasoning": None
+            }}
+            return
+
+        deterministic_turn = await self._build_deterministic_flow_turn(
+            user_id=user_id,
+            user_query=user_query,
+            conv_state=conv_state,
+            resolved_symbol=resolved_symbol,
+        )
+        if deterministic_turn is not None:
+            chat_text, action, draft, state, suggested_actions = deterministic_turn
+            yield {"event": "text", "data": chat_text}
+            yield {"event": "envelope", "data": {
+                "response": chat_text,
+                "action": action,
+                "draft": draft,
+                "state": state,
+                "reasoning": None,
+                "suggested_actions": suggested_actions,
             }}
             return
 
@@ -968,7 +1140,6 @@ class AiAssistantService:
         role_key = self._route_role(intent)
         
         # Get User Preferences
-        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
         user_name = user.first_name if (user and getattr(user, "first_name", None)) else "Handelaar"
         response_language = _response_language_name(preferences)
 
@@ -978,8 +1149,6 @@ class AiAssistantService:
 
         # 5. Build System Prompt
         system_role = get_role_prompt(role_key, preferences, intent=intent, user_name=user_name)
-        self._active_preferences = preferences
-
         # 5.5 Synthesise Chronological Continuity and Event Memory Context
         continuity_str = await self._build_continuity_context_str(user_id)
 
@@ -1285,10 +1454,7 @@ class AiAssistantService:
                 "en verliezers niet te lang laat rekken."
             )
         if "holds_losers_too_long" in behavior_flags:
-            return (
-                f"Voor jouw profiel geldt nu: bewaak bij {asset_label} eerst je invalidatie, "
-                "zodat je verliezers niet langer laat rekken dan je plan toelaat."
-            )
+            return f"Tip vanuit je profiel: houd bij {asset_label} je invalidatie strak."
         if "takes_profit_too_early" in behavior_flags:
             return (
                 f"Voor jouw profiel geldt nu: leg voor {asset_label} vooraf je exitplan vast, "
@@ -1319,6 +1485,9 @@ class AiAssistantService:
     ) -> str:
         if intent not in {"general", "chat", "general_help", "product_help", "analysis", "report", "coach"}:
             return response_text
+        flow_name = str(((context_data or {}).get("current_flow") or "")).strip().lower()
+        if flow_name in {"setup_creation", "strategy_creation", "bot_creation"}:
+            return response_text
         profile_line = self._legacy_general_profile_line(context_data, resolved_symbol)
         if not profile_line:
             return response_text
@@ -1338,10 +1507,80 @@ class AiAssistantService:
         Allows users to specify any slot in any order with immediate asynchronous PostgreSQL persistence.
         """
         q_lower = user_query.strip().lower()
+
+        def _looks_like_setup_start() -> bool:
+            if "setup" not in q_lower:
+                return False
+            explicit_phrases = [
+                "maak setup",
+                "start setup",
+                "setup voor",
+                "setup aanmaken",
+                "nieuwe setup",
+                "setup maken",
+            ]
+            if any(phrase in q_lower for phrase in explicit_phrases):
+                return True
+            create_terms = [
+                "maak",
+                "maken",
+                "aanmaken",
+                "creeer",
+                "creeër",
+                "bouw",
+                "wil",
+                "kan je",
+                "kun je",
+                "help me",
+                "help mij",
+                "start",
+            ]
+            setup_modifiers = ["dca", "trade", "swing", "entry", "trend", "blueprint"]
+            return any(term in q_lower for term in create_terms) and any(term in q_lower for term in setup_modifiers)
+
+        def _looks_like_strategy_start() -> bool:
+            if "strategie" not in q_lower and "strategy" not in q_lower:
+                return False
+            explicit_phrases = [
+                "maak strategie",
+                "start strategie",
+                "strategie voor",
+                "nieuwe strategie",
+                "strategie maken",
+                "make strategy",
+                "create strategy",
+            ]
+            if any(phrase in q_lower for phrase in explicit_phrases):
+                return True
+            create_terms = ["maak", "maken", "aanmaken", "creeer", "creeër", "bouw", "wil", "kan je", "kun je", "help me", "start", "make", "create"]
+            strategy_modifiers = ["entry", "invalidatie", "risk", "risk management", "targets", "stop", "dca", "trade", "setup"]
+            return any(term in q_lower for term in create_terms) and any(term in q_lower for term in strategy_modifiers)
+
+        def _looks_like_bot_start() -> bool:
+            if "bot" not in q_lower:
+                return False
+            explicit_phrases = [
+                "maak bot",
+                "start bot",
+                "bot voor",
+                "nieuwe bot",
+                "bot maken",
+                "make bot",
+                "create bot",
+            ]
+            if any(phrase in q_lower for phrase in explicit_phrases):
+                return True
+            create_terms = ["maak", "maken", "aanmaken", "creeer", "creeër", "bouw", "wil", "kan je", "kun je", "help me", "start", "make", "create"]
+            bot_modifiers = ["dca", "weekelijks", "wekelijks", "maandelijks", "dagelijks", "budget", "strategie", "strategy", "paper", "live"]
+            return any(term in q_lower for term in create_terms) and any(term in q_lower for term in bot_modifiers)
         
-        # 1. Pre-initialize active flow if user requests to start one and there is no active flow
-        if not conv_state or not conv_state.get("current_flow") or conv_state.get("current_flow") == "none":
-            if any(w in q_lower for w in ["maak setup", "start setup", "setup voor", "setup aanmaken", "nieuwe setup", "setup maken"]):
+        # 1. Pre-initialize or override active flow for explicit creation requests.
+        current_flow = str((conv_state or {}).get("current_flow") or "").strip().lower()
+        transactional_flows = {"setup_creation", "strategy_creation", "bot_creation"}
+        has_active_transactional_flow = current_flow in transactional_flows
+
+        if (not conv_state or not current_flow or current_flow == "none" or not has_active_transactional_flow):
+            if _looks_like_setup_start():
                 conv_state = {
                     "current_flow": "setup_creation",
                     "slots": {"symbol": resolved_symbol},
@@ -1350,7 +1589,7 @@ class AiAssistantService:
                 # PERSIST INITIALIZATION STATE TO DB IMMEDIATELY
                 await self.state_repo.save_state(user_id, "setup_creation", resolved_symbol, conv_state["slots"])
                 logger.info(f"🎯 [Deterministic-Pre-Parser] Persisted newly initialized setup flow to DB for user {user_id}")
-            elif any(w in q_lower for w in ["maak strategie", "start strategie", "strategie voor", "nieuwe strategie", "strategie maken"]):
+            elif _looks_like_strategy_start():
                 # CHECK SETUP DEPENDENCY
                 existing_setups = await self.setup_repo.get_all_setups(user_id)
                 symbol_setups = [s for s in existing_setups if s.get("symbol") == resolved_symbol]
@@ -1377,7 +1616,7 @@ class AiAssistantService:
                     }
                     await self.state_repo.save_state(user_id, "strategy_creation", resolved_symbol, conv_state["slots"])
                     logger.info(f"🎯 [Chain-of-Dependence] Setup found with ID {symbol_setups[0]['id']} for {resolved_symbol}. Initialized strategy_creation for user {user_id}.")
-            elif any(w in q_lower for w in ["maak bot", "start bot", "bot voor", "nieuwe bot", "bot maken"]):
+            elif _looks_like_bot_start():
                 # CHECK STRATEGY DEPENDENCY
                 existing_strategies = await self.strategy_repo.query_strategies(user_id, {"symbol": resolved_symbol})
                 
@@ -1446,17 +1685,29 @@ class AiAssistantService:
         if not flow:
             return conv_state
 
-        # Check for immediate finalization override ("maak de setup", "finaliseer")
+        current_missing_slots = []
+        for step in flow.get("question_sequence", []):
+            slot_key = step["slot"]
+            if flow_name == "setup_creation" and slot_key == "dca_frequency" and slots.get("setup_type") != "dca":
+                continue
+            if flow_name == "setup_creation" and slot_key == "dca_day" and slots.get("dca_frequency") != "weekly":
+                continue
+            if flow_name == "setup_creation" and slot_key == "dca_month_day" and slots.get("dca_frequency") != "monthly":
+                continue
+            if flow_name == "strategy_creation" and slot_key in ["entry", "targets", "stop_loss"] and slots.get("setup_type") != "trade":
+                continue
+            if slot_key not in slots or slots[slot_key] is None or slots[slot_key] == "":
+                current_missing_slots.append(slot_key)
+        next_expected_slot = current_missing_slots[0] if current_missing_slots else None
+
+        # Explicit confirmation requests may finalize the flow, but only once the
+        # required slots are actually present. Otherwise we stay in collection mode.
         is_explicit_finalize = any(w in q_lower for w in ["maak de setup", "maak nu", "opslaan", "finaliseer", "bevestig", "approve", "akkoord", "bevestig setup"])
-        if is_explicit_finalize:
-            conv_state["status"] = "complete"
-            logger.info(f"🏁 [Deterministic-Pre-Parser] Forced completion for flow '{flow_name}' upon request: {user_query}")
-            return conv_state
 
         updated = False
 
         # Unconditional slot updating (allows toggling selections / chip clicks!)
-        if any(w in q_lower for w in ["trade", "trading", "swing", "actief", "actieve", "manual", "handmatig"]):
+        if any(w in q_lower for w in ["trade", "trading", "actief", "actieve", "manual", "handmatig"]):
             slots["setup_type"] = "trade"
             updated = True
         elif any(w in q_lower for w in ["dca", "periodiek", "passief", "bijkopen"]):
@@ -1468,20 +1719,75 @@ class AiAssistantService:
             slots["timeframe"] = timeframe_hint
             updated = True
 
+        nums = extract_numbers(q_lower)
+
         should_parse_dca_frequency = flow_name != "setup_creation" or slots.get("setup_type") == "dca" or "dca" in q_lower
         if should_parse_dca_frequency and any(w in q_lower for w in ["dagelijks", "daily", "dag"]):
             slots["dca_frequency"] = "daily"
             updated = True
-        elif any(w in q_lower for w in ["wekelijks", "weekly", "week"]):
+        elif should_parse_dca_frequency and any(w in q_lower for w in ["wekelijks", "weekly", "week"]):
             slots["dca_frequency"] = "weekly"
             updated = True
-        elif any(w in q_lower for w in ["maandelijks", "monthly", "maand"]):
+        elif should_parse_dca_frequency and any(w in q_lower for w in ["maandelijks", "monthly", "maand"]):
             slots["dca_frequency"] = "monthly"
             updated = True
 
+        weekday_map = {
+            "maandag": "monday",
+            "dinsdag": "tuesday",
+            "woensdag": "wednesday",
+            "donderdag": "thursday",
+            "vrijdag": "friday",
+            "zaterdag": "saturday",
+            "zondag": "sunday",
+            "monday": "monday",
+            "tuesday": "tuesday",
+            "wednesday": "wednesday",
+            "thursday": "thursday",
+            "friday": "friday",
+            "saturday": "saturday",
+            "sunday": "sunday",
+        }
+        if next_expected_slot == "dca_day":
+            for label, canonical in weekday_map.items():
+                if label in q_lower:
+                    slots["dca_day"] = canonical
+                    updated = True
+                    break
+
+        if next_expected_slot == "dca_month_day":
+            if nums:
+                month_day = int(nums[0])
+                if 1 <= month_day <= 31:
+                    slots["dca_month_day"] = month_day
+                    updated = True
+
+        if flow_name == "setup_creation":
+            market_condition = _resolve_setup_market_condition(q_lower)
+            if market_condition:
+                if _apply_setup_market_condition_preset(slots, market_condition, force=True):
+                    updated = True
+
+        score_defaults = {
+            "min_macro_score": 30,
+            "max_macro_score": 70,
+            "min_technical_score": 40,
+            "max_technical_score": 80,
+            "min_market_score": 20,
+            "max_market_score": 60,
+        }
+        if next_expected_slot in score_defaults:
+            if any(w in q_lower for w in ["standaard", "default", "prima", "goed", "is goed", "laat zo"]):
+                slots[next_expected_slot] = score_defaults[next_expected_slot]
+                updated = True
+            elif nums:
+                score_value = int(nums[0])
+                if 0 <= score_value <= 100:
+                    slots[next_expected_slot] = score_value
+                    updated = True
+
         # Base Amount
         # Look for eur inleg, e.g. "€100", "100 eur", "inleg van 100", "inleg: 100", "inleg 100"
-        nums = extract_numbers(q_lower)
         if nums and any(w in q_lower for w in ["€", "eur", "inleg", "bedrag", "euro", "order", "inleg:"]):
             slots["base_amount"] = nums[0]
             updated = True
@@ -1563,8 +1869,15 @@ class AiAssistantService:
                 slots["name"] = explicit_name
                 updated = True
             elif should_greedy_capture:
-                slots["name"] = user_query.strip()
-                updated = True
+                cleaned_name = re.sub(
+                    r"\b(?:word(?:t)?|is)\s+de\s+naam\b",
+                    "",
+                    user_query,
+                    flags=re.IGNORECASE,
+                ).strip(" -:,.")
+                if cleaned_name:
+                    slots["name"] = cleaned_name
+                    updated = True
 
         if updated:
             conv_state["slots"] = slots
@@ -1575,6 +1888,10 @@ class AiAssistantService:
             for step in flow.get("question_sequence", []):
                 slot_key = step["slot"]
                 if flow_name == "setup_creation" and slot_key == "dca_frequency" and slots.get("setup_type") != "dca":
+                    continue
+                if flow_name == "setup_creation" and slot_key == "dca_day" and slots.get("dca_frequency") != "weekly":
+                    continue
+                if flow_name == "setup_creation" and slot_key == "dca_month_day" and slots.get("dca_frequency") != "monthly":
                     continue
                 if flow_name == "strategy_creation" and slot_key in ["entry", "targets", "stop_loss"] and slots.get("setup_type") != "trade":
                     continue
@@ -1604,6 +1921,10 @@ class AiAssistantService:
             slot_key = step["slot"]
             if flow_name == "setup_creation" and slot_key == "dca_frequency" and current_slots.get("setup_type") != "dca":
                 continue
+            if flow_name == "setup_creation" and slot_key == "dca_day" and current_slots.get("dca_frequency") != "weekly":
+                continue
+            if flow_name == "setup_creation" and slot_key == "dca_month_day" and current_slots.get("dca_frequency") != "monthly":
+                continue
             if flow_name == "strategy_creation" and slot_key in ["entry", "targets", "stop_loss"] and current_slots.get("setup_type") != "trade":
                 continue
             if slot_key not in current_slots or current_slots[slot_key] is None or current_slots[slot_key] == "":
@@ -1629,6 +1950,35 @@ class AiAssistantService:
 
         return ""
 
+    def _setup_slots_ready_for_draft(self, slots: Optional[dict]) -> bool:
+        current_slots = slots or {}
+        setup_type = str(current_slots.get("setup_type") or "").lower()
+        if not current_slots.get("symbol") or not setup_type:
+            return False
+        common_ready = bool(current_slots.get("timeframe")) and bool(current_slots.get("name"))
+        required_score_keys = [
+            "min_macro_score",
+            "max_macro_score",
+            "min_technical_score",
+            "max_technical_score",
+            "min_market_score",
+            "max_market_score",
+        ]
+        has_market_condition = bool(current_slots.get("market_condition"))
+        has_scores = all(current_slots.get(key) is not None for key in required_score_keys)
+
+        if setup_type == "trade":
+            return common_ready and (has_market_condition or has_scores)
+        if setup_type == "dca":
+            if not common_ready or not current_slots.get("dca_frequency"):
+                return False
+            if current_slots.get("dca_frequency") == "weekly" and not current_slots.get("dca_day"):
+                return False
+            if current_slots.get("dca_frequency") == "monthly" and not current_slots.get("dca_month_day"):
+                return False
+            return has_market_condition or has_scores
+        return False
+
     async def _build_deterministic_flow_turn(
         self,
         *,
@@ -1647,32 +1997,24 @@ class AiAssistantService:
             return None
 
         slots = dict(conv_state.get("slots") or {})
-        if flow_name == "setup_creation" and slots.get("setup_type") == "dca" and not slots.get("timeframe"):
-            frequency_to_timeframe = {
-                "daily": "1D",
-                "weekly": "1W",
-                "monthly": "1M",
-            }
-            inferred_timeframe = frequency_to_timeframe.get(str(slots.get("dca_frequency") or "").lower())
-            if inferred_timeframe:
-                slots["timeframe"] = inferred_timeframe
         missing_slots = self._get_missing_flow_slots(flow_name, slots)
         state_payload = {
             "current_flow": flow_name,
             "asset": slots.get("symbol") or resolved_symbol,
             "slots": slots,
             "missing_slots": missing_slots,
+            "missing_fields": missing_slots,
             "status": "collecting",
         }
 
-        if not missing_slots:
+        if not missing_slots and self._setup_slots_ready_for_draft(slots):
             draft = self._build_deterministic_draft(conv_state)
             await self.state_repo.clear_state(user_id)
             state_reset = {"current_flow": "none", "slots": {}, "status": "none"}
             flow_word = flow_name.split("_")[0]
             locale = _resolve_locale(getattr(self, "_active_preferences", None))
             response_text = {
-                "nl": f"Je {flow_word} staat klaar. Controleer de kaart en sla hem op als dit klopt.",
+                "nl": f"Je {flow_word} staat klaar. Controleer de kaart met naam, timeframe en regels en sla hem op als dit klopt.",
                 "en": f"Your {flow_word} draft is ready. Review the card and save it if it looks right.",
                 "de": f"Dein {flow_word}-Entwurf ist bereit. Pruefe die Karte und speichere sie, wenn alles stimmt.",
             }.get(locale) or f"Your {flow_word} draft is ready. Review the card and save it if it looks right."
@@ -1688,6 +2030,7 @@ class AiAssistantService:
         if not question:
             return None
 
+        state_payload["next_question"] = next_slot
         redirect_reason = str(conv_state.get("redirect_reason") or "").strip().lower()
         if redirect_reason == "no_setup":
             prefix = _localized_example_text(getattr(self, "_active_preferences", None), "no_setup", slots.get("symbol") or resolved_symbol)
@@ -1713,6 +2056,7 @@ class AiAssistantService:
             slots,
         )
         return response_text, None, None, state_payload, None
+
     def _build_deterministic_draft(self, conv_state: dict) -> dict:
         """
         🎯 Builds the production-ready Draft object deterministically from conversation slots.
@@ -1723,30 +2067,38 @@ class AiAssistantService:
 
         if flow_name == "setup_creation":
             setup_type = slots.get("setup_type", "trade")
-            timeframe = slots.get("timeframe") or ("1W" if setup_type == "dca" else "4H")
+            timeframe = slots.get("timeframe")
             payload = {
-                "name": slots.get("name") or _default_setup_name(symbol, setup_type, timeframe),
                 "symbol": symbol,
                 "setup_type": setup_type,
-                "timeframe": timeframe,
-                "market_condition": slots.get("market_condition", "neutral"),
             }
+            if timeframe:
+                payload["timeframe"] = timeframe
+            if slots.get("name"):
+                payload["name"] = slots.get("name")
+            elif timeframe:
+                payload["name"] = _default_setup_name(symbol, setup_type, timeframe)
+            if slots.get("market_condition"):
+                payload["market_condition"] = slots.get("market_condition")
             if setup_type == "dca":
-                payload["dca_frequency"] = slots.get("dca_frequency", "weekly")
-                payload["dca_day"] = "monday"
-                payload["min_macro_score"] = 30
-                payload["max_macro_score"] = 70
-                payload["min_technical_score"] = 40
-                payload["max_technical_score"] = 80
-                payload["min_market_score"] = 20
-                payload["max_market_score"] = 60
-            else:
-                payload["min_macro_score"] = 30
-                payload["max_macro_score"] = 70
-                payload["min_technical_score"] = 40
-                payload["max_technical_score"] = 80
-                payload["min_market_score"] = 20
-                payload["max_market_score"] = 60
+                if slots.get("dca_frequency"):
+                    payload["dca_frequency"] = slots.get("dca_frequency")
+                if slots.get("dca_day"):
+                    payload["dca_day"] = slots.get("dca_day")
+                if slots.get("dca_month_day"):
+                    payload["dca_month_day"] = slots.get("dca_month_day")
+            if slots.get("min_macro_score") is not None:
+                payload["min_macro_score"] = slots.get("min_macro_score")
+            if slots.get("max_macro_score") is not None:
+                payload["max_macro_score"] = slots.get("max_macro_score")
+            if slots.get("min_technical_score") is not None:
+                payload["min_technical_score"] = slots.get("min_technical_score")
+            if slots.get("max_technical_score") is not None:
+                payload["max_technical_score"] = slots.get("max_technical_score")
+            if slots.get("min_market_score") is not None:
+                payload["min_market_score"] = slots.get("min_market_score")
+            if slots.get("max_market_score") is not None:
+                payload["max_market_score"] = slots.get("max_market_score")
             return {
                 "type": "setup",
                 "payload": payload
