@@ -137,7 +137,15 @@ export default function StrategyPage() {
       </header>
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="strategy-new" guidedMode={onboardingGuidedMode} />
+        <OnboardingStepGuide
+          copy={strategyGuideCopy}
+          anchorId="strategy-new"
+          guidedMode={onboardingGuidedMode}
+          isComplete={strategyStepComplete}
+          nextHref="/bot?onboarding=1&step=bot"
+          assistantFlow="strategy_creation"
+          assistantSuppressRestore
+        />
       ) : null}
 
       {/* 🚀 QUICK STATS GRID */}

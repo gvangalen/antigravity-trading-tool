@@ -522,7 +522,6 @@ def _should_use_modern_setup_creation_flow(query: str, context_payload: Optional
 def _is_legacy_transactional_flow_name(flow_name: Optional[str]) -> bool:
     return str(flow_name or "").strip().lower() in {
         "setup_creation",
-        "strategy_creation",
         "bot_creation",
         "indicator_config",
     }
