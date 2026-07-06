@@ -1610,7 +1610,9 @@ class AiAssistantService:
                         "slots": {
                             "symbol": resolved_symbol,
                             "setup_id": symbol_setups[0]["id"],
-                            "setup_type": symbol_setups[0].get("setup_type", "trade")
+                            "setup_type": symbol_setups[0].get("setup_type", "trade"),
+                            "timeframe": symbol_setups[0].get("timeframe"),
+                            "setup_name": symbol_setups[0].get("name"),
                         },
                         "status": "collecting"
                     }
@@ -1632,7 +1634,9 @@ class AiAssistantService:
                             "slots": {
                                 "symbol": resolved_symbol,
                                 "setup_id": symbol_setups[0]["id"],
-                                "setup_type": symbol_setups[0].get("setup_type", "trade")
+                                "setup_type": symbol_setups[0].get("setup_type", "trade"),
+                                "timeframe": symbol_setups[0].get("timeframe"),
+                                "setup_name": symbol_setups[0].get("name"),
                             },
                             "status": "collecting",
                             "redirect_reason": "no_strategy"
@@ -1651,16 +1655,22 @@ class AiAssistantService:
                         logger.info(f"🎯 [Chain-of-Dependence] No setup/strategy found. Redirected user {user_id} to setup_creation.")
                 else:
                     # We have a strategy! We can link its ID
+                    strategy_row = existing_strategies[0]
                     conv_state = {
                         "current_flow": "bot_creation",
                         "slots": {
                             "name": f"{resolved_symbol} Bot",
-                            "strategy_id": existing_strategies[0]["id"]
+                            "symbol": resolved_symbol,
+                            "strategy_id": strategy_row["id"],
+                            "strategy_name": strategy_row.get("name"),
+                            "timeframe": strategy_row.get("timeframe"),
+                            "base_amount": strategy_row.get("base_amount"),
+                            "base_amount_eur": strategy_row.get("base_amount"),
                         },
                         "status": "collecting"
                     }
                     await self.state_repo.save_state(user_id, "bot_creation", resolved_symbol, conv_state["slots"])
-                    logger.info(f"🎯 [Chain-of-Dependence] Strategy found with ID {existing_strategies[0]['id']}. Initialized bot_creation for user {user_id}.")
+                    logger.info(f"🎯 [Chain-of-Dependence] Strategy found with ID {strategy_row['id']}. Initialized bot_creation for user {user_id}.")
                 
         if not conv_state or not conv_state.get("current_flow") or conv_state.get("current_flow") == "none":
             return conv_state
@@ -2004,7 +2014,7 @@ class AiAssistantService:
             return None
 
         flow_name = str(conv_state.get("current_flow") or "").strip().lower()
-        if flow_name not in {"setup_creation"}:
+        if flow_name not in {"setup_creation", "strategy_creation", "bot_creation"}:
             return None
         if str(conv_state.get("status") or "").strip().lower() != "collecting":
             return None
@@ -2020,7 +2030,13 @@ class AiAssistantService:
             "status": "collecting",
         }
 
-        if not missing_slots and self._setup_slots_ready_for_draft(slots):
+        draft_ready = False
+        if flow_name == "setup_creation":
+            draft_ready = self._setup_slots_ready_for_draft(slots)
+        else:
+            draft_ready = not missing_slots
+
+        if draft_ready:
             draft = self._build_deterministic_draft(conv_state)
             await self.state_repo.clear_state(user_id)
             state_reset = {"current_flow": "none", "slots": {}, "status": "none"}
@@ -2118,14 +2134,28 @@ class AiAssistantService:
             }
 
         elif flow_name == "strategy_creation":
+            strategy_name = slots.get("name") or slots.get("strategy_name")
+            if not strategy_name:
+                setup_name = slots.get("setup_name")
+                timeframe = slots.get("timeframe")
+                if setup_name:
+                    strategy_name = f"{setup_name} strategie"
+                elif timeframe:
+                    strategy_name = f"{symbol} {timeframe} strategie"
+                else:
+                    strategy_name = f"{symbol} Strategy"
             payload = {
-                "name": f"{symbol} Strategy",
+                "name": strategy_name,
                 "symbol": symbol,
                 "setup_type": slots.get("setup_type", "trade"),
                 "execution_mode": "fixed",
                 "risk_profile": slots.get("risk_profile", "balanced"),
                 "base_amount": slots.get("base_amount", 100.0)
             }
+            if slots.get("setup_id") is not None:
+                payload["setup_id"] = slots.get("setup_id")
+            if slots.get("timeframe"):
+                payload["timeframe"] = slots.get("timeframe")
             if slots.get("setup_type") == "trade":
                 payload["entry"] = slots.get("entry", 100.0)
                 payload["targets"] = slots.get("targets", [110.0, 120.0])

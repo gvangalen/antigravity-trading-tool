@@ -643,7 +643,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       user_onboarding: ["experience_level", "risk_profile", "investment_goals"],
       setup_creation: ["symbol", "setup_type", "timeframe", "market_condition"],
       strategy_creation: ["setup_id", "base_amount_eur", "entry", "targets", "stop_loss"],
-      bot_creation: ["name", "budget_total_eur"],
+      bot_creation: ["name", "budget_total_eur", "budget_daily_limit_eur"],
       macro_analysis_walkthrough: ["symbol"],
       technical_analysis_walkthrough: ["symbol"],
       risk_check: ["symbol", "proposed_size"],
@@ -853,6 +853,45 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     return missing[0];
   };
 
+  const getBotFlowSlots = (state = {}) => {
+    const rawSlots = state?.slots || {};
+    return {
+      symbol: rawSlots.symbol || state?.asset || state?.symbol || null,
+      name: rawSlots.name || state?.name || null,
+      strategy_id: rawSlots.strategy_id || state?.strategy_id || null,
+      budget_total_eur: rawSlots.budget_total_eur || state?.budget_total_eur || null,
+      budget_daily_limit_eur: rawSlots.budget_daily_limit_eur || state?.budget_daily_limit_eur || null,
+    };
+  };
+
+  const getMissingBotSlots = (slots = {}) => {
+    const missing = [];
+    if (!slots.name) {
+      missing.push("name");
+    }
+    if (!slots.budget_total_eur) {
+      missing.push("budget_total_eur");
+    }
+    if (!slots.budget_daily_limit_eur) {
+      missing.push("budget_daily_limit_eur");
+    }
+    return missing;
+  };
+
+  const getEffectiveBotNextQuestion = (state = {}) => {
+    const slots = getBotFlowSlots(state);
+    const missing = getMissingBotSlots(slots);
+    const declaredNext = state?.next_question || null;
+
+    if (missing.length === 0) {
+      return declaredNext;
+    }
+    if (declaredNext && missing.includes(declaredNext)) {
+      return declaredNext;
+    }
+    return missing[0];
+  };
+
   const buildTransactionalFollowUpActions = (message) => {
     const state = message?.state;
     if (!state?.current_flow) return [];
@@ -860,14 +899,18 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const slots =
       flow === "strategy_creation"
         ? getStrategyFlowSlots(state)
+        : flow === "bot_creation"
+          ? getBotFlowSlots(state)
         : getSetupFlowSlots(state);
     const nextQuestion =
       flow === "strategy_creation"
         ? getEffectiveStrategyNextQuestion(state)
+        : flow === "bot_creation"
+          ? getEffectiveBotNextQuestion(state)
         : getEffectiveSetupNextQuestion(state);
     const symbol = slots.symbol || context.symbol || globalSymbol || "BTC";
 
-    if (!["setup_creation", "strategy_creation"].includes(flow)) return [];
+    if (!["setup_creation", "strategy_creation", "bot_creation"].includes(flow)) return [];
 
     if (flow === "strategy_creation") {
       const bySlot = {
@@ -914,6 +957,54 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         return normalizeFollowUpActions([
           at("followUps.strategy.review", `Bekijk je strategie voor ${symbol}`),
           at("followUps.strategy.nextBot", `Ga door naar bot voor ${symbol}`),
+        ]);
+      }
+
+      return [];
+    }
+
+    if (flow === "bot_creation") {
+      const bySlot = {
+        name: [
+          {
+            label: at("followUps.bot.defaultName", `${symbol} Bot`),
+            prompt: at("followUps.bot.defaultNamePrompt", `Noem de bot ${symbol} Bot.`),
+          },
+        ],
+        budget_total_eur: [
+          {
+            label: at("followUps.bot.totalBudget250", "250 euro totaal"),
+            prompt: at("followUps.bot.totalBudget250Prompt", "Gebruik 250 euro als totaal budget."),
+          },
+          {
+            label: at("followUps.bot.totalBudget500", "500 euro totaal"),
+            prompt: at("followUps.bot.totalBudget500Prompt", "Gebruik 500 euro als totaal budget."),
+          },
+        ],
+        budget_daily_limit_eur: [
+          {
+            label: at("followUps.bot.dailyLimit25", "25 euro per dag"),
+            prompt: at("followUps.bot.dailyLimit25Prompt", "Gebruik 25 euro als daglimiet."),
+          },
+          {
+            label: at("followUps.bot.dailyLimit50", "50 euro per dag"),
+            prompt: at("followUps.bot.dailyLimit50Prompt", "Gebruik 50 euro als daglimiet."),
+          },
+        ],
+      };
+
+      if (state?.status === "collecting" && nextQuestion && bySlot[nextQuestion]) {
+        return normalizeFollowUpActions(bySlot[nextQuestion]);
+      }
+
+      if (state?.status === "collecting") {
+        return [];
+      }
+
+      if (message?.intent === "bot_created") {
+        return normalizeFollowUpActions([
+          at("followUps.bot.review", `Bekijk je bot voor ${symbol}`),
+          at("followUps.bot.goDashboard", "Ga naar dashboard"),
         ]);
       }
 
@@ -1003,7 +1094,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       return transactionalActions;
     }
     if (
-      ["setup_creation", "strategy_creation"].includes(message?.state?.current_flow) &&
+      ["setup_creation", "strategy_creation", "bot_creation"].includes(message?.state?.current_flow) &&
       message?.state?.status === "collecting"
     ) {
       return [];

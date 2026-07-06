@@ -799,7 +799,7 @@ def test_explicit_finalize_does_not_complete_incomplete_setup_flow():
     assert conv_state["current_flow"] == "setup_creation"
 
 
-def test_deterministic_flow_turn_ignores_modern_strategy_flow_state():
+def test_deterministic_flow_turn_asks_next_strategy_question_without_llm():
     state_repo = _FakeStateRepo()
     assistant = AiAssistantService(
         score_repo=None,
@@ -813,16 +813,18 @@ def test_deterministic_flow_turn_ignores_modern_strategy_flow_state():
         ai_gateway=None,
     )
 
-    result = asyncio.run(
+    response, action, draft, state, suggested_actions = asyncio.run(
         assistant._build_deterministic_flow_turn(
             user_id=23,
             user_query="voor mijn setup BTC Swing Blueprint",
             conv_state={
                 "current_flow": "strategy_creation",
                 "slots": {
-                    "draft": {"draft_kind": "strategy"},
-                    "state_bucket": "transactional_state",
-                    "version": 2,
+                    "symbol": "BTC",
+                    "setup_id": 258,
+                    "setup_type": "dca",
+                    "timeframe": "1W",
+                    "setup_name": "Bitcoin test DCA",
                 },
                 "status": "collecting",
             },
@@ -830,7 +832,61 @@ def test_deterministic_flow_turn_ignores_modern_strategy_flow_state():
         )
     )
 
-    assert result is None
+    assert "basisbedrag" in response.lower()
+    assert action is None
+    assert draft is None
+    assert state["current_flow"] == "strategy_creation"
+    assert state["next_question"] == "base_amount"
+    assert state["missing_slots"] == ["base_amount"]
+    assert suggested_actions is None
+
+
+def test_deterministic_flow_turn_builds_strategy_draft_when_base_amount_present():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+    assistant._active_preferences = {"locale": "nl", "experience_level": "beginner"}
+
+    response, action, draft, state, suggested_actions = asyncio.run(
+        assistant._build_deterministic_flow_turn(
+            user_id=24,
+            user_query="100",
+            conv_state={
+                "current_flow": "strategy_creation",
+                "slots": {
+                    "symbol": "BTC",
+                    "setup_id": 258,
+                    "setup_type": "dca",
+                    "timeframe": "1W",
+                    "setup_name": "Bitcoin test DCA",
+                    "base_amount": 100,
+                    "base_amount_eur": 100,
+                },
+                "status": "collecting",
+            },
+            resolved_symbol="BTC",
+        )
+    )
+
+    assert "staat klaar" in response
+    assert action is None
+    assert draft["type"] == "strategy"
+    assert draft["payload"]["name"] == "Bitcoin test DCA strategie"
+    assert draft["payload"]["setup_id"] == 258
+    assert draft["payload"]["timeframe"] == "1W"
+    assert draft["payload"]["base_amount"] == 100
+    assert state["current_flow"] == "none"
+    assert state_repo.cleared == [24]
+    assert suggested_actions == ["Opslaan", "Pas aan"]
 
 
 def test_strategy_follow_up_accepts_plain_numeric_amount_without_euro_keyword():
