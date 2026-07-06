@@ -220,6 +220,25 @@ class _FakeStateRepo:
         self.cleared.append(user_id)
 
 
+class _FakeSetupRepo:
+    def __init__(self, setups):
+        self._setups = setups
+
+    async def get_all_setups(self, user_id):
+        return list(self._setups)
+
+
+class _FakeStrategyRepo:
+    def __init__(self, strategies):
+        self._strategies = strategies
+
+    async def query_strategies(self, user_id, filters):
+        symbol = (filters or {}).get("symbol")
+        if not symbol:
+            return list(self._strategies)
+        return [row for row in self._strategies if row.get("symbol") == symbol]
+
+
 class _FakeResult:
     def __init__(self, row):
         self._row = row
@@ -554,6 +573,100 @@ def test_strategy_follow_up_accepts_plain_numeric_amount_without_euro_keyword():
     assert conv_state["current_flow"] == "strategy_creation"
     assert conv_state["slots"]["base_amount"] == 100
     assert conv_state["slots"]["base_amount_eur"] == 100
+
+
+def test_deterministic_pre_parse_rehydrates_stale_strategy_flow_before_amount_question():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=_FakeSetupRepo([
+            {
+                "id": 258,
+                "symbol": "BTC",
+                "setup_type": "dca",
+                "timeframe": "1W",
+                "name": "Bitcoin test DCA",
+            }
+        ]),
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=_FakeStrategyRepo([]),
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+
+    conv_state = asyncio.run(
+        assistant._deterministic_pre_parse_slots(
+            "maak een strategie voor btc",
+            {
+                "current_flow": "strategy_creation",
+                "slots": {
+                    "symbol": "BTC",
+                },
+                "status": "collecting",
+            },
+            "BTC",
+            111,
+        )
+    )
+
+    assert conv_state["current_flow"] == "strategy_creation"
+    assert conv_state["slots"]["setup_id"] == 258
+    assert conv_state["slots"]["setup_type"] == "dca"
+    assert conv_state["slots"]["timeframe"] == "1W"
+    assert conv_state["slots"]["setup_name"] == "Bitcoin test DCA"
+    assert state_repo.saved[-1][1] == "strategy_creation"
+    assert state_repo.saved[-1][3]["setup_id"] == 258
+
+
+def test_deterministic_pre_parse_rehydrates_stale_bot_flow_before_budget_questions():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=_FakeSetupRepo([]),
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=_FakeStrategyRepo([
+            {
+                "id": 801,
+                "symbol": "BTC",
+                "name": "BTC DCA strategie",
+                "timeframe": "1W",
+                "base_amount": 100,
+            }
+        ]),
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+
+    conv_state = asyncio.run(
+        assistant._deterministic_pre_parse_slots(
+            "start een bot voor btc",
+            {
+                "current_flow": "bot_creation",
+                "slots": {
+                    "symbol": "BTC",
+                    "name": "BTC Bot",
+                },
+                "status": "collecting",
+            },
+            "BTC",
+            112,
+        )
+    )
+
+    assert conv_state["current_flow"] == "bot_creation"
+    assert conv_state["slots"]["strategy_id"] == 801
+    assert conv_state["slots"]["strategy_name"] == "BTC DCA strategie"
+    assert conv_state["slots"]["timeframe"] == "1W"
+    assert conv_state["slots"]["base_amount"] == 100
+    assert conv_state["slots"]["base_amount_eur"] == 100
+    assert state_repo.saved[-1][1] == "bot_creation"
+    assert state_repo.saved[-1][3]["strategy_id"] == 801
 
 
 def test_conversation_state_repo_restores_collecting_status_from_saved_flow():
