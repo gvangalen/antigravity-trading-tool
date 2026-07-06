@@ -1579,6 +1579,68 @@ class AiAssistantService:
         transactional_flows = {"setup_creation", "strategy_creation", "bot_creation"}
         has_active_transactional_flow = current_flow in transactional_flows
 
+        async def _hydrate_strategy_dependencies(existing_state: Optional[dict]) -> Optional[dict]:
+            if not existing_state or str(existing_state.get("current_flow") or "").strip().lower() != "strategy_creation":
+                return existing_state
+            slots_local = dict(existing_state.get("slots") or {})
+            strategy_symbol = str(slots_local.get("symbol") or resolved_symbol or "").strip() or resolved_symbol
+            if slots_local.get("setup_id"):
+                if strategy_symbol and slots_local.get("symbol") != strategy_symbol:
+                    slots_local["symbol"] = strategy_symbol
+                    existing_state["slots"] = slots_local
+                return existing_state
+
+            existing_setups = await self.setup_repo.get_all_setups(user_id)
+            symbol_setups = [s for s in existing_setups if s.get("symbol") == strategy_symbol]
+            if not symbol_setups:
+                return existing_state
+
+            setup_row = symbol_setups[0]
+            slots_local.update({
+                "symbol": strategy_symbol,
+                "setup_id": setup_row["id"],
+                "setup_type": setup_row.get("setup_type", "trade"),
+                "timeframe": setup_row.get("timeframe"),
+                "setup_name": setup_row.get("name"),
+            })
+            existing_state["slots"] = slots_local
+            await self.state_repo.save_state(user_id, "strategy_creation", strategy_symbol, slots_local)
+            logger.info(
+                f"🩹 [Deterministic-Pre-Parser] Rehydrated stale strategy_creation for user {user_id} with setup_id={setup_row['id']} ({strategy_symbol})."
+            )
+            return existing_state
+
+        async def _hydrate_bot_dependencies(existing_state: Optional[dict]) -> Optional[dict]:
+            if not existing_state or str(existing_state.get("current_flow") or "").strip().lower() != "bot_creation":
+                return existing_state
+            slots_local = dict(existing_state.get("slots") or {})
+            bot_symbol = str(slots_local.get("symbol") or resolved_symbol or "").strip() or resolved_symbol
+            if slots_local.get("strategy_id"):
+                if bot_symbol and slots_local.get("symbol") != bot_symbol:
+                    slots_local["symbol"] = bot_symbol
+                    existing_state["slots"] = slots_local
+                return existing_state
+
+            existing_strategies = await self.strategy_repo.query_strategies(user_id, {"symbol": bot_symbol})
+            if not existing_strategies:
+                return existing_state
+
+            strategy_row = existing_strategies[0]
+            slots_local.update({
+                "symbol": bot_symbol,
+                "strategy_id": strategy_row["id"],
+                "strategy_name": strategy_row.get("name"),
+                "timeframe": strategy_row.get("timeframe"),
+                "base_amount": strategy_row.get("base_amount"),
+                "base_amount_eur": strategy_row.get("base_amount"),
+            })
+            existing_state["slots"] = slots_local
+            await self.state_repo.save_state(user_id, "bot_creation", bot_symbol, slots_local)
+            logger.info(
+                f"🩹 [Deterministic-Pre-Parser] Rehydrated stale bot_creation for user {user_id} with strategy_id={strategy_row['id']} ({bot_symbol})."
+            )
+            return existing_state
+
         if (not conv_state or not current_flow or current_flow == "none" or not has_active_transactional_flow):
             if _looks_like_setup_start():
                 conv_state = {
@@ -1671,7 +1733,10 @@ class AiAssistantService:
                     }
                     await self.state_repo.save_state(user_id, "bot_creation", resolved_symbol, conv_state["slots"])
                     logger.info(f"🎯 [Chain-of-Dependence] Strategy found with ID {strategy_row['id']}. Initialized bot_creation for user {user_id}.")
-                
+        else:
+            conv_state = await _hydrate_strategy_dependencies(conv_state)
+            conv_state = await _hydrate_bot_dependencies(conv_state)
+
         if not conv_state or not conv_state.get("current_flow") or conv_state.get("current_flow") == "none":
             return conv_state
 
