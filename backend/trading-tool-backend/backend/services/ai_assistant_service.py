@@ -1760,6 +1760,19 @@ class AiAssistantService:
         if not flow:
             return conv_state
 
+        def _normalize_slot_alias(slot_name: Optional[str]) -> Optional[str]:
+            alias_map = {
+                "strategy.base_amount_eur": "base_amount_eur",
+                "base_amount": "base_amount_eur",
+                "strategy.execution_mode": "execution_mode",
+                "strategy.risk_profile": "risk_profile",
+                "risk_mode": "risk_profile",
+                "strategy.setup_id": "setup_id",
+            }
+            if not slot_name:
+                return None
+            return alias_map.get(str(slot_name), str(slot_name))
+
         current_missing_slots = []
         for step in flow.get("question_sequence", []):
             slot_key = step["slot"]
@@ -1773,7 +1786,10 @@ class AiAssistantService:
                 continue
             if slot_key not in slots or slots[slot_key] is None or slots[slot_key] == "":
                 current_missing_slots.append(slot_key)
+        declared_next_slot = _normalize_slot_alias(conv_state.get("next_question"))
         next_expected_slot = current_missing_slots[0] if current_missing_slots else None
+        if declared_next_slot and declared_next_slot in current_missing_slots:
+            next_expected_slot = declared_next_slot
 
         # Explicit confirmation requests may finalize the flow, but only once the
         # required slots are actually present. Otherwise we stay in collection mode.
@@ -1870,7 +1886,7 @@ class AiAssistantService:
                 any(w in q_lower for w in ["€", "eur", "inleg", "bedrag", "euro", "order", "inleg:"])
                 or (
                     flow_name == "strategy_creation"
-                    and next_expected_slot in {"strategy.base_amount_eur", "base_amount"}
+                    and next_expected_slot in {"base_amount_eur", "base_amount"}
                 )
             )
         )
@@ -1972,20 +1988,7 @@ class AiAssistantService:
             logger.info(f"🎯 [Deterministic-Pre-Parser] Successfully updated slots: {slots}")
 
             # Re-check if any missing slots remain
-            final_missing = []
-            for step in flow.get("question_sequence", []):
-                slot_key = step["slot"]
-                if flow_name == "setup_creation" and slot_key == "dca_frequency" and slots.get("setup_type") != "dca":
-                    continue
-                if flow_name == "setup_creation" and slot_key == "dca_day" and slots.get("dca_frequency") != "weekly":
-                    continue
-                if flow_name == "setup_creation" and slot_key == "dca_month_day" and slots.get("dca_frequency") != "monthly":
-                    continue
-                if flow_name == "strategy_creation" and slot_key in ["entry", "targets", "stop_loss"] and slots.get("setup_type") != "trade":
-                    continue
-
-                if slot_key not in slots or slots[slot_key] is None or slots[slot_key] == "":
-                    final_missing.append(slot_key)
+            final_missing = self._get_missing_flow_slots(flow_name, slots)
 
             if not final_missing and is_explicit_finalize:
                 conv_state["status"] = "complete"
@@ -2005,6 +2008,9 @@ class AiAssistantService:
         current_slots = slots or {}
         missing: List[str] = []
 
+        def _has_value(value: Any) -> bool:
+            return value is not None and value != ""
+
         for step in flow.get("question_sequence", []):
             slot_key = step["slot"]
             if flow_name == "setup_creation" and slot_key == "dca_frequency" and current_slots.get("setup_type") != "dca":
@@ -2014,6 +2020,18 @@ class AiAssistantService:
             if flow_name == "setup_creation" and slot_key == "dca_month_day" and current_slots.get("dca_frequency") != "monthly":
                 continue
             if flow_name == "strategy_creation" and slot_key in ["entry", "targets", "stop_loss"] and current_slots.get("setup_type") != "trade":
+                continue
+            if flow_name == "strategy_creation" and slot_key == "base_amount_eur":
+                if not (_has_value(current_slots.get("base_amount_eur")) or _has_value(current_slots.get("base_amount"))):
+                    missing.append(slot_key)
+                continue
+            if flow_name == "strategy_creation" and slot_key == "risk_profile":
+                if not (_has_value(current_slots.get("risk_profile")) or _has_value(current_slots.get("risk_mode"))):
+                    missing.append(slot_key)
+                continue
+            if flow_name == "strategy_creation" and slot_key == "setup_id":
+                if not _has_value(current_slots.get("setup_id")):
+                    missing.append(slot_key)
                 continue
             if slot_key not in current_slots or current_slots[slot_key] is None or current_slots[slot_key] == "":
                 missing.append(slot_key)
@@ -2209,13 +2227,19 @@ class AiAssistantService:
                     strategy_name = f"{symbol} {timeframe} strategie"
                 else:
                     strategy_name = f"{symbol} Strategy"
+            execution_mode = slots.get("execution_mode") or "manual"
+            risk_profile = slots.get("risk_profile") or slots.get("risk_mode") or "balanced"
+            base_amount_eur = slots.get("base_amount_eur")
+            if base_amount_eur is None:
+                base_amount_eur = slots.get("base_amount", 100.0)
             payload = {
                 "name": strategy_name,
                 "symbol": symbol,
                 "setup_type": slots.get("setup_type", "trade"),
-                "execution_mode": "fixed",
-                "risk_profile": slots.get("risk_profile", "balanced"),
-                "base_amount": slots.get("base_amount", 100.0)
+                "execution_mode": execution_mode,
+                "risk_profile": risk_profile,
+                "base_amount": base_amount_eur,
+                "base_amount_eur": base_amount_eur,
             }
             if slots.get("setup_id") is not None:
                 payload["setup_id"] = slots.get("setup_id")

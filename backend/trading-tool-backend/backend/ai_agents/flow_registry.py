@@ -108,46 +108,28 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "strategy_creation": {
         "page": "/strategy",
         "assistant_role": "Strategie Architect",
-        "required_slots": ["setup_id", "base_amount"],
-        "conditional_slots": {
-            "entry": {
-                "depends_on": "setup_type",
-                "equals_value": "trade"
-            },
-            "targets": {
-                "depends_on": "setup_type",
-                "equals_value": "trade"
-            },
-            "stop_loss": {
-                "depends_on": "setup_type",
-                "equals_value": "trade"
-            }
-        },
+        "required_slots": ["setup_id", "base_amount_eur", "execution_mode", "risk_profile"],
+        "conditional_slots": {},
         "question_sequence": [
             {
                 "slot": "setup_id",
-                "question_beginner": "Voor welke setup wil je deze strategie maken?",
-                "question_advanced": "Voor welke setup wil je deze strategie maken?"
+                "question_beginner": "Welke setup wil je als basis gebruiken voor deze strategie?",
+                "question_advanced": "Welke setup wil je als basis gebruiken voor deze strategie?"
             },
             {
-                "slot": "base_amount",
-                "question_beginner": "Met welk basisbedrag in euro wil je deze strategie uitvoeren?",
-                "question_advanced": "Met welk basisbedrag in euro wil je deze strategie uitvoeren?"
+                "slot": "base_amount_eur",
+                "question_beginner": "Met welk bedrag per uitvoering wil je deze strategie laten werken?",
+                "question_advanced": "Wat is het bedrag per uitvoering voor deze strategie?"
             },
             {
-                "slot": "entry",
-                "question_beginner": "Welke entry hoort bij deze trade-strategie?",
-                "question_advanced": "Welke entry hoort bij deze trade-strategie?"
+                "slot": "execution_mode",
+                "question_beginner": "Wil je deze strategie handmatig uitvoeren of automatisch laten meelopen?",
+                "question_advanced": "Handmatig of automatisch uitvoeren?"
             },
             {
-                "slot": "targets",
-                "question_beginner": "Welke target(s) wil je gebruiken?",
-                "question_advanced": "Welke target(s) wil je gebruiken?"
-            },
-            {
-                "slot": "stop_loss",
-                "question_beginner": "Welke stop-loss wil je gebruiken?",
-                "question_advanced": "Welke stop-loss wil je gebruiken?"
+                "slot": "risk_profile",
+                "question_beginner": "Welk risicoprofiel past hierbij: conservatief, gebalanceerd of agressief?",
+                "question_advanced": "Welk risicoprofiel wil je gebruiken?"
             }
         ],
         "draft_type": "strategy",
