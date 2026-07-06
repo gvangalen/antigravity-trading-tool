@@ -1486,7 +1486,7 @@
       "secondaryCta": "Back to onboarding",
       "finnLabel": "Finn helps:",
       "finnHint": "Use this prompt if needed: 'Turn this into a strategy with a clear entry, invalidation, and risk management.'",
-      "assistantPrompt": "Guide me through this strategy step by step for my chosen asset. Ask only for what is still missing and do not finalize anything yet."
+      "assistantPrompt": "Guide me through this strategy step by step for my chosen asset. If a setup is already present in context, use it directly and do not ask me to choose a setup again. For a DCA strategy, ask only for the remaining fields in this order: amount per execution, execution mode (manual or automatic), risk profile, then a short final review and only then confirmation. If I ask a clarification question, answer it and stay on the same missing field. Do not show a concept or review card before all required fields are complete."
     },
     "editTitle": "Edit strategy",
     "editSubtitle": "Settings",

@@ -2749,10 +2749,11 @@ def test_technical_indicator_config_requires_symbol_when_activated():
     assert "symbol" in validation["missing_fields"]
 
 
-def test_strategy_creation_for_active_dca_setup_is_confirmable():
+def test_strategy_creation_for_active_dca_setup_moves_to_execution_mode_after_amount():
     service = _service()
     context = {
         "setup_id": 12,
+        "setup_name": "Bitcoin test DCA",
         "setup_type": "dca",
         "setup_symbol": "BTC",
         "setup_timeframe": "1W",
@@ -2761,13 +2762,17 @@ def test_strategy_creation_for_active_dca_setup_is_confirmable():
     result = service.build_strategy_response("Maak een strategie met 100 euro", context)
 
     assert result["intent"] == "strategy_creation"
-    assert result["can_confirm"] is True
+    assert result["can_confirm"] is False
     assert result["draft"]["draft_kind"] == "strategy"
     assert result["draft"]["setup_id"] == 12
+    assert result["draft"]["setup_name"] == "Bitcoin test DCA"
     assert result["draft"]["setup_type"] == "dca"
     assert result["draft"]["asset"] == "BTC"
     assert result["draft"]["strategy"]["base_amount_eur"] == 100
-    assert result["actions"][0]["type"] == "create_strategy"
+    assert result["draft"]["strategy"]["execution_mode"] is None
+    assert "strategy.base_amount_eur" not in result["missing_fields"]
+    assert result["next_question"] == "strategy.execution_mode"
+    assert result["actions"] == []
 
 
 def test_strategy_creation_for_trade_setup_requires_missing_timeframe_then_recovers():
@@ -2990,6 +2995,68 @@ def test_strategy_dca_amount_question_uses_human_per_purchase_wording():
     assert "basisbedrag in euro" not in message.lower()
 
 
+def test_strategy_known_setup_does_not_ask_for_setup_again_after_amount_answer():
+    service = _service()
+    result = service.build_strategy_response(
+        "Gebruik 100 euro per uitvoering",
+        {
+            "setup_id": 258,
+            "setup_name": "Bitcoin test DCA",
+            "setup_type": "dca",
+            "setup_symbol": "BTC",
+            "setup_timeframe": "1W",
+        },
+    )
+
+    assert result["draft"]["strategy"]["base_amount_eur"] == 100
+    assert result["next_question"] == "strategy.execution_mode"
+    assert "setup_id" not in result["missing_fields"]
+    assert "Voor welke setup" not in result["response"]
+    assert "Ik gebruik je Bitcoin test DCA als basis." in result["response"]
+
+
+def test_strategy_dca_flow_stores_amount_in_canonical_path_and_does_not_repeat_amount_question():
+    service = _service()
+    first = service.build_strategy_response(
+        "Maak een strategie voor mijn setup",
+        {
+            "setup_id": 258,
+            "setup_name": "Bitcoin test DCA",
+            "setup_type": "dca",
+            "setup_symbol": "BTC",
+            "setup_timeframe": "1W",
+        },
+    )
+
+    second = service.build_strategy_response("Gebruik 100 euro per uitvoering", {"finn_draft": first["draft"]})
+
+    assert second["draft"]["strategy"]["base_amount_eur"] == 100
+    assert "strategy.base_amount_eur" not in second["missing_fields"]
+    assert second["next_question"] != "strategy.base_amount_eur"
+    assert second["next_question"] == "strategy.execution_mode"
+
+
+def test_strategy_dca_flow_asks_risk_after_execution_mode():
+    service = _service()
+    first = service.build_strategy_response(
+        "Gebruik 100 euro per uitvoering",
+        {
+            "setup_id": 258,
+            "setup_name": "Bitcoin test DCA",
+            "setup_type": "dca",
+            "setup_symbol": "BTC",
+            "setup_timeframe": "1W",
+        },
+    )
+
+    second = service.build_strategy_response("handmatig", {"finn_draft": first["draft"]})
+
+    assert second["draft"]["strategy"]["execution_mode"] == "manual"
+    assert second["draft"]["strategy"]["automation"] == "manual_only"
+    assert second["next_question"] == "strategy.risk_profile"
+    assert "strategy.execution_mode" not in second["missing_fields"]
+
+
 def test_strategy_summary_prefers_setup_name_over_raw_setup_id_only():
     service = _service()
     draft = {
@@ -3001,13 +3068,18 @@ def test_strategy_summary_prefers_setup_name_over_raw_setup_id_only():
         "timeframe": "1W",
         "strategy": {
             "base_amount_eur": 100,
+            "execution_mode": "manual",
+            "risk_profile": "balanced",
         },
     }
 
     summary = service._strategy_summary(draft)
 
-    assert "Bitcoin test DCA (#258)" in summary
+    assert "Strategienaam: Bitcoin test DCA strategie" in summary
+    assert "Setup: Bitcoin test DCA" in summary
     assert "Bedrag per uitvoering: €100" in summary
+    assert "Uitvoering: Handmatig" in summary
+    assert "Risicoprofiel: Gebalanceerd" in summary
 
 
 def test_strategy_update_changes_are_summarized():
@@ -3210,11 +3282,14 @@ def test_strategy_flow_state_exposes_normalized_slots_for_ui():
 
     draft = {
         "setup_id": 12,
+        "setup_name": "Bitcoin test DCA",
         "setup_type": "dca",
         "asset": "BTC",
         "timeframe": "1W",
         "strategy": {
             "base_amount_eur": 100,
+            "execution_mode": "manual",
+            "risk_profile": "balanced",
         },
     }
     validation = {
@@ -3227,15 +3302,21 @@ def test_strategy_flow_state_exposes_normalized_slots_for_ui():
 
     assert state["current_flow"] == "strategy_creation"
     assert state["setup_id"] == 12
+    assert state["setup_name"] == "Bitcoin test DCA"
     assert state["timeframe"] == "1W"
     assert state["base_amount"] == 100
     assert state["base_amount_eur"] == 100
+    assert state["execution_mode"] == "manual"
+    assert state["risk_profile"] == "balanced"
     assert state["slots"]["setup_id"] == 12
+    assert state["slots"]["setup_name"] == "Bitcoin test DCA"
     assert state["slots"]["symbol"] == "BTC"
     assert state["slots"]["setup_type"] == "dca"
     assert state["slots"]["timeframe"] == "1W"
     assert state["slots"]["base_amount"] == 100
     assert state["slots"]["base_amount_eur"] == 100
+    assert state["slots"]["execution_mode"] == "manual"
+    assert state["slots"]["risk_profile"] == "balanced"
     assert state["missing_slots"] == []
     assert state["can_confirm"] is True
 

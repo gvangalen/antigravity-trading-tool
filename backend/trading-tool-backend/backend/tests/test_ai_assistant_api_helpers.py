@@ -83,7 +83,7 @@ def test_modern_transactional_state_record_is_not_treated_as_legacy_resume():
         },
     }
 
-    assert api._is_legacy_transactional_flow_name("strategy_creation") is True
+    assert api._is_legacy_transactional_flow_name("strategy_creation") is False
     assert api._is_modern_transactional_state_record(state) is True
 
 

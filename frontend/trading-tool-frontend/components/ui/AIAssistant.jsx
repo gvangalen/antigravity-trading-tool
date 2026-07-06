@@ -621,6 +621,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
   };
 
   const context = getContext();
+  const skipNextFinnRestoreRef = useRef(null);
 
   useEffect(() => {
     missionControlCacheKeyRef.current = `finn-mission-control:${pathname || "/assistant"}:${globalSymbol || context.symbol || "BTC"}`;
@@ -642,7 +643,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const flowSlots = {
       user_onboarding: ["experience_level", "risk_profile", "investment_goals"],
       setup_creation: ["symbol", "setup_type", "timeframe", "market_condition"],
-      strategy_creation: ["setup_id", "base_amount_eur", "entry", "targets", "stop_loss"],
+      strategy_creation: ["setup_id", "base_amount_eur", "execution_mode", "risk_profile"],
       bot_creation: ["name", "budget_total_eur", "budget_daily_limit_eur"],
       macro_analysis_walkthrough: ["symbol"],
       technical_analysis_walkthrough: ["symbol"],
@@ -666,7 +667,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       totalSlots = 5; // symbol, setup_type, timeframe, dca_frequency, market_condition
     }
     if (state.current_flow === "strategy_creation" && setupType === "dca") {
-      totalSlots = 3; // symbol, setup_type, base_amount
+      totalSlots = 4; // setup, amount, execution mode, risk profile
     }
 
     const percentage = Math.min(Math.round((filledSlots.length / totalSlots) * 100), 100);
@@ -812,10 +813,14 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     return {
       symbol: rawSlots.symbol || state?.asset || state?.symbol || null,
       setup_id: rawSlots.setup_id || state?.setup_id || null,
+      setup_name: rawSlots.setup_name || state?.setup_name || null,
       setup_type: rawSlots.setup_type || state?.setup_type || null,
       timeframe: rawSlots.timeframe || state?.timeframe || null,
       base_amount: rawSlots.base_amount || rawSlots.base_amount_eur || state?.base_amount || state?.base_amount_eur || null,
       base_amount_eur: rawSlots.base_amount_eur || rawSlots.base_amount || state?.base_amount_eur || state?.base_amount || null,
+      execution_mode: rawSlots.execution_mode || state?.execution_mode || null,
+      risk_profile: rawSlots.risk_profile || rawSlots.risk_mode || state?.risk_profile || state?.risk_mode || null,
+      risk_mode: rawSlots.risk_mode || rawSlots.risk_profile || state?.risk_mode || state?.risk_profile || null,
       entry_type: rawSlots.entry_type || state?.entry_type || null,
       entry: rawSlots.entry || state?.entry || null,
       stop_loss: rawSlots.stop_loss || state?.stop_loss || null,
@@ -832,6 +837,14 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     }
     if (!slots.base_amount_eur && !slots.base_amount) {
       missing.push("strategy.base_amount_eur");
+      return missing;
+    }
+    if (!slots.execution_mode) {
+      missing.push("strategy.execution_mode");
+      return missing;
+    }
+    if (!slots.risk_profile && !slots.risk_mode) {
+      missing.push("strategy.risk_profile");
     }
     return missing;
   };
@@ -943,6 +956,30 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             prompt: at("followUps.strategy.amount250Prompt", "Gebruik 250 euro per uitvoering."),
           },
         ],
+        "strategy.execution_mode": [
+          {
+            label: at("followUps.strategy.executionManual", "Handmatig uitvoeren"),
+            prompt: at("followUps.strategy.executionManualPrompt", "Voer deze strategie handmatig uit."),
+          },
+          {
+            label: at("followUps.strategy.executionAutomatic", "Automatisch uitvoeren"),
+            prompt: at("followUps.strategy.executionAutomaticPrompt", "Laat deze strategie automatisch meelopen via een bot."),
+          },
+        ],
+        "strategy.risk_profile": [
+          {
+            label: at("followUps.strategy.riskConservative", "Conservatief"),
+            prompt: at("followUps.strategy.riskConservativePrompt", "Gebruik een conservatief risicoprofiel."),
+          },
+          {
+            label: at("followUps.strategy.riskBalanced", "Gebalanceerd"),
+            prompt: at("followUps.strategy.riskBalancedPrompt", "Gebruik een gebalanceerd risicoprofiel."),
+          },
+          {
+            label: at("followUps.strategy.riskAggressive", "Agressief"),
+            prompt: at("followUps.strategy.riskAggressivePrompt", "Gebruik een agressief risicoprofiel."),
+          },
+        ],
       };
 
       if (state?.status === "collecting" && nextQuestion && bySlot[nextQuestion]) {
@@ -951,6 +988,15 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
       if (state?.status === "collecting") {
         return [];
+      }
+
+      if (state?.can_confirm) {
+        return normalizeFollowUpActions([
+          {
+            label: at("followUps.strategy.review", "Strategie controleren"),
+            prompt: at("followUps.strategy.reviewPrompt", "Controleer de strategie en maak hem aan als alles klopt."),
+          },
+        ]);
       }
 
       if (message?.intent === "strategy_created") {
@@ -3467,6 +3513,8 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
         metric,
         symbol,
         timeframe,
+        assistantFlow,
+        assistantSuppressRestore,
       } = e.detail || {};
       if (openAssistant) {
         setIsOpen(true);
@@ -3474,6 +3522,21 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       if (metric) {
         setContextMetric({ metric, symbol: symbol || globalSymbol || "BTC", timeframe: timeframe || "1W" });
         setIsOpen(true);
+      }
+      if (assistantSuppressRestore && assistantFlow) {
+        skipNextFinnRestoreRef.current = assistantFlow;
+        if (assistantFlow === "strategy_creation") {
+          setFinnDraft(null);
+          setActiveState(null);
+          setMessages((prev) =>
+            prev.filter(
+              (message) =>
+                message?.flow !== "strategy_creation" &&
+                message?.intent !== "strategy_creation" &&
+                !message?.restoredFinnDraft
+            )
+          );
+        }
       }
       if (hiddenPrompt) {
         handleChat(hiddenPrompt, true);
@@ -3503,6 +3566,11 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
   async function loadFinnState() {
     if (loadedFinnStateRef.current) return;
+    if (skipNextFinnRestoreRef.current) {
+      loadedFinnStateRef.current = true;
+      skipNextFinnRestoreRef.current = null;
+      return;
+    }
     loadedFinnStateRef.current = true;
     try {
       const envelope = await fetchFinnState();

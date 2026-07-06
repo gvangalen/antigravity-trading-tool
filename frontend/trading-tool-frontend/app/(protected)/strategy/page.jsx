@@ -145,6 +145,8 @@ export default function StrategyPage() {
           guidedMode={onboardingGuidedMode}
           isComplete={strategyStepComplete}
           nextHref="/bot?onboarding=1&step=bot"
+          assistantFlow="strategy_creation"
+          assistantSuppressRestore
         />
       ) : null}
 

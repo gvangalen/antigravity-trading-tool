@@ -389,15 +389,15 @@ def empty_strategy_draft() -> Dict[str, Any]:
         "timeframe": None,
         "strategy": {
             "base_amount_eur": None,
-            "execution_mode": "fixed",
+            "execution_mode": None,
             "decision_curve": None,
-            "direction": "long",
+            "direction": None,
             "entry_type": None,
             "entry": None,
             "stop_loss": None,
             "targets": None,
-            "automation": "manual_only",
-            "risk_profile": "balanced",
+            "automation": None,
+            "risk_profile": None,
         },
     }
 
@@ -5271,6 +5271,8 @@ class FinnPlanService:
 
         if self._is_plan_deviation_ack(q_lower):
             draft["plan_deviation_ack"] = True
+        if self._is_strategy_amount_scope_question(q_lower) and draft.get("strategy", {}).get("base_amount_eur") is None:
+            draft["_strategy_amount_scope_explained"] = True
 
         if explicit_create_intent and not explicit_update_intent:
             draft["operation"] = "create"
@@ -5308,12 +5310,14 @@ class FinnPlanService:
         bot_patch = extracted.get("bot") or {}
         if bot_patch.get("automation"):
             draft["strategy"]["automation"] = bot_patch["automation"]
+            draft["strategy"]["execution_mode"] = self._strategy_execution_mode_from_automation(bot_patch["automation"])
         if bot_patch.get("risk_profile"):
             draft["strategy"]["risk_profile"] = bot_patch["risk_profile"]
         if bot_patch.get("create_bot") is True and not draft["strategy"].get("automation"):
             draft["strategy"]["automation"] = "bot_assisted"
+            draft["strategy"]["execution_mode"] = "automatic"
 
-        self._apply_strategy_defaults(draft, for_save=True)
+        self._apply_strategy_defaults(draft, for_save=False)
         validation = self._validate_strategy_draft(draft)
         message = self._build_strategy_message(draft, validation)
 
@@ -8629,6 +8633,8 @@ class FinnPlanService:
             patch["bot"]["is_live"] = False
         if "agressief" in q or "aggressive" in q:
             patch["bot"]["risk_profile"] = "aggressive"
+        elif "gebalanceerd" in q or "balanced" in q or "balance" in q:
+            patch["bot"]["risk_profile"] = "balanced"
         elif "conservatief" in q or "conservative" in q:
             patch["bot"]["risk_profile"] = "conservative"
 
@@ -8712,6 +8718,8 @@ class FinnPlanService:
     def _apply_strategy_context(self, draft: Dict[str, Any], context: Dict[str, Any]) -> None:
         if context.get("setup_id") and not draft.get("setup_id"):
             draft["setup_id"] = context.get("setup_id")
+        if context.get("setup_name") and not draft.get("setup_name"):
+            draft["setup_name"] = context.get("setup_name")
         if context.get("strategy_id") and not draft.get("strategy_id"):
             draft["strategy_id"] = context.get("strategy_id")
             draft["operation"] = "update"
@@ -8735,10 +8743,40 @@ class FinnPlanService:
             draft["setup_type"] = str(draft["setup_type"]).lower()
         if draft.get("setup_type") == "trade" and not draft["strategy"].get("direction"):
             draft["strategy"]["direction"] = "long"
+        automation = draft["strategy"].get("automation")
+        execution_mode = draft["strategy"].get("execution_mode")
+        if execution_mode in {"manual", "automatic"} and not automation:
+            draft["strategy"]["automation"] = self._strategy_automation_from_execution_mode(execution_mode)
+        elif automation in {"manual_only", "bot_assisted"} and not execution_mode:
+            draft["strategy"]["execution_mode"] = self._strategy_execution_mode_from_automation(automation)
         if for_save and not draft["strategy"].get("automation"):
-            draft["strategy"]["automation"] = "manual_only"
+            draft["strategy"]["automation"] = self._strategy_automation_from_execution_mode(
+                draft["strategy"].get("execution_mode")
+            )
         if for_save and not draft["strategy"].get("risk_profile"):
             draft["strategy"]["risk_profile"] = "balanced"
+
+    def _strategy_execution_mode_from_automation(self, automation: Optional[str]) -> Optional[str]:
+        if automation == "manual_only":
+            return "manual"
+        if automation == "bot_assisted":
+            return "automatic"
+        return None
+
+    def _strategy_automation_from_execution_mode(self, execution_mode: Optional[str]) -> Optional[str]:
+        if execution_mode == "manual":
+            return "manual_only"
+        if execution_mode == "automatic":
+            return "bot_assisted"
+        return None
+
+    def _is_strategy_amount_scope_question(self, q_lower: str) -> bool:
+        return (
+            "per keer" in q_lower
+            or "per uitvoering" in q_lower
+            or "voor totaal of per keer" in q_lower
+            or "totaal of per keer" in q_lower
+        )
 
     async def _hydrate_bot_draft_from_db(self, user_id: int, draft: Dict[str, Any]) -> None:
         if not self.session or not isinstance(draft, dict) or not draft.get("strategy_id"):
@@ -8969,7 +9007,7 @@ class FinnPlanService:
         strategy = draft.get("strategy") or {}
         defaults = {
             "base_amount_eur": existing.get("base_amount"),
-            "execution_mode": existing.get("execution_mode") or "fixed",
+            "execution_mode": self._strategy_execution_mode_from_automation(existing.get("automation")) or "manual",
             "direction": existing.get("direction") or "long",
             "entry_type": existing.get("entry_type") or existing.get("trade_execution_mode"),
             "market_execution_ack": False,
@@ -8988,9 +9026,15 @@ class FinnPlanService:
     def _strategy_changes(self, existing: Dict[str, Any], draft: Dict[str, Any]) -> List[Dict[str, Any]]:
         strategy = draft.get("strategy") or {}
         data = self._strategy_existing_data(existing)
+        existing_execution_mode = self._first_present(
+            self._strategy_execution_mode_from_automation(existing.get("automation")),
+            self._strategy_execution_mode_from_automation(data.get("automation")) if isinstance(data, dict) else None,
+            None if existing.get("execution_mode") == "fixed" else existing.get("execution_mode"),
+            None if data.get("execution_mode") == "fixed" else data.get("execution_mode"),
+        )
         existing_map = {
             "base_amount_eur": self._first_present(existing.get("base_amount"), data.get("base_amount"), data.get("base_amount_eur")),
-            "execution_mode": self._first_present(existing.get("execution_mode"), data.get("execution_mode")),
+            "execution_mode": existing_execution_mode,
             "entry_type": self._first_present(existing.get("entry_type"), existing.get("trade_execution_mode"), data.get("entry_type"), data.get("trade_execution_mode")),
             "entry": self._first_present(existing.get("entry"), data.get("entry")),
             "stop_loss": self._first_present(existing.get("stop_loss"), data.get("stop_loss")),
@@ -8999,6 +9043,8 @@ class FinnPlanService:
         changes = []
         for field, before in existing_map.items():
             after = strategy.get(field)
+            if field == "execution_mode" and self._is_emptyish(after):
+                continue
             if self._is_emptyish(before) and self._is_emptyish(after):
                 continue
             if self._normalized_compare_value(before) != self._normalized_compare_value(after):
@@ -9083,6 +9129,15 @@ class FinnPlanService:
         elif amount > 1_000_000:
             invalid.append({"field": "strategy.base_amount_eur", "reason": "bedrag is onrealistisch hoog; gebruik maximaal 1.000.000 euro"})
 
+        requires_dca_guidance_slots = draft.get("setup_type") == "dca" and draft.get("operation") != "update"
+        if requires_dca_guidance_slots:
+            execution_mode = strategy.get("execution_mode")
+            risk_profile = strategy.get("risk_profile")
+            if execution_mode not in {"manual", "automatic"}:
+                missing.append("strategy.execution_mode")
+            if risk_profile not in {"conservative", "balanced", "aggressive"}:
+                missing.append("strategy.risk_profile")
+
         if draft.get("setup_type") == "trade":
             if strategy.get("direction") != "long":
                 invalid.append({"field": "strategy.direction", "reason": "alleen long trades worden nu ondersteund"})
@@ -9122,7 +9177,7 @@ class FinnPlanService:
                         invalid.append({"field": "strategy.risk_reward", "reason": "risk/reward moet minimaal 1:1 zijn"})
 
         if self._draft_requires_plan_deviation_ack(draft) and not draft.get("plan_deviation_ack"):
-            missing.append("plan_deviation_ack")
+            missing.insert(0, "plan_deviation_ack")
 
         next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
         return {
@@ -9156,20 +9211,38 @@ class FinnPlanService:
                     )
                 return "\n".join(lines)
             return "Voor welke setup wil je deze strategie maken? Noem bijvoorbeeld setup 12, of open eerst je bestaande setup."
+        known_setup_intro = ""
+        if draft.get("setup_id"):
+            setup_label = draft.get("setup_name") or f"{asset} {('DCA setup' if setup_type == 'dca' else 'setup')}"
+            known_setup_intro = f"Ik gebruik je {setup_label} als basis. "
         if next_question == "strategy_id":
             return "Welke bestaande strategie wil je aanpassen? Noem bijvoorbeeld strategie 12 of open eerst de strategie."
         if next_question == "setup_type":
             return "Wil je hier een DCA-strategie van maken of een trade-strategie met entry, invalidatie en targets?"
         if next_question == "strategy.base_amount_eur":
+            if draft.get("_strategy_amount_scope_explained"):
+                return (
+                    f"{known_setup_intro}Hier gaat het om het bedrag per uitvoering, niet om je totale budget. "
+                    f"Welk bedrag wil je per aankoop gebruiken voor deze {asset} {('DCA-strategie' if setup_type == 'dca' else 'strategie')} op {timeframe}? "
+                    "Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
+                )
             if setup_type == "dca":
                 if strategy.get("base_amount_eur") is None:
                     return (
-                        f"Met welk bedrag wil je per aankoop werken voor deze {asset} DCA-strategie op {timeframe}? "
+                        f"{known_setup_intro}Met welk bedrag wil je per aankoop werken voor deze {asset} DCA-strategie op {timeframe}? "
                         "Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
                     )
             return (
-                f"Met welk basisbedrag in euro wil je deze strategie uitvoeren voor {asset} op {timeframe}? "
+                f"{known_setup_intro}Met welk basisbedrag in euro wil je deze strategie uitvoeren voor {asset} op {timeframe}? "
                 "Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
+            )
+        if next_question == "strategy.execution_mode":
+            return (
+                f"{known_setup_intro}Bedrag ingesteld voor {asset}. Wil je deze strategie handmatig uitvoeren of automatisch via een bot laten meelopen?"
+            )
+        if next_question == "strategy.risk_profile":
+            return (
+                f"{known_setup_intro}Prima. Welk risicoprofiel wil je gebruiken voor deze {asset} strategie: conservatief, gebalanceerd of agressief?"
             )
         if next_question == "strategy.entry_type":
             return "Hoe wil je instappen bij deze trade: limit, breakout of direct op market?"
@@ -9211,18 +9284,30 @@ class FinnPlanService:
     def _strategy_summary(self, draft: Dict[str, Any]) -> str:
         strategy = draft.get("strategy") or {}
         setup_type = str(draft.get("setup_type") or "").lower()
-        setup_label = "DCA setup" if setup_type == "dca" else "trade setup"
         setup_id = draft.get("setup_id")
-        setup_name = draft.get("setup_name")
+        setup_name = draft.get("setup_name") or (f"Setup #{setup_id}" if setup_id else "Onbekende setup")
         asset = draft.get("asset") or "onbekend asset"
         timeframe = draft.get("timeframe") or "onbekende timeframe"
+        execution_mode = strategy.get("execution_mode")
+        risk_profile = strategy.get("risk_profile")
+        execution_label = {
+            "manual": "Handmatig",
+            "automatic": "Automatisch",
+        }.get(execution_mode)
+        risk_label = {
+            "conservative": "Conservatief",
+            "balanced": "Gebalanceerd",
+            "aggressive": "Agressief",
+        }.get(risk_profile)
+        strategy_name = f"{setup_name} strategie"
         lines = [
-            f"- Actie: strategie {'bijwerken' if draft.get('operation') == 'update' else 'aanmaken'}",
-            f"- Setup: {setup_name} (#{setup_id})" if setup_name and setup_id else (f"- Setup: #{setup_id}" if setup_id else None),
-            f"- Setupsoort: {setup_label}",
+            f"- Strategienaam: {strategy_name}",
+            f"- Setup: {setup_name}",
             f"- Asset: {asset}",
             f"- Timeframe: {timeframe}",
             f"- Bedrag per uitvoering: €{strategy.get('base_amount_eur')}" if strategy.get("base_amount_eur") else None,
+            f"- Uitvoering: {execution_label}" if execution_label else None,
+            f"- Risicoprofiel: {risk_label}" if risk_label else None,
         ]
         lines = [line for line in lines if line]
         if draft.get("plan_deviation"):
@@ -9250,10 +9335,14 @@ class FinnPlanService:
         slots = {
             "symbol": draft.get("asset"),
             "setup_id": draft.get("setup_id"),
+            "setup_name": draft.get("setup_name"),
             "setup_type": draft.get("setup_type"),
             "timeframe": draft.get("timeframe"),
             "base_amount": strategy.get("base_amount_eur"),
             "base_amount_eur": strategy.get("base_amount_eur"),
+            "execution_mode": strategy.get("execution_mode"),
+            "risk_profile": strategy.get("risk_profile"),
+            "risk_mode": strategy.get("risk_profile"),
             "entry_type": strategy.get("entry_type"),
             "entry": strategy.get("entry"),
             "stop_loss": strategy.get("stop_loss"),
@@ -9268,14 +9357,19 @@ class FinnPlanService:
             "strategy_id": draft.get("strategy_id"),
             "operation": operation,
             "setup_type": draft.get("setup_type"),
+            "setup_name": draft.get("setup_name"),
             "timeframe": draft.get("timeframe"),
             "base_amount": strategy.get("base_amount_eur"),
             "base_amount_eur": strategy.get("base_amount_eur"),
+            "execution_mode": strategy.get("execution_mode"),
+            "risk_profile": strategy.get("risk_profile"),
+            "risk_mode": strategy.get("risk_profile"),
             "entry_type": strategy.get("entry_type"),
             "entry": strategy.get("entry"),
             "stop_loss": strategy.get("stop_loss"),
             "targets": strategy.get("targets"),
             "automation": strategy.get("automation"),
+            "confirmation_status": "ready" if validation["can_confirm"] else "collecting",
             "slots": slots,
             "missing_slots": list(validation.get("missing_fields") or []),
             "setup_options": setup_options or [],
@@ -20278,7 +20372,7 @@ class FinnPlanService:
             "name": f"{setup_name} Strategy",
             "setup_id": setup_id,
             "setup_type": draft["plan_type"],
-            "execution_mode": strategy.get("execution_mode") or "fixed",
+            "execution_mode": "fixed",
             "base_amount": float(strategy["base_amount_eur"]),
             "decision_curve": strategy.get("decision_curve"),
             "risk_profile": risk_profile,
@@ -20307,11 +20401,11 @@ class FinnPlanService:
             "name": f"Finn {str(draft.get('asset') or '').upper()} Strategy".strip(),
             "setup_id": int(draft["setup_id"]),
             "setup_type": draft["setup_type"],
-            "execution_mode": strategy.get("execution_mode") or "fixed",
+            "execution_mode": "fixed",
             "base_amount": float(strategy["base_amount_eur"]),
             "decision_curve": strategy.get("decision_curve"),
             "risk_profile": strategy.get("risk_profile") or "balanced",
-            "automation": strategy.get("automation") or "manual_only",
+            "automation": strategy.get("automation") or self._strategy_automation_from_execution_mode(strategy.get("execution_mode")) or "manual_only",
             "explanation": "Aangemaakt via Finn",
         }
         if draft["setup_type"] == "trade":

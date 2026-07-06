@@ -11,6 +11,8 @@ export default function OnboardingStepGuide({
   guidedMode = false,
   isComplete = false,
   nextHref = null,
+  assistantFlow = null,
+  assistantSuppressRestore = false,
 }) {
   const router = useRouter();
   const [autoAdvanceCancelled, setAutoAdvanceCancelled] = useState(false);
@@ -24,6 +26,8 @@ export default function OnboardingStepGuide({
         detail: {
           openAssistant: true,
           hiddenPrompt: copy.assistantPrompt,
+          assistantFlow,
+          assistantSuppressRestore,
         },
       })
     );

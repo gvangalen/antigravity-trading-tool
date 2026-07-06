@@ -1487,7 +1487,7 @@
       "secondaryCta": "Terug naar onboarding",
       "finnLabel": "Finn helpt:",
       "finnHint": "Gebruik desnoods deze prompt: 'Maak hier een strategie van met duidelijke entry, invalidatie en risk management.'",
-      "assistantPrompt": "Begeleid me stap voor stap bij deze strategie voor mijn gekozen asset. Vraag eerst alleen wat nog ontbreekt en maak nog niets definitief."
+      "assistantPrompt": "Begeleid me stap voor stap bij deze strategie voor mijn gekozen asset. Als er al een setup in context staat, gebruik die dan direct en vraag niet opnieuw om een setup te kiezen. Voor een DCA-strategie vraag je alleen in deze volgorde wat nog ontbreekt: basisbedrag per uitvoering, uitvoermodus (handmatig of automatisch), risicoprofiel, daarna een korte eindcontrole en pas dan bevestiging. Als ik een verduidelijkingsvraag stel, beantwoord die dan en blijf op hetzelfde ontbrekende veld. Toon geen concept- of reviewkaart voordat alle vereiste velden compleet zijn."
     },
     "editTitle": "Strategie aanpassen",
     "editSubtitle": "Instellingen",
