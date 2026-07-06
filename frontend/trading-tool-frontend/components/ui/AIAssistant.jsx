@@ -4295,6 +4295,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
     const isFinnBot = message.intent === "bot_creation" || message.flow === "bot_creation" || draft?.draft_kind === "bot";
     const isFinnIndicator = message.intent === "indicator_config" || message.flow === "indicator_config" || draft?.draft_kind === "indicator_config";
     if (!draft || (!isFinnPlan && !isFinnStrategy && !isFinnBot && !isFinnIndicator)) return null;
+    if (isFinnStrategy && !message.canConfirm) return null;
 
     const setup = draft.setup || {};
     const strategy = draft.strategy || {};
@@ -4486,7 +4487,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             {at("draftStatus.collectingDetails", "Finn verzamelt eerst de kernkeuzes en laat daarna pas de volledige conceptkaart zien.")}
           </div>
         )}
-        {isFinnStrategy && setupOptions.length > 0 && (
+        {isFinnStrategy && visibleMissingFields.includes("setup_id") && setupOptions.length > 0 && (
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/70 dark:bg-slate-950/30 p-3 space-y-2">
             <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">{uiText.chooseSetup}</div>
             <div className="grid grid-cols-1 gap-2">

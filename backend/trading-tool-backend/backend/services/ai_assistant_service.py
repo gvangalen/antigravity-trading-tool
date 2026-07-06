@@ -1781,12 +1781,13 @@ class AiAssistantService:
         updated = False
 
         # Unconditional slot updating (allows toggling selections / chip clicks!)
-        if any(w in q_lower for w in ["trade", "trading", "actief", "actieve", "manual", "handmatig"]):
-            slots["setup_type"] = "trade"
-            updated = True
-        elif any(w in q_lower for w in ["dca", "periodiek", "passief", "bijkopen"]):
-            slots["setup_type"] = "dca"
-            updated = True
+        if flow_name == "setup_creation" or next_expected_slot == "setup_type":
+            if any(w in q_lower for w in ["trade", "trading", "actief", "actieve"]):
+                slots["setup_type"] = "trade"
+                updated = True
+            elif any(w in q_lower for w in ["dca", "periodiek", "passief", "bijkopen"]):
+                slots["setup_type"] = "dca"
+                updated = True
 
         timeframe_hint = _extract_setup_timeframe_hint(q_lower, setup_type=slots.get("setup_type"))
         if timeframe_hint and flow_name == "setup_creation":
@@ -1875,6 +1876,8 @@ class AiAssistantService:
         )
         if should_capture_base_amount:
             slots["base_amount"] = nums[0]
+            if flow_name == "strategy_creation":
+                slots["base_amount_eur"] = nums[0]
             updated = True
 
         # Entry Price
@@ -1908,6 +1911,14 @@ class AiAssistantService:
         elif any(w in q_lower for w in ["advanced", "gevorderd", "ervaren", "expert"]):
             slots["experience_level"] = "advanced"
             updated = True
+
+        if flow_name == "strategy_creation":
+            if any(w in q_lower for w in ["handmatig", "manual"]):
+                slots["execution_mode"] = "manual"
+                updated = True
+            elif any(w in q_lower for w in ["automatisch", "automatic", "auto"]):
+                slots["execution_mode"] = "automatic"
+                updated = True
 
         # Risk Profile
         if any(w in q_lower for w in ["conservative", "voorzichtig", "laag"]):
@@ -2002,6 +2013,17 @@ class AiAssistantService:
         current_slots = slots or {}
         missing: List[str] = []
 
+        if flow_name == "strategy_creation":
+            if not current_slots.get("setup_id"):
+                missing.append("setup_id")
+            if current_slots.get("base_amount_eur") in (None, "") and current_slots.get("base_amount") in (None, ""):
+                missing.append("base_amount")
+            if not current_slots.get("execution_mode"):
+                missing.append("execution_mode")
+            if not current_slots.get("risk_profile"):
+                missing.append("risk_profile")
+            return missing
+
         for step in flow.get("question_sequence", []):
             slot_key = step["slot"]
             if flow_name == "setup_creation" and slot_key == "dca_frequency" and current_slots.get("setup_type") != "dca":
@@ -2023,6 +2045,26 @@ class AiAssistantService:
         flow = FLOW_DEFINITIONS.get(flow_name) or {}
         stated_exp = str((preferences or {}).get("experience_level", "beginner"))
         question_key = "question_advanced" if stated_exp == "advanced" else "question_beginner"
+
+        if flow_name == "strategy_creation":
+            symbol = str((slots or {}).get("symbol") or "BTC")
+            timeframe = str((slots or {}).get("timeframe") or "je gekozen timeframe")
+            setup_name = str((slots or {}).get("setup_name") or "").strip()
+            known_setup_intro = f"Ik gebruik je {setup_name} als basis. " if setup_name else ""
+            prompts = {
+                "setup_id": "Welke setup wil je als basis gebruiken voor deze strategie?",
+                "base_amount": (
+                    f"{known_setup_intro}Met welk bedrag per uitvoering wil je deze strategie voor {symbol} op {timeframe} gebruiken? "
+                    "Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
+                ).strip(),
+                "execution_mode": (
+                    f"{known_setup_intro}Bedrag ingesteld. Wil je deze strategie handmatig uitvoeren of automatisch via een bot laten meelopen?"
+                ).strip(),
+                "risk_profile": (
+                    f"{known_setup_intro}Welk risicoprofiel wil je gebruiken voor deze {symbol} strategie: conservatief, gebalanceerd of agressief?"
+                ).strip(),
+            }
+            return prompts.get(slot_key, "")
 
         for step in flow.get("question_sequence", []):
             if step.get("slot") != slot_key:
@@ -2210,9 +2252,9 @@ class AiAssistantService:
                 "name": strategy_name,
                 "symbol": symbol,
                 "setup_type": slots.get("setup_type", "trade"),
-                "execution_mode": "fixed",
+                "execution_mode": slots.get("execution_mode", "manual"),
                 "risk_profile": slots.get("risk_profile", "balanced"),
-                "base_amount": slots.get("base_amount", 100.0)
+                "base_amount": slots.get("base_amount_eur", slots.get("base_amount", 100.0))
             }
             if slots.get("setup_id") is not None:
                 payload["setup_id"] = slots.get("setup_id")
@@ -2222,10 +2264,6 @@ class AiAssistantService:
                 payload["entry"] = slots.get("entry", 100.0)
                 payload["targets"] = slots.get("targets", [110.0, 120.0])
                 payload["stop_loss"] = slots.get("stop_loss", 90.0)
-            elif slots.get("setup_type") == "dca":
-                payload["dca_mode"] = slots.get("dca_mode", "standard")
-                if slots.get("dca_mode") == "custom":
-                    payload["buy_score_threshold"] = slots.get("buy_score_threshold", 30.0)
             return {
                 "type": "strategy",
                 "payload": payload

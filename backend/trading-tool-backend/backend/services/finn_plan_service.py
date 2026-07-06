@@ -1428,7 +1428,15 @@ class FinnPlanService:
 
         continuation_terms = {
             "bot": ["bot", "strategie", "strategy", "paper", "live", "manual", "auto", "budget", "daglimiet", "min order", "max order", "cadence", "risk", "risico"],
-            "strategy": ["strategie", "strategy", "setup", "entry", "stop", "target", "basisbedrag", "base amount", "market akkoord"],
+            "strategy": [
+                "strategie", "strategy", "setup", "entry", "stop", "target",
+                "basisbedrag", "base amount", "market akkoord",
+                "manual", "automatic", "auto", "handmatig", "automatisch",
+                "conservative", "balanced", "aggressive",
+                "conservatief", "gebalanceerd", "agressief",
+                "per keer", "per uitvoering", "voor totaal", "totaal",
+                "100", "250",
+            ],
             "indicator_config": ["indicator", "macro", "technical", "node", "weging", "weight", "rule", "regel", "contrarian"],
             "plan": [
                 "setup", "dca", "trade", "entry", "stop", "target",
@@ -1448,6 +1456,46 @@ class FinnPlanService:
         if draft_kind == "indicator_config":
             return any(term in q for term in continuation_terms["indicator_config"])
         return any(term in q for term in continuation_terms["plan"])
+
+    def _strategy_field_label(self, field: str) -> str:
+        labels = {
+            "setup_id": "je setup",
+            "setup_type": "het setup-type",
+            "strategy.base_amount_eur": "het bedrag per uitvoering",
+            "strategy.execution_mode": "de uitvoermodus",
+            "strategy.risk_profile": "het risicoprofiel",
+            "strategy.entry_type": "de entry-methode",
+            "strategy.market_execution_ack": "de market-bevestiging",
+            "strategy.entry": "de entry",
+            "strategy.stop_loss": "de invalidatie",
+            "strategy.targets": "de koersdoelen",
+            "plan_deviation_ack": "de planbevestiging",
+        }
+        return labels.get(field, "dit onderdeel")
+
+    def _format_eur_value(self, value: Any) -> str:
+        if value in (None, ""):
+            return "€0"
+        try:
+            amount = float(value)
+        except (TypeError, ValueError):
+            return f"€{value}"
+        if amount.is_integer():
+            return f"€{int(amount)}"
+        return f"€{amount:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    def _apply_strategy_setup_option(self, draft: Dict[str, Any], option: Dict[str, Any]) -> None:
+        if not isinstance(option, dict):
+            return
+        draft["setup_id"] = option.get("id")
+        if option.get("name"):
+            draft["setup_name"] = option.get("name")
+        if option.get("setup_type"):
+            draft["setup_type"] = option.get("setup_type")
+        if option.get("symbol"):
+            draft["asset"] = option.get("symbol")
+        if option.get("timeframe"):
+            draft["timeframe"] = option.get("timeframe")
 
     def sanitize_context_for_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         payload = dict(context or {})
@@ -5234,12 +5282,22 @@ class FinnPlanService:
 
         draft = response.get("draft") if isinstance(response.get("draft"), dict) else {}
         await self._hydrate_strategy_draft_from_db(user_id, draft)
+        setup_options: List[Dict[str, Any]] = []
+        if not draft.get("setup_id"):
+            setup_options = await self._strategy_setup_options(user_id, draft)
+            if len(setup_options) == 1:
+                self._apply_strategy_setup_option(draft, setup_options[0])
+                await self._hydrate_strategy_draft_from_db(user_id, draft)
+                setup_options = []
 
         strategy_service = StrategyService(self.session)
         validation = self._validate_strategy_draft(draft)
         existing_strategy = None
         if draft.get("setup_id"):
-            existing_strategy = await strategy_service.get_strategy_by_setup(int(draft["setup_id"]), user_id)
+            if hasattr(strategy_service, "get_strategy_by_setup"):
+                existing_strategy = await strategy_service.get_strategy_by_setup(int(draft["setup_id"]), user_id)
+            elif getattr(strategy_service, "repository", None) and hasattr(strategy_service.repository, "get_strategy_by_setup"):
+                existing_strategy = await strategy_service.repository.get_strategy_by_setup(int(draft["setup_id"]), user_id)
 
         if existing_strategy and draft.get("operation") != "update":
             draft["strategy_id"] = None
@@ -5276,9 +5334,14 @@ class FinnPlanService:
             draft["plan_deviation"] = self._plan_deviation_warning_from_event(behavioral_event, acknowledged=bool(draft.get("plan_deviation_ack")))
             validation = self._validate_strategy_draft(draft)
 
-        setup_options = []
         if "setup_id" in validation["missing_fields"]:
-            setup_options = await self._strategy_setup_options(user_id, draft)
+            if not setup_options:
+                setup_options = await self._strategy_setup_options(user_id, draft)
+            if len(setup_options) == 1:
+                self._apply_strategy_setup_option(draft, setup_options[0])
+                await self._hydrate_strategy_draft_from_db(user_id, draft)
+                validation = self._validate_strategy_draft(draft)
+                setup_options = []
 
         actions = []
         if validation["can_confirm"]:
@@ -9056,7 +9119,7 @@ class FinnPlanService:
 
         if validation["invalid_fields"]:
             issue = validation["invalid_fields"][0]
-            return f"Ik zie een probleem met {issue['field']}: {issue['reason']}. Wat wil je hiervoor instellen?"
+            return f"Ik zie een probleem met {self._strategy_field_label(issue['field'])}: {issue['reason']}. Wat wil je hiervoor instellen?"
         if next_question == "setup_id":
             if setup_options:
                 lines = ["Voor welke setup wil je deze strategie bouwen? Ik zie deze opties voor je huidige asset:"]
@@ -9089,16 +9152,17 @@ class FinnPlanService:
             if setup_type == "dca":
                 if strategy.get("base_amount_eur") is None:
                     return (
-                        f"{known_setup_intro}Met welk bedrag wil je per aankoop werken voor deze {asset} DCA-strategie op {timeframe}? "
+                        f"{known_setup_intro}Met welk bedrag wil je per uitvoering werken voor deze {asset} DCA-strategie op {timeframe}? "
                         "Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
                     )
             return (
-                f"{known_setup_intro}Met welk basisbedrag in euro wil je deze strategie uitvoeren voor {asset} op {timeframe}? "
+                f"{known_setup_intro}Met welk bedrag per uitvoering wil je deze strategie gebruiken voor {asset} op {timeframe}? "
                 "Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
             )
         if next_question == "strategy.execution_mode":
             return (
-                f"{known_setup_intro}Bedrag ingesteld voor {asset}. Wil je deze strategie handmatig uitvoeren of automatisch via een bot laten meelopen?"
+                f"{known_setup_intro}Bedrag ingesteld op {self._format_eur_value(strategy.get('base_amount_eur'))} per uitvoering. "
+                f"Wil je deze strategie handmatig uitvoeren of automatisch via een bot laten meelopen?"
             )
         if next_question == "strategy.risk_profile":
             return (

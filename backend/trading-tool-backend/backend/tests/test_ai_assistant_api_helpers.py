@@ -480,12 +480,13 @@ def test_deterministic_flow_turn_asks_next_strategy_question_without_llm():
         )
     )
 
-    assert "basisbedrag" in response.lower()
+    assert "ik gebruik je bitcoin test dca als basis" in response.lower()
+    assert "per uitvoering" in response.lower()
     assert action is None
     assert draft is None
     assert state["current_flow"] == "strategy_creation"
     assert state["next_question"] == "base_amount"
-    assert state["missing_slots"] == ["base_amount"]
+    assert state["missing_slots"] == ["base_amount", "execution_mode", "risk_profile"]
     assert suggested_actions is None
 
 
@@ -525,16 +526,17 @@ def test_deterministic_flow_turn_builds_strategy_draft_when_base_amount_present(
         )
     )
 
-    assert "staat klaar" in response
+    assert "bedrag ingesteld" in response.lower()
+    assert "handmatig uitvoeren" in response.lower()
     assert action is None
-    assert draft["type"] == "strategy"
-    assert draft["payload"]["name"] == "Bitcoin test DCA strategie"
-    assert draft["payload"]["setup_id"] == 258
-    assert draft["payload"]["timeframe"] == "1W"
-    assert draft["payload"]["base_amount"] == 100
-    assert state["current_flow"] == "none"
-    assert state_repo.cleared == [24]
-    assert suggested_actions == ["Opslaan", "Pas aan"]
+    assert draft is None
+    assert state["current_flow"] == "strategy_creation"
+    assert state["next_question"] == "execution_mode"
+    assert state["missing_slots"] == ["execution_mode", "risk_profile"]
+    assert state["slots"]["base_amount"] == 100
+    assert state["slots"]["base_amount_eur"] == 100
+    assert state_repo.cleared == []
+    assert suggested_actions is None
 
 
 def test_strategy_follow_up_accepts_plain_numeric_amount_without_euro_keyword():
