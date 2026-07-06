@@ -806,6 +806,7 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
       setup_name: rawSlots.setup_name || state?.setup_name || null,
       setup_type: rawSlots.setup_type || state?.setup_type || null,
       timeframe: rawSlots.timeframe || state?.timeframe || null,
+      name: rawSlots.name || rawSlots.strategy_name || state?.name || state?.strategy_name || null,
       base_amount: rawSlots.base_amount || rawSlots.base_amount_eur || state?.base_amount || state?.base_amount_eur || null,
       base_amount_eur: rawSlots.base_amount_eur || rawSlots.base_amount || state?.base_amount_eur || state?.base_amount || null,
       execution_mode: rawSlots.execution_mode || state?.execution_mode || null,

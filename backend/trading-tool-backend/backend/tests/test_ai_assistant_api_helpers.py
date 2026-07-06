@@ -481,16 +481,16 @@ def test_deterministic_flow_turn_asks_next_strategy_question_without_llm():
     )
 
     assert "ik gebruik je bitcoin test dca als basis" in response.lower()
-    assert "per uitvoering" in response.lower()
+    assert "bedrag" in response.lower() or "uitvoering" in response.lower() or "per uitvoering" in response.lower()
     assert action is None
     assert draft is None
     assert state["current_flow"] == "strategy_creation"
-    assert state["next_question"] == "base_amount"
-    assert state["missing_slots"] == ["base_amount", "execution_mode", "risk_profile"]
+    assert state["next_question"] == "base_amount_eur"
+    assert state["missing_slots"] == ["base_amount_eur", "execution_mode", "risk_profile"]
     assert suggested_actions is None
 
 
-def test_deterministic_flow_turn_builds_strategy_draft_when_base_amount_present():
+def test_deterministic_flow_turn_builds_strategy_draft_when_required_slots_present():
     state_repo = _FakeStateRepo()
     assistant = AiAssistantService(
         score_repo=None,
@@ -517,8 +517,9 @@ def test_deterministic_flow_turn_builds_strategy_draft_when_base_amount_present(
                     "setup_type": "dca",
                     "timeframe": "1W",
                     "setup_name": "Bitcoin test DCA",
-                    "base_amount": 100,
                     "base_amount_eur": 100,
+                    "execution_mode": "manual",
+                    "risk_profile": "balanced",
                 },
                 "status": "collecting",
             },
@@ -526,17 +527,19 @@ def test_deterministic_flow_turn_builds_strategy_draft_when_base_amount_present(
         )
     )
 
-    assert "bedrag ingesteld" in response.lower()
-    assert "handmatig uitvoeren" in response.lower()
     assert action is None
-    assert draft is None
-    assert state["current_flow"] == "strategy_creation"
-    assert state["next_question"] == "execution_mode"
-    assert state["missing_slots"] == ["execution_mode", "risk_profile"]
-    assert state["slots"]["base_amount"] == 100
-    assert state["slots"]["base_amount_eur"] == 100
-    assert state_repo.cleared == []
-    assert suggested_actions is None
+    assert "staat klaar" in response.lower()
+    assert draft["type"] == "strategy"
+    assert draft["payload"]["name"] == "Bitcoin test DCA strategie"
+    assert draft["payload"]["setup_id"] == 258
+    assert draft["payload"]["timeframe"] == "1W"
+    assert draft["payload"]["base_amount"] == 100
+    assert draft["payload"]["base_amount_eur"] == 100
+    assert draft["payload"]["execution_mode"] == "manual"
+    assert draft["payload"]["risk_profile"] == "balanced"
+    assert state["current_flow"] == "none"
+    assert state_repo.cleared == [24]
+    assert suggested_actions == ["Opslaan", "Pas aan"]
 
 
 def test_strategy_follow_up_accepts_plain_numeric_amount_without_euro_keyword():
@@ -573,8 +576,95 @@ def test_strategy_follow_up_accepts_plain_numeric_amount_without_euro_keyword():
     )
 
     assert conv_state["current_flow"] == "strategy_creation"
-    assert conv_state["slots"]["base_amount"] == 100
     assert conv_state["slots"]["base_amount_eur"] == 100
+    assert conv_state["slots"]["base_amount"] == 100
+    assert assistant._get_missing_flow_slots("strategy_creation", conv_state["slots"]) == [
+        "execution_mode",
+        "risk_profile",
+    ]
+
+
+def test_deterministic_flow_turn_moves_to_execution_mode_after_amount_is_known():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+
+    response, action, draft, state, suggested_actions = asyncio.run(
+        assistant._build_deterministic_flow_turn(
+            user_id=25,
+            user_query="gebruik 100 euro per uitvoering",
+            conv_state={
+                "current_flow": "strategy_creation",
+                "slots": {
+                    "symbol": "BTC",
+                    "setup_id": 258,
+                    "setup_type": "dca",
+                    "timeframe": "1W",
+                    "setup_name": "Bitcoin test DCA",
+                    "base_amount_eur": 100,
+                },
+                "status": "collecting",
+            },
+            resolved_symbol="BTC",
+        )
+    )
+
+    assert action is None
+    assert draft is None
+    assert state["current_flow"] == "strategy_creation"
+    assert state["next_question"] == "execution_mode"
+    assert "basisbedrag" not in response.lower()
+    assert "handmatig" in response.lower() or "automatisch" in response.lower()
+
+
+def test_deterministic_flow_turn_keeps_known_setup_and_skips_setup_question():
+    state_repo = _FakeStateRepo()
+    assistant = AiAssistantService(
+        score_repo=None,
+        setup_repo=None,
+        report_repo=None,
+        bot_repo=None,
+        user_repo=None,
+        market_data_repo=None,
+        strategy_repo=None,
+        state_repo=state_repo,
+        ai_gateway=None,
+    )
+
+    response, action, draft, state, suggested_actions = asyncio.run(
+        assistant._build_deterministic_flow_turn(
+            user_id=251,
+            user_query="maak een strategie voor mijn btc dca setup",
+            conv_state={
+                "current_flow": "strategy_creation",
+                "slots": {
+                    "symbol": "BTC",
+                    "setup_id": 258,
+                    "setup_type": "dca",
+                    "timeframe": "1W",
+                    "setup_name": "Bitcoin test DCA",
+                },
+                "status": "collecting",
+            },
+            resolved_symbol="BTC",
+        )
+    )
+
+    assert action is None
+    assert draft is None
+    assert state["current_flow"] == "strategy_creation"
+    assert state["next_question"] == "base_amount_eur"
+    assert "welke setup" not in response.lower()
+    assert "bedrag" in response.lower() or "uitvoering" in response.lower()
 
 
 def test_deterministic_pre_parse_rehydrates_stale_strategy_flow_before_amount_question():
