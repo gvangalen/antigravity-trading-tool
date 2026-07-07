@@ -42,10 +42,10 @@ export const fetchAIScore = (symbol = 'BTC') => {
 // ========================================
 // 💬 4. AI Assistant Chat
 // ========================================
-export const assistantChat = (query, context = {}, history = []) => {
+export const assistantChat = (query, context = {}, history = [], sessionId = null) => {
   return fetchAuth(`/api/assistant/chat`, {
     method: 'POST',
-    body: JSON.stringify({ query, context, history }),
+    body: JSON.stringify({ query, context, history, session_id: sessionId }),
   });
 };
 
@@ -138,7 +138,16 @@ export const executePendingAction = (actionIdOrAction) => {
 // ========================================
 let activeAbortController = null;
 
-export const assistantChatStream = async (query, context = {}, history = [], onChunk, onEnvelope, onError, maxRetries = 2) => {
+export const assistantChatStream = async (
+  query,
+  context = {},
+  history = [],
+  onChunk,
+  onEnvelope,
+  onError,
+  maxRetries = 2,
+  sessionId = null,
+) => {
   // 1. Cancel previous stream to prevent duplicates & resource leaks
   if (activeAbortController) {
     try {
@@ -167,7 +176,7 @@ export const assistantChatStream = async (query, context = {}, history = [], onC
         headers,
         credentials: 'include',
         signal,
-        body: JSON.stringify({ query, context, history }),
+        body: JSON.stringify({ query, context, history, session_id: sessionId }),
       });
 
       if (!response.ok) {

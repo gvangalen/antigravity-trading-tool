@@ -16,6 +16,14 @@ from backend.schemas.dashboard_schema import (
 from backend.services.dashboard_service import DashboardService
 
 router = APIRouter()
+
+
+def _payload_to_dict(payload):
+    if hasattr(payload, "model_dump"):
+        return payload.model_dump()
+    if hasattr(payload, "dict"):
+        return payload.dict()
+    return payload
 logger = logging.getLogger(__name__)
 
 async def get_dashboard_service(db: AsyncSession = Depends(get_db)):
@@ -102,4 +110,4 @@ async def get_mobile_overview(
     user_id = current_user["id"]
     payload = await service.get_mobile_overview(user_id, bypass_cache=bypass_cache)
     locale = resolve_request_locale(x_locale, current_user.get("ai_preferences") or {})
-    return await localize_generic_payload(payload.model_dump(), locale)
+    return await localize_generic_payload(_payload_to_dict(payload), locale)

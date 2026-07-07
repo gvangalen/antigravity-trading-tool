@@ -9,6 +9,9 @@ export default function UniversalSearchDropdown({
   selected = null,
   onSelect,
   placeholder,
+  getItemLabel,
+  getItemSecondaryLabel,
+  hideSecondaryLabel = false,
 }) {
   const { t } = useTranslation();
   const dropdownCopy = t?.ui?.searchDropdown || {};
@@ -88,6 +91,12 @@ export default function UniversalSearchDropdown({
     setIsOpen(false);
   };
 
+  const resolveItemLabel = (item) =>
+    getItemLabel ? getItemLabel(item) : item.display_name;
+
+  const resolveItemSecondaryLabel = (item) =>
+    getItemSecondaryLabel ? getItemSecondaryLabel(item) : item.name;
+
   return (
     <div className="relative mb-4" ref={wrapperRef}>
       {label && (
@@ -128,10 +137,12 @@ export default function UniversalSearchDropdown({
                   : 'hover:bg-gray-100 dark:hover:bg-gray-700'}
               `}
             >
-              <span>{item.display_name}</span>
-              <span className="text-xs text-secondary dark:text-gray-500">
-                ({item.name})
-              </span>
+              <span>{resolveItemLabel(item)}</span>
+              {!hideSecondaryLabel && (
+                <span className="text-xs text-secondary dark:text-gray-500">
+                  ({resolveItemSecondaryLabel(item)})
+                </span>
+              )}
             </li>
           ))}
         </ul>

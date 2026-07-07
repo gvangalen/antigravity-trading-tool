@@ -13,6 +13,14 @@ from backend.services.score_service import ScoreService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
+def _payload_to_dict(payload):
+    if hasattr(payload, "model_dump"):
+        return payload.model_dump()
+    if hasattr(payload, "dict"):
+        return payload.dict()
+    return payload
+
 async def get_score_service(db: AsyncSession = Depends(get_db)):
     repo = ScoreRepository(db)
     user_repo = UserRepository(db)
@@ -81,7 +89,7 @@ async def get_daily_scores(
         user_id = current_user["id"]
         payload = await service.get_daily_scores(user_id=user_id, symbol=symbol)
         locale = resolve_request_locale(x_locale, current_user.get("ai_preferences") or {})
-        return await localize_generic_payload(payload.model_dump(), locale)
+        return await localize_generic_payload(_payload_to_dict(payload), locale)
     except Exception as e:
         logger.error(f"❌ Fout bij /scores/daily ({symbol}): {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij ophalen daily scores")
@@ -138,7 +146,7 @@ async def get_ai_master_score(
         user_id = current_user["id"]
         payload = await service.get_master_score(user_id=user_id, symbol=symbol)
         locale = resolve_request_locale(x_locale, current_user.get("ai_preferences") or {})
-        return await localize_generic_payload(payload.model_dump(), locale)
+        return await localize_generic_payload(_payload_to_dict(payload), locale)
     except Exception as e:
         logger.error(f"❌ Fout bij ophalen AI Master Score: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij ophalen master score")

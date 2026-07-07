@@ -63,10 +63,19 @@ class DashboardRepository:
 
     async def get_top_setups(self, user_id: int, limit: int = 5) -> List[dict]:
         query = text("""
-            SELECT name, score, timeframe, symbol, explanation, timestamp
-            FROM strategies
-            WHERE user_id = :user_id AND data->>'score' IS NOT NULL
-            ORDER BY CAST(data->>'score' AS FLOAT) DESC
+            SELECT
+                s.name,
+                COALESCE(NULLIF(s.data->>'score', '')::float, 0) AS score,
+                st.timeframe,
+                st.symbol,
+                COALESCE(s.explanation, s.data->>'explanation') AS explanation,
+                s.created_at AS timestamp
+            FROM strategies s
+            LEFT JOIN setups st ON st.id = s.setup_id
+            WHERE s.user_id = :user_id
+            ORDER BY
+                COALESCE(NULLIF(s.data->>'score', '')::float, 0) DESC,
+                s.created_at DESC
             LIMIT :limit
         """)
         result = await self.session.execute(query, {"user_id": user_id, "limit": limit})

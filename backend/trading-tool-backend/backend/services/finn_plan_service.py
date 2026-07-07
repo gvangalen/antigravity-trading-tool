@@ -237,6 +237,58 @@ INDICATOR_FIXED_BUCKETS = [
     (80.0, 100.0),
 ]
 
+SETUP_MARKET_CONDITION_PRESETS = {
+    "confirmed_strength": {
+        "label": "Bevestigd sterk",
+        "scores": {
+            "macro_score_range": [40, 100],
+            "technical_score_range": [55, 100],
+            "market_score_range": [35, 100],
+        },
+        "aliases": [
+            "bevestigd sterk",
+            "confirmed strength",
+            "sterke bevestiging",
+            "trend bevestigd",
+            "alleen sterk",
+        ],
+    },
+    "balanced_pullback": {
+        "label": "Normale pullback",
+        "scores": {
+            "macro_score_range": [30, 70],
+            "technical_score_range": [40, 80],
+            "market_score_range": [20, 60],
+        },
+        "aliases": [
+            "normale pullback",
+            "pullback",
+            "gebalanceerd",
+            "balanced",
+            "balanced pullback",
+            "normale markt",
+            "standaard",
+        ],
+    },
+    "early_dip": {
+        "label": "Vroege dip",
+        "scores": {
+            "macro_score_range": [15, 60],
+            "technical_score_range": [25, 75],
+            "market_score_range": [0, 55],
+        },
+        "aliases": [
+            "vroege dip",
+            "early dip",
+            "grote daling",
+            "correctie",
+            "alleen tijdens correcties",
+            "zwakke markt",
+            "dip kopen",
+        ],
+    },
+}
+
 
 def empty_plan_draft() -> Dict[str, Any]:
     return {
@@ -245,6 +297,7 @@ def empty_plan_draft() -> Dict[str, Any]:
         "setup": {
             "name": None,
             "timeframe": None,
+            "market_condition": None,
             "macro_score_range": None,
             "technical_score_range": None,
             "market_score_range": None,
@@ -289,6 +342,7 @@ def empty_plan_patch() -> Dict[str, Any]:
         "setup": {
             "name": None,
             "timeframe": None,
+            "market_condition": None,
             "macro_score_range": None,
             "technical_score_range": None,
             "market_score_range": None,
@@ -445,6 +499,43 @@ def _extract_targets(text: str) -> Optional[List[float]]:
         if value is not None:
             targets.append(value)
     return targets or None
+
+
+def _resolve_setup_market_condition(query: str) -> Optional[str]:
+    q = str(query or "").strip().lower()
+    if not q:
+        return None
+
+    numeric_choice_map = {
+        "1": "confirmed_strength",
+        "optie 1": "confirmed_strength",
+        "eerste": "confirmed_strength",
+        "2": "balanced_pullback",
+        "optie 2": "balanced_pullback",
+        "tweede": "balanced_pullback",
+        "3": "early_dip",
+        "optie 3": "early_dip",
+        "derde": "early_dip",
+    }
+    for phrase, key in numeric_choice_map.items():
+        if q == phrase or q.startswith(f"{phrase} "):
+            return key
+
+    for key, preset in SETUP_MARKET_CONDITION_PRESETS.items():
+        if any(alias in q for alias in preset.get("aliases") or []):
+            return key
+    return None
+
+
+def _apply_setup_market_condition_preset(patch: Dict[str, Any], condition_key: str) -> bool:
+    preset = SETUP_MARKET_CONDITION_PRESETS.get(condition_key)
+    if not preset:
+        return False
+
+    patch["setup"]["market_condition"] = condition_key
+    for field, value in (preset.get("scores") or {}).items():
+        patch["setup"][field] = list(value)
+    return True
 
 
 def _asset_mentions(text: str) -> List[str]:
@@ -1391,6 +1482,19 @@ class FinnPlanService:
             return True
         if draft and len(q.split()) <= 6:
             short_follow_up_terms = [
+                "balanced",
+                "conservative",
+                "aggressive",
+                "gebalanceerd",
+                "conservatief",
+                "agressief",
+                "manual",
+                "paper",
+                "live",
+                "bot assisted",
+                "bot_assisted",
+                "auto",
+                "automatisch",
                 "elke week",
                 "iedere week",
                 "elke dag",
@@ -1427,16 +1531,8 @@ class FinnPlanService:
                 return True
 
         continuation_terms = {
-            "bot": ["bot", "strategie", "strategy", "paper", "live", "manual", "auto", "budget", "daglimiet", "min order", "max order", "cadence", "risk", "risico"],
-            "strategy": [
-                "strategie", "strategy", "setup", "entry", "stop", "target",
-                "basisbedrag", "base amount", "market akkoord",
-                "manual", "automatic", "auto", "handmatig", "automatisch",
-                "conservative", "balanced", "aggressive",
-                "conservatief", "gebalanceerd", "agressief",
-                "per keer", "per uitvoering", "voor totaal", "totaal",
-                "100", "250",
-            ],
+            "bot": ["bot", "strategie", "strategy", "paper", "live", "manual", "auto", "budget", "daglimiet", "min order", "max order", "cadence", "risk", "risico", "balanced", "conservative", "aggressive", "gebalanceerd", "conservatief", "agressief"],
+            "strategy": ["strategie", "strategy", "setup", "entry", "stop", "target", "basisbedrag", "base amount", "market akkoord", "balanced", "conservative", "aggressive", "gebalanceerd", "conservatief", "agressief", "eur", "euro", "per trade"],
             "indicator_config": ["indicator", "macro", "technical", "node", "weging", "weight", "rule", "regel", "contrarian"],
             "plan": [
                 "setup", "dca", "trade", "entry", "stop", "target",
@@ -1445,7 +1541,7 @@ class FinnPlanService:
                 "weekly", "monthly", "daily",
                 "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag",
                 "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-                "btc", "eth", "sol", "euro", "eur", "bedrag",
+                "btc", "eth", "sol", "euro", "eur", "bedrag", "balanced", "conservative", "aggressive",
             ],
         }
         draft_kind = draft.get("draft_kind")
@@ -1456,46 +1552,6 @@ class FinnPlanService:
         if draft_kind == "indicator_config":
             return any(term in q for term in continuation_terms["indicator_config"])
         return any(term in q for term in continuation_terms["plan"])
-
-    def _strategy_field_label(self, field: str) -> str:
-        labels = {
-            "setup_id": "je setup",
-            "setup_type": "het setup-type",
-            "strategy.base_amount_eur": "het bedrag per uitvoering",
-            "strategy.execution_mode": "de uitvoermodus",
-            "strategy.risk_profile": "het risicoprofiel",
-            "strategy.entry_type": "de entry-methode",
-            "strategy.market_execution_ack": "de market-bevestiging",
-            "strategy.entry": "de entry",
-            "strategy.stop_loss": "de invalidatie",
-            "strategy.targets": "de koersdoelen",
-            "plan_deviation_ack": "de planbevestiging",
-        }
-        return labels.get(field, "dit onderdeel")
-
-    def _format_eur_value(self, value: Any) -> str:
-        if value in (None, ""):
-            return "€0"
-        try:
-            amount = float(value)
-        except (TypeError, ValueError):
-            return f"€{value}"
-        if amount.is_integer():
-            return f"€{int(amount)}"
-        return f"€{amount:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-    def _apply_strategy_setup_option(self, draft: Dict[str, Any], option: Dict[str, Any]) -> None:
-        if not isinstance(option, dict):
-            return
-        draft["setup_id"] = option.get("id")
-        if option.get("name"):
-            draft["setup_name"] = option.get("name")
-        if option.get("setup_type"):
-            draft["setup_type"] = option.get("setup_type")
-        if option.get("symbol"):
-            draft["asset"] = option.get("symbol")
-        if option.get("timeframe"):
-            draft["timeframe"] = option.get("timeframe")
 
     def sanitize_context_for_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         payload = dict(context or {})
@@ -1751,6 +1807,22 @@ class FinnPlanService:
         if draft and draft.get("draft_kind") == "strategy":
             return False
         has_setup_word = "setup" in q
+        has_setup_plan_scope = any(word in q for word in [
+            "dca",
+            "trade",
+            "swing",
+            "entry",
+            "trend",
+            "breakout",
+            "invalidatie",
+            "stop loss",
+            "stoploss",
+            "target",
+            "targets",
+            "4h",
+            "1d",
+            "1w",
+        ])
         has_strategy_or_bot_scope = any(word in q for word in [
             "strategie",
             "strategy",
@@ -1782,9 +1854,7 @@ class FinnPlanService:
             "euro",
             "eur",
         ])
-        if has_setup_word and not has_strategy_or_bot_scope:
-            return False
-        if has_setup_word and not has_explicit_plan_fields:
+        if has_setup_word and not (has_strategy_or_bot_scope or has_setup_plan_scope or has_explicit_plan_fields):
             return False
         if self.looks_like_indicator_config_request(query):
             return False
@@ -1902,6 +1972,13 @@ class FinnPlanService:
 
     def looks_like_daily_coach_request(self, query: str) -> bool:
         q = (query or "").lower()
+        explicit_transactional_intent = any(word in q for word in [
+            "maak", "aanmaken", "creeer", "creeër", "bouw", "voeg", "toevoegen", "configureer", "instellen",
+        ]) and any(word in q for word in [
+            "setup", "strategie", "strategy", "bot", "indicator", "node", "watchlist",
+        ])
+        if explicit_transactional_intent:
+            return False
         portfolio_risk_terms = [
             "grootste portfolio risico", "grootste risico", "portfolio risico",
             "portefeuille risico", "portfolio exposure", "te veel exposure",
@@ -3015,9 +3092,9 @@ class FinnPlanService:
                 "strategie_genereren",
                 "bot_aanmaken",
                 "bot_decision_review",
+                "watchlist_wijzigen",
             ],
             "not_supported_yet": [
-                "watchlist_wijzigen_via_finn",
                 "brede_portfolio_mutaties",
             ],
         }
@@ -3038,6 +3115,7 @@ class FinnPlanService:
             "strategie genereren",
             "bot aanmaken",
             "bot-decisions reviewen",
+            "watchlist aanpassen",
         ])
         profile_line = self._profile_focus_line(context, asset, mode="general")
         profile_next_step = self._profile_next_step(context, asset, default_step="")
@@ -3045,7 +3123,7 @@ class FinnPlanService:
             f"Je zit nu op {page}. Hier help ik je vooral met begrijpen en veilig beslissen. "
             f"Wat ik nu direct voor je kan doen: {supported_now}. "
             f"Als je echt iets wilt bouwen of wijzigen, kan ik ook helpen met: {mutations}. "
-            "Wat ik nog niet breed zelf doet: watchlists aanpassen en vrije portfolio-mutaties."
+            "Wat ik nog niet breed zelf doet: vrije portfolio-mutaties buiten de kernflows."
         )
         if profile_line:
             response = f"{response} {profile_line}"
@@ -5282,22 +5360,12 @@ class FinnPlanService:
 
         draft = response.get("draft") if isinstance(response.get("draft"), dict) else {}
         await self._hydrate_strategy_draft_from_db(user_id, draft)
-        setup_options: List[Dict[str, Any]] = []
-        if not draft.get("setup_id"):
-            setup_options = await self._strategy_setup_options(user_id, draft)
-            if len(setup_options) == 1:
-                self._apply_strategy_setup_option(draft, setup_options[0])
-                await self._hydrate_strategy_draft_from_db(user_id, draft)
-                setup_options = []
 
         strategy_service = StrategyService(self.session)
         validation = self._validate_strategy_draft(draft)
         existing_strategy = None
         if draft.get("setup_id"):
-            if hasattr(strategy_service, "get_strategy_by_setup"):
-                existing_strategy = await strategy_service.get_strategy_by_setup(int(draft["setup_id"]), user_id)
-            elif getattr(strategy_service, "repository", None) and hasattr(strategy_service.repository, "get_strategy_by_setup"):
-                existing_strategy = await strategy_service.repository.get_strategy_by_setup(int(draft["setup_id"]), user_id)
+            existing_strategy = await strategy_service.get_strategy_by_setup(int(draft["setup_id"]), user_id)
 
         if existing_strategy and draft.get("operation") != "update":
             draft["strategy_id"] = None
@@ -5334,11 +5402,17 @@ class FinnPlanService:
             draft["plan_deviation"] = self._plan_deviation_warning_from_event(behavioral_event, acknowledged=bool(draft.get("plan_deviation_ack")))
             validation = self._validate_strategy_draft(draft)
 
+        setup_options = []
         if "setup_id" in validation["missing_fields"]:
-            if not setup_options:
-                setup_options = await self._strategy_setup_options(user_id, draft)
-            if len(setup_options) == 1:
-                self._apply_strategy_setup_option(draft, setup_options[0])
+            setup_options = await self._strategy_setup_options(user_id, draft)
+            if len(setup_options) == 1 and draft.get("operation") != "update":
+                draft["setup_id"] = setup_options[0].get("id")
+                if not draft.get("asset"):
+                    draft["asset"] = setup_options[0].get("symbol")
+                if not draft.get("timeframe"):
+                    draft["timeframe"] = setup_options[0].get("timeframe")
+                if not draft.get("setup_type"):
+                    draft["setup_type"] = setup_options[0].get("setup_type")
                 await self._hydrate_strategy_draft_from_db(user_id, draft)
                 validation = self._validate_strategy_draft(draft)
                 setup_options = []
@@ -8455,6 +8529,10 @@ class FinnPlanService:
         if timeframe:
             patch["setup"]["timeframe"] = timeframe.group(1)
 
+        market_condition = _resolve_setup_market_condition(query)
+        if market_condition:
+            _apply_setup_market_condition_preset(patch, market_condition)
+
         if "dagelijks" in q or "daily" in q or "elke dag" in q or "iedere dag" in q:
             patch["dca"]["frequency"] = "daily"
         elif "wekelijks" in q or "weekly" in q or "elke week" in q or "iedere week" in q:
@@ -8521,6 +8599,8 @@ class FinnPlanService:
             patch["setup"]["technical_score_range"] = technical
         if market:
             patch["setup"]["market_score_range"] = market
+        if macro or technical or market:
+            patch["setup"]["market_condition"] = patch["setup"].get("market_condition") or "custom_manual"
 
         quoted_name = re.search(r"(?:noem|naam|heet)\s+(?:hem|haar|deze)?\s*[\"']?([^\"'.]+)[\"']?", q, re.IGNORECASE)
         if quoted_name:
@@ -8560,29 +8640,28 @@ class FinnPlanService:
 
         return patch
 
-    def _apply_defaults(self, draft: Dict[str, Any]) -> None:
+    def _apply_defaults(self, draft: Dict[str, Any], *, for_save: bool = False) -> None:
         if draft.get("asset"):
             draft["asset"] = str(draft["asset"]).upper()
-        if draft.get("plan_type") in {"dca", "trade"} and draft["bot"].get("create_bot") is None:
-            draft["bot"]["create_bot"] = True
         if draft.get("plan_type") == "trade" and not draft["strategy"].get("direction"):
             draft["strategy"]["direction"] = "long"
-        if draft.get("plan_type") == "trade" and not draft["strategy"].get("entry_type"):
-            draft["strategy"]["entry_type"] = "limit"
-        if draft["bot"].get("automation") is None:
+        if draft["bot"].get("create_bot") is True:
+            if draft["bot"].get("automation") is None:
+                draft["bot"]["automation"] = "bot_assisted"
+            if not draft["bot"].get("risk_profile"):
+                draft["bot"]["risk_profile"] = "balanced"
+        elif draft["bot"].get("create_bot") is False and draft["bot"].get("automation") is None:
+            draft["bot"]["automation"] = "manual_only"
+        if not for_save:
+            return
+        if draft["bot"].get("automation") is None and draft["bot"].get("create_bot") is not None:
             draft["bot"]["automation"] = "bot_assisted" if draft["bot"].get("create_bot") else "manual_only"
-        if not draft["setup"].get("timeframe"):
-            draft["setup"]["timeframe"] = "1W" if draft.get("plan_type") == "dca" else None
-        draft["setup"]["macro_score_range"] = draft["setup"].get("macro_score_range") or [30, 70]
-        draft["setup"]["technical_score_range"] = draft["setup"].get("technical_score_range") or [40, 80]
-        draft["setup"]["market_score_range"] = draft["setup"].get("market_score_range") or [20, 60]
-        if not draft["setup"].get("name") and draft.get("asset") and draft.get("plan_type"):
-            label = "Smart DCA" if draft["plan_type"] == "dca" else "Trade Plan"
-            draft["setup"]["name"] = f"{draft['asset']} {label}"
-        if draft.get("plan_type") == "dca" and draft["dca"].get("frequency") == "weekly" and not draft["dca"].get("day"):
-            draft["dca"]["day"] = "monday"
-        if draft["bot"].get("create_bot") and not draft["bot"].get("risk_profile"):
-            draft["bot"]["risk_profile"] = "balanced"
+        if draft["setup"].get("macro_score_range") is None:
+            draft["setup"]["macro_score_range"] = [30, 70]
+        if draft["setup"].get("technical_score_range") is None:
+            draft["setup"]["technical_score_range"] = [40, 80]
+        if draft["setup"].get("market_score_range") is None:
+            draft["setup"]["market_score_range"] = [20, 60]
 
     def _action_id(self, payload: Dict[str, Any]) -> str:
         normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
@@ -8655,15 +8734,13 @@ class FinnPlanService:
         elif context.get("timeframe") and not draft.get("timeframe"):
             draft["timeframe"] = context.get("timeframe")
 
-    def _apply_strategy_defaults(self, draft: Dict[str, Any], for_save: bool = True) -> None:
+    def _apply_strategy_defaults(self, draft: Dict[str, Any], *, for_save: bool = False) -> None:
         if draft.get("operation") not in {"create", "update"}:
             draft["operation"] = "create"
         if draft.get("asset"):
             draft["asset"] = str(draft["asset"]).upper()
         if draft.get("setup_type"):
             draft["setup_type"] = str(draft["setup_type"]).lower()
-        if draft.get("setup_type") == "trade" and not draft["strategy"].get("entry_type"):
-            draft["strategy"]["entry_type"] = "limit"
         if draft.get("setup_type") == "trade" and not draft["strategy"].get("direction"):
             draft["strategy"]["direction"] = "long"
         automation = draft["strategy"].get("automation")
@@ -9119,7 +9196,7 @@ class FinnPlanService:
 
         if validation["invalid_fields"]:
             issue = validation["invalid_fields"][0]
-            return f"Ik zie een probleem met {self._strategy_field_label(issue['field'])}: {issue['reason']}. Wat wil je hiervoor instellen?"
+            return f"Ik zie een probleem met {issue['field']}: {issue['reason']}. Wat wil je hiervoor instellen?"
         if next_question == "setup_id":
             if setup_options:
                 lines = ["Voor welke setup wil je deze strategie bouwen? Ik zie deze opties voor je huidige asset:"]
@@ -9152,17 +9229,16 @@ class FinnPlanService:
             if setup_type == "dca":
                 if strategy.get("base_amount_eur") is None:
                     return (
-                        f"{known_setup_intro}Met welk bedrag wil je per uitvoering werken voor deze {asset} DCA-strategie op {timeframe}? "
+                        f"{known_setup_intro}Met welk bedrag wil je per aankoop werken voor deze {asset} DCA-strategie op {timeframe}? "
                         "Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
                     )
             return (
-                f"{known_setup_intro}Met welk bedrag per uitvoering wil je deze strategie gebruiken voor {asset} op {timeframe}? "
+                f"{known_setup_intro}Met welk basisbedrag in euro wil je deze strategie uitvoeren voor {asset} op {timeframe}? "
                 "Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
             )
         if next_question == "strategy.execution_mode":
             return (
-                f"{known_setup_intro}Bedrag ingesteld op {self._format_eur_value(strategy.get('base_amount_eur'))} per uitvoering. "
-                f"Wil je deze strategie handmatig uitvoeren of automatisch via een bot laten meelopen?"
+                f"{known_setup_intro}Bedrag ingesteld voor {asset}. Wil je deze strategie handmatig uitvoeren of automatisch via een bot laten meelopen?"
             )
         if next_question == "strategy.risk_profile":
             return (
@@ -9327,14 +9403,34 @@ class FinnPlanService:
         }
 
     def _setup_flow_state(self, draft: Dict[str, Any], validation: Dict[str, Any]) -> Dict[str, Any]:
+        setup = draft.get("setup") or {}
+        dca = draft.get("dca") or {}
+        slots = {
+            "symbol": draft.get("asset"),
+            "setup_type": draft.get("plan_type"),
+            "timeframe": setup.get("timeframe"),
+            "name": setup.get("name"),
+            "market_condition": setup.get("market_condition"),
+            "dca_frequency": dca.get("frequency"),
+            "dca_day": dca.get("day"),
+            "dca_month_day": dca.get("month_day"),
+        }
         return {
             "status": "ready_for_confirmation" if validation["can_confirm"] else "collecting",
             "current_flow": "setup_creation",
             "asset": draft.get("asset"),
             "setup_type": draft.get("plan_type"),
             "timeframe": draft.get("setup", {}).get("timeframe"),
+            "name": setup.get("name"),
+            "market_condition": setup.get("market_condition"),
+            "dca_frequency": dca.get("frequency"),
+            "dca_day": dca.get("day"),
+            "dca_month_day": dca.get("month_day"),
+            "slots": slots,
+            "missing_slots": list(validation.get("missing_fields") or []),
             "next_question": validation["next_question"],
             "autonomy_level": "confirm_required",
+            "can_confirm": validation["can_confirm"],
             "analysis": {
                 "tool_intent_reason": "explicit_setup_request",
             },
@@ -10228,9 +10324,14 @@ class FinnPlanService:
         if not draft["setup"].get("timeframe"):
             missing.append("setup.timeframe")
 
-        self._validate_range("setup.macro_score_range", draft["setup"].get("macro_score_range"), invalid)
-        self._validate_range("setup.technical_score_range", draft["setup"].get("technical_score_range"), invalid)
-        self._validate_range("setup.market_score_range", draft["setup"].get("market_score_range"), invalid)
+        for field in (
+            "macro_score_range",
+            "technical_score_range",
+            "market_score_range",
+        ):
+            value = draft["setup"].get(field)
+            if value is not None:
+                self._validate_range(f"setup.{field}", value, invalid)
 
         if draft.get("plan_type") == "dca":
             frequency = draft["dca"].get("frequency")
@@ -10245,9 +10346,6 @@ class FinnPlanService:
                 elif not isinstance(month_day, int) or month_day < 1 or month_day > 28:
                     invalid.append({"field": "dca.month_day", "reason": "gebruik dag 1 t/m 28 voor maandelijkse DCA"})
 
-            if draft["dca"].get("dca_mode") == "custom":
-                if draft["dca"].get("buy_score_threshold") is None:
-                    missing.append("dca.buy_score_threshold")
         if draft.get("plan_type") == "trade":
             is_long_trade = draft["strategy"].get("direction") == "long"
             if not is_long_trade:
@@ -10320,9 +10418,8 @@ class FinnPlanService:
             if value is not None:
                 self._validate_range(f"setup.{field}", value, invalid)
 
-        if draft.get("plan_type") == "trade":
-            if draft["setup"].get("name") and len(str(draft["setup"]["name"]).strip()) < 2:
-                invalid.append({"field": "setup.name", "reason": "setupnaam is te kort"})
+        if draft["setup"].get("name") and len(str(draft["setup"]["name"]).strip()) < 2:
+            invalid.append({"field": "setup.name", "reason": "setupnaam is te kort"})
 
         if draft.get("plan_type") == "dca":
             frequency = draft["dca"].get("frequency")
@@ -10336,8 +10433,8 @@ class FinnPlanService:
                     missing.append("dca.month_day")
                 elif not isinstance(month_day, int) or month_day < 1 or month_day > 28:
                     invalid.append({"field": "dca.month_day", "reason": "gebruik dag 1 t/m 28 voor maandelijkse DCA"})
-            if draft["dca"].get("dca_mode") == "custom" and draft["dca"].get("buy_score_threshold") is None:
-                missing.append("dca.buy_score_threshold")
+            if not draft["setup"].get("market_condition"):
+                missing.append("setup.market_condition")
 
         next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
         return {
@@ -10356,19 +10453,23 @@ class FinnPlanService:
             return f"Ik zie een probleem met {issue['field']}: {issue['reason']}. Wat wil je hiervoor instellen?"
 
         if next_question == "plan_type":
-            return "Bedoel je een DCA-plan om periodiek te accumuleren, of een trade-plan met entry, stop-loss en targets?"
+            return "Wil je dat Finn hier eerst een DCA-plan van maakt, of een trade-plan met entry, stop-loss en targets? Ik vraag dit eerst uit voordat ik de rest invul."
         if next_question == "setup.timeframe":
-            return "Welke timeframe hoort bij dit plan? Bijvoorbeeld 1W voor DCA of 4H/1D voor een trade."
+            return "Welke timeframe hoort bij dit plan? Bijvoorbeeld 1W voor DCA of 4H/1D voor een trade. Daarna vraag ik pas de volgende ontbrekende keuze."
+        if next_question == "setup.name":
+            return "Welke naam wil je deze setup geven? Houd hem kort en herkenbaar, bijvoorbeeld BTC swing setup of Bitcoin test DCA."
         if next_question == "strategy.base_amount_eur":
-            return "Met welk basisbedrag in euro wil je dit plan uitvoeren?"
+            return "Met welk basisbedrag in euro wil je dit plan uitvoeren? Noem gewoon een enkel bedrag, bijvoorbeeld 100 euro."
+        if next_question == "bot.create_bot":
+            return "Wil je hier alleen een plan van maken, of wil je ook meteen een botdraft klaarzetten? Ik bevestig dat pas nadat de basis klopt."
         if next_question == "dca.frequency":
-            return "Hoe vaak wil je deze DCA uitvoeren: dagelijks, wekelijks of maandelijks?"
+            return "Hoe vaak wil je deze DCA uitvoeren: dagelijks, wekelijks of maandelijks? Ik vul nog niets anders in voordat je dit kiest."
         if next_question == "dca.day":
-            return "Op welke weekdag wil je deze DCA uitvoeren?"
+            return "Op welke weekdag wil je deze DCA uitvoeren? Noem gewoon bijvoorbeeld maandag of vrijdag."
         if next_question == "dca.month_day":
             return "Op welke dag van de maand wil je kopen? Gebruik dag 1 t/m 28."
-        if next_question == "dca.buy_score_threshold":
-            return "Bij welke marktscore wil je extra bijkopen? (bijv. onder de 30)"
+        if next_question == "setup.market_condition":
+            return "Wanneer wil je vooral instappen? Kies bijvoorbeeld: bevestigd sterk, normale pullback, of vroege dip. Ik vertaal dat daarna zelf naar de juiste filters."
         if next_question == "strategy.entry":
             return "Welke entry-prijs hoort bij deze trade?"
         if next_question == "strategy.stop_loss":
@@ -10392,14 +10493,16 @@ class FinnPlanService:
             return "Voor welk asset wil je deze setup maken? Ik ondersteun nu BTC, ETH en SOL."
         if next_question == "setup.timeframe":
             return "Welke timeframe hoort bij deze setup? Bijvoorbeeld 4H of 1D voor trade, of 1W voor DCA."
+        if next_question == "setup.name":
+            return "Welke naam wil je voor deze setup gebruiken? Kies iets korts en herkenbaars, bijvoorbeeld BTC swing setup of Bitcoin test DCA."
         if next_question == "dca.frequency":
             return "Hoe vaak wil je deze DCA-setup uitvoeren: dagelijks, wekelijks of maandelijks?"
         if next_question == "dca.day":
             return "Op welke weekdag wil je deze DCA-setup uitvoeren? Noem bijvoorbeeld maandag of vrijdag."
         if next_question == "dca.month_day":
             return "Op welke dag van de maand wil je kopen? Gebruik dag 1 t/m 28."
-        if next_question == "dca.buy_score_threshold":
-            return "Bij welke marktscore wil je extra bijkopen? Noem bijvoorbeeld onder de 30."
+        if next_question == "setup.market_condition":
+            return "Wanneer wil je dat deze setup vooral mag instappen? Kies bijvoorbeeld: bevestigd sterk, normale pullback, of vroege dip."
 
         summary = self._setup_only_summary(draft)
         return f"Ik heb je setup klaarstaan. Controleer dit even en bevestig als het klopt:\n\n{summary}"
@@ -10437,6 +10540,14 @@ class FinnPlanService:
             ).strip()
             if schedule:
                 lines.append(f"- DCA: {schedule}")
+        market_condition = draft.get("setup", {}).get("market_condition")
+        if market_condition:
+            if market_condition == "custom_manual":
+                lines.append("- Instapmoment: handmatig ingestelde voorwaarden")
+            else:
+                preset = SETUP_MARKET_CONDITION_PRESETS.get(str(market_condition))
+                if preset:
+                    lines.append(f"- Instapmoment: {preset['label']}")
         return "\n".join(lines)
 
     def _asset_from_query_or_context(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
@@ -18038,6 +18149,10 @@ class FinnPlanService:
             check["blocker_reason"] = f"{label} score of range ontbreekt"
         return check
 
+    def _draft_score_range(self, setup: Dict[str, Any], field: str, fallback: List[float]) -> List[float]:
+        value = setup.get(field)
+        return value if isinstance(value, list) and len(value) == 2 else fallback
+
     def _finalize_score_analysis(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
         checks = analysis.get("checks") or {}
         known = [check.get("pass") for check in checks.values() if check.get("pass") is not None]
@@ -18071,9 +18186,24 @@ class FinnPlanService:
     ) -> Dict[str, Any]:
         setup = draft.get("setup") or {}
         checks = {
-            "macro": self._score_check("macro", self._score_value(daily_scores, "macro"), setup.get("macro_score_range"), daily_scores),
-            "technical": self._score_check("technical", self._score_value(daily_scores, "technical"), setup.get("technical_score_range"), daily_scores),
-            "market": self._score_check("market", self._score_value(daily_scores, "market"), setup.get("market_score_range"), daily_scores),
+            "macro": self._score_check(
+                "macro",
+                self._score_value(daily_scores, "macro"),
+                self._draft_score_range(setup, "macro_score_range", [30, 70]),
+                daily_scores,
+            ),
+            "technical": self._score_check(
+                "technical",
+                self._score_value(daily_scores, "technical"),
+                self._draft_score_range(setup, "technical_score_range", [40, 80]),
+                daily_scores,
+            ),
+            "market": self._score_check(
+                "market",
+                self._score_value(daily_scores, "market"),
+                self._draft_score_range(setup, "market_score_range", [20, 60]),
+                daily_scores,
+            ),
         }
         return self._finalize_score_analysis({
             "checks": checks,
@@ -18546,15 +18676,37 @@ class FinnPlanService:
         lines = [
             f"- Type: {draft.get('plan_type')}",
             f"- Asset: {draft.get('asset')}",
-            f"- Naam: {draft['setup'].get('name')}",
             f"- Timeframe: {draft['setup'].get('timeframe')}",
-            f"- Bedrag: €{draft['strategy'].get('base_amount_eur')}",
-            f"- Macro: {draft['setup'].get('macro_score_range')}",
-            f"- Technical: {draft['setup'].get('technical_score_range')}",
-            f"- Market: {draft['setup'].get('market_score_range')}",
         ]
+        if draft["setup"].get("name"):
+            lines.insert(2, f"- Naam: {draft['setup'].get('name')}")
+        amount = draft["strategy"].get("base_amount_eur")
+        if amount not in (None, "", 0):
+            lines.append(f"- Bedrag: €{amount}")
         if draft.get("plan_type") == "dca":
-            lines.append(f"- DCA: {draft['dca'].get('frequency')} {draft['dca'].get('day') or draft['dca'].get('month_day') or ''}".strip())
+            frequency = draft["dca"].get("frequency")
+            frequency_label = {
+                "daily": "dagelijks",
+                "weekly": "wekelijks",
+                "monthly": "maandelijks",
+            }.get(str(frequency or "").lower(), frequency)
+            weekday = str(draft["dca"].get("day") or "").lower()
+            weekday_label = {
+                "monday": "maandag",
+                "tuesday": "dinsdag",
+                "wednesday": "woensdag",
+                "thursday": "donderdag",
+                "friday": "vrijdag",
+                "saturday": "zaterdag",
+                "sunday": "zondag",
+            }.get(weekday, draft["dca"].get("day"))
+            schedule = " ".join(
+                str(part)
+                for part in [frequency_label, weekday_label or draft["dca"].get("month_day")]
+                if part not in (None, "", 0)
+            ).strip()
+            if schedule:
+                lines.append(f"- DCA: {schedule}")
         if draft.get("plan_type") == "trade":
             lines.extend([
                 f"- Uitvoering: {draft['strategy'].get('entry_type')}",
@@ -18562,10 +18714,12 @@ class FinnPlanService:
                 f"- Stop-loss: {draft['strategy'].get('stop_loss')}",
                 f"- Targets: {draft['strategy'].get('targets')}",
             ])
-        lines.append(f"- Automatisering: {draft['bot'].get('automation') or ('bot_assisted' if draft['bot'].get('create_bot') else 'manual_only')}")
-        if draft["bot"].get("create_bot"):
+        if draft["bot"].get("create_bot") is True:
             env = "live" if draft["bot"].get("is_live") else "paper"
-            lines.append(f"- Bot: {env}, {draft['bot'].get('mode')}, {draft['bot'].get('risk_profile')}")
+            env_label = "live" if env == "live" else "paper"
+            mode_label = {"manual": "handmatig", "semi-auto": "semi-automatisch", "auto": "automatisch"}.get(draft["bot"].get("mode"), draft["bot"].get("mode"))
+            risk_label = {"conservative": "voorzichtig", "balanced": "gebalanceerd", "aggressive": "agressief"}.get(draft["bot"].get("risk_profile"), draft["bot"].get("risk_profile"))
+            lines.append(f"- Botmodus: {env_label}, {mode_label}, {risk_label}")
         return "\n".join(lines)
 
     async def execute_action(self, user_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
@@ -18597,7 +18751,7 @@ class FinnPlanService:
             raise HTTPException(400, "Onbekende Finn action")
 
         draft = _deep_merge(empty_plan_draft(), action.get("payload") or {})
-        self._apply_defaults(draft)
+        self._apply_defaults(draft, for_save=True)
         action_id = f"{action.get('id') or self._action_id(draft)}-u{user_id}"
         acquired = await self._try_create_pending_action(user_id, action_id, action)
         if not acquired:
@@ -20185,34 +20339,43 @@ class FinnPlanService:
         setup = draft["setup"]
         dca = draft["dca"]
         plan_type = draft["plan_type"]
+        setup_name = setup.get("name") or f"{draft['asset']} {'Smart DCA' if plan_type == 'dca' else 'Trade Plan'}"
+        macro_range = setup.get("macro_score_range") or [30, 70]
+        technical_range = setup.get("technical_score_range") or [40, 80]
+        market_range = setup.get("market_score_range") or [20, 60]
         return {
-            "name": setup["name"],
+            "name": setup_name,
             "symbol": draft["asset"],
             "setup_type": plan_type,
             "timeframe": setup["timeframe"],
             "dca_frequency": dca.get("frequency") if plan_type == "dca" else None,
             "dca_day": str(WEEKDAY_NUMBERS.get(str(dca.get("day") or "").lower(), dca.get("day"))) if plan_type == "dca" and dca.get("frequency") == "weekly" and dca.get("day") is not None else None,
             "dca_month_day": dca.get("month_day") if plan_type == "dca" and dca.get("frequency") == "monthly" else None,
-            "min_macro_score": setup["macro_score_range"][0],
-            "max_macro_score": setup["macro_score_range"][1],
-            "min_technical_score": setup["technical_score_range"][0],
-            "max_technical_score": setup["technical_score_range"][1],
-            "min_market_score": setup["market_score_range"][0],
-            "max_market_score": setup["market_score_range"][1],
+            "min_macro_score": macro_range[0],
+            "max_macro_score": macro_range[1],
+            "min_technical_score": technical_range[0],
+            "max_technical_score": technical_range[1],
+            "min_market_score": market_range[0],
+            "max_market_score": market_range[1],
             "description": "Aangemaakt via Finn",
             "category": "finn_plan",
         }
 
     def _strategy_payload(self, draft: Dict[str, Any], setup_id: int) -> Dict[str, Any]:
         strategy = draft["strategy"]
+        setup_name = draft["setup"].get("name") or f"{draft['asset']} {'Smart DCA' if draft['plan_type'] == 'dca' else 'Trade Plan'}"
+        risk_profile = draft["bot"].get("risk_profile") or "balanced"
+        automation = draft["bot"].get("automation")
+        if automation is None and draft["bot"].get("create_bot") is not None:
+            automation = "bot_assisted" if draft["bot"].get("create_bot") else "manual_only"
         payload = {
-            "name": f"{draft['setup']['name']} Strategy",
+            "name": f"{setup_name} Strategy",
             "setup_id": setup_id,
             "setup_type": draft["plan_type"],
             "execution_mode": "fixed",
             "base_amount": float(strategy["base_amount_eur"]),
             "decision_curve": strategy.get("decision_curve"),
-            "risk_profile": draft["bot"].get("risk_profile") or "balanced",
+            "risk_profile": risk_profile,
             "explanation": "Aangemaakt via Finn",
         }
         if draft["plan_type"] == "trade":
@@ -20220,7 +20383,7 @@ class FinnPlanService:
                 "direction": strategy.get("direction") or "long",
                 "entry_type": strategy.get("entry_type") or "limit",
                 "trade_execution_mode": strategy.get("entry_type") or "limit",
-                "automation": draft["bot"].get("automation") or ("bot_assisted" if draft["bot"].get("create_bot") else "manual_only"),
+                "automation": automation or "manual_only",
                 "entry": strategy.get("entry"),
                 "stop_loss": strategy.get("stop_loss"),
                 "targets": strategy.get("targets"),
@@ -20259,8 +20422,9 @@ class FinnPlanService:
 
     def _bot_payload(self, draft: Dict[str, Any], strategy_id: int) -> Dict[str, Any]:
         bot = draft["bot"]
+        setup_name = draft["setup"].get("name") or f"{draft['asset']} {'Smart DCA' if draft['plan_type'] == 'dca' else 'Trade Plan'}"
         return {
-            "name": f"{draft['setup']['name']} Bot",
+            "name": bot.get("name") or f"{setup_name} Bot",
             "strategy_id": strategy_id,
             "mode": bot.get("mode") or "manual",
             "is_live": bool(bot.get("is_live")),

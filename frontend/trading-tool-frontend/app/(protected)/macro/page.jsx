@@ -74,6 +74,8 @@ export default function MacroPage() {
         guidedIntro: macroT.onboardingGuide.guidedIntro?.replace("{symbol}", selectedAsset),
         guidedConfigHint: macroT.onboardingGuide.guidedConfigHint?.replace("{symbol}", selectedAsset),
         completionHint: macroT.onboardingGuide.completionHint?.replace("{symbol}", selectedAsset),
+        completedTitle: macroT.onboardingGuide.completedTitle?.replace("{symbol}", selectedAsset),
+        completedBody: macroT.onboardingGuide.completedBody?.replace("{symbol}", selectedAsset),
         finnHint: macroT.onboardingGuide.finnHint?.replace("{symbol}", selectedAsset),
         assistantPrompt: macroT.onboardingGuide.assistantPrompt?.replace("{symbol}", selectedAsset),
         steps: Array.isArray(macroT.onboardingGuide.steps)
@@ -81,6 +83,7 @@ export default function MacroPage() {
           : [],
       }
     : null;
+  const nextTechnicalHref = `/technical?onboarding=1&step=technical&symbol=${encodeURIComponent(selectedAsset)}`;
 
   // ===============================
   // 🧭 ONBOARDING HOOK
@@ -101,6 +104,7 @@ export default function MacroPage() {
     loading: loadingIndicators,
     error,
   } = useMacroData(activeTab, selectedAsset);
+  const macroStepComplete = Boolean(status?.has_macro || activeMacroIndicatorNames?.length > 0);
   const macroNeedsSetup = status?.has_macro === false && activeMacroIndicatorNames?.length === 0;
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
   const showOnboardingGuide = onboardingGuidedMode || macroNeedsSetup;
@@ -229,7 +233,13 @@ export default function MacroPage() {
       </header>
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide copy={guideCopy} anchorId="macro-config" guidedMode={onboardingGuidedMode} />
+        <OnboardingStepGuide
+          copy={guideCopy}
+          anchorId="macro-config"
+          guidedMode={onboardingGuidedMode}
+          isComplete={macroStepComplete}
+          nextHref={nextTechnicalHref}
+        />
       ) : null}
 
       <div className="space-y-12">

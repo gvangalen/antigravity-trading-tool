@@ -39,10 +39,7 @@ from backend.schemas.assistant_schema import (
     ChatMessageResponse,
     ChatSessionDetailResponse,
 )
-from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.finn_product_analytics_service import finn_product_analytics
-from backend.services.finn_plan_service import FinnPlanService
-from backend.services.ai_gateway import AiGateway
 from backend.services.locale_service import localize_finn_payload, resolve_locale
 from backend.services.trader_profile_service import (
     build_trader_profile_context,
@@ -59,6 +56,11 @@ from backend.infrastructure.repositories.market_data_repository import MarketDat
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.assistant_context_repository import AssistantContextRepository
+from backend.services.ai_action_engine import AiActionEngine
+
+if TYPE_CHECKING:
+    from backend.services.ai_assistant_service import AiAssistantService
+    from backend.services.finn_plan_service import FinnPlanService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -144,6 +146,7 @@ def _audit_response_type(response: Optional[dict]) -> str:
     if response.get("state"):
         return "stateful_response"
     return "text_response"
+
 
 def _legacy_draft_action_label(draft_type: str, locale: str) -> str:
     labels = {
@@ -661,6 +664,8 @@ async def _continue_transactional_follow_up(
     if active_flow == "indicator_config":
         return await finn.build_indicator_config_response_for_user(user_id, query, payload)
     return finn.build_response(query, payload)
+
+
 def _attach_trader_profile_metadata(response: Optional[dict], context_payload: Optional[dict]) -> dict:
     payload = dict(response or {})
     analysis = payload.get("analysis") if isinstance(payload.get("analysis"), dict) else {}
@@ -882,7 +887,7 @@ def _legacy_response_is_generic_failure(response_text: Optional[str]) -> bool:
 
 
 def _query_prefers_non_transactional_finn_response(
-    finn: FinnPlanService,
+    finn: Any,
     query: str,
     context_payload: Optional[dict],
 ) -> bool:
@@ -917,7 +922,7 @@ def _query_prefers_non_transactional_finn_response(
 
 
 def _legacy_response_needs_finn_rescue(
-    finn: FinnPlanService,
+    finn: Any,
     query: str,
     context_payload: Optional[dict],
     *,
@@ -928,19 +933,21 @@ def _legacy_response_needs_finn_rescue(
 ) -> bool:
     if action or draft:
         return False
+    current_flow = str((state or {}).get("current_flow") or "").lower()
+    if current_flow in {"setup_creation", "strategy_creation", "bot_creation", "indicator_config"}:
+        return _legacy_response_is_generic_failure(response_text)
     if _query_prefers_non_transactional_finn_response(finn, query, context_payload):
         return True
     if _legacy_response_is_generic_failure(response_text):
         return True
     if not _query_prefers_non_transactional_finn_response(finn, query, context_payload):
         return False
-    current_flow = str((state or {}).get("current_flow") or "").lower()
     return current_flow in {"setup_creation", "strategy_creation", "bot_creation", "indicator_config"}
 
 
 async def _build_finn_core_rescue_envelope(
     *,
-    finn: FinnPlanService,
+    finn: Any,
     user_id: int,
     query: str,
     context_payload: Optional[dict],
@@ -1133,6 +1140,9 @@ def _invalidate_mission_control_cache(user_id: int) -> None:
     _mission_control_cache.pop(int(user_id), None)
 
 async def get_assistant_service(db: AsyncSession = Depends(get_db)):
+    from backend.services.ai_assistant_service import AiAssistantService
+    from backend.services.ai_gateway import AiGateway
+
     score_repo = ScoreRepository(db)
     setup_repo = SetupRepository(db)
     report_repo = ReportRepository(db)
@@ -1149,12 +1159,19 @@ async def get_assistant_service(db: AsyncSession = Depends(get_db)):
     )
 
 
+def _new_finn_plan_service(db: AsyncSession, *, trace_id: Optional[str] = None):
+    from backend.services.finn_plan_service import FinnPlanService
+
+    return FinnPlanService(db, trace_id=trace_id)
+
+
 async def _finalize_finn_response(
-    finn: FinnPlanService,
+    finn: Any,
     user_id: int,
     response: dict,
     trace_id: str,
     *,
+    db: Optional[AsyncSession] = None,
     persist_state: bool = True,
     prompt: Optional[str] = None,
     context_payload: Optional[dict] = None,
@@ -1163,6 +1180,14 @@ async def _finalize_finn_response(
     latency_ms: Optional[float] = None,
 ) -> AssistantChatResponse:
     response["trace_id"] = trace_id
+    if db is not None:
+        response = await _ensure_pending_action_ids(
+            db,
+            user_id,
+            response,
+            locale=(context_payload or {}).get("locale") or "nl",
+            trace_id=trace_id,
+        )
     response = finn._build_response_analysis_metadata(response, context_payload, route_source=route_source)
     response = _attach_trader_profile_metadata(response, context_payload)
     response = _normalize_finn_response_contract(response)
@@ -1253,11 +1278,12 @@ async def _finalize_finn_response(
 
 
 async def _prepare_finn_envelope(
-    finn: FinnPlanService,
+    finn: Any,
     user_id: int,
     envelope: dict,
     trace_id: str,
     *,
+    db: Optional[AsyncSession] = None,
     persist_state: bool = True,
     prompt: Optional[str] = None,
     context_payload: Optional[dict] = None,
@@ -1266,6 +1292,14 @@ async def _prepare_finn_envelope(
     latency_ms: Optional[float] = None,
 ) -> dict:
     envelope["trace_id"] = trace_id
+    if db is not None:
+        envelope = await _ensure_pending_action_ids(
+            db,
+            user_id,
+            envelope,
+            locale=(context_payload or {}).get("locale") or "nl",
+            trace_id=trace_id,
+        )
     envelope = finn._build_response_analysis_metadata(envelope, context_payload, route_source=route_source)
     envelope = _attach_trader_profile_metadata(envelope, context_payload)
     envelope = _normalize_finn_response_contract(envelope)
@@ -1355,20 +1389,168 @@ async def _prepare_finn_envelope(
     return envelope
 
 
+async def _finalize_legacy_response(
+    *,
+    service: Any,
+    response: Optional[str],
+    action: Optional[dict],
+    draft: Optional[dict],
+    state: Optional[dict],
+    reasoning: Optional[str],
+    suggested_actions: Optional[list],
+    session_id: Optional[str],
+    finn: Any,
+    user_id: int,
+    trace_id: str,
+    db: Optional[AsyncSession],
+    query: str,
+    context_payload: Optional[dict],
+    started_at: float,
+) -> AssistantChatResponse:
+    intent = service._classify_intent(query)
+    if not isinstance(action, dict):
+        action = None
+    if not isinstance(draft, dict):
+        draft = None
+    if not isinstance(state, dict):
+        state = None
+    reasoning = None
+    if not isinstance(suggested_actions, list):
+        suggested_actions = None
+    if _legacy_response_needs_finn_rescue(
+        finn,
+        query,
+        context_payload,
+        response_text=response,
+        action=action,
+        draft=draft,
+        state=state,
+    ):
+        rescue = await _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=user_id,
+            query=query,
+            context_payload=context_payload,
+        )
+        return await _finalize_finn_response(
+            finn,
+            user_id,
+            rescue,
+            trace_id,
+            db=db,
+            prompt=query,
+            context_payload=context_payload,
+            route_source="finn_core_rescue_legacy",
+            legacy_rescue_reason="legacy_non_transactional_misroute_or_generic_failure",
+            latency_ms=(time.perf_counter() - started_at) * 1000,
+        )
+    legacy_response = {
+        "response": response,
+        "intent": intent,
+        "flow": (state or {}).get("current_flow"),
+        "draft": draft,
+        "state": state,
+        "actions": action and [action] or [],
+        "missing_fields": (state or {}).get("missing_fields") or (state or {}).get("missing_slots") or [],
+        "next_question": (state or {}).get("next_question"),
+        "can_confirm": False,
+    }
+    if db is not None:
+        legacy_response = await _ensure_pending_action_ids(
+            db,
+            user_id,
+            legacy_response,
+            locale=(context_payload or {}).get("locale") or "nl",
+            trace_id=trace_id,
+        )
+    legacy_response = finn._build_response_analysis_metadata(
+        legacy_response,
+        context_payload,
+        route_source="legacy",
+    )
+    legacy_response = _attach_trader_profile_metadata(legacy_response, context_payload)
+    legacy_response = _normalize_finn_response_contract(legacy_response)
+    _log_finn_prompt_audit(
+        trace_id=trace_id,
+        user_id=user_id,
+        prompt=query,
+        route_source="legacy_assistant",
+        detected_intent=intent,
+        intent_confidence=None,
+        selected_flow=(state or {}).get("current_flow"),
+        selected_entity=_audit_selected_entity(legacy_response, context_payload),
+        context_payload=context_payload,
+        used_draft=bool(draft),
+        draft_summary=_audit_draft_summary(draft),
+        response_type=_audit_response_type(legacy_response),
+        success=_audit_success_label(legacy_response),
+        mode=(legacy_response.get("analysis") or {}).get("mode") or finn._response_mode_for_flow((state or {}).get("current_flow"), draft),
+        context_confidence=(legacy_response.get("analysis") or {}).get("context_confidence"),
+        draft_rejected_reason=(context_payload.get("_finn_sanitization") or {}).get("draft_rejected_reason"),
+        latency_ms=(time.perf_counter() - started_at) * 1000,
+    )
+    _record_finn_product_event(
+        user_id=user_id,
+        event_name="finn_response_received",
+        session_id=session_id,
+        surface="legacy_assistant",
+        page=context_payload.get("page"),
+        asset=context_payload.get("symbol") or context_payload.get("asset"),
+        flow_type=(state or {}).get("current_flow"),
+        bot_id=(state or {}).get("bot_id") or context_payload.get("bot_id"),
+        setup_id=(state or {}).get("setup_id") or context_payload.get("setup_id"),
+        strategy_id=(state or {}).get("strategy_id") or context_payload.get("strategy_id"),
+        trace_id=trace_id,
+        next_best_action=legacy_response.get("next_best_action"),
+        metadata={
+            "intent": intent,
+            **_trader_profile_event_metadata(context_payload),
+        },
+    )
+    _record_behavioral_response_events(
+        user_id=user_id,
+        response=legacy_response,
+        context_payload=context_payload,
+        route_source="legacy_assistant",
+        trace_id=trace_id,
+    )
+    return AssistantChatResponse(
+        response=legacy_response.get("response") or response,
+        intent=legacy_response.get("intent") or intent,
+        action=legacy_response.get("action"),
+        draft=legacy_response.get("draft"),
+        state=legacy_response.get("state"),
+        reasoning=reasoning,
+        suggested_actions=legacy_response.get("suggested_actions") or suggested_actions,
+        trace_id=trace_id,
+        session_id=session_id,
+        flow=legacy_response.get("flow"),
+        missing_fields=legacy_response.get("missing_fields") or [],
+        invalid_fields=legacy_response.get("invalid_fields") or [],
+        next_question=legacy_response.get("next_question"),
+        can_confirm=bool(legacy_response.get("can_confirm")),
+        actions=legacy_response.get("actions") or [],
+        summary=legacy_response.get("summary"),
+        risk_summary=legacy_response.get("risk_summary"),
+        next_best_action=legacy_response.get("next_best_action"),
+        review_reason=legacy_response.get("review_reason"),
+    )
+
+
 @router.post("/assistant/chat", response_model=AssistantChatResponse)
 async def assistant_chat(
     request: AssistantChatRequest,
     raw_request: Request,
     x_trace_id: Optional[str] = Header(None),
     current_user: dict = Depends(get_current_user),
-    service: AiAssistantService = Depends(get_assistant_service),
+    service: Any = Depends(get_assistant_service),
     db: AsyncSession = Depends(get_db),
 ):
     trace_id = x_trace_id or f"trdm-trace-{uuid.uuid4().hex[:8]}-{hex(int(time.time()))[2:]}"
     started_at = time.perf_counter()
     try:
         user_id = current_user["id"]
-        finn = FinnPlanService(db)
+        finn = _new_finn_plan_service(db)
         context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
         context_payload = finn.sanitize_context_for_query(request.query, context_payload)
         context_payload = await _enrich_with_trader_profile(db, user_id, context_payload, query=request.query)
@@ -1396,6 +1578,75 @@ async def assistant_chat(
             prompt_text=request.query,
             metadata=_trader_profile_event_metadata(context_payload),
         )
+        if _looks_like_profile_capture(request.query):
+            user_repo = UserRepository(db)
+            profile_patch = _extract_profile_update_from_query(request.query)
+            current_user_row = await user_repo.get_by_id(user_id)
+            current_prefs = getattr(current_user_row, "ai_preferences", {}) or {}
+            merged_profile = normalize_trader_profile_preferences({**current_prefs, **profile_patch})
+            await user_repo.update_ai_preferences(user_id, {
+                "trader_types": merged_profile.get("trader_types", []),
+                "primary_timeframes": merged_profile.get("primary_timeframes", []),
+                "asset_focus": merged_profile.get("asset_focus", []),
+                "behavior_flags": merged_profile.get("behavior_flags", []),
+            })
+            finn_response = _build_profile_saved_envelope(merged_profile)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+            )
+        if _looks_like_profile_explain(request.query):
+            user_row = await UserRepository(db).get_by_id(user_id)
+            prefs = getattr(user_row, "ai_preferences", {}) or {}
+            finn_response = _build_profile_explain_envelope(normalize_trader_profile_preferences(prefs))
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+            )
+        if _looks_like_setup_strategy_listing_request(request.query):
+            finn_response = await _build_setup_strategy_listing_envelope(db, user_id)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+            )
+        if _looks_like_watchlist_mutation(request.query):
+            finn_response = _build_watchlist_mutation_envelope(request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, db=db, prompt=request.query, context_payload=context_payload
+            )
+        active_legacy_state = await service.state_repo.get_state(user_id)
+        active_legacy_flow = str((active_legacy_state or {}).get("current_flow") or "").lower()
+        should_resume_legacy_transaction = (
+            _is_legacy_transactional_flow_name(active_legacy_flow)
+            and not _is_modern_transactional_state_record(active_legacy_state)
+        )
+        if should_resume_legacy_transaction:
+            context_payload["current_flow"] = active_legacy_flow
+        if _should_prefer_legacy_setup_flow(request.query, context_payload) or should_resume_legacy_transaction:
+            if _should_prefer_legacy_setup_flow(request.query, context_payload):
+                _clear_modern_transactional_context(context_payload)
+            response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
+                user_id, request.query, request.history, context_payload, trace_id=trace_id, session_id=request.session_id
+            )
+            return await _finalize_legacy_response(
+                service=service,
+                response=response,
+                action=action,
+                draft=draft,
+                state=state,
+                reasoning=reasoning,
+                suggested_actions=suggested_actions,
+                session_id=actual_session_id or request.session_id,
+                finn=finn,
+                user_id=user_id,
+                trace_id=trace_id,
+                db=db,
+                query=request.query,
+                context_payload=context_payload,
+                started_at=started_at,
+            )
+        follow_up = await _continue_transactional_follow_up(finn, user_id, request.query, context_payload)
+        if follow_up:
+            return await _finalize_finn_response(
+                finn, user_id, follow_up, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
+            )
         if finn.looks_like_daily_score_refresh_request(request.query):
             finn_response = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
             return await _finalize_finn_response(
@@ -1534,11 +1785,6 @@ async def assistant_chat(
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
             )
-        if finn.looks_like_daily_coach_request(request.query):
-            finn_response = await finn.build_daily_coach_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
         if finn.is_cancel_request(request.query):
             finn_response = await finn.build_cancel_response(user_id, context_payload)
             if finn_response:
@@ -1579,6 +1825,11 @@ async def assistant_chat(
             finn_response = finn.build_response(request.query, context_payload)
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
+            )
+        if finn.looks_like_daily_coach_request(request.query):
+            finn_response = await finn.build_daily_coach_response(user_id, request.query, context_payload)
+            return await _finalize_finn_response(
+                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
             )
 
         try:
@@ -1836,7 +2087,7 @@ async def assistant_chat_stream(
     raw_request: Request,
     x_trace_id: Optional[str] = Header(None),
     current_user: dict = Depends(get_current_user),
-    service: AiAssistantService = Depends(get_assistant_service),
+    service: Any = Depends(get_assistant_service),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -1849,7 +2100,7 @@ async def assistant_chat_stream(
 
     async def event_generator():
         try:
-            finn = FinnPlanService(db)
+            finn = _new_finn_plan_service(db)
             context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
             context_payload = finn.sanitize_context_for_query(request.query, context_payload)
             context_payload = await _enrich_with_trader_profile(db, user_id, context_payload, query=request.query)
@@ -1877,6 +2128,76 @@ async def assistant_chat_stream(
                 prompt_text=request.query,
                 metadata=_trader_profile_event_metadata(context_payload),
             )
+            if _looks_like_profile_capture(request.query):
+                user_repo = UserRepository(db)
+                profile_patch = _extract_profile_update_from_query(request.query)
+                current_user_row = await user_repo.get_by_id(user_id)
+                current_prefs = getattr(current_user_row, "ai_preferences", {}) or {}
+                merged_profile = normalize_trader_profile_preferences({**current_prefs, **profile_patch})
+                await user_repo.update_ai_preferences(user_id, {
+                    "trader_types": merged_profile.get("trader_types", []),
+                    "primary_timeframes": merged_profile.get("primary_timeframes", []),
+                    "asset_focus": merged_profile.get("asset_focus", []),
+                    "behavior_flags": merged_profile.get("behavior_flags", []),
+                })
+                envelope = _build_profile_saved_envelope(merged_profile)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if _looks_like_profile_explain(request.query):
+                user_row = await UserRepository(db).get_by_id(user_id)
+                prefs = getattr(user_row, "ai_preferences", {}) or {}
+                envelope = _build_profile_explain_envelope(normalize_trader_profile_preferences(prefs))
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if _looks_like_setup_strategy_listing_request(request.query):
+                envelope = await _build_setup_strategy_listing_envelope(db, user_id)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if _looks_like_watchlist_mutation(request.query):
+                envelope = _build_watchlist_mutation_envelope(request.query, context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, db=db, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            active_legacy_state = await service.state_repo.get_state(user_id)
+            active_legacy_flow = str((active_legacy_state or {}).get("current_flow") or "").lower()
+            should_resume_legacy_transaction = (
+                _is_legacy_transactional_flow_name(active_legacy_flow)
+                and not _is_modern_transactional_state_record(active_legacy_state)
+            )
+            if should_resume_legacy_transaction:
+                context_payload["current_flow"] = active_legacy_flow
+            if _should_prefer_legacy_setup_flow(request.query, context_payload) or should_resume_legacy_transaction:
+                if _should_prefer_legacy_setup_flow(request.query, context_payload):
+                    _clear_modern_transactional_context(context_payload)
+                async for chunk in service.get_chat_response_stream(
+                    user_id,
+                    request.query,
+                    request.history,
+                    context_payload,
+                    trace_id=trace_id,
+                    background_tasks=background_tasks,
+                ):
+                    if await raw_request.is_disconnected():
+                        logger.warning(f"🔌 Client disconnected mid-stream | Trace: {trace_id}. Aborting stream generator.")
+                        return
+                    yield chunk
+                return
+
+            follow_up = await _continue_transactional_follow_up(finn, user_id, request.query, context_payload)
+            if follow_up:
+                envelope = await _prepare_finn_envelope(
+                    finn, user_id, follow_up, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
+                )
+                yield _sse_event("envelope", envelope)
+                return
+
             if finn.looks_like_daily_score_refresh_request(request.query):
                 envelope = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
                 envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
@@ -2042,12 +2363,6 @@ async def assistant_chat_stream(
                 yield _sse_event("envelope", envelope)
                 return
 
-            if finn.looks_like_daily_coach_request(request.query):
-                envelope = await finn.build_daily_coach_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
             if finn.is_cancel_request(request.query):
                 envelope = await finn.build_cancel_response(user_id, context_payload)
                 if envelope:
@@ -2088,6 +2403,12 @@ async def assistant_chat_stream(
             if finn.looks_like_plan_request(request.query, context_payload.get("finn_draft")):
                 envelope = finn.build_response(request.query, context_payload)
                 envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload)
+                yield _sse_event("envelope", envelope)
+                return
+
+            if finn.looks_like_daily_coach_request(request.query):
+                envelope = await finn.build_daily_coach_response(user_id, request.query, context_payload)
+                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
                 yield _sse_event("envelope", envelope)
                 return
 
@@ -2223,7 +2544,7 @@ async def update_preferences(
 async def get_insight(
     context: dict,
     current_user: dict = Depends(get_current_user),
-    service: AiAssistantService = Depends(get_assistant_service)
+    service: Any = Depends(get_assistant_service)
 ):
     try:
         user_id = current_user["id"]
@@ -2262,9 +2583,10 @@ async def execute_pending_action(
     _apply_assistant_execute_rate_limit(user_id=user_id, raw_request=request)
     if str(action_id).startswith("finn-"):
         try:
-            finn = FinnPlanService(db, trace_id=trace_id)
+            finn = _new_finn_plan_service(db, trace_id=trace_id)
             result = await finn.execute_issued_action(user_id, str(action_id))
             _invalidate_mission_control_cache(user_id)
+            from backend.services.finn_plan_service import FinnPlanService
             FinnPlanService.invalidate_runtime_caches_for_user(user_id)
             _record_finn_product_event(
                 user_id=user_id,
@@ -2315,7 +2637,7 @@ async def get_finn_state(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    finn = FinnPlanService(db)
+    finn = _new_finn_plan_service(db)
     response = await finn.get_open_plan_state(current_user["id"])
     return await _enrich_with_trader_profile(db, current_user["id"], response)
 
@@ -2330,7 +2652,7 @@ async def get_finn_mission_control(
     cached = _get_cached_mission_control(current_user["id"])
     if cached:
         return cached
-    finn = FinnPlanService(db, trace_id=trace_id)
+    finn = _new_finn_plan_service(db, trace_id=trace_id)
     response = await finn.build_mission_control_response(
         current_user["id"],
         {"page": "assistant", "scope": "mission_control"},

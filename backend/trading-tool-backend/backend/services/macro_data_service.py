@@ -13,6 +13,25 @@ from backend.schemas.macro_data_schema import (
 
 logger = logging.getLogger(__name__)
 
+
+def _extract_numeric_result(result: Any) -> float:
+    if result is None:
+        raise ValueError("Lege macro response ontvangen.")
+
+    if isinstance(result, dict):
+        candidates = [
+            result.get("value"),
+            result.get("result"),
+            (result.get("data") or {}).get("value") if isinstance(result.get("data"), dict) else None,
+        ]
+        for candidate in candidates:
+            if candidate in ("", ".", None):
+                continue
+            return float(candidate)
+        raise ValueError(f"Macro response bevat geen bruikbare waarde: {result}")
+
+    return float(result)
+
 class MacroDataService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -67,22 +86,12 @@ class MacroDataService:
                 result = await asyncio.to_thread(self._sync_fetch_macro_value, indicator_name, info.source, info.link)
                 if not result:
                     raise HTTPException(500, f"Geen waarde ontvangen voor '{indicator_name}'")
-                
-                if isinstance(result, dict):
-                    if "value" in result:
-                        value = float(result["value"])
-                    elif "data" in result and "value" in result["data"]:
-                        value = float(result["data"]["value"])
-                    elif "result" in result:
-                        value = float(result["result"])
-                    else:
-                        raise HTTPException(500, f"Kan waarde niet parsen: {result}")
-                else:
-                    value = float(result)
+
+                value = _extract_numeric_result(result)
             except HTTPException:
                 raise
             except Exception as e:
-                logger.error(f"Error fetching value macro: {e}")
+                logger.error("Error fetching value macro for '%s': %s", indicator_name, e)
                 raise HTTPException(500, f"Fout bij ophalen dynamische waarde.")
 
         # Score the value

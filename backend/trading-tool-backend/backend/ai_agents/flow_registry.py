@@ -38,11 +38,19 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "setup_creation": {
         "page": "/setup",
         "assistant_role": "Setup Wizard",
-        "required_slots": ["symbol", "setup_type", "timeframe"],
+        "required_slots": ["symbol", "setup_type", "timeframe", "name"],
         "conditional_slots": {
             "dca_frequency": {
                 "depends_on": "setup_type",
                 "equals_value": "dca"
+            },
+            "dca_day": {
+                "depends_on": "dca_frequency",
+                "equals_value": "weekly"
+            },
+            "dca_month_day": {
+                "depends_on": "dca_frequency",
+                "equals_value": "monthly"
             }
         },
         "question_sequence": [
@@ -62,9 +70,29 @@ FLOW_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "question_advanced": "Welke timeframe hoort bij deze setup?"
             },
             {
+                "slot": "name",
+                "question_beginner": "Welke naam wil je aan deze setup geven?",
+                "question_advanced": "Wat is de naam van deze setup?"
+            },
+            {
                 "slot": "dca_frequency",
                 "question_beginner": "Hoe vaak wil je bijkopen? (dagelijks, wekelijks of maandelijks)",
                 "question_advanced": "Frequentie?"
+            },
+            {
+                "slot": "dca_day",
+                "question_beginner": "Op welke dag wil je bijkopen? (bijvoorbeeld maandag)",
+                "question_advanced": "Welke weekdag?"
+            },
+            {
+                "slot": "dca_month_day",
+                "question_beginner": "Op welke dag van de maand wil je bijkopen? (bijvoorbeeld 1, 5 of 28)",
+                "question_advanced": "Welke maanddag?"
+            },
+            {
+                "slot": "market_condition",
+                "question_beginner": "In welke marktconditie wil je vooral instappen? Kies bijvoorbeeld: bevestigd sterk, normale pullback, of vroege dip.",
+                "question_advanced": "Welke marktconditie wil je voor deze setup gebruiken?"
             }
         ],
         "draft_type": "setup",

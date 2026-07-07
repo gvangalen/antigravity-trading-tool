@@ -2990,7 +2990,7 @@ def test_strategy_dca_amount_question_uses_human_per_purchase_wording():
         },
     )
 
-    assert "per uitvoering" in message
+    assert "per aankoop" in message
     assert "100 euro" in message
     assert "basisbedrag in euro" not in message.lower()
 

@@ -7,6 +7,16 @@ import { Coins, Plus } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
+const INDICATOR_LABEL_KEYS = {
+  price: "price",
+  volume: "volumeRelative",
+  market_volume: "volumeRelative",
+  volume_change: "volumeChange",
+  volume_change_24h: "volumeChange",
+  change_24h: "change24h",
+  change_7d: "change7d",
+};
+
 export default function MarketIndicatorScoreView({
   availableIndicators = [],
   selectedIndicator,
@@ -58,12 +68,8 @@ export default function MarketIndicatorScoreView({
   /* --------------------------------------------------
      Display name helper
   -------------------------------------------------- */
-  const displayName =
-    indicator?.display_name ||
-    indicator?.label ||
-    indicator?.name;
-
   const panelCopy = t?.pages?.market?.indicatorPanel || {};
+  const indicatorLabels = t?.legacyComponents?.indicatorScore?.indicatorLabels || {};
   const copy = {
     eyebrow: panelCopy.eyebrow,
     title: panelCopy.title,
@@ -75,6 +81,13 @@ export default function MarketIndicatorScoreView({
     active: t?.ui?.terminalGrid?.active,
     attach: panelCopy.attach,
   };
+
+  const getLocalizedIndicatorLabel = (item) => {
+    const labelKey = INDICATOR_LABEL_KEYS[item?.name];
+    return (labelKey && indicatorLabels?.[labelKey]) || item?.display_name || item?.label || item?.name;
+  };
+
+  const displayName = indicator ? getLocalizedIndicatorLabel(indicator) : null;
 
   return (
     <div className="bg-card border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden">
@@ -107,6 +120,8 @@ export default function MarketIndicatorScoreView({
             items={availableIndicators}
             selected={indicator}
             onSelect={handleSelect}
+            getItemLabel={getLocalizedIndicatorLabel}
+            hideSecondaryLabel
           />
           
           {!indicator && (

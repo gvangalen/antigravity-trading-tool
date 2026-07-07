@@ -1,4 +1,5 @@
 import logging
+import math
 import requests
 
 from backend.utils.scoring_utils import (
@@ -8,8 +9,77 @@ from backend.utils.scoring_utils import (
 
 logger = logging.getLogger(__name__)
 
-YAHOO_DXY = "https://query1.finance.yahoo.com/v8/finance/chart/%5EDXY"
+YAHOO_DXY = "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB"
 ALT_FNG = "https://api.alternative.me/fng/?limit=1"
+REQUEST_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/137.0.0.0 Safari/537.36"
+    )
+}
+
+
+def _coerce_first_numeric(*candidates):
+    for candidate in candidates:
+        if candidate in ("", ".", None):
+            continue
+        try:
+            return float(candidate)
+        except Exception:
+            continue
+    return None
+
+
+def _extract_last_non_null(sequence):
+    if not sequence:
+        return None
+    for value in reversed(sequence):
+        if value not in ("", ".", None):
+            return value
+    return None
+
+
+def _http_get(url: str, timeout: int = 10):
+    return requests.get(url, timeout=timeout, headers=REQUEST_HEADERS)
+
+
+def _fetch_json(url: str, timeout: int = 10):
+    response = _http_get(url, timeout=timeout)
+    response.raise_for_status()
+    return response.json()
+
+
+def _fetch_dxy_from_frankfurter():
+    """
+    Bereken DXY via publieke FX-rates.
+    Dit is stabieler dan de Yahoo ^DXY endpoint die op productie vaak leeg of rate-limited terugkomt.
+    """
+    usd_cross = _fetch_json("https://api.frankfurter.app/latest?from=USD&to=JPY,CAD,SEK,CHF")
+    eur_usd = _fetch_json("https://api.frankfurter.app/latest?from=EUR&to=USD")
+    gbp_usd = _fetch_json("https://api.frankfurter.app/latest?from=GBP&to=USD")
+
+    usd_rates = usd_cross.get("rates", {})
+    eurusd = (eur_usd.get("rates") or {}).get("USD")
+    gbpusd = (gbp_usd.get("rates") or {}).get("USD")
+    usdjpy = usd_rates.get("JPY")
+    usdcad = usd_rates.get("CAD")
+    usdsek = usd_rates.get("SEK")
+    usdchf = usd_rates.get("CHF")
+
+    components = [eurusd, usdjpy, gbpusd, usdcad, usdsek, usdchf]
+    if any(value in ("", ".", None) for value in components):
+        return None
+
+    return (
+        50.14348112
+        * math.pow(float(eurusd), -0.576)
+        * math.pow(float(usdjpy), 0.136)
+        * math.pow(float(gbpusd), -0.119)
+        * math.pow(float(usdcad), 0.091)
+        * math.pow(float(usdsek), 0.042)
+        * math.pow(float(usdchf), 0.036)
+    )
 
 
 # ============================================================
@@ -28,18 +98,38 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
     # 🟦 DXY
     if normalized == "dxy":
         try:
-            r = requests.get(YAHOO_DXY, timeout=10)
+            value = _fetch_dxy_from_frankfurter()
+            if value is not None:
+                return {"value": value}
+        except Exception:
+            logger.warning("Frankfurter DXY fallback mislukt", exc_info=True)
+
+        try:
+            r = _http_get(YAHOO_DXY, timeout=10)
             r.raise_for_status()
             data = r.json()
-            value = data["chart"]["result"][0]["meta"]["regularMarketPrice"]
-            return {"value": float(value)}
+            result = data.get("chart", {}).get("result") or []
+            if not result:
+                return {"value": None}
+
+            payload = result[0]
+            meta = payload.get("meta", {}) or {}
+            quote = (payload.get("indicators", {}).get("quote") or [{}])[0] or {}
+
+            value = _coerce_first_numeric(
+                meta.get("regularMarketPrice"),
+                meta.get("previousClose"),
+                meta.get("chartPreviousClose"),
+                _extract_last_non_null(quote.get("close") or []),
+            )
+            return {"value": value}
         except Exception:
             return {"value": None}
 
     # 🟩 Fear & Greed
     if "alternative" in (source or "").lower():
         try:
-            r = requests.get(ALT_FNG, timeout=10)
+            r = _http_get(ALT_FNG, timeout=10)
             r.raise_for_status()
             fg = r.json()
             return {"value": float(fg["data"][0]["value"])}
@@ -49,7 +139,7 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
     # 🟧 BTC Dominance
     if normalized in ("btc_dominance", "bitcoin_dominance"):
         try:
-            r = requests.get("https://api.coingecko.com/api/v3/global", timeout=10)
+            r = _http_get("https://api.coingecko.com/api/v3/global", timeout=10)
             r.raise_for_status()
             data = r.json()
             return {"value": float(data["data"]["market_cap_percentage"]["btc"])}
@@ -59,26 +149,30 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
     # 🟨 Yahoo generic (Handles ^SPX, ^TNX, ^VIX, GC=F, CL=F, etc.)
     if source and "yahoo" in source.lower() and link:
         try:
-            r = requests.get(link, timeout=10)
+            r = _http_get(link, timeout=10)
             r.raise_for_status()
             data = r.json()
-            meta = data["chart"]["result"][0]["meta"]
-            return {"value": float(meta["regularMarketPrice"])}
+            result = data.get("chart", {}).get("result") or []
+            if not result:
+                return {"value": None}
+
+            payload = result[0]
+            meta = payload.get("meta", {}) or {}
+            quote = (payload.get("indicators", {}).get("quote") or [{}])[0] or {}
+            value = _coerce_first_numeric(
+                meta.get("regularMarketPrice"),
+                meta.get("previousClose"),
+                meta.get("chartPreviousClose"),
+                _extract_last_non_null(quote.get("close") or []),
+            )
+            return {"value": value}
         except Exception:
-            # Fallback for Yahoo (sometimes prices are in result[0].indicators.quote[0].close[-1])
-            try:
-                data = r.json()
-                price = data["chart"]["result"][0]["indicators"]["quote"][0]["close"][-1]
-                if price is not None:
-                    return {"value": float(price)}
-            except:
-                pass
             return {"value": None}
 
     # 🟪 FRED
     if source and "fred" in source.lower() and link:
         try:
-            r = requests.get(link, timeout=10)
+            r = _http_get(link, timeout=10)
             r.raise_for_status()
             fred = r.json()
             obs = fred.get("observations", [])
@@ -91,7 +185,7 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
     # 🟫 Generic
     if link:
         try:
-            r = requests.get(link, timeout=10)
+            r = _http_get(link, timeout=10)
             r.raise_for_status()
             data = r.json()
             for key in ("value", "price", "index"):

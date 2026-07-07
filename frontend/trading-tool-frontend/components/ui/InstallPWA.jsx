@@ -89,20 +89,22 @@ export default function InstallPWA() {
   const dismissedRef = useRef(false);
 
   useEffect(() => {
-    const isStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      window.navigator.standalone ||
-      document.referrer.includes("android-app://");
+    // 1. Check if already installed
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches 
+      || (window.navigator).standalone 
+      || document.referrer.includes("android-app://");
 
     if (isStandalone) return;
 
     if (safeLocalGet(INSTALL_KEY) === "1" || readCookie(INSTALL_KEY) === "1") return;
 
+    // 2. Check dismissal
     dismissedRef.current = hasActiveDismissal();
     if (dismissedRef.current) {
       return;
     }
 
+    // 3. Detect Platform
     const ua = window.navigator.userAgent.toLowerCase();
     const isiOS = /iphone|ipad|ipod/.test(ua);
     const isAndroid = /android/.test(ua);
@@ -111,6 +113,7 @@ export default function InstallPWA() {
     else if (isAndroid) setPlatform("android");
     else setPlatform("other");
 
+    // 4. Handle Android Install Prompt
     const handler = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -132,6 +135,7 @@ export default function InstallPWA() {
     window.addEventListener("beforeinstallprompt", handler);
     window.addEventListener("appinstalled", handleInstalled);
 
+    // 5. iOS manually trigger show (since there's no native prompt)
     let iosTimer = null;
     if (isiOS) {
       iosTimer = window.setTimeout(() => {
@@ -189,6 +193,7 @@ export default function InstallPWA() {
           className="w-full max-w-sm bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-[2.5rem] shadow-2xl pointer-events-auto overflow-hidden transition-colors"
         >
           <div className="p-8 space-y-6">
+            {/* HEADER */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
@@ -204,7 +209,7 @@ export default function InstallPWA() {
                   </div>
                 </div>
               </div>
-              <button
+              <button 
                 onClick={handleDismiss}
                 className="p-2 rounded-xl text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-900 transition-all"
               >
@@ -212,6 +217,7 @@ export default function InstallPWA() {
               </button>
             </div>
 
+            {/* CONTENT */}
             <div className="space-y-4">
               <p className="text-[14px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed">
                 {copy.description}
@@ -224,9 +230,7 @@ export default function InstallPWA() {
                       <Share size={16} />
                     </div>
                     <div className="text-[13px] font-bold text-slate-700 dark:text-slate-300">
-                      {copy.iosStep1Prefix}{" "}
-                      <span className="text-blue-600 dark:text-blue-500">{copy.iosShareLabel}</span>{" "}
-                      {copy.iosStep1Suffix}
+                      {copy.iosStep1Prefix} <span className="text-blue-600 dark:text-blue-500">{copy.iosShareLabel}</span> {copy.iosStep1Suffix}
                     </div>
                   </div>
                   <div className="flex items-start gap-4">
@@ -234,8 +238,7 @@ export default function InstallPWA() {
                       <PlusSquare size={16} />
                     </div>
                     <div className="text-[13px] font-bold text-slate-700 dark:text-slate-300">
-                      {copy.iosStep2Prefix}{" "}
-                      <span className="text-blue-600 dark:text-blue-500">{copy.iosAddToHomeLabel}</span>.
+                      {copy.iosStep2Prefix} <span className="text-blue-600 dark:text-blue-500">{copy.iosAddToHomeLabel}</span>.
                     </div>
                   </div>
                 </div>
@@ -250,7 +253,8 @@ export default function InstallPWA() {
               )}
             </div>
 
-            <button
+            {/* FOOTER */}
+            <button 
               onClick={handleDismiss}
               className="w-full text-center text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
             >

@@ -47,6 +47,7 @@ function BotPageInner() {
   const [envFilter, setEnvFilter] = useState("all"); // "all", "paper", "live"
   const [generatingBotId, setGeneratingBotId] = useState(null);
   const copy = t?.botPage || {};
+  const botGuideCopy = copy.onboardingGuide || {};
 
   const {
     configs: bots = [],
@@ -74,6 +75,7 @@ function BotPageInner() {
   } = useMarketIntelligence();
 
   const botNeedsBot = status?.has_bot === false && bots.length === 0;
+  const botStepComplete = Boolean(status?.has_bot || bots.length > 0);
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
   const showOnboardingGuide = onboardingGuidedMode || botNeedsBot;
 
@@ -412,7 +414,13 @@ function BotPageInner() {
       <OnboardingBanner step="bot" />
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide copy={copy.onboardingGuide} anchorId="bot-create" guidedMode={onboardingGuidedMode} />
+        <OnboardingStepGuide
+          copy={botGuideCopy}
+          anchorId="bot-create"
+          guidedMode={onboardingGuidedMode}
+          isComplete={botStepComplete}
+          nextHref="/onboarding/complete"
+        />
       ) : null}
 
       <div className="max-w-full flex flex-col lg:flex-row gap-10 pb-24 items-start relative">
