@@ -127,8 +127,9 @@ if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_28_auth_password_reset_tokens.py
 
   cd ../../frontend/trading-tool-frontend
-  pkill -f '$REMOTE_DIR/frontend/trading-tool-frontend/node_modules/.bin/next build' || true
-  pkill -f '$REMOTE_DIR/frontend/trading-tool-frontend/node_modules/next/dist/compiled/jest-worker/processChild.js' || true
+  # Bracketed patterns match the target process but not this SSH shell command.
+  pkill -f '$REMOTE_DIR/frontend/trading-tool-frontend/node_modules/.bin/[n]ext build' || true
+  pkill -f '$REMOTE_DIR/frontend/trading-tool-frontend/node_modules/next/dist/compiled/jest-worker/[p]rocessChild.js' || true
   rm -rf .next out
   npm run build
 
