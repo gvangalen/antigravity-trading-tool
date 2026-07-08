@@ -62,8 +62,8 @@ export default function AssetSearchBar() {
       initializeAsset(symbol).catch(err => console.error("❌ Init error:", err));
     });
     
-    // 🚀 THE 'BOEM' FIX: Update URL and navigate
-    const targetUrl = `/dashboard?symbol=${symbol}`;
+    // Route asset selection into the unified workspace.
+    const targetUrl = `/asset?symbol=${symbol}&tab=overview`;
     router.push(targetUrl);
   };
 

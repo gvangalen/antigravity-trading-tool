@@ -3474,6 +3474,26 @@
       "unknown": "Onbekend"
     }
   },
+  "assetWorkspace": {
+    "tabs": {
+      "overview": "Overzicht",
+      "market": "Markt",
+      "macro": "Macro",
+      "technical": "Technisch",
+      "ai": "AI-analyse",
+      "news": "Nieuws"
+    },
+    "overview": {
+      "eyebrow": "Assetworkspace",
+      "titleSuffix": "workspace",
+      "subtitle": "Bekijk markt, macro, technische signalen en Finn-context voor {symbol} vanuit één plek.",
+      "cardBody": "Open de {tab}-tab om bestaande {symbol}-data en configuratie te beheren."
+    },
+    "ai": {
+      "eyebrow": "Finn",
+      "subtitle": "Bestaande Finn-inzichten voor {symbol}, zonder nieuwe analysemotor."
+    }
+  },
   "legacyComponents": {
     "macroScoreCard": {
       "title": "Technische score",

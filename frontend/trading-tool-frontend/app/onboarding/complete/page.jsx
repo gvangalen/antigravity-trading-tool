@@ -23,13 +23,13 @@ export default function OnboardingCompletePage() {
     });
   }, []);
 
-  const handleGoToDashboard = async () => {
+  const handleOpenFinn = async () => {
     trackAssistantEvent({
       event_name: "onboarding_complete_continue_clicked",
       page: "/onboarding/complete",
       surface: "web",
       flow_type: "first_session",
-      action_type: "go_to_dashboard",
+      action_type: "open_finn_shell",
     });
 
     try {
@@ -38,7 +38,7 @@ export default function OnboardingCompletePage() {
     } catch (err) {
       console.error("Bootstrap agents error:", err);
     } finally {
-      router.push("/");
+      router.push("/dashboard");
     }
   };
 
@@ -81,7 +81,7 @@ export default function OnboardingCompletePage() {
       </div>
 
       <button
-        onClick={handleGoToDashboard}
+        onClick={handleOpenFinn}
         disabled={loading || saving}
         className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-3 font-semibold text-white shadow-md transition hover:bg-[var(--primary-dark)] hover:shadow-lg disabled:opacity-60"
       >

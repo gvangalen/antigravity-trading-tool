@@ -2,6 +2,6 @@
 
 import AssetWorkspace from "@/components/workspaces/asset/AssetWorkspace";
 
-export default function MacroPage() {
-  return <AssetWorkspace initialTab="macro" />;
+export default function AssetPage() {
+  return <AssetWorkspace initialTab="overview" />;
 }

@@ -45,7 +45,7 @@ export default function NavBar() {
   const isAdmin = user?.role === 'admin';
 
   const NAV_LINKS = [
-    { href: "/dashboard", label: t.nav.dashboard, icon: <Gauge size={18} /> },
+    { href: "/dashboard", label: "FINN", icon: <Gauge size={18} /> },
     { href: "/market", label: t.nav.market, icon: <DollarSign size={18} /> },
     { href: "/macro", label: t.nav.macro, icon: <Globe size={18} /> },
     { href: "/technical", label: t.nav.technical, icon: <LineChart size={18} /> },
