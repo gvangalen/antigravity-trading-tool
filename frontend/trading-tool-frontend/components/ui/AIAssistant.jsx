@@ -216,7 +216,7 @@ function inferSetupMarketConditionFromScores(payload = {}) {
   return null;
 }
 
-function AIAssistantContent({ isOpen, setIsOpen }) {
+function AIAssistantContent({ isOpen, setIsOpen, persistent = false }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { selectedAsset: globalSymbol } = useAsset();
@@ -5002,12 +5002,14 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
 
   if (!isOpen) return null;
 
-  return (
-    <aside 
-      className={`fixed top-0 right-0 h-full bg-card dark:bg-[#0f172a] border-l border-slate-200 dark:border-slate-800 z-[70] shadow-2xl transition-all duration-300 flex flex-col ${
+  const shellClassName = persistent
+    ? "relative h-[100dvh] w-full bg-card dark:bg-[#0f172a] border-l border-slate-200 dark:border-slate-800 flex flex-col"
+    : `fixed top-0 right-0 h-full bg-card dark:bg-[#0f172a] border-l border-slate-200 dark:border-slate-800 z-[70] shadow-2xl transition-all duration-300 flex flex-col ${
         isOpen ? "translate-x-0" : "translate-x-full"
-      } w-full md:w-[400px]`}
-    >
+      } w-full md:w-[400px]`;
+
+  return (
+    <aside className={shellClassName}>
       {/* HEADER */}
       <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-card dark:bg-[#0f172a] relative z-10 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -5027,12 +5029,14 @@ function AIAssistantContent({ isOpen, setIsOpen }) {
             </div>
           </div>
         </div>
-        <button 
-          onClick={() => setIsOpen(false)}
-          className="p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-lg transition-colors text-secondary hover:text-slate-900 dark:hover:text-slate-100"
-        >
-          <X size={18} />
-        </button>
+        {!persistent ? (
+          <button
+            onClick={() => setIsOpen(false)}
+            className="p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-lg transition-colors text-secondary hover:text-slate-900 dark:hover:text-slate-100"
+          >
+            <X size={18} />
+          </button>
+        ) : null}
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar scroll-smooth" ref={scrollRef}>

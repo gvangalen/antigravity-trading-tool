@@ -2518,6 +2518,26 @@
       "unknownError": "Unknown error."
     }
   },
+  "assetWorkspace": {
+    "tabs": {
+      "overview": "Overview",
+      "market": "Market",
+      "macro": "Macro",
+      "technical": "Technical",
+      "ai": "AI analysis",
+      "news": "News"
+    },
+    "overview": {
+      "eyebrow": "Asset workspace",
+      "titleSuffix": "workspace",
+      "subtitle": "View market, macro, technical signals, and Finn context for {symbol} from one place.",
+      "cardBody": "Open the {tab} tab to manage existing {symbol} data and configuration."
+    },
+    "ai": {
+      "eyebrow": "Finn",
+      "subtitle": "Existing Finn insights for {symbol}, without a new analysis engine."
+    }
+  },
   "publicPages": {
     "notFound": {
       "title": "Oops… Page not found",
