@@ -175,6 +175,14 @@ function buildAssistantUiText(at) {
     botDecisionPaperExecuted: at("uiText.botDecisionPaperExecuted"),
     botDecisionSkippedVerified: at("uiText.botDecisionSkippedVerified"),
     defaultBotName: at("uiText.defaultBotName"),
+    riskAgent: at("uiText.riskAgent", "Risico-agent"),
+    whyLabelPrefix: at("uiText.whyLabelPrefix", "Waarom"),
+    whyBlocked: at("uiText.whyBlocked", "Waarom blokkeert dit?"),
+    portfolioAssetFallback: at("uiText.portfolioAssetFallback", "Portfolio"),
+    riskStackTitleSuffix: at("uiText.riskStackTitleSuffix", "risico stapelt"),
+    riskStackExplainLabelSuffix: at("uiText.riskStackExplainLabelSuffix", "risico-uitleg"),
+    riskStackPrompt: at("uiText.riskStackPrompt", "Welke risico's stapelen nu voor {asset}?"),
+    liveBotsNeedAttention: at("uiText.liveBotsNeedAttention", "live bots vragen aandacht"),
   };
 }
 
@@ -3038,21 +3046,26 @@ function AIAssistantContent({ isOpen, setIsOpen, persistent = false }) {
       }));
 
     const portfolioRiskItems = [
-      ...((missionControl?.portfolio_risk?.risk_stacks || []).slice(0, 3).map((stack, index) => ({
-        id: `risk-stack:${stack.asset || index}`,
-        type: "portfolio_risk_stack",
-        asset: stack.asset,
-        title: `${String(stack.asset || uiText.portfolioAssetFallback).toUpperCase()} ${uiText.riskStackTitleSuffix}`,
-        reason: stack.reason,
-        risk_score: stack.risk_score,
-        next_best_action: {
-          type: "chat_prompt",
-          label: `${String(stack.asset || "BTC").toUpperCase()} ${uiText.riskStackExplainLabelSuffix}`,
-          prompt: uiText.riskStackPrompt.replace("{asset}", String(stack.asset || "BTC").toUpperCase()),
-          handoff: "daily_coach",
-          requires_confirmation: false,
-        },
-      })) || []),
+      ...((missionControl?.portfolio_risk?.risk_stacks || []).slice(0, 3).map((stack, index) => {
+        const asset = String(stack.asset || uiText.portfolioAssetFallback || "BTC").toUpperCase();
+        const promptTemplate = uiText.riskStackPrompt || "Welke risico's stapelen nu voor {asset}?";
+
+        return {
+          id: `risk-stack:${stack.asset || index}`,
+          type: "portfolio_risk_stack",
+          asset: stack.asset,
+          title: `${asset} ${uiText.riskStackTitleSuffix || ""}`.trim(),
+          reason: stack.reason,
+          risk_score: stack.risk_score,
+          next_best_action: {
+            type: "chat_prompt",
+            label: `${asset} ${uiText.riskStackExplainLabelSuffix || ""}`.trim(),
+            prompt: interpolateTranslation(promptTemplate, { asset }),
+            handoff: "daily_coach",
+            requires_confirmation: false,
+          },
+        };
+      }) || []),
       ...((missionControl?.portfolio_risk?.live_bot_hotspots || []).slice(0, 2).map((hotspot, index) => ({
         id: `live-hotspot:${hotspot.asset || index}`,
         type: "portfolio_live_hotspot",
