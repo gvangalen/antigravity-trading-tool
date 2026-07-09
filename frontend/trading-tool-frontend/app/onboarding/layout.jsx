@@ -1,14 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import AIAssistant from "@/components/ui/AIAssistant";
-import AIFloatingButton from "@/components/ui/AIFloatingButton";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import Link from "next/link";
 import { Rocket } from "lucide-react";
 
 export default function OnboardingLayout({ children }) {
-  const [isAIOpen, setIsAIOpen] = useState(false);
   const { t } = useTranslation();
 
   return (
@@ -16,9 +13,6 @@ export default function OnboardingLayout({ children }) {
         {/* 🧱 ONBOARDING FOCUS SHELL */}
         <div 
           className="min-h-screen bg-[#020617] text-slate-100 transition-all duration-300 relative overflow-hidden"
-          style={{ 
-            paddingRight: isAIOpen ? (typeof window !== "undefined" && window.innerWidth < 1024 ? "0px" : "400px") : "0px"
-          }}
         >
           {/* ✨ BACKGROUND TREATMENT (CSS GRID) */}
           <div 
@@ -56,18 +50,19 @@ export default function OnboardingLayout({ children }) {
             </div>
           </header>
 
-          {/* 📄 MISSION CONTENT */}
-          <main className="pt-24 pb-12 min-h-screen relative z-10 px-6 max-w-6xl mx-auto">
-            {children}
-          </main>
+          <div className="relative z-10 pt-16 lg:grid lg:min-h-screen lg:grid-cols-[minmax(0,1fr)_400px]">
+            {/* 📄 MISSION CONTENT */}
+            <main className="px-6 py-8 min-h-screen max-w-6xl mx-auto w-full">
+              {children}
+            </main>
+
+            {/* 🧠 FINN SHELL RAIL */}
+            <aside className="border-t border-slate-800 bg-card text-foreground dark:bg-[#0f172a] lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:border-l lg:border-t-0">
+              <AIAssistant isOpen={true} setIsOpen={() => {}} persistent />
+            </aside>
+          </div>
           
         </div>
-
-        {/* 🧠 AI PILOT */}
-        <AIAssistant isOpen={isAIOpen} setIsOpen={setIsAIOpen} />
-        {!isAIOpen && (
-          <AIFloatingButton isOpen={isAIOpen} onClick={() => setIsAIOpen(true)} />
-        )}
     </>
   );
 }

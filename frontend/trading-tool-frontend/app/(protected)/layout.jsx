@@ -8,6 +8,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function ProtectedLayout({ children }) {
   const { locale } = useTranslation();
+
   return (
     <>
       {/* 🧱 SIDEBAR (NAVBAR handles its own mobile/desktop state) */}
@@ -20,22 +21,19 @@ export default function ProtectedLayout({ children }) {
           <TopBar />
         </div>
 
-        <div className="flex min-h-screen flex-col xl:flex-row">
-          <div className="xl:hidden max-h-[70dvh] overflow-hidden border-b border-slate-100 dark:border-slate-800 bg-card dark:bg-[#0f172a]">
-            <AIAssistant isOpen={true} setIsOpen={() => {}} persistent />
-          </div>
-
-          {/* 📄 PAGE CONTENT */}
+        <div className="pt-16 lg:grid lg:min-h-screen lg:grid-cols-[minmax(0,1fr)_400px]">
+          {/* 📄 WORKSPACE CANVAS */}
           <main
             key={locale}
-            className="pt-16 lg:pt-16 min-h-screen px-4 lg:px-10 h-auto overflow-visible flex-1"
+            className="min-h-[calc(100vh-4rem)] px-4 lg:px-10 h-auto overflow-visible"
           >
             {children}
           </main>
 
-          <div className="hidden xl:block xl:w-[400px] xl:shrink-0 xl:sticky xl:top-0 xl:self-start">
+          {/* 🧠 FINN SHELL RAIL */}
+          <aside className="border-t border-slate-200 bg-card dark:border-slate-800 dark:bg-[#0f172a] lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:border-l lg:border-t-0">
             <AIAssistant isOpen={true} setIsOpen={() => {}} persistent />
-          </div>
+          </aside>
         </div>
       </div>
 
