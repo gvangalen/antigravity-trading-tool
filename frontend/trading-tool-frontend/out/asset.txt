@@ -1,6 +1,6 @@
 1:"$Sreact.fragment"
-9:I[61465,[],""]
-:HL["/_next/static/css/945bc65b150ce27b.css","style"]
+9:I[57150,[],""]
+:HL["/_next/static/css/91d28fed1d2c12fd.css","style"]
 :HL["/_next/static/css/19c9db1a3af975a5.css","style"]
 2:T931,
 (function () {
@@ -106,22 +106,22 @@
         document.cookie = COOKIE_KEY + "=" + encodeURIComponent(locale) + "; path=/; max-age=31536000; samesite=lax";
       } catch (error) {}
     })();
-  0:{"P":null,"b":"build-1783539320677","p":"","c":["","asset"],"i":false,"f":[[["",{"children":["(protected)",{"children":["asset",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/945bc65b150ce27b.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$3"}}]]}],"$L4"]}]]}],{"children":["(protected)","$L5",{"children":["asset","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
-a:I[83340,["3054","static/chunks/3054-b99125931c884c8f.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-83a5fb9028037f42.js","7177","static/chunks/app/layout-850bf7f6c5265add.js"],"default"]
-b:I[89399,["3054","static/chunks/3054-b99125931c884c8f.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-83a5fb9028037f42.js","7177","static/chunks/app/layout-850bf7f6c5265add.js"],"default"]
-c:I[44202,["3054","static/chunks/3054-b99125931c884c8f.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-83a5fb9028037f42.js","7177","static/chunks/app/layout-850bf7f6c5265add.js"],"default"]
-d:I[26291,[],""]
-e:I[46063,[],""]
-f:I[99361,["8618","static/chunks/8618-7c60d096f3705794.js","7432","static/chunks/7432-83a5fb9028037f42.js","4345","static/chunks/app/not-found-51c74ceeba8c1ac3.js"],"default"]
-10:I[62057,["3054","static/chunks/3054-b99125931c884c8f.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-83a5fb9028037f42.js","7177","static/chunks/app/layout-850bf7f6c5265add.js"],"default"]
-11:I[65098,[],"ClientSegmentRoot"]
-12:I[81616,["8618","static/chunks/8618-7c60d096f3705794.js","3054","static/chunks/3054-b99125931c884c8f.js","3024","static/chunks/3024-b69db6cb3e96dc2e.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-83a5fb9028037f42.js","4209","static/chunks/4209-5877efba61adf85c.js","1575","static/chunks/1575-b86003b5f5e37bf2.js","3291","static/chunks/3291-ebf1ae104e40e253.js","4023","static/chunks/4023-f1dd339e6bf1520f.js","1104","static/chunks/1104-87b321653c341309.js","8074","static/chunks/8074-6ffbcb81069e876b.js","4163","static/chunks/app/(protected)/layout-48d8518ed5299018.js"],"default"]
-14:I[41918,[],"ClientPageRoot"]
-15:I[42309,["8618","static/chunks/8618-7c60d096f3705794.js","3054","static/chunks/3054-b99125931c884c8f.js","9614","static/chunks/9614-1c4e50b598112f62.js","7432","static/chunks/7432-83a5fb9028037f42.js","4209","static/chunks/4209-5877efba61adf85c.js","1575","static/chunks/1575-b86003b5f5e37bf2.js","8910","static/chunks/8910-0bbd2453ff8761e2.js","2690","static/chunks/2690-06f6dbfc38729ce3.js","4535","static/chunks/4535-951caecede88b01f.js","4228","static/chunks/4228-0dd8f54eae435c55.js","6242","static/chunks/6242-77289c938a0db6e2.js","1302","static/chunks/1302-c7ee08637b478318.js","8583","static/chunks/app/(protected)/asset/page-80a02ed52c46a92f.js"],"default"]
-18:I[78490,[],"OutletBoundary"]
-1a:I[90127,[],"AsyncMetadataOutlet"]
-1c:I[78490,[],"ViewportBoundary"]
-1e:I[78490,[],"MetadataBoundary"]
+  0:{"P":null,"b":"build-1783625086896","p":"","c":["","asset"],"i":false,"f":[[["",{"children":["(protected)",{"children":["asset",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/91d28fed1d2c12fd.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$3"}}]]}],"$L4"]}]]}],{"children":["(protected)","$L5",{"children":["asset","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
+a:I[30416,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-521bd4e8bfe9f0c9.js","7177","static/chunks/app/layout-042d8ccbfa718136.js"],"default"]
+b:I[69835,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-521bd4e8bfe9f0c9.js","7177","static/chunks/app/layout-042d8ccbfa718136.js"],"default"]
+c:I[55038,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-521bd4e8bfe9f0c9.js","7177","static/chunks/app/layout-042d8ccbfa718136.js"],"default"]
+d:I[9766,[],""]
+e:I[98924,[],""]
+f:I[33293,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-521bd4e8bfe9f0c9.js","4345","static/chunks/app/not-found-32a811daf86eebcf.js"],"default"]
+10:I[11803,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-521bd4e8bfe9f0c9.js","7177","static/chunks/app/layout-042d8ccbfa718136.js"],"default"]
+11:I[17989,[],"ClientSegmentRoot"]
+12:I[83303,["2619","static/chunks/2619-04bc32f026a0d946.js","8327","static/chunks/8327-75c87b9395525913.js","587","static/chunks/587-2e1c88573aed92d0.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-521bd4e8bfe9f0c9.js","9025","static/chunks/9025-9b9bf34b217e25c6.js","7743","static/chunks/7743-8667b9ec38ad9e2c.js","1915","static/chunks/1915-1c1c72b10b5083b1.js","1923","static/chunks/1923-675b1c19574e50bb.js","303","static/chunks/303-99cfb4206d71af0a.js","8876","static/chunks/8876-e4a29370d25d382c.js","4163","static/chunks/app/(protected)/layout-194d4176abde24b9.js"],"default"]
+14:I[81959,[],"ClientPageRoot"]
+15:I[10841,["2619","static/chunks/2619-04bc32f026a0d946.js","8327","static/chunks/8327-75c87b9395525913.js","4654","static/chunks/4654-d77536ff1ccb5ec9.js","8111","static/chunks/8111-521bd4e8bfe9f0c9.js","9025","static/chunks/9025-9b9bf34b217e25c6.js","7743","static/chunks/7743-8667b9ec38ad9e2c.js","6030","static/chunks/6030-ea1ebb7d03477aed.js","8538","static/chunks/8538-8a7c9dfe72b8ecf0.js","2307","static/chunks/2307-dadd82c65a9f6fbc.js","4492","static/chunks/4492-ebcb38a2e8b87076.js","9363","static/chunks/9363-40f0eb1f19634432.js","4617","static/chunks/4617-4a14549ccaccb5fb.js","8583","static/chunks/app/(protected)/asset/page-a63e8cd45d371e36.js"],"default"]
+18:I[24431,[],"OutletBoundary"]
+1a:I[15278,[],"AsyncMetadataOutlet"]
+1c:I[24431,[],"ViewportBoundary"]
+1e:I[24431,[],"MetadataBoundary"]
 1f:"$Sreact.suspense"
 4:["$","body",null,{"className":"bg-background text-foreground transition-colors duration-300 selection:bg-blue-600/30","children":[["$","$La",null,{}],["$","$Lb",null,{"children":[["$","$Lc",null,{"children":["$","$Ld",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$Le",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","$Lf",null,{}],[]],"forbidden":"$undefined","unauthorized":"$undefined"}]}],["$","$L10",null,{}]]}]]}]
 5:["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/19c9db1a3af975a5.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","$L11",null,{"Component":"$12","slots":{"children":["$","$Ld",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$Le",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]},"params":{},"promise":"$@13"}]]}]

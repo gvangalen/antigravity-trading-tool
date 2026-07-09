@@ -45,7 +45,7 @@ export default function NavBar() {
   const isAdmin = user?.role === 'admin';
 
   const NAV_LINKS = [
-    { href: "/dashboard", label: "FINN", icon: <Gauge size={18} /> },
+    { href: "/asset", label: "FINN", icon: <Gauge size={18} /> },
     { href: "/market", label: t.nav.market, icon: <DollarSign size={18} /> },
     { href: "/macro", label: t.nav.macro, icon: <Globe size={18} /> },
     { href: "/technical", label: t.nav.technical, icon: <LineChart size={18} /> },
@@ -80,7 +80,7 @@ export default function NavBar() {
           <button onClick={() => setMobileOpen(true)} className="text-muted hover:text-blue-600 transition-colors">
             <Menu size={24} />
           </button>
-          <Link href="/dashboard" className="flex items-center gap-3 group">
+          <Link href="/asset" className="flex items-center gap-3 group">
             <img src="/tradamind_icon_v2.png" alt="TM" className="h-10 w-10 object-contain rounded-xl group-hover:scale-105 transition-transform" />
             <div className="flex flex-col justify-center">
               <div className="text-sm font-black text-slate-900 dark:text-white tracking-tight leading-none mb-0.5 group-hover:text-blue-600 transition-colors">
@@ -165,7 +165,7 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
   return (
     <div className="flex flex-col h-full bg-card dark:bg-[#020617] transition-colors">
       <Link 
-        href="/dashboard"
+        href="/asset"
         className="p-8 pb-4 hidden md:block select-none group cursor-pointer"
       >
         <div className="flex items-center gap-4 transition-transform duration-500 group-hover:scale-[1.03]">

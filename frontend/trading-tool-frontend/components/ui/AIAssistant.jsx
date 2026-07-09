@@ -5003,7 +5003,7 @@ function AIAssistantContent({ isOpen, setIsOpen, persistent = false }) {
   if (!isOpen) return null;
 
   const shellClassName = persistent
-    ? "relative h-[100dvh] w-full bg-card dark:bg-[#0f172a] border-l border-slate-200 dark:border-slate-800 flex flex-col"
+    ? "relative h-[70dvh] w-full bg-card dark:bg-[#0f172a] flex flex-col lg:h-full"
     : `fixed top-0 right-0 h-full bg-card dark:bg-[#0f172a] border-l border-slate-200 dark:border-slate-800 z-[70] shadow-2xl transition-all duration-300 flex flex-col ${
         isOpen ? "translate-x-0" : "translate-x-full"
       } w-full md:w-[400px]`;
