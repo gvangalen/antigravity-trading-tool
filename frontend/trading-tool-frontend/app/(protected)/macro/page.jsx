@@ -1,7 +1,7 @@
 "use client";
 
-import AssetWorkspace from "@/components/workspaces/asset/AssetWorkspace";
+import WorkspaceRenderer from "@/components/workspaces/WorkspaceRenderer";
 
 export default function MacroPage() {
-  return <AssetWorkspace initialTab="macro" />;
+  return <WorkspaceRenderer tab="macro" canonicalizeLegacy />;
 }

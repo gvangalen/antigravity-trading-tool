@@ -1,7 +1,7 @@
 "use client";
 
-import AssetWorkspace from "@/components/workspaces/asset/AssetWorkspace";
+import WorkspaceRenderer from "@/components/workspaces/WorkspaceRenderer";
 
 export default function TechnicalPage() {
-  return <AssetWorkspace initialTab="technical" />;
+  return <WorkspaceRenderer tab="technical" canonicalizeLegacy />;
 }

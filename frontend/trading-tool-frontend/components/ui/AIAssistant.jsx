@@ -5529,6 +5529,19 @@ export default function AIAssistant(props) {
   );
 }
 
+export function FinnPanel(props) {
+  return (
+    <Suspense fallback={null}>
+      <AIAssistantContent
+        {...props}
+        isOpen={true}
+        setIsOpen={() => {}}
+        persistent
+      />
+    </Suspense>
+  );
+}
+
 function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
   const { openConfirm, showSnackbar } = useModal();
   const { t } = useTranslation();
