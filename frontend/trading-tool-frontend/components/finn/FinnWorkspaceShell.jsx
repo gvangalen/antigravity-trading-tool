@@ -5,11 +5,8 @@ import TopBar from "@/components/ui/TopBar";
 import ScrollToTop from "@/components/ui/ScrollToTop";
 import FinnPanel from "@/components/finn/FinnPanel";
 import WorkspaceCanvas from "@/components/workspaces/WorkspaceCanvas";
-import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function FinnWorkspaceShell({ children }) {
-  const { locale } = useTranslation();
-
   return (
     <>
       <NavBar />
@@ -20,7 +17,7 @@ export default function FinnWorkspaceShell({ children }) {
         </div>
 
         <div className="pt-16 lg:grid lg:min-h-screen lg:grid-cols-[minmax(0,1fr)_400px]">
-          <WorkspaceCanvas key={locale}>{children}</WorkspaceCanvas>
+          <WorkspaceCanvas>{children}</WorkspaceCanvas>
 
           <aside className="border-t border-slate-200 bg-card dark:border-slate-800 dark:bg-[#0f172a] lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:border-l lg:border-t-0">
             <FinnPanel />

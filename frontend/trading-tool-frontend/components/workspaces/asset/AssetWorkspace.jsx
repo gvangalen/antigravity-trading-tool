@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Activity, BarChart3, Brain, LineChart, Newspaper } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { BarChart3, Brain } from "lucide-react";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
@@ -10,15 +10,6 @@ import MarketPanel from "@/components/workspaces/asset/MarketPanel";
 import MacroPanel from "@/components/workspaces/asset/MacroPanel";
 import TechnicalPanel from "@/components/workspaces/asset/TechnicalPanel";
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
-
-const TABS = [
-  { id: "overview", icon: BarChart3 },
-  { id: "market", icon: Activity },
-  { id: "macro", icon: Brain },
-  { id: "technical", icon: LineChart },
-  { id: "ai", icon: Brain },
-  { id: "news", icon: Newspaper, disabled: true },
-];
 
 function interpolate(template, values) {
   return Object.entries(values).reduce(
@@ -64,7 +55,6 @@ function AssetOverview({ symbol }) {
 }
 
 export default function AssetWorkspace({ initialTab = "overview" }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedAsset, setSelectedAsset } = useAsset();
   const { t } = useTranslation();
@@ -119,40 +109,8 @@ export default function AssetWorkspace({ initialTab = "overview" }) {
     }
   }, [activeSymbol, activeTab, copy.ai, labels.ai]);
 
-  const updateTab = (tabId) => {
-    if (tabId === "news") return;
-    setActiveTab(tabId);
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("tab", tabId);
-    params.set("symbol", activeSymbol);
-    router.replace(`/asset?${params.toString()}`, { scroll: false });
-  };
-
   return (
     <section className="min-h-screen bg-white dark:bg-[#020617]">
-      <div className="sticky top-16 z-20 border-b border-slate-100 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-[#020617]/90 lg:px-10">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="mr-3 text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">
-            {activeSymbol}
-          </div>
-          {TABS.map(({ id, icon: Icon, disabled }) => (
-            <button
-              key={id}
-              type="button"
-              disabled={disabled}
-              onClick={() => updateTab(id)}
-              className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] transition ${
-                activeTab === id
-                  ? "border-blue-200 bg-blue-50 text-blue-600"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:text-blue-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
-              } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
-            >
-              <Icon size={14} />
-              {labels[id]}
-            </button>
-          ))}
-        </div>
-      </div>
       {tabContent}
     </section>
   );
