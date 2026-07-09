@@ -1,7 +1,7 @@
 "use client";
 
-import AssetWorkspace from "@/components/workspaces/asset/AssetWorkspace";
+import WorkspaceRenderer from "@/components/workspaces/WorkspaceRenderer";
 
 export default function MarketPage() {
-  return <AssetWorkspace initialTab="market" />;
+  return <WorkspaceRenderer tab="market" canonicalizeLegacy />;
 }

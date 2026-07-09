@@ -1,7 +1,7 @@
 "use client";
 
-import AssetWorkspace from "@/components/workspaces/asset/AssetWorkspace";
+import WorkspaceRenderer from "@/components/workspaces/WorkspaceRenderer";
 
 export default function AssetPage() {
-  return <AssetWorkspace initialTab="overview" />;
+  return <WorkspaceRenderer tab="overview" />;
 }

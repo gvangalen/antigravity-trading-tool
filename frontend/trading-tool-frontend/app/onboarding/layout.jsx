@@ -1,6 +1,6 @@
 "use client";
 
-import AIAssistant from "@/components/ui/AIAssistant";
+import FinnPanel from "@/components/finn/FinnPanel";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import Link from "next/link";
 import { Rocket } from "lucide-react";
@@ -58,7 +58,7 @@ export default function OnboardingLayout({ children }) {
 
             {/* 🧠 FINN SHELL RAIL */}
             <aside className="border-t border-slate-800 bg-card text-foreground dark:bg-[#0f172a] lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:border-l lg:border-t-0">
-              <AIAssistant isOpen={true} setIsOpen={() => {}} persistent />
+              <FinnPanel />
             </aside>
           </div>
           
