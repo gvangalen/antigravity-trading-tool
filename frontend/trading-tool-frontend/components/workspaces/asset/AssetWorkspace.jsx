@@ -6,10 +6,8 @@ import { BarChart3, Brain } from "lucide-react";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
-import MarketPanel from "@/components/workspaces/asset/MarketPanel";
-import MacroPanel from "@/components/workspaces/asset/MacroPanel";
-import TechnicalPanel from "@/components/workspaces/asset/TechnicalPanel";
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
+import MarketAnalysisWorkflow from "@/components/workflows/MarketAnalysisWorkflow";
 
 function interpolate(template, values) {
   return Object.entries(values).reduce(
@@ -80,11 +78,11 @@ export default function AssetWorkspace({ initialTab = "overview" }) {
   const tabContent = useMemo(() => {
     switch (activeTab) {
       case "market":
-        return <MarketPanel />;
+        return <MarketAnalysisWorkflow initialStep="market" />;
       case "macro":
-        return <MacroPanel />;
+        return <MarketAnalysisWorkflow initialStep="macro" />;
       case "technical":
-        return <TechnicalPanel />;
+        return <MarketAnalysisWorkflow initialStep="technical" />;
       case "ai":
         return (
           <div className="page-container bg-white dark:bg-[#020617] min-h-screen">

@@ -64,17 +64,22 @@ export function useMacroData(activeTab = "Dag") {
 
     try {
       let raw;
-      switch (activeTab) {
-        case "Dag":
+      const normalizedTab = String(activeTab || "day").toLowerCase();
+
+      switch (normalizedTab) {
+        case "dag":
+        case "day":
           raw = await fetchMacroDataByDay();
           break;
-        case "Week":
+        case "week":
           raw = await fetchMacroDataByWeek();
           break;
-        case "Maand":
+        case "maand":
+        case "month":
           raw = await fetchMacroDataByMonth();
           break;
-        case "Kwartaal":
+        case "kwartaal":
+        case "quarter":
           raw = await fetchMacroDataByQuarter();
           break;
         default:
