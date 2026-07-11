@@ -80,7 +80,7 @@ export default function NavBar() {
           <button onClick={() => setMobileOpen(true)} className="text-muted hover:text-blue-600 transition-colors">
             <Menu size={24} />
           </button>
-          <Link href="/asset" className="flex items-center gap-3 group">
+          <Link href="/asset" prefetch={false} className="flex items-center gap-3 group">
             <img src="/tradamind_icon_v2.png" alt="TM" className="h-10 w-10 object-contain rounded-xl group-hover:scale-105 transition-transform" />
             <div className="flex flex-col justify-center">
               <div className="text-sm font-black text-slate-900 dark:text-white tracking-tight leading-none mb-0.5 group-hover:text-blue-600 transition-colors">
@@ -166,6 +166,7 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
     <div className="flex flex-col h-full bg-card dark:bg-[#020617] transition-colors">
       <Link 
         href="/asset"
+        prefetch={false}
         className="p-8 pb-4 hidden md:block select-none group cursor-pointer"
       >
         <div className="flex items-center gap-4 transition-transform duration-500 group-hover:scale-[1.03]">
@@ -200,6 +201,7 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
             <Link
               key={link.href}
               href={link.href}
+              prefetch={false}
               onClick={onNavigate}
               className={`
                 flex items-center gap-4 px-5 py-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all group
@@ -233,6 +235,7 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
                 <Link
                   key={link.href}
                   href={link.href}
+                  prefetch={false}
                   onClick={onNavigate}
                   className={`
                     flex items-center gap-4 px-5 py-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all group mb-1
