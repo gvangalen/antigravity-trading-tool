@@ -62,8 +62,12 @@ done
 git reset --hard "$ROLLBACK_COMMIT"
 
 cd frontend/trading-tool-frontend
-rm -rf .next out
-npm run build
+rm -rf .next
+if [ ! -f out/index.html ]; then
+  echo "❌ Prebuilt frontend export missing during rollback: frontend/trading-tool-frontend/out/index.html" >&2
+  exit 1
+fi
+echo "✅ Using prebuilt frontend export from git during rollback."
 
 cd ../..
 
