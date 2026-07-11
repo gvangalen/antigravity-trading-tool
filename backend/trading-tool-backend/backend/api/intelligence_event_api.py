@@ -17,10 +17,7 @@ async def get_assistant_events(
     current_user: dict = Depends(get_current_user),
     session = Depends(get_db)
 ):
-    """
-    Triggert de realtime evaluatie van actieve risico's en portfolio-events,
-    en retourneert de lijst met alle actieve, niet-gearchiveerde events.
-    """
+    """Retourneert alleen bestaande actieve, niet-gearchiveerde events."""
     user_id = current_user["id"]
     
     bot_repo = BotRepository(session)
@@ -30,14 +27,6 @@ async def get_assistant_events(
     service = IntelligenceEventService(session, bot_repo, market_data_repo, score_repo)
     
     try:
-        # Trigger realtime evaluatie
-        try:
-            await service.evaluate_and_generate_events(user_id)
-        except Exception as eval_err:
-            logger.warning(f"⚠️ Fout tijdens evaluate_and_generate_events (geïsoleerd): {eval_err}")
-            await session.rollback()
-        
-        # Haal actieve events op
         events = await service.get_active_events(user_id)
         
         # Format naar JSON dictionaries
@@ -59,6 +48,30 @@ async def get_assistant_events(
     except Exception as e:
         logger.exception(f"❌ Error in get_assistant_events: {e}")
         raise HTTPException(status_code=500, detail="Fout bij ophalen van live intelligence events")
+
+@router.post("/assistant/events/refresh")
+async def refresh_assistant_events(
+    current_user: dict = Depends(get_current_user),
+    session = Depends(get_db)
+):
+    """
+    Expliciete refresh voor event-evaluatie.
+    GET /assistant/events blijft read-only en side-effectvrij.
+    """
+    user_id = current_user["id"]
+
+    bot_repo = BotRepository(session)
+    market_data_repo = MarketDataRepository(session)
+    score_repo = ScoreRepository(session)
+
+    service = IntelligenceEventService(session, bot_repo, market_data_repo, score_repo)
+
+    try:
+        events = await service.evaluate_and_generate_events(user_id)
+        return {"success": True, "generated_count": len(events or [])}
+    except Exception as e:
+        logger.exception(f"❌ Error in refresh_assistant_events: {e}")
+        raise HTTPException(status_code=500, detail="Fout bij verversen van live intelligence events")
 
 @router.post("/assistant/events/{event_id}/archive")
 async def archive_assistant_event(

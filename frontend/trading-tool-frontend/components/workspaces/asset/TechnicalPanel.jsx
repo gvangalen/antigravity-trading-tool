@@ -66,9 +66,12 @@ export default function TechnicalPage() {
     removeTechnicalIndicator,
     loading: loadingIndicators,
     error,
-  } = useTechnicalData(activeTab, selectedAsset);
+  } = useTechnicalData(activeTab, selectedAsset, { includeScoreSummary: false });
 
-  const { technical: technicalScore } = useScoresData(selectedAsset);
+  const { technical: technicalScore } = useScoresData(selectedAsset, {
+    includeHistory: false,
+    includeMaster: false,
+  });
   const { status, completeStep } = useOnboarding();
   const technicalStepComplete = Boolean(status?.has_technical || technicalData?.length > 0);
   const technicalNeedsSetup = status?.has_technical === false && technicalData?.length === 0;

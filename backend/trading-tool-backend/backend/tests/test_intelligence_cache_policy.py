@@ -1,20 +1,22 @@
 from backend.services.intelligence_service import IntelligenceService
 
 
-def test_intelligence_cache_disabled_by_default(monkeypatch):
-    monkeypatch.delenv("INTELLIGENCE_SERVICE_CACHE_ENABLED", raising=False)
+def test_intelligence_cache_enabled_by_default(monkeypatch):
+    monkeypatch.delenv("MARKET_INTELLIGENCE_CACHE_TTL_SECONDS", raising=False)
+
+    assert IntelligenceService.cache_enabled() is True
+    assert IntelligenceService.cache_ttl_seconds() == 45
+
+
+def test_intelligence_cache_can_be_disabled_with_zero_ttl(monkeypatch):
+    monkeypatch.setenv("MARKET_INTELLIGENCE_CACHE_TTL_SECONDS", "0")
 
     assert IntelligenceService.cache_enabled() is False
+    assert IntelligenceService.cache_ttl_seconds() == 0
 
 
-def test_intelligence_cache_enabled_only_by_explicit_truthy_values(monkeypatch):
-    for value in ("1", "true", "yes", "on"):
-        monkeypatch.setenv("INTELLIGENCE_SERVICE_CACHE_ENABLED", value)
+def test_intelligence_cache_uses_explicit_positive_ttl(monkeypatch):
+    monkeypatch.setenv("MARKET_INTELLIGENCE_CACHE_TTL_SECONDS", "120")
 
-        assert IntelligenceService.cache_enabled() is False
-
-
-def test_intelligence_cache_rejects_unknown_values(monkeypatch):
-    monkeypatch.setenv("INTELLIGENCE_SERVICE_CACHE_ENABLED", "enabled")
-
-    assert IntelligenceService.cache_enabled() is False
+    assert IntelligenceService.cache_enabled() is True
+    assert IntelligenceService.cache_ttl_seconds() == 120

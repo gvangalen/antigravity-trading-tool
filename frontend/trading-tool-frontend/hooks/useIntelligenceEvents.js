@@ -4,19 +4,21 @@ import { useState, useRef } from "react";
 import { apiGet, apiPost } from "@/lib/api/apiClient";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 
-export default function useIntelligenceEvents() {
+export default function useIntelligenceEvents(options = {}) {
+  const { enabled = true } = options;
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const isFetchingRef = useRef(false);
 
   const fetchEvents = async (silent = false) => {
+    if (!enabled) return;
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     if (!silent) setLoading(true);
     
     try {
-      const data = await apiGet("/api/assistant/events");
+      const data = await apiGet("/api/assistant/events", { forceFresh: true });
       setEvents(data || []);
       setError(null);
     } catch (err) {
@@ -44,6 +46,7 @@ export default function useIntelligenceEvents() {
   };
 
   useVisibilityPolling(() => fetchEvents(true), {
+    enabled,
     intervalMs: 60000,
     backgroundIntervalMs: 180000,
     runImmediately: true,

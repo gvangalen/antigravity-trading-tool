@@ -78,7 +78,11 @@ export default function FinnWorkspaceShell({ children }) {
           <WorkspaceCanvas>
             <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 py-6 lg:gap-8 lg:py-8">
               <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-35px_rgba(37,99,235,0.32)] dark:border-slate-800 dark:bg-[#0f172a]">
-                <FinnPanel previewSectionsOnly className="h-auto min-h-0" />
+                <FinnPanel
+                  previewSectionsOnly
+                  eventsEnabled={!assistantOpen}
+                  className="h-auto min-h-0"
+                />
               </section>
 
               <section className="rounded-[32px] border border-slate-200/80 bg-white p-4 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.35)] dark:border-slate-800 dark:bg-[#06101f] lg:p-6">
@@ -150,6 +154,7 @@ export default function FinnWorkspaceShell({ children }) {
               setIsOpen={setAssistantOpen}
               modal
               className="z-10"
+              eventsEnabled={assistantOpen}
               queryValue={composerQuery}
               onQueryChange={setComposerQuery}
               autoFocusComposer

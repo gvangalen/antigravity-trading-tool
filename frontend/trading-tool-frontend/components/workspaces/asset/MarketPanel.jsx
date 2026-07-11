@@ -66,7 +66,7 @@ export default function MarketPage() {
     selectIndicator,
     btcLive,
     loading
-  } = useMarketData(activeSymbol);
+  } = useMarketData(activeSymbol, { includeDailyScores: false });
   const marketStepComplete = Boolean(status?.has_market || activeMarketIndicatorNames?.length > 0);
   const marketNeedsSetup = status?.has_market === false && activeMarketIndicatorNames?.length === 0;
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
@@ -80,7 +80,10 @@ export default function MarketPage() {
   // ===============================
   // 📈 SCORE DATA
   // ===============================
-  const { market: marketScore } = useScoresData(activeSymbol);
+  const { market: marketScore } = useScoresData(activeSymbol, {
+    includeHistory: false,
+    includeMaster: false,
+  });
 
   useEffect(() => {
     trackAssistantEvent({

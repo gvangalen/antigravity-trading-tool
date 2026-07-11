@@ -1,5 +1,8 @@
 import logging
 import asyncio
+import os
+import time
+from copy import deepcopy
 from typing import Dict, Any
 
 from backend.infrastructure.repositories.intelligence_repository import IntelligenceRepository
@@ -10,18 +13,61 @@ logger = logging.getLogger(__name__)
 class IntelligenceService:
     # 🛡️ Semaphore om te voorkomen dat er teveel 'heavy' threads tegelijk draaien
     _semaphore = asyncio.Semaphore(5)
+    _cache: Dict[tuple[int, str], Dict[str, Any]] = {}
 
     def __init__(self, repository: IntelligenceRepository):
         self.repository = repository
 
     @classmethod
     def cache_enabled(cls) -> bool:
-        # Market intelligence is request/user-context sensitive. Process-local
-        # caching is disabled until a Redis/shared cache with invalidation is
-        # introduced.
-        return False
+        return cls.cache_ttl_seconds() > 0
+
+    @classmethod
+    def cache_ttl_seconds(cls) -> int:
+        return max(0, int(os.getenv("MARKET_INTELLIGENCE_CACHE_TTL_SECONDS", "45")))
+
+    @classmethod
+    def _cache_key(cls, user_id: int, symbol: str) -> tuple[int, str]:
+        return int(user_id), str(symbol or "BTC").upper()
+
+    @classmethod
+    def get_cached_result(cls, user_id: int, symbol: str) -> Dict[str, Any] | None:
+        if not cls.cache_enabled():
+            return None
+        key = cls._cache_key(user_id, symbol)
+        cached = cls._cache.get(key)
+        if not cached:
+            return None
+        if cached["expires_at"] <= time.time():
+            cls._cache.pop(key, None)
+            return None
+        return deepcopy(cached["payload"])
+
+    @classmethod
+    def store_cached_result(cls, user_id: int, symbol: str, payload: Dict[str, Any]) -> None:
+        if not cls.cache_enabled():
+            return
+        key = cls._cache_key(user_id, symbol)
+        cls._cache[key] = {
+            "expires_at": time.time() + cls.cache_ttl_seconds(),
+            "payload": deepcopy(payload),
+        }
+
+    @classmethod
+    def invalidate_cached_result(cls, user_id: int, symbol: str | None = None) -> None:
+        if symbol is None:
+            prefix = int(user_id)
+            stale_keys = [key for key in cls._cache if key[0] == prefix]
+            for key in stale_keys:
+                cls._cache.pop(key, None)
+            return
+        cls._cache.pop(cls._cache_key(user_id, symbol), None)
 
     async def get_market_intelligence(self, user_id: int, symbol: str = "BTC") -> Dict[str, Any]:
+        cached = self.get_cached_result(user_id, symbol)
+        if cached is not None:
+            return cached
+
         # 2. Fetch scores (Async)
         daily_score = await self.repository.get_latest_daily_scores(user_id, symbol)
         
@@ -49,4 +95,5 @@ class IntelligenceService:
                 scores=scores
             )
 
+        self.store_cached_result(user_id, symbol, result)
         return result

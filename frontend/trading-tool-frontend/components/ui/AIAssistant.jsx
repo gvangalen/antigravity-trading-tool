@@ -234,6 +234,7 @@ function AIAssistantContent({
   queryValue,
   onQueryChange,
   autoFocusComposer = false,
+  eventsEnabled = true,
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -243,7 +244,9 @@ function AIAssistantContent({
   const { openConfirm, showSnackbar } = useModal();
   const { t } = useTranslation();
   const governanceCopy = t?.pages?.report?.finn?.governance || {};
-  const { events, loading: eventsLoading, archiveEvent } = useIntelligenceEvents();
+  const { events, loading: eventsLoading, archiveEvent } = useIntelligenceEvents({
+    enabled: eventsEnabled,
+  });
   
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -3588,10 +3591,12 @@ function AIAssistantContent({
 
   useEffect(() => {
     if (isOpen) {
-      loadInsight();
       loadMissionControl();
-      loadFinnState();
-      if (Object.keys(preferences).length === 0) {
+      if (!previewSectionsOnly) {
+        loadInsight();
+        loadFinnState();
+      }
+      if (!previewSectionsOnly && Object.keys(preferences).length === 0) {
         getAssistantPreferences().then(res => setPreferences(res.preferences || {}));
       }
     } else {

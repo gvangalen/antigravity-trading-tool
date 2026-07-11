@@ -17,7 +17,7 @@ const normalizeArray = (v) => {
 
 export function useScoresData(symbol = "BTC", options = {}) {
   const { t, locale } = useTranslation();
-  const { includeHistory = true } = options;
+  const { includeHistory = true, includeMaster = true } = options;
   const gaugesT = t?.dashboard?.gauges || {};
   const commonT = t?.common || {};
   const adviceMap = {
@@ -43,7 +43,7 @@ export function useScoresData(symbol = "BTC", options = {}) {
 
   const [loading, setLoading] = useState(true);
 
-  const cacheKey = `${symbol}:history:${includeHistory ? "1" : "0"}:locale:${String(locale || "nl").toLowerCase()}`;
+  const cacheKey = `${symbol}:history:${includeHistory ? "1" : "0"}:master:${includeMaster ? "1" : "0"}:locale:${String(locale || "nl").toLowerCase()}`;
 
   async function loadScores(forceRefresh = false) {
     const cached = scoreCache.get(cacheKey);
@@ -61,7 +61,7 @@ export function useScoresData(symbol = "BTC", options = {}) {
     const request = (async () => {
       const [dailyRes, masterRes, historyRes] = await Promise.allSettled([
         getDailyScores(symbol),
-        getAiMasterScore(symbol),
+        includeMaster ? getAiMasterScore(symbol) : Promise.resolve(null),
         includeHistory ? getScoreHistory(30, symbol) : Promise.resolve([])
       ]);
 

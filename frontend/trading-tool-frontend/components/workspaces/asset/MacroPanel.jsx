@@ -117,7 +117,10 @@ export default function MacroPage() {
   // ===============================
   // 📈 SCORE DATA
   // ===============================
-  const { macro } = useScoresData(selectedAsset);
+  const { macro } = useScoresData(selectedAsset, {
+    includeHistory: false,
+    includeMaster: false,
+  });
   const { openConfirm, showSnackbar } = useModal();
 
   useEffect(() => {

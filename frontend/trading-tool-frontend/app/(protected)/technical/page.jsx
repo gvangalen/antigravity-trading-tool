@@ -3,5 +3,5 @@
 import WorkspaceRenderer from "@/components/workspaces/WorkspaceRenderer";
 
 export default function TechnicalPage() {
-  return <WorkspaceRenderer tab="technical" canonicalizeLegacy />;
+  return <WorkspaceRenderer tab="technical" />;
 }
