@@ -8,9 +8,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { getIndicatorNames as getTechnicalIndicatorNames } from "@/lib/api/technical";
-import { getMacroIndicatorNames } from "@/lib/api/macro";
-import { getMarketIndicatorNames } from "@/lib/api/market";
+import { useModal } from "@/components/modal/ModalProvider";
+import { getIndicatorNames as getTechnicalIndicatorNames, technicalDataAdd } from "@/lib/api/technical";
+import { getMacroIndicatorNames, macroDataAdd } from "@/lib/api/macro";
+import { getMarketIndicatorNames, marketIndicatorAdd } from "@/lib/api/market";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -56,6 +57,7 @@ export default function AssetSearchBar() {
   const { selectedAsset, setSelectedAsset } = useAsset();
   const { setActiveSetup, setFocusedBotId } = useActiveSetup();
   const { isInWatchlist, add, remove } = useWatchlist();
+  const { showSnackbar } = useModal();
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState({ kind: "all", category: null });
@@ -273,7 +275,7 @@ export default function AssetSearchBar() {
     });
   };
 
-  const handleSelectResult = (result) => {
+  const handleSelectResult = async (result) => {
     if (result.type === "asset") {
       handleSelectAsset(result.asset.symbol);
       return;
@@ -296,8 +298,50 @@ export default function AssetSearchBar() {
     }
 
     if (result.type === "indicator") {
-      router.push(result.href);
-      resetSearch();
+      try {
+        const encodedSymbol = encodeURIComponent(activeSymbol);
+        const encodedIndicator = encodeURIComponent(result.indicatorName);
+        const navigationNonce = Date.now();
+
+        if (result.indicatorCategory === "technical") {
+          await technicalDataAdd(result.indicatorName, activeSymbol);
+          router.push(
+            `/technical?symbol=${encodedSymbol}&step=technical&technicalIndicator=${encodedIndicator}&indicatorAction=select&indicatorNonce=${navigationNonce}`,
+            { scroll: false }
+          );
+          resetSearch();
+          showSnackbar(`${result.title} toegevoegd aan ${activeSymbol} Technical.`, "success");
+          return;
+        }
+
+        if (result.indicatorCategory === "macro") {
+          await macroDataAdd(result.indicatorName);
+          router.push(
+            `/macro?symbol=${encodedSymbol}&step=macro&macroIndicator=${encodedIndicator}&indicatorAction=select&indicatorNonce=${navigationNonce}`,
+            { scroll: false }
+          );
+          resetSearch();
+          showSnackbar(`${result.title} toegevoegd aan ${activeSymbol} Macro.`, "success");
+          return;
+        }
+
+        if (result.indicatorCategory === "market") {
+          await marketIndicatorAdd(result.indicatorName, activeSymbol);
+          router.push(
+            `/market?symbol=${encodedSymbol}&step=market&marketIndicator=${encodedIndicator}&indicatorAction=select&indicatorNonce=${navigationNonce}`,
+            { scroll: false }
+          );
+          resetSearch();
+          showSnackbar(`${result.title} toegevoegd aan ${activeSymbol} Market.`, "success");
+          return;
+        }
+
+        router.push(result.href);
+        resetSearch();
+      } catch (error) {
+        console.error("Failed to add indicator from command search:", error);
+        showSnackbar(`Toevoegen van ${result.title} is mislukt.`, "danger");
+      }
     }
   };
 

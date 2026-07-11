@@ -181,6 +181,8 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
   });
   const [selectedTechnicalIndicator, setSelectedTechnicalIndicator] = useState(null);
   const appliedIndicatorsRef = useRef(new Set());
+  const technicalConfigRef = useRef(null);
+  const focusedTechnicalIndicatorRef = useRef(null);
 
   const stepMeta = useMemo(() => getStepMeta(activeSymbol), [activeSymbol]);
   const activeStep = resolveActiveStep({ pathname, searchParams, initialStep });
@@ -188,6 +190,7 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
   const marketIndicatorFromUrl = searchParams.get("marketIndicator");
   const macroIndicatorFromUrl = searchParams.get("macroIndicator");
   const technicalIndicatorFromUrl = searchParams.get("technicalIndicator") || indicatorFromUrl;
+  const indicatorAction = searchParams.get("indicatorAction");
 
   const {
     sevenDayData,
@@ -225,10 +228,11 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
   });
 
   useEffect(() => {
+    if (technicalIndicatorFromUrl && activeStep === "technical") return;
     if (selectedTechnicalIndicator) return;
     if (!technicalData?.length) return;
     setSelectedTechnicalIndicator(technicalData[0]?.name || null);
-  }, [selectedTechnicalIndicator, technicalData]);
+  }, [activeStep, selectedTechnicalIndicator, technicalData, technicalIndicatorFromUrl]);
 
   useEffect(() => {
     if (!selectedTechnicalIndicator) return;
@@ -238,6 +242,14 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
 
   useEffect(() => {
     if (!technicalIndicatorFromUrl || activeStep !== "technical") return;
+    if (indicatorAction === "select") return;
+
+    if (technicalData?.some((item) => item?.name === technicalIndicatorFromUrl)) {
+      setSelectedTechnicalIndicator(technicalIndicatorFromUrl);
+      setShowDetails((current) => ({ ...current, technical: true }));
+      return;
+    }
+
     const key = `technical:${technicalIndicatorFromUrl}`;
     if (appliedIndicatorsRef.current.has(key)) return;
 
@@ -248,7 +260,33 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
     Promise.resolve(addTechnicalIndicator(technicalIndicatorFromUrl)).catch((error) => {
       console.error("Failed to add technical indicator from command search:", error);
     });
-  }, [activeStep, addTechnicalIndicator, technicalIndicatorFromUrl]);
+  }, [activeStep, addTechnicalIndicator, indicatorAction, technicalData, technicalIndicatorFromUrl]);
+
+  useEffect(() => {
+    if (!technicalIndicatorFromUrl || activeStep !== "technical") return;
+    if (!technicalData?.length) return;
+
+    const matchingIndicator = technicalData.find((item) => item?.name === technicalIndicatorFromUrl);
+    if (!matchingIndicator) return;
+
+    if (selectedTechnicalIndicator !== matchingIndicator.name) {
+      setSelectedTechnicalIndicator(matchingIndicator.name);
+    }
+
+    setShowDetails((current) => (
+      current.technical ? current : { ...current, technical: true }
+    ));
+
+    if (focusedTechnicalIndicatorRef.current === matchingIndicator.name) return;
+    focusedTechnicalIndicatorRef.current = matchingIndicator.name;
+
+    requestAnimationFrame(() => {
+      technicalConfigRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [activeStep, selectedTechnicalIndicator, technicalData, technicalIndicatorFromUrl]);
 
   useEffect(() => {
     if (!marketIndicatorFromUrl || activeStep !== "market") return;
@@ -567,7 +605,11 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
               </div>
 
               {selectedTechnicalIndicatorData ? (
-                <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#06101f]">
+                <div
+                  ref={technicalConfigRef}
+                  tabIndex={-1}
+                  className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm outline-none dark:border-slate-800 dark:bg-[#06101f]"
+                >
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
                     <div>
                       <div className="text-[10px] font-black uppercase tracking-[0.26em] text-blue-600 dark:text-blue-400">
