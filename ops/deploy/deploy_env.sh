@@ -129,10 +129,10 @@ if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
   cd ../../frontend/trading-tool-frontend
   rm -rf .next
   if [ ! -f out/index.html ]; then
-    echo "❌ Prebuilt frontend export missing: frontend/trading-tool-frontend/out/index.html" >&2
+    echo \"❌ Prebuilt frontend export missing: frontend/trading-tool-frontend/out/index.html\" >&2
     exit 1
   fi
-  echo "✅ Using prebuilt frontend export from git (server build skipped)."
+  echo \"✅ Using prebuilt frontend export from git (server build skipped).\"
 
   cd ../..
   if [ ! -f \"$PM2_CONFIG\" ]; then
