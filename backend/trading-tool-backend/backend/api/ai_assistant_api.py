@@ -6,6 +6,7 @@ import uuid
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Request
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Primary assistant limits. Authenticated Finn users get enough room for
@@ -66,6 +67,29 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 MISSION_CONTROL_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_CACHE_TTL_SECONDS", "20"))
 _mission_control_cache: Dict[int, Dict[str, Any]] = {}
+
+
+async def _issue_finn_response_actions_safely(
+    finn: "FinnPlanService",
+    db: Optional[AsyncSession],
+    user_id: int,
+    payload: dict,
+    *,
+    trace_id: Optional[str] = None,
+    route_source: str = "finn",
+) -> None:
+    try:
+        await finn.issue_response_actions(user_id, payload)
+    except (DBAPIError, SQLAlchemyError) as exc:
+        logger.warning(
+            "Skipping FINN response action issuance after database failure on %s for user %s (trace_id=%s): %s",
+            route_source,
+            user_id,
+            trace_id,
+            exc,
+        )
+        if db is not None:
+            await db.rollback()
 
 
 def _audit_context_summary(context: Optional[dict]) -> Dict[str, Any]:
@@ -1193,7 +1217,14 @@ async def _finalize_finn_response(
     response = _normalize_finn_response_contract(response)
     response = await localize_finn_payload(response, (context_payload or {}).get("locale") or "nl")
     _redact_assistant_reasoning(response)
-    await finn.issue_response_actions(user_id, response)
+    await _issue_finn_response_actions_safely(
+        finn,
+        db,
+        user_id,
+        response,
+        trace_id=trace_id,
+        route_source=route_source,
+    )
     if persist_state:
         await finn.persist_response_state(user_id, response)
     reasoning = response.get("reasoning") if isinstance(response.get("reasoning"), dict) else {}
@@ -1305,7 +1336,14 @@ async def _prepare_finn_envelope(
     envelope = _normalize_finn_response_contract(envelope)
     envelope = await localize_finn_payload(envelope, (context_payload or {}).get("locale") or "nl")
     _redact_assistant_reasoning(envelope)
-    await finn.issue_response_actions(user_id, envelope)
+    await _issue_finn_response_actions_safely(
+        finn,
+        db,
+        user_id,
+        envelope,
+        trace_id=trace_id,
+        route_source=route_source,
+    )
     if persist_state:
         await finn.persist_response_state(user_id, envelope)
     reasoning = envelope.get("reasoning") if isinstance(envelope.get("reasoning"), dict) else {}
@@ -2657,7 +2695,14 @@ async def get_finn_mission_control(
         current_user["id"],
         {"page": "assistant", "scope": "mission_control"},
     )
-    await finn.issue_response_actions(current_user["id"], response)
+    await _issue_finn_response_actions_safely(
+        finn,
+        db,
+        current_user["id"],
+        response,
+        trace_id=trace_id,
+        route_source="assistant_mission_control",
+    )
     response = await _enrich_with_trader_profile(db, current_user["id"], response)
     _store_cached_mission_control(current_user["id"], response)
     return response
