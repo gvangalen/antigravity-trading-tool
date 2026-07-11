@@ -102,8 +102,9 @@ export default function IndicatorConfigModal({
   if (!isOpen || !indicator || !category) return null;
 
   return (
-    <div className="fixed inset-0 z-[220] flex items-center justify-center bg-slate-950/55 px-4 py-8 backdrop-blur-sm">
-      <div className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_35px_120px_-35px_rgba(15,23,42,0.55)]">
+    <div className="fixed inset-0 z-[220] overflow-y-auto bg-slate-950/55 px-4 py-6 backdrop-blur-sm sm:py-8">
+      <div className="flex min-h-full items-start justify-center sm:items-center">
+        <div className="relative flex max-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_35px_120px_-35px_rgba(15,23,42,0.55)] sm:max-h-[calc(100vh-4rem)]">
         <button
           type="button"
           onClick={onClose}
@@ -160,6 +161,7 @@ export default function IndicatorConfigModal({
             {saving ? "Bezig..." : actionLabel}
           </button>
         </div>
+      </div>
       </div>
     </div>
   );
