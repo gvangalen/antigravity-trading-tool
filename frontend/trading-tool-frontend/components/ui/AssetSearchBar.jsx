@@ -9,6 +9,8 @@ import { useWatchlist } from "@/hooks/useWatchlist";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { getIndicatorNames as getTechnicalIndicatorNames } from "@/lib/api/technical";
+import { getMacroIndicatorNames } from "@/lib/api/macro";
+import { getMarketIndicatorNames } from "@/lib/api/market";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -58,6 +60,8 @@ export default function AssetSearchBar() {
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState({ kind: "all", category: null });
   const [technicalIndicators, setTechnicalIndicators] = useState([]);
+  const [macroIndicators, setMacroIndicators] = useState([]);
+  const [marketIndicators, setMarketIndicators] = useState([]);
   const containerRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -68,12 +72,19 @@ export default function AssetSearchBar() {
 
     async function loadIndicators() {
       try {
-        const list = await getTechnicalIndicatorNames();
+        const [technicalList, macroList, marketList] = await Promise.all([
+          getTechnicalIndicatorNames(),
+          getMacroIndicatorNames(),
+          getMarketIndicatorNames(),
+        ]);
+
         if (mounted) {
-          setTechnicalIndicators(Array.isArray(list) ? list : []);
+          setTechnicalIndicators(Array.isArray(technicalList) ? technicalList : []);
+          setMacroIndicators(Array.isArray(macroList) ? macroList : []);
+          setMarketIndicators(Array.isArray(marketList) ? marketList : []);
         }
       } catch (error) {
-        console.error("Failed to load technical indicators for command search:", error);
+        console.error("Failed to load indicators for command search:", error);
       }
     }
 
@@ -113,33 +124,68 @@ export default function AssetSearchBar() {
     };
   }, []);
 
-  const technicalIndicatorResults = useMemo(() => {
-    const filtered = technicalIndicators.filter((indicator) => {
-      if (mode.kind !== "indicator" && query.trim() === "") return false;
-      if (mode.kind === "indicator" && query.trim() === "") return true;
+  const indicatorResults = useMemo(() => {
+    const sources = [
+      {
+        key: "technical",
+        label: "Technical indicator",
+        actionLabel: "Toevoegen aan Technical",
+        route: (symbol, name) => `/technical?symbol=${encodeURIComponent(symbol)}&step=technical&technicalIndicator=${encodeURIComponent(name)}`,
+        items: technicalIndicators,
+      },
+      {
+        key: "macro",
+        label: "Macro indicator",
+        actionLabel: "Toevoegen aan Macro",
+        route: (symbol, name) => `/macro?symbol=${encodeURIComponent(symbol)}&step=macro&macroIndicator=${encodeURIComponent(name)}`,
+        items: macroIndicators,
+      },
+      {
+        key: "market",
+        label: "Market indicator",
+        actionLabel: "Toevoegen aan Market",
+        route: (symbol, name) => `/market?symbol=${encodeURIComponent(symbol)}&step=market&marketIndicator=${encodeURIComponent(name)}`,
+        items: marketIndicators,
+      },
+    ];
 
-      const haystack = [
-        indicator?.display_name,
-        indicator?.name,
-        "technical",
-        "indicator",
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+    const activeSources =
+      mode.kind === "indicator" && mode.category
+        ? sources.filter((source) => source.key === mode.category)
+        : sources;
 
-      return haystack.includes(normalize(query));
-    });
+    return activeSources
+      .flatMap((source) =>
+        source.items
+          .filter((indicator) => {
+            if (mode.kind !== "indicator" && query.trim() === "") return false;
+            if (mode.kind === "indicator" && query.trim() === "") return true;
 
-    return filtered.slice(0, 10).map((indicator) => ({
-      id: `technical:${indicator.name}`,
-      type: "indicator",
-      title: indicator.display_name || indicator.label || indicator.name,
-      subtitle: "Technical indicator",
-      actionLabel: "Toevoegen aan Technical",
-      indicatorName: indicator.name,
-    }));
-  }, [mode.kind, query, technicalIndicators]);
+            const haystack = [
+              indicator?.display_name,
+              indicator?.name,
+              source.label,
+              "indicator",
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+
+            return haystack.includes(normalize(query));
+          })
+          .map((indicator) => ({
+            id: `${source.key}:${indicator.name}`,
+            type: "indicator",
+            title: indicator.display_name || indicator.label || indicator.name,
+            subtitle: source.label,
+            actionLabel: source.actionLabel,
+            indicatorName: indicator.name,
+            indicatorCategory: source.key,
+            href: source.route(activeSymbol, indicator.name),
+          }))
+      )
+      .slice(0, 12);
+  }, [activeSymbol, macroIndicators, marketIndicators, mode.category, mode.kind, query, technicalIndicators]);
 
   const assetResults = useMemo(() => {
     if (mode.kind === "indicator") return [];
@@ -191,8 +237,8 @@ export default function AssetSearchBar() {
   }, [mode.kind, query]);
 
   const results = useMemo(
-    () => [...actionResults, ...assetResults, ...workflowResults, ...technicalIndicatorResults],
-    [actionResults, assetResults, technicalIndicatorResults, workflowResults]
+    () => [...actionResults, ...assetResults, ...workflowResults, ...indicatorResults],
+    [actionResults, assetResults, indicatorResults, workflowResults]
   );
 
   const resetSearch = () => {
@@ -250,9 +296,7 @@ export default function AssetSearchBar() {
     }
 
     if (result.type === "indicator") {
-      router.push(
-        `/technical?symbol=${encodeURIComponent(activeSymbol)}&step=technical&indicator=${encodeURIComponent(result.indicatorName)}`
-      );
+      router.push(result.href);
       resetSearch();
     }
   };

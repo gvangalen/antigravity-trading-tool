@@ -180,11 +180,14 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
     conclusion: false,
   });
   const [selectedTechnicalIndicator, setSelectedTechnicalIndicator] = useState(null);
-  const appliedIndicatorRef = useRef("");
+  const appliedIndicatorsRef = useRef(new Set());
 
   const stepMeta = useMemo(() => getStepMeta(activeSymbol), [activeSymbol]);
   const activeStep = resolveActiveStep({ pathname, searchParams, initialStep });
   const indicatorFromUrl = searchParams.get("indicator");
+  const marketIndicatorFromUrl = searchParams.get("marketIndicator");
+  const macroIndicatorFromUrl = searchParams.get("macroIndicator");
+  const technicalIndicatorFromUrl = searchParams.get("technicalIndicator") || indicatorFromUrl;
 
   const {
     sevenDayData,
@@ -234,16 +237,51 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
   }, [selectedTechnicalIndicator, technicalData]);
 
   useEffect(() => {
-    if (!indicatorFromUrl || activeStep !== "technical") return;
-    if (appliedIndicatorRef.current === indicatorFromUrl) return;
+    if (!technicalIndicatorFromUrl || activeStep !== "technical") return;
+    const key = `technical:${technicalIndicatorFromUrl}`;
+    if (appliedIndicatorsRef.current.has(key)) return;
 
-    appliedIndicatorRef.current = indicatorFromUrl;
-    setSelectedTechnicalIndicator(indicatorFromUrl);
+    appliedIndicatorsRef.current.add(key);
+    setSelectedTechnicalIndicator(technicalIndicatorFromUrl);
+    setShowDetails((current) => ({ ...current, technical: true }));
 
-    Promise.resolve(addTechnicalIndicator(indicatorFromUrl)).catch((error) => {
+    Promise.resolve(addTechnicalIndicator(technicalIndicatorFromUrl)).catch((error) => {
       console.error("Failed to add technical indicator from command search:", error);
     });
-  }, [activeStep, addTechnicalIndicator, indicatorFromUrl]);
+  }, [activeStep, addTechnicalIndicator, technicalIndicatorFromUrl]);
+
+  useEffect(() => {
+    if (!marketIndicatorFromUrl || activeStep !== "market") return;
+    const key = `market:${marketIndicatorFromUrl}`;
+    if (appliedIndicatorsRef.current.has(key)) return;
+
+    appliedIndicatorsRef.current.add(key);
+    setShowDetails((current) => ({ ...current, market: true }));
+
+    Promise.resolve(addMarket(marketIndicatorFromUrl))
+      .then(() => {
+        selectIndicator?.({
+          name: marketIndicatorFromUrl,
+          display_name: marketIndicatorFromUrl,
+        });
+      })
+      .catch((error) => {
+        console.error("Failed to add market indicator from command search:", error);
+      });
+  }, [activeStep, addMarket, marketIndicatorFromUrl, selectIndicator]);
+
+  useEffect(() => {
+    if (!macroIndicatorFromUrl || activeStep !== "macro") return;
+    const key = `macro:${macroIndicatorFromUrl}`;
+    if (appliedIndicatorsRef.current.has(key)) return;
+
+    appliedIndicatorsRef.current.add(key);
+    setShowDetails((current) => ({ ...current, macro: true }));
+
+    Promise.resolve(addMacroIndicator(macroIndicatorFromUrl)).catch((error) => {
+      console.error("Failed to add macro indicator from command search:", error);
+    });
+  }, [activeStep, addMacroIndicator, macroIndicatorFromUrl]);
 
   const conclusion = useMemo(
     () =>
@@ -448,6 +486,7 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
                 <MacroIndicatorScoreView
                   addMacroIndicator={addMacroIndicator}
                   activeMacroIndicatorNames={activeMacroIndicatorNames || []}
+                  initialSelectedName={macroIndicatorFromUrl}
                 />
 
                 <MacroTabs

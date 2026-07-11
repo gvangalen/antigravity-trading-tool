@@ -19,6 +19,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 export default function MacroIndicatorScoreView({
   addMacroIndicator,
   activeMacroIndicatorNames = [],
+  initialSelectedName = null,
 }) {
   const { t } = useTranslation();
   const [allIndicators, setAllIndicators] = useState([]);
@@ -42,6 +43,15 @@ export default function MacroIndicatorScoreView({
     }
     load();
   }, []);
+
+  useEffect(() => {
+    if (!initialSelectedName) return;
+    if (!allIndicators.length) return;
+    const matchingIndicator = allIndicators.find((item) => item?.name === initialSelectedName);
+    if (matchingIndicator) {
+      setSelected(matchingIndicator);
+    }
+  }, [allIndicators, initialSelectedName]);
 
   /* -------------------------------------------------------
      Select indicator
