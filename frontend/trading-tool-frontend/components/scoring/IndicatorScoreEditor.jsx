@@ -139,6 +139,8 @@ export default function IndicatorScoreEditor({
   loading = false,
   onSave,
   onSaveCustom,
+  deferred = false,
+  onDraftChange,
 }) {
   const { showSnackbar } = useModal();
   const { t } = useTranslation();
@@ -168,14 +170,37 @@ export default function IndicatorScoreEditor({
     setCustomRules(bucketizeRules(rules));
   }, [normalizedIndicator, scoreMode, rules, weight]);
 
+  useEffect(() => {
+    if (!onDraftChange) return;
+
+    onDraftChange({
+      indicator: normalizedIndicator,
+      category,
+      score_mode: mode,
+      weight: localWeight,
+      rules: FIXED_BUCKETS.map((bucket, idx) => {
+        const score = clampScore(customRules?.[idx]?.score ?? 50);
+        return {
+          indicator: normalizedIndicator,
+          category,
+          range_min: bucket.min,
+          range_max: bucket.max,
+          score,
+          trend: getTrend(score),
+        };
+      }),
+    });
+  }, [category, customRules, localWeight, mode, normalizedIndicator, onDraftChange]);
+
   /* --------------------------------------------------
      Auto-save for STANDARD & CONTRARIAN only
      (Mode changes are saved; custom is saved via button)
   -------------------------------------------------- */
-    useEffect(() => {
+  useEffect(() => {
     if (loading) return;
     if (!normalizedIndicator || !category) return;
     if (mode === "custom") return;
+    if (deferred) return;
 
     onSave?.({
       indicator: normalizedIndicator,
@@ -185,7 +210,7 @@ export default function IndicatorScoreEditor({
       __silent: true, // ✅ voorkomt snackbar bij navigatie
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, loading, normalizedIndicator, category, localWeight]);
+  }, [mode, loading, normalizedIndicator, category, localWeight, deferred]);
 
   /* --------------------------------------------------
      Template rows (standard baseline)
@@ -406,7 +431,7 @@ export default function IndicatorScoreEditor({
               </div>
            )}
 
-           {isCustom && (
+           {isCustom && !deferred && (
               <button
                 onClick={saveCustom}
                 disabled={savingCustom}

@@ -24,7 +24,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 
 import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
-import IndicatorScorePanel from "@/components/scoring/IndicatorScorePanel";
+import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
 import MarketTerminalHUD from "@/components/market/MarketTerminalHUD";
 import MacroTerminalHUD from "@/components/macro/MacroTerminalHUD";
 import TechnicalTerminalHUD from "@/components/technical/TechnicalTerminalHUD";
@@ -181,8 +181,8 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
   });
   const [selectedTechnicalIndicator, setSelectedTechnicalIndicator] = useState(null);
   const appliedIndicatorsRef = useRef(new Set());
-  const technicalConfigRef = useRef(null);
   const focusedTechnicalIndicatorRef = useRef(null);
+  const [technicalConfigModal, setTechnicalConfigModal] = useState(null);
 
   const stepMeta = useMemo(() => getStepMeta(activeSymbol), [activeSymbol]);
   const activeStep = resolveActiveStep({ pathname, searchParams, initialStep });
@@ -281,7 +281,7 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
     focusedTechnicalIndicatorRef.current = matchingIndicator.name;
 
     requestAnimationFrame(() => {
-      technicalConfigRef.current?.scrollIntoView({
+      document.getElementById("technical-indicator-pills")?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
@@ -578,14 +578,17 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
                   Active Technical Indicators
                 </div>
                 {technicalData?.length ? (
-                  <div className="flex flex-wrap gap-2">
+                  <div id="technical-indicator-pills" className="flex flex-wrap gap-2">
                     {technicalData.map((item) => {
                       const isSelected = selectedTechnicalIndicator === item.name;
                       return (
                         <button
                           key={item.name}
                           type="button"
-                          onClick={() => setSelectedTechnicalIndicator(item.name)}
+                          onClick={() => {
+                            setSelectedTechnicalIndicator(item.name);
+                            setTechnicalConfigModal(item.name);
+                          }}
                           className={`rounded-full border px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] transition ${
                             isSelected
                               ? "border-blue-500 bg-blue-600 text-white"
@@ -604,32 +607,40 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
                 )}
               </div>
 
-              {selectedTechnicalIndicatorData ? (
-                <div
-                  ref={technicalConfigRef}
-                  tabIndex={-1}
-                  className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm outline-none dark:border-slate-800 dark:bg-[#06101f]"
-                >
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
-                    <div>
-                      <div className="text-[10px] font-black uppercase tracking-[0.26em] text-blue-600 dark:text-blue-400">
-                        Configuration
-                      </div>
-                      <h4 className="mt-2 text-xl font-black tracking-tight text-slate-950 dark:text-slate-50">
-                        {selectedTechnicalIndicatorData.name}
-                      </h4>
+              <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#06101f]">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.26em] text-blue-600 dark:text-blue-400">
+                      Configuration
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removeTechnicalIndicator(selectedTechnicalIndicatorData.name)}
-                      className="rounded-2xl border border-slate-200 px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 transition hover:border-red-200 hover:text-red-600 dark:border-slate-700 dark:text-slate-300"
-                    >
-                      Remove
-                    </button>
+                    <h4 className="mt-2 text-xl font-black tracking-tight text-slate-950 dark:text-slate-50">
+                      Indicator setup moved to popup
+                    </h4>
+                    <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+                      Open een indicator vanuit de zoekbalk of klik op een actieve indicator hierboven om de instellingen in een popup te bekijken of aan te passen.
+                    </p>
                   </div>
-                  <IndicatorScorePanel category="technical" indicator={selectedTechnicalIndicatorData.name} />
+
+                  {selectedTechnicalIndicatorData ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setTechnicalConfigModal(selectedTechnicalIndicatorData.name)}
+                        className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-blue-600 transition hover:border-blue-300 hover:bg-blue-100"
+                      >
+                        {selectedTechnicalIndicatorData.name} bewerken
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeTechnicalIndicator(selectedTechnicalIndicatorData.name)}
+                        className="rounded-2xl border border-slate-200 px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 transition hover:border-red-200 hover:text-red-600 dark:border-slate-700 dark:text-slate-300"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
+              </div>
 
               <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#06101f]">
                 <div className="mb-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">
@@ -713,6 +724,15 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
           </div>
         </SectionShell>
       ) : null}
+
+      <IndicatorConfigModal
+        isOpen={Boolean(technicalConfigModal)}
+        category="technical"
+        indicator={technicalConfigModal}
+        assetSymbol={activeSymbol}
+        mode="edit"
+        onClose={() => setTechnicalConfigModal(null)}
+      />
     </div>
   );
 }

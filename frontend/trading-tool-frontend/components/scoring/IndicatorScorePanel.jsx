@@ -35,7 +35,12 @@ function normalizeIndicatorName(name) {
   return NAME_ALIASES[normalized] || normalized;
 }
 
-export default function IndicatorScorePanel({ indicator, category }) {
+export default function IndicatorScorePanel({
+  indicator,
+  category,
+  deferred = false,
+  onDraftChange,
+}) {
   const { showSnackbar } = useModal();
   const { t } = useTranslation();
   const copy = t?.legacyComponents?.indicatorScore || {};
@@ -216,6 +221,8 @@ export default function IndicatorScorePanel({ indicator, category }) {
         loading={false}
         onSave={saveSettings}
         onSaveCustom={saveCustom}
+        deferred={deferred}
+        onDraftChange={onDraftChange}
       />
     </div>
   );
