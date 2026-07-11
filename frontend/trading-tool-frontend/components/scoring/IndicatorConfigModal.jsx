@@ -95,6 +95,37 @@ function normalizeDraft(category, indicator, config = {}) {
   };
 }
 
+function areRulesEqual(a = [], b = []) {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+
+  return a.every((rule, index) => {
+    const compare = b[index];
+    return (
+      String(rule?.indicator || "") === String(compare?.indicator || "") &&
+      String(rule?.category || "") === String(compare?.category || "") &&
+      Number(rule?.range_min) === Number(compare?.range_min) &&
+      Number(rule?.range_max) === Number(compare?.range_max) &&
+      Number(rule?.score) === Number(compare?.score) &&
+      String(rule?.trend || "") === String(compare?.trend || "")
+    );
+  });
+}
+
+function areDraftsEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+
+  return (
+    String(a.indicator || "") === String(b.indicator || "") &&
+    String(a.category || "") === String(b.category || "") &&
+    String(a.score_mode || "standard") === String(b.score_mode || "standard") &&
+    Number(a.weight || 1) === Number(b.weight || 1) &&
+    areRulesEqual(a.rules, b.rules)
+  );
+}
+
 function getWeightOptionFromValue(value) {
   const next = typeof value === "number" ? value : 1;
   const distances = SIMPLE_WEIGHT_OPTIONS.map((option) => ({
@@ -299,11 +330,15 @@ export default function IndicatorConfigModal({
   }, [draft]);
 
   const handleDraftChange = useCallback((nextDraft) => {
-    setDraft((prev) => ({
-      ...(prev || {}),
-      ...nextDraft,
-      rules: Array.isArray(nextDraft?.rules) ? nextDraft.rules : prev?.rules || [],
-    }));
+    setDraft((prev) => {
+      const merged = {
+        ...(prev || {}),
+        ...nextDraft,
+        rules: Array.isArray(nextDraft?.rules) ? nextDraft.rules : prev?.rules || [],
+      };
+
+      return areDraftsEqual(prev, merged) ? prev : merged;
+    });
   }, []);
 
   const handleSelectWeight = useCallback((weightOption) => {
