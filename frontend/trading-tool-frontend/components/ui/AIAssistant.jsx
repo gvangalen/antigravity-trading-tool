@@ -224,7 +224,14 @@ function inferSetupMarketConditionFromScores(payload = {}) {
   return null;
 }
 
-function AIAssistantContent({ isOpen, setIsOpen, persistent = false }) {
+function AIAssistantContent({
+  isOpen,
+  setIsOpen,
+  persistent = false,
+  previewSectionsOnly = false,
+  className = "",
+  modal = false,
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { selectedAsset: globalSymbol } = useAsset();
@@ -5017,12 +5024,16 @@ function AIAssistantContent({ isOpen, setIsOpen, persistent = false }) {
 
   const shellClassName = persistent
     ? "relative h-[70dvh] w-full bg-card dark:bg-[#0f172a] flex flex-col lg:h-full"
-    : `fixed top-0 right-0 h-full bg-card dark:bg-[#0f172a] border-l border-slate-200 dark:border-slate-800 z-[70] shadow-2xl transition-all duration-300 flex flex-col ${
-        isOpen ? "translate-x-0" : "translate-x-full"
-      } w-full md:w-[400px]`;
+    : modal
+      ? `relative max-h-[82vh] w-[min(960px,calc(100vw-2rem))] overflow-hidden rounded-[32px] border border-slate-200 bg-card shadow-2xl transition-all duration-300 dark:border-slate-800 dark:bg-[#0f172a] flex flex-col ${
+          isOpen ? "translate-y-0 opacity-100 scale-100" : "translate-y-4 opacity-0 scale-[0.98]"
+        }`
+      : `fixed top-0 right-0 h-full bg-card dark:bg-[#0f172a] border-l border-slate-200 dark:border-slate-800 z-[70] shadow-2xl transition-all duration-300 flex flex-col ${
+          isOpen ? "translate-x-0" : "translate-x-full"
+        } w-full md:w-[400px]`;
 
   return (
-    <aside className={shellClassName}>
+    <aside className={`${shellClassName} ${className}`.trim()}>
       {/* HEADER */}
       <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-card dark:bg-[#0f172a] relative z-10 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -5344,6 +5355,8 @@ function AIAssistantContent({ isOpen, setIsOpen, persistent = false }) {
           </div>
         )}
 
+        {!previewSectionsOnly && (
+        <>
         {/* MESSAGES AREA */}
         <div className="p-6 space-y-6 pb-20">
           {messages.map((m, i) => (
@@ -5494,9 +5507,12 @@ function AIAssistantContent({ isOpen, setIsOpen, persistent = false }) {
           )}
           <div ref={messagesEndRef} />
         </div>
+        </>
+        )}
       </div>
 
       {/* INPUT AREA */}
+      {!previewSectionsOnly && (
       <div className="p-6 bg-card dark:bg-[#0f172a] border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] relative z-10 flex-shrink-0">
         {pathname?.includes("/admin") && activeState && activeState.current_flow && activeState.current_flow !== "none" && progress && (
           <div className="mb-4 p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-2xl flex flex-col gap-2.5">
@@ -5530,6 +5546,7 @@ function AIAssistantContent({ isOpen, setIsOpen, persistent = false }) {
           </button>
         </div>
       </div>
+      )}
     </aside>
   );
 }
