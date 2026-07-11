@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Check,
   SlidersHorizontal,
   Sparkles,
   X,
@@ -104,25 +105,6 @@ function getWeightOptionFromValue(value) {
   return distances[0]?.option || SIMPLE_WEIGHT_OPTIONS[1];
 }
 
-function configsMatch(a, b) {
-  if (!a || !b) return false;
-  if ((a.score_mode || "standard") !== (b.score_mode || "standard")) return false;
-  if (Math.abs((a.weight || 1) - (b.weight || 1)) > 0.05) return false;
-
-  const aRules = Array.isArray(a.rules) ? a.rules : [];
-  const bRules = Array.isArray(b.rules) ? b.rules : [];
-  if (aRules.length !== bRules.length) return false;
-
-  return aRules.every((rule, index) => {
-    const compare = bRules[index];
-    return (
-      Number(rule?.range_min) === Number(compare?.range_min) &&
-      Number(rule?.range_max) === Number(compare?.range_max) &&
-      Number(rule?.score) === Number(compare?.score)
-    );
-  });
-}
-
 function buildProfileContext(preferences = {}) {
   const profile = normalizeTraderProfilePreferences(preferences);
   const traderTypes = Array.isArray(profile.trader_types) ? profile.trader_types : [];
@@ -154,133 +136,108 @@ function buildProfileContext(preferences = {}) {
   };
 }
 
-function getPresetLibrary(category, indicator, profileContext) {
+function getRoleModel(category, indicator, profileContext) {
   const normalizedIndicator = normalizeIndicatorName(indicator);
   const summarySuffix = profileContext?.summaryText || "deze workflow";
 
-  const genericIntro =
-    category === "technical"
-      ? "Kies eerst hoe FINN deze indicator moet meenemen in je technische routine."
-      : `Kies eerst hoe FINN deze ${getCategoryLabel(category).toLowerCase()}-indicator moet meenemen.`;
-
-  const genericPresets = [
-    {
-      id: "default",
-      label: "Standaard interpreteren",
-      help: "FINN leest deze indicator op de gebruikelijke manier.",
-      score_mode: "standard",
-      defaultWeightId: "normal",
-      summaryTemplate: (weightLabel) => `FINN gebruikt ${getIndicatorLabel(indicator)} op de standaardmanier met ${weightLabel.toLowerCase()} invloed.`,
-      recommendationReason: `Aanbevolen als veilige start voor ${summarySuffix}.`,
-    },
-    {
-      id: "contrarian",
-      label: "Tegendraads lezen",
-      help: "FINN draait hoge en lage waardes om voor een meer contrair signaal.",
-      score_mode: "contrarian",
-      defaultWeightId: "normal",
-      summaryTemplate: (weightLabel) => `FINN leest ${getIndicatorLabel(indicator)} contrair met ${weightLabel.toLowerCase()} invloed.`,
-      recommendationReason: `Handig wanneer je vooral extremen wilt benutten binnen ${summarySuffix}.`,
-    },
-  ];
-
   if (category !== "technical") {
     return {
-      description: genericIntro,
-      presets: genericPresets,
+      description: `Bepaal wanneer FINN naar ${getIndicatorLabel(indicator)} moet luisteren, hoe hij het signaal leest en hoe zwaar het meetelt.`,
+      whenQuestion: "Wanneer moet FINN extra naar deze indicator luisteren?",
+      whenOptions: [
+        { id: "default", label: "Altijd gebruiken", help: "Deze indicator telt standaard mee in de routine." },
+      ],
+      recommendedWhen: ["default"],
+      interpretationQuestion: "Hoe moet FINN het signaal interpreteren?",
+      interpretationOptions: [
+        { id: "standard", label: "Standaard", help: "FINN leest hoge waardes als sterker of positiever." },
+        { id: "contrarian", label: "Contrarian", help: "FINN draait hoge en lage waardes om als dat logischer is." },
+      ],
+      recommendedInterpretation: "standard",
+      summaryLabel: getIndicatorLabel(indicator),
+      recommendationReason: `Aanbevolen als veilige start voor ${summarySuffix}.`,
     };
   }
 
   if (normalizedIndicator === "rsi") {
-    const recommendedId =
-      profileContext?.primaryTraderType === "day_trader" || profileContext?.primaryTraderType === "scalper"
-        ? "trend_strength"
-        : "oversold_reversal";
+    const fastProfile =
+      profileContext?.primaryTraderType === "day_trader" || profileContext?.primaryTraderType === "scalper";
 
     return {
-      description: "RSI laat zien of momentum afkoelt of juist doorzet. Zo kan FINN beter kiezen of hij op uitputting of trendsterkte moet letten.",
-      presets: [
-        {
-          id: "oversold_reversal",
-          label: "Oververkocht kopen",
-          help: "Gebruik RSI vooral om zwakke fases en mogelijke rebounds te herkennen.",
-          score_mode: "contrarian",
-          defaultWeightId: "normal",
-          summaryTemplate: (weightLabel) => `FINN gebruikt RSI als oversold-signaal met ${weightLabel.toLowerCase()} invloed.`,
-          recommendationReason: `Aanbevolen voor ${summarySuffix}.`,
-          recommended: recommendedId === "oversold_reversal",
-        },
-        {
-          id: "trend_strength",
-          label: "Trendsterkte volgen",
-          help: "Gebruik RSI vooral als bevestiging dat momentum mee- of tegenzit.",
-          score_mode: "standard",
-          defaultWeightId: "normal",
-          summaryTemplate: (weightLabel) => `FINN gebruikt RSI als trendbevestiging met ${weightLabel.toLowerCase()} invloed.`,
-          recommendationReason: `Aanbevolen wanneer je sneller op momentum wilt reageren binnen ${summarySuffix}.`,
-          recommended: recommendedId === "trend_strength",
-        },
+      description: "RSI helpt FINN inschatten wanneer momentum te ver is doorgeschoten of juist kracht houdt.",
+      whenQuestion: "Wanneer moet FINN extra naar RSI luisteren?",
+      whenOptions: [
+        { id: "oversold", label: "Oversold", help: "RSI onder 30 kan op een herstel- of koopkans wijzen." },
+        { id: "overbought", label: "Overbought", help: "RSI boven 70 kan aangeven dat de move uitgeput raakt." },
+        { id: "always", label: "Altijd gebruiken", help: "RSI telt ook buiten extreme zones mee als bevestiging." },
       ],
+      recommendedWhen: fastProfile ? ["always"] : ["oversold", "overbought"],
+      interpretationQuestion: "Hoe moet FINN het signaal interpreteren?",
+      interpretationOptions: [
+        { id: "standard", label: "Standaard", help: "Hoge RSI telt positiever, lage RSI zwakker." },
+        { id: "contrarian", label: "Contrarian", help: "Lage RSI telt positiever, hoge RSI juist voorzichtiger." },
+      ],
+      recommendedInterpretation: fastProfile ? "standard" : "contrarian",
+      summaryLabel: "RSI",
+      recommendationReason: fastProfile
+        ? `Aanbevolen voor sneller momentumwerk binnen ${summarySuffix}.`
+        : `Aanbevolen voor jouw swingprofiel: gebruik RSI vooral bij oversold en overbought situaties.`,
     };
   }
 
   if (normalizedIndicator === "ma_200") {
-    const recommendedId =
-      profileContext?.primaryTraderType === "day_trader" || profileContext?.primaryTraderType === "scalper"
-        ? "confirmation_only"
-        : "trend_filter";
+    const fastProfile =
+      profileContext?.primaryTraderType === "day_trader" || profileContext?.primaryTraderType === "scalper";
 
     return {
-      description: "MA 200 helpt FINN zien of de grotere trend mee- of tegenwerkt. Zo voorkom je dat een klein signaal te veel gewicht krijgt.",
-      presets: [
-        {
-          id: "trend_filter",
-          label: "Trend volgen",
-          help: "Gebruik MA 200 als stevige trendfilter voor richting en bias.",
-          score_mode: "standard",
-          defaultWeightId: "normal",
-          summaryTemplate: (weightLabel) => `FINN gebruikt MA 200 als trendfilter met ${weightLabel.toLowerCase()} invloed.`,
-          recommendationReason: `Aanbevolen voor ${summarySuffix}.`,
-          recommended: recommendedId === "trend_filter",
-        },
-        {
-          id: "confirmation_only",
-          label: "Alleen als bevestiging gebruiken",
-          help: "Gebruik MA 200 lichter, vooral om andere signalen te bevestigen.",
-          score_mode: "standard",
-          defaultWeightId: "low",
-          summaryTemplate: (weightLabel) => `FINN gebruikt MA 200 als extra bevestiging met ${weightLabel.toLowerCase()} invloed.`,
-          recommendationReason: `Aanbevolen wanneer je korter handelt en MA 200 niet alles wilt laten domineren.`,
-          recommended: recommendedId === "confirmation_only",
-        },
+      description: "MA 200 helpt FINN zien of de grotere trend meewerkt, tegenwerkt of alleen als filter moet dienen.",
+      whenQuestion: "Wanneer moet FINN extra naar MA 200 luisteren?",
+      whenOptions: [
+        { id: "bull", label: "Bull market", help: "Gebruik MA 200 om long-bias en trendcontinuatie te bewaken." },
+        { id: "bear", label: "Bear market", help: "Gebruik MA 200 om defensief te blijven wanneer de grotere trend zwak is." },
+        { id: "sideways", label: "Sideways", help: "Gebruik MA 200 als filter wanneer de markt geen duidelijke trend toont." },
       ],
+      recommendedWhen: fastProfile ? ["bull", "bear"] : ["bull", "bear", "sideways"],
+      interpretationQuestion: "Hoe moet FINN het signaal interpreteren?",
+      interpretationOptions: [
+        { id: "standard", label: "Standaard", help: "Boven MA 200 is sterker, onder MA 200 is zwakker." },
+        { id: "contrarian", label: "Contrarian", help: "Gebruik MA 200 bewust tegendraads als mean-reversion filter." },
+      ],
+      recommendedInterpretation: "standard",
+      summaryLabel: "MA 200",
+      recommendationReason: fastProfile
+        ? `Aanbevolen als richtingfilter zonder zijwaartse ruis te zwaar mee te nemen binnen ${summarySuffix}.`
+        : `Aanbevolen voor ${summarySuffix}: gebruik MA 200 als trendfilter in bull, bear en zijwaartse fases.`,
     };
   }
 
   return {
-    description: genericIntro,
-    presets: genericPresets,
+    description: `Bepaal wanneer FINN naar ${getIndicatorLabel(indicator)} moet luisteren, hoe hij het signaal leest en hoe zwaar het meetelt.`,
+    whenQuestion: "Wanneer moet FINN extra naar deze indicator luisteren?",
+    whenOptions: [
+      { id: "default", label: "Altijd gebruiken", help: "Deze indicator telt standaard mee in de routine." },
+    ],
+    recommendedWhen: ["default"],
+    interpretationQuestion: "Hoe moet FINN het signaal interpreteren?",
+    interpretationOptions: [
+      { id: "standard", label: "Standaard", help: "FINN leest hoge waardes als sterker of positiever." },
+      { id: "contrarian", label: "Contrarian", help: "FINN draait hoge en lage waardes om als dat logischer is." },
+    ],
+    recommendedInterpretation: "standard",
+    summaryLabel: getIndicatorLabel(indicator),
+    recommendationReason: `Aanbevolen als veilige start voor ${summarySuffix}.`,
   };
 }
 
-function buildPresetDraft(preset, category, indicator, currentDraft) {
-  const weightOption =
-    SIMPLE_WEIGHT_OPTIONS.find((option) => option.id === preset.defaultWeightId) || SIMPLE_WEIGHT_OPTIONS[1];
+function buildWhenSummary(ids, options) {
+  const labels = options
+    .filter((option) => ids.includes(option.id))
+    .map((option) => option.label.toLowerCase());
 
-  return {
-    ...(currentDraft || normalizeDraft(category, indicator)),
-    score_mode: preset.score_mode || "standard",
-    weight: weightOption.value,
-    rules:
-      preset.score_mode === "custom" && Array.isArray(preset.rules) && preset.rules.length > 0
-        ? preset.rules.map((rule) => ({ ...rule }))
-        : (currentDraft?.rules || normalizeDraft(category, indicator).rules).map((rule) => ({ ...rule })),
-  };
-}
-
-function derivePresetState(draft, presets) {
-  const matches = presets.find((preset) => configsMatch(draft, buildPresetDraft(preset, draft?.category, draft?.indicator, draft)));
-  return matches?.id || "custom";
+  if (labels.length === 0) return "zonder extra marktmomenten";
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return `${labels[0]} en ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")} en ${labels[labels.length - 1]}`;
 }
 
 export default function IndicatorConfigModal({
@@ -300,47 +257,36 @@ export default function IndicatorConfigModal({
   const [mounted, setMounted] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [profileContext, setProfileContext] = useState(buildProfileContext());
+  const [selectedConditions, setSelectedConditions] = useState([]);
 
   const categoryLabel = useMemo(() => getCategoryLabel(category), [category]);
   const normalizedIndicator = useMemo(() => normalizeIndicatorName(indicator), [indicator]);
   const indicatorLabel = useMemo(() => getIndicatorLabel(indicator), [indicator]);
   const actionLabel = mode === "edit" ? "Opslaan" : `${indicatorLabel} toevoegen`;
-
-  const presetLibrary = useMemo(
-    () => getPresetLibrary(category, normalizedIndicator, profileContext),
+  const roleModel = useMemo(
+    () => getRoleModel(category, normalizedIndicator, profileContext),
     [category, normalizedIndicator, profileContext]
   );
-
-  const presets = presetLibrary.presets || [];
-  const recommendedPreset = useMemo(
-    () => presets.find((preset) => preset.recommended) || presets[0] || null,
-    [presets]
-  );
-
-  const selectedPresetId = useMemo(() => derivePresetState(draft, presets), [draft, presets]);
-  const selectedPreset = useMemo(
-    () => presets.find((preset) => preset.id === selectedPresetId) || null,
-    [presets, selectedPresetId]
-  );
+  const interpretationOptions = roleModel.interpretationOptions || [];
+  const whenOptions = roleModel.whenOptions || [];
   const selectedWeight = useMemo(() => getWeightOptionFromValue(draft?.weight), [draft?.weight]);
+  const selectedInterpretation = useMemo(() => draft?.score_mode || roleModel.recommendedInterpretation || "standard", [
+    draft?.score_mode,
+    roleModel.recommendedInterpretation,
+  ]);
 
   const summaryText = useMemo(() => {
     if (!draft) return "";
-    const presetForSummary =
-      selectedPreset ||
-      recommendedPreset || {
-        summaryTemplate: (weightLabel) =>
-          `FINN gebruikt ${indicatorLabel} met ${weightLabel.toLowerCase()} invloed.`,
-      };
-
-    return presetForSummary.summaryTemplate(selectedWeight.label);
-  }, [draft, indicatorLabel, recommendedPreset, selectedPreset, selectedWeight.label]);
+    const interpretationLabel =
+      selectedInterpretation === "contrarian" ? "contrarian" : selectedInterpretation === "custom" ? "aangepast" : "standaard";
+    const whenLabel = buildWhenSummary(selectedConditions, whenOptions);
+    return `FINN gebruikt ${roleModel.summaryLabel || indicatorLabel}: ${interpretationLabel}, ${whenLabel}, met ${selectedWeight.label.toLowerCase()} invloed.`;
+  }, [draft, indicatorLabel, roleModel.summaryLabel, selectedConditions, selectedInterpretation, selectedWeight.label, whenOptions]);
 
   const recommendationText = useMemo(() => {
-    if (selectedPreset?.recommendationReason) return selectedPreset.recommendationReason;
-    if (recommendedPreset?.recommendationReason) return recommendedPreset.recommendationReason;
+    if (roleModel.recommendationReason) return roleModel.recommendationReason;
     return `Aanbevolen als veilige start voor ${profileContext.summaryText || "deze workflow"}.`;
-  }, [profileContext.summaryText, recommendedPreset, selectedPreset]);
+  }, [profileContext.summaryText, roleModel.recommendationReason]);
 
   const isValidDraft = useMemo(() => {
     if (!draft) return false;
@@ -360,14 +306,6 @@ export default function IndicatorConfigModal({
     }));
   }, []);
 
-  const handleSelectPreset = useCallback(
-    (preset) => {
-      if (!category || !normalizedIndicator) return;
-      setDraft((currentDraft) => buildPresetDraft(preset, category, normalizedIndicator, currentDraft));
-    },
-    [category, normalizedIndicator]
-  );
-
   const handleSelectWeight = useCallback((weightOption) => {
     setDraft((currentDraft) => {
       if (!currentDraft) return currentDraft;
@@ -375,6 +313,26 @@ export default function IndicatorConfigModal({
         ...currentDraft,
         weight: weightOption.value,
       };
+    });
+  }, []);
+
+  const handleSelectInterpretation = useCallback((value) => {
+    setDraft((currentDraft) => {
+      if (!currentDraft) return currentDraft;
+      return {
+        ...currentDraft,
+        score_mode: value,
+      };
+    });
+  }, []);
+
+  const handleToggleCondition = useCallback((conditionId) => {
+    setSelectedConditions((current) => {
+      if (current.includes(conditionId)) {
+        const next = current.filter((item) => item !== conditionId);
+        return next.length > 0 ? next : current;
+      }
+      return [...current, conditionId];
     });
   }, []);
 
@@ -410,15 +368,14 @@ export default function IndicatorConfigModal({
 
         const normalizedDraft = normalizeDraft(category, normalizedIndicator, configResponse || {});
         const nextProfile = buildProfileContext(preferencesResponse?.preferences || preferencesResponse || {});
-        const nextLibrary = getPresetLibrary(category, normalizedIndicator, nextProfile);
-        const nextRecommended = nextLibrary.presets?.find((preset) => preset.recommended) || nextLibrary.presets?.[0] || null;
+        const nextRoleModel = getRoleModel(category, normalizedIndicator, nextProfile);
 
         setProfileContext(nextProfile);
-        setDraft(normalizedDraft);
-
-        if (!configResponse && nextRecommended) {
-          setDraft(buildPresetDraft(nextRecommended, category, normalizedIndicator, normalizedDraft));
-        }
+        setDraft({
+          ...normalizedDraft,
+          score_mode: configResponse?.score_mode || nextRoleModel.recommendedInterpretation || normalizedDraft.score_mode,
+        });
+        setSelectedConditions(nextRoleModel.recommendedWhen || []);
       })
       .catch((error) => {
         if (!active) return;
@@ -526,7 +483,7 @@ export default function IndicatorConfigModal({
                   {indicatorLabel}
                 </h2>
                 <p className="mt-3 text-sm font-medium leading-6 text-slate-500">
-                  {presetLibrary.description}
+                  {roleModel.description}
                 </p>
               </div>
 
@@ -554,27 +511,24 @@ export default function IndicatorConfigModal({
                         Aanbevolen voor jouw profiel
                       </div>
                       <div className="text-lg font-black text-slate-950">
-                        {selectedPreset?.label || recommendedPreset?.label || "Standaard start"}
-                      </div>
-                      <p className="text-sm font-medium leading-6 text-slate-500">
                         {recommendationText}
-                      </p>
+                      </div>
                     </div>
                   </div>
                 </section>
 
                 <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                    Hoe moet FINN deze indicator gebruiken?
+                    {roleModel.whenQuestion}
                   </div>
                   <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                    {presets.map((preset) => {
-                      const active = selectedPresetId === preset.id;
+                    {whenOptions.map((option) => {
+                      const active = selectedConditions.includes(option.id);
                       return (
                         <button
-                          key={preset.id}
+                          key={option.id}
                           type="button"
-                          onClick={() => handleSelectPreset(preset)}
+                          onClick={() => handleToggleCondition(option.id)}
                           className={`rounded-[24px] border px-5 py-4 text-left transition ${
                             active
                               ? "border-blue-200 bg-blue-50 shadow-sm"
@@ -583,9 +537,48 @@ export default function IndicatorConfigModal({
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <div className="text-base font-black text-slate-950">{preset.label}</div>
+                              <div className="text-base font-black text-slate-950">{option.label}</div>
                               <div className="mt-2 text-sm font-medium leading-6 text-slate-500">
-                                {preset.help}
+                                {option.help}
+                              </div>
+                            </div>
+                            <div
+                              className={`mt-1 flex h-5 w-5 items-center justify-center rounded-full border ${
+                                active ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-transparent"
+                              }`}
+                            >
+                              <Check size={12} />
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                    {roleModel.interpretationQuestion}
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    {interpretationOptions.map((option) => {
+                      const active = selectedInterpretation === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => handleSelectInterpretation(option.id)}
+                          className={`rounded-[24px] border px-5 py-4 text-left transition ${
+                            active
+                              ? "border-blue-200 bg-blue-50 shadow-sm"
+                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-base font-black text-slate-950">{option.label}</div>
+                              <div className="mt-2 text-sm font-medium leading-6 text-slate-500">
+                                {option.help}
                               </div>
                             </div>
                             <div
@@ -599,16 +592,16 @@ export default function IndicatorConfigModal({
                         </button>
                       );
                     })}
-
-                    {selectedPresetId === "custom" ? (
-                      <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4">
-                        <div className="text-base font-black text-slate-950">Aangepast</div>
-                        <div className="mt-2 text-sm font-medium leading-6 text-slate-500">
-                          Je geavanceerde instellingen wijken af van de standaard presets.
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
+
+                  {selectedInterpretation === "custom" ? (
+                    <div className="mt-4 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4">
+                      <div className="text-base font-black text-slate-950">Aangepast</div>
+                      <div className="mt-2 text-sm font-medium leading-6 text-slate-500">
+                        Je geavanceerde instellingen gebruiken nu een eigen custom scoreverdeling.
+                      </div>
+                    </div>
+                  ) : null}
                 </section>
 
                 <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
