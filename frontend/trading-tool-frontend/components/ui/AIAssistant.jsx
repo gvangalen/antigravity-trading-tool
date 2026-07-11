@@ -231,6 +231,9 @@ function AIAssistantContent({
   previewSectionsOnly = false,
   className = "",
   modal = false,
+  queryValue,
+  onQueryChange,
+  autoFocusComposer = false,
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -261,12 +264,15 @@ function AIAssistantContent({
   
   const messagesEndRef = useRef(null);
   const scrollRef = useRef(null);
+  const composerInputRef = useRef(null);
   const loadedFinnStateRef = useRef(false);
   const missionControlCacheKeyRef = useRef("");
   const activeStreamIdRef = useRef(null);
   const profileTelemetryKeyRef = useRef("");
   const [showReasoning, setShowReasoning] = useState(false);
   const at = createAssistantTranslator(t);
+  const activeQuery = queryValue !== undefined ? queryValue : query;
+  const updateQuery = onQueryChange || setQuery;
 
   const humanizeSurfaceStatus = (value) => {
     const raw = String(value || "").toLowerCase();
@@ -328,6 +334,14 @@ function AIAssistantContent({
     setMissionDetailSection("");
     setStableBriefingText("");
   }, [isOpen, pathname, globalSymbol]);
+
+  useEffect(() => {
+    if (!isOpen || previewSectionsOnly || !autoFocusComposer) return;
+    const frame = window.requestAnimationFrame(() => {
+      composerInputRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isOpen, previewSectionsOnly, autoFocusComposer]);
 
   const getMetricTitle = (metric) => {
     const titles = {
@@ -3787,14 +3801,14 @@ function AIAssistantContent({
   }
 
   async function handleChat(directQuery, isSilent = false, overrideContext = null) {
-    const activeQuery = directQuery !== undefined ? directQuery : query;
-    if (!activeQuery.trim()) return;
+    const nextQuery = directQuery !== undefined ? directQuery : activeQuery;
+    if (!nextQuery.trim()) return;
 
     setLoading(true);
-    if (!isSilent) setQuery("");
+    if (!isSilent) updateQuery("");
     
     if (!isSilent) {
-      setMessages(prev => [...prev, { role: "user", text: activeQuery }]);
+      setMessages(prev => [...prev, { role: "user", text: nextQuery }]);
     }
 
     const streamId = `stream-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -3811,7 +3825,7 @@ function AIAssistantContent({
     try {
       const cleanHistory = [
         ...messages.map(m => ({ role: m.role, text: m.text })),
-        { role: "user", text: activeQuery }
+        { role: "user", text: nextQuery }
       ];
 
       const latestAssistantState = overrideContext || activeState || getLatestAssistantState();
@@ -3821,7 +3835,7 @@ function AIAssistantContent({
       const sessionId = getAssistantSessionId();
 
       await assistantChatStream(
-        activeQuery,
+        nextQuery,
         requestContext,
         cleanHistory,
         (token) => {
@@ -5023,7 +5037,9 @@ function AIAssistantContent({
   if (!isOpen) return null;
 
   const shellClassName = persistent
-    ? "relative h-[70dvh] w-full bg-card dark:bg-[#0f172a] flex flex-col lg:h-full"
+    ? previewSectionsOnly
+      ? "relative w-full bg-card dark:bg-[#0f172a] flex flex-col"
+      : "relative h-[70dvh] w-full bg-card dark:bg-[#0f172a] flex flex-col lg:h-full"
     : modal
       ? `relative max-h-[82vh] w-[min(960px,calc(100vw-2rem))] overflow-hidden rounded-[32px] border border-slate-200 bg-card shadow-2xl transition-all duration-300 dark:border-slate-800 dark:bg-[#0f172a] flex flex-col ${
           isOpen ? "translate-y-0 opacity-100 scale-100" : "translate-y-4 opacity-0 scale-[0.98]"
@@ -5530,16 +5546,17 @@ function AIAssistantContent({
         )}
         <div className="relative group">
           <input 
+            ref={composerInputRef}
             type="text" 
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={activeQuery}
+            onChange={(e) => updateQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleChat()}
             placeholder={uiText.inputPlaceholder}
             className="w-full pl-6 pr-14 py-4 bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-600/5 focus:bg-white dark:focus:bg-slate-800 focus:border-blue-600/20 transition-all outline-none text-sm text-foreground dark:text-slate-100"
           />
           <button 
             onClick={() => handleChat()}
-            disabled={loading || !query.trim()}
+            disabled={loading || !activeQuery.trim()}
             className="absolute right-3 top-2.5 p-2 rounded-xl bg-slate-900 dark:bg-blue-600 text-white hover:bg-blue-600 dark:hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg"
           >
             <Send size={18} />
