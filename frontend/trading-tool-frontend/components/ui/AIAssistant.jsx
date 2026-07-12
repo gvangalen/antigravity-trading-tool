@@ -5429,7 +5429,7 @@ function AIAssistantContent({
                 {m.action && m.action.type !== "action_card" && !m.draft?.plan_type && m.isComplete !== false && (
                   <ActionCard action={m.action} onAction={handleActionClick} />
                 )}
-                {m.draft && m.intent !== "plan_creation" && m.flow !== "plan_creation" && m.intent !== "strategy_creation" && m.flow !== "strategy_creation" && !m.draft?.plan_type && m.draft?.draft_kind !== "strategy" && m.draft.type !== "action_card" && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
+                {m.draft && m.intent !== "plan_creation" && m.flow !== "plan_creation" && m.intent !== "strategy_creation" && m.flow !== "strategy_creation" && !m.draft?.plan_type && m.draft?.draft_kind !== "strategy" && m.draft?.draft_kind !== "indicator_config" && m.draft.type !== "action_card" && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
                   <DraftCard 
                     draft={m.draft} 
                     onCancel={() => handleCancelDraft(i)} 
@@ -6158,19 +6158,20 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
   const at = createAssistantTranslator(t);
   const uiText = buildAssistantUiText(at);
   const [approving, setApproving] = useState(false);
+  const payload = draft?.payload && typeof draft.payload === "object" ? draft.payload : {};
 
   const handleApprove = async () => {
     setApproving(true);
     try {
       if (draft.type === "setup") {
-        await saveNewSetup(draft.payload);
+        await saveNewSetup(payload);
         showSnackbar(uiText.draftSetupApproved, "success");
         onSuccess();
       } else if (draft.type === "strategy") {
         const setups = await fetchSetups();
-        const matching = setups.filter(s => s.symbol?.toUpperCase() === draft.payload.symbol?.toUpperCase());
+        const matching = setups.filter(s => s.symbol?.toUpperCase() === payload.symbol?.toUpperCase());
         if (matching.length === 0) {
-          showSnackbar(uiText.missingSetupForStrategy.replace("{symbol}", draft.payload.symbol || ""), "danger");
+          showSnackbar(uiText.missingSetupForStrategy.replace("{symbol}", payload.symbol || ""), "danger");
           setApproving(false);
           return;
         }
@@ -6183,7 +6184,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
         onSuccess();
       } else if (draft.type === "bot") {
         const strategies = await fetchStrategies();
-        const matching = strategies.filter(s => s.symbol?.toUpperCase() === draft.payload.name?.split(' ')[0]?.toUpperCase() || s.name?.toLowerCase().includes(draft.payload.name?.toLowerCase()));
+        const matching = strategies.filter(s => s.symbol?.toUpperCase() === payload.name?.split(' ')[0]?.toUpperCase() || s.name?.toLowerCase().includes(payload.name?.toLowerCase()));
         let stratId = matching[0]?.id;
         if (!stratId && strategies.length > 0) {
           stratId = strategies[0].id;
@@ -6232,7 +6233,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
               {uiText.conceptReview}
             </span>
             <h4 className="text-xs font-black text-foreground dark:text-slate-200 tracking-tight leading-snug">
-              {draft.payload.name || uiText.newConcept}
+              {payload.name || uiText.newConcept}
             </h4>
           </div>
           <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm text-white bg-gradient-to-r ${getAccentGradient()}`}>
@@ -6246,51 +6247,51 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col col-span-2">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.name || "Naam"}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">{draft.payload.name || "—"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">{payload.name || "—"}</span>
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{draft.payload.symbol || globalSymbol || context.symbol || "—"}</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || globalSymbol || context.symbol || "—"}</span>
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.setupType}</span>
-                <span className="uppercase text-xs text-foreground dark:text-slate-200">{draft.payload.setup_type || "dca"}</span>
+                <span className="uppercase text-xs text-foreground dark:text-slate-200">{payload.setup_type || "dca"}</span>
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.timeframe || "Timeframe"}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">{draft.payload.timeframe || uiText.required}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">{payload.timeframe || uiText.required}</span>
               </div>
-              {(draft.payload.market_condition || draft.payload.min_macro_score !== undefined) && (
+              {(payload.market_condition || payload.min_macro_score !== undefined) && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
                   <span className="text-xs text-foreground dark:text-slate-200">
-                    {getSetupMarketConditionLabel(draft.payload.market_condition || inferSetupMarketConditionFromScores(draft.payload), uiText)}
+                    {getSetupMarketConditionLabel(payload.market_condition || inferSetupMarketConditionFromScores(payload), uiText)}
                   </span>
                 </div>
               )}
-              {draft.payload.setup_type === "dca" && (
+              {payload.setup_type === "dca" && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaParameters}</span>
                   <span className="text-xs text-foreground dark:text-slate-200">
-                    {[draft.payload.dca_frequency, draft.payload.dca_day ? `op ${draft.payload.dca_day}` : null].filter(Boolean).join(" ") || uiText.required}
+                    {[payload.dca_frequency, payload.dca_day ? `op ${payload.dca_day}` : null].filter(Boolean).join(" ") || uiText.required}
                   </span>
                 </div>
               )}
-              {!(draft.payload.market_condition || inferSetupMarketConditionFromScores(draft.payload)) && (
+              {!(payload.market_condition || inferSetupMarketConditionFromScores(payload)) && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2 space-y-1">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
                   <div className="grid grid-cols-3 gap-2 mt-1">
                     <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
                       <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Macro</div>
-                      <div className="text-[10px] font-mono font-black text-blue-500">{draft.payload.min_macro_score ?? 30}-{draft.payload.max_macro_score ?? 70}</div>
+                      <div className="text-[10px] font-mono font-black text-blue-500">{payload.min_macro_score ?? 30}-{payload.max_macro_score ?? 70}</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
                       <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Tech</div>
-                      <div className="text-[10px] font-mono font-black text-amber-500">{draft.payload.min_technical_score ?? 40}-{draft.payload.max_technical_score ?? 80}</div>
+                      <div className="text-[10px] font-mono font-black text-amber-500">{payload.min_technical_score ?? 40}-{payload.max_technical_score ?? 80}</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
                       <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Market</div>
-                      <div className="text-[10px] font-mono font-black text-emerald-500">{draft.payload.min_market_score ?? 20}-{draft.payload.max_market_score ?? 60}</div>
+                      <div className="text-[10px] font-mono font-black text-emerald-500">{payload.min_market_score ?? 20}-{payload.max_market_score ?? 60}</div>
                     </div>
                   </div>
                 </div>
@@ -6302,33 +6303,33 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{draft.payload.symbol || globalSymbol || context.symbol || "—"}</span>
+                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || globalSymbol || context.symbol || "—"}</span>
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.baseBudget}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">€{draft.payload.base_amount || 100.0}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">€{payload.base_amount || 100.0}</span>
               </div>
-              {draft.payload.setup_type === "trade" ? (
+              {payload.setup_type === "trade" ? (
                 <>
                   <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
                     <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.entryTarget}</span>
-                    <span className="text-xs text-foreground dark:text-slate-200">€{draft.payload.entry}</span>
+                    <span className="text-xs text-foreground dark:text-slate-200">€{payload.entry}</span>
                   </div>
                   <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
                     <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.stopLoss}</span>
-                    <span className="text-xs text-rose-500">€{draft.payload.stop_loss}</span>
+                    <span className="text-xs text-rose-500">€{payload.stop_loss}</span>
                   </div>
                   <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
                     <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.takeProfitTargets}</span>
                     <span className="text-xs text-emerald-500 font-mono">
-                      {Array.isArray(draft.payload.targets) ? draft.payload.targets.map(t => `€${t}`).join(" · ") : `€${draft.payload.targets}`}
+                      {Array.isArray(payload.targets) ? payload.targets.map(t => `€${t}`).join(" · ") : `€${payload.targets}`}
                     </span>
                   </div>
                 </>
               ) : (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaMultiplierMode}</span>
-                  <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{draft.payload.execution_mode || "fixed"}</span>
+                  <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{payload.execution_mode || "fixed"}</span>
                 </div>
               )}
             </div>
@@ -6338,21 +6339,21 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.safetyProfile}</span>
-                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{draft.payload.risk_profile || "balanced"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{payload.risk_profile || "balanced"}</span>
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.budget}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">€{draft.payload.budget_total_eur || 500.0}</span>
+                <span className="text-xs text-foreground dark:text-slate-200">€{payload.budget_total_eur || 500.0}</span>
               </div>
               <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.environment}</span>
                 <span className="text-xs text-foreground dark:text-slate-200">
-                  {draft.payload.is_live ? uiText.liveReal : uiText.paperSandbox}
+                  {payload.is_live ? uiText.liveReal : uiText.paperSandbox}
                 </span>
               </div>
               <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.mode}</span>
-                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{draft.payload.mode || "manual"}</span>
+                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{payload.mode || "manual"}</span>
               </div>
             </div>
           )}
