@@ -446,11 +446,7 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
           </DashboardErrorBoundary>
 
           <section className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-[#0f172a] lg:p-6">
-            <button
-              type="button"
-              onClick={() => toggleDetails("market")}
-              className="flex w-full items-center justify-between gap-4"
-            >
+            <div className="flex w-full items-center justify-between gap-4">
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.28em] text-blue-600 dark:text-blue-400">
                   Market Details
@@ -459,29 +455,26 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
                   Configuration, signals and history
                 </h3>
               </div>
-              {showDetails.market ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
-            </button>
+            </div>
 
-            {showDetails.market ? (
-              <div className="mt-6 grid gap-6">
-                <MarketIndicatorScoreView
-                  availableIndicators={availableIndicators || []}
-                  selectedIndicator={selectedIndicator}
-                  selectIndicator={selectIndicator}
-                  addMarketIndicator={addMarket}
-                  activeIndicators={activeMarketIndicatorNames || []}
-                />
+            <div className="mt-6 grid gap-6">
+              <MarketIndicatorScoreView
+                availableIndicators={availableIndicators || []}
+                selectedIndicator={selectedIndicator}
+                selectIndicator={selectIndicator}
+                addMarketIndicator={addMarket}
+                activeIndicators={activeMarketIndicatorNames || []}
+              />
 
-                <TechnicalTerminalGrid
-                  title={`Market signals for ${activeSymbol}`}
-                  data={marketDayData || []}
-                  loading={marketLoading}
-                />
+              <TechnicalTerminalGrid
+                title={`Market signals for ${activeSymbol}`}
+                data={marketDayData || []}
+                loading={marketLoading}
+              />
 
-                <MarketSevenDayTable history={sevenDayData || []} loading={marketLoading} />
-                <MarketForwardReturnTabs data={forwardReturns || {}} />
-              </div>
-            ) : null}
+              <MarketSevenDayTable history={sevenDayData || []} loading={marketLoading} />
+              <MarketForwardReturnTabs data={forwardReturns || {}} />
+            </div>
           </section>
         </>
       ) : null}
@@ -503,11 +496,7 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
           </DashboardErrorBoundary>
 
           <section className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-[#0f172a] lg:p-6">
-            <button
-              type="button"
-              onClick={() => toggleDetails("macro")}
-              className="flex w-full items-center justify-between gap-4"
-            >
+            <div className="flex w-full items-center justify-between gap-4">
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.28em] text-blue-600 dark:text-blue-400">
                   Macro Details
@@ -516,27 +505,24 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
                   Indicator setup and timeframe drilldown
                 </h3>
               </div>
-              {showDetails.macro ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
-            </button>
+            </div>
 
-            {showDetails.macro ? (
-              <div className="mt-6 grid gap-6">
-                <MacroIndicatorScoreView
-                  addMacroIndicator={addMacroIndicator}
-                  activeMacroIndicatorNames={activeMacroIndicatorNames || []}
-                  initialSelectedName={macroIndicatorFromUrl}
-                />
+            <div className="mt-6 grid gap-6">
+              <MacroIndicatorScoreView
+                addMacroIndicator={addMacroIndicator}
+                activeMacroIndicatorNames={activeMacroIndicatorNames || []}
+                initialSelectedName={macroIndicatorFromUrl}
+              />
 
-                <MacroTabs
-                  activeTab={macroTimeframe}
-                  setActiveTab={setMacroTimeframe}
-                  macroData={macroData}
-                  loading={macroLoading}
-                  error={macroError}
-                  handleRemove={(name) => removeMacroIndicator(name)}
-                />
-              </div>
-            ) : null}
+              <MacroTabs
+                activeTab={macroTimeframe}
+                setActiveTab={setMacroTimeframe}
+                macroData={macroData}
+                loading={macroLoading}
+                error={macroError}
+                handleRemove={(name) => removeMacroIndicator(name)}
+              />
+            </div>
           </section>
         </>
       ) : null}
