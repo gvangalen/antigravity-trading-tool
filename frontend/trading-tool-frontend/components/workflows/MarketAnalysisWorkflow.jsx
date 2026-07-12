@@ -174,8 +174,8 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
   const [macroTimeframe, setMacroTimeframe] = useState("day");
   const [technicalTimeframe, setTechnicalTimeframe] = useState("day");
   const [showDetails, setShowDetails] = useState({
-    market: false,
-    macro: false,
+    market: true,
+    macro: true,
     technical: true,
     conclusion: false,
   });
