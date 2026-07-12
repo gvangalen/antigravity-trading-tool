@@ -4,6 +4,7 @@ import logging
 import time
 import re
 import asyncio
+import inspect
 from typing import Any, Dict, Optional
 from pathlib import Path
 
@@ -11,6 +12,10 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from backend.services.ai_usage_observability_service import (
     elapsed_ms,
+    get_ai_usage_context,
+    get_app_env,
+    infer_entry_point,
+    log_ai_usage_sync,
     log_openai_quota_skip_from_context,
     log_openai_usage_from_context,
     start_timer,
@@ -123,6 +128,101 @@ def sanitize_json_output(raw_text: str) -> Dict[str, Any]:
                 pass
     return {}
 
+
+def _infer_unscoped_entry_point() -> str:
+    try:
+        for frame_info in inspect.stack()[2:]:
+            frame_path = Path(frame_info.filename)
+            if frame_path == Path(__file__):
+                continue
+            module_name = frame_path.stem
+            function_name = frame_info.function or "unknown"
+            return f"{module_name}:{function_name}"
+    except Exception:
+        pass
+    return "openai_client:unknown"
+
+
+def _log_openai_usage(
+    *,
+    model_name: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    response_time_ms: int,
+    status: str = "full_ai",
+    rejected_reason: Optional[str] = None,
+) -> None:
+    context = get_ai_usage_context()
+    if context:
+        log_openai_usage_from_context(
+            model=model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            response_time_ms=response_time_ms,
+            status=status,
+            rejected_reason=rejected_reason,
+        )
+        return
+
+    cost = 0.0
+    try:
+        from backend.utils.ai_cost_calculator import calculate_cost
+
+        cost = calculate_cost(model_name, prompt_tokens, completion_tokens)
+    except Exception:
+        cost = 0.0
+
+    entry_point = _infer_unscoped_entry_point()
+    log_ai_usage_sync(
+        user_id=None,
+        model=model_name,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        cost=cost,
+        purpose="unscoped_openai_call",
+        status=status,
+        response_time_ms=response_time_ms,
+        estimated_cost_if_full=cost,
+        rejected_reason=rejected_reason,
+        symbol="GLOBAL",
+        trace_id=None,
+        completion_status="success",
+        request_source="system",
+        app_env=get_app_env(),
+        run_kind="interactive",
+        entry_point=entry_point or infer_entry_point(purpose="unscoped_openai_call", run_kind="interactive"),
+        user_email_snapshot=None,
+    )
+
+
+def _log_openai_quota_skip() -> None:
+    context = get_ai_usage_context()
+    if context:
+        log_openai_quota_skip_from_context()
+        return
+
+    entry_point = _infer_unscoped_entry_point()
+    log_ai_usage_sync(
+        user_id=None,
+        model=model,
+        prompt_tokens=0,
+        completion_tokens=0,
+        cost=0.0,
+        purpose="unscoped_openai_call",
+        status="quota_blocked",
+        response_time_ms=0,
+        estimated_cost_if_full=0.0,
+        rejected_reason="insufficient_quota",
+        symbol="GLOBAL",
+        trace_id=None,
+        completion_status="quota_blocked",
+        request_source="system",
+        app_env=get_app_env(),
+        run_kind="interactive",
+        entry_point=entry_point or infer_entry_point(purpose="unscoped_openai_call", run_kind="interactive"),
+        user_email_snapshot=None,
+    )
+
 # ============================================================
 # ✅ GPT JSON CALL
 # ============================================================
@@ -142,7 +242,7 @@ def ask_gpt_json(
     if _quota_breaker_active():
         _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
         logger.warning("⛔ GPT JSON Call overgeslagen: quota breaker actief")
-        log_openai_quota_skip_from_context()
+        _log_openai_quota_skip()
         return {"error": "quota"}
 
     _openai_runtime_state["json_calls"] = int(_openai_runtime_state.get("json_calls") or 0) + 1
@@ -170,8 +270,8 @@ def ask_gpt_json(
 
             if parsed:
                 usage = getattr(response, "usage", None)
-                log_openai_usage_from_context(
-                    model=str(getattr(response, "model", None) or model),
+                _log_openai_usage(
+                    model_name=str(getattr(response, "model", None) or model),
                     prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
                     completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
                     response_time_ms=elapsed_ms(started),
@@ -186,7 +286,7 @@ def ask_gpt_json(
             if "insufficient_quota" in str(e):
                 logger.error("❌ QUOTA bereikt → stop retries")
                 _mark_quota_exhausted()
-                log_openai_quota_skip_from_context()
+                _log_openai_quota_skip()
                 return {"error": "quota"}
 
             if attempt == retries:
@@ -214,7 +314,7 @@ def ask_gpt_text(
     if _quota_breaker_active():
         _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
         logger.warning("⛔ GPT Text Call overgeslagen: quota breaker actief")
-        log_openai_quota_skip_from_context()
+        _log_openai_quota_skip()
         return "AI quota bereikt"
 
     _openai_runtime_state["text_calls"] = int(_openai_runtime_state.get("text_calls") or 0) + 1
@@ -239,8 +339,8 @@ def ask_gpt_text(
             content = response.choices[0].message.content
             if content:
                 usage = getattr(response, "usage", None)
-                log_openai_usage_from_context(
-                    model=str(getattr(response, "model", None) or model),
+                _log_openai_usage(
+                    model_name=str(getattr(response, "model", None) or model),
                     prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
                     completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
                     response_time_ms=elapsed_ms(started),
@@ -255,7 +355,7 @@ def ask_gpt_text(
             if "insufficient_quota" in str(e):
                 logger.error("❌ QUOTA bereikt → stop retries")
                 _mark_quota_exhausted()
-                log_openai_quota_skip_from_context()
+                _log_openai_quota_skip()
                 return "AI quota bereikt"
 
             if attempt == retries:

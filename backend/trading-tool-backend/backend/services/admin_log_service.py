@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.models import SystemLog
+from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.utils.openai_client import ask_gpt_json_async
 
 logger = logging.getLogger(__name__)
@@ -96,7 +97,16 @@ Guidelines:
 - Return only the JSON object.
 """
 
-        analysis = await ask_gpt_json_async(prompt=prompt, system_role=system_role)
+        with ai_usage_context(
+            user_id=None,
+            purpose="admin_log_analysis",
+            symbol="GLOBAL",
+            request_source="system",
+            run_kind="interactive",
+            entry_point="admin_log_service:analyze_errors_with_ai",
+            completion_status="success",
+        ):
+            analysis = await ask_gpt_json_async(prompt=prompt, system_role=system_role)
         
         # Ensure it has all required fields for our schema
         return {

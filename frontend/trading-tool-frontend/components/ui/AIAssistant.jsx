@@ -303,6 +303,9 @@ function AIAssistantContent({
   const missionControlCacheKeyRef = useRef("");
   const activeStreamIdRef = useRef(null);
   const profileTelemetryKeyRef = useRef("");
+  const missionControlRequestRef = useRef(null);
+  const insightRequestRef = useRef(null);
+  const finnStateRequestRef = useRef(null);
   const [showReasoning, setShowReasoning] = useState(false);
   const at = createAssistantTranslator(t);
   const activeQuery = queryValue !== undefined ? queryValue : query;
@@ -3670,86 +3673,100 @@ function AIAssistantContent({
 
   async function loadFinnState() {
     if (loadedFinnStateRef.current) return;
+    if (finnStateRequestRef.current) return finnStateRequestRef.current;
     if (skipNextFinnRestoreRef.current) {
       loadedFinnStateRef.current = true;
       skipNextFinnRestoreRef.current = null;
       return;
     }
     loadedFinnStateRef.current = true;
-    try {
-      const envelope = await fetchFinnState();
-      if (!envelope?.has_draft || !envelope.draft) return;
-      const indicatorModalRequest = buildIndicatorModalRequest(envelope, context.symbol || globalSymbol || "BTC");
+    finnStateRequestRef.current = (async () => {
+      try {
+        const envelope = await fetchFinnState();
+        if (!envelope?.has_draft || !envelope.draft) return;
+        const indicatorModalRequest = buildIndicatorModalRequest(envelope, context.symbol || globalSymbol || "BTC");
 
-      if (indicatorModalRequest && typeof window !== "undefined") {
-        window.dispatchEvent(
-          new CustomEvent(INDICATOR_MODAL_OPEN_EVENT, {
-            detail: {
-              category: indicatorModalRequest.category,
-              indicatorName: indicatorModalRequest.indicatorName,
-              title: indicatorModalRequest.title,
-              source: "finn",
-            },
-          })
+        if (indicatorModalRequest && typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent(INDICATOR_MODAL_OPEN_EVENT, {
+              detail: {
+                category: indicatorModalRequest.category,
+                indicatorName: indicatorModalRequest.indicatorName,
+                title: indicatorModalRequest.title,
+                source: "finn",
+              },
+            })
+          );
+        }
+
+        setFinnDraft(indicatorModalRequest ? null : envelope.draft);
+        setActiveState(
+          indicatorModalRequest
+            ? null
+            : envelope.state
+              ? { ...envelope.state, can_confirm: envelope.can_confirm }
+              : null
         );
+        setMessages(prev => {
+          const alreadyVisible = prev.some((m) =>
+            (m.intent === envelope.intent || m.flow === envelope.flow) &&
+            (indicatorModalRequest ? m.text === indicatorModalRequest.responseText : m.draft)
+          );
+          if (alreadyVisible) return prev;
+          return [...prev, {
+            role: "assistant",
+            text: indicatorModalRequest?.responseText || envelope.response,
+            intent: envelope.intent,
+            flow: envelope.flow,
+            draft: indicatorModalRequest ? null : envelope.draft,
+            actions: indicatorModalRequest ? [] : (Array.isArray(envelope.actions) ? envelope.actions : []),
+            missingFields: indicatorModalRequest ? [] : (envelope.missing_fields || []),
+            invalidFields: indicatorModalRequest ? [] : (envelope.invalid_fields || []),
+            nextQuestion: indicatorModalRequest ? null : (envelope.next_question || null),
+            canConfirm: indicatorModalRequest ? false : envelope.can_confirm,
+            suggestedActions: indicatorModalRequest ? [] : (envelope.suggested_actions || []),
+            reasoning: envelope.reasoning,
+            state: indicatorModalRequest ? null : (envelope.state || null),
+            summary: envelope.summary || null,
+            riskSummary: envelope.risk_summary || null,
+            nextBestAction: envelope.next_best_action || null,
+            reviewReason: envelope.review_reason || null,
+            restoredFinnDraft: true,
+            isComplete: true,
+          }];
+        });
+      } catch (err) {
+        console.error("Finn state herstellen mislukt", err);
+      } finally {
+        finnStateRequestRef.current = null;
       }
-
-      setFinnDraft(indicatorModalRequest ? null : envelope.draft);
-      setActiveState(
-        indicatorModalRequest
-          ? null
-          : envelope.state
-            ? { ...envelope.state, can_confirm: envelope.can_confirm }
-            : null
-      );
-      setMessages(prev => {
-        const alreadyVisible = prev.some((m) =>
-          (m.intent === envelope.intent || m.flow === envelope.flow) &&
-          (indicatorModalRequest ? m.text === indicatorModalRequest.responseText : m.draft)
-        );
-        if (alreadyVisible) return prev;
-        return [...prev, {
-          role: "assistant",
-          text: indicatorModalRequest?.responseText || envelope.response,
-          intent: envelope.intent,
-          flow: envelope.flow,
-          draft: indicatorModalRequest ? null : envelope.draft,
-          actions: indicatorModalRequest ? [] : (Array.isArray(envelope.actions) ? envelope.actions : []),
-          missingFields: indicatorModalRequest ? [] : (envelope.missing_fields || []),
-          invalidFields: indicatorModalRequest ? [] : (envelope.invalid_fields || []),
-          nextQuestion: indicatorModalRequest ? null : (envelope.next_question || null),
-          canConfirm: indicatorModalRequest ? false : envelope.can_confirm,
-          suggestedActions: indicatorModalRequest ? [] : (envelope.suggested_actions || []),
-          reasoning: envelope.reasoning,
-          state: indicatorModalRequest ? null : (envelope.state || null),
-          summary: envelope.summary || null,
-          riskSummary: envelope.risk_summary || null,
-          nextBestAction: envelope.next_best_action || null,
-          reviewReason: envelope.review_reason || null,
-          restoredFinnDraft: true,
-          isComplete: true,
-        }];
-      });
-    } catch (err) {
-      console.error("Finn state herstellen mislukt", err);
-    }
+    })();
+    return finnStateRequestRef.current;
   }
 
   async function loadInsight() {
+    if (insightRequestRef.current) return insightRequestRef.current;
     setInsightLoading(true);
-    try {
-      const res = await fetchAssistantInsight(context);
-      setInsight(res);
-      setStableBriefingText((current) => current || buildBriefingText(res));
-      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-    } catch (err) {
-      console.error("Failed to fetch AI insight", err);
-    } finally {
-      setInsightLoading(false);
-    }
+    insightRequestRef.current = (async () => {
+      try {
+        const res = await fetchAssistantInsight(context);
+        setInsight(res);
+        setStableBriefingText((current) => current || buildBriefingText(res));
+        setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        return res;
+      } catch (err) {
+        console.error("Failed to fetch AI insight", err);
+        return null;
+      } finally {
+        setInsightLoading(false);
+        insightRequestRef.current = null;
+      }
+    })();
+    return insightRequestRef.current;
   }
 
   async function loadMissionControl() {
+    if (missionControlRequestRef.current) return missionControlRequestRef.current;
     setMissionControlLoading(true);
     if (!missionControl && typeof window !== "undefined" && missionControlCacheKeyRef.current) {
       try {
@@ -3764,92 +3781,102 @@ function AIAssistantContent({
         console.warn("Finn Mission Control cache read failed", err);
       }
     }
-    let lastError = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try {
-        const res = await fetchFinnMissionControl();
-        const normalized = res
-          ? {
-              ...res,
-              coaching_loop:
-                res.coaching_loop ||
-                res.analysis?.coaching_loop ||
-                res.state?.analysis?.coaching_loop ||
-                null,
-              summary:
-                res.summary ||
-                res.analysis?.summary ||
-                res.state?.analysis?.summary ||
-                null,
-              behavioral_insight:
-                res.behavioral_insight ||
-                res.analysis?.behavioral_insight ||
-                res.state?.analysis?.behavioral_insight ||
-                null,
-              behavioral_profile:
-                res.behavioral_profile ||
-                res.analysis?.behavioral_profile ||
-                res.state?.analysis?.behavioral_profile ||
-                null,
-              trend:
-                res.trend ||
-                res.analysis?.trend ||
-                res.state?.analysis?.trend ||
-                null,
-              risk_flags:
-                res.risk_flags ||
-                res.analysis?.risk_flags ||
-                res.state?.analysis?.risk_flags ||
-                null,
-              habit_cards:
-                res.habit_cards ||
-                res.analysis?.habit_cards ||
-                res.state?.analysis?.habit_cards ||
-                null,
-              priority_engine:
-                res.priority_engine ||
-                res.analysis?.priority_engine ||
-                res.state?.analysis?.priority_engine ||
-                null,
-              memory_v2:
-                res.memory_v2 ||
-                res.analysis?.memory_v2 ||
-                res.state?.analysis?.memory_v2 ||
-                null,
-              portfolio_operating_system:
-                res.portfolio_operating_system ||
-                res.analysis?.portfolio_operating_system ||
-                res.state?.analysis?.portfolio_operating_system ||
-                null,
-              governance_events_summary:
-                res.governance_events_summary ||
-                res.analysis?.governance_events_summary ||
-                res.state?.analysis?.governance_events_summary ||
-                null,
+    missionControlRequestRef.current = (async () => {
+      let lastError = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const res = await fetchFinnMissionControl();
+          const normalized = res
+            ? {
+                ...res,
+                coaching_loop:
+                  res.coaching_loop ||
+                  res.analysis?.coaching_loop ||
+                  res.state?.analysis?.coaching_loop ||
+                  null,
+                summary:
+                  res.summary ||
+                  res.analysis?.summary ||
+                  res.state?.analysis?.summary ||
+                  null,
+                behavioral_insight:
+                  res.behavioral_insight ||
+                  res.analysis?.behavioral_insight ||
+                  res.state?.analysis?.behavioral_insight ||
+                  null,
+                behavioral_profile:
+                  res.behavioral_profile ||
+                  res.analysis?.behavioral_profile ||
+                  res.state?.analysis?.behavioral_profile ||
+                  null,
+                trend:
+                  res.trend ||
+                  res.analysis?.trend ||
+                  res.state?.analysis?.trend ||
+                  null,
+                risk_flags:
+                  res.risk_flags ||
+                  res.analysis?.risk_flags ||
+                  res.state?.analysis?.risk_flags ||
+                  null,
+                habit_cards:
+                  res.habit_cards ||
+                  res.analysis?.habit_cards ||
+                  res.state?.analysis?.habit_cards ||
+                  null,
+                priority_engine:
+                  res.priority_engine ||
+                  res.analysis?.priority_engine ||
+                  res.state?.analysis?.priority_engine ||
+                  null,
+                memory_v2:
+                  res.memory_v2 ||
+                  res.analysis?.memory_v2 ||
+                  res.state?.analysis?.memory_v2 ||
+                  null,
+                portfolio_operating_system:
+                  res.portfolio_operating_system ||
+                  res.analysis?.portfolio_operating_system ||
+                  res.state?.analysis?.portfolio_operating_system ||
+                  null,
+                governance_events_summary:
+                  res.governance_events_summary ||
+                  res.analysis?.governance_events_summary ||
+                  res.state?.analysis?.governance_events_summary ||
+                  null,
+              }
+            : null;
+          setMissionControl(normalized);
+          if (normalized && typeof window !== "undefined" && missionControlCacheKeyRef.current) {
+            try {
+              window.sessionStorage.setItem(missionControlCacheKeyRef.current, JSON.stringify(normalized));
+            } catch (err) {
+              console.warn("Finn Mission Control cache write failed", err);
             }
-          : null;
-        setMissionControl(normalized);
-        if (normalized && typeof window !== "undefined" && missionControlCacheKeyRef.current) {
-          try {
-            window.sessionStorage.setItem(missionControlCacheKeyRef.current, JSON.stringify(normalized));
-          } catch (err) {
-            console.warn("Finn Mission Control cache write failed", err);
+          }
+          setMissionControlLoadError(null);
+          setMissionControlLoading(false);
+          return normalized;
+        } catch (err) {
+          lastError = err;
+          if (err?.status === 401 || err?.status === 403) {
+            break;
+          }
+          if (attempt < 1) {
+            await new Promise((resolve) => setTimeout(resolve, 400));
           }
         }
-        setMissionControlLoadError(null);
-        setMissionControlLoading(false);
-        return normalized;
-      } catch (err) {
-        lastError = err;
-        if (attempt < 2) {
-          await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
-        }
       }
+      console.error("Finn overzicht laden mislukt", lastError);
+      setMissionControlLoadError(lastError?.message || uiText.missionControlUnavailable);
+      setMissionControlLoading(false);
+      return null;
+    })();
+    try {
+      return await missionControlRequestRef.current;
+    } finally {
+      missionControlRequestRef.current = null;
     }
-    console.error("Finn overzicht laden mislukt", lastError);
-    setMissionControlLoadError(lastError?.message || uiText.missionControlUnavailable);
-    setMissionControlLoading(false);
-    return null;
   }
 
   async function handleActionClick(action) {

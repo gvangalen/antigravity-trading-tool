@@ -69,28 +69,6 @@ export const fetchFinnState = () => {
 export const fetchFinnMissionControl = () => {
   return fetchAuth(`/api/assistant/mission-control`, {
     method: 'GET',
-  }).then(async (res) => {
-    if (res) return res;
-
-    const fallback = await fetch(`${API_BASE_URL}/api/assistant/mission-control`, {
-      method: 'GET',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!fallback.ok) {
-      throw new Error(`Mission Control fallback request failed (${fallback.status})`);
-    }
-
-    const text = await fallback.text();
-    try {
-      return JSON.parse(text);
-    } catch (err) {
-      console.error('Finn Mission Control fallback JSON parse failed', text.slice(0, 1000));
-      throw err;
-    }
   });
 };
 

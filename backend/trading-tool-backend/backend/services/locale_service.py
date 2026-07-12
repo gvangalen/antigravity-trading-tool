@@ -9,6 +9,7 @@ from backend.services.locale_config import (
     LOCALE_TO_FINN_LANGUAGE,
     resolve_locale as resolve_supported_locale,
 )
+from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.utils.openai_client import ask_gpt_text_async
 
 
@@ -246,14 +247,24 @@ async def translate_text_if_needed(text: Any, target_locale: str) -> Any:
         "- Return only the translated text.\n\n"
         f"{stripped}"
     )
-    translated = await ask_gpt_text_async(
-        prompt=prompt,
-        system_role=(
-            "You are a precise product copy translator for a trading app. "
-            f"Translate Dutch UI and coaching text into concise natural {response_language_name(normalized_locale)}."
-        ),
-        max_tokens=1200,
-    )
+    with ai_usage_context(
+        user_id=None,
+        purpose="locale_translation",
+        symbol="GLOBAL",
+        request_source="system",
+        run_kind="interactive",
+        entry_point="locale_service:translate_text_if_needed",
+        completion_status="success",
+        locale=normalized_locale,
+    ):
+        translated = await ask_gpt_text_async(
+            prompt=prompt,
+            system_role=(
+                "You are a precise product copy translator for a trading app. "
+                f"Translate Dutch UI and coaching text into concise natural {response_language_name(normalized_locale)}."
+            ),
+            max_tokens=1200,
+        )
     if not isinstance(translated, str):
         return text
     translated = translated.strip()
