@@ -6,7 +6,10 @@ import CacheKiller from "@/components/ui/CacheKiller";
 import { BRANDING } from "@/lib/branding";
 import { getLocaleBootScript, resolveServerFallbackLocale } from "@/lib/i18n";
 
-const STALE_APP_RECOVERY_VERSION = "2026-07-08-copy-chunk-recovery";
+const STALE_APP_RECOVERY_VERSION =
+  process.env.NEXT_PUBLIC_DEPLOY_VERSION ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  `local-build-${new Date().toISOString()}`;
 
 export const metadata = {
   title: `${BRANDING.APP_NAME} — ${BRANDING.APP_SLOGAN} Trading Discipline Engine`,
