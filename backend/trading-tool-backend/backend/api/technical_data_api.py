@@ -225,8 +225,8 @@ async def delete_technical_indicator(
     session: AsyncSession = Depends(get_db)
 ):
     user_id = current_user["id"]
-    repo = TechnicalDataRepository(session)
-    deleted = await repo.delete_indicator(indicator, user_id, symbol=symbol)
+    service = TechnicalDataService(session)
+    deleted = await service.delete_indicator(indicator, user_id, symbol=symbol)
     await session.commit()
 
     return {

@@ -2713,6 +2713,40 @@ def test_indicator_reset_draft_does_not_require_score_mode_or_weight():
     assert validation["missing_fields"] == []
 
 
+def test_indicator_delete_draft_does_not_require_score_mode_or_weight():
+    service = _service()
+    draft = empty_indicator_config_draft()
+    draft["operation"] = "delete"
+    draft["category"] = "technical"
+    draft["indicator"] = "rsi"
+    draft["display_name"] = "RSI"
+    draft["score_mode"] = None
+    draft["weight"] = None
+    draft["symbol"] = "BTC"
+
+    validation = service._validate_indicator_config_draft(draft)
+
+    assert validation["can_confirm"] is True
+    assert validation["missing_fields"] == []
+
+
+def test_indicator_delete_draft_requires_symbol_for_technical():
+    service = _service()
+    draft = empty_indicator_config_draft()
+    draft["operation"] = "delete"
+    draft["category"] = "technical"
+    draft["indicator"] = "rsi"
+    draft["display_name"] = "RSI"
+    draft["score_mode"] = None
+    draft["weight"] = None
+    draft["symbol"] = None
+
+    validation = service._validate_indicator_config_draft(draft)
+
+    assert validation["can_confirm"] is False
+    assert "symbol" in validation["missing_fields"]
+
+
 def test_indicator_reset_changes_use_existing_snapshot():
     service = _service()
     draft = empty_indicator_config_draft()

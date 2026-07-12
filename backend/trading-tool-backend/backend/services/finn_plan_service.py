@@ -454,6 +454,9 @@ def empty_indicator_config_draft() -> Dict[str, Any]:
     }
 
 
+INDICATOR_REMOVE_TERMS = ("verwijder", "haal weg", "remove", "delete")
+
+
 def _deep_merge(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
     merged = deepcopy(base)
     for key, value in (patch or {}).items():
@@ -5712,7 +5715,17 @@ class FinnPlanService:
             draft["custom_rules_touched"] = False
             draft["custom_rules_complete"] = False
             draft["custom_rule_buckets"] = []
+        elif any(term in q_lower for term in INDICATOR_REMOVE_TERMS):
+            draft["operation"] = "delete"
+            draft["activate_node"] = False
+            draft["score_mode"] = None
+            draft["weight"] = None
+            draft["custom_rules_touched"] = False
+            draft["custom_rules_complete"] = False
+            draft["custom_rule_buckets"] = []
         elif draft.get("operation") == "reset" and any(word in q_lower for word in ["standard", "standaard", "contrarian", "custom", "weight", "weging", "gewicht"]):
+            draft["operation"] = "configure"
+        elif draft.get("operation") == "delete" and any(word in q_lower for word in ["standard", "standaard", "contrarian", "custom", "weight", "weging", "gewicht", "toevoegen", "voeg", "activeer"]):
             draft["operation"] = "configure"
 
         if any(word in q_lower for word in ["technical", "technisch", "technische"]):
@@ -5768,7 +5781,15 @@ class FinnPlanService:
             actions.append({
                 "id": self._indicator_config_action_id(action_payload),
                 "type": "configure_indicator",
-                "label": "Indicator resetten" if draft.get("operation") == "reset" else ("Indicator bijwerken" if draft.get("operation") == "update" else "Indicator toevoegen"),
+                "label": (
+                    "Indicator verwijderen"
+                    if draft.get("operation") == "delete"
+                    else "Indicator resetten"
+                    if draft.get("operation") == "reset"
+                    else "Indicator bijwerken"
+                    if draft.get("operation") == "update"
+                    else "Indicator toevoegen"
+                ),
                 "payload": action_payload,
                 "risk_level": "low",
                 "requires_confirmation": True,
@@ -9931,6 +9952,20 @@ class FinnPlanService:
         indicator = normalize_indicator_name(draft.get("indicator") or "") if draft.get("indicator") else None
         if indicator:
             exact = await self._find_indicator_exact(category, indicator)
+            if not exact and category == "macro":
+                technical_exact = await self._find_indicator_exact("technical", indicator)
+                if technical_exact:
+                    draft["category"] = "technical"
+                    if not draft.get("symbol"):
+                        draft["symbol"] = "BTC"
+                    category = "technical"
+                    exact = technical_exact
+            elif not exact and category == "technical":
+                macro_exact = await self._find_indicator_exact("macro", indicator)
+                if macro_exact:
+                    draft["category"] = "macro"
+                    category = "macro"
+                    exact = macro_exact
             if exact:
                 draft["indicator"] = exact["name"]
                 draft["display_name"] = exact.get("display_name") or exact["name"]
@@ -9958,6 +9993,12 @@ class FinnPlanService:
                 draft["node_already_active"] = node_active
                 if draft.get("operation") == "reset":
                     draft["changes"] = self._indicator_reset_changes_from_snapshot(draft)
+                elif draft.get("operation") == "delete":
+                    draft["changes"] = [{
+                        "field": "active_indicator",
+                        "from": "active" if node_active else "configured",
+                        "to": "removed",
+                    }]
                 else:
                     draft["operation"] = "update" if (has_user_override or node_active) else "create"
                     draft["changes"] = self._indicator_config_changes_from_snapshot(draft)
@@ -10163,18 +10204,18 @@ class FinnPlanService:
         if draft.get("_indicator_lookup_error"):
             invalid.append({"field": "indicator", "reason": draft["_indicator_lookup_error"]})
         mode = draft.get("score_mode")
-        if draft.get("operation") != "reset":
+        if draft.get("operation") not in {"reset", "delete"}:
             if not mode:
                 missing.append("score_mode")
             elif mode not in {"standard", "contrarian", "custom"}:
                 invalid.append({"field": "score_mode", "reason": "score_mode moet standard, contrarian of custom zijn"})
         weight = draft.get("weight")
-        if draft.get("operation") != "reset":
+        if draft.get("operation") not in {"reset", "delete"}:
             if weight is None:
                 missing.append("weight")
             elif not isinstance(weight, (int, float)) or float(weight) < 0 or float(weight) > 3:
                 invalid.append({"field": "weight", "reason": "weight moet tussen 0.0 en 3.0 liggen"})
-        if draft.get("operation") != "reset" and mode == "custom":
+        if draft.get("operation") not in {"reset", "delete"} and mode == "custom":
             rules = draft.get("rules") if isinstance(draft.get("rules"), list) else []
             if not draft.get("custom_rules_touched"):
                 missing.append("rules")
@@ -10196,7 +10237,9 @@ class FinnPlanService:
                     if not isinstance(score, (int, float)) or int(float(score)) < 10 or int(float(score)) > 100:
                         invalid.append({"field": "rules", "reason": "bucket-scores moeten tussen 10 en 100 liggen"})
                         break
-        if draft.get("operation") != "reset" and draft.get("category") == "technical" and draft.get("activate_node") and not draft.get("symbol"):
+        if draft.get("operation") == "delete" and draft.get("category") == "technical" and not draft.get("symbol"):
+            missing.append("symbol")
+        if draft.get("operation") not in {"reset", "delete"} and draft.get("category") == "technical" and draft.get("activate_node") and not draft.get("symbol"):
             missing.append("symbol")
 
         next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
@@ -10241,10 +10284,20 @@ class FinnPlanService:
             "create": "Nieuwe indicator-config",
             "update": "Indicator-config bijwerken",
             "reset": "Reset naar standaard",
+            "delete": "Indicator verwijderen",
         }.get(draft.get("operation"), "Indicator-config bijwerken")
         if draft.get("operation") == "reset":
             return (
                 "Ik heb deze reset klaarstaan. Ik verwijder alleen jouw user-overrides en val terug op de bestaande template-buckets:\n\n"
+                f"- Actie: {operation_label}\n"
+                f"- Node: {draft.get('display_name') or draft.get('indicator')} ({draft.get('indicator')})\n"
+                + (f"- Asset: {draft.get('symbol')}\n" if draft.get("category") == "technical" and draft.get("symbol") else "")
+                + f"- Categorie: {draft.get('category')}"
+                + (("\n\nWijzigingen:\n" + "\n".join(change_lines)) if change_lines else "")
+            )
+        if draft.get("operation") == "delete":
+            return (
+                "Ik heb deze verwijdering klaarstaan. Ik haal deze indicator uit de actieve configuratie en verifieer daarna meteen of hij echt weg is:\n\n"
                 f"- Actie: {operation_label}\n"
                 f"- Node: {draft.get('display_name') or draft.get('indicator')} ({draft.get('indicator')})\n"
                 + (f"- Asset: {draft.get('symbol')}\n" if draft.get("category") == "technical" and draft.get("symbol") else "")
@@ -19038,9 +19091,19 @@ class FinnPlanService:
 
         indicator = draft["indicator"]
         category = draft["category"]
+        symbol = draft.get("symbol") or "BTC"
         try:
             config_service = IndicatorConfigService(IndicatorConfigRepository(self.session))
-            if draft.get("operation") == "reset":
+            if draft.get("operation") == "delete":
+                if category == "technical":
+                    technical_service = TechnicalDataService(self.session)
+                    await technical_service.delete_indicator(indicator, user_id, symbol=symbol)
+                elif category == "macro":
+                    macro_service = MacroDataService(self.session)
+                    await macro_service.delete_macro_indicator(indicator, user_id, symbol=symbol)
+                else:
+                    raise HTTPException(400, "Onbekende indicator category")
+            elif draft.get("operation") == "reset":
                 await config_service.reset_indicator_rules(category, indicator, user_id)
             elif draft.get("score_mode") == "custom":
                 await config_service.save_custom_rules(
@@ -19059,14 +19122,15 @@ class FinnPlanService:
                     weight=float(draft["weight"]),
                 )
             node_active = False
-            if draft.get("activate_node") and category == "macro":
+            if draft.get("operation") == "delete":
+                node_active = False
+            elif draft.get("activate_node") and category == "macro":
                 macro_service = MacroDataService(self.session)
                 if not await macro_service.repository.check_indicator_exists(user_id, indicator):
                     await macro_service.add_macro_indicator(user_id, indicator, None)
                 node_active = True
             elif draft.get("activate_node") and category == "technical":
                 technical_service = TechnicalDataService(self.session)
-                symbol = draft.get("symbol") or "BTC"
                 if await technical_service.repository.check_duplicate(indicator, user_id, symbol):
                     await technical_service.repository.ensure_user_config(user_id, indicator, "technical")
                 else:
@@ -19077,7 +19141,9 @@ class FinnPlanService:
                 category,
                 indicator,
                 node_active=node_active,
-                require_override=draft.get("operation") != "reset",
+                require_override=draft.get("operation") not in {"reset", "delete"},
+                require_removed=draft.get("operation") == "delete",
+                symbol=symbol,
             )
         except Exception:
             await self.session.rollback()
@@ -19090,7 +19156,15 @@ class FinnPlanService:
 
         result = {
             "ok": True,
-            "message": "Indicator-configuratie gereset" if draft.get("operation") == "reset" else ("Indicator-configuratie bijgewerkt" if draft.get("operation") == "update" else "Indicator-configuratie toegevoegd"),
+            "message": (
+                "Indicator verwijderd"
+                if draft.get("operation") == "delete"
+                else "Indicator-configuratie gereset"
+                if draft.get("operation") == "reset"
+                else "Indicator-configuratie bijgewerkt"
+                if draft.get("operation") == "update"
+                else "Indicator-configuratie toegevoegd"
+            ),
             "indicator": indicator,
             "category": category,
             "symbol": draft.get("symbol"),
@@ -20243,7 +20317,41 @@ class FinnPlanService:
         *,
         node_active: bool = False,
         require_override: bool = True,
+        require_removed: bool = False,
+        symbol: Optional[str] = None,
     ) -> Dict[str, bool]:
+        node_key = "technical_node" if category == "technical" else "macro_node"
+
+        if require_removed:
+            active_after_action: List[str] = []
+            removed_ok = True
+            if category == "technical":
+                technical_rows = await TechnicalDataService(self.session).get_day_indicators(user_id, symbol=symbol)
+                active_after_action = sorted({normalize_indicator_name(row.indicator) for row in technical_rows})
+                config_rows = await self.session.execute(text("""
+                    SELECT COUNT(*) AS count
+                    FROM user_indicator_configs
+                    WHERE user_id = :user_id AND category = 'technical' AND indicator = :indicator
+                """), {"user_id": user_id, "indicator": indicator})
+                config_count = int(config_rows.scalar() or 0)
+                removed_ok = normalize_indicator_name(indicator) not in active_after_action and config_count == 0
+            elif category == "macro":
+                macro_rows = await MacroDataService(self.session).get_latest_macro_indicators(user_id)
+                active_after_action = sorted({normalize_indicator_name(row.name) for row in macro_rows})
+                removed_ok = normalize_indicator_name(indicator) not in active_after_action
+            else:
+                raise HTTPException(400, "Onbekende indicator category")
+
+            verified = {
+                "indicator_config": removed_ok,
+                node_key: removed_ok,
+                "backend_confirmed": removed_ok,
+                "active_after_action": active_after_action,
+            }
+            if not removed_ok:
+                raise HTTPException(500, f"Indicator delete read-after-write verificatie faalde: {verified}")
+            return verified
+
         config = await IndicatorConfigService(IndicatorConfigRepository(self.session)).get_indicator_config(category, indicator, user_id)
         rules_ok = bool(config and len(config.rules) == 5)
         table = {
@@ -20269,10 +20377,10 @@ class FinnPlanService:
                 WHERE user_id = :user_id AND category = 'technical' AND indicator = :indicator
             """), {"user_id": user_id, "indicator": indicator})
             node_ok = int(config_rows.scalar() or 0) > 0
-        node_key = "technical_node" if category == "technical" else "macro_node"
         verified = {
             "indicator_config": rules_ok and override_ok,
             node_key: node_ok,
+            "backend_confirmed": rules_ok and override_ok and node_ok,
         }
         if not verified["indicator_config"] or not verified[node_key]:
             raise HTTPException(500, f"Indicator read-after-write verificatie faalde: {verified}")

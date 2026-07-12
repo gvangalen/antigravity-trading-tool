@@ -4254,11 +4254,13 @@ function AIAssistantContent({
       const isBotOnly = res?.draft?.draft_kind === "bot";
       const isStrategyOnly = res?.draft?.draft_kind === "strategy";
       const isIndicatorConfig = res?.draft?.draft_kind === "indicator_config";
+      const isIndicatorDelete = isIndicatorConfig && res?.operation === "delete";
       const verifiedOk = isBotOnly
         ? Boolean(res?.verified?.bot)
         : isIndicatorConfig
         ? Boolean(
             res?.verified?.indicator_config &&
+            res?.verified?.backend_confirmed !== false &&
             (res.category === "technical"
               ? res?.verified?.technical_node !== false
               : res?.verified?.macro_node !== false)
@@ -4269,21 +4271,37 @@ function AIAssistantContent({
       }
 
       if (isIndicatorConfig) {
-        const [config, macroRows] = await Promise.all([
-          getIndicatorConfig(res.category, res.indicator),
-          res.category === "macro" ? fetchMacroData() : technicalDataAll(res.draft?.symbol || context.symbol || "BTC"),
-        ]);
-        const configFound = Boolean(config?.indicator === res.indicator && Array.isArray(config?.rules) && config.rules.length === 5);
-        const shouldVerifyNode = Boolean(res.draft?.activate_node || res.draft?.node_already_active);
-        const nodeFound = !shouldVerifyNode ? true : res.category === "macro"
-          ? macroRows.some((row) => String(row.name).toLowerCase() === String(res.indicator).toLowerCase())
-          : macroRows.some((row) => String(row.indicator).toLowerCase() === String(res.indicator).toLowerCase());
-        if (!configFound || !nodeFound) {
-          throw new Error("Indicator-configuratie is nog niet terugleesbaar via de API.");
+        const indicatorName = String(res.indicator || "").toLowerCase();
+        const symbol = res.draft?.symbol || context.symbol || "BTC";
+        if (isIndicatorDelete) {
+          const rows = res.category === "macro"
+            ? await fetchMacroData()
+            : await technicalDataAll(symbol);
+          const stillPresent = res.category === "macro"
+            ? rows.some((row) => String(row.name || "").toLowerCase() === indicatorName)
+            : rows.some((row) => String(row.indicator || "").toLowerCase() === indicatorName);
+          if (stillPresent) {
+            throw new Error("Indicator staat nog steeds in de actieve lijst na verwijderen.");
+          }
+        } else {
+          const [config, rows] = await Promise.all([
+            getIndicatorConfig(res.category, res.indicator),
+            res.category === "macro" ? fetchMacroData() : technicalDataAll(symbol),
+          ]);
+          const configFound = Boolean(config?.indicator === res.indicator && Array.isArray(config?.rules) && config.rules.length === 5);
+          const shouldVerifyNode = Boolean(res.draft?.activate_node || res.draft?.node_already_active);
+          const nodeFound = !shouldVerifyNode ? true : res.category === "macro"
+            ? rows.some((row) => String(row.name).toLowerCase() === indicatorName)
+            : rows.some((row) => String(row.indicator).toLowerCase() === indicatorName);
+          if (!configFound || !nodeFound) {
+            throw new Error("Indicator-configuratie is nog niet terugleesbaar via de API.");
+          }
         }
         setMessages(prev => [...prev, {
           role: "assistant",
-          text: `${res.duplicate ? "Deze actie was al verwerkt. " : ""}${res.message || "Indicator-configuratie opgeslagen"} en geverifieerd: ${res.category}/${res.indicator}.`,
+          text: isIndicatorDelete
+            ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}${res.message || "Indicator verwijderd"} en geverifieerd: ${res.category}/${res.indicator} is niet langer actief.`
+            : `${res.duplicate ? "Deze actie was al verwerkt. " : ""}${res.message || "Indicator-configuratie opgeslagen"} en geverifieerd: ${res.category}/${res.indicator}.`,
           intent: "indicator_configured",
         }]);
         setFinnDraft(null);
