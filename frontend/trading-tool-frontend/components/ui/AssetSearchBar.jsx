@@ -15,6 +15,8 @@ import { getMacroIndicatorNames, macroDataAdd } from "@/lib/api/macro";
 import { getMarketIndicatorNames, marketIndicatorAdd } from "@/lib/api/market";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
+const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
+const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
 
 const ASSETS = [
   { symbol: "BTC", name: "Bitcoin", icon: "₿" },
@@ -119,12 +121,32 @@ export default function AssetSearchBar() {
       });
     }
 
+    function handleOpenIndicatorModal(event) {
+      const category = event?.detail?.category || "technical";
+      const indicatorName = event?.detail?.indicatorName;
+      const title = event?.detail?.title || indicatorName;
+
+      if (!indicatorName) return;
+
+      setQuery("");
+      setIsOpen(false);
+      setMode({ kind: "all", category: null });
+      setPendingIndicator({
+        category,
+        indicatorName,
+        title,
+        source: event?.detail?.source || "external",
+      });
+    }
+
     document.addEventListener("mousedown", handleClickOutside);
     window.addEventListener(SEARCH_OPEN_EVENT, handleOpenSearch);
+    window.addEventListener(INDICATOR_MODAL_OPEN_EVENT, handleOpenIndicatorModal);
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       window.removeEventListener(SEARCH_OPEN_EVENT, handleOpenSearch);
+      window.removeEventListener(INDICATOR_MODAL_OPEN_EVENT, handleOpenIndicatorModal);
     };
   }, []);
 
@@ -499,6 +521,19 @@ export default function AssetSearchBar() {
           const encodedSymbol = encodeURIComponent(assetSymbol);
           const encodedIndicator = encodeURIComponent(indicator);
           const navigationNonce = Date.now();
+
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent(INDICATOR_MODAL_COMPLETED_EVENT, {
+                detail: {
+                  category,
+                  indicator,
+                  assetSymbol,
+                  source: pendingIndicator?.source || "command-search",
+                },
+              })
+            );
+          }
 
           if (category === "technical") {
             router.push(

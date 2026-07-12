@@ -26,6 +26,9 @@ import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantA
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
+const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
+const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
+
 function getDictionaryValue(dictionary, path) {
   return String(path || "")
     .split(".")
@@ -186,6 +189,34 @@ function buildAssistantUiText(at) {
   };
 }
 
+function buildIndicatorModalRequest(envelope, fallbackSymbol) {
+  const draft = envelope?.draft;
+  const isIndicatorConfig =
+    draft?.draft_kind === "indicator_config" ||
+    envelope?.intent === "indicator_config" ||
+    envelope?.flow === "indicator_config";
+
+  if (!isIndicatorConfig || !draft || draft.operation === "delete") return null;
+
+  const category = draft.category || envelope?.category || "technical";
+  const rawIndicatorName = draft.indicator || draft.payload?.indicator || draft.node;
+  const indicatorName = typeof rawIndicatorName === "string"
+    ? rawIndicatorName.replace(/^.*\(([^)]+)\)\s*$/, "$1").trim()
+    : rawIndicatorName;
+  if (!indicatorName) return null;
+
+  const symbol = draft.symbol || envelope?.selected_entity?.asset || fallbackSymbol || "BTC";
+  const label = draft.display_name || String(indicatorName).toUpperCase();
+
+  return {
+    category,
+    indicatorName,
+    title: label,
+    assetSymbol: symbol,
+    responseText: `Ik heb ${label} voor ${symbol} klaargezet. Controleer de instellingen om hem toe te voegen.`,
+  };
+}
+
 function getSetupMarketConditionLabel(condition, uiText) {
   switch (condition) {
     case "confirmed_strength":
@@ -292,6 +323,39 @@ function AIAssistantContent({
   };
 
   const uiText = buildAssistantUiText(at);
+
+  useEffect(() => {
+    const handleIndicatorModalCompleted = (event) => {
+      const { indicator, assetSymbol, category, source } = event?.detail || {};
+      if (source !== "finn") return;
+
+      const label = String(indicator || "").toUpperCase();
+      const symbol =
+        assetSymbol ||
+        searchParams.get("symbol") ||
+        searchParams.get("asset") ||
+        globalSymbol ||
+        "BTC";
+      const categoryLabel = String(category || "technical").toLowerCase();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: `${label} is toegevoegd aan ${symbol} ${categoryLabel.charAt(0).toUpperCase()}${categoryLabel.slice(1)}.`,
+          intent: "indicator_configured",
+          isComplete: true,
+        },
+      ]);
+
+      loadInsight();
+      loadMissionControl();
+      emitFinnRefreshSignals();
+    };
+
+    window.addEventListener(INDICATOR_MODAL_COMPLETED_EVENT, handleIndicatorModalCompleted);
+    return () => window.removeEventListener(INDICATOR_MODAL_COMPLETED_EVENT, handleIndicatorModalCompleted);
+  }, [globalSymbol, searchParams]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -3615,26 +3679,49 @@ function AIAssistantContent({
     try {
       const envelope = await fetchFinnState();
       if (!envelope?.has_draft || !envelope.draft) return;
+      const indicatorModalRequest = buildIndicatorModalRequest(envelope, context.symbol || globalSymbol || "BTC");
 
-      setFinnDraft(envelope.draft);
-      setActiveState(envelope.state ? { ...envelope.state, can_confirm: envelope.can_confirm } : null);
+      if (indicatorModalRequest && typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent(INDICATOR_MODAL_OPEN_EVENT, {
+            detail: {
+              category: indicatorModalRequest.category,
+              indicatorName: indicatorModalRequest.indicatorName,
+              title: indicatorModalRequest.title,
+              source: "finn",
+            },
+          })
+        );
+      }
+
+      setFinnDraft(indicatorModalRequest ? null : envelope.draft);
+      setActiveState(
+        indicatorModalRequest
+          ? null
+          : envelope.state
+            ? { ...envelope.state, can_confirm: envelope.can_confirm }
+            : null
+      );
       setMessages(prev => {
-        const alreadyVisible = prev.some(m => (m.intent === envelope.intent || m.flow === envelope.flow) && m.draft);
+        const alreadyVisible = prev.some((m) =>
+          (m.intent === envelope.intent || m.flow === envelope.flow) &&
+          (indicatorModalRequest ? m.text === indicatorModalRequest.responseText : m.draft)
+        );
         if (alreadyVisible) return prev;
         return [...prev, {
           role: "assistant",
-          text: envelope.response,
+          text: indicatorModalRequest?.responseText || envelope.response,
           intent: envelope.intent,
           flow: envelope.flow,
-          draft: envelope.draft,
-          actions: Array.isArray(envelope.actions) ? envelope.actions : [],
-          missingFields: envelope.missing_fields || [],
-          invalidFields: envelope.invalid_fields || [],
-          nextQuestion: envelope.next_question || null,
-          canConfirm: envelope.can_confirm,
-          suggestedActions: envelope.suggested_actions || [],
+          draft: indicatorModalRequest ? null : envelope.draft,
+          actions: indicatorModalRequest ? [] : (Array.isArray(envelope.actions) ? envelope.actions : []),
+          missingFields: indicatorModalRequest ? [] : (envelope.missing_fields || []),
+          invalidFields: indicatorModalRequest ? [] : (envelope.invalid_fields || []),
+          nextQuestion: indicatorModalRequest ? null : (envelope.next_question || null),
+          canConfirm: indicatorModalRequest ? false : envelope.can_confirm,
+          suggestedActions: indicatorModalRequest ? [] : (envelope.suggested_actions || []),
           reasoning: envelope.reasoning,
-          state: envelope.state || null,
+          state: indicatorModalRequest ? null : (envelope.state || null),
           summary: envelope.summary || null,
           riskSummary: envelope.risk_summary || null,
           nextBestAction: envelope.next_best_action || null,
@@ -3863,6 +3950,7 @@ function AIAssistantContent({
           if (activeStreamIdRef.current !== streamId) return;
           const originalResponse = envelope?.response || "";
           const sanitizedResponse = stripSuggestedActionsSection(originalResponse);
+          const indicatorModalRequest = buildIndicatorModalRequest(envelope, requestContext?.symbol || globalSymbol || "BTC");
           const extractedSuggestedActions =
             Array.isArray(envelope?.suggested_actions) && envelope.suggested_actions.length > 0
               ? envelope.suggested_actions
@@ -3873,23 +3961,25 @@ function AIAssistantContent({
             if (msgIndex >= 0 && copy[msgIndex].role === "assistant") {
               copy[msgIndex] = {
                 ...copy[msgIndex],
-                text: sanitizedResponse,
+                text: indicatorModalRequest?.responseText || sanitizedResponse,
                 intent: envelope.intent,
                 flow: envelope.flow,
-                action: envelope.action,
-                draft: envelope.draft,
-                actions: Array.isArray(envelope.actions)
-                ? envelope.actions
-                : envelope.action
-                  ? [envelope.action]
-                  : [],
-                missingFields: envelope.missing_fields || [],
-                invalidFields: envelope.invalid_fields || [],
-                nextQuestion: envelope.next_question || null,
-                canConfirm: envelope.can_confirm,
-                suggestedActions: extractedSuggestedActions,
+                action: indicatorModalRequest ? null : envelope.action,
+                draft: indicatorModalRequest ? null : envelope.draft,
+                actions: indicatorModalRequest
+                  ? []
+                  : Array.isArray(envelope.actions)
+                    ? envelope.actions
+                    : envelope.action
+                      ? [envelope.action]
+                      : [],
+                missingFields: indicatorModalRequest ? [] : (envelope.missing_fields || []),
+                invalidFields: indicatorModalRequest ? [] : (envelope.invalid_fields || []),
+                nextQuestion: indicatorModalRequest ? null : (envelope.next_question || null),
+                canConfirm: indicatorModalRequest ? false : envelope.can_confirm,
+                suggestedActions: indicatorModalRequest ? [] : extractedSuggestedActions,
                 reasoning: envelope.reasoning,
-                state: envelope.state || null,
+                state: indicatorModalRequest ? null : (envelope.state || null),
                 summary: envelope.summary || null,
                 riskSummary: envelope.risk_summary || null,
                 nextBestAction: envelope.next_best_action || null,
@@ -3900,6 +3990,20 @@ function AIAssistantContent({
             return copy;
           });
           activeStreamIdRef.current = null;
+
+          if (indicatorModalRequest && typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent(INDICATOR_MODAL_OPEN_EVENT, {
+                detail: {
+                  category: indicatorModalRequest.category,
+                  indicatorName: indicatorModalRequest.indicatorName,
+                  title: indicatorModalRequest.title,
+                  source: "finn",
+                },
+              })
+            );
+          }
+
           if (envelope?.flow === "decision_review" || envelope?.intent === "decision_review") {
             trackAssistantEvent({
               event_name: "decision_review_used",
@@ -3925,6 +4029,9 @@ function AIAssistantContent({
           const legacyTransactionalFlows = ["setup_creation"];
 
           if (["plan_creation_cancelled", "strategy_creation_cancelled", "bot_creation_cancelled", "indicator_config_cancelled"].includes(envelope.intent)) {
+            setFinnDraft(null);
+            setActiveState(null);
+          } else if (indicatorModalRequest) {
             setFinnDraft(null);
             setActiveState(null);
           } else if (transactionalFlows.includes(envelope.flow)) {
@@ -4368,6 +4475,7 @@ function AIAssistantContent({
     const isFinnStrategy = message.intent === "strategy_creation" || message.flow === "strategy_creation" || draft?.draft_kind === "strategy";
     const isFinnBot = message.intent === "bot_creation" || message.flow === "bot_creation" || draft?.draft_kind === "bot";
     const isFinnIndicator = message.intent === "indicator_config" || message.flow === "indicator_config" || draft?.draft_kind === "indicator_config";
+    if (isFinnIndicator) return null;
     if (!draft || (!isFinnPlan && !isFinnStrategy && !isFinnBot && !isFinnIndicator)) return null;
 
     const setup = draft.setup || {};
