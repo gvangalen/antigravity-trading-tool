@@ -255,6 +255,42 @@ function inferSetupMarketConditionFromScores(payload = {}) {
   return null;
 }
 
+function humanizeFinnContextValue(value, fallback = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return fallback;
+
+  const normalized = raw.toLowerCase();
+  const timeframeMap = {
+    "1d": "Day",
+    day: "Day",
+    daily: "Day",
+    "1w": "Week",
+    week: "Week",
+    weekly: "Week",
+    "1m": "Month",
+    month: "Month",
+    monthly: "Month",
+    overview: "Overview",
+    workflow: "Workflow",
+    market: "Market",
+    macro: "Macro",
+    technical: "Technical",
+    setups: "Setups",
+    setup: "Setups",
+    strategies: "Strategies",
+    strategy: "Strategies",
+    bots: "Bots",
+    bot: "Bots",
+    reports: "Reports",
+    report: "Reports",
+  };
+
+  if (timeframeMap[normalized]) return timeframeMap[normalized];
+  if (raw === raw.toUpperCase() && raw.length <= 5) return raw;
+
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
 function AIAssistantContent({
   isOpen,
   setIsOpen,
@@ -310,6 +346,7 @@ function AIAssistantContent({
   const at = createAssistantTranslator(t);
   const activeQuery = queryValue !== undefined ? queryValue : query;
   const updateQuery = onQueryChange || setQuery;
+  const isSimpleFinnModal = modal;
 
   const humanizeSurfaceStatus = (value) => {
     const raw = String(value || "").toLowerCase();
@@ -5072,6 +5109,12 @@ function AIAssistantContent({
   const finnContextLabel = [context.page_type || "Finn", context.symbol || "BTC", context.timeframe || "1D"]
     .filter(Boolean)
     .join(" · ");
+  const compactFinnHeader = [
+    "FINN",
+    humanizeFinnContextValue(context.page_type, "Overview"),
+    String(context.symbol || globalSymbol || "BTC").toUpperCase(),
+    humanizeFinnContextValue(context.timeframe, "Day"),
+  ].filter(Boolean);
   const finnModeLabel =
     activeState?.current_flow && activeState.current_flow !== "none"
       ? "Concept"
@@ -5160,6 +5203,11 @@ function AIAssistantContent({
       ? (openSummaryCount === 1 ? "1 review open" : `${openSummaryCount} reviews open`)
       : (openSummaryCount === 1 ? "1 aandachtspunt open" : `${openSummaryCount} aandachtspunten open`);
   const showMissionSection = (key) => (showFullMissionControl || shouldCondenseMissionControl) && missionDetailSection === key;
+  const starterPrompts = [
+    "Waarom is Macro zwak?",
+    "Voeg RSI toe",
+    "Welke actie moet ik nu eerst doen?",
+  ];
 
   useEffect(() => {
     if (!isOpen || isOnboarding) return;
@@ -5215,16 +5263,24 @@ function AIAssistantContent({
              <Bot size={20} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">FINN</h2>
-              <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">{finnModeLabel}</span>
-            </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-bold text-secondary dark:text-slate-500 uppercase tracking-widest leading-none">
-                {finnContextLabel}
-              </span>
-            </div>
+            {isSimpleFinnModal ? (
+              <h2 className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">
+                {compactFinnHeader.join(" • ")}
+              </h2>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">FINN</h2>
+                  <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">{finnModeLabel}</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] font-bold text-secondary dark:text-slate-500 uppercase tracking-widest leading-none">
+                    {finnContextLabel}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </div>
         {!persistent ? (
@@ -5238,7 +5294,7 @@ function AIAssistantContent({
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar scroll-smooth" ref={scrollRef}>
-        {contextMetric && (
+        {!isSimpleFinnModal && contextMetric && (
           <div className="m-5 p-5 bg-blue-600/5 dark:bg-blue-600/10 border-2 border-blue-600/20 rounded-2xl relative animate-in fade-in slide-in-from-top-4 duration-300">
             <button 
               onClick={() => setContextMetric(null)} 
@@ -5261,6 +5317,7 @@ function AIAssistantContent({
           </div>
         )}
         {/* SECTION 1 — FINN POSTURE & BRIEFING */}
+        {!isSimpleFinnModal && (
         <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20 space-y-2.5 animate-fade-in">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
@@ -5322,9 +5379,10 @@ function AIAssistantContent({
             </div>
           )}
         </div>
+        )}
 
         {/* SECTION 1B — FINN Mission Control */}
-        {(shouldCondenseMissionControl || missionControlLoading || missionControl?.summary || missionControl?.coaching_loop || missionControl?.behavioral_insight) && (
+        {!isSimpleFinnModal && (shouldCondenseMissionControl || missionControlLoading || missionControl?.summary || missionControl?.coaching_loop || missionControl?.behavioral_insight) && (
           <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f172a] space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
@@ -5532,7 +5590,29 @@ function AIAssistantContent({
         {!previewSectionsOnly && (
         <>
         {/* MESSAGES AREA */}
-        <div className="p-6 space-y-6 pb-20">
+        <div className={`space-y-6 ${isSimpleFinnModal ? "p-5 pb-8" : "p-6 pb-20"}`}>
+          {isSimpleFinnModal && messages.length === 0 && !loading && (
+            <div className="rounded-[28px] border border-slate-200/80 bg-slate-50/70 px-6 py-10 text-center dark:border-slate-800 dark:bg-slate-900/30">
+              <p className="text-base font-black tracking-tight text-slate-950 dark:text-slate-50">
+                FINN wacht op je vraag.
+              </p>
+              <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+                Vraag FINN om uitleg, context of een actie...
+              </p>
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                {starterPrompts.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => handleChat(prompt)}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition-colors hover:border-blue-200 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-800 dark:hover:text-blue-300"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[90%] rounded-2xl p-4 ${
@@ -5543,25 +5623,25 @@ function AIAssistantContent({
                     : "bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-foreground dark:text-slate-100"
                 }`}>
                 <p className="text-sm leading-relaxed">{m.text}</p>
-                {m.role === "assistant" && m.isComplete !== false && renderOperatorReadoutCard(m)}
-                {m.role === "assistant" && m.isComplete !== false && renderAgentController(getMessageAgentController(m))}
-                {m.role === "assistant" && m.isComplete !== false && renderDecisionReviewV3Card(getMessageDecisionReview(m))}
-                {m.role === "assistant" && m.isComplete !== false && renderPlanAdherenceCard(getMessagePlanAdherenceReview(m))}
-                {m.role === "assistant" && m.isComplete !== false && renderOutcomeTrackingCard(getMessageOutcomeTracking(m))}
-                {m.role === "assistant" && m.isComplete !== false && renderPriorityEngineCard(getMessagePriorityEngine(m))}
-                {m.role === "assistant" && m.isComplete !== false && renderMemoryV2Card(getMessageMemoryV2(m))}
-                {m.role === "assistant" && m.isComplete !== false && renderPortfolioOperatingSystemCard(getMessagePortfolioOperatingSystem(m))}
-                {m.role === "assistant" && m.isComplete !== false && renderBehavioralIntelligenceCard(getMessageBehavioralAnalysis(m))}
-                {m.role === "assistant" && m.isComplete !== false && renderPortfolioRisk(getMessagePortfolioRisk(m))}
-                {m.role === "assistant" && m.isComplete !== false && renderExecutionReviewCard(getMessageExecutionReview(m))}
-                {m.role === "assistant" && m.isComplete !== false && renderOperatorResolutionCard(getMessageOperatorResolution(m))}
-                {m.role === "assistant" && m.isComplete !== false && renderAgentVerdicts(getMessageAgentVerdicts(m))}
-                {m.role === "assistant" && m.isComplete !== false && (() => {
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderOperatorReadoutCard(m)}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderAgentController(getMessageAgentController(m))}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderDecisionReviewV3Card(getMessageDecisionReview(m))}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderPlanAdherenceCard(getMessagePlanAdherenceReview(m))}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderOutcomeTrackingCard(getMessageOutcomeTracking(m))}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderPriorityEngineCard(getMessagePriorityEngine(m))}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderMemoryV2Card(getMessageMemoryV2(m))}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderPortfolioOperatingSystemCard(getMessagePortfolioOperatingSystem(m))}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderBehavioralIntelligenceCard(getMessageBehavioralAnalysis(m))}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderPortfolioRisk(getMessagePortfolioRisk(m))}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderExecutionReviewCard(getMessageExecutionReview(m))}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderOperatorResolutionCard(getMessageOperatorResolution(m))}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderAgentVerdicts(getMessageAgentVerdicts(m))}
+                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && (() => {
                   const suggestions = getMessageFollowUpActions(m);
                   if (suggestions.length === 0) return null;
                   return renderFollowUpButtons(suggestions);
                 })()}
-                {m.reasoning && m.isComplete !== false && (
+                {!isSimpleFinnModal && m.reasoning && m.isComplete !== false && (
                   <ReasoningWidget reasoning={m.reasoning} />
                 )}
                 {/* Universal Action Card Renderer */}
@@ -5601,8 +5681,8 @@ function AIAssistantContent({
                   </div>
                 )}
                 {renderBehavioralMemoryAckCard(m)}
-                {renderDraftCard(m)}
-                {renderInlineActionCard(m)}
+                {!isSimpleFinnModal && renderDraftCard(m)}
+                {!isSimpleFinnModal && renderInlineActionCard(m)}
                 {m.isError && (
                   <button 
                     onClick={() => handleChat(messages[i-1]?.text)} 
@@ -5702,14 +5782,14 @@ function AIAssistantContent({
             </div>
           </div>
         )}
-        <div className="relative group">
+          <div className="relative group">
           <input 
             ref={composerInputRef}
             type="text" 
             value={activeQuery}
             onChange={(e) => updateQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleChat()}
-            placeholder={uiText.inputPlaceholder}
+            placeholder={isSimpleFinnModal ? "Vraag FINN om uitleg, context of een actie..." : uiText.inputPlaceholder}
             className="w-full pl-6 pr-14 py-4 bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-600/5 focus:bg-white dark:focus:bg-slate-800 focus:border-blue-600/20 transition-all outline-none text-sm text-foreground dark:text-slate-100"
           />
           <button 
