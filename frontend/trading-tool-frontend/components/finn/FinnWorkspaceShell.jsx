@@ -76,7 +76,11 @@ export default function FinnWorkspaceShell({ children }) {
           </header>
 
           <WorkspaceCanvas>
-            <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 py-6 lg:gap-8 lg:py-8">
+            <div
+              className={`mx-auto flex w-full max-w-[1500px] flex-col gap-6 pt-6 lg:gap-8 lg:pt-8 ${
+                assistantOpen ? "pb-8" : "pb-36 lg:pb-40"
+              }`}
+            >
               <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-35px_rgba(37,99,235,0.32)] dark:border-slate-800 dark:bg-[#0f172a]">
                 <FinnPanel
                   previewSectionsOnly
