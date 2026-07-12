@@ -78,7 +78,7 @@ export default function FinnWorkspaceShell({ children }) {
           <WorkspaceCanvas>
             <div
               className={`mx-auto flex w-full max-w-[1500px] flex-col gap-6 pt-6 lg:gap-8 lg:pt-8 ${
-                assistantOpen ? "pb-8" : "pb-36 lg:pb-40"
+                assistantOpen ? "pb-8" : "pb-10 lg:pb-12"
               }`}
             >
               <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-35px_rgba(37,99,235,0.32)] dark:border-slate-800 dark:bg-[#0f172a]">
@@ -112,6 +112,8 @@ export default function FinnWorkspaceShell({ children }) {
 
                 <div>{children}</div>
               </section>
+
+              {!assistantOpen ? <div aria-hidden className="h-40 shrink-0 lg:h-48" /> : null}
             </div>
           </WorkspaceCanvas>
         </div>
