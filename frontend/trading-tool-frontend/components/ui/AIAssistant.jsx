@@ -3777,7 +3777,6 @@ function AIAssistantContent({
     if (isOpen) {
       loadMissionControl();
       if (!previewSectionsOnly) {
-        loadInsight();
         loadFinnState();
       }
       if (!previewSectionsOnly && Object.keys(preferences).length === 0) {

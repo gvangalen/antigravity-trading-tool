@@ -2411,6 +2411,7 @@ class AiAssistantService:
         start_insight = time.perf_counter()
         symbol = context_data.get("symbol", "BTC")
         page_type = context_data.get("page_type") or context_data.get("page") or "Dashboard"
+        preview_only = bool(context_data.get("preview_only", True))
         trader_profile_context: Dict[str, Any] = {}
         user = None
 
@@ -2458,6 +2459,28 @@ class AiAssistantService:
                     return briefing
             except Exception as exc:
                 logger.warning("⚠️ Deterministic FINN insight fallback failed: %s", exc, exc_info=True)
+
+        if preview_only:
+            insight_total_duration = (time.perf_counter() - start_insight) * 1000
+            logger.info(
+                "⏱️ [Ai-Assistant-Service] preview insight served without AI fallback in %.2fms",
+                insight_total_duration,
+            )
+            return {
+                "greeting": f"Hoi {user_name}, ik wacht op je vraag over {symbol}.",
+                "bot_insight": {
+                    "conclusion": f"De {page_type}-shell staat klaar.",
+                    "action": "Stel een concrete vraag of start een actie in FINN.",
+                    "why": "Deze preview blijft read-only en start geen extra AI-generatie op de achtergrond.",
+                },
+                "market_insight": {
+                    "conclusion": f"{symbol} context staat klaar.",
+                    "action": "Vraag om uitleg, context of een specifieke actie.",
+                    "why": "FINN gebruikt de page-shell als primaire briefing en wacht hier op jouw input.",
+                },
+                "context_detected": context_data,
+                "suggested_actions": [],
+            }
         
         # 1. Fetch Contexts, Market Data, and User Preferences sequentially to prevent task collisions
         if self.context_repo:

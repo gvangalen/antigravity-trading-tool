@@ -94,7 +94,10 @@ export const updateAssistantPreferences = (preferences) => {
 export const fetchAssistantInsight = (context) => {
   return fetchAuth(`/api/assistant/insight`, {
     method: 'POST',
-    body: JSON.stringify(context),
+    body: JSON.stringify({
+      ...context,
+      preview_only: context?.preview_only ?? true,
+    }),
   });
 };
 
