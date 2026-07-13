@@ -5203,12 +5203,6 @@ function AIAssistantContent({
       ? (openSummaryCount === 1 ? "1 review open" : `${openSummaryCount} reviews open`)
       : (openSummaryCount === 1 ? "1 aandachtspunt open" : `${openSummaryCount} aandachtspunten open`);
   const showMissionSection = (key) => (showFullMissionControl || shouldCondenseMissionControl) && missionDetailSection === key;
-  const starterPrompts = [
-    "Waarom is Macro zwak?",
-    "Voeg RSI toe",
-    "Welke actie moet ik nu eerst doen?",
-  ];
-
   useEffect(() => {
     if (!isOpen || isOnboarding) return;
     const nextBriefing = buildBriefingText(insight);
@@ -5596,28 +5590,6 @@ function AIAssistantContent({
         <>
         {/* MESSAGES AREA */}
         <div className={`space-y-4 ${isSimpleFinnModal ? "p-5 pb-8" : "p-6 pb-20"}`}>
-          {isSimpleFinnModal && messages.length === 0 && !loading && (
-            <div className="px-2 py-12 text-center">
-              <p className="text-base font-black tracking-tight text-slate-950 dark:text-slate-50">
-                FINN wacht op je vraag.
-              </p>
-              <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
-                Vraag FINN om uitleg, context of een actie...
-              </p>
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                {starterPrompts.map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    onClick={() => handleChat(prompt)}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition-colors hover:border-blue-200 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-800 dark:hover:text-blue-300"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[90%] rounded-2xl p-4 ${
