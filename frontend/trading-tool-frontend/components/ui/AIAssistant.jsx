@@ -5264,9 +5264,14 @@ function AIAssistantContent({
           </div>
           <div>
             {isSimpleFinnModal ? (
-              <h2 className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">
-                {compactFinnHeader.join(" • ")}
-              </h2>
+              <>
+                <h2 className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">
+                  FINN
+                </h2>
+                <p className="mt-0.5 text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-tight">
+                  {compactFinnHeader.slice(1).join(" • ")}
+                </p>
+              </>
             ) : (
               <>
                 <div className="flex items-center gap-2">
@@ -5590,9 +5595,9 @@ function AIAssistantContent({
         {!previewSectionsOnly && (
         <>
         {/* MESSAGES AREA */}
-        <div className={`space-y-6 ${isSimpleFinnModal ? "p-5 pb-8" : "p-6 pb-20"}`}>
+        <div className={`space-y-4 ${isSimpleFinnModal ? "p-5 pb-8" : "p-6 pb-20"}`}>
           {isSimpleFinnModal && messages.length === 0 && !loading && (
-            <div className="rounded-[28px] border border-slate-200/80 bg-slate-50/70 px-6 py-10 text-center dark:border-slate-800 dark:bg-slate-900/30">
+            <div className="px-2 py-12 text-center">
               <p className="text-base font-black tracking-tight text-slate-950 dark:text-slate-50">
                 FINN wacht op je vraag.
               </p>
