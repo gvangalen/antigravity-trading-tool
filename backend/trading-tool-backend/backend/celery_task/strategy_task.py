@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 from celery import shared_task
 
 from backend.utils.db import get_db_connection
+from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.ai_agents.strategy_ai_agent import (
     generate_strategy_from_setup,
     analyze_strategies,
@@ -387,10 +388,20 @@ def analyze_strategy(user_id: int, strategy_id: int):
         # 🔥 EXTRA SAFETY (voor nested Decimal)
         payload = convert_decimals(payload)
 
-        analysis = analyze_strategies(
+        with ai_usage_context(
             user_id=user_id,
-            strategies=payload,
-        )
+            symbol="BTC",
+            request_source="background_job",
+            run_kind="scheduled",
+            entry_point="celery_task.strategy_task:analyze_strategy",
+            caller_tag="celery_task.strategy_task:analyze_strategy",
+            job_name="analyze_strategy",
+            job_id=getattr(getattr(analyze_strategy, "request", None), "id", None),
+        ):
+            analysis = analyze_strategies(
+                user_id=user_id,
+                strategies=payload,
+            )
 
         if not analysis:
             raise RuntimeError("AI analyse gaf None terug")
@@ -781,18 +792,28 @@ def run_daily_strategy_snapshot(user_id: int):
         # =====================================================
         # 4️⃣ AI ANALYSE
         # =====================================================
-        analysis = analyze_strategies(
+        with ai_usage_context(
             user_id=user_id,
-            strategies=[{
-                "strategy_id": base_strategy["strategy_id"],
-                "setup_id": setup_id,
-                "setup_type": setup_type,
-                "entry": base_strategy.get("entry"),
-                "targets": base_strategy.get("targets"),
-                "stop_loss": base_strategy.get("stop_loss"),
-                "market_context": market_context,
-            }],
-        )
+            symbol=setup.get("symbol") or "BTC",
+            request_source="background_job",
+            run_kind="scheduled",
+            entry_point="celery_task.strategy_task:run_daily_strategy_snapshot",
+            caller_tag="celery_task.strategy_task:run_daily_strategy_snapshot",
+            job_name="run_daily_strategy_snapshot",
+            job_id=getattr(getattr(run_daily_strategy_snapshot, "request", None), "id", None),
+        ):
+            analysis = analyze_strategies(
+                user_id=user_id,
+                strategies=[{
+                    "strategy_id": base_strategy["strategy_id"],
+                    "setup_id": setup_id,
+                    "setup_type": setup_type,
+                    "entry": base_strategy.get("entry"),
+                    "targets": base_strategy.get("targets"),
+                    "stop_loss": base_strategy.get("stop_loss"),
+                    "market_context": market_context,
+                }],
+            )
 
         if not analysis:
             raise RuntimeError("AI analyse failed")

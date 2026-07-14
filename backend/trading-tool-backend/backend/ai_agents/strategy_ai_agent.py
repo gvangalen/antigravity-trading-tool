@@ -7,6 +7,7 @@ from backend.utils.db import get_db_connection
 from backend.utils.openai_client import ask_gpt_text, ask_gpt_json, ask_gpt_text
 from backend.ai_core.system_prompt_builder import build_system_prompt
 from backend.ai_core.agent_context import build_agent_context
+from backend.services.ai_usage_observability_service import ai_usage_context
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -132,10 +133,17 @@ REGELS:
         "strategies": strategies,
     }
 
-    response = ask_gpt_json(
-        prompt=json.dumps(payload, ensure_ascii=False, indent=2),
-        system_role=system_prompt
-    )
+    with ai_usage_context(
+        user_id=user_id,
+        symbol=strategies[0].get("symbol") if strategies else "GLOBAL",
+        purpose="strategy_analysis",
+        entry_point="strategy_ai_agent:analyze_strategies",
+        caller_tag="strategy_ai_agent:analyze_strategies",
+    ):
+        response = ask_gpt_json(
+            prompt=json.dumps(payload, ensure_ascii=False, indent=2),
+            system_role=system_prompt
+        )
 
     # ======================================================
     # 🧪 VALIDATIE
@@ -222,10 +230,17 @@ OUTPUT JSON:
         "market_context": market_context,
     }
 
-    result = ask_gpt_json(
-        prompt=json.dumps(payload, ensure_ascii=False, indent=2),
-        system_role=system_prompt,
-    )
+    with ai_usage_context(
+        user_id=user_id,
+        symbol=setup.get("symbol") or "GLOBAL",
+        purpose="strategy_adjustment",
+        entry_point="strategy_ai_agent:adjust_strategy_for_today",
+        caller_tag="strategy_ai_agent:adjust_strategy_for_today",
+    ):
+        result = ask_gpt_json(
+            prompt=json.dumps(payload, ensure_ascii=False, indent=2),
+            system_role=system_prompt,
+        )
 
     if not isinstance(result, dict):
         return None
@@ -344,10 +359,17 @@ Output JSON:
         }
     }
 
-    result = ask_gpt_json(
-        prompt=json.dumps(payload, ensure_ascii=False, indent=2),
-        system_role=system_prompt
-    )
+    with ai_usage_context(
+        user_id=setup.get("user_id"),
+        symbol=symbol,
+        purpose="strategy_generation",
+        entry_point="strategy_ai_agent:generate_dca_strategy",
+        caller_tag="strategy_ai_agent:generate_dca_strategy",
+    ):
+        result = ask_gpt_json(
+            prompt=json.dumps(payload, ensure_ascii=False, indent=2),
+            system_role=system_prompt
+        )
 
     # 🔥 HARD VALIDATIE (DIT IS WAT JE WILT)
     if not isinstance(result, dict):

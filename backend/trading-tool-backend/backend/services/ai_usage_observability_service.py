@@ -127,7 +127,10 @@ def estimate_blocked_cost(
 
 @contextmanager
 def ai_usage_context(**kwargs: Any) -> Iterator[None]:
-    token = _usage_context.set(dict(kwargs))
+    existing = _usage_context.get() or {}
+    merged = dict(existing)
+    merged.update({key: value for key, value in kwargs.items() if value is not None})
+    token = _usage_context.set(merged)
     try:
         yield
     finally:

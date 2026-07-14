@@ -2,6 +2,7 @@ import logging
 from celery import shared_task
 
 from backend.ai_agents.setup_ai_agent import run_setup_agent
+from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.utils.db import get_db_connection
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,17 @@ def run_setup_agent_daily(user_id: int):
         )
 
         try:
-            run_setup_agent(user_id=user_id, asset=asset)
+            with ai_usage_context(
+                user_id=user_id,
+                symbol=asset,
+                request_source="background_job",
+                run_kind="scheduled",
+                entry_point="celery_task.setup_task:run_setup_agent_daily",
+                caller_tag="celery_task.setup_task:run_setup_agent_daily",
+                job_name="run_setup_agent_daily",
+                job_id=getattr(getattr(run_setup_agent_daily, "request", None), "id", None),
+            ):
+                run_setup_agent(user_id=user_id, asset=asset)
 
             logger.info(
                 f"✅ [Setup-Task] Setup-Agent voltooid user_id={user_id}, asset={asset}"

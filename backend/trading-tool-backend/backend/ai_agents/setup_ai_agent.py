@@ -7,6 +7,7 @@ from backend.utils.db import get_db_connection
 from backend.utils.openai_client import ask_gpt_text, ask_gpt_json
 from backend.ai_core.system_prompt_builder import build_system_prompt
 from backend.ai_core.agent_context import build_agent_context  # ✅ gedeelde context
+from backend.services.ai_usage_observability_service import ai_usage_context
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -226,18 +227,25 @@ Output: 2–3 zinnen.
 """
         system_prompt = build_system_prompt(agent="setup", task=SETUP_TASK)
 
-        explanation = ask_gpt_text(
-            prompt=json.dumps({
-                "setup": best["name"],
-                "setup_type": best["setup_type"],
-                "dca_config": best["dca_config"],
-                "macro_score": macro,
-                "technical_score": technical,
-                "market_score": market,
-                "component_overlap": best["components"]
-            }, ensure_ascii=False, indent=2),
-            system_role=system_prompt
-        )
+        with ai_usage_context(
+            user_id=user_id,
+            symbol=asset,
+            purpose="setup_analysis",
+            entry_point="setup_ai_agent:run_setup_agent",
+            caller_tag="setup_ai_agent:run_setup_agent",
+        ):
+            explanation = ask_gpt_text(
+                prompt=json.dumps({
+                    "setup": best["name"],
+                    "setup_type": best["setup_type"],
+                    "dca_config": best["dca_config"],
+                    "macro_score": macro,
+                    "technical_score": technical,
+                    "market_score": market,
+                    "component_overlap": best["components"]
+                }, ensure_ascii=False, indent=2),
+                system_role=system_prompt
+            )
 
         # ==================================================
         # 6️⃣ OPSLAAN VOOR ALLE SETUPS
@@ -374,21 +382,28 @@ Geen educatie of voorspellingen.
 
         system_prompt = build_system_prompt(agent="setup", task=TASK)
 
-        return ask_gpt_text(
-            prompt=json.dumps({
-                "setup": name,
-                "symbol": symbol,
-                "setup_type": setup_type,
-                "dca_config": {
-                    "frequency": dca_frequency,
-                    "day": dca_day,
-                    "month_day": dca_month_day
-                },
-                "description": description,
-                "action": action
-            }, ensure_ascii=False, indent=2),
-            system_role=system_prompt
-        )
+        with ai_usage_context(
+            user_id=user_id,
+            symbol=symbol,
+            purpose="setup_explanation",
+            entry_point="setup_ai_agent:generate_setup_explanation",
+            caller_tag="setup_ai_agent:generate_setup_explanation",
+        ):
+            return ask_gpt_text(
+                prompt=json.dumps({
+                    "setup": name,
+                    "symbol": symbol,
+                    "setup_type": setup_type,
+                    "dca_config": {
+                        "frequency": dca_frequency,
+                        "day": dca_day,
+                        "month_day": dca_month_day
+                    },
+                    "description": description,
+                    "action": action
+                }, ensure_ascii=False, indent=2),
+                system_role=system_prompt
+            )
 
     except Exception:
         logger.error("❌ generate_setup_explanation fout", exc_info=True)

@@ -143,6 +143,51 @@ def _infer_unscoped_entry_point() -> str:
     return "openai_client:unknown"
 
 
+def _compact_stacktrace(limit: int = 8) -> list[str]:
+    frames: list[str] = []
+    try:
+        for frame_info in inspect.stack()[2:]:
+            frame_path = Path(frame_info.filename)
+            if frame_path == Path(__file__):
+                continue
+            frames.append(f"{frame_path.stem}:{frame_info.function}")
+            if len(frames) >= limit:
+                break
+    except Exception:
+        return []
+    return frames
+
+
+def _quota_block_debug_payload(*, call_kind: str) -> Dict[str, Any]:
+    context = dict(get_ai_usage_context() or {})
+    caller_tag = (
+        context.get("caller_tag")
+        or context.get("entry_point")
+        or _infer_unscoped_entry_point()
+    )
+    payload: Dict[str, Any] = {
+        "call_kind": call_kind,
+        "model": model,
+        "caller_tag": caller_tag,
+        "trace_id": context.get("trace_id"),
+        "user_id": context.get("user_id"),
+        "http_route": context.get("http_route"),
+        "page_route": context.get("page_route") or context.get("page"),
+        "page_type": context.get("page_type"),
+        "selected_flow": context.get("selected_flow"),
+        "response_source": context.get("response_source"),
+        "response_handler": context.get("response_handler"),
+        "job_name": context.get("job_name"),
+        "job_id": context.get("job_id"),
+        "request_source": context.get("request_source"),
+        "run_kind": context.get("run_kind"),
+        "purpose": context.get("purpose"),
+        "process": os.getpid(),
+        "stacktrace": _compact_stacktrace(),
+    }
+    return {key: value for key, value in payload.items() if value not in (None, "", [], {})}
+
+
 def _log_openai_usage(
     *,
     model_name: str,
@@ -223,6 +268,18 @@ def _log_openai_quota_skip() -> None:
         user_email_snapshot=None,
     )
 
+
+def _log_quota_block_warning(call_kind: str) -> None:
+    try:
+        payload = _quota_block_debug_payload(call_kind=call_kind)
+        logger.warning(
+            "⛔ GPT %s Call overgeslagen: quota breaker actief | %s",
+            call_kind,
+            json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        )
+    except Exception:
+        logger.warning("⛔ GPT %s Call overgeslagen: quota breaker actief", call_kind)
+
 # ============================================================
 # ✅ GPT JSON CALL
 # ============================================================
@@ -241,7 +298,7 @@ def ask_gpt_json(
         return {"error": "AI is offline"}
     if _quota_breaker_active():
         _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
-        logger.warning("⛔ GPT JSON Call overgeslagen: quota breaker actief")
+        _log_quota_block_warning("JSON")
         _log_openai_quota_skip()
         return {"error": "quota"}
 
@@ -313,7 +370,7 @@ def ask_gpt_text(
         return "De AI assistent is momenteel offline omdat de OpenAI API sleutel ontbreekt. Controleer je .env bestand."
     if _quota_breaker_active():
         _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
-        logger.warning("⛔ GPT Text Call overgeslagen: quota breaker actief")
+        _log_quota_block_warning("Text")
         _log_openai_quota_skip()
         return "AI quota bereikt"
 

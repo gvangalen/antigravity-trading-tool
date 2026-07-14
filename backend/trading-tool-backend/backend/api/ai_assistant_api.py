@@ -41,6 +41,7 @@ from backend.schemas.assistant_schema import (
     ChatSessionDetailResponse,
 )
 from backend.services.finn_product_analytics_service import finn_product_analytics
+from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.services.locale_service import localize_finn_payload, resolve_locale
 from backend.services.trader_profile_service import (
     build_trader_profile_context,
@@ -1295,6 +1296,45 @@ def _new_finn_plan_service(db: AsyncSession, *, trace_id: Optional[str] = None):
     return FinnPlanService(db, trace_id=trace_id)
 
 
+def _assistant_http_route(route_source: str) -> str:
+    if route_source == "finn_stream":
+        return "/api/assistant/chat/stream"
+    if route_source == "finn":
+        return "/api/assistant/chat"
+    return f"/api/{route_source}"
+
+
+async def _localize_finn_response_payload(
+    payload: dict,
+    *,
+    user_id: int,
+    trace_id: str,
+    route_source: str,
+    context_payload: Optional[dict],
+    response_source: str,
+    response_handler: str,
+    selected_flow: Optional[str],
+) -> dict:
+    locale = (context_payload or {}).get("locale") or "nl"
+    with ai_usage_context(
+        user_id=user_id,
+        trace_id=trace_id,
+        symbol=(context_payload or {}).get("symbol") or (context_payload or {}).get("asset") or "GLOBAL",
+        request_source="live_user",
+        run_kind="interactive",
+        purpose="finn_response_localization",
+        entry_point="ai_assistant_api:localize_finn_payload",
+        caller_tag="ai_assistant_api:localize_finn_payload",
+        http_route=_assistant_http_route(route_source),
+        page_route=(context_payload or {}).get("page"),
+        page_type=(context_payload or {}).get("page_type"),
+        selected_flow=selected_flow,
+        response_source=response_source,
+        response_handler=response_handler,
+    ):
+        return await localize_finn_payload(payload, locale)
+
+
 async def _finalize_finn_response(
     finn: Any,
     user_id: int,
@@ -1329,7 +1369,16 @@ async def _finalize_finn_response(
     }
     response = _attach_trader_profile_metadata(response, context_payload)
     response = _normalize_finn_response_contract(response)
-    response = await localize_finn_payload(response, (context_payload or {}).get("locale") or "nl")
+    response = await _localize_finn_response_payload(
+        response,
+        user_id=user_id,
+        trace_id=trace_id,
+        route_source=route_source,
+        context_payload=context_payload,
+        response_source=response_source,
+        response_handler=response_handler,
+        selected_flow=response.get("flow") or (response.get("state") or {}).get("current_flow"),
+    )
     _redact_assistant_reasoning(response)
     await _issue_finn_response_actions_safely(
         finn,
@@ -1460,7 +1509,16 @@ async def _prepare_finn_envelope(
     }
     envelope = _attach_trader_profile_metadata(envelope, context_payload)
     envelope = _normalize_finn_response_contract(envelope)
-    envelope = await localize_finn_payload(envelope, (context_payload or {}).get("locale") or "nl")
+    envelope = await _localize_finn_response_payload(
+        envelope,
+        user_id=user_id,
+        trace_id=trace_id,
+        route_source=route_source,
+        context_payload=context_payload,
+        response_source=response_source,
+        response_handler=response_handler,
+        selected_flow=envelope.get("flow") or (envelope.get("state") or {}).get("current_flow"),
+    )
     _redact_assistant_reasoning(envelope)
     await _issue_finn_response_actions_safely(
         finn,

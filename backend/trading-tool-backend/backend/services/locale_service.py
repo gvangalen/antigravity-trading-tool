@@ -254,6 +254,7 @@ async def translate_text_if_needed(text: Any, target_locale: str) -> Any:
         request_source="system",
         run_kind="interactive",
         entry_point="locale_service:translate_text_if_needed",
+        caller_tag="locale_service:translate_text_if_needed",
         completion_status="success",
         locale=normalized_locale,
     ):
