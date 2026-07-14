@@ -1052,6 +1052,8 @@ def _log_finn_prompt_audit(
     draft_rejected_reason: Optional[str] = None,
     legacy_rescue_reason: Optional[str] = None,
     latency_ms: Optional[float] = None,
+    response_source: Optional[str] = None,
+    response_handler: Optional[str] = None,
 ) -> None:
     audit_payload = {
         "trace_id": trace_id,
@@ -1072,8 +1074,112 @@ def _log_finn_prompt_audit(
         "draft_rejected_reason": draft_rejected_reason,
         "legacy_rescue_reason": legacy_rescue_reason,
         "latency_ms": latency_ms,
+        "response_source": response_source,
+        "response_handler": response_handler,
     }
     logger.info("📋 [FINN-P0-AUDIT] %s", json.dumps(audit_payload, ensure_ascii=False, default=str))
+
+
+_FLOW_RESPONSE_SOURCE_MAP = {
+    "behavioral_memory": "memory",
+    "outcome_memory": "memory",
+    "context_explain": "database",
+    "mission_control_explain": "database",
+    "indicator_insight": "database",
+    "daily_coach": "database",
+    "portfolio_intelligence": "database",
+    "priority_engine": "database",
+    "portfolio_operating_system": "database",
+    "decision_review": "database",
+    "bot_decision_review": "database",
+    "trade_journal_intelligence": "database",
+    "personal_performance": "database",
+    "behavioral_intelligence": "database",
+    "finn_report": "database",
+    "status": "database",
+    "general_help": "deterministic",
+    "product_help": "deterministic",
+    "education": "deterministic",
+    "setup_creation": "deterministic",
+    "strategy_creation": "deterministic",
+    "bot_creation": "deterministic",
+    "setup": "deterministic",
+    "strategy": "deterministic",
+    "bot": "deterministic",
+    "cancel": "deterministic",
+}
+
+_FLOW_RESPONSE_HANDLER_MAP = {
+    "behavioral_memory": "finn_plan_service.build_behavioral_memory_response",
+    "outcome_memory": "finn_plan_service.build_outcome_memory_response",
+    "context_explain": "finn_plan_service.build_context_explain_response",
+    "mission_control_explain": "finn_plan_service.build_mission_control_explain_response",
+    "indicator_insight": "finn_plan_service.build_indicator_insight_response",
+    "daily_coach": "finn_plan_service.build_daily_coach_response",
+    "portfolio_intelligence": "finn_plan_service.build_portfolio_intelligence_response",
+    "priority_engine": "finn_plan_service.build_priority_engine_response",
+    "portfolio_operating_system": "finn_plan_service.build_portfolio_operating_system_response",
+    "decision_review": "finn_plan_service.build_decision_review_response",
+    "bot_decision_review": "finn_plan_service.build_bot_decision_review_response",
+    "trade_journal_intelligence": "finn_plan_service.build_trade_journal_intelligence_response",
+    "personal_performance": "finn_plan_service.build_personal_performance_response",
+    "behavioral_intelligence": "finn_plan_service.build_behavioral_intelligence_response",
+    "finn_report": "finn_plan_service.build_finn_report_response",
+    "status": "finn_plan_service.build_status_response",
+    "general_help": "finn_plan_service.build_general_capability_response",
+    "product_help": "finn_plan_service.build_product_help_response",
+    "education": "finn_plan_service.build_education_response",
+    "setup_creation": "ai_assistant_service.get_chat_response",
+    "strategy_creation": "ai_assistant_service.get_chat_response",
+    "bot_creation": "ai_assistant_service.get_chat_response",
+    "setup": "finn_plan_service.build_setup_response",
+    "strategy": "finn_plan_service.build_strategy_response_for_user",
+    "bot": "finn_plan_service.build_bot_response_for_user",
+    "cancel": "finn_plan_service.build_cancel_response",
+}
+
+
+def _infer_response_source(
+    response: Optional[Dict[str, Any]],
+    *,
+    route_source: str,
+    legacy_rescue_reason: Optional[str] = None,
+) -> str:
+    response = response or {}
+    analysis = response.get("analysis") if isinstance(response.get("analysis"), dict) else {}
+    explicit = analysis.get("response_source") or response.get("response_source")
+    if explicit in {"deterministic", "memory", "database", "openai", "fallback"}:
+        return explicit
+
+    flow = str(response.get("flow") or (response.get("state") or {}).get("current_flow") or "").lower()
+    if flow in _FLOW_RESPONSE_SOURCE_MAP:
+        return _FLOW_RESPONSE_SOURCE_MAP[flow]
+    if "rescue" in route_source or legacy_rescue_reason:
+        return "fallback"
+    if route_source in {"legacy_assistant", "legacy", "openai", "assistant_service"}:
+        return "openai"
+    return "fallback"
+
+
+def _infer_response_handler(
+    response: Optional[Dict[str, Any]],
+    *,
+    route_source: str,
+) -> str:
+    response = response or {}
+    analysis = response.get("analysis") if isinstance(response.get("analysis"), dict) else {}
+    explicit = analysis.get("response_handler") or response.get("response_handler")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit
+
+    flow = str(response.get("flow") or (response.get("state") or {}).get("current_flow") or "").lower()
+    if flow in _FLOW_RESPONSE_HANDLER_MAP:
+        return _FLOW_RESPONSE_HANDLER_MAP[flow]
+    if "rescue" in route_source:
+        return "ai_assistant_api._build_finn_core_rescue_envelope"
+    if route_source in {"legacy_assistant", "legacy", "openai", "assistant_service"}:
+        return "ai_assistant_service.get_chat_response"
+    return f"ai_assistant_api.{route_source}"
 
 
 def _client_ip(raw_request: Request) -> str:
@@ -1213,6 +1319,14 @@ async def _finalize_finn_response(
             trace_id=trace_id,
         )
     response = finn._build_response_analysis_metadata(response, context_payload, route_source=route_source)
+    analysis = response.get("analysis") if isinstance(response.get("analysis"), dict) else {}
+    response_source = _infer_response_source(response, route_source=route_source, legacy_rescue_reason=legacy_rescue_reason)
+    response_handler = _infer_response_handler(response, route_source=route_source)
+    response["analysis"] = {
+        **analysis,
+        "response_source": response_source,
+        "response_handler": response_handler,
+    }
     response = _attach_trader_profile_metadata(response, context_payload)
     response = _normalize_finn_response_contract(response)
     response = await localize_finn_payload(response, (context_payload or {}).get("locale") or "nl")
@@ -1247,6 +1361,8 @@ async def _finalize_finn_response(
         draft_rejected_reason=((context_payload or {}).get("_finn_sanitization") or {}).get("draft_rejected_reason"),
         legacy_rescue_reason=legacy_rescue_reason,
         latency_ms=latency_ms,
+        response_source=response_source,
+        response_handler=response_handler,
     )
     _record_finn_product_event(
         user_id=user_id,
@@ -1263,6 +1379,8 @@ async def _finalize_finn_response(
         next_best_action=response.get("next_best_action"),
         metadata={
             "intent": response.get("intent"),
+            "response_source": response_source,
+            "response_handler": response_handler,
             **_trader_profile_event_metadata(context_payload),
         },
     )
@@ -1332,6 +1450,14 @@ async def _prepare_finn_envelope(
             trace_id=trace_id,
         )
     envelope = finn._build_response_analysis_metadata(envelope, context_payload, route_source=route_source)
+    analysis = envelope.get("analysis") if isinstance(envelope.get("analysis"), dict) else {}
+    response_source = _infer_response_source(envelope, route_source=route_source, legacy_rescue_reason=legacy_rescue_reason)
+    response_handler = _infer_response_handler(envelope, route_source=route_source)
+    envelope["analysis"] = {
+        **analysis,
+        "response_source": response_source,
+        "response_handler": response_handler,
+    }
     envelope = _attach_trader_profile_metadata(envelope, context_payload)
     envelope = _normalize_finn_response_contract(envelope)
     envelope = await localize_finn_payload(envelope, (context_payload or {}).get("locale") or "nl")
@@ -1366,6 +1492,8 @@ async def _prepare_finn_envelope(
         draft_rejected_reason=((context_payload or {}).get("_finn_sanitization") or {}).get("draft_rejected_reason"),
         legacy_rescue_reason=legacy_rescue_reason,
         latency_ms=latency_ms,
+        response_source=response_source,
+        response_handler=response_handler,
     )
     _record_finn_product_event(
         user_id=user_id,
@@ -1382,6 +1510,8 @@ async def _prepare_finn_envelope(
         next_best_action=envelope.get("next_best_action"),
         metadata={
             "intent": envelope.get("intent"),
+            "response_source": response_source,
+            "response_handler": response_handler,
             **_trader_profile_event_metadata(context_payload),
         },
     )
@@ -1506,6 +1636,20 @@ async def _finalize_legacy_response(
         context_payload,
         route_source="legacy",
     )
+    legacy_analysis = legacy_response.get("analysis") if isinstance(legacy_response.get("analysis"), dict) else {}
+    response_source = _infer_response_source(
+        legacy_response,
+        route_source="legacy_assistant",
+    )
+    response_handler = _infer_response_handler(
+        legacy_response,
+        route_source="legacy_assistant",
+    )
+    legacy_response["analysis"] = {
+        **legacy_analysis,
+        "response_source": response_source,
+        "response_handler": response_handler,
+    }
     legacy_response = _attach_trader_profile_metadata(legacy_response, context_payload)
     legacy_response = _normalize_finn_response_contract(legacy_response)
     _log_finn_prompt_audit(
@@ -1526,6 +1670,8 @@ async def _finalize_legacy_response(
         context_confidence=(legacy_response.get("analysis") or {}).get("context_confidence"),
         draft_rejected_reason=(context_payload.get("_finn_sanitization") or {}).get("draft_rejected_reason"),
         latency_ms=(time.perf_counter() - started_at) * 1000,
+        response_source=response_source,
+        response_handler=response_handler,
     )
     _record_finn_product_event(
         user_id=user_id,
@@ -1542,6 +1688,8 @@ async def _finalize_legacy_response(
         next_best_action=legacy_response.get("next_best_action"),
         metadata={
             "intent": intent,
+            "response_source": response_source,
+            "response_handler": response_handler,
             **_trader_profile_event_metadata(context_payload),
         },
     )
@@ -2693,7 +2841,13 @@ async def get_finn_mission_control(
     finn = _new_finn_plan_service(db, trace_id=trace_id)
     response = await finn.build_mission_control_response(
         current_user["id"],
-        {"page": "assistant", "scope": "mission_control"},
+        {
+            "page": "assistant",
+            "scope": "mission_control",
+            "mission_control_fast": True,
+            "mission_control_preview_only": True,
+            "allow_cached_mission_control": True,
+        },
     )
     await _issue_finn_response_actions_safely(
         finn,
