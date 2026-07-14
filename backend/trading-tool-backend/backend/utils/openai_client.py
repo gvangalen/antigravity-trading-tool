@@ -289,7 +289,8 @@ def ask_gpt_json(
     system_role: str,
     schema: Optional[Dict[str, Any]] = None,
     retries: int = 2,
-    max_tokens: Optional[int] = None
+    max_tokens: Optional[int] = None,
+    client_max_retries: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Genereert een gestructureerde JSON response."""
     
@@ -314,7 +315,8 @@ def ask_gpt_json(
             logger.info(f"🧠 GPT JSON Call (Attempt {attempt})")
             started = start_timer()
             
-            response = client.chat.completions.create(
+            active_client = client.with_options(max_retries=client_max_retries) if client_max_retries is not None else client
+            response = active_client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=JSON_TEMP,
@@ -361,7 +363,8 @@ def ask_gpt_text(
     prompt: str,
     system_role: str,
     retries: int = 2,
-    max_tokens: Optional[int] = None
+    max_tokens: Optional[int] = None,
+    client_max_retries: Optional[int] = None,
 ) -> str:
     """Genereert een platte tekst response."""
     
@@ -386,7 +389,8 @@ def ask_gpt_text(
             logger.info(f"🧠 GPT Text Call (Attempt {attempt})")
             started = start_timer()
             
-            response = client.chat.completions.create(
+            active_client = client.with_options(max_retries=client_max_retries) if client_max_retries is not None else client
+            response = active_client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=TEXT_TEMP,
