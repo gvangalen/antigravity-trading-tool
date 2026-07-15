@@ -58,6 +58,18 @@ export default function NavBar() {
       matchPathnames: ["/setup", "/strategy"],
       label: "Mijn Plan",
       icon: <Layers size={18} />,
+      subItems: [
+        {
+          href: "/setup",
+          label: "Setups",
+          matchPathnames: ["/setup"],
+        },
+        {
+          href: "/strategy",
+          label: "Strategies",
+          matchPathnames: ["/strategy"],
+        },
+      ],
     },
     {
       href: "/bot",
@@ -215,26 +227,52 @@ function SidebarInner({ pathname, onNavigate, navItems, adminLinks }) {
         {navItems.map((link) => {
           const isActive = (link.matchPathnames || []).includes(pathname);
           return (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={onNavigate}
-              className={`
-                flex items-center gap-4 px-5 py-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all group
-                ${isActive 
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" 
-                  : "text-muted hover:bg-slate-50 dark:hover:bg-slate-900/50 hover:text-slate-900 dark:hover:text-white"
-                }
-              `}
-            >
-              <span className={`${isActive ? "text-white" : "text-secondary group-hover:text-slate-600 dark:group-hover:text-slate-200"}`}>
-                {link.icon}
-              </span>
-              {link.label}
-              {isActive && (
-                <div className="ml-auto w-1.5 h-6 bg-white/40 rounded-full animate-pulse" />
-              )}
-            </Link>
+            <div key={link.href} className="space-y-2">
+              <Link
+                href={link.href}
+                onClick={onNavigate}
+                className={`
+                  flex items-center gap-4 px-5 py-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all group
+                  ${isActive 
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" 
+                    : "text-muted hover:bg-slate-50 dark:hover:bg-slate-900/50 hover:text-slate-900 dark:hover:text-white"
+                  }
+                `}
+              >
+                <span className={`${isActive ? "text-white" : "text-secondary group-hover:text-slate-600 dark:group-hover:text-slate-200"}`}>
+                  {link.icon}
+                </span>
+                {link.label}
+                {isActive && (
+                  <div className="ml-auto w-1.5 h-6 bg-white/40 rounded-full animate-pulse" />
+                )}
+              </Link>
+
+              {link.subItems?.length && isActive ? (
+                <div className="ml-5 space-y-1 border-l border-slate-200 pl-5 dark:border-slate-800">
+                  {link.subItems.map((subItem) => {
+                    const isSubActive = (subItem.matchPathnames || []).includes(pathname);
+
+                    return (
+                      <Link
+                        key={subItem.href}
+                        href={subItem.href}
+                        onClick={onNavigate}
+                        className={`
+                          flex items-center rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-[0.24em] transition-all
+                          ${isSubActive
+                            ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                            : "text-slate-400 hover:bg-slate-50 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-900/50 dark:hover:text-slate-200"
+                          }
+                        `}
+                      >
+                        {subItem.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           );
         })}
 
