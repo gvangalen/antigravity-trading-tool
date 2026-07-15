@@ -31,8 +31,8 @@ export default function TopBar() {
   /* ======== Breadcrumb Label (Localized) ======== */
   const labels = {
     "/": "FINN",
-    "/dashboard": "FINN",
-    "/asset": t?.assetWorkspace?.overview?.eyebrow,
+    "/dashboard": t?.assistant?.uiText?.portfolio || "Portfolio",
+    "/asset": t?.nav?.dashboard || t?.assetWorkspace?.overview?.eyebrow,
     "/market": t.nav.market,
     "/macro": t.nav.macro,
     "/technical": t.nav.technical,

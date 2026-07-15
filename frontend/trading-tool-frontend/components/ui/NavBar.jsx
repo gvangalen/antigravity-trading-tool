@@ -7,8 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import {
   Gauge,
-  DollarSign,
-  Globe,
   LineChart,
   Layers,
   BarChart3,
@@ -43,16 +41,48 @@ export default function NavBar() {
   const appSlogan = shellCopy.appSlogan || BRANDING.APP_SLOGAN;
 
   const isAdmin = user?.role === 'admin';
-
-  const NAV_LINKS = [
-    { href: "/asset", label: "FINN", icon: <Gauge size={18} /> },
-    { href: "/market", label: t.nav.market, icon: <DollarSign size={18} /> },
-    { href: "/macro", label: t.nav.macro, icon: <Globe size={18} /> },
-    { href: "/technical", label: t.nav.technical, icon: <LineChart size={18} /> },
-    { href: "/setup", label: t.nav.setups, icon: <Layers size={18} /> },
-    { href: "/strategy", label: t.nav.strategies, icon: <BarChart3 size={18} /> },
-    { href: "/bot", label: t.nav.bots, icon: <Bot size={18} /> },
-    { href: "/report", label: t.nav.reports, icon: <FileText size={18} /> },
+  const NAV_SECTIONS = [
+    {
+      title: t?.assistant?.uiText?.portfolio || "Portfolio",
+      items: [
+        {
+          href: "/dashboard",
+          matchPathnames: ["/dashboard"],
+          label: t?.assistant?.uiText?.portfolio || "Portfolio",
+          icon: <Gauge size={18} />,
+        },
+      ],
+    },
+    {
+      title: t?.marketAnalysisWorkflow?.title || "Analyse",
+      items: [
+        {
+          href: "/market",
+          matchPathnames: ["/", "/asset", "/market", "/macro", "/technical"],
+          label: t?.marketAnalysisWorkflow?.title || "Analyse",
+          icon: <LineChart size={18} />,
+        }
+      ],
+    },
+    {
+      title: "Mijn Plan",
+      items: [
+        { href: "/setup", matchPathnames: ["/setup"], label: t.nav.setups, icon: <Layers size={18} /> },
+        { href: "/strategy", matchPathnames: ["/strategy"], label: t.nav.strategies, icon: <BarChart3 size={18} /> },
+      ],
+    },
+    {
+      title: t?.assistant?.draftRows?.automation || "Automation",
+      items: [
+        { href: "/bot", matchPathnames: ["/bot"], label: t.nav.bots, icon: <Bot size={18} /> },
+      ],
+    },
+    {
+      title: t?.assistant?.signals?.reflection?.title || "Reflectie",
+      items: [
+        { href: "/report", matchPathnames: ["/report"], label: t.nav.reports, icon: <FileText size={18} /> },
+      ],
+    },
   ];
 
   const ADMIN_LINKS = [];
@@ -104,7 +134,7 @@ export default function NavBar() {
 
       {/* 💻 DESKTOP BAR */}
       <aside className="hidden lg:flex fixed top-0 left-0 bottom-0 w-64 bg-card dark:bg-[#020617] border-r border-slate-200 dark:border-slate-800 flex-col z-50 transition-colors">
-        <SidebarInner pathname={pathname} onNavigate={() => {}} navLinks={NAV_LINKS} adminLinks={ADMIN_LINKS} />
+        <SidebarInner pathname={pathname} onNavigate={() => {}} navSections={NAV_SECTIONS} adminLinks={ADMIN_LINKS} />
       </aside>
 
       {/* 🛸 MOBILE DRAWER */}
@@ -148,7 +178,7 @@ export default function NavBar() {
                   <X size={20} />
                 </button>
               </div>
-              <SidebarInner pathname={pathname} onNavigate={() => setMobileOpen(false)} navLinks={NAV_LINKS} adminLinks={ADMIN_LINKS} />
+              <SidebarInner pathname={pathname} onNavigate={() => setMobileOpen(false)} navSections={NAV_SECTIONS} adminLinks={ADMIN_LINKS} />
             </motion.aside>
           </>
         )}
@@ -157,7 +187,7 @@ export default function NavBar() {
   );
 }
 
-function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
+function SidebarInner({ pathname, onNavigate, navSections, adminLinks }) {
   const { t } = useTranslation();
   const shellCopy = t?.ui?.shell || {};
   const missionStatement = shellCopy.missionStatement || BRANDING.MISSION_STATEMENT;
@@ -194,34 +224,42 @@ function SidebarInner({ pathname, onNavigate, navLinks, adminLinks }) {
 
       {/* LINKS */}
       <nav className="flex-1 px-4 space-y-2 overflow-y-auto no-scrollbar py-4">
-        {navLinks.map((link) => {
-          const isActive = pathname === link.href;
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={onNavigate}
-              className={`
-                flex items-center gap-4 px-5 py-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all group
-                ${isActive 
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" 
-                  : "text-muted hover:bg-slate-50 dark:hover:bg-slate-900/50 hover:text-slate-900 dark:hover:text-white"
-                }
-              `}
-            >
-              <span className={`${isActive ? "text-white" : "text-secondary group-hover:text-slate-600 dark:group-hover:text-slate-200"}`}>
-                {link.icon}
-              </span>
-              {link.label}
-              {isActive && (
-                <div className="ml-auto w-1.5 h-6 bg-white/40 rounded-full animate-pulse" />
-              )}
-            </Link>
-          );
-        })}
+        {navSections.map((section) => (
+          <div key={section.title} className="space-y-1">
+            <p className="px-5 pt-3 text-[9px] font-black uppercase tracking-[0.3em] text-slate-400">
+              {section.title}
+            </p>
+            {section.items.map((link) => {
+              const isActive = (link.matchPathnames || []).includes(pathname);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={onNavigate}
+                  className={`
+                    flex items-center gap-4 px-5 py-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all group
+                    ${isActive 
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" 
+                      : "text-muted hover:bg-slate-50 dark:hover:bg-slate-900/50 hover:text-slate-900 dark:hover:text-white"
+                    }
+                  `}
+                >
+                  <span className={`${isActive ? "text-white" : "text-secondary group-hover:text-slate-600 dark:group-hover:text-slate-200"}`}>
+                    {link.icon}
+                  </span>
+                  {link.label}
+                  {isActive && (
+                    <div className="ml-auto w-1.5 h-6 bg-white/40 rounded-full animate-pulse" />
+                  )}
+                </Link>
+              );
+            })}
 
-        {/* ⭐ WATCHLIST SECTION */}
-        <WatchlistSidebar onNavigate={onNavigate} pathname={pathname} />
+            {section.title === (t?.marketAnalysisWorkflow?.title || "Analyse") ? (
+              <WatchlistSidebar onNavigate={onNavigate} pathname={pathname} embedded />
+            ) : null}
+          </div>
+        ))}
 
         {/* ADMIN SECTION */}
         {adminLinks.length > 0 && (
@@ -303,7 +341,7 @@ function WatchlistItem({ symbol, isActive, onSelect, onRemove, helperText }) {
   );
 }
 
-function WatchlistSidebar({ onNavigate, pathname }) {
+function WatchlistSidebar({ onNavigate, pathname, embedded = false }) {
   const { t } = require("@/app/providers/I18nProvider").useTranslation();
   const router = require("next/navigation").useRouter();
   const { watchlist, remove, loading } = useWatchlist();
@@ -312,10 +350,10 @@ function WatchlistSidebar({ onNavigate, pathname }) {
   const { openConfirm, showSnackbar } = useModal();
 
   return (
-    <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80">
+    <div className={`${embedded ? "pt-2" : "pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80"}`}>
       <p className="px-5 text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-3 flex items-center gap-2">
         <Star size={10} className="text-amber-400 fill-amber-400 animate-pulse" />
-        {t?.nav?.marketContext}
+        {embedded ? "Watchlist" : t?.nav?.marketContext}
       </p>
       {loading ? (
         <div className="space-y-2.5 px-1.5">

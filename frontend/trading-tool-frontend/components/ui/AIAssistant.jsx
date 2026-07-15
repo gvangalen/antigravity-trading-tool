@@ -28,6 +28,49 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
+const FINN_RECENT_CONVERSATIONS_STORAGE_KEY = "finn-recent-conversations:v1";
+const MAX_RECENT_FINN_CONVERSATIONS = 3;
+
+function sanitizeMessageForPersistence(message) {
+  if (!message || typeof message.text !== "string") return null;
+  const text = message.text.trim();
+  if (!text) return null;
+
+  return {
+    role: message.role === "user" ? "user" : "assistant",
+    text,
+    isError: Boolean(message.isError),
+    timestamp: message.timestamp || null,
+  };
+}
+
+function getRecentConversationTitle(messages = []) {
+  const latestUserMessage = [...messages].reverse().find((message) => message?.role === "user" && message?.text);
+  if (latestUserMessage?.text) {
+    return latestUserMessage.text;
+  }
+
+  const latestAssistantMessage = [...messages].reverse().find((message) => message?.text);
+  if (latestAssistantMessage?.text) {
+    return latestAssistantMessage.text;
+  }
+
+  return "Verdergaan met FINN";
+}
+
+function formatRecentConversationTime(timestamp) {
+  if (!timestamp) return "";
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return new Intl.DateTimeFormat("nl-NL", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
 
 function getDictionaryValue(dictionary, path) {
   return String(path || "")
@@ -331,6 +374,7 @@ function AIAssistantContent({
   const [missionControlLoading, setMissionControlLoading] = useState(false);
   const [executingAction, setExecutingAction] = useState(false);
   const [missionDetailSection, setMissionDetailSection] = useState("");
+  const [recentConversations, setRecentConversations] = useState([]);
   
   const messagesEndRef = useRef(null);
   const scrollRef = useRef(null);
@@ -758,6 +802,12 @@ function AIAssistantContent({
 
   const context = getContext();
   const skipNextFinnRestoreRef = useRef(null);
+  const currentConversationStorageKey = React.useMemo(() => {
+    const section = String(context.page_type || pathname || "overview").toLowerCase();
+    const asset = String(context.symbol || globalSymbol || "BTC").toUpperCase();
+    const timeframe = String(context.timeframe || "Day").toLowerCase();
+    return `${section}:${asset}:${timeframe}`;
+  }, [context.page_type, context.symbol, context.timeframe, pathname, globalSymbol]);
 
   useEffect(() => {
     missionControlCacheKeyRef.current = `finn-mission-control:${pathname || "/assistant"}:${globalSymbol || context.symbol || "BTC"}`;
@@ -5219,7 +5269,69 @@ function AIAssistantContent({
     primaryCoachingItem,
   ]);
 
-  const showSimpleFinnHistory = !isSimpleFinnModal || messages.length > 0 || loading || Boolean(activeState);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.sessionStorage.getItem(FINN_RECENT_CONVERSATIONS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      setRecentConversations(Array.isArray(parsed) ? parsed : []);
+    } catch (error) {
+      console.warn("Kon recente FINN-gesprekken niet laden:", error);
+      setRecentConversations([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || loading) return;
+
+    const persistedMessages = messages
+      .map(sanitizeMessageForPersistence)
+      .filter(Boolean);
+
+    if (persistedMessages.length === 0) return;
+
+    const title = getRecentConversationTitle(persistedMessages);
+    const nextConversation = {
+      id: `${currentConversationStorageKey}:${title.toLowerCase()}`,
+      storageKey: currentConversationStorageKey,
+      title: title.length > 88 ? `${title.slice(0, 85)}...` : title,
+      updatedAt: new Date().toISOString(),
+      messages: persistedMessages,
+    };
+
+    setRecentConversations((prev) => {
+      const merged = [
+        nextConversation,
+        ...prev.filter((item) => item?.id !== nextConversation.id),
+      ].slice(0, 12);
+
+      try {
+        window.sessionStorage.setItem(FINN_RECENT_CONVERSATIONS_STORAGE_KEY, JSON.stringify(merged));
+      } catch (error) {
+        console.warn("Kon recente FINN-gesprekken niet bewaren:", error);
+      }
+
+      return merged;
+    });
+  }, [messages, loading, currentConversationStorageKey]);
+
+  const recentConversationItems = recentConversations
+    .filter((conversation) => conversation?.storageKey === currentConversationStorageKey)
+    .slice(0, MAX_RECENT_FINN_CONVERSATIONS);
+
+  const handleRestoreConversation = (conversation) => {
+    if (!conversation || !Array.isArray(conversation.messages) || conversation.messages.length === 0) return;
+    setFinnDraft(null);
+    setActiveState(null);
+    setMessages(conversation.messages);
+  };
+
+  const showSimpleFinnHistory =
+    !isSimpleFinnModal ||
+    messages.length > 0 ||
+    loading ||
+    Boolean(activeState) ||
+    recentConversationItems.length > 0;
 
   useEffect(() => {
     if (!isOpen || !hasTraderProfile) return;
@@ -5593,6 +5705,36 @@ function AIAssistantContent({
         {/* MESSAGES AREA */}
         {showSimpleFinnHistory ? (
         <div className={`space-y-4 ${isSimpleFinnModal ? "p-5 pb-8" : "p-6 pb-20"}`}>
+          {isSimpleFinnModal && messages.length === 0 && recentConversationItems.length > 0 && (
+            <div className="space-y-2">
+              <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
+                Recente gesprekken
+              </div>
+              <div className="space-y-2">
+                {recentConversationItems.map((conversation) => (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    onClick={() => handleRestoreConversation(conversation)}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50/40 dark:border-slate-800 dark:bg-slate-950/40 dark:hover:border-blue-900/50 dark:hover:bg-blue-950/20"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {conversation.title}
+                      </p>
+                      <span className="shrink-0 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                        {formatRecentConversationTime(conversation.updatedAt)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[12px] text-slate-500 dark:text-slate-400">
+                      Ga verder waar je was gebleven.
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[90%] rounded-2xl p-4 ${
