@@ -32,9 +32,7 @@ export const fetchSetupInsight = async () => {
 
 export const fetchStrategyInsight = async () => {
   const res = await fetchAuth(`/api/agents/insights/strategy`, { method: "GET" });
-  console.log("STRATEGY INSIGHT RAW:", res);
-
-  return res?.insight ?? null;  // 🔥 FIX
+  return res?.insight ?? null;
 };
 
 //
@@ -68,5 +66,4 @@ export const fetchStrategyReflections = async () => {
   const res = await fetchAuth(`/api/agents/reflections/strategy`, { method: "GET" });
   return res?.reflections ?? [];
 };
-
 

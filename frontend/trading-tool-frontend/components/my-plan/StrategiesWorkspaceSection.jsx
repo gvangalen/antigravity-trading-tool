@@ -20,7 +20,6 @@ import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 import Drawer from "@/components/ui/Drawer";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
-import { useSetupData } from "@/hooks/useSetupData";
 import { useStrategyData } from "@/hooks/useStrategyData";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { createStrategy, deleteStrategy, updateStrategy } from "@/lib/api/strategy";
@@ -40,8 +39,13 @@ export default function StrategiesWorkspaceSection() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [editingStrategy, setEditingStrategy] = useState(null);
 
-  const { setups, loadSetups } = useSetupData();
-  const { strategies, loadStrategies, loading: strategyLoading } = useStrategyData();
+  const {
+    strategies,
+    setups,
+    loadStrategies,
+    loadSetups,
+    loading: strategyLoading,
+  } = useStrategyData();
 
   const safeSetups = Array.isArray(setups) ? setups : [];
   const safeStrategies = Array.isArray(strategies) ? strategies : [];
@@ -54,11 +58,6 @@ export default function StrategiesWorkspaceSection() {
     if (!status || status.has_asset) return;
     router.replace("/onboarding/asset?onboarding=1&step=asset");
   }, [status, router]);
-
-  useEffect(() => {
-    loadSetups();
-    loadStrategies();
-  }, [loadSetups, loadStrategies]);
 
   useEffect(() => {
     if (safeStrategies.length > 0 && status && status.has_strategy === false) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   fetchSetups,
   fetchTopSetups,
@@ -21,16 +21,7 @@ export function useSetupData() {
   // ============================================================
   // 🔁 LOAD
   // ============================================================
-  useEffect(() => {
-    loadSetups();
-    loadTopSetups();
-  }, [setupTypeFilter]);
-
-  // ============================================================
-  // 🔁 1. Setups ophalen
-  // ============================================================
-  async function loadSetups() {
-    console.log('🔍 loadSetups gestart');
+  const loadSetups = useCallback(async () => {
     setLoading(true);
     setError('');
 
@@ -47,12 +38,9 @@ export function useSetupData() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [setupTypeFilter]);
 
-  // ============================================================
-  // ⭐ 2. Top setups
-  // ============================================================
-  async function loadTopSetups() {
+  const loadTopSetups = useCallback(async () => {
     try {
       const data = await fetchTopSetups();
       setTopSetups(Array.isArray(data) ? data : []);
@@ -60,12 +48,20 @@ export function useSetupData() {
       console.error('❌ loadTopSetups fout:', err);
       setTopSetups([]);
     }
-  }
+  }, []);
 
+  useEffect(() => {
+    loadSetups();
+    loadTopSetups();
+  }, [loadSetups, loadTopSetups]);
+
+  // ============================================================
+  // 🔁 1. Setups ophalen
+  // ============================================================
   // ============================================================
   // 💾 3. Setup bijwerken
   // ============================================================
-  async function saveSetup(id, updatedData) {
+  const saveSetup = useCallback(async (id, updatedData) => {
     try {
       await updateSetup(id, updatedData);
       setSuccessMessage('Setup succesvol opgeslagen.');
@@ -74,12 +70,12 @@ export function useSetupData() {
       console.error('❌ saveSetup fout:', err);
       setError('Opslaan mislukt.');
     }
-  }
+  }, [loadSetups]);
 
   // ============================================================
   // 🗑 4. Setup verwijderen
   // ============================================================
-  async function removeSetup(id) {
+  const removeSetup = useCallback(async (id) => {
     try {
       await deleteSetup(id);
       await loadSetups();
@@ -87,7 +83,7 @@ export function useSetupData() {
       console.error('❌ removeSetup fout:', err);
       setError('Verwijderen mislukt.');
     }
-  }
+  }, [loadSetups]);
 
   // ============================================================
   // 🔍 5. Naam-check

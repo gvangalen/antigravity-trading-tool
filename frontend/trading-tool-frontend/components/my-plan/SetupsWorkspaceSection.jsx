@@ -27,10 +27,6 @@ export default function SetupsWorkspaceSection() {
   const { setups, loading, error, loadSetups, saveSetup, removeSetup } = useSetupData();
 
   useEffect(() => {
-    loadSetups();
-  }, [loadSetups]);
-
-  useEffect(() => {
     trackAssistantEvent({
       event_name: "screen_view",
       page: "/setup",
