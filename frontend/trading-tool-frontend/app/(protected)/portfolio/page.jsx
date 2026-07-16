@@ -6,14 +6,12 @@ import { Wallet } from "lucide-react";
 import useBotData from "@/hooks/useBotData";
 import BotPortfolioOverview from "@/components/bot/BotPortfolioOverview";
 import PortfolioBalanceCard from "@/components/bot/PortfolioBalanceCard";
-import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
-import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
 function PortfolioPageInner() {
   const { t } = useTranslation();
-  const copy = t?.botPage || {};
+  const copy = t?.portfolioOverview || {};
   const [envFilter, setEnvFilter] = useState("all");
 
   const {
@@ -54,7 +52,7 @@ function PortfolioPageInner() {
         </div>
         <div className="max-w-2xl">
           <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">
-            {t?.assistant?.uiText?.portfolio || "Portfolio"}
+            {copy.title || "Portfolio"}
           </h1>
           <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 leading-relaxed">
             {copy.subtitle}
@@ -65,15 +63,9 @@ function PortfolioPageInner() {
       <div className="space-y-8">
         {error && (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
-            {copy.partialError}
+            {t?.botPage?.partialError || "Er ging iets mis bij het laden van portfolio-data."}
           </div>
         )}
-
-        <div className="flex justify-end">
-          <DashboardErrorBoundary>
-            <SystemConnectivity />
-          </DashboardErrorBoundary>
-        </div>
 
         <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
           <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
