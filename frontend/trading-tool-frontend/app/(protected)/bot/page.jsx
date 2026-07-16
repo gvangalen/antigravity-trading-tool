@@ -13,8 +13,6 @@ import BotAgentCard from "@/components/bot/BotAgentCard";
 import BotScores from "@/components/bot/BotScores";
 import BotForm from "@/components/bot/AddBotForm";
 import BotBudgetForm from "@/components/bot/BotBudgetForm";
-import BotPortfolioOverview from "@/components/bot/BotPortfolioOverview";
-import PortfolioBalanceCard from "@/components/bot/PortfolioBalanceCard";
 import GlobalTradePanel from "@/components/bot/GlobalTradePanel";
 
 import {
@@ -44,7 +42,6 @@ function BotPageInner() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [assetFilter, setAssetFilter] = useState("all");
   const [currentTime, setCurrentTime] = useState(null);
-  const [envFilter, setEnvFilter] = useState("all"); // "all", "paper", "live"
   const [generatingBotId, setGeneratingBotId] = useState(null);
   const copy = t?.botPage || {};
   const botGuideCopy = copy.onboardingGuide || {};
@@ -177,23 +174,17 @@ function BotPageInner() {
     macro: 10, technical: 10, market: 10, setup: 10
   };
 
-  const aggregatedBotsForOverview = useMemo(() => {
-    return bots.map((bot) => {
-      const p = portfolios.find((x) => x.bot_id === bot.id);
-      return {
-        bot_id: bot.id,
-        symbol: p?.symbol ?? bot?.symbol ?? "—",
-        is_live: bot.is_live,
-        budget: p?.budget ?? {},
-        stats: p?.stats ?? {},
-      };
-    });
-  }, [bots, portfolios]);
-  
   const availableAssets = useMemo(() => {
-    const assets = new Set(aggregatedBotsForOverview.map(b => b.symbol).filter(s => s && s !== "—"));
+    const assets = new Set(
+      bots
+        .map((bot) => {
+          const portfolio = portfolios.find((item) => item.bot_id === bot.id);
+          return portfolio?.symbol ?? bot?.symbol ?? "—";
+        })
+        .filter((symbol) => symbol && symbol !== "—")
+    );
     return Array.from(assets).sort();
-  }, [aggregatedBotsForOverview]);
+  }, [bots, portfolios]);
 
   const filteredBots = useMemo(() => {
     return bots.filter((bot) => {
@@ -436,25 +427,6 @@ function BotPageInner() {
           {/* ... existing content ... */}
           <div className="space-y-6">
             <BotScores scores={dailyScores} loading={loading?.today} />
-            
-            <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
-              <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
-                <div className="card-title text-slate-900 dark:text-white flex items-center gap-3 font-black uppercase tracking-widest text-xs">{copy.portfolioOverviewTitle}</div>
-              </div>
-              <div className="card-p p-8">
-                <PortfolioBalanceCard
-                  title={copy.portfolioOverviewCardTitle}
-                  defaultRange="1W"
-                  is_live={envFilter === "all" ? null : envFilter === "live"}
-                />
-              </div>
-            </div>
-
-            <BotPortfolioOverview 
-              bots={aggregatedBotsForOverview} 
-              envFilter={envFilter}
-              onEnvFilterChange={setEnvFilter}
-            />
           </div>
 
           {/* BOT DEPLOYMENT SECTION */}

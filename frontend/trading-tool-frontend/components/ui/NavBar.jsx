@@ -11,6 +11,7 @@ import {
   Layers,
   FileText,
   Bot,
+  Wallet,
   Menu,
   X,
   ShieldCheck,
@@ -44,8 +45,14 @@ export default function NavBar() {
     {
       href: "/dashboard",
       matchPathnames: ["/dashboard"],
-      label: t?.assistant?.uiText?.portfolio || "Portfolio",
+      label: "FINN",
       icon: <Gauge size={18} />,
+    },
+    {
+      href: "/portfolio",
+      matchPathnames: ["/portfolio"],
+      label: t?.assistant?.uiText?.portfolio || "Portfolio",
+      icon: <Wallet size={18} />,
     },
     {
       href: "/market",
