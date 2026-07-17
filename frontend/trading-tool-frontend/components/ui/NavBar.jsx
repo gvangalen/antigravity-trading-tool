@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -36,9 +36,12 @@ export default function NavBar() {
   const { t } = useTranslation();
   const { user } = useAuthHook();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
   const shellCopy = t?.ui?.shell || {};
   const appSlogan = shellCopy.appSlogan || BRANDING.APP_SLOGAN;
+  const isAnalysisV3 = searchParams.get("variant") === "v3";
+  const analysisHref = isAnalysisV3 ? "/asset?variant=v3" : "/market";
 
   const isAdmin = user?.role === 'admin';
   const NAV_ITEMS = [
@@ -55,7 +58,7 @@ export default function NavBar() {
       icon: <Wallet size={18} />,
     },
     {
-      href: "/market",
+      href: analysisHref,
       matchPathnames: ["/", "/asset", "/market", "/macro", "/technical"],
       label: t?.marketAnalysisWorkflow?.title || "Analyse",
       icon: <LineChart size={18} />,

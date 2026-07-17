@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
-import { Activity, Bot, ClipboardList, DollarSign, FileBarChart2, Layers3, LineChart, Send, TrendingUp, Workflow } from "lucide-react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Bot, ClipboardList, FileBarChart2, Layers3, Send, Workflow } from "lucide-react";
 
 import NavBar from "@/components/ui/NavBar";
 import ScrollToTop from "@/components/ui/ScrollToTop";
@@ -16,13 +16,15 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function FinnWorkspaceShell({ children }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { selectedAsset } = useAsset();
   const { user } = useAuth();
   const { t } = useTranslation();
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [composerQuery, setComposerQuery] = useState("");
+  const isAnalysisV3 = searchParams.get("variant") === "v3";
 
-  const activeWorkflow = useMemo(() => getWorkflowMeta(pathname), [pathname]);
+  const activeWorkflow = useMemo(() => getWorkflowMeta(pathname, isAnalysisV3), [isAnalysisV3, pathname]);
   const userName = user?.first_name || "Trader";
   const shellStatus = t?.ui?.shell?.appSlogan || "Professional";
   const currentAsset = selectedAsset || "BTC";
@@ -94,19 +96,21 @@ export default function FinnWorkspaceShell({ children }) {
                   <div>
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.28em] text-blue-600 dark:text-blue-400">
                       <Workflow size={12} />
-                      Workflow Canvas
+                      {isAnalysisV3 ? "Analysis Canvas" : "Workflow Canvas"}
                     </div>
                     <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-slate-50">
                       {activeWorkflow.label}
                     </h2>
                     <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
-                      Werk in deze flow met de actieve FINN-briefing direct erboven.
+                      {isAnalysisV3
+                        ? "Bekijk een asset in drie contexten met de actieve FINN-briefing direct erboven."
+                        : "Werk in deze flow met de actieve FINN-briefing direct erboven."}
                     </p>
                   </div>
 
                   <div className="inline-flex items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300">
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                    Workflow Active
+                    {isAnalysisV3 ? "Live Analysis" : "Workflow Active"}
                   </div>
                 </div>
 
@@ -174,17 +178,34 @@ export default function FinnWorkspaceShell({ children }) {
   );
 }
 
-function getWorkflowMeta(pathname) {
+function getWorkflowMeta(pathname, isAnalysisV3) {
+  if (isAnalysisV3) {
+    const v3Workflows = {
+      "/asset": { label: "Analyse" },
+      "/market": { label: "Analyse" },
+      "/macro": { label: "Analyse" },
+      "/technical": { label: "Analyse" },
+      "/bot": { label: "Automation" },
+      "/setup": { label: "Mijn Plan" },
+      "/strategy": { label: "Mijn Plan" },
+      "/report": { label: "Reflectie" },
+      "/portfolio": { label: "Portfolio" },
+      "/dashboard": { label: "FINN" },
+    };
+
+    return v3Workflows[pathname] || { label: "Workspace" };
+  }
+
   const workflows = {
-    "/asset": { label: "Overview", icon: Activity },
-    "/bot": { label: "Bots", icon: Bot },
-    "/market": { label: "Market", icon: DollarSign },
-    "/macro": { label: "Macro", icon: TrendingUp },
-    "/technical": { label: "Technical", icon: LineChart },
-    "/setup": { label: "Setups", icon: Layers3 },
-    "/strategy": { label: "Strategies", icon: ClipboardList },
-    "/report": { label: "Reports", icon: FileBarChart2 },
+    "/asset": { label: "Overview" },
+    "/bot": { label: "Bots" },
+    "/market": { label: "Market" },
+    "/macro": { label: "Macro" },
+    "/technical": { label: "Technical" },
+    "/setup": { label: "Setups" },
+    "/strategy": { label: "Strategies" },
+    "/report": { label: "Reports" },
   };
 
-  return workflows[pathname] || { label: "Workflow", icon: Workflow };
+  return workflows[pathname] || { label: "Workflow" };
 }

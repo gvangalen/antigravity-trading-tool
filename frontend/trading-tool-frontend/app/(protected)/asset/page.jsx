@@ -7,10 +7,11 @@ import DashboardPage from "@/app/(protected)/dashboard/page";
 export default function AssetPage() {
   const searchParams = useSearchParams();
   const queryTab = searchParams.get("tab");
+  const variant = searchParams.get("variant");
 
-  if (!queryTab || queryTab === "overview") {
+  if (variant !== "v3" && (!queryTab || queryTab === "overview")) {
     return <DashboardPage />;
   }
 
-  return <WorkspaceRenderer tab={queryTab} />;
+  return <WorkspaceRenderer tab="market" />;
 }

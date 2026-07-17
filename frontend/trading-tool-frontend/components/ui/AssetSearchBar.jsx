@@ -27,11 +27,10 @@ const ASSETS = [
 ];
 
 const WORKFLOWS = [
-  { id: "overview", label: "Overview", href: (symbol) => `/asset?symbol=${symbol}&tab=overview`, category: "Workflow" },
-  { id: "market", label: "Market Context", href: (symbol) => `/market?symbol=${symbol}&step=market`, category: "Workflow" },
-  { id: "macro", label: "Macro Context", href: (symbol) => `/macro?symbol=${symbol}&step=macro`, category: "Workflow" },
-  { id: "technical", label: "Technical Context", href: (symbol) => `/technical?symbol=${symbol}&step=technical`, category: "Workflow" },
-  { id: "conclusion", label: "FINN Conclusion", href: (symbol) => `/technical?symbol=${symbol}&step=conclusion`, category: "Workflow" },
+  { id: "analysis", label: "Analyse", href: (symbol) => `/asset?symbol=${symbol}`, category: "Workspace" },
+  { id: "market", label: "Analyse: Markt", href: (symbol) => `/market?symbol=${symbol}`, category: "Context" },
+  { id: "macro", label: "Analyse: Macro", href: (symbol) => `/macro?symbol=${symbol}`, category: "Context" },
+  { id: "technical", label: "Analyse: Technisch", href: (symbol) => `/technical?symbol=${symbol}`, category: "Context" },
   { id: "setup", label: "Setups", href: (symbol) => `/setup?symbol=${symbol}`, category: "Workflow" },
   { id: "strategy", label: "Strategies", href: (symbol) => `/strategy?symbol=${symbol}`, category: "Workflow" },
   { id: "bot", label: "Bots", href: (symbol) => `/bot?symbol=${symbol}`, category: "Workflow" },
@@ -50,6 +49,12 @@ const ACTIONS = [
 
 function normalize(text) {
   return String(text || "").trim().toLowerCase();
+}
+
+function withVariant(path, variant) {
+  if (variant !== "v3") return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}variant=v3`;
 }
 
 export default function AssetSearchBar() {
@@ -72,6 +77,7 @@ export default function AssetSearchBar() {
   const inputRef = useRef(null);
 
   const activeSymbol = searchParams.get("symbol")?.toUpperCase() || selectedAsset || "BTC";
+  const activeVariant = searchParams.get("variant") === "v3" ? "v3" : "legacy";
 
   useEffect(() => {
     let mounted = true;
@@ -155,22 +161,22 @@ export default function AssetSearchBar() {
       {
         key: "technical",
         label: "Technical indicator",
-        actionLabel: "Toevoegen aan Technical",
-        route: (symbol, name) => `/technical?symbol=${encodeURIComponent(symbol)}&step=technical&technicalIndicator=${encodeURIComponent(name)}`,
+        actionLabel: "Toevoegen aan Technisch",
+        route: (symbol, name) => withVariant(`/technical?symbol=${encodeURIComponent(symbol)}&technicalIndicator=${encodeURIComponent(name)}`, activeVariant),
         items: technicalIndicators,
       },
       {
         key: "macro",
         label: "Macro indicator",
         actionLabel: "Toevoegen aan Macro",
-        route: (symbol, name) => `/macro?symbol=${encodeURIComponent(symbol)}&step=macro&macroIndicator=${encodeURIComponent(name)}`,
+        route: (symbol, name) => withVariant(`/macro?symbol=${encodeURIComponent(symbol)}&macroIndicator=${encodeURIComponent(name)}`, activeVariant),
         items: macroIndicators,
       },
       {
         key: "market",
         label: "Market indicator",
-        actionLabel: "Toevoegen aan Market",
-        route: (symbol, name) => `/market?symbol=${encodeURIComponent(symbol)}&step=market&marketIndicator=${encodeURIComponent(name)}`,
+        actionLabel: "Toevoegen aan Markt",
+        route: (symbol, name) => withVariant(`/market?symbol=${encodeURIComponent(symbol)}&marketIndicator=${encodeURIComponent(name)}`, activeVariant),
         items: marketIndicators,
       },
     ];
@@ -211,7 +217,7 @@ export default function AssetSearchBar() {
           }))
       )
       .slice(0, 12);
-  }, [activeSymbol, macroIndicators, marketIndicators, mode.category, mode.kind, query, technicalIndicators]);
+  }, [activeSymbol, activeVariant, macroIndicators, marketIndicators, mode.category, mode.kind, query, technicalIndicators]);
 
   const assetResults = useMemo(() => {
     if (mode.kind === "indicator") return [];
@@ -242,9 +248,9 @@ export default function AssetSearchBar() {
       type: "workflow",
       title: workflow.label,
       subtitle: workflow.category,
-      href: workflow.href(activeSymbol),
+      href: withVariant(workflow.href(activeSymbol), activeVariant),
     }));
-  }, [activeSymbol, mode.kind, query]);
+  }, [activeSymbol, activeVariant, mode.kind, query]);
 
   const actionResults = useMemo(() => {
     if (query.trim() === "" && mode.kind !== "indicator") return [];
@@ -282,7 +288,7 @@ export default function AssetSearchBar() {
       initializeAsset(symbol).catch((err) => console.error("❌ Init error:", err));
     });
 
-    router.push(`/asset?symbol=${symbol}&tab=overview`);
+    router.push(withVariant(`/asset?symbol=${symbol}`, activeVariant));
     resetSearch();
   };
 
@@ -499,10 +505,6 @@ export default function AssetSearchBar() {
         mode="add"
         onClose={() => setPendingIndicator(null)}
         onSubmitAction={async ({ category, indicator, assetSymbol }) => {
-          const encodedSymbol = encodeURIComponent(assetSymbol);
-          const encodedIndicator = encodeURIComponent(indicator);
-          const navigationNonce = Date.now();
-
           if (category === "technical") {
             await technicalDataAdd(indicator, assetSymbol);
             return;
@@ -537,7 +539,7 @@ export default function AssetSearchBar() {
 
           if (category === "technical") {
             router.push(
-              `/technical?symbol=${encodedSymbol}&step=technical&technicalIndicator=${encodedIndicator}&indicatorAction=select&indicatorNonce=${navigationNonce}`,
+              withVariant(`/technical?symbol=${encodedSymbol}&technicalIndicator=${encodedIndicator}&indicatorAction=select&indicatorNonce=${navigationNonce}`, activeVariant),
               { scroll: false }
             );
             return;
@@ -545,7 +547,7 @@ export default function AssetSearchBar() {
 
           if (category === "macro") {
             router.push(
-              `/macro?symbol=${encodedSymbol}&step=macro&macroIndicator=${encodedIndicator}&indicatorAction=select&indicatorNonce=${navigationNonce}`,
+              withVariant(`/macro?symbol=${encodedSymbol}&macroIndicator=${encodedIndicator}&indicatorAction=select&indicatorNonce=${navigationNonce}`, activeVariant),
               { scroll: false }
             );
             return;
@@ -553,7 +555,7 @@ export default function AssetSearchBar() {
 
           if (category === "market") {
             router.push(
-              `/market?symbol=${encodedSymbol}&step=market&marketIndicator=${encodedIndicator}&indicatorAction=select&indicatorNonce=${navigationNonce}`,
+              withVariant(`/market?symbol=${encodedSymbol}&marketIndicator=${encodedIndicator}&indicatorAction=select&indicatorNonce=${navigationNonce}`, activeVariant),
               { scroll: false }
             );
           }

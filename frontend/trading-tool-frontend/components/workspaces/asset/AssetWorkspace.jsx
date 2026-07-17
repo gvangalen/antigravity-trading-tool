@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BarChart3, Brain } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
@@ -38,12 +38,18 @@ function AssetOverview({ symbol }) {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {["market", "macro", "technical", "ai"].map((tabId) => (
-          <div key={tabId} className="rounded-3xl border-2 border-slate-100 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-[#0f172a]">
+          <div
+            key={tabId}
+            className="rounded-3xl border-2 border-slate-100 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-[#0f172a]"
+          >
             <div className="mb-3 text-[11px] font-black uppercase tracking-[0.25em] text-blue-600">
               {labels[tabId]}
             </div>
             <p className="text-sm font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
-              {interpolate(copy.overview.cardBody, { tab: labels[tabId].toLowerCase(), symbol })}
+              {interpolate(copy.overview.cardBody, {
+                tab: labels[tabId].toLowerCase(),
+                symbol,
+              })}
             </p>
           </div>
         ))}
@@ -107,9 +113,5 @@ export default function AssetWorkspace({ initialTab = "overview" }) {
     }
   }, [activeSymbol, activeTab, copy.ai, labels.ai]);
 
-  return (
-    <section className="min-h-screen bg-white dark:bg-[#020617]">
-      {tabContent}
-    </section>
-  );
+  return <section className="min-h-screen bg-white dark:bg-[#020617]">{tabContent}</section>;
 }
