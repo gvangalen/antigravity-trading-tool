@@ -8,6 +8,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 export default function GlobalMarketDecisionCard({
   symbol = "BTC",
   snapshot = null,
+  compact = false,
 }) {
   const { t } = useTranslation();
   const fallbackSnapshot = useMarketIntelligence(symbol);
@@ -22,5 +23,5 @@ export default function GlobalMarketDecisionCard({
     );
   }
 
-  return <MarketDecisionCard data={data} />;
+  return <MarketDecisionCard data={data} symbol={symbol} compact={compact} />;
 }

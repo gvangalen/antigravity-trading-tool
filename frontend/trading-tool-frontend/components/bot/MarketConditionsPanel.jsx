@@ -167,6 +167,8 @@ export default function MarketConditionsInline({
   trendStrength = 50,
   multiplier = 1,
   symbol = "BTC",
+  compact = false,
+  hideMetrics = [],
 }) {
   const { t } = useTranslation();
   const copy = t?.ui?.marketConditions || {};
@@ -199,76 +201,128 @@ export default function MarketConditionsInline({
     }
   };
 
+  const rowClass = compact
+    ? "flex items-center gap-3 text-[10px] w-full group py-1.5 transition-all hover:bg-slate-100/50 dark:hover:bg-slate-800/50 px-2 rounded-lg"
+    : "flex items-center gap-6 text-[10px] w-full group py-2.5 transition-all hover:bg-slate-100/50 dark:hover:bg-slate-800/50 px-3 rounded-xl";
+  const labelClass = compact
+    ? "w-36 font-black uppercase tracking-[0.16em] text-muted group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors leading-none"
+    : "w-48 font-black uppercase tracking-widest text-muted group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors leading-none";
+  const barClass = compact
+    ? "flex-1 min-w-[110px] flex gap-1 h-2 items-center"
+    : "flex-1 min-w-[120px] flex gap-1.5 h-3 items-center";
+  const scoreClass = compact
+    ? "w-20 text-right font-mono font-black tabular-nums"
+    : "w-24 text-right font-mono font-black tabular-nums";
+  const badgeClass = compact
+    ? "w-44 flex items-center justify-end gap-2"
+    : "w-64 flex items-center justify-end gap-2";
+  const rowIconClass = compact
+    ? "w-5 flex items-center justify-center text-secondary group-hover:text-blue-600 transition-colors"
+    : "w-6 flex items-center justify-center text-secondary group-hover:text-blue-600 transition-colors";
+  const buttonClass = compact
+    ? "opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/40 text-[8px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all hover:scale-105 active:scale-95 shadow-sm"
+    : "opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all hover:scale-105 active:scale-95 shadow-sm";
+  const statusClass = compact
+    ? "px-2.5 py-0.5 rounded-md bg-card dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-[8px] font-black uppercase tracking-[0.14em] text-muted shadow-sm group-hover:border-blue-600/30 group-hover:text-blue-600 transition-all"
+    : "px-3 py-1 rounded-lg bg-card dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-[9px] font-black uppercase tracking-widest text-muted shadow-sm group-hover:border-blue-600/30 group-hover:text-blue-600 transition-all";
+
+  const metricDefinitions = [
+    {
+      key: "market_pressure",
+      icon: <BarChart3 size={compact ? 14 : 16} />,
+      label: labels.pressure,
+      value: safePressure,
+      color: "bg-blue-500",
+      getLabel: (value) => getPressureLabel(value, pressureStates),
+    },
+    {
+      key: "transition_risk",
+      icon: <AlertTriangle size={compact ? 14 : 16} />,
+      label: labels.transitionRisk,
+      value: safeRisk,
+      color: "bg-orange-500",
+      getLabel: (value) => getTransitionRiskLabel(value, transitionRiskStates),
+    },
+    {
+      key: "setup_quality",
+      icon: <Target size={compact ? 14 : 16} />,
+      label: labels.setupQuality,
+      value: safeHealth,
+      color: "bg-emerald-500",
+      getLabel: (value) => getSetupQualityLabel(value, setupQualityStates),
+    },
+    {
+      key: "market_volatility",
+      icon: <Zap size={compact ? 14 : 16} />,
+      label: labels.volatility,
+      value: safeVolatility,
+      color: "bg-purple-500",
+      getLabel: (value) => getVolatilityLabel(value, volatilityStates),
+    },
+    {
+      key: "trend_strength",
+      icon: <TrendingUp size={compact ? 14 : 16} />,
+      label: labels.trendStrength,
+      value: safeTrend,
+      color: "bg-indigo-500",
+      getLabel: (value) => getTrendStrengthLabel(value, trendStrengthStates),
+    },
+    {
+      key: "position_size",
+      icon: <Layers size={compact ? 14 : 16} />,
+      label: labels.positionSize,
+      value: exposureScore,
+      color: exposureColor,
+      getLabel: () => exposureLabel,
+    },
+  ].filter((item) => !hideMetrics.includes(item.key));
+
   return (
-
     <div className="flex flex-col gap-2 w-full">
-
-      {/* MARKET PRESSURE */}
-
-      <Bar
-        icon={<BarChart3 size={16} />}
-        label={{ text: labels.pressure, askFinn: copy.askFinn }}
-        value={safePressure}
-        color="bg-blue-500"
-        getLabel={(value) => getPressureLabel(value, pressureStates)}
-        onClick={() => triggerAI('market_pressure')}
-      />
-
-      {/* TRANSITION RISK */}
-
-      <Bar
-        icon={<AlertTriangle size={16} />}
-        label={{ text: labels.transitionRisk, askFinn: copy.askFinn }}
-        value={safeRisk}
-        color="bg-orange-500"
-        getLabel={(value) => getTransitionRiskLabel(value, transitionRiskStates)}
-        onClick={() => triggerAI('transition_risk')}
-      />
-
-      {/* SETUP QUALITY */}
-
-      <Bar
-        icon={<Target size={16} />}
-        label={{ text: labels.setupQuality, askFinn: copy.askFinn }}
-        value={safeHealth}
-        color="bg-emerald-500"
-        getLabel={(value) => getSetupQualityLabel(value, setupQualityStates)}
-        onClick={() => triggerAI('setup_quality')}
-      />
-
-      {/* MARKET VOLATILITY */}
-
-      <Bar
-        icon={<Zap size={16} />}
-        label={{ text: labels.volatility, askFinn: copy.askFinn }}
-        value={safeVolatility}
-        color="bg-purple-500"
-        getLabel={(value) => getVolatilityLabel(value, volatilityStates)}
-        onClick={() => triggerAI('market_volatility')}
-      />
-
-      {/* TREND STRENGTH */}
-
-      <Bar
-        icon={<TrendingUp size={16} />}
-        label={{ text: labels.trendStrength, askFinn: copy.askFinn }}
-        value={safeTrend}
-        color="bg-indigo-500"
-        getLabel={(value) => getTrendStrengthLabel(value, trendStrengthStates)}
-        onClick={() => triggerAI('trend_strength')}
-      />
-
-      {/* POSITION SIZE (UPDATED) */}
-
-      <Bar
-        icon={<Layers size={16} />}
-        label={{ text: labels.positionSize, askFinn: copy.askFinn }}
-        value={exposureScore}
-        color={exposureColor}
-        getLabel={() => exposureLabel}
-        onClick={() => triggerAI('position_size')}
-      />
-
+      {metricDefinitions.map((metric) => (
+        <div
+          key={metric.key}
+          className={rowClass}
+        >
+          <span className={rowIconClass}>{metric.icon}</span>
+          <span className={labelClass}>{metric.label}</span>
+          <div className={barClass}>
+            {[...Array(10)].map((_, i) => {
+              const filled = Math.round((clamp(metric.value) / 100) * 10);
+              return (
+                <div
+                  key={i}
+                  className={`flex-1 h-full rounded-[1px] transition-all duration-300 ${
+                    i < filled ? `${metric.color} opacity-100 shadow-sm shadow-blue-900/10` : "bg-slate-200/50 dark:bg-slate-800"
+                  }`}
+                />
+              );
+            })}
+          </div>
+          <div className={scoreClass}>
+            <span className={compact ? "text-foreground text-xs" : "text-foreground text-sm"}>
+              {clamp(metric.value).toString().padStart(2, "0")}
+            </span>
+            <span className={compact ? "text-slate-300 dark:text-slate-600 text-[9px] ml-1 opacity-40" : "text-slate-300 dark:text-slate-600 text-[10px] ml-1.5 opacity-40"}>
+              / 100
+            </span>
+          </div>
+          <div className={badgeClass}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                triggerAI(metric.key);
+              }}
+              className={buttonClass}
+            >
+              <Sparkles size={compact ? 9 : 10} /> {copy.askFinn}
+            </button>
+            <span className={statusClass}>
+              {metric.getLabel(clamp(metric.value))}
+            </span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

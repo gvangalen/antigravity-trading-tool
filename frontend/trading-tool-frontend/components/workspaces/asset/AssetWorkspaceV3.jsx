@@ -348,8 +348,8 @@ function SummaryPill({ label, value, tone = "neutral" }) {
       : "border-slate-200 bg-white text-slate-700";
 
   return (
-    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-black ${toneClass}`}>
-      <span className="uppercase tracking-[0.22em]">{label}</span>
+    <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black ${toneClass}`}>
+      <span className="uppercase tracking-[0.18em]">{label}</span>
       <span className="tracking-tight">{value}</span>
     </div>
   );
@@ -384,36 +384,33 @@ function ScoreOverview({ market, macro, technical, combined, setup }) {
   ];
 
   return (
-    <section className="rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-42px_rgba(15,23,42,0.35)]">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-5 py-5">
-        <div>
+    <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5">
+        <div className="min-w-0">
           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
             Context Scores
           </div>
-          <p className="mt-2 text-sm font-medium text-slate-500">
-            Eerst het totale krachtenveld, daarna de onderliggende bewijslijsten.
-          </p>
         </div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600">
+        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">
           Setup {clampNumber(setup?.score)}/100
           <span className="text-slate-400">·</span>
           Bekijk in Mijn Plan
         </div>
       </div>
 
-      <div className="grid gap-4 px-5 py-5 lg:grid-cols-4">
+      <div className="grid gap-3 px-4 py-3 lg:grid-cols-4">
         {items.map((item) => {
           const tone = scoreTone(item.score);
           return (
-            <div key={item.id} className={`rounded-[22px] border px-4 py-4 ${tone.pill}`}>
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] opacity-70">
+            <div key={item.id} className={`rounded-[18px] border px-4 py-3 ${tone.pill}`}>
+              <div className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">
                 {item.label}
               </div>
-              <div className="mt-2 text-2xl font-black tracking-tight">
-                {item.score}
-              </div>
-              <div className="mt-1 text-sm font-bold">
-                {item.summary}
+              <div className="mt-1.5 flex items-baseline gap-2">
+                <span className="text-[28px] font-black leading-none tracking-tight">{item.score}</span>
+                <span className="text-xs font-bold uppercase tracking-[0.14em] opacity-80">
+                  {item.summary}
+                </span>
               </div>
             </div>
           );
@@ -427,38 +424,38 @@ function AnalysisChartSection({ symbol, isOpen, onToggle }) {
   const tvSymbol = `BINANCE:${symbol}USDT`;
 
   return (
-    <section className="rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-42px_rgba(15,23,42,0.35)]">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-5 py-5">
+    <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5">
         <div>
           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
             TradingView Chart
           </div>
-          <p className="mt-2 text-sm font-medium text-slate-500">
+          <p className="mt-1.5 text-[13px] font-medium text-slate-500">
             Prijsstructuur en visueel bewijs voor de actieve assetanalyse.
           </p>
         </div>
         <button
           type="button"
           onClick={onToggle}
-          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
         >
           {isOpen ? "Chart sluiten" : "Open chart"}
         </button>
       </div>
 
       {isOpen ? (
-        <div className="p-5">
+        <div className="p-4">
           <TradingViewSmartChart
             symbol={tvSymbol}
             interval="D"
             indicators={[]}
             focusedBotId={null}
             setFocusedBotId={() => {}}
-            height={520}
+            height={430}
           />
         </div>
       ) : (
-        <div className="px-5 py-8 text-sm font-medium text-slate-500">
+        <div className="px-4 py-5 text-[13px] font-medium text-slate-500">
           De chart blijft inklapbaar zodat de bewijslijsten hun leesbare hoogte behouden.
         </div>
       )}
@@ -494,7 +491,7 @@ function formatBiasLabel(value) {
 
 function AssetList({ rows, activeSymbol, onSelect, onAddAsset }) {
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
+    <div className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-3.5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
@@ -505,7 +502,7 @@ function AssetList({ rows, activeSymbol, onSelect, onAddAsset }) {
               <button
                 key={group.id}
                 type="button"
-                className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${
+                className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] ${
                   group.active
                     ? "border-slate-900 bg-slate-900 text-white"
                     : "border-slate-200 bg-white text-slate-500"
@@ -520,15 +517,15 @@ function AssetList({ rows, activeSymbol, onSelect, onAddAsset }) {
         <button
           type="button"
           onClick={onAddAsset}
-          className="inline-flex items-center gap-2 rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 transition hover:border-blue-300 hover:text-blue-600"
+          className="inline-flex items-center gap-2 rounded-full border border-dashed border-slate-300 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 transition hover:border-blue-300 hover:text-blue-600"
         >
           <Plus size={12} />
           Asset toevoegen
         </button>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-[20px] border border-slate-200 bg-white">
-        <div className="grid grid-cols-[minmax(0,1.5fr)_130px_110px_90px_130px] gap-3 border-b border-slate-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+      <div className="mt-3 overflow-hidden rounded-[18px] border border-slate-200 bg-white">
+        <div className="grid grid-cols-[minmax(0,1.5fr)_120px_100px_80px_120px] gap-3 border-b border-slate-100 px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
           <div>Asset</div>
           <div className="text-right">Laatste</div>
           <div className="text-right">24u</div>
@@ -543,26 +540,26 @@ function AssetList({ rows, activeSymbol, onSelect, onAddAsset }) {
                 key={row.symbol}
                 type="button"
                 onClick={() => onSelect(row.symbol)}
-                className={`grid w-full grid-cols-[minmax(0,1.5fr)_130px_110px_90px_130px] gap-3 border-b border-slate-100 px-4 py-3 text-left transition last:border-b-0 ${
+                className={`grid w-full grid-cols-[minmax(0,1.5fr)_120px_100px_80px_120px] gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition last:border-b-0 ${
                   active ? "bg-blue-50/70" : "hover:bg-slate-50/80"
                 }`}
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={`h-2.5 w-2.5 rounded-full ${active ? "bg-blue-600" : "bg-slate-300"}`} />
-                    <span className="text-sm font-black text-slate-950">{row.symbol}</span>
+                    <span className="text-[15px] font-black text-slate-950">{row.symbol}</span>
                   </div>
-                  <div className="mt-1 truncate text-sm font-medium text-slate-500">
+                  <div className="mt-0.5 truncate text-[13px] font-medium text-slate-500">
                     {ASSET_NAMES[row.symbol] || "Asset context"}
                   </div>
                 </div>
-                <div className="text-right text-sm font-black text-slate-950">{row.lastPrice}</div>
-                <div className={`text-right text-sm font-black ${row.changeTone}`}>
+                <div className="text-right text-[15px] font-black text-slate-950">{row.lastPrice}</div>
+                <div className={`text-right text-[15px] font-black ${row.changeTone}`}>
                   {row.change24h}
                 </div>
-                <div className="text-right text-sm font-black text-slate-950">{row.score}</div>
+                <div className="text-right text-[15px] font-black text-slate-950">{row.score}</div>
                 <div className="text-right">
-                  <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${row.biasTone}`}>
+                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] ${row.biasTone}`}>
                     {row.bias}
                   </span>
                 </div>
@@ -578,7 +575,7 @@ function AssetList({ rows, activeSymbol, onSelect, onAddAsset }) {
 function SectionScorePill({ score }) {
   const tone = scoreTone(score);
   return (
-    <div className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] ${tone.pill}`}>
+    <div className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] ${tone.pill}`}>
       {clampNumber(score)}/100
     </div>
   );
@@ -590,11 +587,11 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
       <button
         type="button"
         onClick={onToggle}
-        className="w-full px-4 py-4 text-left transition hover:bg-slate-50/80"
+        className="w-full px-4 py-3 text-left transition hover:bg-slate-50/80"
       >
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(120px,0.5fr)_minmax(160px,0.55fr)_minmax(240px,0.9fr)] lg:items-center">
           <div className="flex items-start gap-3">
-            <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition ${
+            <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition ${
               expanded ? "border-blue-200 bg-blue-50 text-blue-600" : "border-slate-200 bg-white text-slate-400"
             }`}>
               <ChevronDown size={14} className={`transition ${expanded ? "rotate-180" : ""}`} />
@@ -603,7 +600,7 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
                 Indicator
               </div>
-              <div className="text-base font-black leading-tight text-slate-950">{row.label}</div>
+              <div className="text-[15px] font-black leading-tight text-slate-950">{row.label}</div>
             </div>
           </div>
 
@@ -611,14 +608,14 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
             <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
               Waarde
             </div>
-            <div className="text-base font-black text-slate-950">{row.value}</div>
+            <div className="text-[15px] font-black text-slate-950">{row.value}</div>
           </div>
 
           <div>
             <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
               Ontwikkeling
             </div>
-            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">
+            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-600">
               <span className={`h-2 w-2 rounded-full ${row.signalTone.dot}`} />
               {row.direction}
             </span>
@@ -629,11 +626,11 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
               Beoordeling
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${row.signalTone.pill}`}>
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.14em] ${row.signalTone.pill}`}>
                 {row.scoreLabel}
               </span>
             </div>
-            <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
+            <p className="mt-1.5 text-[13px] font-medium leading-6 text-slate-500">
               {row.detail}
             </p>
           </div>
@@ -641,13 +638,13 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
       </button>
 
       {expanded ? (
-        <div className="bg-slate-50/70 px-5 py-4">
+        <div className="bg-slate-50/70 px-4 py-3.5">
           <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
                 Verdieping
               </div>
-              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
+              <p className="mt-1.5 text-[13px] font-medium leading-6 text-slate-600">
                 {row.raw?.interpretation || row.raw?.uitleg || row.raw?.action || row.detail}
               </p>
             </div>
@@ -657,7 +654,7 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
                 <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
                   Laatste signaal
                 </div>
-                <div className="mt-2 text-sm font-black text-slate-900">
+                <div className="mt-1.5 text-[13px] font-black text-slate-900">
                   {row.timestamp ? formatTimestamp(row.timestamp) : "Live"}
                 </div>
               </div>
@@ -685,25 +682,25 @@ function EvidenceSection({
   emptyState,
 }) {
   return (
-    <section className="rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-42px_rgba(15,23,42,0.35)]">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-5 py-5">
+    <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.26em] text-blue-600">
             <Icon size={12} />
             {eyebrow}
           </div>
-          <div className="mt-2 flex items-center gap-3">
-            <h2 className="text-2xl font-black tracking-tight text-slate-950">{title}</h2>
+          <div className="mt-1.5 flex items-center gap-3">
+            <h2 className="text-[20px] font-black tracking-tight text-slate-950">{title}</h2>
             <SectionScorePill score={score} />
           </div>
-          <p className="mt-3 max-w-3xl text-sm font-medium leading-relaxed text-slate-500">
+          <p className="mt-2 max-w-3xl text-[13px] font-medium leading-6 text-slate-500">
             {insight}
           </p>
         </div>
         {action}
       </div>
 
-      <div className="hidden border-b border-slate-100 px-5 py-3 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(120px,0.5fr)_minmax(160px,0.55fr)_minmax(240px,0.9fr)] lg:gap-4">
+      <div className="hidden border-b border-slate-100 px-4 py-2.5 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(120px,0.5fr)_minmax(160px,0.55fr)_minmax(240px,0.9fr)] lg:gap-4">
         {["Indicator", "Waarde", "Ontwikkeling", "Beoordeling"].map((label, index) => (
           <div
             key={label}
@@ -981,9 +978,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   };
 
   return (
-    <section className="space-y-4">
-      <section className="rounded-[32px] border border-slate-200/80 bg-white p-5 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.38)] lg:p-6">
-        <div className="space-y-5">
+    <section className="space-y-3">
+      <section className="rounded-[28px] border border-slate-200/80 bg-white p-4 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)] lg:p-5">
+        <div className="space-y-4">
           <AssetList
             rows={watchlistRows}
             activeSymbol={activeSymbol}
@@ -992,30 +989,30 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
           />
 
           <div className="min-w-0">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.28em] text-blue-600">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
               <Brain size={12} />
-              Asset Intelligence Overview
+              Asset Intelligence
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <button
                 type="button"
                 onClick={() => openSearch()}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black tracking-tight text-slate-950 transition hover:border-blue-200 hover:text-blue-600"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-black tracking-tight text-slate-950 transition hover:border-blue-200 hover:text-blue-600"
               >
                 <span>{activeSymbol}</span>
                 <span className="text-slate-400">{ASSET_NAMES[activeSymbol] || "Asset"}</span>
               </button>
-              <span className="text-4xl font-black tracking-tight text-slate-950 lg:text-5xl">
+              <span className="text-[34px] font-black leading-none tracking-tight text-slate-950 lg:text-[38px]">
                 {formatPrice(btcLive?.price, locale)}
               </span>
-              <span className={`text-xl font-black ${Number(btcLive?.change_24h) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              <span className={`text-lg font-black ${Number(btcLive?.change_24h) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                 {formatPercent(btcLive?.change_24h)}
               </span>
-              <span className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">1D</span>
-              <span className="text-sm font-semibold text-slate-500">
+              <span className="text-[13px] font-black uppercase tracking-[0.14em] text-slate-500">1D</span>
+              <span className="text-[13px] font-semibold text-slate-500">
                 Updated {formatTimestamp(btcLive?.timestamp, locale)}
               </span>
             </div>
@@ -1055,14 +1052,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         onToggle={() => setShowChart((current) => !current)}
       />
 
-      <section className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_20px_60px_-42px_rgba(15,23,42,0.35)]">
-        <div className="mb-5">
+      <section className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
+        <div className="mb-3">
           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
-            Analysecontext
+            Marktregime
           </div>
-          <p className="mt-2 text-sm font-medium text-slate-500">
-            Overgenomen uit Overview: structurele fase, short/medium/long-term bias en druk-/risicometingen horen bij Analyse.
-          </p>
         </div>
         <GlobalMarketDecisionCard
           symbol={activeSymbol}
@@ -1070,10 +1064,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             data: overviewSnapshot?.intelligence ?? null,
             loading: overviewLoading && !overviewSnapshot?.intelligence,
           }}
+          compact
         />
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-3">
         {sections.map((section) => (
           <EvidenceSection
             key={section.id}
@@ -1092,27 +1087,27 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                 <button
                   type="button"
                   onClick={() => openSearch({ mode: "indicator", category: "market" })}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
                 >
-                  <Plus size={14} />
+                  <Plus size={12} />
                   Indicator toevoegen
                 </button>
               ) : section.id === "macro" ? (
                 <button
                   type="button"
                   onClick={() => openSearch({ mode: "indicator", category: "macro" })}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
                 >
-                  <Plus size={14} />
+                  <Plus size={12} />
                   Indicator toevoegen
                 </button>
               ) : section.id === "technical" ? (
                 <button
                   type="button"
                   onClick={() => openSearch({ mode: "indicator", category: "technical" })}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
                 >
-                  <Plus size={14} />
+                  <Plus size={12} />
                   Indicator toevoegen
                 </button>
               ) : null
