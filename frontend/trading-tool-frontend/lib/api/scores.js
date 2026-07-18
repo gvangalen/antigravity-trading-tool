@@ -2,23 +2,51 @@
 
 import { fetchAuth } from '@/lib/api/auth';  // ✅ JUISTE AUTH
 
+const DAILY_SCORES_TTL_MS = 30_000;
+const dailyScoresCache = new Map();
+const inflightDailyScoreRequests = new Map();
+
 //
 // =====================================================
 // 🔹 1. Dagelijkse scores ophalen (met veilige fallback)
 // =====================================================
 export async function getDailyScores(symbol = "BTC") {
+  const normalizedSymbol = String(symbol || "BTC").toUpperCase();
+  const cached = dailyScoresCache.get(normalizedSymbol);
+  if (cached && Date.now() - cached.timestamp < DAILY_SCORES_TTL_MS) {
+    return cached.data;
+  }
+
+  if (inflightDailyScoreRequests.has(normalizedSymbol)) {
+    return inflightDailyScoreRequests.get(normalizedSymbol);
+  }
+
+  const request = (async () => {
   try {
-    const data = await fetchAuth(`/api/scores/daily?symbol=${symbol}`);
+    const data = await fetchAuth(`/api/scores/daily?symbol=${normalizedSymbol}`);
 
     if (!data || typeof data !== 'object') {
-      console.warn(`⚠️ getDailyScores(): backend gaf leeg resultaat voor ${symbol} → fallback`);
+      console.warn(`⚠️ getDailyScores(): backend gaf leeg resultaat voor ${normalizedSymbol} → fallback`);
       return fallbackScores();
     }
 
+    dailyScoresCache.set(normalizedSymbol, {
+      data,
+      timestamp: Date.now(),
+    });
     return data;
   } catch (err) {
     console.error('❌ getDailyScores ERROR:', err);
     return fallbackScores();
+  }
+  })();
+
+  inflightDailyScoreRequests.set(normalizedSymbol, request);
+
+  try {
+    return await request;
+  } finally {
+    inflightDailyScoreRequests.delete(normalizedSymbol);
   }
 }
 

@@ -4,6 +4,8 @@ import { fetchWithRetry } from "@/lib/utils/fetchWithRetry";
 import { fetchAuth } from "@/lib/api/auth";
 
 const inflightLatestPriceRequests = new Map();
+const latestPriceCache = new Map();
+const LATEST_PRICE_TTL_MS = 30_000;
 
 //
 // =======================================================
@@ -14,21 +16,39 @@ const inflightLatestPriceRequests = new Map();
 export const fetchMarketData7d = (symbol = "BTC") =>
   fetchWithRetry(`/api/market_data/7d?symbol=${symbol}`, "GET", null, 1, 250, { silent: true });
 export const fetchLatestPrice = (symbol = "BTC", options = {}) => {
-  const requestKey = `${String(symbol || "BTC").toUpperCase()}:${options.forceFresh === false ? "cached" : "fresh"}`;
+  const normalizedSymbol = String(symbol || "BTC").toUpperCase();
+  const allowCache = options.forceFresh === false;
+  const requestKey = `${normalizedSymbol}:${allowCache ? "cached" : "fresh"}`;
+
+  if (allowCache) {
+    const cached = latestPriceCache.get(normalizedSymbol);
+    if (cached && Date.now() - cached.timestamp < LATEST_PRICE_TTL_MS) {
+      return Promise.resolve(cached.data);
+    }
+  }
+
   const existing = inflightLatestPriceRequests.get(requestKey);
   if (existing) return existing;
 
   const request = fetchWithRetry(
-    `/api/market_data/${symbol}/latest`,
+    `/api/market_data/${normalizedSymbol}/latest`,
     "GET",
     null,
     1,
-    options.forceFresh === false ? 150 : 300,
+    allowCache ? 150 : 300,
     {
-      ...(options.forceFresh === false ? {} : { cache: "no-store" }),
+      ...(allowCache ? {} : { cache: "no-store" }),
       silent: true,
     }
-  ).finally(() => {
+  ).then((data) => {
+    if (allowCache) {
+      latestPriceCache.set(normalizedSymbol, {
+        data,
+        timestamp: Date.now(),
+      });
+    }
+    return data;
+  }).finally(() => {
     inflightLatestPriceRequests.delete(requestKey);
   });
 

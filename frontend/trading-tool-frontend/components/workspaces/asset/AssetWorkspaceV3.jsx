@@ -89,6 +89,74 @@ const ASSET_GROUPS = [
   { id: "etf", label: "ETF", active: false },
 ];
 
+function getUiCopy(locale = "nl") {
+  const normalized = String(locale || "nl").toLowerCase();
+  if (normalized.startsWith("en")) {
+    return {
+      activeAnalysis: "Active analysis",
+      updated: "Updated",
+      combinedScore: "Combined score",
+      confidence: "Confidence",
+      bias: "Bias",
+      watchlist: "Watchlist",
+      addAsset: "Add asset",
+      latest: "Last",
+      chartTitle: "TradingView chart",
+      chartClose: "Close chart",
+      chartOpen: "Open chart",
+      contextScores: "Context scores",
+      setupRoute: "Setup via My Plan",
+      marketRegime: "Market regime",
+      addIndicator: "Add indicator",
+      positive: "Positive",
+      negative: "Negative",
+      neutral: "Neutral",
+    };
+  }
+  if (normalized.startsWith("de")) {
+    return {
+      activeAnalysis: "Aktive analyse",
+      updated: "Aktualisiert",
+      combinedScore: "Kombinierter score",
+      confidence: "Vertrauen",
+      bias: "Bias",
+      watchlist: "Watchlist",
+      addAsset: "Asset hinzufügen",
+      latest: "Letzte",
+      chartTitle: "TradingView-chart",
+      chartClose: "Chart schließen",
+      chartOpen: "Chart öffnen",
+      contextScores: "Kontext-scores",
+      setupRoute: "Setup über Mein Plan",
+      marketRegime: "Marktregime",
+      addIndicator: "Indikator hinzufügen",
+      positive: "Positiv",
+      negative: "Negativ",
+      neutral: "Neutral",
+    };
+  }
+  return {
+    activeAnalysis: "Actieve analyse",
+    updated: "Bijgewerkt",
+    combinedScore: "Gecombineerde score",
+    confidence: "Vertrouwen",
+    bias: "Bias",
+    watchlist: "Watchlist",
+    addAsset: "Asset toevoegen",
+    latest: "Laatste",
+    chartTitle: "TradingView-chart",
+    chartClose: "Chart sluiten",
+    chartOpen: "Chart openen",
+    contextScores: "Contextscores",
+    setupRoute: "Setup via Mijn Plan",
+    marketRegime: "Marktregime",
+    addIndicator: "Indicator toevoegen",
+    positive: "Positief",
+    negative: "Negatief",
+    neutral: "Neutraal",
+  };
+}
+
 function clampNumber(value, fallback = 50) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -250,11 +318,11 @@ function toDirectionLabel(item, score) {
   return "Stabiel";
 }
 
-function scoreTone(value) {
+function scoreTone(value, ui = getUiCopy("nl")) {
   const numericValue = clampNumber(value);
   if (numericValue >= 70) {
     return {
-      label: "Positief",
+      label: ui.positive,
       pill: "border-emerald-200 bg-emerald-50 text-emerald-700",
       text: "text-emerald-700",
       dot: "bg-emerald-500",
@@ -262,14 +330,14 @@ function scoreTone(value) {
   }
   if (numericValue <= 35) {
     return {
-      label: "Negatief",
+      label: ui.negative,
       pill: "border-red-200 bg-red-50 text-red-700",
       text: "text-red-700",
       dot: "bg-red-500",
     };
   }
   return {
-    label: "Neutraal",
+    label: ui.neutral,
     pill: "border-slate-200 bg-slate-50 text-slate-700",
     text: "text-slate-700",
     dot: "bg-slate-400",
@@ -355,31 +423,31 @@ function SummaryPill({ label, value, tone = "neutral" }) {
   );
 }
 
-function ScoreOverview({ market, macro, technical, combined }) {
+function ScoreOverview({ market, macro, technical, combined, ui }) {
   const items = [
     {
       id: "market",
       label: "Markt",
       score: clampNumber(market?.score),
-      summary: market?.bias || market?.trend || "Gemengd",
+      summary: market?.bias || market?.trend || ui.neutral,
     },
     {
       id: "macro",
       label: "Macro",
       score: clampNumber(macro?.score),
-      summary: macro?.bias || macro?.trend || "Tegenwind",
+      summary: macro?.bias || macro?.trend || ui.neutral,
     },
     {
       id: "technical",
       label: "Technisch",
       score: clampNumber(technical?.score),
-      summary: technical?.bias || technical?.trend || "Zwak",
+      summary: technical?.bias || technical?.trend || ui.neutral,
     },
     {
       id: "combined",
       label: "Gecombineerd",
       score: clampNumber(combined?.score),
-      summary: combined?.bias || "Voorzichtig",
+      summary: combined?.bias || ui.neutral,
     },
   ];
 
@@ -387,13 +455,13 @@ function ScoreOverview({ market, macro, technical, combined }) {
     <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
       <div className="border-b border-slate-100 px-4 py-3">
         <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
-          Context Scores
+          {ui.contextScores}
         </div>
       </div>
 
       <div className="grid gap-2.5 px-4 py-2.5 lg:grid-cols-4">
         {items.map((item) => {
-          const tone = scoreTone(item.score);
+          const tone = scoreTone(item.score, ui);
           return (
             <div key={item.id} className={`rounded-[16px] border px-3.5 py-2.5 ${tone.pill}`}>
               <div className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">
@@ -413,7 +481,7 @@ function ScoreOverview({ market, macro, technical, combined }) {
   );
 }
 
-function AnalysisChartSection({ symbol, isOpen, onToggle }) {
+function AnalysisChartSection({ symbol, isOpen, onToggle, ui }) {
   const tvSymbol = `BINANCE:${symbol}USDT`;
 
   return (
@@ -421,7 +489,7 @@ function AnalysisChartSection({ symbol, isOpen, onToggle }) {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
         <div>
           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
-            TradingView Chart
+            {ui.chartTitle}
           </div>
           <p className="mt-1 text-[12px] font-medium text-slate-500">
             Prijsstructuur en visueel bewijs voor de actieve assetanalyse.
@@ -432,7 +500,7 @@ function AnalysisChartSection({ symbol, isOpen, onToggle }) {
           onClick={onToggle}
           className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
         >
-          {isOpen ? "Chart sluiten" : "Open chart"}
+          {isOpen ? ui.chartClose : ui.chartOpen}
         </button>
       </div>
 
@@ -456,7 +524,7 @@ function AnalysisChartSection({ symbol, isOpen, onToggle }) {
   );
 }
 
-function PlanBridge({ setup }) {
+function PlanBridge({ setup, ui }) {
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 px-5 py-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -476,9 +544,13 @@ function PlanBridge({ setup }) {
   );
 }
 
-function formatBiasLabel(value) {
+function formatBiasLabel(value, ui = getUiCopy("nl")) {
   const source = String(value || "").trim();
-  if (!source || source === "—") return "Neutraal";
+  if (!source || source === "—") return ui.neutral;
+  const normalized = source.toLowerCase();
+  if (/(bull|posit)/.test(normalized)) return ui.positive;
+  if (/(bear|negat)/.test(normalized)) return ui.negative;
+  if (/(neutr|stab|side)/.test(normalized)) return ui.neutral;
   return source;
 }
 
@@ -490,6 +562,7 @@ function ActiveAssetCard({
   updatedAt,
   combinedSummary,
   onSelectAsset,
+  ui,
 }) {
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white px-5 py-4 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
@@ -497,7 +570,7 @@ function ActiveAssetCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
             <Brain size={12} />
-            Actieve analyse
+            {ui.activeAnalysis}
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -516,37 +589,37 @@ function ActiveAssetCard({
               {formatPercent(change24h)}
             </span>
             <span className="text-[13px] font-black uppercase tracking-[0.14em] text-slate-500">1D</span>
-            <span className="text-[13px] font-semibold text-slate-500">Updated {updatedAt}</span>
+            <span className="text-[13px] font-semibold text-slate-500">{ui.updated} {updatedAt}</span>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2 xl:justify-end">
-          <SummaryPill label="Combined score" value={`${combinedSummary.score}/100`} />
+          <SummaryPill label={ui.combinedScore} value={`${combinedSummary.score}/100`} />
           <SummaryPill
-            label="Bias"
+            label={ui.bias}
             value={combinedSummary.bias}
             tone={
-              combinedSummary.tone.label === "Positief"
+              combinedSummary.tone.label === ui.positive
                 ? "positive"
-                : combinedSummary.tone.label === "Negatief"
+                : combinedSummary.tone.label === ui.negative
                 ? "negative"
                 : "neutral"
             }
           />
-          <SummaryPill label="Confidence" value={`${combinedSummary.confidence}%`} />
+          <SummaryPill label={ui.confidence} value={`${combinedSummary.confidence}%`} />
         </div>
       </div>
     </section>
   );
 }
 
-function AssetList({ rows, activeSymbol, onSelect, onAddAsset }) {
+function AssetList({ rows, activeSymbol, onSelect, onAddAsset, ui }) {
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white p-3.5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
-            Watchlist
+            {ui.watchlist}
           </span>
           <div className="flex flex-wrap gap-2">
             {ASSET_GROUPS.map((group) => (
@@ -571,17 +644,17 @@ function AssetList({ rows, activeSymbol, onSelect, onAddAsset }) {
           className="inline-flex items-center gap-2 rounded-full border border-dashed border-slate-300 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 transition hover:border-blue-300 hover:text-blue-600"
         >
           <Plus size={12} />
-          Asset toevoegen
+          {ui.addAsset}
         </button>
       </div>
 
       <div className="mt-3 overflow-hidden rounded-[18px] border border-slate-200 bg-white">
         <div className="grid grid-cols-[minmax(0,1.5fr)_120px_100px_80px_120px] gap-3 border-b border-slate-100 px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
           <div>Asset</div>
-          <div className="text-right">Laatste</div>
+          <div className="text-right">{ui.latest}</div>
           <div className="text-right">24u</div>
           <div className="text-right">Score</div>
-          <div className="text-right">Bias</div>
+          <div className="text-right">{ui.bias}</div>
         </div>
         <div>
           {rows.map((row) => {
@@ -794,6 +867,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const searchParams = useSearchParams();
   const { selectedAsset, setSelectedAsset, availableAssets = [] } = useAsset();
   const { locale } = useTranslation();
+  const ui = useMemo(() => getUiCopy(locale), [locale]);
   const { watchlist } = useWatchlist();
   const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
   const activeSymbol = symbolFromUrl || selectedAsset || "BTC";
@@ -846,7 +920,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     includeHistory: false,
     includeMaster: true,
   });
-  const { snapshot: overviewSnapshot, loading: overviewLoading } = useOverviewSnapshot(activeSymbol);
+  const { snapshot: overviewSnapshot, loading: overviewLoading } = useOverviewSnapshot(activeSymbol, {
+    includeLive: false,
+  });
 
   useEffect(() => {
     if (!marketIndicatorFromUrl) return;
@@ -914,20 +990,25 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
             const latest = latestResult.status === "fulfilled" ? latestResult.value : null;
             const scores = scoresResult.status === "fulfilled" ? scoresResult.value : null;
+            const latestSource = symbol === activeSymbol && btcLive ? btcLive : latest;
+            const scoreSource =
+              symbol === activeSymbol
+                ? { market, macro, technical }
+                : scores;
             const combinedScore = Math.round(
               (
-                clampNumber(scores?.market?.score, 50) +
-                clampNumber(scores?.macro?.score, 50) +
-                clampNumber(scores?.technical?.score, 50)
+                clampNumber(scoreSource?.market?.score, 50) +
+                clampNumber(scoreSource?.macro?.score, 50) +
+                clampNumber(scoreSource?.technical?.score, 50)
               ) / 3
             );
-            const bias = formatBiasLabel(scores?.market?.advies || scores?.market?.bias);
-            const biasTone = scoreTone(combinedScore).pill;
-            const changeValue = Number(latest?.change_24h);
+            const bias = formatBiasLabel(scoreSource?.market?.advies || scoreSource?.market?.bias, ui);
+            const biasTone = scoreTone(combinedScore, ui).pill;
+            const changeValue = Number(latestSource?.change_24h);
 
             return {
               symbol,
-              lastPrice: formatPrice(latest?.price, locale),
+              lastPrice: formatPrice(latestSource?.price, locale),
               change24h: formatPercent(changeValue, 2),
               changeTone: changeValue >= 0 ? "text-emerald-600" : "text-red-600",
               score: combinedScore,
@@ -941,7 +1022,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
               change24h: "—",
               changeTone: "text-slate-400",
               score: "—",
-              bias: "Neutraal",
+              bias: ui.neutral,
               biasTone: "border-slate-200 bg-slate-50 text-slate-700",
             };
           }
@@ -957,7 +1038,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     return () => {
       cancelled = true;
     };
-  }, [locale, watchlistSymbols]);
+  }, [activeSymbol, btcLive, locale, macro, market, technical, ui, watchlistSymbols]);
 
   const combinedSummary = useMemo(() => {
     const marketScore = clampNumber(market?.score);
@@ -966,15 +1047,15 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     const average = Math.round((marketScore + macroScore + technicalScore) / 3);
     const spread = Math.max(marketScore, macroScore, technicalScore) - Math.min(marketScore, macroScore, technicalScore);
     const confidence = Math.max(32, Math.min(92, 100 - spread));
-    const tone = scoreTone(average);
+    const tone = scoreTone(average, ui);
 
     return {
       score: average,
       confidence,
-      bias: master?.bias && master.bias !== "—" ? master.bias : tone.label,
+      bias: master?.bias && master.bias !== "—" ? formatBiasLabel(master.bias, ui) : tone.label,
       tone,
     };
-  }, [macro, market, master, technical]);
+  }, [macro, market, master, technical, ui]);
 
   const sections = useMemo(() => {
     const marketRows = buildRows(marketDayData, locale);
@@ -984,33 +1065,33 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     return [
       {
         id: "market",
-        title: SECTION_META.market.label,
-        eyebrow: SECTION_META.market.eyebrow,
+        title: locale?.startsWith("en") ? "Market" : locale?.startsWith("de") ? "Markt" : SECTION_META.market.label,
+        eyebrow: locale?.startsWith("en") ? "Market evidence" : locale?.startsWith("de") ? "Marktbelege" : "Marktbewijs",
         icon: SECTION_META.market.icon,
         score: market?.score,
         insight: buildSectionInsight("market", market?.score, marketRows),
         rows: marketRows,
-        emptyState: marketLoading ? "Marktdata laden..." : SECTION_META.market.empty,
+        emptyState: marketLoading ? (locale?.startsWith("en") ? "Loading market data..." : locale?.startsWith("de") ? "Marktdaten werden geladen..." : "Marktdata laden...") : SECTION_META.market.empty,
       },
       {
         id: "macro",
-        title: SECTION_META.macro.label,
-        eyebrow: SECTION_META.macro.eyebrow,
+        title: locale?.startsWith("en") ? "Macro" : locale?.startsWith("de") ? "Makro" : SECTION_META.macro.label,
+        eyebrow: locale?.startsWith("en") ? "Macro evidence" : locale?.startsWith("de") ? "Makrobelege" : "Macro-bewijs",
         icon: SECTION_META.macro.icon,
         score: macro?.score,
         insight: buildSectionInsight("macro", macro?.score, macroRows),
         rows: macroRows,
-        emptyState: macroLoading ? "Macrodata laden..." : SECTION_META.macro.empty,
+        emptyState: macroLoading ? (locale?.startsWith("en") ? "Loading macro data..." : locale?.startsWith("de") ? "Makrodaten werden geladen..." : "Macrodata laden...") : SECTION_META.macro.empty,
       },
       {
         id: "technical",
-        title: SECTION_META.technical.label,
-        eyebrow: SECTION_META.technical.eyebrow,
+        title: locale?.startsWith("en") ? "Technical" : locale?.startsWith("de") ? "Technisch" : SECTION_META.technical.label,
+        eyebrow: locale?.startsWith("en") ? "Technical evidence" : locale?.startsWith("de") ? "Technische belege" : "Technisch bewijs",
         icon: SECTION_META.technical.icon,
         score: technical?.score,
         insight: buildSectionInsight("technical", technical?.score, technicalRows),
         rows: technicalRows,
-        emptyState: technicalLoading ? "Technische data laden..." : SECTION_META.technical.empty,
+        emptyState: technicalLoading ? (locale?.startsWith("en") ? "Loading technical data..." : locale?.startsWith("de") ? "Technische daten werden geladen..." : "Technische data laden...") : SECTION_META.technical.empty,
       },
     ];
   }, [locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading]);
@@ -1038,6 +1119,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         updatedAt={formatTimestamp(btcLive?.timestamp, locale)}
         combinedSummary={combinedSummary}
         onSelectAsset={() => openSearch()}
+        ui={ui}
       />
 
       <AssetList
@@ -1045,21 +1127,23 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         activeSymbol={activeSymbol}
         onSelect={handleAssetSelect}
         onAddAsset={() => openSearch()}
+        ui={ui}
       />
 
       <AnalysisChartSection
         symbol={activeSymbol}
         isOpen={showChart}
         onToggle={() => setShowChart((current) => !current)}
+        ui={ui}
       />
 
       <section className="rounded-[24px] border border-slate-200/80 bg-white p-3.5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
         <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
-            Marktregime
+            {ui.marketRegime}
           </div>
           <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
-            Setup en sizing via Mijn Plan
+            {ui.setupRoute}
           </div>
         </div>
         <GlobalMarketDecisionCard
@@ -1077,6 +1161,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         macro={macro}
         technical={technical}
         combined={combinedSummary}
+        ui={ui}
       />
 
       <section className="space-y-3">
@@ -1101,7 +1186,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
                 >
                   <Plus size={12} />
-                  Indicator toevoegen
+                  {ui.addIndicator}
                 </button>
               ) : section.id === "macro" ? (
                 <button
@@ -1110,7 +1195,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
                 >
                   <Plus size={12} />
-                  Indicator toevoegen
+                  {ui.addIndicator}
                 </button>
               ) : section.id === "technical" ? (
                 <button
@@ -1119,7 +1204,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
                 >
                   <Plus size={12} />
-                  Indicator toevoegen
+                  {ui.addIndicator}
                 </button>
               ) : null
             }
@@ -1173,7 +1258,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         ))}
       </section>
 
-      <PlanBridge setup={setup} />
+      <PlanBridge setup={setup} ui={ui} />
 
       <IndicatorConfigModal
         isOpen={Boolean(technicalConfigModal)}
