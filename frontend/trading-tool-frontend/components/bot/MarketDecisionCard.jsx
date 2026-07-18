@@ -82,7 +82,7 @@ export default function MarketDecisionCard({ data, symbol = "BTC", compact = fal
   ====================================== */
 
   return (
-    <div className={compact ? "space-y-5" : "space-y-8"}>
+    <div className={compact ? "space-y-4" : "space-y-8"}>
       <div className={`flex items-center justify-between border-b border-slate-100 dark:border-slate-800 ${compact ? "pb-3" : "pb-4"}`}>
         <div className="flex items-center gap-3">
           <div className={`${compact ? "p-1.5 rounded-md" : "p-2 rounded-lg"} bg-blue-50 dark:bg-blue-600/10 text-blue-600`}>
@@ -102,7 +102,7 @@ export default function MarketDecisionCard({ data, symbol = "BTC", compact = fal
         </div>
       </div>
 
-      <div className={`group/cycle transition-all ${compact ? "space-y-3 p-2" : "space-y-4 p-3"} rounded-2xl`}>
+      <div className={`group/cycle transition-all ${compact ? "space-y-2 p-1.5" : "space-y-4 p-3"} rounded-2xl`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">{copy.structuralPhase}</div>
@@ -125,7 +125,7 @@ export default function MarketDecisionCard({ data, symbol = "BTC", compact = fal
           </div>
         </div>
 
-        <div className={`grid grid-cols-4 items-end ${compact ? "gap-2 h-2.5 pb-5" : "gap-3 h-3 pb-8"}`}>
+        <div className={`grid grid-cols-4 items-end ${compact ? "gap-2 h-2 pb-4" : "gap-3 h-3 pb-8"}`}>
           {phases.map((p, i) => {
             const isActive = i === phaseIndex;
             const isCompleted = i < phaseIndex;
@@ -141,7 +141,7 @@ export default function MarketDecisionCard({ data, symbol = "BTC", compact = fal
                         : "bg-[var(--color-border-subtle)] dark:bg-slate-800"
                   }`} 
                 />
-                <div className={`mt-3 text-[9px] font-black uppercase tracking-[0.15em] transition-colors whitespace-nowrap ${
+                <div className={`mt-2 text-[8px] font-black uppercase tracking-[0.12em] transition-colors whitespace-nowrap ${
                   isActive ? "text-blue-600" : isCompleted ? "text-muted" : "text-slate-300 dark:text-slate-600"
                 }`}>
                   {p}
@@ -151,12 +151,12 @@ export default function MarketDecisionCard({ data, symbol = "BTC", compact = fal
           })}
         </div>
 
-        <div className={`${compact ? "text-[10px]" : "text-[11px]"} text-muted italic pt-1`}>
+        <div className={`${compact ? "text-[10px]" : "text-[11px]"} text-muted italic pt-0.5`}>
           {macroData.explanation}
         </div>
       </div>
 
-      <div className={`grid grid-cols-1 md:grid-cols-3 ${compact ? "gap-3 pt-2" : "gap-4 pt-4"}`}>
+      <div className={`grid grid-cols-1 md:grid-cols-3 ${compact ? "gap-2 pt-1" : "gap-4 pt-4"}`}>
         {[
           { label: copy.shortTerm, value: trendShort },
           { label: copy.mediumTerm, value: trendMid },
@@ -167,11 +167,11 @@ export default function MarketDecisionCard({ data, symbol = "BTC", compact = fal
           const dotClass = val === 'bullish' ? 'bg-green-500' : val === 'bearish' ? 'bg-red-500' : 'bg-slate-400';
 
           return (
-            <div key={t.label} className={`${compact ? "p-3 rounded-xl" : "p-4 rounded-2xl"} bg-[var(--color-border-subtle)] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-center`}>
-              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">
+            <div key={t.label} className={`${compact ? "p-2.5 rounded-lg" : "p-4 rounded-2xl"} bg-[var(--color-border-subtle)] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-center`}>
+              <div className="text-[8px] font-black text-secondary uppercase tracking-widest mb-1 opacity-60">
                 {t.label}
               </div>
-              <div className={`text-xs font-black uppercase tracking-tight flex items-center gap-2 ${colorClass}`}>
+              <div className={`text-[11px] font-black uppercase tracking-tight flex items-center gap-2 ${colorClass}`}>
                 <div className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
                 {formatTrend(t.value)}
               </div>

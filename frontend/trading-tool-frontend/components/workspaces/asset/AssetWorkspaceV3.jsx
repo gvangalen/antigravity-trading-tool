@@ -385,11 +385,9 @@ function ScoreOverview({ market, macro, technical, combined, setup }) {
 
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5">
-        <div className="min-w-0">
-          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
-            Context Scores
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+        <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
+          Context Scores
         </div>
         <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">
           Setup {clampNumber(setup?.score)}/100
@@ -398,17 +396,17 @@ function ScoreOverview({ market, macro, technical, combined, setup }) {
         </div>
       </div>
 
-      <div className="grid gap-3 px-4 py-3 lg:grid-cols-4">
+      <div className="grid gap-2.5 px-4 py-2.5 lg:grid-cols-4">
         {items.map((item) => {
           const tone = scoreTone(item.score);
           return (
-            <div key={item.id} className={`rounded-[18px] border px-4 py-3 ${tone.pill}`}>
+            <div key={item.id} className={`rounded-[16px] border px-3.5 py-2.5 ${tone.pill}`}>
               <div className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">
                 {item.label}
               </div>
-              <div className="mt-1.5 flex items-baseline gap-2">
-                <span className="text-[28px] font-black leading-none tracking-tight">{item.score}</span>
-                <span className="text-xs font-bold uppercase tracking-[0.14em] opacity-80">
+              <div className="mt-1 flex items-baseline gap-1.5">
+                <span className="text-[24px] font-black leading-none tracking-tight">{item.score}</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.12em] opacity-80">
                   {item.summary}
                 </span>
               </div>
@@ -425,12 +423,12 @@ function AnalysisChartSection({ symbol, isOpen, onToggle }) {
 
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
         <div>
           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
             TradingView Chart
           </div>
-          <p className="mt-1.5 text-[13px] font-medium text-slate-500">
+          <p className="mt-1 text-[12px] font-medium text-slate-500">
             Prijsstructuur en visueel bewijs voor de actieve assetanalyse.
           </p>
         </div>
@@ -444,14 +442,14 @@ function AnalysisChartSection({ symbol, isOpen, onToggle }) {
       </div>
 
       {isOpen ? (
-        <div className="p-4">
+        <div className="p-3">
           <TradingViewSmartChart
             symbol={tvSymbol}
             interval="D"
             indicators={[]}
             focusedBotId={null}
             setFocusedBotId={() => {}}
-            height={430}
+            height={400}
           />
         </div>
       ) : (
@@ -587,9 +585,9 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
       <button
         type="button"
         onClick={onToggle}
-        className="w-full px-4 py-3 text-left transition hover:bg-slate-50/80"
+        className="w-full px-4 py-2.5 text-left transition hover:bg-slate-50/80"
       >
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(120px,0.5fr)_minmax(160px,0.55fr)_minmax(240px,0.9fr)] lg:items-center">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(120px,0.45fr)_minmax(150px,0.5fr)_minmax(220px,0.8fr)] lg:items-center">
           <div className="flex items-start gap-3">
             <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition ${
               expanded ? "border-blue-200 bg-blue-50 text-blue-600" : "border-slate-200 bg-white text-slate-400"
@@ -600,7 +598,7 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
                 Indicator
               </div>
-              <div className="text-[15px] font-black leading-tight text-slate-950">{row.label}</div>
+              <div className="text-[14px] font-black leading-tight text-slate-950">{row.label}</div>
             </div>
           </div>
 
@@ -608,14 +606,14 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
             <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
               Waarde
             </div>
-            <div className="text-[15px] font-black text-slate-950">{row.value}</div>
+            <div className="text-[14px] font-black text-slate-950">{row.value}</div>
           </div>
 
           <div>
             <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
               Ontwikkeling
             </div>
-            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-600">
+            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-bold text-slate-600">
               <span className={`h-2 w-2 rounded-full ${row.signalTone.dot}`} />
               {row.direction}
             </span>
@@ -626,11 +624,11 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
               Beoordeling
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.14em] ${row.signalTone.pill}`}>
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${row.signalTone.pill}`}>
                 {row.scoreLabel}
               </span>
             </div>
-            <p className="mt-1.5 text-[13px] font-medium leading-6 text-slate-500">
+            <p className="mt-1 text-[12px] font-medium leading-5 text-slate-500">
               {row.detail}
             </p>
           </div>
@@ -638,7 +636,7 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
       </button>
 
       {expanded ? (
-        <div className="bg-slate-50/70 px-4 py-3.5">
+        <div className="bg-slate-50/70 px-4 py-3">
           <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
@@ -683,24 +681,24 @@ function EvidenceSection({
 }) {
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-3.5">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.26em] text-blue-600">
             <Icon size={12} />
             {eyebrow}
           </div>
-          <div className="mt-1.5 flex items-center gap-3">
-            <h2 className="text-[20px] font-black tracking-tight text-slate-950">{title}</h2>
+          <div className="mt-1 flex items-center gap-3">
+            <h2 className="text-[18px] font-black tracking-tight text-slate-950">{title}</h2>
             <SectionScorePill score={score} />
           </div>
-          <p className="mt-2 max-w-3xl text-[13px] font-medium leading-6 text-slate-500">
+          <p className="mt-1.5 max-w-3xl text-[12px] font-medium leading-5 text-slate-500">
             {insight}
           </p>
         </div>
         {action}
       </div>
 
-      <div className="hidden border-b border-slate-100 px-4 py-2.5 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(120px,0.5fr)_minmax(160px,0.55fr)_minmax(240px,0.9fr)] lg:gap-4">
+      <div className="hidden border-b border-slate-100 px-4 py-2 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(120px,0.45fr)_minmax(150px,0.5fr)_minmax(220px,0.8fr)] lg:gap-3">
         {["Indicator", "Waarde", "Ontwikkeling", "Beoordeling"].map((label, index) => (
           <div
             key={label}
@@ -751,7 +749,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const [expandedRowKey, setExpandedRowKey] = useState(null);
   const [technicalConfigModal, setTechnicalConfigModal] = useState(null);
   const [watchlistRows, setWatchlistRows] = useState([]);
-  const [showChart, setShowChart] = useState(false);
+  const [showChart, setShowChart] = useState(true);
   const appliedIndicatorsRef = useRef(new Set());
 
   const indicatorFromUrl = searchParams.get("indicator");
@@ -1052,10 +1050,13 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         onToggle={() => setShowChart((current) => !current)}
       />
 
-      <section className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
-        <div className="mb-3">
+      <section className="rounded-[24px] border border-slate-200/80 bg-white p-3.5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
+        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
             Marktregime
+          </div>
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+            Setup en sizing via Mijn Plan
           </div>
         </div>
         <GlobalMarketDecisionCard
