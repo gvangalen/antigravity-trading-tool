@@ -482,9 +482,67 @@ function formatBiasLabel(value) {
   return source;
 }
 
+function ActiveAssetCard({
+  activeSymbol,
+  assetName,
+  price,
+  change24h,
+  updatedAt,
+  combinedSummary,
+  onSelectAsset,
+}) {
+  return (
+    <section className="rounded-[24px] border border-slate-200/80 bg-white px-5 py-4 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
+            <Brain size={12} />
+            Actieve analyse
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <button
+              type="button"
+              onClick={onSelectAsset}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-black tracking-tight text-slate-950 transition hover:border-blue-200 hover:text-blue-600"
+            >
+              <span>{activeSymbol}</span>
+              <span className="text-slate-400">{assetName || "Asset"}</span>
+            </button>
+            <span className="text-[34px] font-black leading-none tracking-tight text-slate-950 lg:text-[38px]">
+              {price}
+            </span>
+            <span className={`text-lg font-black ${Number(change24h) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              {formatPercent(change24h)}
+            </span>
+            <span className="text-[13px] font-black uppercase tracking-[0.14em] text-slate-500">1D</span>
+            <span className="text-[13px] font-semibold text-slate-500">Updated {updatedAt}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 xl:justify-end">
+          <SummaryPill label="Combined score" value={`${combinedSummary.score}/100`} />
+          <SummaryPill
+            label="Bias"
+            value={combinedSummary.bias}
+            tone={
+              combinedSummary.tone.label === "Positief"
+                ? "positive"
+                : combinedSummary.tone.label === "Negatief"
+                ? "negative"
+                : "neutral"
+            }
+          />
+          <SummaryPill label="Confidence" value={`${combinedSummary.confidence}%`} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function AssetList({ rows, activeSymbol, onSelect, onAddAsset }) {
   return (
-    <div className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-3.5">
+    <section className="rounded-[24px] border border-slate-200/80 bg-white p-3.5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
@@ -561,7 +619,7 @@ function AssetList({ rows, activeSymbol, onSelect, onAddAsset }) {
           })}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -972,64 +1030,22 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
   return (
     <section className="space-y-3">
-      <section className="rounded-[28px] border border-slate-200/80 bg-white p-4 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)] lg:p-5">
-        <div className="space-y-4">
-          <div className="min-w-0">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
-              <Brain size={12} />
-              Asset Intelligence
-            </div>
+      <ActiveAssetCard
+        activeSymbol={activeSymbol}
+        assetName={ASSET_NAMES[activeSymbol]}
+        price={formatPrice(btcLive?.price, locale)}
+        change24h={btcLive?.change_24h}
+        updatedAt={formatTimestamp(btcLive?.timestamp, locale)}
+        combinedSummary={combinedSummary}
+        onSelectAsset={() => openSearch()}
+      />
 
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <button
-                type="button"
-                onClick={() => openSearch()}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-black tracking-tight text-slate-950 transition hover:border-blue-200 hover:text-blue-600"
-              >
-                <span>{activeSymbol}</span>
-                <span className="text-slate-400">{ASSET_NAMES[activeSymbol] || "Asset"}</span>
-              </button>
-              <span className="text-[34px] font-black leading-none tracking-tight text-slate-950 lg:text-[38px]">
-                {formatPrice(btcLive?.price, locale)}
-              </span>
-              <span className={`text-lg font-black ${Number(btcLive?.change_24h) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                {formatPercent(btcLive?.change_24h)}
-              </span>
-              <span className="text-[13px] font-black uppercase tracking-[0.14em] text-slate-500">1D</span>
-              <span className="text-[13px] font-semibold text-slate-500">
-                Updated {formatTimestamp(btcLive?.timestamp, locale)}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 xl:justify-end">
-            <SummaryPill label="Combined score" value={`${combinedSummary.score}/100`} />
-            <SummaryPill
-              label="Bias"
-              value={combinedSummary.bias}
-              tone={
-                combinedSummary.tone.label === "Positief"
-                  ? "positive"
-                  : combinedSummary.tone.label === "Negatief"
-                  ? "negative"
-                  : "neutral"
-              }
-            />
-            <SummaryPill label="Confidence" value={`${combinedSummary.confidence}%`} />
-          </div>
-        </div>
-        </div>
-
-          <AssetList
-            rows={watchlistRows}
-            activeSymbol={activeSymbol}
-            onSelect={handleAssetSelect}
-            onAddAsset={() => openSearch()}
-          />
-        </div>
-      </section>
+      <AssetList
+        rows={watchlistRows}
+        activeSymbol={activeSymbol}
+        onSelect={handleAssetSelect}
+        onAddAsset={() => openSearch()}
+      />
 
       <AnalysisChartSection
         symbol={activeSymbol}
