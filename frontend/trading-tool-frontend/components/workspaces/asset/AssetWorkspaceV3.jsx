@@ -134,6 +134,11 @@ function getUiCopy(locale = "nl") {
       unbalancedWeights: "The weights must add up to 100%.",
       applyWeights: "Apply weights",
       savingWeights: "Saving...",
+      day: "Day",
+      week: "Week",
+      month: "Month",
+      quarter: "Quarter",
+      macroPeriod: "Macro period",
     };
   }
   if (normalized.startsWith("de")) {
@@ -175,6 +180,11 @@ function getUiCopy(locale = "nl") {
       unbalancedWeights: "Die Gewichtungen müssen zusammen 100 % ergeben.",
       applyWeights: "Gewichtungen anwenden",
       savingWeights: "Speichern...",
+      day: "Tag",
+      week: "Woche",
+      month: "Monat",
+      quarter: "Quartal",
+      macroPeriod: "Makrozeitraum",
     };
   }
   return {
@@ -215,6 +225,11 @@ function getUiCopy(locale = "nl") {
     unbalancedWeights: "De wegingen moeten samen op 100% uitkomen.",
     applyWeights: "Wegingen toepassen",
     savingWeights: "Opslaan...",
+    day: "Dag",
+    week: "Week",
+    month: "Maand",
+    quarter: "Kwartaal",
+    macroPeriod: "Macroperiode",
   };
 }
 
@@ -224,6 +239,8 @@ const DEFAULT_INTELLIGENCE_WEIGHTS = {
   technical: 0.25,
   setup: 0.25,
 };
+
+const MACRO_TIMEFRAMES = ["day", "week", "month", "quarter"];
 
 function normalizeWeights(weights) {
   const next = Object.fromEntries(
@@ -1175,7 +1192,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const { watchlist } = useWatchlist();
   const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
   const activeSymbol = symbolFromUrl || selectedAsset || "BTC";
-  const [macroTimeframe] = useState("day");
+  const [macroTimeframe, setMacroTimeframe] = useState("day");
   const [technicalTimeframe] = useState("day");
   const [expandedRowKey, setExpandedRowKey] = useState(null);
   const [technicalConfigModal, setTechnicalConfigModal] = useState(null);
@@ -1535,14 +1552,39 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                   {ui.addIndicator}
                 </button>
               ) : section.id === "macro" ? (
-                <button
-                  type="button"
-                  onClick={() => openSearch({ mode: "indicator", category: "macro" })}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
-                >
-                  <Plus size={12} />
-                  {ui.addIndicator}
-                </button>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div
+                    role="group"
+                    aria-label={ui.macroPeriod}
+                    className={`inline-flex rounded-full border border-slate-200 bg-slate-50 p-0.5 transition-opacity ${
+                      macroLoading ? "opacity-60" : "opacity-100"
+                    }`}
+                  >
+                    {MACRO_TIMEFRAMES.map((timeframe) => (
+                      <button
+                        key={timeframe}
+                        type="button"
+                        onClick={() => setMacroTimeframe(timeframe)}
+                        aria-pressed={macroTimeframe === timeframe}
+                        className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] transition ${
+                          macroTimeframe === timeframe
+                            ? "bg-white text-blue-600 shadow-sm ring-1 ring-slate-200"
+                            : "text-slate-400 hover:text-slate-700"
+                        }`}
+                      >
+                        {ui[timeframe]}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openSearch({ mode: "indicator", category: "macro" })}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
+                  >
+                    <Plus size={12} />
+                    {ui.addIndicator}
+                  </button>
+                </div>
               ) : section.id === "technical" ? (
                 <button
                   type="button"
