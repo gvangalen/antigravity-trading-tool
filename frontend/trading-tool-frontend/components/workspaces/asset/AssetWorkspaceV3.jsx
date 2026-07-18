@@ -139,6 +139,7 @@ function getUiCopy(locale = "nl") {
       month: "Month",
       quarter: "Quarter",
       macroPeriod: "Macro period",
+      technicalPeriod: "Technical period",
     };
   }
   if (normalized.startsWith("de")) {
@@ -185,6 +186,7 @@ function getUiCopy(locale = "nl") {
       month: "Monat",
       quarter: "Quartal",
       macroPeriod: "Makrozeitraum",
+      technicalPeriod: "Technischer Zeitraum",
     };
   }
   return {
@@ -230,6 +232,7 @@ function getUiCopy(locale = "nl") {
     month: "Maand",
     quarter: "Kwartaal",
     macroPeriod: "Macroperiode",
+    technicalPeriod: "Technische periode",
   };
 }
 
@@ -239,7 +242,7 @@ const DEFAULT_INTELLIGENCE_WEIGHTS = {
   technical: 1 / 3,
 };
 
-const MACRO_TIMEFRAMES = ["day", "week", "month", "quarter"];
+const ANALYSIS_TIMEFRAMES = ["day", "week", "month", "quarter"];
 
 function normalizeWeights(weights) {
   const next = Object.fromEntries(
@@ -1110,6 +1113,34 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
   );
 }
 
+function TimeframeTabs({ value, onChange, loading, label, ui }) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className={`inline-flex rounded-full border border-slate-200 bg-slate-100/80 p-1 transition-opacity ${
+        loading ? "pointer-events-none opacity-60" : "opacity-100"
+      }`}
+    >
+      {ANALYSIS_TIMEFRAMES.map((timeframe) => (
+        <button
+          key={timeframe}
+          type="button"
+          onClick={() => onChange(timeframe)}
+          aria-pressed={value === timeframe}
+          className={`min-w-[58px] rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition sm:min-w-[70px] ${
+            value === timeframe
+              ? "bg-white text-blue-600 shadow-sm ring-1 ring-slate-200"
+              : "text-slate-500 hover:bg-white/60 hover:text-slate-800"
+          }`}
+        >
+          {ui[timeframe]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function EvidenceSection({
   id,
   title,
@@ -1121,6 +1152,7 @@ function EvidenceSection({
   expandedRowKey,
   onToggleRow,
   action,
+  toolbar,
   renderExpandedActions,
   emptyState,
 }) {
@@ -1142,6 +1174,12 @@ function EvidenceSection({
         </div>
         {action}
       </div>
+
+      {toolbar ? (
+        <div className="flex items-center justify-end border-b border-slate-100 bg-slate-50/50 px-4 py-2.5">
+          {toolbar}
+        </div>
+      ) : null}
 
       <div className="hidden border-b border-slate-100 px-4 py-2 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(120px,0.45fr)_minmax(150px,0.5fr)_minmax(220px,0.8fr)] lg:gap-3">
         {["Indicator", "Waarde", "Ontwikkeling", "Beoordeling"].map((label, index) => (
@@ -1191,7 +1229,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
   const activeSymbol = symbolFromUrl || selectedAsset || "BTC";
   const [macroTimeframe, setMacroTimeframe] = useState("day");
-  const [technicalTimeframe] = useState("day");
+  const [technicalTimeframe, setTechnicalTimeframe] = useState("day");
   const [expandedRowKey, setExpandedRowKey] = useState(null);
   const [technicalConfigModal, setTechnicalConfigModal] = useState(null);
   const [watchlistRows, setWatchlistRows] = useState([]);
@@ -1534,6 +1572,25 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             expandedRowKey={expandedRowKey}
             onToggleRow={(key) => setExpandedRowKey((current) => (current === key ? null : key))}
             emptyState={section.emptyState}
+            toolbar={
+              section.id === "macro" ? (
+                <TimeframeTabs
+                  value={macroTimeframe}
+                  onChange={setMacroTimeframe}
+                  loading={macroLoading}
+                  label={ui.macroPeriod}
+                  ui={ui}
+                />
+              ) : section.id === "technical" ? (
+                <TimeframeTabs
+                  value={technicalTimeframe}
+                  onChange={setTechnicalTimeframe}
+                  loading={technicalLoading}
+                  label={ui.technicalPeriod}
+                  ui={ui}
+                />
+              ) : null
+            }
             action={
               section.id === "market" ? (
                 <button
@@ -1545,39 +1602,14 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                   {ui.addIndicator}
                 </button>
               ) : section.id === "macro" ? (
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <div
-                    role="group"
-                    aria-label={ui.macroPeriod}
-                    className={`inline-flex rounded-full border border-slate-200 bg-slate-50 p-0.5 transition-opacity ${
-                      macroLoading ? "opacity-60" : "opacity-100"
-                    }`}
-                  >
-                    {MACRO_TIMEFRAMES.map((timeframe) => (
-                      <button
-                        key={timeframe}
-                        type="button"
-                        onClick={() => setMacroTimeframe(timeframe)}
-                        aria-pressed={macroTimeframe === timeframe}
-                        className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] transition ${
-                          macroTimeframe === timeframe
-                            ? "bg-white text-blue-600 shadow-sm ring-1 ring-slate-200"
-                            : "text-slate-400 hover:text-slate-700"
-                        }`}
-                      >
-                        {ui[timeframe]}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => openSearch({ mode: "indicator", category: "macro" })}
-                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
-                  >
-                    <Plus size={12} />
-                    {ui.addIndicator}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => openSearch({ mode: "indicator", category: "macro" })}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
+                >
+                  <Plus size={12} />
+                  {ui.addIndicator}
+                </button>
               ) : section.id === "technical" ? (
                 <button
                   type="button"
