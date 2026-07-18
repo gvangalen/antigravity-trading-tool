@@ -21,6 +21,8 @@ import { useTechnicalData } from "@/hooks/useTechnicalData";
 import { useScoresData } from "@/hooks/useScoresData";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
+import { fetchLatestPrice } from "@/lib/api/market";
+import { getDailyScores } from "@/lib/api/scores";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -350,7 +352,13 @@ function SummaryPill({ label, value, tone = "neutral" }) {
   );
 }
 
-function AssetList({ assets, activeSymbol, onSelect, onAddAsset }) {
+function formatBiasLabel(value) {
+  const source = String(value || "").trim();
+  if (!source || source === "—") return "Neutraal";
+  return source;
+}
+
+function AssetList({ rows, activeSymbol, onSelect, onAddAsset }) {
   return (
     <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -386,40 +394,42 @@ function AssetList({ assets, activeSymbol, onSelect, onAddAsset }) {
       </div>
 
       <div className="mt-4 overflow-hidden rounded-[20px] border border-slate-200 bg-white">
-        <div className="grid grid-cols-[minmax(0,1.4fr)_90px_90px] gap-3 border-b border-slate-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+        <div className="grid grid-cols-[minmax(0,1.5fr)_130px_110px_90px_130px] gap-3 border-b border-slate-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
           <div>Asset</div>
-          <div>Type</div>
-          <div className="text-right">Status</div>
+          <div className="text-right">Laatste</div>
+          <div className="text-right">24u</div>
+          <div className="text-right">Score</div>
+          <div className="text-right">Bias</div>
         </div>
         <div>
-          {assets.map((symbol) => {
-            const active = symbol === activeSymbol;
+          {rows.map((row) => {
+            const active = row.symbol === activeSymbol;
             return (
               <button
-                key={symbol}
+                key={row.symbol}
                 type="button"
-                onClick={() => onSelect(symbol)}
-                className={`grid w-full grid-cols-[minmax(0,1.4fr)_90px_90px] gap-3 border-b border-slate-100 px-4 py-3 text-left transition last:border-b-0 ${
+                onClick={() => onSelect(row.symbol)}
+                className={`grid w-full grid-cols-[minmax(0,1.5fr)_130px_110px_90px_130px] gap-3 border-b border-slate-100 px-4 py-3 text-left transition last:border-b-0 ${
                   active ? "bg-blue-50/70" : "hover:bg-slate-50/80"
                 }`}
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={`h-2.5 w-2.5 rounded-full ${active ? "bg-blue-600" : "bg-slate-300"}`} />
-                    <span className="text-sm font-black text-slate-950">{symbol}</span>
+                    <span className="text-sm font-black text-slate-950">{row.symbol}</span>
                   </div>
                   <div className="mt-1 truncate text-sm font-medium text-slate-500">
-                    {ASSET_NAMES[symbol] || "Asset context"}
+                    {ASSET_NAMES[row.symbol] || "Asset context"}
                   </div>
                 </div>
-                <div className="text-sm font-bold text-slate-500">Crypto</div>
+                <div className="text-right text-sm font-black text-slate-950">{row.lastPrice}</div>
+                <div className={`text-right text-sm font-black ${row.changeTone}`}>
+                  {row.change24h}
+                </div>
+                <div className="text-right text-sm font-black text-slate-950">{row.score}</div>
                 <div className="text-right">
-                  <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
-                    active
-                      ? "border-blue-200 bg-blue-100 text-blue-700"
-                      : "border-slate-200 bg-slate-50 text-slate-500"
-                  }`}>
-                    {active ? "Actief" : "Open"}
+                  <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${row.biasTone}`}>
+                    {row.bias}
                   </span>
                 </div>
               </button>
@@ -609,6 +619,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const [technicalTimeframe] = useState("day");
   const [expandedRowKey, setExpandedRowKey] = useState(null);
   const [technicalConfigModal, setTechnicalConfigModal] = useState(null);
+  const [watchlistRows, setWatchlistRows] = useState([]);
   const appliedIndicatorsRef = useRef(new Set());
 
   const indicatorFromUrl = searchParams.get("indicator");
@@ -705,6 +716,65 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     return Array.from(new Set([activeSymbol, ...preferred])).slice(0, 6);
   }, [activeSymbol, assetOptions, watchlist]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWatchlistRows() {
+      const nextRows = await Promise.all(
+        watchlistSymbols.map(async (symbol) => {
+          try {
+            const [latestResult, scoresResult] = await Promise.allSettled([
+              fetchLatestPrice(symbol, { forceFresh: false }),
+              getDailyScores(symbol),
+            ]);
+
+            const latest = latestResult.status === "fulfilled" ? latestResult.value : null;
+            const scores = scoresResult.status === "fulfilled" ? scoresResult.value : null;
+            const combinedScore = Math.round(
+              (
+                clampNumber(scores?.market?.score, 50) +
+                clampNumber(scores?.macro?.score, 50) +
+                clampNumber(scores?.technical?.score, 50)
+              ) / 3
+            );
+            const bias = formatBiasLabel(scores?.market?.advies || scores?.market?.bias);
+            const biasTone = scoreTone(combinedScore).pill;
+            const changeValue = Number(latest?.change_24h);
+
+            return {
+              symbol,
+              lastPrice: formatPrice(latest?.price, locale),
+              change24h: formatPercent(changeValue, 2),
+              changeTone: changeValue >= 0 ? "text-emerald-600" : "text-red-600",
+              score: combinedScore,
+              bias,
+              biasTone,
+            };
+          } catch {
+            return {
+              symbol,
+              lastPrice: "—",
+              change24h: "—",
+              changeTone: "text-slate-400",
+              score: "—",
+              bias: "Neutraal",
+              biasTone: "border-slate-200 bg-slate-50 text-slate-700",
+            };
+          }
+        })
+      );
+
+      if (!cancelled) {
+        setWatchlistRows(nextRows);
+      }
+    }
+
+    loadWatchlistRows();
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, watchlistSymbols]);
+
   const combinedSummary = useMemo(() => {
     const marketScore = clampNumber(market?.score);
     const macroScore = clampNumber(macro?.score);
@@ -777,16 +847,16 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   return (
     <section className="space-y-4">
       <section className="rounded-[32px] border border-slate-200/80 bg-white p-5 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.38)] lg:p-6">
-        <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)] xl:items-stretch">
+        <div className="space-y-5">
           <AssetList
-            assets={watchlistSymbols}
+            rows={watchlistRows}
             activeSymbol={activeSymbol}
             onSelect={handleAssetSelect}
             onAddAsset={() => openSearch()}
           />
 
           <div className="min-w-0">
-        <div className="flex flex-col gap-5 xl:justify-between">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.28em] text-blue-600">
               <Brain size={12} />
