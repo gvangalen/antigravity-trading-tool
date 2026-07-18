@@ -90,7 +90,9 @@ export default function MarketDecisionCard({ data, symbol = "BTC", compact = fal
           </div>
           <div>
             <div className="text-[10px] font-black text-muted uppercase tracking-widest mb-0.5">{copy.title}</div>
-            <div className={`${compact ? "text-[13px]" : "text-sm"} font-bold text-foreground tracking-tight`}>{copy.subtitle}</div>
+            {!compact ? (
+              <div className="text-sm font-bold tracking-tight text-foreground">{copy.subtitle}</div>
+            ) : null}
           </div>
         </div>
 
@@ -106,19 +108,21 @@ export default function MarketDecisionCard({ data, symbol = "BTC", compact = fal
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">{copy.structuralPhase}</div>
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new CustomEvent('finn-action-trigger', {
-                    detail: { metric: 'structural_cycle', symbol, timeframe: '1W' }
-                  }));
-                }
-              }}
-              className={`opacity-0 group-hover/cycle:opacity-100 flex items-center gap-1 bg-blue-50 dark:bg-blue-900/40 text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all hover:scale-105 active:scale-95 shadow-sm ${compact ? "px-1.5 py-0.5 rounded-md" : "px-2 py-0.5 rounded-lg"}`}
-            >
-              <Sparkles size={10} /> {copy.askFinn}
-            </button>
+            {!compact ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(new CustomEvent('finn-action-trigger', {
+                      detail: { metric: 'structural_cycle', symbol, timeframe: '1W' }
+                    }));
+                  }
+                }}
+                className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-600 opacity-0 shadow-sm transition-all hover:scale-105 active:scale-95 group-hover/cycle:opacity-100 dark:border-blue-800 dark:bg-blue-900/40 dark:text-blue-400"
+              >
+                <Sparkles size={10} /> {copy.askFinn}
+              </button>
+            ) : null}
           </div>
           <div className={`text-[10px] font-black text-[var(--primary)] uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 ${compact ? "px-2 py-0.5 rounded-md" : "px-2 py-0.5 rounded-md"}`}>
              {copy.active}: {macroData.regime}
@@ -151,9 +155,11 @@ export default function MarketDecisionCard({ data, symbol = "BTC", compact = fal
           })}
         </div>
 
-        <div className={`${compact ? "text-[10px]" : "text-[11px]"} text-muted italic pt-0.5`}>
-          {macroData.explanation}
-        </div>
+        {!compact ? (
+          <div className="pt-0.5 text-[11px] italic text-muted">
+            {macroData.explanation}
+          </div>
+        ) : null}
       </div>
 
       <div className={`grid grid-cols-1 md:grid-cols-3 ${compact ? "gap-2 pt-1" : "gap-4 pt-4"}`}>

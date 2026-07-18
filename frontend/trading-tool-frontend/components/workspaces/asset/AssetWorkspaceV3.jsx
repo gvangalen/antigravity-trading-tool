@@ -109,7 +109,6 @@ function getUiCopy(locale = "nl") {
       chartClose: "Close chart",
       chartOpen: "Open chart",
       contextScores: "Context scores",
-      setupRoute: "Setup via My Plan",
       marketRegime: "Market regime",
       addIndicator: "Add indicator",
       positive: "Positive",
@@ -157,7 +156,6 @@ function getUiCopy(locale = "nl") {
       chartClose: "Chart schließen",
       chartOpen: "Chart öffnen",
       contextScores: "Kontext-scores",
-      setupRoute: "Setup über Mein Plan",
       marketRegime: "Marktregime",
       addIndicator: "Indikator hinzufügen",
       positive: "Positiv",
@@ -204,7 +202,6 @@ function getUiCopy(locale = "nl") {
     chartClose: "Chart sluiten",
     chartOpen: "Chart openen",
     contextScores: "Contextscores",
-    setupRoute: "Setup via Mijn Plan",
     marketRegime: "Marktregime",
     addIndicator: "Indicator toevoegen",
     positive: "Positief",
@@ -751,13 +748,8 @@ function AnalysisChartSection({ symbol, isOpen, onToggle, ui }) {
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-        <div>
-          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
-            {ui.chartTitle}
-          </div>
-          <p className="mt-1 text-[12px] font-medium text-slate-500">
-            Prijsstructuur en visueel bewijs voor de actieve assetanalyse.
-          </p>
+        <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
+          {ui.chartTitle}
         </div>
         <button
           type="button"
@@ -779,11 +771,7 @@ function AnalysisChartSection({ symbol, isOpen, onToggle, ui }) {
             height={400}
           />
         </div>
-      ) : (
-        <div className="px-4 py-5 text-[13px] font-medium text-slate-500">
-          De chart blijft inklapbaar zodat de bewijslijsten hun leesbare hoogte behouden.
-        </div>
-      )}
+      ) : null}
     </section>
   );
 }
@@ -1534,12 +1522,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       />
 
       <section className="rounded-[24px] border border-slate-200/80 bg-white p-3.5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
-        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-2.5 flex items-center">
           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
             {ui.marketRegime}
-          </div>
-          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
-            {ui.setupRoute}
           </div>
         </div>
         <GlobalMarketDecisionCard
