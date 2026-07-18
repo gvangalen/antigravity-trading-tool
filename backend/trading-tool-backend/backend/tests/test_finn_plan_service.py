@@ -4459,7 +4459,7 @@ def test_daily_score_fetch_uses_runtime_refresh_when_raw_scores_are_missing(monk
 
     assert result["macro_score"] == 10
     assert fetch_scores.await_count == 2
-    refresh_scores.assert_awaited_once_with(7, "BTC")
+    refresh_scores.assert_awaited_once_with(7, "BTC", refresh_if_incomplete=True)
 
 
 def test_daily_data_readiness_separates_onboarding_from_score_generation():

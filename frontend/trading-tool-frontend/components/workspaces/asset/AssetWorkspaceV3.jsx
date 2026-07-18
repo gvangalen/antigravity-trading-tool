@@ -111,6 +111,11 @@ function getUiCopy(locale = "nl") {
       positive: "Positive",
       negative: "Negative",
       neutral: "Neutral",
+      unavailable: "Insufficient data",
+      market: "Market",
+      macro: "Macro",
+      technical: "Technical",
+      combined: "Combined",
     };
   }
   if (normalized.startsWith("de")) {
@@ -133,6 +138,11 @@ function getUiCopy(locale = "nl") {
       positive: "Positiv",
       negative: "Negativ",
       neutral: "Neutral",
+      unavailable: "Unzureichende Daten",
+      market: "Markt",
+      macro: "Makro",
+      technical: "Technisch",
+      combined: "Kombiniert",
     };
   }
   return {
@@ -154,12 +164,44 @@ function getUiCopy(locale = "nl") {
     positive: "Positief",
     negative: "Negatief",
     neutral: "Neutraal",
+    unavailable: "Onvoldoende data",
+    market: "Markt",
+    macro: "Macro",
+    technical: "Technisch",
+    combined: "Gecombineerd",
   };
 }
 
-function clampNumber(value, fallback = 50) {
+function normalizeScore(value) {
+  if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function formatScore(value) {
+  const score = normalizeScore(value);
+  return score === null ? "—" : Math.round(score);
+}
+
+function summarizeContextScores(values, ui) {
+  const scores = values.map(normalizeScore).filter((value) => value !== null);
+  if (!scores.length) {
+    return {
+      score: null,
+      confidence: null,
+      bias: ui.unavailable,
+      tone: scoreTone(null, ui),
+    };
+  }
+
+  const average = Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length);
+  const spread = scores.length > 1 ? Math.max(...scores) - Math.min(...scores) : 100;
+  const coverage = scores.length / values.length;
+  const confidence = Math.round(Math.max(0, 100 - spread) * coverage);
+  const tone = scoreTone(average, ui);
+
+  return { score: average, confidence, bias: tone.label, tone };
 }
 
 function formatPrice(value, locale) {
@@ -313,13 +355,22 @@ function toDirectionLabel(item, score) {
   if (trendSource.includes("stable") || trendSource.includes("stab")) return "Stabiel";
   if (trendSource.includes("buy")) return "Actief";
   if (trendSource.includes("sell")) return "Verzwakt";
+  if (score === null) return "Onvoldoende data";
   if (score >= 70) return "Verbetert";
   if (score <= 35) return "Verslechtert";
   return "Stabiel";
 }
 
 function scoreTone(value, ui = getUiCopy("nl")) {
-  const numericValue = clampNumber(value);
+  const numericValue = normalizeScore(value);
+  if (numericValue === null) {
+    return {
+      label: ui.unavailable,
+      pill: "border-slate-200 bg-slate-50 text-slate-500",
+      text: "text-slate-500",
+      dot: "bg-slate-300",
+    };
+  }
   if (numericValue >= 70) {
     return {
       label: ui.positive,
@@ -354,7 +405,7 @@ function buildRows(items, locale) {
   return source.map((item, index) => {
     const name = item?.name || item?.indicator || `indicator_${index}`;
     const label = prettifyName(name);
-    const score = clampNumber(item?.score, 50);
+    const score = normalizeScore(item?.score);
     const tone = scoreTone(score);
     const direction = toDirectionLabel(item, score);
     const detail = trimSentence(
@@ -370,7 +421,7 @@ function buildRows(items, locale) {
       direction,
       score,
       signalTone: tone,
-      scoreLabel: `${tone.label} · ${score}`,
+      scoreLabel: score === null ? tone.label : `${tone.label} · ${Math.round(score)}`,
       detail,
       timestamp: item?.timestamp || item?.date || null,
       raw: item,
@@ -379,8 +430,10 @@ function buildRows(items, locale) {
 }
 
 function buildSectionInsight(sectionId, sectionScore, rows) {
-  const score = clampNumber(sectionScore, 50);
+  const score = normalizeScore(sectionScore);
   const focus = rows.slice(0, 2).map((row) => row.label.toLowerCase());
+
+  if (score === null) return "Onvoldoende scoredata voor een betrouwbare groepsconclusie.";
 
   if (sectionId === "market") {
     if (score <= 35) {
@@ -427,27 +480,23 @@ function ScoreOverview({ market, macro, technical, combined, ui }) {
   const items = [
     {
       id: "market",
-      label: "Markt",
-      score: clampNumber(market?.score),
-      summary: market?.bias || market?.trend || ui.neutral,
+      label: ui.market,
+      score: normalizeScore(market?.score),
     },
     {
       id: "macro",
-      label: "Macro",
-      score: clampNumber(macro?.score),
-      summary: macro?.bias || macro?.trend || ui.neutral,
+      label: ui.macro,
+      score: normalizeScore(macro?.score),
     },
     {
       id: "technical",
-      label: "Technisch",
-      score: clampNumber(technical?.score),
-      summary: technical?.bias || technical?.trend || ui.neutral,
+      label: ui.technical,
+      score: normalizeScore(technical?.score),
     },
     {
       id: "combined",
-      label: "Gecombineerd",
-      score: clampNumber(combined?.score),
-      summary: combined?.bias || ui.neutral,
+      label: ui.combined,
+      score: normalizeScore(combined?.score),
     },
   ];
 
@@ -462,15 +511,16 @@ function ScoreOverview({ market, macro, technical, combined, ui }) {
       <div className="grid gap-2.5 px-4 py-2.5 lg:grid-cols-4">
         {items.map((item) => {
           const tone = scoreTone(item.score, ui);
+          const summary = item.id === "combined" ? combined?.bias || tone.label : tone.label;
           return (
             <div key={item.id} className={`rounded-[16px] border px-3.5 py-2.5 ${tone.pill}`}>
               <div className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">
                 {item.label}
               </div>
               <div className="mt-1 flex items-baseline gap-1.5">
-                <span className="text-[24px] font-black leading-none tracking-tight">{item.score}</span>
+                <span className="text-[24px] font-black leading-none tracking-tight">{formatScore(item.score)}</span>
                 <span className="text-[11px] font-bold uppercase tracking-[0.12em] opacity-80">
-                  {item.summary}
+                  {summary}
                 </span>
               </div>
             </div>
@@ -525,6 +575,7 @@ function AnalysisChartSection({ symbol, isOpen, onToggle, ui }) {
 }
 
 function PlanBridge({ setup, ui }) {
+  const setupScore = normalizeScore(setup?.score);
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 px-5 py-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -533,11 +584,11 @@ function PlanBridge({ setup, ui }) {
             Overgang naar Mijn Plan
           </div>
           <p className="mt-1 text-sm font-medium text-slate-600">
-            Actieve setup: {clampNumber(setup?.score)}/100. De volledige setupkwaliteit, position sizing en risk/reward horen in Mijn Plan.
+            Actieve setup: {setupScore === null ? "—" : `${Math.round(setupScore)}/100`}. De volledige setupkwaliteit, position sizing en risk/reward horen in Mijn Plan.
           </p>
         </div>
         <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600">
-          Setup {clampNumber(setup?.score)}/100
+          Setup {setupScore === null ? "—" : `${Math.round(setupScore)}/100`}
         </div>
       </div>
     </section>
@@ -594,7 +645,7 @@ function ActiveAssetCard({
         </div>
 
         <div className="flex flex-wrap gap-2 xl:justify-end">
-          <SummaryPill label={ui.combinedScore} value={`${combinedSummary.score}/100`} />
+          <SummaryPill label={ui.combinedScore} value={combinedSummary.score === null ? "—" : `${combinedSummary.score}/100`} />
           <SummaryPill
             label={ui.bias}
             value={combinedSummary.bias}
@@ -606,7 +657,7 @@ function ActiveAssetCard({
                 : "neutral"
             }
           />
-          <SummaryPill label={ui.confidence} value={`${combinedSummary.confidence}%`} />
+          <SummaryPill label={ui.confidence} value={combinedSummary.confidence === null ? "—" : `${combinedSummary.confidence}%`} />
         </div>
       </div>
     </section>
@@ -700,7 +751,7 @@ function SectionScorePill({ score }) {
   const tone = scoreTone(score);
   return (
     <div className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] ${tone.pill}`}>
-      {clampNumber(score)}/100
+      {normalizeScore(score) === null ? "—" : `${Math.round(normalizeScore(score))}/100`}
     </div>
   );
 }
@@ -916,9 +967,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     removeTechnicalIndicator,
   } = useTechnicalData(technicalTimeframe, activeSymbol, { includeScoreSummary: false });
 
-  const { market, macro, technical, setup, master } = useScoresData(activeSymbol, {
+  const { market, macro, technical, setup, master, hasData: hasScoreData } = useScoresData(activeSymbol, {
     includeHistory: false,
     includeMaster: true,
+    fallbackOnError: false,
   });
   const { snapshot: overviewSnapshot, loading: overviewLoading } = useOverviewSnapshot(activeSymbol, {
     includeLive: false,
@@ -983,37 +1035,48 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       const nextRows = await Promise.all(
         watchlistSymbols.map(async (symbol) => {
           try {
+            if (symbol === activeSymbol) {
+              const combined = hasScoreData
+                ? summarizeContextScores([market?.score, macro?.score, technical?.score], ui)
+                : summarizeContextScores([], ui);
+              const changeValue = Number(btcLive?.change_24h);
+
+              return {
+                symbol,
+                lastPrice: formatPrice(btcLive?.price, locale),
+                change24h: formatPercent(changeValue, 2),
+                changeTone: Number.isFinite(changeValue)
+                  ? changeValue >= 0 ? "text-emerald-600" : "text-red-600"
+                  : "text-slate-400",
+                score: formatScore(combined.score),
+                bias: combined.bias,
+                biasTone: combined.tone.pill,
+              };
+            }
+
             const [latestResult, scoresResult] = await Promise.allSettled([
               fetchLatestPrice(symbol, { forceFresh: false }),
-              getDailyScores(symbol),
+              getDailyScores(symbol, { fallbackOnError: false }),
             ]);
 
             const latest = latestResult.status === "fulfilled" ? latestResult.value : null;
             const scores = scoresResult.status === "fulfilled" ? scoresResult.value : null;
-            const latestSource = symbol === activeSymbol && btcLive ? btcLive : latest;
-            const scoreSource =
-              symbol === activeSymbol
-                ? { market, macro, technical }
-                : scores;
-            const combinedScore = Math.round(
-              (
-                clampNumber(scoreSource?.market?.score, 50) +
-                clampNumber(scoreSource?.macro?.score, 50) +
-                clampNumber(scoreSource?.technical?.score, 50)
-              ) / 3
+            const combined = summarizeContextScores(
+              [scores?.market?.score, scores?.macro?.score, scores?.technical?.score],
+              ui
             );
-            const bias = formatBiasLabel(scoreSource?.market?.advies || scoreSource?.market?.bias, ui);
-            const biasTone = scoreTone(combinedScore, ui).pill;
-            const changeValue = Number(latestSource?.change_24h);
+            const changeValue = Number(latest?.change_24h);
 
             return {
               symbol,
-              lastPrice: formatPrice(latestSource?.price, locale),
+              lastPrice: formatPrice(latest?.price, locale),
               change24h: formatPercent(changeValue, 2),
-              changeTone: changeValue >= 0 ? "text-emerald-600" : "text-red-600",
-              score: combinedScore,
-              bias,
-              biasTone,
+              changeTone: Number.isFinite(changeValue)
+                ? changeValue >= 0 ? "text-emerald-600" : "text-red-600"
+                : "text-slate-400",
+              score: formatScore(combined.score),
+              bias: combined.bias,
+              biasTone: combined.tone.pill,
             };
           } catch {
             return {
@@ -1038,24 +1101,20 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     return () => {
       cancelled = true;
     };
-  }, [activeSymbol, btcLive, locale, macro, market, technical, ui, watchlistSymbols]);
+  }, [activeSymbol, btcLive, hasScoreData, locale, macro, market, technical, ui, watchlistSymbols]);
 
   const combinedSummary = useMemo(() => {
-    const marketScore = clampNumber(market?.score);
-    const macroScore = clampNumber(macro?.score);
-    const technicalScore = clampNumber(technical?.score);
-    const average = Math.round((marketScore + macroScore + technicalScore) / 3);
-    const spread = Math.max(marketScore, macroScore, technicalScore) - Math.min(marketScore, macroScore, technicalScore);
-    const confidence = Math.max(32, Math.min(92, 100 - spread));
-    const tone = scoreTone(average, ui);
+    if (!hasScoreData) return summarizeContextScores([], ui);
+    const summary = summarizeContextScores(
+      [market?.score, macro?.score, technical?.score],
+      ui
+    );
 
     return {
-      score: average,
-      confidence,
-      bias: master?.bias && master.bias !== "—" ? formatBiasLabel(master.bias, ui) : tone.label,
-      tone,
+      ...summary,
+      bias: master?.bias && master.bias !== "—" ? formatBiasLabel(master.bias, ui) : summary.bias,
     };
-  }, [macro, market, master, technical, ui]);
+  }, [hasScoreData, macro, market, master, technical, ui]);
 
   const sections = useMemo(() => {
     const marketRows = buildRows(marketDayData, locale);
@@ -1068,8 +1127,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         title: locale?.startsWith("en") ? "Market" : locale?.startsWith("de") ? "Markt" : SECTION_META.market.label,
         eyebrow: locale?.startsWith("en") ? "Market evidence" : locale?.startsWith("de") ? "Marktbelege" : "Marktbewijs",
         icon: SECTION_META.market.icon,
-        score: market?.score,
-        insight: buildSectionInsight("market", market?.score, marketRows),
+        score: hasScoreData ? market?.score : null,
+        insight: buildSectionInsight("market", hasScoreData ? market?.score : null, marketRows),
         rows: marketRows,
         emptyState: marketLoading ? (locale?.startsWith("en") ? "Loading market data..." : locale?.startsWith("de") ? "Marktdaten werden geladen..." : "Marktdata laden...") : SECTION_META.market.empty,
       },
@@ -1078,8 +1137,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         title: locale?.startsWith("en") ? "Macro" : locale?.startsWith("de") ? "Makro" : SECTION_META.macro.label,
         eyebrow: locale?.startsWith("en") ? "Macro evidence" : locale?.startsWith("de") ? "Makrobelege" : "Macro-bewijs",
         icon: SECTION_META.macro.icon,
-        score: macro?.score,
-        insight: buildSectionInsight("macro", macro?.score, macroRows),
+        score: hasScoreData ? macro?.score : null,
+        insight: buildSectionInsight("macro", hasScoreData ? macro?.score : null, macroRows),
         rows: macroRows,
         emptyState: macroLoading ? (locale?.startsWith("en") ? "Loading macro data..." : locale?.startsWith("de") ? "Makrodaten werden geladen..." : "Macrodata laden...") : SECTION_META.macro.empty,
       },
@@ -1088,13 +1147,13 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         title: locale?.startsWith("en") ? "Technical" : locale?.startsWith("de") ? "Technisch" : SECTION_META.technical.label,
         eyebrow: locale?.startsWith("en") ? "Technical evidence" : locale?.startsWith("de") ? "Technische belege" : "Technisch bewijs",
         icon: SECTION_META.technical.icon,
-        score: technical?.score,
-        insight: buildSectionInsight("technical", technical?.score, technicalRows),
+        score: hasScoreData ? technical?.score : null,
+        insight: buildSectionInsight("technical", hasScoreData ? technical?.score : null, technicalRows),
         rows: technicalRows,
         emptyState: technicalLoading ? (locale?.startsWith("en") ? "Loading technical data..." : locale?.startsWith("de") ? "Technische daten werden geladen..." : "Technische data laden...") : SECTION_META.technical.empty,
       },
     ];
-  }, [locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading]);
+  }, [hasScoreData, locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading]);
 
   const handleAssetSelect = (symbol) => {
     const nextSymbol = String(symbol || activeSymbol).toUpperCase();
@@ -1157,9 +1216,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       </section>
 
       <ScoreOverview
-        market={market}
-        macro={macro}
-        technical={technical}
+        market={hasScoreData ? market : null}
+        macro={hasScoreData ? macro : null}
+        technical={hasScoreData ? technical : null}
         combined={combinedSummary}
         ui={ui}
       />
@@ -1258,7 +1317,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         ))}
       </section>
 
-      <PlanBridge setup={setup} ui={ui} />
+      <PlanBridge setup={hasScoreData ? setup : null} ui={ui} />
 
       <IndicatorConfigModal
         isOpen={Boolean(technicalConfigModal)}

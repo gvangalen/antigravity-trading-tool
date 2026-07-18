@@ -10752,7 +10752,11 @@ class FinnPlanService:
         if scores or not allow_refresh:
             return scores
         try:
-            await ScoreService(score_repo).get_daily_scores(user_id, asset)
+            await ScoreService(score_repo).get_daily_scores(
+                user_id,
+                asset,
+                refresh_if_incomplete=True,
+            )
             return await score_repo.fetch_daily_scores(user_id, asset)
         except Exception:
             return scores
@@ -19200,7 +19204,11 @@ class FinnPlanService:
         score_service = ScoreService(ScoreRepository(self.session))
         try:
             for asset in assets:
-                await score_service.get_daily_scores(user_id, asset)
+                await score_service.get_daily_scores(
+                    user_id,
+                    asset,
+                    refresh_if_incomplete=True,
+                )
                 row = await ScoreRepository(self.session).fetch_daily_scores(user_id, asset)
                 refreshed[asset] = bool(row)
         except Exception:

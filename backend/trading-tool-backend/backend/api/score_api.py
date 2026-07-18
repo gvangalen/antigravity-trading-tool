@@ -90,6 +90,8 @@ async def get_daily_scores(
         payload = await service.get_daily_scores(user_id=user_id, symbol=symbol)
         locale = resolve_request_locale(x_locale, current_user.get("ai_preferences") or {})
         return await localize_generic_payload(_payload_to_dict(payload), locale)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"❌ Fout bij /scores/daily ({symbol}): {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij ophalen daily scores")

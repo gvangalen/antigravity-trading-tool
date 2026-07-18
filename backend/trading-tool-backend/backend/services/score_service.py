@@ -33,33 +33,38 @@ class ScoreService:
     async def get_market_score(self, user_id: int, symbol: str = "BTC"):
         return await asyncio.to_thread(generate_scores_db, "market", user_id=user_id, symbol=symbol)
 
-    async def get_daily_scores(self, user_id: int, symbol: str = "BTC") -> DailyCombinedScoreResponse:
+    async def get_daily_scores(
+        self,
+        user_id: int,
+        symbol: str = "BTC",
+        refresh_if_incomplete: bool = False,
+    ) -> DailyCombinedScoreResponse:
         logger.info(f"🔍 Fetching daily scores for user_id={user_id} symbol={symbol}")
         scores = await self.repository.fetch_daily_scores(user_id, symbol)
         
-        # 🔥 RUNTIME ENGINE: Check if we need to refresh/calculate
-        tech_repo = TechnicalDataRepository(self.repository.db)
-        user_configs = await tech_repo.get_user_configs(user_id)
-        
-        # If user has no config yet, let's use their BTC indicators as their initial global config
-        if not user_configs:
-            logger.info(f"🆕 Initializing global indicator config for user {user_id} from BTC data...")
-            btc_data = await tech_repo.get_latest_data_fallback(user_id, symbol="BTC")
-            for d in btc_data:
-                await tech_repo.ensure_user_config(user_id, d.indicator)
-            await self.repository.db.commit()
+        has_all_data = True
+        tech_repo = None
+        user_configs = []
+
+        if refresh_if_incomplete:
+            tech_repo = TechnicalDataRepository(self.repository.db)
             user_configs = await tech_repo.get_user_configs(user_id)
 
-        # Check if we have data for ALL configured indicators for THIS symbol
-        has_all_data = True
-        if user_configs:
+            if not user_configs:
+                logger.info(f"🆕 Initializing global indicator config for user {user_id} from BTC data...")
+                btc_data = await tech_repo.get_latest_data_fallback(user_id, symbol="BTC")
+                for d in btc_data:
+                    await tech_repo.ensure_user_config(user_id, d.indicator)
+                await self.repository.db.commit()
+                user_configs = await tech_repo.get_user_configs(user_id)
+
             for conf in user_configs:
                 exists = await tech_repo.check_duplicate(conf.indicator, user_id, symbol)
                 if not exists:
                     has_all_data = False
                     break
 
-        if not scores or not has_all_data:
+        if refresh_if_incomplete and (not scores or not has_all_data):
             logger.info(f"🚀 Data incomplete for {symbol}. Triggering RUNTIME scan...")
             try:
                 from backend.utils.scoring_engine import run_category_scoring
@@ -116,8 +121,8 @@ class ScoreService:
                 scores = {}
 
         if not scores:
-            logger.warning(f"⚠️ No daily scores found for user_id={user_id} today")
-            scores = {}
+            logger.warning(f"⚠️ No daily scores found for user_id={user_id} symbol={symbol} today")
+            raise LookupError(f"Geen dagelijkse scores gevonden voor {symbol}.")
 
         def _safe_list(val):
             if isinstance(val, list):

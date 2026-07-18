@@ -49,7 +49,11 @@ async def _async_initialize(user_id: int, symbol: str):
 
             # 3. Trigger a fresh scan for this symbol via ScoreService logic
             # The get_daily_scores method has the "Runtime Engine" built-in
-            await score_service.get_daily_scores(user_id, symbol=symbol)
+            await score_service.get_daily_scores(
+                user_id,
+                symbol=symbol,
+                refresh_if_incomplete=True,
+            )
             
             logger.info(f"✅ Asset {symbol} initialized successfully for user {user_id}")
             return {"status": "success", "symbol": symbol}
