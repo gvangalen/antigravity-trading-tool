@@ -31,7 +31,7 @@ export default function WorkspaceRenderer({ tab = "market", canonicalizeLegacy =
   const resolvedSymbol = normalizeSymbol(
     searchParams.get("symbol") || searchParams.get("asset") || selectedAsset || "BTC"
   );
-  const variant = searchParams.get("variant") === "v3" ? "v3" : "legacy";
+  const variant = searchParams.get("variant") === "legacy" ? "legacy" : "v3";
 
   useEffect(() => {
     if (!canonicalizeLegacy || pathname === "/asset") return;
@@ -42,9 +42,9 @@ export default function WorkspaceRenderer({ tab = "market", canonicalizeLegacy =
     router.replace(`/asset?${params.toString()}`, { scroll: false });
   }, [canonicalizeLegacy, pathname, queryString, resolvedSymbol, resolvedTab, router]);
 
-  if (variant === "v3") {
-    return <AssetWorkspaceV3 initialTab={resolvedTab} variant="v3" />;
+  if (variant === "legacy") {
+    return <AssetWorkspace initialTab={resolvedTab} />;
   }
 
-  return <AssetWorkspace initialTab={resolvedTab} />;
+  return <AssetWorkspaceV3 initialTab={resolvedTab} variant="v3" />;
 }

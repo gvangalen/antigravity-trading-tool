@@ -40,8 +40,8 @@ export default function NavBar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const shellCopy = t?.ui?.shell || {};
   const appSlogan = shellCopy.appSlogan || BRANDING.APP_SLOGAN;
-  const isAnalysisV3 = searchParams.get("variant") === "v3";
-  const analysisHref = isAnalysisV3 ? "/asset?variant=v3" : "/market";
+  const isAnalysisV3 = searchParams.get("variant") !== "legacy";
+  const analysisHref = isAnalysisV3 ? "/asset" : "/market?variant=legacy";
 
   const isAdmin = user?.role === 'admin';
   const NAV_ITEMS = [

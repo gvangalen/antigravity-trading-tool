@@ -52,9 +52,9 @@ function normalize(text) {
 }
 
 function withVariant(path, variant) {
-  if (variant !== "v3") return path;
+  if (variant !== "legacy") return path;
   const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}variant=v3`;
+  return `${path}${separator}variant=legacy`;
 }
 
 export default function AssetSearchBar() {
@@ -77,7 +77,7 @@ export default function AssetSearchBar() {
   const inputRef = useRef(null);
 
   const activeSymbol = searchParams.get("symbol")?.toUpperCase() || selectedAsset || "BTC";
-  const activeVariant = searchParams.get("variant") === "v3" ? "v3" : "legacy";
+  const activeVariant = searchParams.get("variant") === "legacy" ? "legacy" : "v3";
 
   useEffect(() => {
     let mounted = true;

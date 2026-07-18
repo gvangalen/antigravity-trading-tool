@@ -22,7 +22,7 @@ export default function FinnWorkspaceShell({ children }) {
   const { t } = useTranslation();
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [composerQuery, setComposerQuery] = useState("");
-  const isAnalysisV3 = searchParams.get("variant") === "v3";
+  const isAnalysisV3 = searchParams.get("variant") !== "legacy";
 
   const activeWorkflow = useMemo(() => getWorkflowMeta(pathname, isAnalysisV3), [isAnalysisV3, pathname]);
   const userName = user?.first_name || "Trader";
