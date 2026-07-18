@@ -234,10 +234,9 @@ function getUiCopy(locale = "nl") {
 }
 
 const DEFAULT_INTELLIGENCE_WEIGHTS = {
-  market: 0.25,
-  macro: 0.25,
-  technical: 0.25,
-  setup: 0.25,
+  market: 1 / 3,
+  macro: 1 / 3,
+  technical: 1 / 3,
 };
 
 const MACRO_TIMEFRAMES = ["day", "week", "month", "quarter"];
@@ -565,7 +564,7 @@ function buildSectionInsight(sectionId, sectionScore, rows) {
   return "Technisch beeld is werkbaar, maar momentum en trendbevestiging blijven neutraal.";
 }
 
-function ScoreOverview({ market, macro, technical, setup, combined, weights, loading, onSaveWeights, ui }) {
+function ScoreOverview({ market, macro, technical, combined, weights, loading, onSaveWeights, ui }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [localWeights, setLocalWeights] = useState(() => normalizeWeights(weights));
@@ -601,7 +600,6 @@ function ScoreOverview({ market, macro, technical, setup, combined, weights, loa
     { id: "market", label: ui.market, score: normalizeScore(market?.score) },
     { id: "macro", label: ui.macro, score: normalizeScore(macro?.score) },
     { id: "technical", label: ui.technical, score: normalizeScore(technical?.score) },
-    { id: "setup", label: ui.setup, score: normalizeScore(setup?.score) },
   ];
 
   const handleWeightChange = (key, nextValue) => {
@@ -691,7 +689,7 @@ function ScoreOverview({ market, macro, technical, setup, combined, weights, loa
             </div>
           </div>
 
-          <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2.5 md:grid-cols-3">
             {weightItems.map((item) => {
               const weight = localWeights[item.id] ?? 0;
               return (
@@ -1294,18 +1292,17 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       });
   }, [addTechnicalIndicator, indicatorAction, technicalIndicatorFromUrl]);
 
-  const assetOptions = useMemo(() => {
-    const base =
-      Array.isArray(availableAssets) && availableAssets.length
+  const watchlistSymbols = useMemo(() => {
+    const preferred =
+      Array.isArray(watchlist) && watchlist.length
+        ? watchlist
+        : Array.isArray(availableAssets) && availableAssets.length
         ? availableAssets
         : ["BTC", "ETH", "SOL", "ADA", "DOT"];
-    return Array.from(new Set([activeSymbol, ...(watchlist || []), ...base]));
-  }, [activeSymbol, availableAssets, watchlist]);
-
-  const watchlistSymbols = useMemo(() => {
-    const preferred = Array.isArray(watchlist) && watchlist.length ? watchlist : assetOptions;
-    return Array.from(new Set([activeSymbol, ...preferred])).slice(0, 6);
-  }, [activeSymbol, assetOptions, watchlist]);
+    return Array.from(
+      new Set(preferred.map((symbol) => String(symbol || "").toUpperCase()).filter(Boolean))
+    ).slice(0, 6);
+  }, [availableAssets, watchlist]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1321,7 +1318,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                       market: market?.score,
                       macro: macro?.score,
                       technical: technical?.score,
-                      setup: setup?.score,
                     },
                     master?.weights,
                     ui
@@ -1354,7 +1350,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                 market: scores?.market?.score,
                 macro: scores?.macro?.score,
                 technical: scores?.technical?.score,
-                setup: scores?.setup?.score,
               },
               master?.weights,
               ui
@@ -1395,7 +1390,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     return () => {
       cancelled = true;
     };
-  }, [activeSymbol, btcLive, hasScoreData, locale, macro, master, market, setup, technical, ui, watchlistSymbols]);
+  }, [activeSymbol, btcLive, hasScoreData, locale, macro, master, market, technical, ui, watchlistSymbols]);
 
   const combinedSummary = useMemo(() => {
     if (!hasScoreData) return summarizeContextScores([], ui);
@@ -1404,7 +1399,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         market: market?.score,
         macro: macro?.score,
         technical: technical?.score,
-        setup: setup?.score,
       },
       master?.weights,
       ui
@@ -1414,7 +1408,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       ...summary,
       bias: master?.bias && master.bias !== "—" ? formatBiasLabel(master.bias, ui) : summary.bias,
     };
-  }, [hasScoreData, macro, market, master, setup, technical, ui]);
+  }, [hasScoreData, macro, market, master, technical, ui]);
 
   const sections = useMemo(() => {
     const marketRows = buildRows(marketDayData, locale);
@@ -1519,7 +1513,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         market={hasScoreData ? market : null}
         macro={hasScoreData ? macro : null}
         technical={hasScoreData ? technical : null}
-        setup={hasScoreData ? setup : null}
         combined={combinedSummary}
         weights={master?.weights}
         loading={scoresLoading}

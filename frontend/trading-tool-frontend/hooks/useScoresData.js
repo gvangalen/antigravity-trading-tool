@@ -7,6 +7,23 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 const SCORE_CACHE_TTL_MS = 30_000;
 const scoreCache = new Map();
 const inflightScoreRequests = new Map();
+const DEFAULT_CONTEXT_WEIGHTS = {
+  macro: 1 / 3,
+  market: 1 / 3,
+  technical: 1 / 3,
+};
+
+const normalizeContextWeights = (weights) => {
+  const next = Object.fromEntries(
+    Object.keys(DEFAULT_CONTEXT_WEIGHTS).map((key) => {
+      const value = Number(weights?.[key]);
+      return [key, Number.isFinite(value) && value >= 0 ? value : DEFAULT_CONTEXT_WEIGHTS[key]];
+    })
+  );
+  const total = Object.values(next).reduce((sum, value) => sum + value, 0);
+  if (!total) return { ...DEFAULT_CONTEXT_WEIGHTS };
+  return Object.fromEntries(Object.entries(next).map(([key, value]) => [key, value / total]));
+};
 
 // Zorg dat altijd een array terugkomt
 const normalizeArray = (v) => {
@@ -36,7 +53,7 @@ export function useScoresData(symbol = "BTC", options = {}) {
     setup: { score: 0, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
     master: { 
       score: 0, trend: '–', bias: '–', risk: '–', outlook: '–', summary: t?.dashboard?.brain?.noSpecificSignals,
-      weights: { macro: 0.25, market: 0.25, technical: 0.25, setup: 0.25 }
+      weights: { ...DEFAULT_CONTEXT_WEIGHTS }
     },
     history: []
   });
@@ -86,12 +103,11 @@ export function useScoresData(symbol = "BTC", options = {}) {
       const marketScore = daily.market?.score ?? mkData.score ?? 0;
       const setupScore = daily.setup?.score ?? sData.score ?? 0;
 
-      const weights = master?.weights || { macro: 0.25, market: 0.25, technical: 0.25, setup: 0.25 };
+      const weights = normalizeContextWeights(master?.weights);
       const calculatedMasterScore = Math.round(
-        macroScore * (weights.macro ?? 0.25) +
-        technicalScore * (weights.technical ?? 0.25) +
-        marketScore * (weights.market ?? 0.25) +
-        setupScore * (weights.setup ?? 0.25)
+        macroScore * weights.macro +
+        technicalScore * weights.technical +
+        marketScore * weights.market
       );
 
       const nextScores = {
