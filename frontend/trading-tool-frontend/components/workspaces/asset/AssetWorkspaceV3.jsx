@@ -23,6 +23,9 @@ import { useWatchlist } from "@/hooks/useWatchlist";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
 import { fetchLatestPrice } from "@/lib/api/market";
 import { getDailyScores } from "@/lib/api/scores";
+import { useOverviewSnapshot } from "@/hooks/useOverviewSnapshot";
+import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
+import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -352,6 +355,137 @@ function SummaryPill({ label, value, tone = "neutral" }) {
   );
 }
 
+function ScoreOverview({ market, macro, technical, combined, setup }) {
+  const items = [
+    {
+      id: "market",
+      label: "Markt",
+      score: clampNumber(market?.score),
+      summary: market?.bias || market?.trend || "Gemengd",
+    },
+    {
+      id: "macro",
+      label: "Macro",
+      score: clampNumber(macro?.score),
+      summary: macro?.bias || macro?.trend || "Tegenwind",
+    },
+    {
+      id: "technical",
+      label: "Technisch",
+      score: clampNumber(technical?.score),
+      summary: technical?.bias || technical?.trend || "Zwak",
+    },
+    {
+      id: "combined",
+      label: "Gecombineerd",
+      score: clampNumber(combined?.score),
+      summary: combined?.bias || "Voorzichtig",
+    },
+  ];
+
+  return (
+    <section className="rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-42px_rgba(15,23,42,0.35)]">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-5 py-5">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
+            Context Scores
+          </div>
+          <p className="mt-2 text-sm font-medium text-slate-500">
+            Eerst het totale krachtenveld, daarna de onderliggende bewijslijsten.
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600">
+          Setup {clampNumber(setup?.score)}/100
+          <span className="text-slate-400">·</span>
+          Bekijk in Mijn Plan
+        </div>
+      </div>
+
+      <div className="grid gap-4 px-5 py-5 lg:grid-cols-4">
+        {items.map((item) => {
+          const tone = scoreTone(item.score);
+          return (
+            <div key={item.id} className={`rounded-[22px] border px-4 py-4 ${tone.pill}`}>
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] opacity-70">
+                {item.label}
+              </div>
+              <div className="mt-2 text-2xl font-black tracking-tight">
+                {item.score}
+              </div>
+              <div className="mt-1 text-sm font-bold">
+                {item.summary}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function AnalysisChartSection({ symbol, isOpen, onToggle }) {
+  const tvSymbol = `BINANCE:${symbol}USDT`;
+
+  return (
+    <section className="rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-42px_rgba(15,23,42,0.35)]">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-5 py-5">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
+            TradingView Chart
+          </div>
+          <p className="mt-2 text-sm font-medium text-slate-500">
+            Prijsstructuur en visueel bewijs voor de actieve assetanalyse.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+        >
+          {isOpen ? "Chart sluiten" : "Open chart"}
+        </button>
+      </div>
+
+      {isOpen ? (
+        <div className="p-5">
+          <TradingViewSmartChart
+            symbol={tvSymbol}
+            interval="D"
+            indicators={[]}
+            focusedBotId={null}
+            setFocusedBotId={() => {}}
+            height={520}
+          />
+        </div>
+      ) : (
+        <div className="px-5 py-8 text-sm font-medium text-slate-500">
+          De chart blijft inklapbaar zodat de bewijslijsten hun leesbare hoogte behouden.
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PlanBridge({ setup }) {
+  return (
+    <section className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+            Overgang naar Mijn Plan
+          </div>
+          <p className="mt-1 text-sm font-medium text-slate-600">
+            Actieve setup: {clampNumber(setup?.score)}/100. De volledige setupkwaliteit, position sizing en risk/reward horen in Mijn Plan.
+          </p>
+        </div>
+        <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600">
+          Setup {clampNumber(setup?.score)}/100
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function formatBiasLabel(value) {
   const source = String(value || "").trim();
   if (!source || source === "—") return "Neutraal";
@@ -620,6 +754,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const [expandedRowKey, setExpandedRowKey] = useState(null);
   const [technicalConfigModal, setTechnicalConfigModal] = useState(null);
   const [watchlistRows, setWatchlistRows] = useState([]);
+  const [showChart, setShowChart] = useState(false);
   const appliedIndicatorsRef = useRef(new Set());
 
   const indicatorFromUrl = searchParams.get("indicator");
@@ -659,10 +794,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     removeTechnicalIndicator,
   } = useTechnicalData(technicalTimeframe, activeSymbol, { includeScoreSummary: false });
 
-  const { market, macro, technical, master } = useScoresData(activeSymbol, {
+  const { market, macro, technical, setup, master } = useScoresData(activeSymbol, {
     includeHistory: false,
     includeMaster: true,
   });
+  const { snapshot: overviewSnapshot, loading: overviewLoading } = useOverviewSnapshot(activeSymbol);
 
   useEffect(() => {
     if (!marketIndicatorFromUrl) return;
@@ -905,6 +1041,38 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         </div>
       </section>
 
+      <ScoreOverview
+        market={market}
+        macro={macro}
+        technical={technical}
+        combined={combinedSummary}
+        setup={setup}
+      />
+
+      <AnalysisChartSection
+        symbol={activeSymbol}
+        isOpen={showChart}
+        onToggle={() => setShowChart((current) => !current)}
+      />
+
+      <section className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_20px_60px_-42px_rgba(15,23,42,0.35)]">
+        <div className="mb-5">
+          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
+            Analysecontext
+          </div>
+          <p className="mt-2 text-sm font-medium text-slate-500">
+            Overgenomen uit Overview: structurele fase, short/medium/long-term bias en druk-/risicometingen horen bij Analyse.
+          </p>
+        </div>
+        <GlobalMarketDecisionCard
+          symbol={activeSymbol}
+          snapshot={{
+            data: overviewSnapshot?.intelligence ?? null,
+            loading: overviewLoading && !overviewSnapshot?.intelligence,
+          }}
+        />
+      </section>
+
       <section className="space-y-4">
         {sections.map((section) => (
           <EvidenceSection
@@ -998,6 +1166,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
           />
         ))}
       </section>
+
+      <PlanBridge setup={setup} />
 
       <IndicatorConfigModal
         isOpen={Boolean(technicalConfigModal)}
