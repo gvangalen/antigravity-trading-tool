@@ -25,7 +25,14 @@ import { useTechnicalData } from "@/hooks/useTechnicalData";
 import { useScoresData } from "@/hooks/useScoresData";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
-import { fetchLatestPrice } from "@/lib/api/market";
+import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
+import {
+  fetchLatestPrice,
+  fetchForwardReturnsMonth,
+  fetchForwardReturnsQuarter,
+  fetchForwardReturnsWeek,
+  fetchForwardReturnsYear,
+} from "@/lib/api/market";
 import { getDailyScores } from "@/lib/api/scores";
 import { useOverviewSnapshot } from "@/hooks/useOverviewSnapshot";
 import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
@@ -140,6 +147,9 @@ function getUiCopy(locale = "nl") {
       marketPeriod: "Market period",
       macroPeriod: "Macro period",
       technicalPeriod: "Technical period",
+      forwardReturnsTitle: "Historical forward returns",
+      forwardReturnsSubtitle: "Compare recurring returns by week, month, quarter and year.",
+      forwardReturnsLoading: "Loading historical returns...",
     };
   }
   if (normalized.startsWith("de")) {
@@ -187,6 +197,9 @@ function getUiCopy(locale = "nl") {
       marketPeriod: "Marktzeitraum",
       macroPeriod: "Makrozeitraum",
       technicalPeriod: "Technischer Zeitraum",
+      forwardReturnsTitle: "Historische Forward Returns",
+      forwardReturnsSubtitle: "Vergleiche wiederkehrende Renditen nach Woche, Monat, Quartal und Jahr.",
+      forwardReturnsLoading: "Historische Renditen werden geladen...",
     };
   }
   return {
@@ -233,6 +246,9 @@ function getUiCopy(locale = "nl") {
     marketPeriod: "Marktperiode",
     macroPeriod: "Macroperiode",
     technicalPeriod: "Technische periode",
+    forwardReturnsTitle: "Historische forward returns",
+    forwardReturnsSubtitle: "Vergelijk terugkerende rendementen per week, maand, kwartaal en jaar.",
+    forwardReturnsLoading: "Historische rendementen laden...",
   };
 }
 
@@ -1209,6 +1225,99 @@ function EvidenceSection({
   );
 }
 
+const EMPTY_FORWARD_RETURNS = {
+  week: [],
+  month: [],
+  quarter: [],
+  year: [],
+};
+
+function ForwardReturnsSection({ symbol, ui }) {
+  const [data, setData] = useState(EMPTY_FORWARD_RETURNS);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let idleId = null;
+    let timeoutId = null;
+
+    const loadForwardReturns = async () => {
+      setLoading(true);
+      setFailed(false);
+
+      const results = await Promise.allSettled([
+        fetchForwardReturnsWeek(symbol),
+        fetchForwardReturnsMonth(symbol),
+        fetchForwardReturnsQuarter(symbol),
+        fetchForwardReturnsYear(symbol),
+      ]);
+
+      if (cancelled) return;
+
+      const value = (index) =>
+        results[index]?.status === "fulfilled" && Array.isArray(results[index].value)
+          ? results[index].value
+          : [];
+
+      setData({
+        week: value(0),
+        month: value(1),
+        quarter: value(2),
+        year: value(3),
+      });
+      setFailed(results.every((result) => result.status === "rejected"));
+      setLoading(false);
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(loadForwardReturns, { timeout: 1200 });
+    } else {
+      timeoutId = window.setTimeout(loadForwardReturns, 0);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleId !== null && typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    };
+  }, [symbol]);
+
+  return (
+    <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
+            {symbol} · {ui.market}
+          </div>
+          <h2 className="mt-1 text-lg font-black tracking-tight text-slate-950">
+            {ui.forwardReturnsTitle}
+          </h2>
+          <p className="mt-1 text-xs font-medium text-slate-500">
+            {ui.forwardReturnsSubtitle}
+          </p>
+        </div>
+      </header>
+
+      <div className="p-4 sm:p-5">
+        {loading ? (
+          <div className="flex min-h-36 items-center justify-center rounded-2xl bg-slate-50 text-xs font-bold text-slate-400">
+            {ui.forwardReturnsLoading}
+          </div>
+        ) : failed ? (
+          <div className="flex min-h-36 items-center justify-center rounded-2xl bg-slate-50 text-xs font-bold text-slate-400">
+            {ui.unavailable}
+          </div>
+        ) : (
+          <MarketForwardReturnTabs data={data} />
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3" }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -1674,6 +1783,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         onOpenPlan={() => router.push(`/setup?symbol=${encodeURIComponent(activeSymbol)}`)}
         ui={ui}
       />
+
+      <ForwardReturnsSection symbol={activeSymbol} ui={ui} />
 
       <IndicatorConfigModal
         isOpen={Boolean(technicalConfigModal)}
