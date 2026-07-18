@@ -156,12 +156,12 @@ restart_backend_app() {
 }
 
 stabilize_backend_app() {
-  if wait_for_backend_listen 45 && wait_for_backend_health 60; then
+  if wait_for_backend_listen 120 && wait_for_backend_health 60; then
     return 0
   fi
   restart_backend_app
-  wait_for_backend_listen 60
-  wait_for_backend_health 90
+  wait_for_backend_listen 150
+  wait_for_backend_health 120
 }
 
 pm2 startOrReload "$PM2_CONFIG" --update-env
