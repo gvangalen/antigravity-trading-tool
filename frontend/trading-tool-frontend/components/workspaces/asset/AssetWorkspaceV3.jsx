@@ -78,6 +78,12 @@ const ASSET_NAMES = {
   DOT: "Polkadot",
 };
 
+const ASSET_GROUPS = [
+  { id: "crypto", label: "Crypto", active: true },
+  { id: "stocks", label: "Stocks", active: false },
+  { id: "etf", label: "ETF", active: false },
+];
+
 function clampNumber(value, fallback = 50) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -340,6 +346,87 @@ function SummaryPill({ label, value, tone = "neutral" }) {
     <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-black ${toneClass}`}>
       <span className="uppercase tracking-[0.22em]">{label}</span>
       <span className="tracking-tight">{value}</span>
+    </div>
+  );
+}
+
+function AssetList({ assets, activeSymbol, onSelect, onAddAsset }) {
+  return (
+    <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
+            Watchlist
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {ASSET_GROUPS.map((group) => (
+              <button
+                key={group.id}
+                type="button"
+                className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${
+                  group.active
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-500"
+                }`}
+              >
+                {group.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onAddAsset}
+          className="inline-flex items-center gap-2 rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 transition hover:border-blue-300 hover:text-blue-600"
+        >
+          <Plus size={12} />
+          Asset toevoegen
+        </button>
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-[20px] border border-slate-200 bg-white">
+        <div className="grid grid-cols-[minmax(0,1.4fr)_90px_90px] gap-3 border-b border-slate-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+          <div>Asset</div>
+          <div>Type</div>
+          <div className="text-right">Status</div>
+        </div>
+        <div>
+          {assets.map((symbol) => {
+            const active = symbol === activeSymbol;
+            return (
+              <button
+                key={symbol}
+                type="button"
+                onClick={() => onSelect(symbol)}
+                className={`grid w-full grid-cols-[minmax(0,1.4fr)_90px_90px] gap-3 border-b border-slate-100 px-4 py-3 text-left transition last:border-b-0 ${
+                  active ? "bg-blue-50/70" : "hover:bg-slate-50/80"
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2.5 w-2.5 rounded-full ${active ? "bg-blue-600" : "bg-slate-300"}`} />
+                    <span className="text-sm font-black text-slate-950">{symbol}</span>
+                  </div>
+                  <div className="mt-1 truncate text-sm font-medium text-slate-500">
+                    {ASSET_NAMES[symbol] || "Asset context"}
+                  </div>
+                </div>
+                <div className="text-sm font-bold text-slate-500">Crypto</div>
+                <div className="text-right">
+                  <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                    active
+                      ? "border-blue-200 bg-blue-100 text-blue-700"
+                      : "border-slate-200 bg-slate-50 text-slate-500"
+                  }`}>
+                    {active ? "Actief" : "Open"}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -690,38 +777,16 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   return (
     <section className="space-y-4">
       <section className="rounded-[32px] border border-slate-200/80 bg-white p-5 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.38)] lg:p-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">
-            Watchlist
-          </span>
-          {watchlistSymbols.map((symbol) => {
-            const active = symbol === activeSymbol;
-            return (
-              <button
-                key={symbol}
-                type="button"
-                onClick={() => handleAssetSelect(symbol)}
-                className={`rounded-full border px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] transition ${
-                  active
-                    ? "border-blue-500 bg-blue-600 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:text-blue-600"
-                }`}
-              >
-                {symbol}
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => openSearch()}
-            className="inline-flex items-center gap-2 rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 transition hover:border-blue-300 hover:text-blue-600"
-          >
-            <Plus size={12} />
-            Asset
-          </button>
-        </div>
+        <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)] xl:items-stretch">
+          <AssetList
+            assets={watchlistSymbols}
+            activeSymbol={activeSymbol}
+            onSelect={handleAssetSelect}
+            onAddAsset={() => openSearch()}
+          />
 
-        <div className="mt-5 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0">
+        <div className="flex flex-col gap-5 xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.28em] text-blue-600">
               <Brain size={12} />
@@ -766,6 +831,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             <SummaryPill label="Confidence" value={`${combinedSummary.confidence}%`} />
           </div>
         </div>
+        </div>
+        </div>
       </section>
 
       <section className="space-y-4">
@@ -783,7 +850,25 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             onToggleRow={(key) => setExpandedRowKey((current) => (current === key ? null : key))}
             emptyState={section.emptyState}
             action={
-              section.id === "technical" ? (
+              section.id === "market" ? (
+                <button
+                  type="button"
+                  onClick={() => openSearch({ mode: "indicator", category: "market" })}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+                >
+                  <Plus size={14} />
+                  Indicator toevoegen
+                </button>
+              ) : section.id === "macro" ? (
+                <button
+                  type="button"
+                  onClick={() => openSearch({ mode: "indicator", category: "macro" })}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+                >
+                  <Plus size={14} />
+                  Indicator toevoegen
+                </button>
+              ) : section.id === "technical" ? (
                 <button
                   type="button"
                   onClick={() => openSearch({ mode: "indicator", category: "technical" })}
