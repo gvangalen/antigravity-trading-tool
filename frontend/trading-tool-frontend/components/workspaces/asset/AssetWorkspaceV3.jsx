@@ -9,9 +9,12 @@ import {
   Globe,
   LineChart,
   Plus,
+  Save,
   Settings2,
+  Sliders,
   Target,
   TrendingUp,
+  X,
 } from "lucide-react";
 
 import { useAsset } from "@/app/providers/AssetProvider";
@@ -122,6 +125,15 @@ function getUiCopy(locale = "nl") {
       planBridgeDescription: "Review setup quality, position sizing and risk/reward before taking action.",
       openMyPlan: "Open My Plan",
       setupScore: "Setup score",
+      setup: "Setup",
+      tuneEngine: "Tune engine",
+      closeTuning: "Close tuning",
+      weight: "Weight",
+      weightInfluence: "Influence on the combined score",
+      balancedWeights: "The weights add up to 100%.",
+      unbalancedWeights: "The weights must add up to 100%.",
+      applyWeights: "Apply weights",
+      savingWeights: "Saving...",
     };
   }
   if (normalized.startsWith("de")) {
@@ -154,6 +166,15 @@ function getUiCopy(locale = "nl") {
       planBridgeDescription: "Prüfe Setup-Qualität, Positionsgröße und Risiko-Rendite vor der Ausführung.",
       openMyPlan: "Mein Plan öffnen",
       setupScore: "Setup-Score",
+      setup: "Setup",
+      tuneEngine: "Engine abstimmen",
+      closeTuning: "Abstimmung schließen",
+      weight: "Gewichtung",
+      weightInfluence: "Einfluss auf den kombinierten Score",
+      balancedWeights: "Die Gewichtungen ergeben zusammen 100 %.",
+      unbalancedWeights: "Die Gewichtungen müssen zusammen 100 % ergeben.",
+      applyWeights: "Gewichtungen anwenden",
+      savingWeights: "Speichern...",
     };
   }
   return {
@@ -185,7 +206,35 @@ function getUiCopy(locale = "nl") {
     planBridgeDescription: "Controleer setupkwaliteit, positiegrootte en risk/reward voordat je handelt.",
     openMyPlan: "Open Mijn Plan",
     setupScore: "Setupscore",
+    setup: "Setup",
+    tuneEngine: "Engine afstemmen",
+    closeTuning: "Afstemmen sluiten",
+    weight: "Weging",
+    weightInfluence: "Invloed op de gecombineerde score",
+    balancedWeights: "De wegingen komen samen uit op 100%.",
+    unbalancedWeights: "De wegingen moeten samen op 100% uitkomen.",
+    applyWeights: "Wegingen toepassen",
+    savingWeights: "Opslaan...",
   };
+}
+
+const DEFAULT_INTELLIGENCE_WEIGHTS = {
+  market: 0.25,
+  macro: 0.25,
+  technical: 0.25,
+  setup: 0.25,
+};
+
+function normalizeWeights(weights) {
+  const next = Object.fromEntries(
+    Object.keys(DEFAULT_INTELLIGENCE_WEIGHTS).map((key) => {
+      const value = Number(weights?.[key]);
+      return [key, Number.isFinite(value) && value >= 0 ? value : DEFAULT_INTELLIGENCE_WEIGHTS[key]];
+    })
+  );
+  const total = Object.values(next).reduce((sum, value) => sum + value, 0);
+  if (!total) return { ...DEFAULT_INTELLIGENCE_WEIGHTS };
+  return Object.fromEntries(Object.entries(next).map(([key, value]) => [key, value / total]));
 }
 
 function normalizeScore(value) {
@@ -218,6 +267,29 @@ function summarizeContextScores(values, ui) {
   const tone = scoreTone(average, ui);
 
   return { score: average, confidence, bias: tone.label, tone };
+}
+
+function summarizeWeightedScores(scores, weights, ui) {
+  const normalizedWeights = normalizeWeights(weights);
+  const available = Object.entries(normalizedWeights)
+    .map(([key, weight]) => ({ score: normalizeScore(scores?.[key]), weight }))
+    .filter((item) => item.score !== null && item.weight > 0);
+
+  if (!available.length) return summarizeContextScores([], ui);
+
+  const includedWeight = available.reduce((sum, item) => sum + item.weight, 0);
+  const weightedScore = Math.round(
+    available.reduce((sum, item) => sum + item.score * item.weight, 0) / includedWeight
+  );
+  const baseSummary = summarizeContextScores(available.map((item) => item.score), ui);
+  const tone = scoreTone(weightedScore, ui);
+
+  return {
+    ...baseSummary,
+    score: weightedScore,
+    bias: tone.label,
+    tone,
+  };
 }
 
 function formatPrice(value, locale) {
@@ -476,7 +548,15 @@ function buildSectionInsight(sectionId, sectionScore, rows) {
   return "Technisch beeld is werkbaar, maar momentum en trendbevestiging blijven neutraal.";
 }
 
-function ScoreOverview({ market, macro, technical, combined, ui }) {
+function ScoreOverview({ market, macro, technical, setup, combined, weights, loading, onSaveWeights, ui }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [localWeights, setLocalWeights] = useState(() => normalizeWeights(weights));
+
+  useEffect(() => {
+    if (!isEditing) setLocalWeights(normalizeWeights(weights));
+  }, [isEditing, weights]);
+
   const items = [
     {
       id: "market",
@@ -500,12 +580,62 @@ function ScoreOverview({ market, macro, technical, combined, ui }) {
     },
   ];
 
+  const weightItems = [
+    { id: "market", label: ui.market, score: normalizeScore(market?.score) },
+    { id: "macro", label: ui.macro, score: normalizeScore(macro?.score) },
+    { id: "technical", label: ui.technical, score: normalizeScore(technical?.score) },
+    { id: "setup", label: ui.setup, score: normalizeScore(setup?.score) },
+  ];
+
+  const handleWeightChange = (key, nextValue) => {
+    const value = Math.max(0, Math.min(1, Number(nextValue)));
+    setLocalWeights((current) => {
+      const otherKeys = Object.keys(current).filter((itemKey) => itemKey !== key);
+      const otherTotal = otherKeys.reduce((sum, itemKey) => sum + current[itemKey], 0);
+      const remaining = 1 - value;
+      const next = { ...current, [key]: value };
+
+      otherKeys.forEach((itemKey) => {
+        next[itemKey] = otherTotal > 0
+          ? remaining * (current[itemKey] / otherTotal)
+          : remaining / otherKeys.length;
+      });
+
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSaveWeights(localWeights);
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const totalWeight = Object.values(localWeights).reduce((sum, value) => sum + value, 0);
+  const isBalanced = Math.abs(totalWeight - 1) < 0.01;
+
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
-      <div className="border-b border-slate-100 px-4 py-3">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
         <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
           {ui.contextScores}
         </div>
+        <button
+          type="button"
+          onClick={() => setIsEditing((current) => !current)}
+          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.15em] transition ${
+            isEditing
+              ? "border-slate-300 bg-slate-900 text-white"
+              : "border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:text-blue-600"
+          }`}
+        >
+          {isEditing ? <X size={12} /> : <Sliders size={12} />}
+          {isEditing ? ui.closeTuning : ui.tuneEngine}
+        </button>
       </div>
 
       <div className="grid gap-2.5 px-4 py-2.5 lg:grid-cols-4">
@@ -527,6 +657,69 @@ function ScoreOverview({ market, macro, technical, combined, ui }) {
           );
         })}
       </div>
+
+      {isEditing ? (
+        <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-3.5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+                {ui.weightInfluence}
+              </div>
+              <div className={`mt-0.5 text-[11px] font-semibold ${isBalanced ? "text-emerald-600" : "text-amber-600"}`}>
+                {isBalanced ? ui.balancedWeights : ui.unbalancedWeights}
+              </div>
+            </div>
+            <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-black text-slate-700">
+              {Math.round(totalWeight * 100)}%
+            </div>
+          </div>
+
+          <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
+            {weightItems.map((item) => {
+              const weight = localWeights[item.id] ?? 0;
+              return (
+                <div key={item.id} className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
+                        {item.label}
+                      </div>
+                      <div className="mt-0.5 text-[11px] font-semibold text-slate-400">
+                        {ui.weight} · {formatScore(item.score)}/100
+                      </div>
+                    </div>
+                    <div className="text-[18px] font-black tracking-tight text-slate-950">
+                      {Math.round(weight * 100)}%
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={weight}
+                    onChange={(event) => handleWeightChange(item.id, event.target.value)}
+                    aria-label={`${ui.weight} ${item.label}`}
+                    className="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-blue-600"
+                  />
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={loading || isSaving || !isBalanced}
+              className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Save size={13} />
+              {isSaving ? ui.savingWeights : ui.applyWeights}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1027,7 +1220,16 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     removeTechnicalIndicator,
   } = useTechnicalData(technicalTimeframe, activeSymbol, { includeScoreSummary: false });
 
-  const { market, macro, technical, setup, master, hasData: hasScoreData } = useScoresData(activeSymbol, {
+  const {
+    market,
+    macro,
+    technical,
+    setup,
+    master,
+    loading: scoresLoading,
+    hasData: hasScoreData,
+    saveWeights,
+  } = useScoresData(activeSymbol, {
     includeHistory: false,
     includeMaster: true,
     fallbackOnError: false,
@@ -1097,7 +1299,16 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
           try {
             if (symbol === activeSymbol) {
               const combined = hasScoreData
-                ? summarizeContextScores([market?.score, macro?.score, technical?.score], ui)
+                ? summarizeWeightedScores(
+                    {
+                      market: market?.score,
+                      macro: macro?.score,
+                      technical: technical?.score,
+                      setup: setup?.score,
+                    },
+                    master?.weights,
+                    ui
+                  )
                 : summarizeContextScores([], ui);
               const changeValue = Number(btcLive?.change_24h);
 
@@ -1121,8 +1332,14 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
             const latest = latestResult.status === "fulfilled" ? latestResult.value : null;
             const scores = scoresResult.status === "fulfilled" ? scoresResult.value : null;
-            const combined = summarizeContextScores(
-              [scores?.market?.score, scores?.macro?.score, scores?.technical?.score],
+            const combined = summarizeWeightedScores(
+              {
+                market: scores?.market?.score,
+                macro: scores?.macro?.score,
+                technical: scores?.technical?.score,
+                setup: scores?.setup?.score,
+              },
+              master?.weights,
               ui
             );
             const changeValue = Number(latest?.change_24h);
@@ -1161,12 +1378,18 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     return () => {
       cancelled = true;
     };
-  }, [activeSymbol, btcLive, hasScoreData, locale, macro, market, technical, ui, watchlistSymbols]);
+  }, [activeSymbol, btcLive, hasScoreData, locale, macro, master, market, setup, technical, ui, watchlistSymbols]);
 
   const combinedSummary = useMemo(() => {
     if (!hasScoreData) return summarizeContextScores([], ui);
-    const summary = summarizeContextScores(
-      [market?.score, macro?.score, technical?.score],
+    const summary = summarizeWeightedScores(
+      {
+        market: market?.score,
+        macro: macro?.score,
+        technical: technical?.score,
+        setup: setup?.score,
+      },
+      master?.weights,
       ui
     );
 
@@ -1174,7 +1397,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       ...summary,
       bias: master?.bias && master.bias !== "—" ? formatBiasLabel(master.bias, ui) : summary.bias,
     };
-  }, [hasScoreData, macro, market, master, technical, ui]);
+  }, [hasScoreData, macro, market, master, setup, technical, ui]);
 
   const sections = useMemo(() => {
     const marketRows = buildRows(marketDayData, locale);
@@ -1279,7 +1502,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         market={hasScoreData ? market : null}
         macro={hasScoreData ? macro : null}
         technical={hasScoreData ? technical : null}
+        setup={hasScoreData ? setup : null}
         combined={combinedSummary}
+        weights={master?.weights}
+        loading={scoresLoading}
+        onSaveWeights={saveWeights}
         ui={ui}
       />
 
