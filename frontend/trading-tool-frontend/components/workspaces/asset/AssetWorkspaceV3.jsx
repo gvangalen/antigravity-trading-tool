@@ -3,14 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowRight,
   Brain,
   ChevronDown,
   Globe,
   LineChart,
   Plus,
   Settings2,
-  Sparkles,
   Target,
   TrendingUp,
 } from "lucide-react";
@@ -21,10 +19,10 @@ import { useMarketData } from "@/hooks/useMarketData";
 import { useMacroData } from "@/hooks/useMacroData";
 import { useTechnicalData } from "@/hooks/useTechnicalData";
 import { useScoresData } from "@/hooks/useScoresData";
+import { useWatchlist } from "@/hooks/useWatchlist";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
-const CONTEXT_ORDER = ["market", "macro", "technical"];
 
 const SECTION_META = {
   market: {
@@ -50,8 +48,8 @@ const SECTION_META = {
 const INDICATOR_LABELS = {
   atr_model: "ATR-model",
   btc_dominance: "Bitcoin-dominantie",
-  change_24h: "Prijs 24u",
-  change_7d: "Prijs 7d",
+  change_24h: "Prijsverandering 24 uur",
+  change_7d: "Prijsverandering 7 dagen",
   dxy: "DXY",
   etf_flows: "ETF-flows",
   fear_greed_index: "Fear & Greed",
@@ -68,8 +66,16 @@ const INDICATOR_LABELS = {
   volatility: "Volatiliteit",
   volume: "Volume",
   volume_change: "Volumeverandering",
-  volume_change_24h: "Volume 24u",
+  volume_change_24h: "Volumeverandering 24 uur",
   volume_trend: "Volume-trend",
+};
+
+const ASSET_NAMES = {
+  BTC: "Bitcoin",
+  ETH: "Ethereum",
+  SOL: "Solana",
+  ADA: "Cardano",
+  DOT: "Polkadot",
 };
 
 function clampNumber(value, fallback = 50) {
@@ -87,10 +93,10 @@ function formatPrice(value, locale) {
   }).format(numericValue);
 }
 
-function formatPercent(value) {
+function formatPercent(value, digits = 2) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return "—";
-  return `${numericValue >= 0 ? "+" : ""}${numericValue.toFixed(2)}%`;
+  return `${numericValue >= 0 ? "+" : ""}${numericValue.toFixed(digits)}%`;
 }
 
 function formatTimestamp(value, locale) {
@@ -125,8 +131,8 @@ function buildContextHref({ pathname, symbol, context, variant }) {
 function trimSentence(value, fallback) {
   const source = String(value || "").trim();
   if (!source) return fallback;
-  if (source.length <= 160) return source;
-  return `${source.slice(0, 157).trim()}...`;
+  if (source.length <= 150) return source;
+  return `${source.slice(0, 147).trim()}...`;
 }
 
 function prettifyName(name) {
@@ -134,85 +140,102 @@ function prettifyName(name) {
   const normalized = String(name).trim();
   const lowered = normalized.toLowerCase();
   if (INDICATOR_LABELS[lowered]) return INDICATOR_LABELS[lowered];
-  return normalized
-    .replace(/_/g, " ")
-    .replace(/\b([a-z])/g, (match) => match.toUpperCase());
+  return normalized.replace(/_/g, " ").replace(/\b([a-z])/g, (match) => match.toUpperCase());
 }
 
-function formatBillions(value, locale) {
+function formatCompactNumber(value, locale, digits = 2) {
+  return new Intl.NumberFormat(locale || "en-US", {
+    maximumFractionDigits: digits,
+  }).format(value);
+}
+
+function formatMagnitude(value, locale) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return "—";
-  if (Math.abs(numericValue) >= 1e12) {
-    return `${new Intl.NumberFormat(locale || "en-US", { maximumFractionDigits: 1 }).format(
-      numericValue / 1e12
-    )}T`;
-  }
-  if (Math.abs(numericValue) >= 1e9) {
-    return `${new Intl.NumberFormat(locale || "en-US", { maximumFractionDigits: 1 }).format(
-      numericValue / 1e9
-    )}B`;
-  }
-  if (Math.abs(numericValue) >= 1e6) {
-    return `${new Intl.NumberFormat(locale || "en-US", { maximumFractionDigits: 1 }).format(
-      numericValue / 1e6
-    )}M`;
-  }
-  return new Intl.NumberFormat(locale || "en-US", {
-    maximumFractionDigits: 2,
-  }).format(numericValue);
+  if (Math.abs(numericValue) >= 1e12) return `${formatCompactNumber(numericValue / 1e12, locale, 2)}T`;
+  if (Math.abs(numericValue) >= 1e9) return `${formatCompactNumber(numericValue / 1e9, locale, 2)} mld.`;
+  if (Math.abs(numericValue) >= 1e6) return `${formatCompactNumber(numericValue / 1e6, locale, 2)} mln.`;
+  return formatCompactNumber(numericValue, locale, 2);
+}
+
+function normalizePotentialRatio(value, { percent = false } = {}) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return null;
+  if (!percent) return numericValue;
+  if (Math.abs(numericValue) <= 1) return numericValue * 100;
+  return numericValue;
 }
 
 function formatIndicatorValue(name, value, locale) {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "Onvoldoende data";
+
   const label = String(name || "").toLowerCase();
   const raw = typeof value === "string" ? value.trim() : value;
-  const numericValue = Number(typeof raw === "string" ? raw.replace(/,/g, ".") : raw);
+  const rawString = typeof raw === "string" ? raw : "";
+  const numericValue = Number(
+    typeof raw === "string"
+      ? raw.replace(/,/g, ".").replace(/[^0-9.+-]/g, "")
+      : raw
+  );
 
-  if (typeof raw === "string" && /buy|sell|above|below|bull|bear|neutral|hoog|laag|stijg|daal/i.test(raw)) {
+  if (typeof raw === "string" && /buy|sell|above|below|bull|bear|neutral|hoog|laag|stijg|daal|trend/i.test(rawString)) {
     return raw;
   }
 
-  if (label.includes("price")) return formatPrice(numericValue, locale);
-  if (label.includes("change") || label.includes("yield") || label.includes("dominance")) {
-    if (Number.isFinite(numericValue)) return `${numericValue.toFixed(2)}%`;
+  if (label === "ma_200" && Number.isFinite(numericValue)) {
+    return numericValue >= 1 ? "Boven MA200" : "Onder MA200";
   }
+
+  if ((label.includes("change") || label.includes("dominance")) && Number.isFinite(numericValue)) {
+    const percentValue = normalizePotentialRatio(numericValue, { percent: true });
+    return formatPercent(percentValue, 2);
+  }
+
+  if ((label === "us10y" || label === "us2y") && Number.isFinite(numericValue)) {
+    const percentValue = normalizePotentialRatio(numericValue, { percent: true });
+    return `${formatCompactNumber(percentValue, locale, 2)}%`;
+  }
+
   if (label.includes("volume") || label.includes("flow")) {
-    if (Number.isFinite(numericValue)) return `$${formatBillions(numericValue, locale)}`;
+    if (!Number.isFinite(numericValue) || numericValue <= 0) return "Onvoldoende data";
+    return `$${formatMagnitude(numericValue, locale)}`;
   }
-  if (label.includes("rsi") || label.includes("fear")) {
-    if (Number.isFinite(numericValue)) return numericValue.toFixed(1);
+
+  if (label.includes("price")) {
+    if (!Number.isFinite(numericValue)) return "Onvoldoende data";
+    if (Math.abs(numericValue) <= 1 && label.includes("change")) {
+      return formatPercent(numericValue * 100, 2);
+    }
+    return formatPrice(numericValue, locale);
   }
-  if (label.includes("dxy")) {
-    if (Number.isFinite(numericValue)) return numericValue.toFixed(1);
+
+  if (label.includes("rsi") || label.includes("fear") || label.includes("dxy")) {
+    if (!Number.isFinite(numericValue)) return "Onvoldoende data";
+    return formatCompactNumber(numericValue, locale, 2);
+  }
+
+  if (label.includes("participation") || label.includes("volatility")) {
+    if (!Number.isFinite(numericValue)) return "Onvoldoende data";
+    const percentValue = normalizePotentialRatio(numericValue, { percent: true });
+    return `${formatCompactNumber(percentValue, locale, 2)}%`;
   }
 
   if (Number.isFinite(numericValue)) {
-    if (Math.abs(numericValue) >= 1000) return formatBillions(numericValue, locale);
-    return new Intl.NumberFormat(locale || "en-US", {
-      maximumFractionDigits: 2,
-    }).format(numericValue);
+    return formatCompactNumber(numericValue, locale, 2);
   }
 
-  return String(raw);
+  return rawString || "Onvoldoende data";
 }
 
 function toDirectionLabel(item, score) {
-  const trendSource = String(item?.trend || item?.action || "").trim().toLowerCase();
-
-  if (trendSource.includes("improv") || trendSource.includes("stijg") || trendSource.includes("bull")) {
-    return "Verbeterend";
-  }
-  if (trendSource.includes("verslecht") || trendSource.includes("dal") || trendSource.includes("bear")) {
-    return "Verslechterend";
-  }
-  if (trendSource.includes("stable") || trendSource.includes("stab")) {
-    return "Stabiel";
-  }
+  const trendSource = String(item?.trend || item?.action || item?.interpretation || "").trim().toLowerCase();
+  if (trendSource.includes("improv") || trendSource.includes("stijg") || trendSource.includes("herstel")) return "Verbetert";
+  if (trendSource.includes("verslecht") || trendSource.includes("dal") || trendSource.includes("tegenwind")) return "Verslechtert";
+  if (trendSource.includes("stable") || trendSource.includes("stab")) return "Stabiel";
   if (trendSource.includes("buy")) return "Actief";
-  if (trendSource.includes("sell")) return "Verzwakkend";
-
-  if (score >= 70) return "Verbeterend";
-  if (score <= 35) return "Verslechterend";
+  if (trendSource.includes("sell")) return "Verzwakt";
+  if (score >= 70) return "Verbetert";
+  if (score <= 35) return "Verslechtert";
   return "Stabiel";
 }
 
@@ -242,27 +265,8 @@ function scoreTone(value) {
   };
 }
 
-function getCombinedSummary({ market, macro, technical, master }) {
-  const marketScore = clampNumber(market?.score);
-  const macroScore = clampNumber(macro?.score);
-  const technicalScore = clampNumber(technical?.score);
-  const combined = Math.round((marketScore + macroScore + technicalScore) / 3);
-  const spread = Math.max(marketScore, macroScore, technicalScore) - Math.min(marketScore, macroScore, technicalScore);
-  const confidence = Math.max(32, Math.min(92, 100 - spread));
-  const tone = scoreTone(combined);
-  const summary = trimSentence(
-    master?.summary || master?.outlook,
-    "Scant markt-, macro- en technische context als een gezamenlijke beslislaag."
-  );
-
-  return {
-    score: combined,
-    confidence,
-    bias: master?.bias || tone.label,
-    outlook: master?.outlook || tone.label,
-    summary,
-    tone,
-  };
+function fallbackAssessment(label, direction, tone) {
+  return `${label} ${direction === "Stabiel" ? "blijft stabiel" : direction === "Verbetert" ? "verbetert" : direction === "Verslechtert" ? "verslechtert" : "blijft actief"} en geeft nu een ${tone.label.toLowerCase()} signaal.`;
 }
 
 function buildRows(items, locale) {
@@ -270,27 +274,58 @@ function buildRows(items, locale) {
 
   return source.map((item, index) => {
     const name = item?.name || item?.indicator || `indicator_${index}`;
+    const label = prettifyName(name);
     const score = clampNumber(item?.score, 50);
     const tone = scoreTone(score);
-    const assessment = trimSentence(
-      item?.interpretation || item?.uitleg || item?.action,
-      tone.label
+    const direction = toDirectionLabel(item, score);
+    const detail = trimSentence(
+      item?.interpretation || item?.uitleg || "",
+      fallbackAssessment(label, direction, tone)
     );
 
     return {
       id: `${name}-${index}`,
       name,
-      label: prettifyName(name),
+      label,
       value: formatIndicatorValue(name, item?.value ?? item?.waarde, locale),
-      direction: toDirectionLabel(item, score),
+      direction,
       score,
-      assessment,
-      signalLabel: tone.label,
       signalTone: tone,
+      scoreLabel: `${tone.label} · ${score}`,
+      detail,
       timestamp: item?.timestamp || item?.date || null,
       raw: item,
     };
   });
+}
+
+function buildSectionInsight(sectionId, sectionScore, rows) {
+  const score = clampNumber(sectionScore, 50);
+  const focus = rows.slice(0, 2).map((row) => row.label.toLowerCase());
+
+  if (sectionId === "market") {
+    if (score <= 35) {
+      return focus.length
+        ? `Prijsactie oogt zwak en bevestiging vanuit ${focus.join(" en ")} blijft beperkt.`
+        : "Prijsactie oogt zwak en bevestiging vanuit volume en liquiditeit blijft beperkt.";
+    }
+    if (score >= 70) {
+      return focus.length
+        ? `${focus[0][0].toUpperCase()}${focus[0].slice(1)} ondersteunt de beweging en marktinternals blijven meewerken.`
+        : "Prijsactie en marktinternals ondersteunen de beweging.";
+    }
+    return "Marktbeeld is gemengd: beweging is zichtbaar, maar bevestiging blijft nog onvolledig.";
+  }
+
+  if (sectionId === "macro") {
+    if (score <= 35) return "Stijgende yields en een sterke dollar blijven macro-tegenwind geven.";
+    if (score >= 70) return "Macroregime werkt mee en hogere druklagen ondersteunen het risicobeeld.";
+    return "Macrocontext blijft gemengd en vraagt om bevestiging vanuit rates, flows en sentiment.";
+  }
+
+  if (score <= 35) return "Trendstructuur is kwetsbaar en momentum levert nog geen sterke bevestiging.";
+  if (score >= 70) return "Trend en actieve indicatoren staan op één lijn en ondersteunen follow-through.";
+  return "Technisch beeld is werkbaar, maar momentum en trendbevestiging blijven neutraal.";
 }
 
 function SummaryPill({ label, value, tone = "neutral" }) {
@@ -318,14 +353,99 @@ function SectionScorePill({ score }) {
   );
 }
 
+function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
+  return (
+    <div className="border-t border-slate-100">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full px-4 py-4 text-left transition hover:bg-slate-50/80"
+      >
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(120px,0.5fr)_minmax(160px,0.55fr)_minmax(240px,0.9fr)] lg:items-center">
+          <div className="flex items-start gap-3">
+            <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition ${
+              expanded ? "border-blue-200 bg-blue-50 text-blue-600" : "border-slate-200 bg-white text-slate-400"
+            }`}>
+              <ChevronDown size={14} className={`transition ${expanded ? "rotate-180" : ""}`} />
+            </span>
+            <div className="min-w-0">
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
+                Indicator
+              </div>
+              <div className="text-base font-black leading-tight text-slate-950">{row.label}</div>
+            </div>
+          </div>
+
+          <div className="lg:text-right">
+            <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
+              Waarde
+            </div>
+            <div className="text-base font-black text-slate-950">{row.value}</div>
+          </div>
+
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
+              Ontwikkeling
+            </div>
+            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">
+              <span className={`h-2 w-2 rounded-full ${row.signalTone.dot}`} />
+              {row.direction}
+            </span>
+          </div>
+
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
+              Beoordeling
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${row.signalTone.pill}`}>
+                {row.scoreLabel}
+              </span>
+            </div>
+            <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
+              {row.detail}
+            </p>
+          </div>
+        </div>
+      </button>
+
+      {expanded ? (
+        <div className="bg-slate-50/70 px-5 py-4">
+          <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                Verdieping
+              </div>
+              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
+                {row.raw?.interpretation || row.raw?.uitleg || row.raw?.action || row.detail}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 lg:items-end">
+              <div className="text-left lg:text-right">
+                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                  Laatste signaal
+                </div>
+                <div className="mt-2 text-sm font-black text-slate-900">
+                  {row.timestamp ? formatTimestamp(row.timestamp) : "Live"}
+                </div>
+              </div>
+              {renderExpandedActions ? renderExpandedActions(row) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function EvidenceSection({
   id,
   title,
   eyebrow,
   icon: Icon,
   score,
-  bias,
-  summary,
+  insight,
   rows,
   expandedRowKey,
   onToggleRow,
@@ -345,112 +465,45 @@ function EvidenceSection({
             <h2 className="text-2xl font-black tracking-tight text-slate-950">{title}</h2>
             <SectionScorePill score={score} />
           </div>
-          <div className="mt-2 text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">
-            {bias}
-          </div>
-          <p className="mt-3 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
-            {summary}
+          <p className="mt-3 max-w-3xl text-sm font-medium leading-relaxed text-slate-500">
+            {insight}
           </p>
         </div>
         {action}
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full table-auto">
-          <thead>
-            <tr className="border-b border-slate-100 text-left text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
-              <th className="px-5 py-3">Indicator</th>
-              <th className="px-4 py-3 text-right">Huidige waarde</th>
-              <th className="px-4 py-3">Richting</th>
-              <th className="px-4 py-3 text-right">Score</th>
-              <th className="px-5 py-3">Beoordeling</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length ? (
-              rows.map((row) => {
-                const expanded = expandedRowKey === `${id}:${row.id}`;
-                return (
-                  <>
-                    <tr
-                      key={`${id}:${row.id}`}
-                      className="cursor-pointer border-b border-slate-100/80 transition hover:bg-slate-50/70"
-                      onClick={() => onToggleRow(`${id}:${row.id}`)}
-                    >
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            tabIndex={-1}
-                            className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${
-                              expanded
-                                ? "border-blue-200 bg-blue-50 text-blue-600"
-                                : "border-slate-200 bg-white text-slate-400"
-                            }`}
-                          >
-                            <ChevronDown size={14} className={`transition ${expanded ? "rotate-180" : ""}`} />
-                          </button>
-                          <div>
-                            <div className="text-sm font-black text-slate-900">{row.label}</div>
-                            <div className="mt-1 text-[11px] font-medium text-slate-400">{row.signalLabel}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-right text-sm font-black text-slate-900">{row.value}</td>
-                      <td className="px-4 py-4">
-                        <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">
-                          <span className={`h-2 w-2 rounded-full ${row.signalTone.dot}`} />
-                          {row.direction}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className={`text-sm font-black ${row.signalTone.text}`}>{row.score}</div>
-                      </td>
-                      <td className="px-5 py-4 text-sm font-medium leading-relaxed text-slate-500">
-                        {row.assessment}
-                      </td>
-                    </tr>
+      <div className="hidden border-b border-slate-100 px-5 py-3 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(120px,0.5fr)_minmax(160px,0.55fr)_minmax(240px,0.9fr)] lg:gap-4">
+        {["Indicator", "Waarde", "Ontwikkeling", "Beoordeling"].map((label, index) => (
+          <div
+            key={label}
+            className={`text-[10px] font-black uppercase tracking-[0.24em] text-slate-400 ${
+              index === 1 ? "text-right" : ""
+            }`}
+          >
+            {label}
+          </div>
+        ))}
+      </div>
 
-                    {expanded ? (
-                      <tr key={`${id}:${row.id}:expanded`} className="border-b border-slate-100 bg-slate-50/65">
-                        <td colSpan={5} className="px-5 py-4">
-                          <div className="grid gap-4 lg:grid-cols-[1.5fr_0.8fr]">
-                            <div>
-                              <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
-                                Verdieping
-                              </div>
-                              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
-                                {row.raw?.interpretation || row.raw?.uitleg || row.raw?.action || "Nog geen extra interpretatie beschikbaar."}
-                              </p>
-                            </div>
-
-                            <div className="flex flex-col gap-3 lg:items-end">
-                              <div className="text-right">
-                                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
-                                  Laatste signaal
-                                </div>
-                                <div className="mt-2 text-sm font-black text-slate-900">
-                                  {row.timestamp ? formatTimestamp(row.timestamp) : "Live"}
-                                </div>
-                              </div>
-                              {renderExpandedActions ? renderExpandedActions(row) : null}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={5} className="px-5 py-12 text-center text-sm font-semibold text-slate-400">
-                  {emptyState}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div>
+        {rows.length ? (
+          rows.map((row) => {
+            const rowKey = `${id}:${row.id}`;
+            return (
+              <EvidenceRow
+                key={rowKey}
+                row={row}
+                expanded={expandedRowKey === rowKey}
+                onToggle={() => onToggleRow(rowKey)}
+                renderExpandedActions={renderExpandedActions}
+              />
+            );
+          })
+        ) : (
+          <div className="px-5 py-12 text-center text-sm font-semibold text-slate-400">
+            {emptyState}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -462,6 +515,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const searchParams = useSearchParams();
   const { selectedAsset, setSelectedAsset, availableAssets = [] } = useAsset();
   const { locale } = useTranslation();
+  const { watchlist } = useWatchlist();
   const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
   const activeSymbol = symbolFromUrl || selectedAsset || "BTC";
   const [macroTimeframe] = useState("day");
@@ -483,7 +537,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   }, [selectedAsset, setSelectedAsset, symbolFromUrl]);
 
   const {
-    availableIndicators,
     addMarket,
     btcLive,
     loading: marketLoading,
@@ -544,7 +597,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     Promise.resolve(addTechnicalIndicator(technicalIndicatorFromUrl))
       .then(() => {
         if (indicatorAction !== "select") {
-          setExpandedRowKey(`technical:${technicalIndicatorFromUrl}-0`);
           setTechnicalConfigModal(technicalIndicatorFromUrl);
         }
       })
@@ -558,13 +610,30 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       Array.isArray(availableAssets) && availableAssets.length
         ? availableAssets
         : ["BTC", "ETH", "SOL", "ADA", "DOT"];
-    return Array.from(new Set([activeSymbol, ...base]));
-  }, [activeSymbol, availableAssets]);
+    return Array.from(new Set([activeSymbol, ...(watchlist || []), ...base]));
+  }, [activeSymbol, availableAssets, watchlist]);
 
-  const combinedSummary = useMemo(
-    () => getCombinedSummary({ market, macro, technical, master }),
-    [macro, market, master, technical]
-  );
+  const watchlistSymbols = useMemo(() => {
+    const preferred = Array.isArray(watchlist) && watchlist.length ? watchlist : assetOptions;
+    return Array.from(new Set([activeSymbol, ...preferred])).slice(0, 6);
+  }, [activeSymbol, assetOptions, watchlist]);
+
+  const combinedSummary = useMemo(() => {
+    const marketScore = clampNumber(market?.score);
+    const macroScore = clampNumber(macro?.score);
+    const technicalScore = clampNumber(technical?.score);
+    const average = Math.round((marketScore + macroScore + technicalScore) / 3);
+    const spread = Math.max(marketScore, macroScore, technicalScore) - Math.min(marketScore, macroScore, technicalScore);
+    const confidence = Math.max(32, Math.min(92, 100 - spread));
+    const tone = scoreTone(average);
+
+    return {
+      score: average,
+      confidence,
+      bias: master?.bias && master.bias !== "—" ? master.bias : tone.label,
+      tone,
+    };
+  }, [macro, market, master, technical]);
 
   const sections = useMemo(() => {
     const marketRows = buildRows(marketDayData, locale);
@@ -578,11 +647,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         eyebrow: SECTION_META.market.eyebrow,
         icon: SECTION_META.market.icon,
         score: market?.score,
-        bias: market?.bias || market?.trend || "Neutraal",
-        summary: trimSentence(
-          market?.uitleg,
-          `Prijs, volume, participatie en liquiditeit voor ${activeSymbol}.`
-        ),
+        insight: buildSectionInsight("market", market?.score, marketRows),
         rows: marketRows,
         emptyState: marketLoading ? "Marktdata laden..." : SECTION_META.market.empty,
       },
@@ -592,11 +657,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         eyebrow: SECTION_META.macro.eyebrow,
         icon: SECTION_META.macro.icon,
         score: macro?.score,
-        bias: macro?.bias || macro?.trend || "Neutraal",
-        summary: trimSentence(
-          macro?.uitleg,
-          `Regime, yields, flows en hogere macrodruk rond ${activeSymbol}.`
-        ),
+        insight: buildSectionInsight("macro", macro?.score, macroRows),
         rows: macroRows,
         emptyState: macroLoading ? "Macrodata laden..." : SECTION_META.macro.empty,
       },
@@ -606,41 +667,61 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         eyebrow: SECTION_META.technical.eyebrow,
         icon: SECTION_META.technical.icon,
         score: technical?.score,
-        bias: technical?.bias || technical?.trend || "Neutraal",
-        summary: trimSentence(
-          technical?.uitleg,
-          `Trend, momentum en actieve indicatorlogica voor ${activeSymbol}.`
-        ),
+        insight: buildSectionInsight("technical", technical?.score, technicalRows),
         rows: technicalRows,
         emptyState: technicalLoading ? "Technische data laden..." : SECTION_META.technical.empty,
       },
     ];
-  }, [activeSymbol, locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading]);
+  }, [locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading]);
 
-  const handleAssetChange = (event) => {
-    const nextSymbol = String(event.target.value || activeSymbol).toUpperCase();
+  const handleAssetSelect = (symbol) => {
+    const nextSymbol = String(symbol || activeSymbol).toUpperCase();
     setSelectedAsset(nextSymbol);
     router.push(buildContextHref({ pathname, symbol: nextSymbol, context: initialTab, variant }), {
       scroll: false,
     });
   };
 
-  const openIndicatorSearch = () => {
+  const openSearch = (detail = undefined) => {
     if (typeof window === "undefined") return;
-    window.dispatchEvent(
-      new CustomEvent(SEARCH_OPEN_EVENT, {
-        detail: {
-          mode: "indicator",
-          category: "technical",
-        },
-      })
-    );
+    window.dispatchEvent(new CustomEvent(SEARCH_OPEN_EVENT, { detail }));
   };
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       <section className="rounded-[32px] border border-slate-200/80 bg-white p-5 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.38)] lg:p-6">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">
+            Watchlist
+          </span>
+          {watchlistSymbols.map((symbol) => {
+            const active = symbol === activeSymbol;
+            return (
+              <button
+                key={symbol}
+                type="button"
+                onClick={() => handleAssetSelect(symbol)}
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] transition ${
+                  active
+                    ? "border-blue-500 bg-blue-600 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                }`}
+              >
+                {symbol}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => openSearch()}
+            className="inline-flex items-center gap-2 rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 transition hover:border-blue-300 hover:text-blue-600"
+          >
+            <Plus size={12} />
+            Asset
+          </button>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.28em] text-blue-600">
               <Brain size={12} />
@@ -648,71 +729,46 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <h1 className="text-4xl font-black tracking-tight text-slate-950 lg:text-5xl">
-                {activeSymbol} Analyse
-              </h1>
-              <span className="text-sm font-semibold text-slate-400">·</span>
-              <span className="text-lg font-black text-slate-950">{formatPrice(btcLive?.price, locale)}</span>
-              <span className="text-sm font-semibold text-slate-400">·</span>
-              <span className={`text-lg font-black ${Number(btcLive?.change_24h) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              <button
+                type="button"
+                onClick={() => openSearch()}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black tracking-tight text-slate-950 transition hover:border-blue-200 hover:text-blue-600"
+              >
+                <span>{activeSymbol}</span>
+                <span className="text-slate-400">{ASSET_NAMES[activeSymbol] || "Asset"}</span>
+              </button>
+              <span className="text-4xl font-black tracking-tight text-slate-950 lg:text-5xl">
+                {formatPrice(btcLive?.price, locale)}
+              </span>
+              <span className={`text-xl font-black ${Number(btcLive?.change_24h) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                 {formatPercent(btcLive?.change_24h)}
               </span>
-              <span className="text-sm font-semibold text-slate-400">·</span>
               <span className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">1D</span>
-              <span className="text-sm font-semibold text-slate-400">·</span>
               <span className="text-sm font-semibold text-slate-500">
                 Updated {formatTimestamp(btcLive?.timestamp, locale)}
               </span>
             </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <SummaryPill label="Combined score" value={`${combinedSummary.score}/100`} />
-              <SummaryPill label="Bias" value={combinedSummary.bias} tone={combinedSummary.tone.label === "Positief" ? "positive" : combinedSummary.tone.label === "Negatief" ? "negative" : "neutral"} />
-              <SummaryPill label="Confidence" value={`${combinedSummary.confidence}%`} />
-            </div>
-
-            <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50/75 p-4">
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
-                <Sparkles size={12} />
-                FINN conclusie
-              </div>
-              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
-                {combinedSummary.summary}
-              </p>
-            </div>
           </div>
 
-          <div className="w-full rounded-[26px] border border-slate-200 bg-slate-50/70 p-4 xl:max-w-[320px]">
-            <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
-              Asset wisselen
-            </div>
-            <div className="mt-3 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-sm font-black uppercase tracking-[0.14em] text-white">
-                {activeSymbol.slice(0, 3)}
-              </div>
-              <div className="min-w-0">
-                <div className="text-lg font-black text-slate-950">{activeSymbol}</div>
-                <div className="text-sm font-medium text-slate-500">
-                  Zelfde analysecanvas, andere assetcontext.
-                </div>
-              </div>
-            </div>
-            <select
-              value={activeSymbol}
-              onChange={handleAssetChange}
-              className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black uppercase tracking-[0.18em] text-slate-900 outline-none transition focus:border-blue-500"
-            >
-              {assetOptions.map((asset) => (
-                <option key={asset} value={asset}>
-                  {asset}
-                </option>
-              ))}
-            </select>
+          <div className="flex flex-wrap gap-2 xl:justify-end">
+            <SummaryPill label="Combined score" value={`${combinedSummary.score}/100`} />
+            <SummaryPill
+              label="Bias"
+              value={combinedSummary.bias}
+              tone={
+                combinedSummary.tone.label === "Positief"
+                  ? "positive"
+                  : combinedSummary.tone.label === "Negatief"
+                  ? "negative"
+                  : "neutral"
+              }
+            />
+            <SummaryPill label="Confidence" value={`${combinedSummary.confidence}%`} />
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-3">
+      <section className="space-y-4">
         {sections.map((section) => (
           <EvidenceSection
             key={section.id}
@@ -721,8 +777,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             eyebrow={section.eyebrow}
             icon={section.icon}
             score={section.score}
-            bias={section.bias}
-            summary={section.summary}
+            insight={section.insight}
             rows={section.rows}
             expandedRowKey={expandedRowKey}
             onToggleRow={(key) => setExpandedRowKey((current) => (current === key ? null : key))}
@@ -731,7 +786,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
               section.id === "technical" ? (
                 <button
                   type="button"
-                  onClick={openIndicatorSearch}
+                  onClick={() => openSearch({ mode: "indicator", category: "technical" })}
                   className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
                 >
                   <Plus size={14} />
@@ -788,23 +843,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
           />
         ))}
       </section>
-
-      <div className="rounded-[28px] border border-slate-200/80 bg-white p-4 shadow-[0_16px_50px_-42px_rgba(15,23,42,0.35)]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
-              Analyseflow
-            </div>
-            <p className="mt-1 text-sm font-medium text-slate-500">
-              Markt, Macro en Technisch blijven altijd zichtbaar. Klik alleen op een rij voor verdieping.
-            </p>
-          </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600">
-            <ArrowRight size={12} />
-            Eén canvas, drie evidence-lijsten
-          </div>
-        </div>
-      </div>
 
       <IndicatorConfigModal
         isOpen={Boolean(technicalConfigModal)}
