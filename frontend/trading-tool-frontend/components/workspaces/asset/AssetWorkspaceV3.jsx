@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  ArrowRight,
   Brain,
   ChevronDown,
   Globe,
@@ -116,6 +117,11 @@ function getUiCopy(locale = "nl") {
       macro: "Macro",
       technical: "Technical",
       combined: "Combined",
+      nextStep: "Next step",
+      planBridgeTitle: "Continue this setup in My Plan",
+      planBridgeDescription: "Review setup quality, position sizing and risk/reward before taking action.",
+      openMyPlan: "Open My Plan",
+      setupScore: "Setup score",
     };
   }
   if (normalized.startsWith("de")) {
@@ -143,6 +149,11 @@ function getUiCopy(locale = "nl") {
       macro: "Makro",
       technical: "Technisch",
       combined: "Kombiniert",
+      nextStep: "Nächster Schritt",
+      planBridgeTitle: "Dieses Setup in Mein Plan ausarbeiten",
+      planBridgeDescription: "Prüfe Setup-Qualität, Positionsgröße und Risiko-Rendite vor der Ausführung.",
+      openMyPlan: "Mein Plan öffnen",
+      setupScore: "Setup-Score",
     };
   }
   return {
@@ -169,6 +180,11 @@ function getUiCopy(locale = "nl") {
     macro: "Macro",
     technical: "Technisch",
     combined: "Gecombineerd",
+    nextStep: "Volgende stap",
+    planBridgeTitle: "Werk deze setup uit in Mijn Plan",
+    planBridgeDescription: "Controleer setupkwaliteit, positiegrootte en risk/reward voordat je handelt.",
+    openMyPlan: "Open Mijn Plan",
+    setupScore: "Setupscore",
   };
 }
 
@@ -460,22 +476,6 @@ function buildSectionInsight(sectionId, sectionScore, rows) {
   return "Technisch beeld is werkbaar, maar momentum en trendbevestiging blijven neutraal.";
 }
 
-function SummaryPill({ label, value, tone = "neutral" }) {
-  const toneClass =
-    tone === "positive"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : tone === "negative"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : "border-slate-200 bg-white text-slate-700";
-
-  return (
-    <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black ${toneClass}`}>
-      <span className="uppercase tracking-[0.18em]">{label}</span>
-      <span className="tracking-tight">{value}</span>
-    </div>
-  );
-}
-
 function ScoreOverview({ market, macro, technical, combined, ui }) {
   const items = [
     {
@@ -574,21 +574,54 @@ function AnalysisChartSection({ symbol, isOpen, onToggle, ui }) {
   );
 }
 
-function PlanBridge({ setup, ui }) {
+function PlanBridge({ setup, onOpenPlan, ui }) {
   const setupScore = normalizeScore(setup?.score);
+  const scoreLabel = setupScore === null ? "—" : `${Math.round(setupScore)}/100`;
+
   return (
-    <section className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 px-5 py-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-            Overgang naar Mijn Plan
+    <section className="relative overflow-hidden rounded-[24px] border border-blue-100 bg-gradient-to-r from-blue-50/80 via-white to-white px-4 py-3.5 shadow-[0_18px_40px_-38px_rgba(37,99,235,0.45)]">
+      <div className="absolute inset-y-0 left-0 w-1 bg-blue-600" />
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-white text-blue-600 shadow-sm">
+            <Target size={17} />
           </div>
-          <p className="mt-1 text-sm font-medium text-slate-600">
-            Actieve setup: {setupScore === null ? "—" : `${Math.round(setupScore)}/100`}. De volledige setupkwaliteit, position sizing en risk/reward horen in Mijn Plan.
-          </p>
+          <div className="min-w-0">
+            <div className="text-[9px] font-black uppercase tracking-[0.22em] text-blue-600">
+              {ui.nextStep}
+            </div>
+            <h3 className="mt-0.5 text-[15px] font-black tracking-tight text-slate-950">
+              {ui.planBridgeTitle}
+            </h3>
+            <p className="mt-0.5 text-[12px] font-medium leading-5 text-slate-500">
+              {ui.planBridgeDescription}
+            </p>
+          </div>
         </div>
-        <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600">
-          Setup {setupScore === null ? "—" : `${Math.round(setupScore)}/100`}
+
+        <div className="flex items-center justify-between gap-3 sm:justify-end">
+          <div className="min-w-[92px]">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">
+                {ui.setupScore}
+              </span>
+              <span className="text-[13px] font-black text-slate-900">{scoreLabel}</span>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200/80">
+              <div
+                className="h-full rounded-full bg-blue-600 transition-[width] duration-500"
+                style={{ width: `${setupScore ?? 0}%` }}
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenPlan}
+            className="inline-flex shrink-0 items-center gap-2 rounded-full bg-blue-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-sm transition hover:bg-blue-700"
+          >
+            {ui.openMyPlan}
+            <ArrowRight size={13} />
+          </button>
         </div>
       </div>
     </section>
@@ -615,49 +648,76 @@ function ActiveAssetCard({
   onSelectAsset,
   ui,
 }) {
+  const changeValue = Number(change24h);
+  const changeClass = Number.isFinite(changeValue)
+    ? changeValue >= 0
+      ? "text-emerald-600"
+      : "text-red-600"
+    : "text-slate-400";
+  const biasToneClass =
+    combinedSummary.tone.label === ui.positive
+      ? "text-emerald-700"
+      : combinedSummary.tone.label === ui.negative
+      ? "text-red-700"
+      : "text-slate-700";
+
+  const summaryItems = [
+    {
+      label: ui.combinedScore,
+      value: combinedSummary.score === null ? "—" : `${combinedSummary.score}/100`,
+      className: "text-slate-950",
+    },
+    { label: ui.bias, value: combinedSummary.bias, className: biasToneClass },
+    {
+      label: ui.confidence,
+      value: combinedSummary.confidence === null ? "—" : `${combinedSummary.confidence}%`,
+      className: "text-slate-950",
+    },
+  ];
+
   return (
-    <section className="rounded-[24px] border border-slate-200/80 bg-white px-5 py-4 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
+    <section className="relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white px-4 py-3.5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-blue-500 via-blue-200 to-transparent" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
             <Brain size={12} />
             {ui.activeAnalysis}
-          </div>
+        </div>
+        <div className="shrink-0 text-right text-[11px] font-semibold text-slate-400">
+          {ui.updated} <span className="text-slate-600">{updatedAt}</span>
+        </div>
+      </div>
 
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <div className="mt-2.5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(350px,auto)] lg:items-end">
+        <div className="flex min-w-0 items-center gap-3 overflow-hidden">
             <button
               type="button"
               onClick={onSelectAsset}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-black tracking-tight text-slate-950 transition hover:border-blue-200 hover:text-blue-600"
+              className="inline-flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-black tracking-tight text-slate-950 transition hover:border-blue-200 hover:text-blue-600"
             >
               <span>{activeSymbol}</span>
-              <span className="text-slate-400">{assetName || "Asset"}</span>
+              <span className="hidden text-slate-400 sm:inline">{assetName || "Asset"}</span>
             </button>
-            <span className="text-[34px] font-black leading-none tracking-tight text-slate-950 lg:text-[38px]">
+            <span className="min-w-0 truncate text-[31px] font-black leading-none tracking-tight text-slate-950 sm:text-[34px] lg:text-[36px]">
               {price}
             </span>
-            <span className={`text-lg font-black ${Number(change24h) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+            <span className={`shrink-0 text-base font-black ${changeClass}`}>
               {formatPercent(change24h)}
             </span>
-            <span className="text-[13px] font-black uppercase tracking-[0.14em] text-slate-500">1D</span>
-            <span className="text-[13px] font-semibold text-slate-500">{ui.updated} {updatedAt}</span>
-          </div>
+            <span className="shrink-0 text-[12px] font-black uppercase tracking-[0.14em] text-slate-400">1D</span>
         </div>
 
-        <div className="flex flex-wrap gap-2 xl:justify-end">
-          <SummaryPill label={ui.combinedScore} value={combinedSummary.score === null ? "—" : `${combinedSummary.score}/100`} />
-          <SummaryPill
-            label={ui.bias}
-            value={combinedSummary.bias}
-            tone={
-              combinedSummary.tone.label === ui.positive
-                ? "positive"
-                : combinedSummary.tone.label === ui.negative
-                ? "negative"
-                : "neutral"
-            }
-          />
-          <SummaryPill label={ui.confidence} value={combinedSummary.confidence === null ? "—" : `${combinedSummary.confidence}%`} />
+        <div className="grid grid-cols-3 divide-x divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70">
+          {summaryItems.map((item) => (
+            <div key={item.label} className="min-w-0 px-3 py-2 text-center">
+              <div className="truncate text-[8px] font-black uppercase tracking-[0.16em] text-slate-400">
+                {item.label}
+              </div>
+              <div className={`mt-0.5 truncate text-[12px] font-black ${item.className}`}>
+                {item.value}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -1317,7 +1377,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         ))}
       </section>
 
-      <PlanBridge setup={hasScoreData ? setup : null} ui={ui} />
+      <PlanBridge
+        setup={hasScoreData ? setup : null}
+        onOpenPlan={() => router.push(`/setup?symbol=${encodeURIComponent(activeSymbol)}`)}
+        ui={ui}
+      />
 
       <IndicatorConfigModal
         isOpen={Boolean(technicalConfigModal)}
