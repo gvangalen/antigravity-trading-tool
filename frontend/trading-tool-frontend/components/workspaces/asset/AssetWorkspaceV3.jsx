@@ -138,6 +138,7 @@ function getUiCopy(locale = "nl") {
       week: "Week",
       month: "Month",
       quarter: "Quarter",
+      marketPeriod: "Market period",
       macroPeriod: "Macro period",
       technicalPeriod: "Technical period",
     };
@@ -185,6 +186,7 @@ function getUiCopy(locale = "nl") {
       week: "Woche",
       month: "Monat",
       quarter: "Quartal",
+      marketPeriod: "Marktzeitraum",
       macroPeriod: "Makrozeitraum",
       technicalPeriod: "Technischer Zeitraum",
     };
@@ -231,6 +233,7 @@ function getUiCopy(locale = "nl") {
     week: "Week",
     month: "Maand",
     quarter: "Kwartaal",
+    marketPeriod: "Marktperiode",
     macroPeriod: "Macroperiode",
     technicalPeriod: "Technische periode",
   };
@@ -1228,6 +1231,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const { watchlist } = useWatchlist();
   const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
   const activeSymbol = symbolFromUrl || selectedAsset || "BTC";
+  const [marketTimeframe, setMarketTimeframe] = useState("day");
   const [macroTimeframe, setMacroTimeframe] = useState("day");
   const [technicalTimeframe, setTechnicalTimeframe] = useState("day");
   const [expandedRowKey, setExpandedRowKey] = useState(null);
@@ -1257,6 +1261,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     includeDailyScores: false,
     includeSevenDayData: false,
     includeForwardData: false,
+    timeframe: marketTimeframe,
   });
 
   const {
@@ -1573,7 +1578,15 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             onToggleRow={(key) => setExpandedRowKey((current) => (current === key ? null : key))}
             emptyState={section.emptyState}
             toolbar={
-              section.id === "macro" ? (
+              section.id === "market" ? (
+                <TimeframeTabs
+                  value={marketTimeframe}
+                  onChange={setMarketTimeframe}
+                  loading={marketLoading}
+                  label={ui.marketPeriod}
+                  ui={ui}
+                />
+              ) : section.id === "macro" ? (
                 <TimeframeTabs
                   value={macroTimeframe}
                   onChange={setMacroTimeframe}

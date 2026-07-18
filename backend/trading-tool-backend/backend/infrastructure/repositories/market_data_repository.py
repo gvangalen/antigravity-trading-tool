@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import desc, delete
+from sqlalchemy import and_, desc, delete, func
 from typing import List, Optional, Sequence
 import datetime
 
@@ -138,6 +138,44 @@ class MarketDataRepository:
         # Sorteer alfabetisch op naam zoals originele query (ORDER BY name, timestamp DESC)
         active.sort(key=lambda x: x.name)
         return active
+
+    async def get_period_indicators(
+        self,
+        user_id: int,
+        symbol: str,
+        days: int,
+    ) -> Sequence[MarketDataIndicator]:
+        date_query = (
+            select(func.date(MarketDataIndicator.timestamp).label("period_date"))
+            .where(
+                and_(
+                    MarketDataIndicator.user_id == user_id,
+                    MarketDataIndicator.symbol == symbol,
+                )
+            )
+            .group_by(func.date(MarketDataIndicator.timestamp))
+            .order_by(desc(func.date(MarketDataIndicator.timestamp)))
+            .limit(days)
+        )
+        date_result = await self.session.execute(date_query)
+        dates = [row[0] for row in date_result.fetchall()]
+
+        if not dates:
+            return []
+
+        stmt = (
+            select(MarketDataIndicator)
+            .where(
+                and_(
+                    MarketDataIndicator.user_id == user_id,
+                    MarketDataIndicator.symbol == symbol,
+                    func.date(MarketDataIndicator.timestamp).in_(dates),
+                )
+            )
+            .order_by(desc(MarketDataIndicator.timestamp), MarketDataIndicator.name.asc())
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
 
     # =========================================================
     # GLOBAAL: 7D Data

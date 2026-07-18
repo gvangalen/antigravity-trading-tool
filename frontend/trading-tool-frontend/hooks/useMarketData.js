@@ -12,6 +12,9 @@ import {
   fetchForwardReturnsQuarter,
   fetchForwardReturnsYear,
   fetchMarketDayData,
+  fetchMarketWeekData,
+  fetchMarketMonthData,
+  fetchMarketQuarterData,
   getMarketIndicatorNames,
   getScoreRulesForMarketIndicator,
   marketIndicatorAdd,
@@ -45,6 +48,7 @@ export function useMarketData(symbol = "BTC", options = {}) {
     includeDailyScores,
     includeMarketDayData,
     includeIndicators,
+    timeframe = "day",
   } = options;
   const [sevenDayData, setSevenDayData] = useState([]);
   const [btcLive, setBtcLive] = useState(null);
@@ -90,7 +94,7 @@ export function useMarketData(symbol = "BTC", options = {}) {
   -------------------------------------------------------- */
   useEffect(() => {
     loadAll();
-  }, [symbol]);
+  }, [symbol, timeframe]);
 
   useVisibilityPolling(loadLivePrice, {
     intervalMs: 60000,
@@ -115,6 +119,14 @@ export function useMarketData(symbol = "BTC", options = {}) {
         return;
       }
 
+      const normalizedTimeframe = String(timeframe || "day").toLowerCase();
+      const marketPeriodRequest = {
+        day: fetchMarketDayData,
+        week: fetchMarketWeekData,
+        month: fetchMarketMonthData,
+        quarter: fetchMarketQuarterData,
+      }[normalizedTimeframe] || fetchMarketDayData;
+
       const settledResults = await Promise.allSettled([
         shouldLoadSevenDayData ? fetchMarketData7d(symbol) : Promise.resolve(null),
         shouldLoadForwardData ? fetchForwardReturnsWeek(symbol) : Promise.resolve(null),
@@ -122,7 +134,7 @@ export function useMarketData(symbol = "BTC", options = {}) {
         shouldLoadForwardData ? fetchForwardReturnsQuarter(symbol) : Promise.resolve(null),
         shouldLoadForwardData ? fetchForwardReturnsYear(symbol) : Promise.resolve(null),
         shouldLoadDailyScores ? getDailyScores(symbol) : Promise.resolve(null),
-        shouldLoadMarketDayData ? fetchMarketDayData(symbol) : Promise.resolve(null),
+        shouldLoadMarketDayData ? marketPeriodRequest(symbol) : Promise.resolve(null),
         shouldLoadIndicators ? getUserMarketIndicators(symbol) : Promise.resolve(null),
         shouldLoadIndicators ? getMarketIndicatorNames() : Promise.resolve(null),
       ]);

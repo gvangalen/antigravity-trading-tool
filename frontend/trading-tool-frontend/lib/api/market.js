@@ -78,6 +78,15 @@ export const fetchForwardReturnsYear = (symbol = "BTC") =>
 export const fetchMarketDayData = (symbol = "BTC") =>
   fetchAuth(`/api/market_data/day?symbol=${symbol}`, { method: "GET" });
 
+export const fetchMarketWeekData = (symbol = "BTC") =>
+  fetchAuth(`/api/market_data/week?symbol=${symbol}`, { method: "GET" });
+
+export const fetchMarketMonthData = (symbol = "BTC") =>
+  fetchAuth(`/api/market_data/month?symbol=${symbol}`, { method: "GET" });
+
+export const fetchMarketQuarterData = (symbol = "BTC") =>
+  fetchAuth(`/api/market_data/quarter?symbol=${symbol}`, { method: "GET" });
+
 export const fetchUserMarketHistory = (symbol = "BTC") =>
   fetchAuth(`/api/market_data/indicators?symbol=${symbol}`, { method: "GET" });
 

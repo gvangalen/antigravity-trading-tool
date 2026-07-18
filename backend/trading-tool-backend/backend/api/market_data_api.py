@@ -90,6 +90,48 @@ async def get_market_day_data(
         raise HTTPException(500, "Fout bij ophalen dagtabellen.")
 
 
+@router.get("/market_data/week")
+async def get_market_week_data(
+    symbol: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        service = MarketDataService(db)
+        return await service.get_market_period_data(int(current_user["id"]), symbol=symbol, days=7)
+    except Exception as e:
+        logger.error(f"❌ [market_week_data] {e}", exc_info=True)
+        raise HTTPException(500, "Fout bij ophalen weektabellen.")
+
+
+@router.get("/market_data/month")
+async def get_market_month_data(
+    symbol: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        service = MarketDataService(db)
+        return await service.get_market_period_data(int(current_user["id"]), symbol=symbol, days=30)
+    except Exception as e:
+        logger.error(f"❌ [market_month_data] {e}", exc_info=True)
+        raise HTTPException(500, "Fout bij ophalen maandtabellen.")
+
+
+@router.get("/market_data/quarter")
+async def get_market_quarter_data(
+    symbol: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        service = MarketDataService(db)
+        return await service.get_market_period_data(int(current_user["id"]), symbol=symbol, days=90)
+    except Exception as e:
+        logger.error(f"❌ [market_quarter_data] {e}", exc_info=True)
+        raise HTTPException(500, "Fout bij ophalen kwartaaltabellen.")
+
+
 # =========================================================
 # INDICATOR CONFIG & RULES
 # =========================================================

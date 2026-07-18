@@ -179,6 +179,20 @@ class MarketDataService:
         # Note: In standard response we return dict via Pydantic or manual
         return [MarketDataIndicatorResponse.from_orm(r).dict() for r in records]
 
+    async def get_market_period_data(
+        self,
+        user_id: int,
+        symbol: str = "BTC",
+        days: int = 7,
+    ) -> List[dict]:
+        symbol = symbol.upper() if symbol else "BTC"
+        records = await self.repository.get_period_indicators(
+            user_id,
+            symbol=symbol,
+            days=days,
+        )
+        return [MarketDataIndicatorResponse.from_orm(record).dict() for record in records]
+
     # =========================================================
     # GLOBAL: Indicators & Rules
     # =========================================================
