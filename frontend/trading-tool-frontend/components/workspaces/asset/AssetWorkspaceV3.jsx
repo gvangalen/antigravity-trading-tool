@@ -355,7 +355,7 @@ function SummaryPill({ label, value, tone = "neutral" }) {
   );
 }
 
-function ScoreOverview({ market, macro, technical, combined, setup }) {
+function ScoreOverview({ market, macro, technical, combined }) {
   const items = [
     {
       id: "market",
@@ -385,14 +385,9 @@ function ScoreOverview({ market, macro, technical, combined, setup }) {
 
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+      <div className="border-b border-slate-100 px-4 py-3">
         <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
           Context Scores
-        </div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">
-          Setup {clampNumber(setup?.score)}/100
-          <span className="text-slate-400">·</span>
-          Bekijk in Mijn Plan
         </div>
       </div>
 
@@ -979,13 +974,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     <section className="space-y-3">
       <section className="rounded-[28px] border border-slate-200/80 bg-white p-4 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)] lg:p-5">
         <div className="space-y-4">
-          <AssetList
-            rows={watchlistRows}
-            activeSymbol={activeSymbol}
-            onSelect={handleAssetSelect}
-            onAddAsset={() => openSearch()}
-          />
-
           <div className="min-w-0">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
@@ -1033,16 +1021,15 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
           </div>
         </div>
         </div>
+
+          <AssetList
+            rows={watchlistRows}
+            activeSymbol={activeSymbol}
+            onSelect={handleAssetSelect}
+            onAddAsset={() => openSearch()}
+          />
         </div>
       </section>
-
-      <ScoreOverview
-        market={market}
-        macro={macro}
-        technical={technical}
-        combined={combinedSummary}
-        setup={setup}
-      />
 
       <AnalysisChartSection
         symbol={activeSymbol}
@@ -1068,6 +1055,13 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
           compact
         />
       </section>
+
+      <ScoreOverview
+        market={market}
+        macro={macro}
+        technical={technical}
+        combined={combinedSummary}
+      />
 
       <section className="space-y-3">
         {sections.map((section) => (
