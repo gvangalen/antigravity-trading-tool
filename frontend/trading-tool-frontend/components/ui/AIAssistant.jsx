@@ -5171,7 +5171,7 @@ function AIAssistantContent({
       ? "Paper"
       : "Alleen lezen";
 
-  const shouldCondenseMissionControl = pathname === "/dashboard" && !isOnboarding;
+  const shouldCondenseMissionControl = (previewSectionsOnly || pathname === "/dashboard") && !isOnboarding;
   const showFullMissionControl = !shouldCondenseMissionControl;
   const overlayMissionSections = buildMissionOverlaySections();
   const primaryProfileHabitAlignment = pickPrimaryProfileHabitAlignment(missionControl);
