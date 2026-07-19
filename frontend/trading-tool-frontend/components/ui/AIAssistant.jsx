@@ -3520,7 +3520,7 @@ function AIAssistantContent({
       return {
         label: asset ? uiText.openStrategyFor.replace("{asset}", asset) : uiText.openStrategy,
         run: () => {
-          router.push(asset ? `/strategy?symbol=${asset}` : "/strategy");
+          router.push(asset ? `/setup?symbol=${asset}` : "/setup");
           setIsOpen(false);
         },
       };
@@ -3982,7 +3982,7 @@ function AIAssistantContent({
         router.push(`/setup${symbol ? `?symbol=${symbol}` : ""}`);
         setIsOpen(false);
       } else if (type === "generate_strategy") {
-        router.push(`/strategy${symbol ? `?symbol=${symbol}` : ""}`);
+        router.push(`/setup${symbol ? `?symbol=${symbol}` : ""}`);
         setIsOpen(false);
       } else if (type === "open_bot_draft") {
         // Support prefilled bot parameters via query params

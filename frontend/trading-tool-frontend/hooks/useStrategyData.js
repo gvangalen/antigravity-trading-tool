@@ -34,7 +34,9 @@ export function useStrategyData() {
 
     try {
       const data = await fetchStrategies();
-      setStrategies(Array.isArray(data) ? data.filter(Boolean) : []);
+      const cleaned = Array.isArray(data) ? data.filter(Boolean) : [];
+      setStrategies(cleaned);
+      return cleaned;
     } catch (err) {
       console.error('❌ loadStrategies fout:', err);
       setError('Fout bij laden strategieën.');
@@ -64,11 +66,12 @@ export function useStrategyData() {
         : [];
   
       setSetups(cleaned);
-  
+      return cleaned;
     } catch (err) {
       console.error('❌ loadSetups fout:', err);
       setError('Fout bij laden setups.');
       setSetups([]);
+      return [];
     }
   }, []);
 
@@ -85,23 +88,27 @@ export function useStrategyData() {
   // =========================================================
   async function addStrategy(strategyData) {
     try {
-      await createStrategy(strategyData);
+      const created = await createStrategy(strategyData);
       setSuccessMessage('Strategie toegevoegd.');
       await loadStrategies();
+      return created;
     } catch (err) {
       console.error('❌ addStrategy fout:', err);
       setError('Toevoegen mislukt.');
+      throw err;
     }
   }
 
   async function saveStrategy(id, updatedData) {
     try {
-      await updateStrategy(id, updatedData);
+      const saved = await updateStrategy(id, updatedData);
       setSuccessMessage('Strategie opgeslagen.');
       await loadStrategies();
+      return saved;
     } catch (err) {
       console.error('❌ saveStrategy fout:', err);
       setError('Opslaan mislukt.');
+      throw err;
     }
   }
 
@@ -110,9 +117,11 @@ export function useStrategyData() {
       await deleteStrategy(id);
       setSuccessMessage('Strategie verwijderd.');
       await loadStrategies();
+      return true;
     } catch (err) {
       console.error('❌ removeStrategy fout:', err);
       setError('Verwijderen mislukt.');
+      throw err;
     }
   }
 

@@ -31,8 +31,7 @@ const WORKFLOWS = [
   { id: "market", label: "Analyse: Markt", href: (symbol) => `/market?symbol=${symbol}`, category: "Context" },
   { id: "macro", label: "Analyse: Macro", href: (symbol) => `/macro?symbol=${symbol}`, category: "Context" },
   { id: "technical", label: "Analyse: Technisch", href: (symbol) => `/technical?symbol=${symbol}`, category: "Context" },
-  { id: "setup", label: "Setups", href: (symbol) => `/setup?symbol=${symbol}`, category: "Workflow" },
-  { id: "strategy", label: "Strategies", href: (symbol) => `/strategy?symbol=${symbol}`, category: "Workflow" },
+  { id: "plan", label: "Mijn Plan", href: (symbol) => `/setup?symbol=${symbol}`, category: "Workflow" },
   { id: "bot", label: "Bots", href: (symbol) => `/bot?symbol=${symbol}`, category: "Workflow" },
   { id: "report", label: "Reports", href: (symbol) => `/report?symbol=${symbol}`, category: "Workflow" },
 ];

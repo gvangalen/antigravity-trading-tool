@@ -149,11 +149,12 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
     };
 
     try {
+      let savedSetup = null;
       if (isEdit) {
-        await updateSetup(initialData.id, payload);
+        savedSetup = await updateSetup(initialData.id, payload);
         showSnackbar(copy.updatedSuccess, "success");
       } else {
-        await saveNewSetup(payload);
+        savedSetup = await saveNewSetup(payload);
         showSnackbar(copy.savedSuccess, "success");
         setFormData({
           ...emptyForm,
@@ -164,7 +165,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
         setMarketScore([20, 60]);
       }
 
-      onSaved?.();
+      onSaved?.(savedSetup?.setup ?? savedSetup ?? null);
     } catch (err) {
       console.error(err);
       showSnackbar(copy.saveFailed, "danger");
