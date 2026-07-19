@@ -150,6 +150,51 @@ function getUiCopy(locale = "nl") {
       forwardReturnsTitle: "Historical forward returns",
       forwardReturnsSubtitle: "Compare recurring returns by week, month, quarter and year.",
       forwardReturnsLoading: "Loading historical returns...",
+      improving: "Improving",
+      worsening: "Weakening",
+      stable: "Stable",
+      active: "Active",
+      weakened: "Weak",
+      indicator: "Indicator",
+      value: "Value",
+      development: "Development",
+      assessment: "Assessment",
+      details: "Details",
+      latestSignal: "Latest signal",
+      live: "Live",
+      edit: "Edit",
+      remove: "Remove",
+      marketEmpty: "No market indicators loaded yet.",
+      macroEmpty: "No macro indicators loaded yet.",
+      technicalEmpty: "No technical indicators loaded yet.",
+      loadingMarket: "Loading market data...",
+      loadingMacro: "Loading macro data...",
+      loadingTechnical: "Loading technical data...",
+      indicatorAssessment: (label, direction, signal) => `${label} is ${direction.toLowerCase()} and currently gives a ${signal.toLowerCase()} signal.`,
+      positiveMoveWeakScore: (value, score) => `Price is up ${value}, but the configured scoring thresholds still place this move in the weak zone (${score}/100).`,
+      aboveMa200: "Above MA200",
+      belowMa200: "Below MA200",
+      indicatorLabels: {
+        change_24h: "24-hour price change",
+        volume: "Volume",
+        market_volume: "Volume",
+        btc_dominance: "Bitcoin dominance",
+        fear_greed_index: "Fear & Greed",
+        ma_200: "200-day moving average",
+        rsi: "RSI",
+      },
+      sectionInsights: {
+        missing: "Not enough score data for a reliable group conclusion.",
+        marketNegative: "Price action is weak and confirmation from volume and liquidity remains limited.",
+        marketPositive: "Price action and market internals support the move.",
+        marketNeutral: "The market picture is mixed: movement is visible, but confirmation remains incomplete.",
+        macroNegative: "Rising yields and a strong dollar remain macro headwinds.",
+        macroPositive: "The macro regime supports the current risk picture.",
+        macroNeutral: "Macro context remains mixed and needs confirmation from rates, flows and sentiment.",
+        technicalNegative: "Trend structure is vulnerable and momentum does not yet provide strong confirmation.",
+        technicalPositive: "Trend and active indicators align and support follow-through.",
+        technicalNeutral: "The technical picture is workable, but momentum and trend confirmation remain neutral.",
+      },
     };
   }
   if (normalized.startsWith("de")) {
@@ -200,6 +245,51 @@ function getUiCopy(locale = "nl") {
       forwardReturnsTitle: "Historische Forward Returns",
       forwardReturnsSubtitle: "Vergleiche wiederkehrende Renditen nach Woche, Monat, Quartal und Jahr.",
       forwardReturnsLoading: "Historische Renditen werden geladen...",
+      improving: "Verbessert sich",
+      worsening: "Verschlechtert sich",
+      stable: "Stabil",
+      active: "Aktiv",
+      weakened: "Schwach",
+      indicator: "Indikator",
+      value: "Wert",
+      development: "Entwicklung",
+      assessment: "Bewertung",
+      details: "Details",
+      latestSignal: "Letztes Signal",
+      live: "Live",
+      edit: "Bearbeiten",
+      remove: "Entfernen",
+      marketEmpty: "Noch keine Marktindikatoren geladen.",
+      macroEmpty: "Noch keine Makroindikatoren geladen.",
+      technicalEmpty: "Noch keine technischen Indikatoren geladen.",
+      loadingMarket: "Marktdaten werden geladen...",
+      loadingMacro: "Makrodaten werden geladen...",
+      loadingTechnical: "Technische Daten werden geladen...",
+      indicatorAssessment: (label, direction, signal) => `${label} ist ${direction.toLowerCase()} und liefert derzeit ein ${signal.toLowerCase()} Signal.`,
+      positiveMoveWeakScore: (value, score) => `Der Kurs steigt um ${value}, aber die konfigurierten Score-Grenzen ordnen diese Bewegung noch der schwachen Zone zu (${score}/100).`,
+      aboveMa200: "Über MA200",
+      belowMa200: "Unter MA200",
+      indicatorLabels: {
+        change_24h: "24-Stunden-Preisänderung",
+        volume: "Volumen",
+        market_volume: "Volumen",
+        btc_dominance: "Bitcoin-Dominanz",
+        fear_greed_index: "Fear & Greed",
+        ma_200: "200-Tage-Durchschnitt",
+        rsi: "RSI",
+      },
+      sectionInsights: {
+        missing: "Für eine zuverlässige Gruppenbewertung fehlen Score-Daten.",
+        marketNegative: "Die Preisbewegung ist schwach; Volumen und Liquidität bestätigen sie nur begrenzt.",
+        marketPositive: "Preisbewegung und Marktinternas unterstützen die Bewegung.",
+        marketNeutral: "Das Marktbild ist gemischt: Bewegung ist sichtbar, die Bestätigung bleibt unvollständig.",
+        macroNegative: "Steigende Renditen und ein starker Dollar bleiben makroökonomischer Gegenwind.",
+        macroPositive: "Das Makroregime unterstützt das aktuelle Risikobild.",
+        macroNeutral: "Der Makrokontext bleibt gemischt und benötigt Bestätigung durch Zinsen, Flows und Sentiment.",
+        technicalNegative: "Die Trendstruktur ist anfällig und das Momentum bestätigt noch nicht ausreichend.",
+        technicalPositive: "Trend und aktive Indikatoren stimmen überein und unterstützen eine Fortsetzung.",
+        technicalNeutral: "Das technische Bild ist brauchbar, Momentum und Trendbestätigung bleiben jedoch neutral.",
+      },
     };
   }
   return {
@@ -249,6 +339,51 @@ function getUiCopy(locale = "nl") {
     forwardReturnsTitle: "Historische forward returns",
     forwardReturnsSubtitle: "Vergelijk terugkerende rendementen per week, maand, kwartaal en jaar.",
     forwardReturnsLoading: "Historische rendementen laden...",
+    improving: "Verbetert",
+    worsening: "Verslechtert",
+    stable: "Stabiel",
+    active: "Actief",
+    weakened: "Verzwakt",
+    indicator: "Indicator",
+    value: "Waarde",
+    development: "Ontwikkeling",
+    assessment: "Beoordeling",
+    details: "Verdieping",
+    latestSignal: "Laatste signaal",
+    live: "Live",
+    edit: "Bewerken",
+    remove: "Verwijderen",
+    marketEmpty: "Nog geen marktindicatoren geladen.",
+    macroEmpty: "Nog geen macro-indicatoren geladen.",
+    technicalEmpty: "Nog geen technische indicatoren geladen.",
+    loadingMarket: "Marktdata laden...",
+    loadingMacro: "Macrodata laden...",
+    loadingTechnical: "Technische data laden...",
+    indicatorAssessment: (label, direction, signal) => `${label} ${direction.toLowerCase()} en geeft nu een ${signal.toLowerCase()} signaal.`,
+    positiveMoveWeakScore: (value, score) => `De koers stijgt ${value}, maar de ingestelde scoregrenzen plaatsen deze beweging nog in de zwakke zone (${score}/100).`,
+    aboveMa200: "Boven MA200",
+    belowMa200: "Onder MA200",
+    indicatorLabels: {
+      change_24h: "Prijsverandering 24 uur",
+      volume: "Volume",
+      market_volume: "Volume",
+      btc_dominance: "Bitcoin-dominantie",
+      fear_greed_index: "Fear & Greed",
+      ma_200: "200-daags gemiddelde",
+      rsi: "RSI",
+    },
+    sectionInsights: {
+      missing: "Onvoldoende scoredata voor een betrouwbare groepsconclusie.",
+      marketNegative: "Prijsactie oogt zwak en bevestiging vanuit volume en liquiditeit blijft beperkt.",
+      marketPositive: "Prijsactie en marktinternals ondersteunen de beweging.",
+      marketNeutral: "Het marktbeeld is gemengd: beweging is zichtbaar, maar bevestiging blijft nog onvolledig.",
+      macroNegative: "Stijgende yields en een sterke dollar blijven macro-tegenwind geven.",
+      macroPositive: "Het macroregime ondersteunt het actuele risicobeeld.",
+      macroNeutral: "De macrocontext blijft gemengd en vraagt om bevestiging vanuit rates, flows en sentiment.",
+      technicalNegative: "De trendstructuur is kwetsbaar en momentum levert nog geen sterke bevestiging.",
+      technicalPositive: "Trend en actieve indicatoren staan op één lijn en ondersteunen follow-through.",
+      technicalNeutral: "Het technische beeld is werkbaar, maar momentum en trendbevestiging blijven neutraal.",
+    },
   };
 }
 
@@ -364,10 +499,6 @@ function buildContextHref({ pathname, symbol, context, variant }) {
     params.set("variant", "v3");
   }
 
-  if (pathname === "/macro" || pathname === "/market" || pathname === "/technical") {
-    return `/${context}?${params.toString()}`;
-  }
-
   params.set("tab", context);
   return `/asset?${params.toString()}`;
 }
@@ -379,10 +510,11 @@ function trimSentence(value, fallback) {
   return `${source.slice(0, 147).trim()}...`;
 }
 
-function prettifyName(name) {
+function prettifyName(name, ui = getUiCopy("nl")) {
   if (!name) return "Onbekende indicator";
   const normalized = String(name).trim();
   const lowered = normalized.toLowerCase();
+  if (ui.indicatorLabels?.[lowered]) return ui.indicatorLabels[lowered];
   if (INDICATOR_LABELS[lowered]) return INDICATOR_LABELS[lowered];
   return normalized.replace(/_/g, " ").replace(/\b([a-z])/g, (match) => match.toUpperCase());
 }
@@ -410,24 +542,43 @@ function normalizePotentialRatio(value, { percent = false } = {}) {
   return numericValue;
 }
 
-function formatIndicatorValue(name, value, locale) {
-  if (value === null || value === undefined || value === "") return "Onvoldoende data";
+function parseIndicatorNumber(value) {
+  return Number(
+    typeof value === "string"
+      ? value.replace(/,/g, ".").replace(/[^0-9.+-]/g, "")
+      : value
+  );
+}
+
+function hasUsableIndicatorValue(name, value) {
+  if (value === null || value === undefined || value === "") return false;
+  const rawString = String(value).trim().toLowerCase();
+  if (!rawString || /^(?:-|–|—|n\/?a|null|undefined|onvoldoende data|insufficient data)$/.test(rawString)) {
+    return false;
+  }
+
+  const numericValue = parseIndicatorNumber(value);
+  const label = String(name || "").toLowerCase();
+  if ((label.includes("volume") || label.includes("flow")) && Number.isFinite(numericValue)) {
+    return numericValue > 0;
+  }
+  return true;
+}
+
+function formatIndicatorValue(name, value, locale, ui = getUiCopy(locale)) {
+  if (!hasUsableIndicatorValue(name, value)) return ui.unavailable;
 
   const label = String(name || "").toLowerCase();
   const raw = typeof value === "string" ? value.trim() : value;
   const rawString = typeof raw === "string" ? raw : "";
-  const numericValue = Number(
-    typeof raw === "string"
-      ? raw.replace(/,/g, ".").replace(/[^0-9.+-]/g, "")
-      : raw
-  );
+  const numericValue = parseIndicatorNumber(raw);
 
   if (typeof raw === "string" && /buy|sell|above|below|bull|bear|neutral|hoog|laag|stijg|daal|trend/i.test(rawString)) {
     return raw;
   }
 
   if (label === "ma_200" && Number.isFinite(numericValue)) {
-    return numericValue >= 1 ? "Boven MA200" : "Onder MA200";
+    return numericValue >= 1 ? ui.aboveMa200 : ui.belowMa200;
   }
 
   if ((label.includes("change") || label.includes("dominance")) && Number.isFinite(numericValue)) {
@@ -441,12 +592,12 @@ function formatIndicatorValue(name, value, locale) {
   }
 
   if (label.includes("volume") || label.includes("flow")) {
-    if (!Number.isFinite(numericValue) || numericValue <= 0) return "Onvoldoende data";
+    if (!Number.isFinite(numericValue) || numericValue <= 0) return ui.unavailable;
     return `$${formatMagnitude(numericValue, locale)}`;
   }
 
   if (label.includes("price")) {
-    if (!Number.isFinite(numericValue)) return "Onvoldoende data";
+    if (!Number.isFinite(numericValue)) return ui.unavailable;
     if (Math.abs(numericValue) <= 1 && label.includes("change")) {
       return formatPercent(numericValue * 100, 2);
     }
@@ -454,12 +605,12 @@ function formatIndicatorValue(name, value, locale) {
   }
 
   if (label.includes("rsi") || label.includes("fear") || label.includes("dxy")) {
-    if (!Number.isFinite(numericValue)) return "Onvoldoende data";
+    if (!Number.isFinite(numericValue)) return ui.unavailable;
     return formatCompactNumber(numericValue, locale, 2);
   }
 
   if (label.includes("participation") || label.includes("volatility")) {
-    if (!Number.isFinite(numericValue)) return "Onvoldoende data";
+    if (!Number.isFinite(numericValue)) return ui.unavailable;
     const percentValue = normalizePotentialRatio(numericValue, { percent: true });
     return `${formatCompactNumber(percentValue, locale, 2)}%`;
   }
@@ -468,20 +619,20 @@ function formatIndicatorValue(name, value, locale) {
     return formatCompactNumber(numericValue, locale, 2);
   }
 
-  return rawString || "Onvoldoende data";
+  return rawString || ui.unavailable;
 }
 
-function toDirectionLabel(item, score) {
+function toDirectionLabel(item, score, ui = getUiCopy("nl")) {
   const trendSource = String(item?.trend || item?.action || item?.interpretation || "").trim().toLowerCase();
-  if (trendSource.includes("improv") || trendSource.includes("stijg") || trendSource.includes("herstel")) return "Verbetert";
-  if (trendSource.includes("verslecht") || trendSource.includes("dal") || trendSource.includes("tegenwind")) return "Verslechtert";
-  if (trendSource.includes("stable") || trendSource.includes("stab")) return "Stabiel";
-  if (trendSource.includes("buy")) return "Actief";
-  if (trendSource.includes("sell")) return "Verzwakt";
-  if (score === null) return "Onvoldoende data";
-  if (score >= 70) return "Verbetert";
-  if (score <= 35) return "Verslechtert";
-  return "Stabiel";
+  if (trendSource.includes("improv") || trendSource.includes("stijg") || trendSource.includes("herstel")) return ui.improving;
+  if (trendSource.includes("verslecht") || trendSource.includes("dal") || trendSource.includes("tegenwind")) return ui.worsening;
+  if (trendSource.includes("stable") || trendSource.includes("stab")) return ui.stable;
+  if (trendSource.includes("buy")) return ui.active;
+  if (trendSource.includes("sell")) return ui.weakened;
+  if (score === null) return ui.unavailable;
+  if (score >= 70) return ui.improving;
+  if (score <= 35) return ui.worsening;
+  return ui.stable;
 }
 
 function scoreTone(value, ui = getUiCopy("nl")) {
@@ -518,29 +669,38 @@ function scoreTone(value, ui = getUiCopy("nl")) {
   };
 }
 
-function fallbackAssessment(label, direction, tone) {
-  return `${label} ${direction === "Stabiel" ? "blijft stabiel" : direction === "Verbetert" ? "verbetert" : direction === "Verslechtert" ? "verslechtert" : "blijft actief"} en geeft nu een ${tone.label.toLowerCase()} signaal.`;
-}
-
-function buildRows(items, locale) {
+function buildRows(items, locale, ui) {
   const source = Array.isArray(items) ? items : [];
 
   return source.map((item, index) => {
     const name = item?.name || item?.indicator || `indicator_${index}`;
-    const label = prettifyName(name);
-    const score = normalizeScore(item?.score);
-    const tone = scoreTone(score);
-    const direction = toDirectionLabel(item, score);
-    const detail = trimSentence(
-      item?.interpretation || item?.uitleg || "",
-      fallbackAssessment(label, direction, tone)
-    );
+    const label = prettifyName(name, ui);
+    const rawValue = item?.value ?? item?.waarde;
+    const hasValue = hasUsableIndicatorValue(name, rawValue);
+    const score = hasValue ? normalizeScore(item?.score) : null;
+    const tone = scoreTone(score, ui);
+    const direction = hasValue ? toDirectionLabel(item, score, ui) : ui.unavailable;
+    const value = formatIndicatorValue(name, rawValue, locale, ui);
+    const numericValue = parseIndicatorNumber(rawValue);
+    const scoreConflict =
+      hasValue &&
+      String(name).toLowerCase().includes("change") &&
+      Number.isFinite(numericValue) &&
+      numericValue > 0 &&
+      score !== null &&
+      score <= 35;
+    const detail = scoreConflict
+      ? ui.positiveMoveWeakScore(value, Math.round(score))
+      : trimSentence(
+          item?.interpretation || item?.uitleg || "",
+          hasValue ? ui.indicatorAssessment(label, direction, tone.label) : ui.unavailable
+        );
 
     return {
       id: `${name}-${index}`,
       name,
       label,
-      value: formatIndicatorValue(name, item?.value ?? item?.waarde, locale),
+      value,
       direction,
       score,
       signalTone: tone,
@@ -552,35 +712,27 @@ function buildRows(items, locale) {
   });
 }
 
-function buildSectionInsight(sectionId, sectionScore, rows) {
+function buildSectionInsight(sectionId, sectionScore, ui) {
   const score = normalizeScore(sectionScore);
-  const focus = rows.slice(0, 2).map((row) => row.label.toLowerCase());
+  const copy = ui.sectionInsights;
 
-  if (score === null) return "Onvoldoende scoredata voor een betrouwbare groepsconclusie.";
+  if (score === null) return copy.missing;
 
   if (sectionId === "market") {
-    if (score <= 35) {
-      return focus.length
-        ? `Prijsactie oogt zwak en bevestiging vanuit ${focus.join(" en ")} blijft beperkt.`
-        : "Prijsactie oogt zwak en bevestiging vanuit volume en liquiditeit blijft beperkt.";
-    }
-    if (score >= 70) {
-      return focus.length
-        ? `${focus[0][0].toUpperCase()}${focus[0].slice(1)} ondersteunt de beweging en marktinternals blijven meewerken.`
-        : "Prijsactie en marktinternals ondersteunen de beweging.";
-    }
-    return "Marktbeeld is gemengd: beweging is zichtbaar, maar bevestiging blijft nog onvolledig.";
+    if (score <= 35) return copy.marketNegative;
+    if (score >= 70) return copy.marketPositive;
+    return copy.marketNeutral;
   }
 
   if (sectionId === "macro") {
-    if (score <= 35) return "Stijgende yields en een sterke dollar blijven macro-tegenwind geven.";
-    if (score >= 70) return "Macroregime werkt mee en hogere druklagen ondersteunen het risicobeeld.";
-    return "Macrocontext blijft gemengd en vraagt om bevestiging vanuit rates, flows en sentiment.";
+    if (score <= 35) return copy.macroNegative;
+    if (score >= 70) return copy.macroPositive;
+    return copy.macroNeutral;
   }
 
-  if (score <= 35) return "Trendstructuur is kwetsbaar en momentum levert nog geen sterke bevestiging.";
-  if (score >= 70) return "Trend en actieve indicatoren staan op één lijn en ondersteunen follow-through.";
-  return "Technisch beeld is werkbaar, maar momentum en trendbevestiging blijven neutraal.";
+  if (score <= 35) return copy.technicalNegative;
+  if (score >= 70) return copy.technicalPositive;
+  return copy.technicalNeutral;
 }
 
 function ScoreOverview({ market, macro, technical, combined, weights, loading, onSaveWeights, ui }) {
@@ -848,7 +1000,7 @@ function PlanBridge({ setup, onOpenPlan, ui }) {
 
 function formatBiasLabel(value, ui = getUiCopy("nl")) {
   const source = String(value || "").trim();
-  if (!source || source === "—") return ui.neutral;
+  if (!source || /^[-–—]+$/.test(source)) return ui.neutral;
   const normalized = source.toLowerCase();
   if (/(bull|posit)/.test(normalized)) return ui.positive;
   if (/(bear|negat)/.test(normalized)) return ui.negative;
@@ -891,7 +1043,7 @@ function ActiveAssetCard({
       value: combinedSummary.confidence === null ? "—" : `${combinedSummary.confidence}%`,
       className: "text-slate-950",
     },
-  ];
+  ].filter((item) => item.value !== "—");
 
   return (
     <section className="relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white px-4 py-3.5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
@@ -1034,7 +1186,7 @@ function SectionScorePill({ score }) {
   );
 }
 
-function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
+function EvidenceRow({ row, expanded, onToggle, renderExpandedActions, ui }) {
   return (
     <div className="border-t border-slate-100">
       <button
@@ -1051,7 +1203,7 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
             </span>
             <div className="min-w-0">
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
-                Indicator
+                {ui.indicator}
               </div>
               <div className="text-[14px] font-black leading-tight text-slate-950">{row.label}</div>
             </div>
@@ -1059,14 +1211,14 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
 
           <div className="lg:text-right">
             <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
-              Waarde
+              {ui.value}
             </div>
             <div className="text-[14px] font-black text-slate-950">{row.value}</div>
           </div>
 
           <div>
             <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
-              Ontwikkeling
+              {ui.development}
             </div>
             <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-bold text-slate-600">
               <span className={`h-2 w-2 rounded-full ${row.signalTone.dot}`} />
@@ -1076,7 +1228,7 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
 
           <div>
             <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
-              Beoordeling
+              {ui.assessment}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${row.signalTone.pill}`}>
@@ -1095,7 +1247,7 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
           <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                Verdieping
+                {ui.details}
               </div>
               <p className="mt-1.5 text-[13px] font-medium leading-6 text-slate-600">
                 {row.raw?.interpretation || row.raw?.uitleg || row.raw?.action || row.detail}
@@ -1105,10 +1257,10 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions }) {
             <div className="flex flex-col gap-3 lg:items-end">
               <div className="text-left lg:text-right">
                 <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                  Laatste signaal
+                  {ui.latestSignal}
                 </div>
                 <div className="mt-1.5 text-[13px] font-black text-slate-900">
-                  {row.timestamp ? formatTimestamp(row.timestamp) : "Live"}
+                  {row.timestamp ? formatTimestamp(row.timestamp) : ui.live}
                 </div>
               </div>
               {renderExpandedActions ? renderExpandedActions(row) : null}
@@ -1162,6 +1314,7 @@ function EvidenceSection({
   toolbar,
   renderExpandedActions,
   emptyState,
+  ui,
 }) {
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
@@ -1189,7 +1342,7 @@ function EvidenceSection({
       ) : null}
 
       <div className="hidden border-b border-slate-100 px-4 py-2 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(120px,0.45fr)_minmax(150px,0.5fr)_minmax(220px,0.8fr)] lg:gap-3">
-        {["Indicator", "Waarde", "Ontwikkeling", "Beoordeling"].map((label, index) => (
+        {[ui.indicator, ui.value, ui.development, ui.assessment].map((label, index) => (
           <div
             key={label}
             className={`text-[10px] font-black uppercase tracking-[0.24em] text-slate-400 ${
@@ -1212,6 +1365,7 @@ function EvidenceSection({
                 expanded={expandedRowKey === rowKey}
                 onToggle={() => onToggleRow(rowKey)}
                 renderExpandedActions={renderExpandedActions}
+                ui={ui}
               />
             );
           })
@@ -1544,16 +1698,21 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       ui
     );
 
+    const masterBias = String(master?.bias || "").trim();
+    const hasMasterBias = masterBias && !/^[-–—]+$/.test(masterBias);
+
     return {
       ...summary,
-      bias: master?.bias && master.bias !== "—" ? formatBiasLabel(master.bias, ui) : summary.bias,
+      bias: hasMasterBias ? formatBiasLabel(masterBias, ui) : summary.bias,
     };
   }, [hasScoreData, macro, market, master, technical, ui]);
 
   const sections = useMemo(() => {
-    const marketRows = buildRows(marketDayData, locale);
-    const macroRows = buildRows(macroData, locale);
-    const technicalRows = buildRows(technicalData, locale);
+    const marketRows = buildRows(marketDayData, locale, ui);
+    const macroRows = buildRows(macroData, locale, ui);
+    const technicalRows = buildRows(technicalData, locale, ui);
+    const supportedScore = (score, rows) =>
+      hasScoreData && rows.some((row) => row.score !== null) ? score : null;
 
     return [
       {
@@ -1561,33 +1720,33 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         title: locale?.startsWith("en") ? "Market" : locale?.startsWith("de") ? "Markt" : SECTION_META.market.label,
         eyebrow: locale?.startsWith("en") ? "Market evidence" : locale?.startsWith("de") ? "Marktbelege" : "Marktbewijs",
         icon: SECTION_META.market.icon,
-        score: hasScoreData ? market?.score : null,
-        insight: buildSectionInsight("market", hasScoreData ? market?.score : null, marketRows),
+        score: supportedScore(market?.score, marketRows),
+        insight: buildSectionInsight("market", supportedScore(market?.score, marketRows), ui),
         rows: marketRows,
-        emptyState: marketLoading ? (locale?.startsWith("en") ? "Loading market data..." : locale?.startsWith("de") ? "Marktdaten werden geladen..." : "Marktdata laden...") : SECTION_META.market.empty,
+        emptyState: marketLoading ? ui.loadingMarket : ui.marketEmpty,
       },
       {
         id: "macro",
         title: locale?.startsWith("en") ? "Macro" : locale?.startsWith("de") ? "Makro" : SECTION_META.macro.label,
         eyebrow: locale?.startsWith("en") ? "Macro evidence" : locale?.startsWith("de") ? "Makrobelege" : "Macro-bewijs",
         icon: SECTION_META.macro.icon,
-        score: hasScoreData ? macro?.score : null,
-        insight: buildSectionInsight("macro", hasScoreData ? macro?.score : null, macroRows),
+        score: supportedScore(macro?.score, macroRows),
+        insight: buildSectionInsight("macro", supportedScore(macro?.score, macroRows), ui),
         rows: macroRows,
-        emptyState: macroLoading ? (locale?.startsWith("en") ? "Loading macro data..." : locale?.startsWith("de") ? "Makrodaten werden geladen..." : "Macrodata laden...") : SECTION_META.macro.empty,
+        emptyState: macroLoading ? ui.loadingMacro : ui.macroEmpty,
       },
       {
         id: "technical",
         title: locale?.startsWith("en") ? "Technical" : locale?.startsWith("de") ? "Technisch" : SECTION_META.technical.label,
         eyebrow: locale?.startsWith("en") ? "Technical evidence" : locale?.startsWith("de") ? "Technische belege" : "Technisch bewijs",
         icon: SECTION_META.technical.icon,
-        score: hasScoreData ? technical?.score : null,
-        insight: buildSectionInsight("technical", hasScoreData ? technical?.score : null, technicalRows),
+        score: supportedScore(technical?.score, technicalRows),
+        insight: buildSectionInsight("technical", supportedScore(technical?.score, technicalRows), ui),
         rows: technicalRows,
-        emptyState: technicalLoading ? (locale?.startsWith("en") ? "Loading technical data..." : locale?.startsWith("de") ? "Technische daten werden geladen..." : "Technische data laden...") : SECTION_META.technical.empty,
+        emptyState: technicalLoading ? ui.loadingTechnical : ui.technicalEmpty,
       },
     ];
-  }, [hasScoreData, locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading]);
+  }, [hasScoreData, locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading, ui]);
 
   const handleAssetSelect = (symbol) => {
     const nextSymbol = String(symbol || activeSymbol).toUpperCase();
@@ -1671,6 +1830,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             expandedRowKey={expandedRowKey}
             onToggleRow={(key) => setExpandedRowKey((current) => (current === key ? null : key))}
             emptyState={section.emptyState}
+            ui={ui}
             toolbar={
               section.id === "market" ? (
                 <TimeframeTabs
@@ -1741,7 +1901,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                         className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-blue-700 transition hover:bg-blue-100"
                       >
                         <Settings2 size={12} />
-                        Bewerken
+                        {ui.edit}
                       </button>
                       <button
                         type="button"
@@ -1753,7 +1913,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                         className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition hover:border-red-200 hover:text-red-600"
                       >
                         <Target size={12} />
-                        Verwijderen
+                        {ui.remove}
                       </button>
                     </div>
                   )
@@ -1769,7 +1929,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                       className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition hover:border-red-200 hover:text-red-600"
                     >
                       <Target size={12} />
-                      Verwijderen
+                      {ui.remove}
                     </button>
                   )
                 : null

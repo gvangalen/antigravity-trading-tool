@@ -258,7 +258,14 @@ export default function MarketForwardReturnTabs({ data = {} }) {
                   <td className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-foreground italic">{copy.positiveChance}</td>
                   {forwardStats.map((s, i) => (
                     <td key={i} className="px-1 py-5 text-center font-mono text-xs font-black text-foreground border-t border-slate-100/50">
-                      {s.rate !== null ? `${s.rate.toFixed(1)}%` : "—"}
+                      {s.rate !== null ? (
+                        <span className="inline-flex flex-col items-center gap-0.5">
+                          <span>{s.rate.toFixed(1)}%</span>
+                          <span className={`text-[8px] font-bold ${s.total < 3 ? "text-amber-600" : "text-slate-400"}`}>
+                            {s.wins}/{s.total}
+                          </span>
+                        </span>
+                      ) : "—"}
                     </td>
                   ))}
                 </tr>

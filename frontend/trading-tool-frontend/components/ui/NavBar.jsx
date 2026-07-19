@@ -21,16 +21,8 @@ import {
 } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { BRANDING } from "@/lib/branding";
-import AssetSwitcher from "./AssetSwitcher";
 import AvatarMenu from "./AvatarMenu";
-import { useAuth } from "@/components/auth/AuthGuard"; // useAuth is actually in AuthProvider usually but AuthGuard re-exports sometimes, or use direct
-// Actually AuthGuard.jsx has useAuth. Let's check imports.
-// Ah, AuthGuard.jsx uses useAuth from AuthProvider. Wait.
 import { useAuth as useAuthHook } from "@/components/auth/AuthProvider"; 
-import { useWatchlist } from "@/hooks/useWatchlist";
-import { useAsset } from "@/app/providers/AssetProvider";
-import { Star, AlertTriangle } from "lucide-react";
-import { useModal } from "@/components/modal/ModalProvider";
 
 export default function NavBar() {
   const { t } = useTranslation();
@@ -248,8 +240,6 @@ function SidebarInner({ pathname, onNavigate, navItems, adminLinks }) {
           );
         })}
 
-        <WatchlistSidebar onNavigate={onNavigate} pathname={pathname} />
-
         {/* ADMIN SECTION */}
         {adminLinks.length > 0 && (
           <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800">
@@ -288,127 +278,6 @@ function SidebarInner({ pathname, onNavigate, navItems, adminLinks }) {
            ))}
         </div>
       </div>
-    </div>
-  );
-}
-
-function WatchlistItem({ symbol, isActive, onSelect, onRemove, helperText }) {
-  return (
-    <div
-      className={`
-        group flex flex-col gap-2 p-3.5 rounded-2xl transition-all cursor-pointer border relative overflow-hidden
-        ${isActive 
-          ? "bg-blue-600/5 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 font-black border-blue-500/20 dark:border-blue-500/15 shadow-xl shadow-blue-500/5" 
-          : "text-muted hover:bg-slate-50 dark:hover:bg-slate-900/40 hover:text-slate-900 dark:hover:text-white border-transparent"
-        }
-      `}
-      onClick={onSelect}
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isActive ? "bg-blue-600 dark:bg-blue-500 animate-ping" : "bg-slate-300 dark:bg-slate-700"}`} />
-          <span className="text-[12px] font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">{symbol}</span>
-        </div>
-        
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all text-slate-400 hover:scale-110 active:scale-95"
-        >
-          <X size={12} />
-        </button>
-      </div>
-
-      <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60">
-        <p className="text-[10px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
-          {helperText} <span className="font-black text-slate-700 dark:text-slate-200">{symbol}</span>.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function WatchlistSidebar({ onNavigate, pathname, embedded = false }) {
-  const { t } = require("@/app/providers/I18nProvider").useTranslation();
-  const router = require("next/navigation").useRouter();
-  const { watchlist, remove, loading } = useWatchlist();
-  const { selectedAsset: activeSymbol, setSelectedAsset } = useAsset();
-  const { setActiveSetup, setFocusedBotId } = require("@/app/providers/SetupProvider").useActiveSetup();
-  const { openConfirm, showSnackbar } = useModal();
-
-  return (
-    <div className={`${embedded ? "pt-2" : "pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80"}`}>
-      <p className="px-5 text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-3 flex items-center gap-2">
-        <Star size={10} className="text-amber-400 fill-amber-400 animate-pulse" />
-        {embedded ? "Watchlist" : t?.nav?.marketContext}
-      </p>
-      {loading ? (
-        <div className="space-y-2.5 px-1.5">
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 p-4 animate-pulse">
-            <div className="h-3 w-24 rounded-full bg-slate-200 dark:bg-slate-800 mb-3" />
-            <div className="h-10 rounded-xl bg-slate-200 dark:bg-slate-800" />
-          </div>
-        </div>
-      ) : !watchlist || watchlist.length === 0 ? (
-        <div className="px-1.5">
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 px-4 py-4">
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">
-              {t?.nav?.watchlistEmptyTitle}
-            </p>
-            <p className="mt-2 text-[11px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
-              {t?.nav?.watchlistEmptyBody}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-2.5 px-1.5">
-          {watchlist.map((symbol) => {
-            const isActive = activeSymbol === symbol;
-            return (
-              <WatchlistItem
-                key={symbol}
-                symbol={symbol}
-                isActive={isActive}
-                helperText={t?.nav?.watchlistOpenContext}
-                onSelect={() => {
-                  setActiveSetup(null);
-                  setFocusedBotId(null);
-                  setSelectedAsset(symbol);
-                  router.push(`${pathname}?symbol=${symbol}`);
-                  
-                  import("@/lib/api/market").then(({ initializeAsset }) => {
-                    initializeAsset(symbol).catch(err => console.error("❌ Init error:", err));
-                  });
-                  
-                  if (onNavigate) onNavigate();
-                }}
-                onRemove={() => {
-                  openConfirm({
-                    title: t?.nav?.watchlistRemoveTitle,
-                    context: t?.nav?.watchlistRemoveContext?.replace("{symbol}", symbol),
-                    impact: t?.nav?.watchlistRemoveImpact,
-                    safety: t?.nav?.watchlistRemoveSafety,
-                    consequence: t?.nav?.watchlistRemoveConsequence,
-                    tone: "danger",
-                    confirmText: t?.common?.delete,
-                    cancelText: t?.common?.cancel,
-                    icon: <AlertTriangle size={20} />,
-                    onConfirm: async () => {
-                      await remove(symbol);
-                      showSnackbar(
-                        t?.nav?.watchlistRemoveSuccess?.replace("{symbol}", symbol),
-                        "success"
-                      );
-                    }
-                  });
-                }}
-              />
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

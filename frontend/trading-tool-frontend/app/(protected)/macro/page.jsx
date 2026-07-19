@@ -3,5 +3,5 @@
 import WorkspaceRenderer from "@/components/workspaces/WorkspaceRenderer";
 
 export default function MacroPage() {
-  return <WorkspaceRenderer tab="macro" />;
+  return <WorkspaceRenderer tab="macro" canonicalizeLegacy />;
 }
