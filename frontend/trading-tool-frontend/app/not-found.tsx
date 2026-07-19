@@ -24,7 +24,7 @@ export default function NotFoundPage() {
         </p>
 
         <Link
-          href="/dashboard"
+          href="/asset"
           className="inline-block bg-blue-600 hover:bg-blue-700 transition-all px-8 py-3 rounded-xl text-[12px] font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 active:scale-95"
         >
           {t?.publicPages?.notFound?.cta}

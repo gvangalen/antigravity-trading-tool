@@ -38,7 +38,7 @@ export default function OnboardingCompletePage() {
     } catch (err) {
       console.error("Bootstrap agents error:", err);
     } finally {
-      router.push("/dashboard");
+      router.push("/asset");
     }
   };
 

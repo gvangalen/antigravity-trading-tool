@@ -15,7 +15,7 @@ export default function LandingPage() {
   const { user } = useAuth() || {};
   useEffect(() => {
     if (user) {
-      router.push("/dashboard");
+      router.push("/asset");
     }
   }, [router, user]);
 

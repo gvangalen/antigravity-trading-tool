@@ -26,7 +26,7 @@ async function resolvePostLoginDestination(nextPath) {
   }
 
   if (!nextPath || nextPath.startsWith("/login") || nextPath.startsWith("/register")) {
-    return "/dashboard";
+    return "/asset";
   }
   return nextPath;
 }
@@ -37,7 +37,7 @@ function LoginPageContent() {
   const { login, isAuthenticated, sessionChecked } = useAuth();
   const { showSnackbar } = useModal();
   const { t, locale } = useTranslation();
-  const nextPath = searchParams.get("next") || "/dashboard";
+  const nextPath = searchParams.get("next") || "/asset";
   const reason = searchParams.get("reason");
 
   const [email, setEmail] = useState("");

@@ -31,7 +31,7 @@ export default function LandingPage() {
       {/* 1. HEADER */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-[var(--color-border-subtle)]">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <Link href={isAuthenticated ? "/dashboard" : "/"} className="flex items-center gap-3 group">
+          <Link href={isAuthenticated ? "/asset" : "/"} className="flex items-center gap-3 group">
             <img src="/tradamind_icon_v2.png" alt="TM" className="h-12 w-12 object-contain rounded-xl group-hover:scale-105 transition-transform" />
             <div className="flex flex-col justify-center">
               <div className="text-lg font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1 group-hover:text-blue-600 transition-colors">
@@ -56,7 +56,7 @@ export default function LandingPage() {
               </Link>
             ) : (
               <Link 
-                href="/dashboard" 
+                href="/asset"
                 className="px-6 py-2.5 rounded-xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20"
               >
                 {copy.dashboard}
@@ -96,7 +96,7 @@ export default function LandingPage() {
                     <ArrowRight size={16} />
                   </Link>
                   <Link 
-                    href="/login?next=/dashboard"
+                    href="/login?next=/asset"
                     className="w-full sm:w-auto px-10 py-5 rounded-2xl border-2 border-[var(--color-border)] hover:border-blue-600/30 text-[12px] font-black uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 active:scale-95"
                   >
                     {copy.viewDashboard}
@@ -104,7 +104,7 @@ export default function LandingPage() {
                 </>
               ) : (
                 <Link 
-                  href="/dashboard" 
+                  href="/asset"
                   className="w-full sm:w-auto bg-blue-600 text-white hover:bg-blue-700 px-14 py-6 rounded-[2rem] text-[14px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20 active:scale-95 animate-pulse-soft"
                 >
                   <LayoutDashboard size={20} />

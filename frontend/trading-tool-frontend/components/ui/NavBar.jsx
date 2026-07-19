@@ -6,7 +6,6 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
 import {
-  Gauge,
   LineChart,
   Layers,
   FileText,
@@ -37,12 +36,6 @@ export default function NavBar() {
 
   const isAdmin = user?.role === 'admin';
   const NAV_ITEMS = [
-    {
-      href: "/dashboard",
-      matchPathnames: ["/dashboard"],
-      label: "FINN",
-      icon: <Gauge size={18} />,
-    },
     {
       href: "/portfolio",
       matchPathnames: ["/portfolio"],

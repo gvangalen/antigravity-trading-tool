@@ -462,7 +462,7 @@ export default function OnboardingPage() {
                     action_type: "activate_dashboard",
                   });
                   await finish();
-                  router.push("/dashboard");
+                  router.push("/asset");
                 }}
                 disabled={saving}
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-md transition hover:bg-slate-800"

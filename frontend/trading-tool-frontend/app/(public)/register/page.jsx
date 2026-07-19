@@ -22,7 +22,7 @@ async function resolvePostRegisterDestination() {
       status?.has_market &&
       status?.has_strategy
     );
-    return isComplete ? "/dashboard" : "/onboarding";
+    return isComplete ? "/asset" : "/onboarding";
   } catch (error) {
     console.warn("⚠️ Could not resolve onboarding status after register:", error);
     return "/onboarding";

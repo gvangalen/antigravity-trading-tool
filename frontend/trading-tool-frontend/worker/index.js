@@ -10,7 +10,7 @@ self.addEventListener('push', (event) => {
       badge: data.badge || '/icons/badge-72x72.png',
       vibrate: [100, 50, 100],
       data: {
-        url: data.data?.url || '/dashboard',
+        url: data.data?.url || '/asset',
       },
       actions: [
         { action: 'open', title: 'Bekijken' }

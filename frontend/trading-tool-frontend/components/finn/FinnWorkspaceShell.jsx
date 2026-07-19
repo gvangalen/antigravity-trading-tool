@@ -190,7 +190,7 @@ function getWorkflowMeta(pathname, isAnalysisV3) {
       "/strategy": { label: "Mijn Plan" },
       "/report": { label: "Reflectie" },
       "/portfolio": { label: "Portfolio" },
-      "/dashboard": { label: "FINN" },
+      "/dashboard": { label: "Analyse" },
     };
 
     return v3Workflows[pathname] || { label: "Workspace" };
