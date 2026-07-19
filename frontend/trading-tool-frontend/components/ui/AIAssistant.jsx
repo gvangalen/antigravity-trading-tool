@@ -3,7 +3,7 @@
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl } from "@/lib/api/ai";
-import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2 } from "lucide-react";
+import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { ChatSkeleton } from "@/components/dashboard/DashboardSkeleton";
@@ -354,7 +354,7 @@ function AIAssistantContent({
   const router = useRouter();
   const watchlist = useWatchlist();
   const { openConfirm, showSnackbar } = useModal();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const governanceCopy = t?.pages?.report?.finn?.governance || {};
   const { events, loading: eventsLoading, archiveEvent } = useIntelligenceEvents({
     enabled: eventsEnabled,
@@ -377,6 +377,7 @@ function AIAssistantContent({
   const [executingAction, setExecutingAction] = useState(false);
   const [missionDetailSection, setMissionDetailSection] = useState("");
   const [recentConversations, setRecentConversations] = useState([]);
+  const [showComposerMenu, setShowComposerMenu] = useState(false);
   
   const messagesEndRef = useRef(null);
   const scrollRef = useRef(null);
@@ -394,6 +395,12 @@ function AIAssistantContent({
   const activeQuery = queryValue !== undefined ? queryValue : query;
   const updateQuery = onQueryChange || setQuery;
   const isSimpleFinnModal = modal;
+
+  const composerMenuCopy = String(locale || "nl").toLowerCase().startsWith("en")
+    ? { asset: "Add asset", indicator: "Add indicator", placeholder: "Ask FINN or give an instruction...", menu: "Open add menu" }
+    : String(locale || "nl").toLowerCase().startsWith("de")
+      ? { asset: "Asset hinzufügen", indicator: "Indikator hinzufügen", placeholder: "FINN fragen oder einen Auftrag geben...", menu: "Hinzufügen-Menü öffnen" }
+      : { asset: "Asset toevoegen", indicator: "Indicator toevoegen", placeholder: "Vraag FINN of voer een opdracht uit...", menu: "Toevoegmenu openen" };
 
   const humanizeSurfaceStatus = (value) => {
     const raw = String(value || "").toLowerCase();
@@ -485,6 +492,7 @@ function AIAssistantContent({
 
   useEffect(() => {
     if (!isOpen) return;
+    setShowComposerMenu(false);
     setMissionDetailSection("");
     setStableBriefingText("");
   }, [isOpen, pathname, globalSymbol]);
@@ -5921,17 +5929,61 @@ function AIAssistantContent({
             />
           ) : null}
           <div className="relative group">
+          {isSimpleFinnModal && showComposerMenu ? (
+            <div className="absolute bottom-[calc(100%+10px)] left-0 z-20 w-60 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowComposerMenu(false);
+                  updateQuery("");
+                  commandCenterRef.current?.openAssetSearch();
+                  composerInputRef.current?.focus();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-800 transition hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900"
+              >
+                <Search size={17} className="text-slate-500" />
+                {composerMenuCopy.asset}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowComposerMenu(false);
+                  updateQuery("");
+                  commandCenterRef.current?.openIndicatorSearch();
+                  composerInputRef.current?.focus();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-800 transition hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900"
+              >
+                <SlidersHorizontal size={17} className="text-slate-500" />
+                {composerMenuCopy.indicator}
+              </button>
+            </div>
+          ) : null}
+          {isSimpleFinnModal ? (
+            <button
+              type="button"
+              aria-label={composerMenuCopy.menu}
+              aria-expanded={showComposerMenu}
+              onClick={() => setShowComposerMenu((current) => !current)}
+              className="absolute left-2.5 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Plus size={22} className={`transition-transform ${showComposerMenu ? "rotate-45" : ""}`} />
+            </button>
+          ) : null}
           <input 
             ref={composerInputRef}
             type="text" 
             value={activeQuery}
-            onChange={(e) => updateQuery(e.target.value)}
+            onChange={(e) => {
+              setShowComposerMenu(false);
+              updateQuery(e.target.value);
+            }}
             onKeyDown={(event) => {
               if (isSimpleFinnModal && commandCenterRef.current?.handleKeyDown(event)) return;
               if (event.key === "Enter") handleChat();
             }}
-            placeholder={isSimpleFinnModal ? "Vraag, zoek of voer een actie uit..." : uiText.inputPlaceholder}
-            className="w-full pl-6 pr-14 py-4 bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-600/5 focus:bg-white dark:focus:bg-slate-800 focus:border-blue-600/20 transition-all outline-none text-sm text-foreground dark:text-slate-100"
+            placeholder={isSimpleFinnModal ? composerMenuCopy.placeholder : uiText.inputPlaceholder}
+            className={`w-full pr-14 py-4 bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-600/5 focus:bg-white dark:focus:bg-slate-800 focus:border-blue-600/20 transition-all outline-none text-sm text-foreground dark:text-slate-100 ${isSimpleFinnModal ? "pl-14" : "pl-6"}`}
           />
           <button 
             onClick={() => {

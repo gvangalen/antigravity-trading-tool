@@ -9,7 +9,6 @@ import {
   Check,
   Layers3,
   MessageSquare,
-  Plus,
   Search,
   Sparkles,
   Star,
@@ -297,6 +296,14 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
   };
 
   useImperativeHandle(ref, () => ({
+    openAssetSearch() {
+      setMode({ kind: "asset", category: null });
+      setActiveIndex(0);
+    },
+    openIndicatorSearch() {
+      setMode({ kind: "indicator", category: getDefaultIndicatorCategory(pathname) });
+      setActiveIndex(0);
+    },
     handleKeyDown(event) {
       if (event.key === "ArrowDown" && selectableResults.length > 0) {
         event.preventDefault();
@@ -327,29 +334,10 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
     },
   }));
 
-  const quickActions = [
-    { id: "assets", label: copy.searchAsset, icon: Search, action: () => setMode({ kind: "asset", category: null }) },
-    { id: "indicators", label: copy.addIndicator, icon: Plus, action: () => setMode({ kind: "indicator", category: getDefaultIndicatorCategory(pathname) }) },
-    { id: "analysis", label: copy.openAnalysis, icon: BarChart3, action: () => selectResult({ type: "workflow", href: `/asset?symbol=${activeSymbol}` }) },
-    { id: "plan", label: copy.openPlan, icon: Workflow, action: () => selectResult({ type: "workflow", href: `/setup?symbol=${activeSymbol}` }) },
-  ];
-
   return (
     <>
-      <div className="mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950/60">
-        {!hasQuery && mode.kind === "all" ? (
-          <div className="p-3">
-            <div className="px-2 pb-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{copy.heading}</div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {quickActions.map(({ action, icon: Icon, id, label }) => (
-                <button key={id} type="button" onClick={action} className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50/50 dark:border-slate-800 dark:hover:border-blue-900 dark:hover:bg-blue-950/20">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300"><Icon size={15} /></span>
-                  <span className="text-xs font-black text-slate-800 dark:text-slate-100">{label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
+      {(hasQuery || mode.kind !== "all") && (
+        <div className="mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-950/95">
           <div className="max-h-[330px] overflow-y-auto p-2">
             {catalogLoading && mode.kind === "indicator" && indicatorResults.length === 0 ? (
               <div className="px-4 py-6 text-center text-xs font-semibold text-slate-400">{copy.loading}</div>
@@ -389,8 +377,8 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
               </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <IndicatorConfigModal
         isOpen={Boolean(pendingIndicator)}
