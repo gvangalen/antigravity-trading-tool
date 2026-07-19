@@ -335,6 +335,29 @@ function humanizeFinnContextValue(value, fallback = "") {
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
+function getFinnWorkspaceLabel(pathname, locale) {
+  const normalizedLocale = String(locale || "nl").toLowerCase();
+  const labels = normalizedLocale.startsWith("en")
+    ? { asset: "Analysis", setup: "My Plan", bot: "Automation", report: "Reflection", portfolio: "Portfolio" }
+    : normalizedLocale.startsWith("de")
+      ? { asset: "Analyse", setup: "Mein Plan", bot: "Automatisierung", report: "Reflexion", portfolio: "Portfolio" }
+      : { asset: "Analyse", setup: "Mijn Plan", bot: "Automatisering", report: "Reflectie", portfolio: "Portfolio" };
+
+  if (pathname?.startsWith("/setup") || pathname?.startsWith("/strategy")) return labels.setup;
+  if (pathname?.startsWith("/bot")) return labels.bot;
+  if (pathname?.startsWith("/report")) return labels.report;
+  if (pathname?.startsWith("/portfolio")) return labels.portfolio;
+  return labels.asset;
+}
+
+function compactFinnTimeframe(value) {
+  const normalized = String(value || "1D").trim().toLowerCase();
+  if (["day", "daily", "1d"].includes(normalized)) return "1D";
+  if (["week", "weekly", "1w"].includes(normalized)) return "1W";
+  if (["month", "monthly", "1m"].includes(normalized)) return "1M";
+  return String(value || "1D").toUpperCase();
+}
+
 function AIAssistantContent({
   isOpen,
   setIsOpen,
@@ -5171,9 +5194,11 @@ function AIAssistantContent({
     .join(" · ");
   const compactFinnHeader = [
     "FINN",
-    humanizeFinnContextValue(context.page_type, "Overview"),
+    String(context.page_type || "").toLowerCase() !== "unknown"
+      ? humanizeFinnContextValue(context.page_type, getFinnWorkspaceLabel(pathname, locale))
+      : getFinnWorkspaceLabel(pathname, locale),
     String(context.symbol || globalSymbol || "BTC").toUpperCase(),
-    humanizeFinnContextValue(context.timeframe, "Day"),
+    compactFinnTimeframe(context.timeframe),
   ].filter(Boolean);
   const finnModeLabel =
     activeState?.current_flow && activeState.current_flow !== "none"

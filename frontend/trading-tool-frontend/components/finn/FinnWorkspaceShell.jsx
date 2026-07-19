@@ -10,10 +10,12 @@ import {
   FileBarChart2,
   Lightbulb,
   ListChecks,
+  Plus,
   Search,
   Send,
   ShieldAlert,
   ShieldCheck,
+  SlidersHorizontal,
   TrendingUp,
   WalletCards,
   Workflow,
@@ -37,6 +39,7 @@ export default function FinnWorkspaceShell({ children }) {
   const { t, locale } = useTranslation();
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [composerQuery, setComposerQuery] = useState("");
+  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [commandRequest, setCommandRequest] = useState(null);
   const commandNonceRef = useRef(0);
   const isAnalysisV3 = searchParams.get("variant") !== "legacy";
@@ -46,11 +49,24 @@ export default function FinnWorkspaceShell({ children }) {
   const userName = user?.first_name || "Trader";
   const shellStatus = t?.ui?.shell?.appSlogan || "Professional";
   const currentAsset = selectedAsset || "BTC";
-  const composerPlaceholder = t?.assistant?.uiText?.inputPlaceholder || "Ask Finn for context, risk, or the next step...";
+  const normalizedLocale = String(locale || "nl").toLowerCase();
+  const composerCopy = normalizedLocale.startsWith("en")
+    ? { asset: "Add asset", indicator: "Add indicator", menu: "Open add menu", placeholder: "Ask FINN, search an asset or add an indicator..." }
+    : normalizedLocale.startsWith("de")
+      ? { asset: "Asset hinzufügen", indicator: "Indikator hinzufügen", menu: "Hinzufügen-Menü öffnen", placeholder: "FINN fragen, ein Asset suchen oder einen Indikator hinzufügen..." }
+      : { asset: "Asset toevoegen", indicator: "Indicator toevoegen", menu: "Toevoegmenu openen", placeholder: "Vraag FINN, zoek een asset of voeg een indicator toe..." };
 
   const openAssistant = () => {
     commandNonceRef.current += 1;
     setCommandRequest({ mode: "all", category: null, nonce: commandNonceRef.current });
+    setAssistantOpen(true);
+  };
+
+  const openAssistantMode = (mode, category = null) => {
+    commandNonceRef.current += 1;
+    setComposerMenuOpen(false);
+    setComposerQuery("");
+    setCommandRequest({ mode, category, nonce: commandNonceRef.current });
     setAssistantOpen(true);
   };
 
@@ -197,16 +213,46 @@ export default function FinnWorkspaceShell({ children }) {
               className="pointer-events-auto w-full max-w-[980px] rounded-[28px] border border-slate-200/90 bg-white/95 p-3 shadow-[0_20px_60px_-25px_rgba(15,23,42,0.35)] backdrop-blur-xl dark:border-slate-800 dark:bg-[#0f172a]/95"
             >
               <div className="relative">
+                {composerMenuOpen ? (
+                  <div className="absolute bottom-[calc(100%+10px)] left-0 z-20 w-60 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950">
+                    <button
+                      type="button"
+                      onClick={() => openAssistantMode("asset")}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-800 transition hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900"
+                    >
+                      <Search size={17} className="text-slate-500" />
+                      {composerCopy.asset}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openAssistantMode("indicator")}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-800 transition hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900"
+                    >
+                      <SlidersHorizontal size={17} className="text-slate-500" />
+                      {composerCopy.indicator}
+                    </button>
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  aria-label={composerCopy.menu}
+                  aria-expanded={composerMenuOpen}
+                  onClick={() => setComposerMenuOpen((current) => !current)}
+                  className="absolute left-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <Plus size={23} className={`transition-transform ${composerMenuOpen ? "rotate-45" : ""}`} />
+                </button>
                 <input
                   type="text"
                   value={composerQuery}
                   onFocus={openAssistant}
                   onChange={(event) => {
+                    setComposerMenuOpen(false);
                     setComposerQuery(event.target.value);
                     if (!assistantOpen) openAssistant();
                   }}
-                  placeholder={composerPlaceholder}
-                  className="w-full rounded-[22px] border border-slate-100 bg-slate-50 py-4 pl-6 pr-16 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-600/5 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-900 dark:focus:bg-slate-800"
+                  placeholder={composerCopy.placeholder}
+                  className="w-full rounded-[22px] border border-slate-100 bg-slate-50 py-4 pl-16 pr-16 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-600/5 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-900 dark:focus:bg-slate-800"
                 />
                 <button
                   type="submit"
