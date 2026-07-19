@@ -19,12 +19,13 @@ export default function FinnWorkspaceShell({ children }) {
   const searchParams = useSearchParams();
   const { selectedAsset } = useAsset();
   const { user } = useAuth();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [composerQuery, setComposerQuery] = useState("");
   const isAnalysisV3 = searchParams.get("variant") !== "legacy";
 
-  const activeWorkflow = useMemo(() => getWorkflowMeta(pathname, isAnalysisV3), [isAnalysisV3, pathname]);
+  const activeWorkflow = useMemo(() => getWorkflowMeta(pathname, isAnalysisV3, locale), [isAnalysisV3, locale, pathname]);
+  const isPlanWorkspace = pathname === "/setup" || pathname === "/strategy";
   const userName = user?.first_name || "Trader";
   const shellStatus = t?.ui?.shell?.appSlogan || "Professional";
   const currentAsset = selectedAsset || "BTC";
@@ -83,35 +84,39 @@ export default function FinnWorkspaceShell({ children }) {
                 assistantOpen ? "pb-8" : "pb-10 lg:pb-12"
               }`}
             >
-              <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-35px_rgba(37,99,235,0.32)] dark:border-slate-800 dark:bg-[#0f172a]">
-                <FinnPanel
-                  previewSectionsOnly
-                  eventsEnabled={!assistantOpen}
-                  className="h-auto min-h-0"
-                />
-              </section>
+              {!isPlanWorkspace ? (
+                <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-35px_rgba(37,99,235,0.32)] dark:border-slate-800 dark:bg-[#0f172a]">
+                  <FinnPanel
+                    previewSectionsOnly
+                    eventsEnabled={!assistantOpen}
+                    className="h-auto min-h-0"
+                  />
+                </section>
+              ) : null}
 
               <section className="rounded-[32px] border border-slate-200/80 bg-white p-4 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.35)] dark:border-slate-800 dark:bg-[#06101f] lg:p-6">
                 <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-5 dark:border-slate-800 lg:flex-row lg:items-end lg:justify-between">
                   <div>
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.28em] text-blue-600 dark:text-blue-400">
                       <Workflow size={12} />
-                      {isAnalysisV3 ? "Analysis Canvas" : "Workflow Canvas"}
+                      {activeWorkflow.eyebrow || (isAnalysisV3 ? "Analysis Canvas" : "Workflow Canvas")}
                     </div>
                     <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-slate-50">
                       {activeWorkflow.label}
                     </h2>
                     <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
-                      {isAnalysisV3
+                      {activeWorkflow.description || (isAnalysisV3
                         ? "Bekijk een asset in drie contexten met de actieve FINN-briefing direct erboven."
-                        : "Werk in deze flow met de actieve FINN-briefing direct erboven."}
+                        : "Werk in deze flow met de actieve FINN-briefing direct erboven.")}
                     </p>
                   </div>
 
-                  <div className="inline-flex items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                    {isAnalysisV3 ? "Live Analysis" : "Workflow Active"}
-                  </div>
+                  {activeWorkflow.status !== null ? (
+                    <div className="inline-flex items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      {activeWorkflow.status || (isAnalysisV3 ? "Live Analysis" : "Workflow Active")}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div>{children}</div>
@@ -178,16 +183,37 @@ export default function FinnWorkspaceShell({ children }) {
   );
 }
 
-function getWorkflowMeta(pathname, isAnalysisV3) {
+function getWorkflowMeta(pathname, isAnalysisV3, locale) {
   if (isAnalysisV3) {
+    const planCopies = {
+      nl: {
+        label: "Mijn Plan",
+        eyebrow: "Planwerkruimte",
+        description: "Bouw en beheer je handelsplannen voor de geselecteerde asset.",
+        status: null,
+      },
+      en: {
+        label: "My Plan",
+        eyebrow: "Plan Workspace",
+        description: "Build and manage your trading plans for the selected asset.",
+        status: null,
+      },
+      de: {
+        label: "Mein Plan",
+        eyebrow: "Plan-Arbeitsbereich",
+        description: "Erstelle und verwalte deine Handelspläne für das ausgewählte Asset.",
+        status: null,
+      },
+    };
+    const planCopy = planCopies[String(locale || "nl").toLowerCase()] || planCopies.nl;
     const v3Workflows = {
       "/asset": { label: "Analyse" },
       "/market": { label: "Analyse" },
       "/macro": { label: "Analyse" },
       "/technical": { label: "Analyse" },
       "/bot": { label: "Automation" },
-      "/setup": { label: "Mijn Plan" },
-      "/strategy": { label: "Mijn Plan" },
+      "/setup": planCopy,
+      "/strategy": planCopy,
       "/report": { label: "Reflectie" },
       "/portfolio": { label: "Portfolio" },
       "/dashboard": { label: "Analyse" },

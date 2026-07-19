@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   Activity,
-  ArrowRight,
   Bot,
   Check,
   CheckCircle2,
@@ -33,7 +32,7 @@ import { deleteSetup } from "@/lib/api/setups";
 const COPY = {
   nl: {
     eyebrow: "Mijn Plan",
-    heading: "Wanneer handelen, en hoe?",
+    heading: "Wanneer handel je en hoe?",
     intro: "Koppel je marktvoorwaarden aan duidelijke uitvoeringsregels. Samen vormen ze een plan dat je consequent kunt volgen.",
     newPlan: "Nieuw plan",
     setupTerm: "Setup",
@@ -42,7 +41,7 @@ const COPY = {
     strategyHelp: "Hoe voer ik de trade uit?",
     planTerm: "Plan",
     planHelp: "De combinatie die klaarstaat voor uitvoering.",
-    finnLabel: "FINN plancheck",
+    finnLabel: "FINN planadvies",
     finishPlan: "Plan afmaken",
     activePlan: "Actief plan",
     selectedAsset: "Asset en ritme",
@@ -93,7 +92,7 @@ const COPY = {
   },
   en: {
     eyebrow: "My Plan",
-    heading: "When to trade, and how?",
+    heading: "When do you trade and how?",
     intro: "Connect your market conditions to clear execution rules. Together they form a plan you can follow consistently.",
     newPlan: "New plan",
     setupTerm: "Setup",
@@ -153,7 +152,7 @@ const COPY = {
   },
   de: {
     eyebrow: "Mein Plan",
-    heading: "Wann handeln, und wie?",
+    heading: "Wann handelst du und wie?",
     intro: "Verbinde deine Marktbedingungen mit klaren Ausführungsregeln. Zusammen bilden sie einen Plan, dem du konsequent folgen kannst.",
     newPlan: "Neuer Plan",
     setupTerm: "Setup",
@@ -221,8 +220,12 @@ function normalizeId(value) {
   return value == null ? "" : String(value);
 }
 
+function hasUsableStrategy(strategy) {
+  return Boolean(strategy?.id && String(strategy?.name || "").trim());
+}
+
 function strategyIsComplete(setup, strategy) {
-  if (!setup || !strategy || Number(strategy.base_amount || strategy.amount || 0) <= 0) return false;
+  if (!setup || !hasUsableStrategy(strategy) || Number(strategy.base_amount || strategy.amount || 0) <= 0) return false;
   if (String(setup.setup_type || "").toLowerCase() === "dca") return true;
   const targets = Array.isArray(strategy.targets) ? strategy.targets.filter(Boolean) : [];
   return strategy.entry != null && strategy.entry !== "" && strategy.stop_loss != null && strategy.stop_loss !== "" && targets.length > 0;
@@ -251,16 +254,20 @@ function buildPlans(setups, strategies) {
     }
   });
 
-  return plans.map((plan) => ({ ...plan, complete: strategyIsComplete(plan.setup, plan.strategy) }));
+  return plans.map((plan) => ({
+    ...plan,
+    hasStrategy: hasUsableStrategy(plan.strategy),
+    complete: strategyIsComplete(plan.setup, plan.strategy),
+  }));
 }
 
 function getPlanName(plan, copy) {
-  return plan.strategy?.name || plan.setup?.name || copy.planTerm;
+  return (plan.hasStrategy ? plan.strategy?.name : null) || plan.setup?.name || copy.planTerm;
 }
 
 function getFinnMessage(copy, plan, totalPlans) {
   if (!totalPlans) return copy.noPlansBody;
-  if (!plan?.strategy) {
+  if (!plan?.hasStrategy) {
     return `${getPlanName(plan, copy)}: ${copy.setupReady.toLowerCase()}, ${copy.missingStrategy.toLowerCase()}.`;
   }
   if (!plan.complete) {
@@ -432,7 +439,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
         </div>
       </section>
 
-      <section className="flex flex-col gap-4 rounded-[24px] border border-blue-100 bg-[linear-gradient(110deg,#eff6ff_0%,#ffffff_58%)] p-5 dark:border-blue-950 dark:bg-[linear-gradient(110deg,#0b1b35_0%,#0f172a_58%)] lg:flex-row lg:items-center lg:justify-between">
+      <section className="rounded-[24px] border border-blue-100 bg-[linear-gradient(110deg,#eff6ff_0%,#ffffff_58%)] p-4 dark:border-blue-950 dark:bg-[linear-gradient(110deg,#0b1b35_0%,#0f172a_58%)]">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm shadow-blue-600/20">
             <Sparkles size={18} />
@@ -444,18 +451,6 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
             </p>
           </div>
         </div>
-        {activePlan && !activePlan.complete ? (
-          <button
-            type="button"
-            onClick={() => activePlan.strategy
-              ? openStrategyDrawer(activePlan.setup, activePlan.strategy)
-              : openStrategyDrawer(activePlan.setup, null, "new-strategy")}
-            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 text-xs font-black text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 dark:border-blue-900 dark:bg-slate-950 dark:text-blue-300"
-          >
-            {copy.finishPlan}
-            <ArrowRight size={15} />
-          </button>
-        ) : null}
       </section>
 
       {loading ? (
@@ -489,12 +484,12 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
             <PlanPart
               icon={Target}
               eyebrow={`${copy.strategyTerm} · ${copy.strategyHelp}`}
-              title={activePlan.strategy?.name || copy.missingStrategy}
-              meta={activePlan.strategy ? `${copy.amount} ${formatNumber(activePlan.strategy.base_amount || activePlan.strategy.amount)} · ${activePlan.strategy.execution_mode === "fixed" ? copy.fixed : copy.dynamic}` : copy.notReady}
-              detail={activePlan.strategy ? getExecutionSummary(activePlan, copy) : copy.strategyHelp}
-              actionLabel={activePlan.strategy ? copy.editStrategy : copy.addStrategy}
-              onAction={() => openStrategyDrawer(activePlan.setup, activePlan.strategy, activePlan.strategy ? "edit-strategy" : "new-strategy")}
-              muted={!activePlan.strategy}
+              title={activePlan.hasStrategy ? activePlan.strategy.name : copy.missingStrategy}
+              meta={activePlan.hasStrategy ? `${copy.amount} ${formatNumber(activePlan.strategy.base_amount || activePlan.strategy.amount)} · ${activePlan.strategy.execution_mode === "fixed" ? copy.fixed : copy.dynamic}` : copy.notReady}
+              detail={activePlan.hasStrategy ? getExecutionSummary(activePlan, copy) : copy.strategyHelp}
+              actionLabel={activePlan.hasStrategy ? copy.editStrategy : copy.addStrategy}
+              onAction={() => openStrategyDrawer(activePlan.setup, activePlan.strategy, activePlan.strategy?.id ? "edit-strategy" : "new-strategy")}
+              muted={!activePlan.hasStrategy}
             />
             <div className="hidden items-center justify-center text-slate-300 lg:flex"><ChevronRight size={20} /></div>
             <div className="flex flex-col justify-between border-t border-slate-100 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-900/50 lg:border-l lg:border-t-0">
@@ -509,7 +504,15 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
                 <Link href={`/bot?symbol=${encodeURIComponent(activePlan.setup?.symbol || activeSymbol)}`} className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-black text-white transition hover:bg-blue-700">
                   <Bot size={15} /> {copy.openAutomation}
                 </Link>
-              ) : null}
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => openStrategyDrawer(activePlan.setup, activePlan.strategy, activePlan.strategy?.id ? "edit-strategy" : "new-strategy")}
+                  className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-black text-white transition hover:bg-blue-700"
+                >
+                  <Plus size={15} /> {activePlan.hasStrategy ? copy.finishPlan : copy.addStrategy}
+                </button>
+              )}
             </div>
           </div>
         </section>
@@ -621,16 +624,16 @@ function PlanRow({ plan, copy, onEditSetup, onEditStrategy, onDelete }) {
           <span className="block text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">{copy.setupTerm}</span>
           <span className="block truncate text-xs font-black text-slate-800 dark:text-slate-200">{plan.setup?.name || copy.notReady}</span>
         </span>
-        <Check size={14} className="ml-auto shrink-0 text-emerald-500" />
+        {plan.setup ? <Check size={14} className="ml-auto shrink-0 text-emerald-500" /> : <CircleDashed size={14} className="ml-auto shrink-0 text-amber-500" />}
       </button>
 
-      <button type="button" onClick={onEditStrategy} className={`flex min-w-0 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${plan.strategy ? "border-slate-100 hover:border-blue-200 hover:bg-blue-50 dark:border-slate-800 dark:hover:border-blue-900 dark:hover:bg-blue-950/20" : "border-dashed border-amber-200 bg-amber-50/60 hover:border-amber-300 dark:border-amber-900/60 dark:bg-amber-950/10"}`}>
-        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${plan.strategy ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"}`}><Target size={15} /></span>
+      <button type="button" onClick={onEditStrategy} className={`flex min-w-0 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${plan.complete ? "border-slate-100 hover:border-blue-200 hover:bg-blue-50 dark:border-slate-800 dark:hover:border-blue-900 dark:hover:bg-blue-950/20" : "border-dashed border-amber-200 bg-amber-50/60 hover:border-amber-300 dark:border-amber-900/60 dark:bg-amber-950/10"}`}>
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${plan.complete ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"}`}><Target size={15} /></span>
         <span className="min-w-0">
           <span className="block text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">{copy.strategyTerm}</span>
-          <span className="block truncate text-xs font-black text-slate-800 dark:text-slate-200">{plan.strategy?.name || copy.addStrategy}</span>
+          <span className="block truncate text-xs font-black text-slate-800 dark:text-slate-200">{plan.hasStrategy ? plan.strategy.name : copy.addStrategy}</span>
         </span>
-        {plan.strategy ? <Check size={14} className="ml-auto shrink-0 text-emerald-500" /> : <Plus size={14} className="ml-auto shrink-0 text-amber-600" />}
+        {plan.complete ? <Check size={14} className="ml-auto shrink-0 text-emerald-500" /> : plan.hasStrategy ? <CircleDashed size={14} className="ml-auto shrink-0 text-amber-600" /> : <Plus size={14} className="ml-auto shrink-0 text-amber-600" />}
       </button>
 
       <button type="button" onClick={onDelete} aria-label={copy.deletePlan} className="inline-flex h-9 w-9 items-center justify-center justify-self-end rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/20">
