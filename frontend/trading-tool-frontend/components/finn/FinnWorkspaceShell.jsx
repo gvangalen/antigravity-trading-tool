@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   BarChart3,
@@ -23,11 +23,11 @@ import NavBar from "@/components/ui/NavBar";
 import ScrollToTop from "@/components/ui/ScrollToTop";
 import WorkspaceCanvas from "@/components/workspaces/WorkspaceCanvas";
 import AIAssistant, { FinnPanel } from "@/components/ui/AIAssistant";
-import AssetSearchBar from "@/components/ui/AssetSearchBar";
 import AvatarMenu from "@/components/ui/AvatarMenu";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { FINN_COMMAND_OPEN_EVENT } from "@/lib/finnCommandSearch";
 
 export default function FinnWorkspaceShell({ children }) {
   const pathname = usePathname();
@@ -37,6 +37,8 @@ export default function FinnWorkspaceShell({ children }) {
   const { t, locale } = useTranslation();
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [composerQuery, setComposerQuery] = useState("");
+  const [commandRequest, setCommandRequest] = useState(null);
+  const commandNonceRef = useRef(0);
   const isAnalysisV3 = searchParams.get("variant") !== "legacy";
 
   const activeWorkflow = useMemo(() => getWorkflowMeta(pathname, isAnalysisV3, locale), [isAnalysisV3, locale, pathname]);
@@ -46,10 +48,42 @@ export default function FinnWorkspaceShell({ children }) {
   const currentAsset = selectedAsset || "BTC";
   const composerPlaceholder = t?.assistant?.uiText?.inputPlaceholder || "Ask Finn for context, risk, or the next step...";
 
-  const openAssistant = () => setAssistantOpen(true);
+  const openAssistant = () => {
+    commandNonceRef.current += 1;
+    setCommandRequest({ mode: "all", category: null, nonce: commandNonceRef.current });
+    setAssistantOpen(true);
+  };
+
+  useEffect(() => {
+    const openCommandCenter = (detail = {}) => {
+      commandNonceRef.current += 1;
+      setComposerQuery(detail.query || "");
+      setCommandRequest({
+        mode: detail.mode || "all",
+        category: detail.category || null,
+        nonce: commandNonceRef.current,
+      });
+      setAssistantOpen(true);
+    };
+
+    const handleCommandEvent = (event) => openCommandCenter(event?.detail || {});
+    const handleShortcut = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        openCommandCenter();
+      }
+    };
+
+    window.addEventListener(FINN_COMMAND_OPEN_EVENT, handleCommandEvent);
+    window.addEventListener("keydown", handleShortcut);
+    return () => {
+      window.removeEventListener(FINN_COMMAND_OPEN_EVENT, handleCommandEvent);
+      window.removeEventListener("keydown", handleShortcut);
+    };
+  }, []);
   const handleComposerSubmit = (event) => {
     event.preventDefault();
-    setAssistantOpen(true);
+    openAssistant();
   };
 
   return (
@@ -60,9 +94,13 @@ export default function FinnWorkspaceShell({ children }) {
         <div className="pt-16 lg:pt-0">
           <header className="sticky top-16 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl dark:border-slate-800 dark:bg-[#020617]/90 lg:top-0">
             <div className="px-4 py-4 lg:px-8 lg:py-5">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => {
+                    commandNonceRef.current += 1;
+                    setCommandRequest({ mode: "all", category: null, nonce: commandNonceRef.current });
+                    setAssistantOpen(true);
+                  }} className="flex items-center gap-3 text-left">
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
                       <Bot size={24} />
                     </div>
@@ -77,14 +115,22 @@ export default function FinnWorkspaceShell({ children }) {
                         {userName} · {activeWorkflow.label} · {currentAsset}
                       </p>
                     </div>
-                  </div>
-                </div>
-
-                <div className="hidden min-w-0 flex-1 px-6 lg:flex xl:max-w-xl">
-                  <AssetSearchBar />
+                  </button>
                 </div>
 
                 <div className="hidden lg:flex lg:items-center lg:gap-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      commandNonceRef.current += 1;
+                      setCommandRequest({ mode: "all", category: null, nonce: commandNonceRef.current });
+                      setAssistantOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 transition hover:border-blue-200 hover:text-blue-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400"
+                  >
+                    FINN
+                    <span className="rounded-md border border-slate-200 px-1.5 py-0.5 text-[9px] dark:border-slate-700">⌘K</span>
+                  </button>
                   <div className="rounded-full border-2 border-slate-100 p-0.5 shadow-sm dark:border-slate-800">
                     <AvatarMenu />
                   </div>
@@ -157,7 +203,7 @@ export default function FinnWorkspaceShell({ children }) {
                   onFocus={openAssistant}
                   onChange={(event) => {
                     setComposerQuery(event.target.value);
-                    if (!assistantOpen) setAssistantOpen(true);
+                    if (!assistantOpen) openAssistant();
                   }}
                   placeholder={composerPlaceholder}
                   className="w-full rounded-[22px] border border-slate-100 bg-slate-50 py-4 pl-6 pr-16 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-600/5 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-900 dark:focus:bg-slate-800"
@@ -189,6 +235,7 @@ export default function FinnWorkspaceShell({ children }) {
               eventsEnabled={assistantOpen}
               queryValue={composerQuery}
               onQueryChange={setComposerQuery}
+              commandRequest={commandRequest}
               autoFocusComposer
             />
           </div>

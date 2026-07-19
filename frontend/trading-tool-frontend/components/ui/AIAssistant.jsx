@@ -25,6 +25,7 @@ import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -345,6 +346,7 @@ function AIAssistantContent({
   onQueryChange,
   autoFocusComposer = false,
   eventsEnabled = true,
+  commandRequest = null,
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -379,6 +381,7 @@ function AIAssistantContent({
   const messagesEndRef = useRef(null);
   const scrollRef = useRef(null);
   const composerInputRef = useRef(null);
+  const commandCenterRef = useRef(null);
   const loadedFinnStateRef = useRef(false);
   const missionControlCacheKeyRef = useRef("");
   const activeStreamIdRef = useRef(null);
@@ -5905,18 +5908,36 @@ function AIAssistantContent({
             </div>
           </div>
         )}
+          {isSimpleFinnModal ? (
+            <FinnCommandCenter
+              ref={commandCenterRef}
+              isOpen={isOpen}
+              query={activeQuery}
+              request={commandRequest}
+              onQueryChange={updateQuery}
+              onAskFinn={() => handleChat()}
+              onClose={() => setIsOpen(false)}
+              watchlist={watchlist}
+            />
+          ) : null}
           <div className="relative group">
           <input 
             ref={composerInputRef}
             type="text" 
             value={activeQuery}
             onChange={(e) => updateQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleChat()}
-            placeholder={isSimpleFinnModal ? "Vraag FINN om uitleg, context of een actie..." : uiText.inputPlaceholder}
+            onKeyDown={(event) => {
+              if (isSimpleFinnModal && commandCenterRef.current?.handleKeyDown(event)) return;
+              if (event.key === "Enter") handleChat();
+            }}
+            placeholder={isSimpleFinnModal ? "Vraag, zoek of voer een actie uit..." : uiText.inputPlaceholder}
             className="w-full pl-6 pr-14 py-4 bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-600/5 focus:bg-white dark:focus:bg-slate-800 focus:border-blue-600/20 transition-all outline-none text-sm text-foreground dark:text-slate-100"
           />
           <button 
-            onClick={() => handleChat()}
+            onClick={() => {
+              if (isSimpleFinnModal && commandCenterRef.current?.submitPrimary()) return;
+              handleChat();
+            }}
             disabled={loading || !activeQuery.trim()}
             className="absolute right-3 top-2.5 p-2 rounded-xl bg-slate-900 dark:bg-blue-600 text-white hover:bg-blue-600 dark:hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg"
           >

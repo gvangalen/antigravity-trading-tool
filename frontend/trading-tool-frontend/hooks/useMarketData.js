@@ -348,6 +348,7 @@ export function useMarketData(symbol = "BTC", options = {}) {
     addMarket,
     removeMarket,
     syncHistory,
+    reload: loadAll,
 
     availableIndicators,
     selectedIndicator,

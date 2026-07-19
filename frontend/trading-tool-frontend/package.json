@@ -11,6 +11,7 @@
     "export": "next build",
     "lint:i18n": "node scripts/check-i18n-literals.mjs",
     "test:i18n": "node --test tests/i18n-hardening.test.mjs",
+    "test:commands": "node --test tests/finn-command-search.test.mjs",
     "ios:sync": "npm run build && npx cap sync ios",
     "start": "next start"
   },

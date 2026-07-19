@@ -37,6 +37,7 @@ import { getDailyScores } from "@/lib/api/scores";
 import { useOverviewSnapshot } from "@/hooks/useOverviewSnapshot";
 import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
 import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
+import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -1508,6 +1509,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     btcLive,
     loading: marketLoading,
     marketDayData,
+    reload: reloadMarketData,
   } = useMarketData(activeSymbol, {
     includeDailyScores: false,
     includeSevenDayData: false,
@@ -1520,6 +1522,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     addMacroIndicator,
     loading: macroLoading,
     removeMacroIndicator,
+    reload: reloadMacroData,
   } = useMacroData(macroTimeframe, activeSymbol);
 
   const {
@@ -1527,6 +1530,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     addTechnicalIndicator,
     loading: technicalLoading,
     removeTechnicalIndicator,
+    reload: reloadTechnicalData,
   } = useTechnicalData(technicalTimeframe, activeSymbol, { includeScoreSummary: false });
 
   const {
@@ -1585,6 +1589,21 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         console.error("Failed to add technical indicator from command search:", error);
       });
   }, [addTechnicalIndicator, indicatorAction, technicalIndicatorFromUrl]);
+
+  useEffect(() => {
+    const refreshCompletedIndicator = (event) => {
+      const detail = event?.detail || {};
+      if (String(detail.assetSymbol || "").toUpperCase() !== activeSymbol) return;
+
+      if (detail.category === "market") void reloadMarketData();
+      if (detail.category === "macro") void reloadMacroData();
+      if (detail.category === "technical") void reloadTechnicalData();
+    };
+
+    window.addEventListener(FINN_INDICATOR_MODAL_COMPLETED_EVENT, refreshCompletedIndicator);
+    return () =>
+      window.removeEventListener(FINN_INDICATOR_MODAL_COMPLETED_EVENT, refreshCompletedIndicator);
+  }, [activeSymbol, reloadMacroData, reloadMarketData, reloadTechnicalData]);
 
   const watchlistSymbols = useMemo(() => {
     const preferred =

@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import AvatarMenu from "@/components/ui/AvatarMenu";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import AssetSearchBar from "./AssetSearchBar";
 
 export default function TopBar() {
   const { t } = useTranslation();
@@ -62,11 +61,6 @@ export default function TopBar() {
             {greetingText}
           </p>
         </div>
-      </div>
-
-      {/* CENTER — Global Asset Search (Primary Control) */}
-      <div className="hidden lg:flex flex-1 justify-center max-w-xl">
-        <AssetSearchBar />
       </div>
 
       {/* RIGHT — Avatar & Profile */}
