@@ -1,10 +1,10 @@
 1:"$Sreact.fragment"
 9:I[61465,[],""]
-:HL["/_next/static/css/d34b03f23f3eba3b.css","style"]
+:HL["/_next/static/css/ed9323131720b981.css","style"]
 :HL["/_next/static/css/19c9db1a3af975a5.css","style"]
 2:T937,
 (function () {
-  var VERSION = "local-build-2026-07-19T14:50:56.402Z";
+  var VERSION = "local-build-2026-07-19T16:13:09.915Z";
   var VERSION_KEY = "tradamind_app_cache_version";
   var RECOVERY_KEY = "tradamind_app_cache_recovered_" + VERSION;
 
@@ -106,18 +106,18 @@
         document.cookie = COOKIE_KEY + "=" + encodeURIComponent(locale) + "; path=/; max-age=31536000; samesite=lax";
       } catch (error) {}
     })();
-  0:{"P":null,"b":"build-1784472637843","p":"","c":["","onboarding","profile"],"i":false,"f":[[["",{"children":["onboarding",{"children":["profile",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/d34b03f23f3eba3b.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$3"}}]]}],"$L4"]}]]}],{"children":["onboarding","$L5",{"children":["profile","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
-a:I[83340,["3054","static/chunks/3054-b99125931c884c8f.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-6d1a56d637f4817a.js","7177","static/chunks/app/layout-d817431fa48bdf1a.js"],"default"]
-b:I[89399,["3054","static/chunks/3054-b99125931c884c8f.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-6d1a56d637f4817a.js","7177","static/chunks/app/layout-d817431fa48bdf1a.js"],"default"]
-c:I[44202,["3054","static/chunks/3054-b99125931c884c8f.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-6d1a56d637f4817a.js","7177","static/chunks/app/layout-d817431fa48bdf1a.js"],"default"]
+  0:{"P":null,"b":"build-1784477574460","p":"","c":["","onboarding","profile"],"i":false,"f":[[["",{"children":["onboarding",{"children":["profile",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/ed9323131720b981.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$3"}}]]}],"$L4"]}]]}],{"children":["onboarding","$L5",{"children":["profile","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
+a:I[83340,["3054","static/chunks/3054-b99125931c884c8f.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-6d1a56d637f4817a.js","7177","static/chunks/app/layout-34e37ccc75a29c08.js"],"default"]
+b:I[89399,["3054","static/chunks/3054-b99125931c884c8f.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-6d1a56d637f4817a.js","7177","static/chunks/app/layout-34e37ccc75a29c08.js"],"default"]
+c:I[44202,["3054","static/chunks/3054-b99125931c884c8f.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-6d1a56d637f4817a.js","7177","static/chunks/app/layout-34e37ccc75a29c08.js"],"default"]
 d:I[26291,[],""]
 e:I[46063,[],""]
-f:I[99361,["8618","static/chunks/8618-7c60d096f3705794.js","7432","static/chunks/7432-6d1a56d637f4817a.js","4345","static/chunks/app/not-found-1e38a504c71e5464.js"],"default"]
-10:I[62057,["3054","static/chunks/3054-b99125931c884c8f.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-6d1a56d637f4817a.js","7177","static/chunks/app/layout-d817431fa48bdf1a.js"],"default"]
+f:I[99361,["8618","static/chunks/8618-7c60d096f3705794.js","7432","static/chunks/7432-6d1a56d637f4817a.js","4345","static/chunks/app/not-found-ef5617b88ab8d8f9.js"],"default"]
+10:I[62057,["3054","static/chunks/3054-b99125931c884c8f.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-6d1a56d637f4817a.js","7177","static/chunks/app/layout-34e37ccc75a29c08.js"],"default"]
 11:I[65098,[],"ClientSegmentRoot"]
-12:I[19169,["3054","static/chunks/3054-b99125931c884c8f.js","8618","static/chunks/8618-7c60d096f3705794.js","615","static/chunks/615-6a5d89229b548ba3.js","7432","static/chunks/7432-6d1a56d637f4817a.js","3842","static/chunks/3842-a5aa898580378dc9.js","9200","static/chunks/9200-c6861382930076e7.js","5962","static/chunks/5962-e95480de00e243e2.js","5520","static/chunks/5520-a6d0e7907cd86d36.js","6959","static/chunks/6959-f9e42d130bac33c0.js","6937","static/chunks/app/onboarding/layout-d916d7d827c885b8.js"],"default"]
+12:I[19169,["3054","static/chunks/3054-b99125931c884c8f.js","8618","static/chunks/8618-7c60d096f3705794.js","5811","static/chunks/5811-ed0ccadc7009ebdc.js","7432","static/chunks/7432-6d1a56d637f4817a.js","866","static/chunks/866-c44622f6507c218c.js","6564","static/chunks/6564-c992384e64759fac.js","8746","static/chunks/8746-d493fed905903d10.js","5962","static/chunks/5962-e95480de00e243e2.js","5520","static/chunks/5520-a6d0e7907cd86d36.js","2604","static/chunks/2604-4138558a4c3a20f6.js","6937","static/chunks/app/onboarding/layout-b92b3480e5470d46.js"],"default"]
 14:I[41918,[],"ClientPageRoot"]
-15:I[88066,["8618","static/chunks/8618-7c60d096f3705794.js","7432","static/chunks/7432-6d1a56d637f4817a.js","1308","static/chunks/app/onboarding/profile/page-cb9d3199780f22a4.js"],"default"]
+15:I[88066,["8618","static/chunks/8618-7c60d096f3705794.js","7432","static/chunks/7432-6d1a56d637f4817a.js","1308","static/chunks/app/onboarding/profile/page-86ebb4f37830fc52.js"],"default"]
 18:I[78490,[],"OutletBoundary"]
 1a:I[90127,[],"AsyncMetadataOutlet"]
 1c:I[78490,[],"ViewportBoundary"]
