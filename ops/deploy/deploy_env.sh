@@ -69,12 +69,16 @@ if [ "$DEPLOY_COMPONENT_SET" = "backend_only" ]; then
 fi
 
 echo "📦 1. Committing & pushing to GitHub for ${ENVIRONMENT}..."
-if ! git diff --cached --quiet; then
-  git commit -m "$COMMIT_MSG"
-elif ! git diff --quiet; then
-  echo "⚠️ Working tree has unstaged changes; deploy_env.sh will deploy the current HEAD only." >&2
+if [ "$(lower_bool "${SKIP_GIT_PUSH:-false}")" = "true" ]; then
+  echo "ℹ️ Git push skipped by orchestrator; deploying checked-out HEAD."
+else
+  if ! git diff --cached --quiet; then
+    git commit -m "$COMMIT_MSG"
+  elif ! git diff --quiet; then
+    echo "⚠️ Working tree has unstaged changes; deploy_env.sh will deploy the current HEAD only." >&2
+  fi
+  git push origin HEAD
 fi
-git push origin HEAD
 
 TARGET_COMMIT="$(git rev-parse --short HEAD)"
 REMOTE_LAST_GOOD="$(

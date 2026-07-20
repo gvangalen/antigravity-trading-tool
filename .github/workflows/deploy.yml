@@ -8,31 +8,30 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
-      - name: 🚀 Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Checkout deploy commit
+        uses: actions/checkout@v4
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            echo "=== START DEPLOY ==="
-            whoami
-            pwd
+          ref: main
+          fetch-depth: 2
 
-            cd ~/antigravity-trading-tool || exit 1
+      - name: Prepare deploy key
+        shell: bash
+        env:
+          DEPLOY_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/tradamind-deploy-key"
+          chmod 600 "$RUNNER_TEMP/tradamind-deploy-key"
 
-            echo "=== SYNC DEPLOY CHECKOUT ==="
-            git fetch origin main
-            git reset --hard origin/main
-
-            echo "=== RUN PRODUCTION DEPLOY ==="
-            chmod +x deploy_live.sh
-            ./deploy_live.sh "GitHub Actions production deploy"
-
-            echo "=== PM2 STATUS ==="
-            pm2 status
-
-            echo "=== DONE ==="
-          command_timeout: 60m
+      - name: Deploy production
+        shell: bash
+        env:
+          SERVER_IP: ${{ secrets.HOST }}
+          SSH_KEY: ${{ runner.temp }}/tradamind-deploy-key
+          SKIP_GIT_PUSH: "true"
+        run: |
+          set -euo pipefail
+          ./ops/deploy/deploy_env.sh production main "GitHub Actions production deploy"
