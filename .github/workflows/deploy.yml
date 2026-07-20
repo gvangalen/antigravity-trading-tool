@@ -23,6 +23,10 @@ jobs:
 
             cd ~/antigravity-trading-tool || exit 1
 
+            echo "=== SYNC DEPLOY CHECKOUT ==="
+            git fetch origin main
+            git reset --hard origin/main
+
             echo "=== RUN PRODUCTION DEPLOY ==="
             chmod +x deploy_live.sh
             ./deploy_live.sh "GitHub Actions production deploy"
