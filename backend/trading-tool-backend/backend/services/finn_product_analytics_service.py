@@ -638,6 +638,47 @@ class FinnProductAnalyticsService:
         self._persist_event(normalized)
         return normalized
 
+    def get_response_trace(self, *, user_id: int, trace_id: str) -> Optional[Dict[str, Any]]:
+        """Return only the caller's privacy-safe persisted FINN response trace."""
+        conn = get_db_connection()
+        if conn is not None:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"""
+                        SELECT metadata, created_at
+                        FROM {PERSISTED_EVENTS_TABLE}
+                        WHERE user_id = %s
+                          AND trace_id = %s
+                          AND event_name = 'finn_response_trace'
+                        ORDER BY created_at DESC, id DESC
+                        LIMIT 1
+                        """,
+                        (int(user_id), str(trace_id)),
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        metadata, created_at = row
+                        trace = deepcopy(metadata or {})
+                        if isinstance(trace, dict) and not trace.get("recorded_at") and created_at:
+                            trace["recorded_at"] = created_at.isoformat() + "Z"
+                        return trace if isinstance(trace, dict) else None
+            except Exception as exc:
+                logger.warning("Kon FINN response trace niet ophalen: %s", exc)
+            finally:
+                conn.close()
+
+        with self._lock:
+            for event in reversed(self._events):
+                if (
+                    event.get("event_name") == "finn_response_trace"
+                    and int(event.get("user_id") or 0) == int(user_id)
+                    and str(event.get("trace_id") or "") == str(trace_id)
+                ):
+                    metadata = deepcopy(event.get("metadata") or {})
+                    return metadata if isinstance(metadata, dict) else None
+        return None
+
     def snapshot(self) -> Dict[str, Any]:
         return self._persistent_snapshot() or self._memory_snapshot()
 

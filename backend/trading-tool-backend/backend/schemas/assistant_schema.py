@@ -52,6 +52,7 @@ class AssistantChatResponse(BaseModel):
     risk_summary: Optional[str] = None
     next_best_action: Optional[str] = None
     review_reason: Optional[str] = None
+    response_trace: Optional[Dict[str, Any]] = None
 
 class AssistantActionExecuteRequest(BaseModel):
     action: Dict[str, Any]

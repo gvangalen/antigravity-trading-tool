@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import re
@@ -59,6 +60,8 @@ from backend.infrastructure.repositories.strategy_repository import StrategyRepo
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.assistant_context_repository import AssistantContextRepository
 from backend.services.ai_action_engine import AiActionEngine
+from backend.services.ai_availability_service import get_ai_availability
+from backend.services.finn_response_trace_service import build_finn_response_trace
 
 if TYPE_CHECKING:
     from backend.services.ai_assistant_service import AiAssistantService
@@ -960,6 +963,18 @@ def _legacy_response_needs_finn_rescue(
         return False
     current_flow = str((state or {}).get("current_flow") or "").lower()
     if current_flow in {"setup_creation", "strategy_creation", "bot_creation", "indicator_config"}:
+        query_lower = str(query or "").lower()
+        expected_terms = {
+            "setup_creation": ("setup",),
+            "strategy_creation": ("strategie", "strategy"),
+            "bot_creation": ("bot", "automatisering", "automation"),
+            "indicator_config": ("indicator",),
+        }
+        entity_terms = ("setup", "strategie", "strategy", "bot", "automatisering", "automation", "indicator")
+        mentions_expected = any(term in query_lower for term in expected_terms[current_flow])
+        mentions_other_entity = any(term in query_lower for term in entity_terms) and not mentions_expected
+        if mentions_other_entity:
+            return True
         return _legacy_response_is_generic_failure(response_text)
     if _query_prefers_non_transactional_finn_response(finn, query, context_payload):
         return True
@@ -1158,7 +1173,7 @@ def _infer_response_source(
     if "rescue" in route_source or legacy_rescue_reason:
         return "fallback"
     if route_source in {"legacy_assistant", "legacy", "openai", "assistant_service"}:
-        return "openai"
+        return "openai" if get_ai_availability().get("available") else "fallback"
     return "fallback"
 
 
@@ -1335,6 +1350,48 @@ async def _localize_finn_response_payload(
         return await localize_finn_payload(payload, locale)
 
 
+def _attach_and_record_response_trace(
+    *,
+    response: dict,
+    user_id: int,
+    trace_id: str,
+    context_payload: Optional[dict],
+    route_source: str,
+    response_source: str,
+    response_handler: str,
+    latency_ms: Optional[float],
+    legacy_rescue_reason: Optional[str],
+) -> dict:
+    response_trace = build_finn_response_trace(
+        trace_id=trace_id,
+        response=response,
+        context=context_payload,
+        route_source=route_source,
+        response_source=response_source,
+        response_handler=response_handler,
+        latency_ms=latency_ms,
+        legacy_rescue_reason=legacy_rescue_reason,
+    )
+    response["response_trace"] = response_trace
+    state = response.get("state") if isinstance(response.get("state"), dict) else {}
+    _record_finn_product_event(
+        user_id=user_id,
+        event_name="finn_response_trace",
+        session_id=(context_payload or {}).get("session_id"),
+        surface=route_source,
+        page=(context_payload or {}).get("page"),
+        asset=(response_trace.get("context") or {}).get("asset"),
+        flow_type=(response_trace.get("routing") or {}).get("flow"),
+        bot_id=state.get("bot_id") or (context_payload or {}).get("bot_id"),
+        setup_id=state.get("setup_id") or (context_payload or {}).get("setup_id"),
+        strategy_id=state.get("strategy_id") or (context_payload or {}).get("strategy_id"),
+        trace_id=trace_id,
+        metadata=response_trace,
+    )
+    logger.info("[FINN-RESPONSE-TRACE] %s", json.dumps(response_trace, ensure_ascii=False, default=str))
+    return response
+
+
 async def _finalize_finn_response(
     finn: Any,
     user_id: int,
@@ -1378,6 +1435,17 @@ async def _finalize_finn_response(
         response_source=response_source,
         response_handler=response_handler,
         selected_flow=response.get("flow") or (response.get("state") or {}).get("current_flow"),
+    )
+    response = _attach_and_record_response_trace(
+        response=response,
+        user_id=user_id,
+        trace_id=trace_id,
+        context_payload=context_payload,
+        route_source=route_source,
+        response_source=response_source,
+        response_handler=response_handler,
+        latency_ms=latency_ms,
+        legacy_rescue_reason=legacy_rescue_reason,
     )
     _redact_assistant_reasoning(response)
     await _issue_finn_response_actions_safely(
@@ -1518,6 +1586,17 @@ async def _prepare_finn_envelope(
         response_source=response_source,
         response_handler=response_handler,
         selected_flow=envelope.get("flow") or (envelope.get("state") or {}).get("current_flow"),
+    )
+    envelope = _attach_and_record_response_trace(
+        response=envelope,
+        user_id=user_id,
+        trace_id=trace_id,
+        context_payload=context_payload,
+        route_source=route_source,
+        response_source=response_source,
+        response_handler=response_handler,
+        latency_ms=latency_ms,
+        legacy_rescue_reason=legacy_rescue_reason,
     )
     _redact_assistant_reasoning(envelope)
     await _issue_finn_response_actions_safely(
@@ -1710,6 +1789,17 @@ async def _finalize_legacy_response(
     }
     legacy_response = _attach_trader_profile_metadata(legacy_response, context_payload)
     legacy_response = _normalize_finn_response_contract(legacy_response)
+    legacy_response = _attach_and_record_response_trace(
+        response=legacy_response,
+        user_id=user_id,
+        trace_id=trace_id,
+        context_payload=context_payload,
+        route_source="legacy_assistant",
+        response_source=response_source,
+        response_handler=response_handler,
+        latency_ms=(time.perf_counter() - started_at) * 1000,
+        legacy_rescue_reason=None,
+    )
     _log_finn_prompt_audit(
         trace_id=trace_id,
         user_id=user_id,
@@ -1778,6 +1868,7 @@ async def _finalize_legacy_response(
         risk_summary=legacy_response.get("risk_summary"),
         next_best_action=legacy_response.get("next_best_action"),
         review_reason=legacy_response.get("review_reason"),
+        response_trace=legacy_response.get("response_trace"),
     )
 
 
@@ -1855,7 +1946,8 @@ async def assistant_chat(
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, db=db, prompt=request.query, context_payload=context_payload
             )
-        active_legacy_state = await service.state_repo.get_state(user_id)
+        state_repo = getattr(service, "state_repo", None)
+        active_legacy_state = await state_repo.get_state(user_id) if state_repo is not None else None
         active_legacy_flow = str((active_legacy_state or {}).get("current_flow") or "").lower()
         should_resume_legacy_transaction = (
             _is_legacy_transactional_flow_name(active_legacy_flow)
@@ -2148,8 +2240,27 @@ async def assistant_chat(
             context_payload,
             route_source="legacy",
         )
+        legacy_analysis = legacy_response.get("analysis") if isinstance(legacy_response.get("analysis"), dict) else {}
+        response_source = _infer_response_source(legacy_response, route_source="legacy_assistant")
+        response_handler = _infer_response_handler(legacy_response, route_source="legacy_assistant")
+        legacy_response["analysis"] = {
+            **legacy_analysis,
+            "response_source": response_source,
+            "response_handler": response_handler,
+        }
         legacy_response = _attach_trader_profile_metadata(legacy_response, context_payload)
         legacy_response = _normalize_finn_response_contract(legacy_response)
+        legacy_response = _attach_and_record_response_trace(
+            response=legacy_response,
+            user_id=user_id,
+            trace_id=trace_id,
+            context_payload=context_payload,
+            route_source="legacy_assistant",
+            response_source=response_source,
+            response_handler=response_handler,
+            latency_ms=(time.perf_counter() - started_at) * 1000,
+            legacy_rescue_reason=None,
+        )
         _log_finn_prompt_audit(
             trace_id=trace_id,
             user_id=user_id,
@@ -2168,6 +2279,8 @@ async def assistant_chat(
             context_confidence=(legacy_response.get("analysis") or {}).get("context_confidence"),
             draft_rejected_reason=(context_payload.get("_finn_sanitization") or {}).get("draft_rejected_reason"),
             latency_ms=(time.perf_counter() - started_at) * 1000,
+            response_source=response_source,
+            response_handler=response_handler,
         )
         _record_finn_product_event(
             user_id=user_id,
@@ -2184,6 +2297,8 @@ async def assistant_chat(
             next_best_action=legacy_response.get("next_best_action"),
             metadata={
                 "intent": intent,
+                "response_source": response_source,
+                "response_handler": response_handler,
                 **_trader_profile_event_metadata(context_payload),
             },
         )
@@ -2208,6 +2323,7 @@ async def assistant_chat(
             risk_summary=legacy_response.get("risk_summary"),
             next_best_action=legacy_response.get("next_best_action"),
             review_reason=legacy_response.get("review_reason"),
+            response_trace=legacy_response.get("response_trace"),
         )
     except HTTPException:
         raise
@@ -2308,7 +2424,6 @@ async def delete_chat_session(
 
 
 from fastapi.responses import StreamingResponse
-import json
 
 
 def _assistant_context_payload(context) -> dict:
@@ -2409,7 +2524,8 @@ async def assistant_chat_stream(
                 yield _sse_event("envelope", envelope)
                 return
 
-            active_legacy_state = await service.state_repo.get_state(user_id)
+            state_repo = getattr(service, "state_repo", None)
+            active_legacy_state = await state_repo.get_state(user_id) if state_repo is not None else None
             active_legacy_flow = str((active_legacy_state or {}).get("current_flow") or "").lower()
             should_resume_legacy_transaction = (
                 _is_legacy_transactional_flow_name(active_legacy_flow)
@@ -2699,6 +2815,19 @@ async def assistant_chat_stream(
                             yield _sse_event("envelope", rescue)
                             return
 
+                        if not isinstance(data_val.get("response_trace"), dict):
+                            data_val = await _prepare_finn_envelope(
+                                finn,
+                                user_id,
+                                data_val,
+                                trace_id,
+                                db=db,
+                                prompt=request.query,
+                                context_payload=context_payload,
+                                route_source="legacy_assistant_stream",
+                                latency_ms=(time.perf_counter() - started_at) * 1000,
+                            )
+
                     yield _sse_event(event_name, data_val)
             except Exception as legacy_exc:
                 logger.warning("⚠️ Legacy assistant stream failed; trying FINN core rescue | Trace: %s | Error: %s", trace_id, legacy_exc)
@@ -2875,6 +3004,20 @@ async def record_assistant_analytics_event(
         metadata=payload.metadata,
     )
     return {"ok": True, "event": event}
+
+
+@router.get("/assistant/traces/{trace_id}")
+async def get_assistant_response_trace(
+    trace_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    trace = finn_product_analytics.get_response_trace(
+        user_id=current_user["id"],
+        trace_id=trace_id,
+    )
+    if trace is None:
+        raise HTTPException(status_code=404, detail="FINN-trace niet gevonden.")
+    return trace
 
 @router.get("/assistant/finn/state")
 async def get_finn_state(

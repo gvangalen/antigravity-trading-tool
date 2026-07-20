@@ -17,6 +17,7 @@ from backend.api.ai_assistant_api import (
     _record_behavioral_response_events,
     _legacy_response_is_generic_failure,
     _legacy_response_needs_finn_rescue,
+    _infer_response_source,
 )
 from backend.schemas.assistant_schema import AssistantChatRequest
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
@@ -25,6 +26,28 @@ from backend.services.finn_plan_service import FinnPlanService
 
 def _finn():
     return FinnPlanService(db_session=None)
+
+
+def test_legacy_response_source_is_fallback_when_ai_is_unavailable(monkeypatch):
+    monkeypatch.setattr(
+        "backend.api.ai_assistant_api.get_ai_availability",
+        lambda: {"available": False, "reason": "ai_unavailable_budget"},
+    )
+
+    source = _infer_response_source({}, route_source="legacy_assistant")
+
+    assert source == "fallback"
+
+
+def test_legacy_response_source_is_openai_when_ai_is_available(monkeypatch):
+    monkeypatch.setattr(
+        "backend.api.ai_assistant_api.get_ai_availability",
+        lambda: {"available": True, "reason": None},
+    )
+
+    source = _infer_response_source({}, route_source="legacy_assistant")
+
+    assert source == "openai"
 
 
 def test_audit_context_summary_includes_profile_match_metadata():
@@ -869,6 +892,9 @@ def test_finalize_finn_response_persists_read_only_state_by_default():
 
     finn.persist_response_state.assert_awaited_once()
     assert response.intent == "context_explain"
+    assert response.response_trace["trace_id"] == "trace-1"
+    assert response.response_trace["context"]["asset"] == "BTC"
+    assert response.response_trace["response"]["handler"] == "finn_plan_service.build_context_explain_response"
 
 
 def test_prepare_finn_envelope_persists_read_only_state_by_default():
@@ -889,6 +915,20 @@ def test_prepare_finn_envelope_persists_read_only_state_by_default():
 
     finn.persist_response_state.assert_awaited_once()
     assert envelope["intent"] == "behavioral_intelligence"
+    assert envelope["response_trace"]["trace_id"] == "trace-2"
+    assert set(envelope["response_trace"]) == {
+        "schema_version",
+        "trace_id",
+        "recorded_at",
+        "routing",
+        "context",
+        "data",
+        "memory",
+        "specialist",
+        "decision",
+        "fallback",
+        "response",
+    }
 
 
 def test_conversation_state_repository_serializes_date_values():

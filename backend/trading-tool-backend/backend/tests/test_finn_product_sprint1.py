@@ -5,6 +5,26 @@ import asyncio
 import pytest
 
 
+def test_response_trace_lookup_is_user_scoped_and_uses_memory_fallback(monkeypatch):
+    monkeypatch.setattr(
+        "backend.services.finn_product_analytics_service.get_db_connection",
+        lambda: None,
+    )
+    service = FinnProductAnalyticsService(max_events=10)
+    service.record_event(
+        user_id=7,
+        event={
+            "event_name": "finn_response_trace",
+            "trace_id": "trace-private",
+            "metadata": {"trace_id": "trace-private", "decision": {"response_source": "database"}},
+        },
+    )
+
+    assert service.get_response_trace(user_id=7, trace_id="trace-private")["trace_id"] == "trace-private"
+    assert service.get_response_trace(user_id=8, trace_id="trace-private") is None
+    assert service.get_response_trace(user_id=7, trace_id="missing") is None
+
+
 def test_normalize_finn_response_contract_promotes_primary_fields():
     payload = _normalize_finn_response_contract(
         {
