@@ -2,10 +2,14 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from backend.services.report_service import ReportService
+from backend.services import ai_availability_service
 from backend.utils import openai_client as openai_module
 
 
 def test_openai_quota_breaker_short_circuits_json_calls(monkeypatch):
+    monkeypatch.setenv("OPENAI_CALLS_ENABLED", "true")
+    monkeypatch.setattr(ai_availability_service, "_redis_client", lambda: None)
+    ai_availability_service.reset_ai_availability_for_tests()
     openai_module._openai_runtime_state.update(
         {
             "quota_exhausted_until": 0.0,
@@ -24,10 +28,37 @@ def test_openai_quota_breaker_short_circuits_json_calls(monkeypatch):
     openai_module._mark_quota_exhausted()
     result = openai_module.ask_gpt_json(prompt="{}", system_role="system")
 
-    assert result == {"error": "quota"}
+    assert result["error"] == "ai_unavailable_budget"
+    assert result["ai_status"]["available"] is False
     status = openai_module.get_openai_runtime_status()
     assert status["quota_breaker_active"] is True
     assert status["blocked_calls"] >= 1
+
+
+def test_no_budget_mode_never_calls_openai(monkeypatch):
+    class _Client:
+        def with_options(self, **kwargs):
+            raise AssertionError("OpenAI mag niet worden aangeroepen in no-budget mode")
+
+    monkeypatch.setenv("OPENAI_CALLS_ENABLED", "false")
+    monkeypatch.setattr(ai_availability_service, "_redis_client", lambda: None)
+    monkeypatch.setattr(openai_module, "client", _Client())
+    monkeypatch.setattr(openai_module, "_log_openai_quota_skip", lambda reason: None)
+
+    result = openai_module.ask_gpt_json(prompt="{}", system_role="system")
+
+    assert result["error"] == "ai_unavailable_budget"
+    assert result["ai_status"]["mode"] == "deterministic_only"
+
+
+def test_block_observability_is_deduplicated(monkeypatch):
+    monkeypatch.setattr(ai_availability_service, "_redis_client", lambda: None)
+    monkeypatch.setenv("OPENAI_BLOCK_LOG_WINDOW_SECONDS", "3600")
+    ai_availability_service.reset_ai_availability_for_tests()
+
+    assert ai_availability_service.should_emit_block_event("setup", "ai_unavailable_budget") is True
+    assert ai_availability_service.should_emit_block_event("setup", "ai_unavailable_budget") is False
+    assert ai_availability_service.should_emit_block_event("strategy", "ai_unavailable_budget") is True
 
 
 class _Repo:

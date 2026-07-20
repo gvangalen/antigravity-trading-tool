@@ -9,6 +9,7 @@ from backend.utils.openai_client import ask_gpt_text, ask_gpt_json
 from backend.ai_core.system_prompt_builder import build_system_prompt
 from backend.ai_core.agent_context import build_agent_context  # ✅ gedeelde context
 from backend.services.ai_usage_observability_service import ai_usage_context, log_background_ai_skip
+from backend.services.ai_availability_service import get_ai_availability
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -134,6 +135,7 @@ def run_setup_agent(*, user_id: int, asset: str = "BTC"):
     if not user_id:
         raise ValueError("❌ Setup agent vereist user_id")
 
+    asset = str(asset or "BTC").upper()
     logger.info(f"🤖 [Setup-Agent] Start (user_id={user_id}, asset={asset})")
 
     conn = get_db_connection()
@@ -151,8 +153,9 @@ def run_setup_agent(*, user_id: int, asset: str = "BTC"):
                 FROM daily_scores
                 WHERE report_date = CURRENT_DATE
                   AND user_id = %s
+                  AND symbol = %s
                 LIMIT 1
-            """, (user_id,))
+            """, (user_id, asset))
             row = cur.fetchone()
 
         if not row:
@@ -263,7 +266,6 @@ def run_setup_agent(*, user_id: int, asset: str = "BTC"):
         # Sorteer om de winnaar te bepalen
         ranked = sorted(evaluations, key=lambda x: x["score"], reverse=True)
         best = ranked[0]
-        asset = str(asset or "BTC").upper()
         input_hash = _setup_input_hash(asset, best)
         explanation = _stored_setup_explanation(
             conn,
@@ -299,6 +301,13 @@ Output: 2–3 zinnen.
         system_prompt = build_system_prompt(agent="setup", task=SETUP_TASK)
 
         def generate_explanation() -> str:
+            availability = get_ai_availability()
+            if not availability["available"]:
+                return (
+                    f"Mechanische setupmatch: {best['name']} scoort {best['score']}/100 "
+                    "op basis van de ingestelde markt-, macro- en technische voorwaarden. "
+                    "AI-uitleg is tijdelijk niet beschikbaar."
+                )
             with ai_usage_context(
                 user_id=user_id,
                 symbol=asset,

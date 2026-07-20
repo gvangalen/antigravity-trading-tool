@@ -118,7 +118,7 @@ function createEcosystem(environmentName) {
       {
         name: beatWorker,
         script: CELERY_BIN,
-        args: "-A backend.celery_task.celery_app beat --loglevel=info",
+        args: `-A backend.celery_task.celery_app beat --loglevel=info --pidfile=/tmp/tradamind-${environmentName}-celery-beat.pid`,
         cwd: backendDir,
         interpreter: "none",
         env: {

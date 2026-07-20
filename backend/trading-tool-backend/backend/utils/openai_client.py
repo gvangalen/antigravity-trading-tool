@@ -20,6 +20,13 @@ from backend.services.ai_usage_observability_service import (
     log_openai_usage_from_context,
     start_timer,
 )
+from backend.services.ai_availability_service import (
+    AI_UNAVAILABLE_BUDGET,
+    acquire_ai_call_slot,
+    get_ai_availability,
+    mark_ai_unavailable,
+    should_emit_block_event,
+)
 
 # ============================================================
 # ⚙️ Setup
@@ -80,12 +87,14 @@ def _mark_quota_exhausted() -> None:
     _openai_runtime_state["quota_failures"] = int(_openai_runtime_state.get("quota_failures") or 0) + 1
     _openai_runtime_state["quota_exhausted_until"] = time.time() + max(60, QUOTA_COOLDOWN_SECONDS)
     _mark_runtime_error("insufficient_quota")
+    mark_ai_unavailable(AI_UNAVAILABLE_BUDGET, QUOTA_COOLDOWN_SECONDS)
 
 
 def get_openai_runtime_status() -> Dict[str, Any]:
     exhausted_until = float(_openai_runtime_state.get("quota_exhausted_until") or 0.0)
     breaker_active = exhausted_until > time.time()
     remaining = int(max(0, exhausted_until - time.time())) if breaker_active else 0
+    availability = get_ai_availability()
     return {
         "configured": bool(api_key),
         "model": model,
@@ -98,6 +107,7 @@ def get_openai_runtime_status() -> Dict[str, Any]:
         "json_calls": int(_openai_runtime_state.get("json_calls") or 0),
         "last_error": _openai_runtime_state.get("last_error"),
         "last_error_at_epoch": _openai_runtime_state.get("last_error_at"),
+        "availability": availability,
     }
 
 # ============================================================
@@ -240,10 +250,17 @@ def _log_openai_usage(
     )
 
 
-def _log_openai_quota_skip() -> None:
+def _log_openai_quota_skip(reason: str = "insufficient_quota") -> None:
     context = get_ai_usage_context()
+    scope = str(
+        (context or {}).get("entry_point")
+        or (context or {}).get("purpose")
+        or _infer_unscoped_entry_point()
+    )
+    if not should_emit_block_event(scope, reason):
+        return
     if context:
-        log_openai_quota_skip_from_context()
+        log_openai_quota_skip_from_context(status="ai_unavailable", rejected_reason=reason)
         return
 
     entry_point = _infer_unscoped_entry_point()
@@ -254,13 +271,13 @@ def _log_openai_quota_skip() -> None:
         completion_tokens=0,
         cost=0.0,
         purpose="unscoped_openai_call",
-        status="quota_blocked",
+        status="ai_unavailable",
         response_time_ms=0,
         estimated_cost_if_full=0.0,
-        rejected_reason="insufficient_quota",
+        rejected_reason=reason,
         symbol="GLOBAL",
         trace_id=None,
-        completion_status="quota_blocked",
+        completion_status="ai_unavailable",
         request_source="system",
         app_env=get_app_env(),
         run_kind="interactive",
@@ -280,6 +297,27 @@ def _log_quota_block_warning(call_kind: str) -> None:
     except Exception:
         logger.warning("⛔ GPT %s Call overgeslagen: quota breaker actief", call_kind)
 
+
+def _call_scope() -> tuple[str, bool]:
+    context = dict(get_ai_usage_context() or {})
+    scope = ":".join(
+        str(value)
+        for value in (
+            context.get("entry_point") or context.get("purpose") or _infer_unscoped_entry_point(),
+            context.get("user_id") or "system",
+            context.get("symbol") or "GLOBAL",
+        )
+    )
+    return scope, context.get("run_kind") == "scheduled"
+
+
+def _rate_limit_allows_call() -> bool:
+    scope, scheduled = _call_scope()
+    allowed = acquire_ai_call_slot(scope, scheduled=scheduled)
+    if not allowed:
+        _log_openai_quota_skip("ai_rate_limited")
+    return allowed
+
 # ============================================================
 # ✅ GPT JSON CALL
 # ============================================================
@@ -294,14 +332,22 @@ def ask_gpt_json(
 ) -> Dict[str, Any]:
     """Genereert een gestructureerde JSON response."""
     
+    availability = get_ai_availability()
+    if not availability["available"]:
+        _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
+        reason = str(availability.get("reason") or AI_UNAVAILABLE_BUDGET)
+        _log_openai_quota_skip(reason)
+        return {"error": reason, "ai_status": availability}
     if not client:
         logger.error("❌ GPT JSON Call gefaald: Geen OpenAI Client (Missing API Key)")
         return {"error": "AI is offline"}
+    if not _rate_limit_allows_call():
+        return {"error": "ai_rate_limited", "ai_status": get_ai_availability()}
     if _quota_breaker_active():
         _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
         _log_quota_block_warning("JSON")
-        _log_openai_quota_skip()
-        return {"error": "quota"}
+        _log_openai_quota_skip(AI_UNAVAILABLE_BUDGET)
+        return {"error": AI_UNAVAILABLE_BUDGET, "ai_status": get_ai_availability()}
 
     _openai_runtime_state["json_calls"] = int(_openai_runtime_state.get("json_calls") or 0) + 1
 
@@ -345,8 +391,8 @@ def ask_gpt_json(
             if "insufficient_quota" in str(e):
                 logger.error("❌ QUOTA bereikt → stop retries")
                 _mark_quota_exhausted()
-                _log_openai_quota_skip()
-                return {"error": "quota"}
+                _log_openai_quota_skip(AI_UNAVAILABLE_BUDGET)
+                return {"error": AI_UNAVAILABLE_BUDGET, "ai_status": get_ai_availability()}
 
             if attempt == retries:
                 return {"error": str(e)}
@@ -368,14 +414,22 @@ def ask_gpt_text(
 ) -> str:
     """Genereert een platte tekst response."""
     
+    availability = get_ai_availability()
+    if not availability["available"]:
+        _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
+        reason = str(availability.get("reason") or AI_UNAVAILABLE_BUDGET)
+        _log_openai_quota_skip(reason)
+        return "AI is tijdelijk niet beschikbaar. FINN gebruikt alleen opgeslagen en mechanisch berekende platformdata."
     if not client:
         logger.error("❌ GPT Text Call gefaald: Geen OpenAI Client (Missing API Key)")
         return "De AI assistent is momenteel offline omdat de OpenAI API sleutel ontbreekt. Controleer je .env bestand."
+    if not _rate_limit_allows_call():
+        return "AI is tijdelijk begrensd om onverwachte modelkosten te voorkomen. Probeer het later opnieuw."
     if _quota_breaker_active():
         _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
         _log_quota_block_warning("Text")
-        _log_openai_quota_skip()
-        return "AI quota bereikt"
+        _log_openai_quota_skip(AI_UNAVAILABLE_BUDGET)
+        return "AI is tijdelijk niet beschikbaar. FINN gebruikt alleen opgeslagen en mechanisch berekende platformdata."
 
     _openai_runtime_state["text_calls"] = int(_openai_runtime_state.get("text_calls") or 0) + 1
 
@@ -416,8 +470,8 @@ def ask_gpt_text(
             if "insufficient_quota" in str(e):
                 logger.error("❌ QUOTA bereikt → stop retries")
                 _mark_quota_exhausted()
-                _log_openai_quota_skip()
-                return "AI quota bereikt"
+                _log_openai_quota_skip(AI_UNAVAILABLE_BUDGET)
+                return "AI is tijdelijk niet beschikbaar. FINN gebruikt alleen opgeslagen en mechanisch berekende platformdata."
 
             if attempt == retries:
                 return f"⚠️ Er is een fout opgetreden bij de AI aanvraag: {str(e)}"
@@ -444,9 +498,16 @@ def stream_gpt_json(
     """
     Initiates a streaming chat completion in JSON mode, yielding the raw OpenAI stream.
     """
+    availability = get_ai_availability()
+    if not availability["available"]:
+        reason = str(availability.get("reason") or AI_UNAVAILABLE_BUDGET)
+        _log_openai_quota_skip(reason)
+        raise RuntimeError(reason)
     if not client:
         logger.error("❌ GPT Stream Call gefaald: Geen OpenAI Client")
         raise ValueError("AI is offline")
+    if not _rate_limit_allows_call():
+        raise RuntimeError("ai_rate_limited")
 
     messages = [
         {"role": "system", "content": system_role},

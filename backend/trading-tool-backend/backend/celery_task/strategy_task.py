@@ -8,6 +8,7 @@ from celery import shared_task
 
 from backend.utils.db import get_db_connection
 from backend.services.ai_usage_observability_service import ai_usage_context, log_background_ai_skip
+from backend.services.ai_availability_service import get_ai_availability
 from backend.ai_agents.strategy_ai_agent import (
     generate_strategy_from_setup,
     analyze_strategies,
@@ -821,6 +822,18 @@ def run_daily_strategy_snapshot(user_id: int):
         )
 
         if needs_bootstrap:
+            availability = get_ai_availability()
+            if not availability["available"]:
+                logger.info(
+                    "Strategy snapshot overgeslagen: plan mist uitvoeringsregels en AI is niet beschikbaar | user=%s setup=%s",
+                    user_id,
+                    setup_id,
+                )
+                return {
+                    "skipped": True,
+                    "reason": "strategy_incomplete",
+                    "ai_status": availability.get("reason"),
+                }
             logger.warning("⚠️ Strategy ontbreekt → bootstrap")
 
             strategy = generate_strategy_from_setup(setup)
@@ -941,28 +954,38 @@ def run_daily_strategy_snapshot(user_id: int):
         # =====================================================
         # 4️⃣ AI ANALYSE
         # =====================================================
-        with ai_usage_context(
-            user_id=user_id,
-            symbol=setup_symbol,
-            request_source="background_job",
-            run_kind="scheduled",
-            entry_point="celery_task.strategy_task:run_daily_strategy_snapshot",
-            caller_tag="celery_task.strategy_task:run_daily_strategy_snapshot",
-            job_name="run_daily_strategy_snapshot",
-            job_id=getattr(getattr(run_daily_strategy_snapshot, "request", None), "id", None),
-        ):
-            analysis = analyze_strategies(
+        availability = get_ai_availability()
+        if availability["available"]:
+            with ai_usage_context(
                 user_id=user_id,
-                strategies=[{
-                    "strategy_id": base_strategy["strategy_id"],
-                    "setup_id": setup_id,
-                    "setup_type": setup_type,
-                    "entry": base_strategy.get("entry"),
-                    "targets": base_strategy.get("targets"),
-                    "stop_loss": base_strategy.get("stop_loss"),
-                    "market_context": market_context,
-                }],
-            )
+                symbol=setup_symbol,
+                request_source="background_job",
+                run_kind="scheduled",
+                entry_point="celery_task.strategy_task:run_daily_strategy_snapshot",
+                caller_tag="celery_task.strategy_task:run_daily_strategy_snapshot",
+                job_name="run_daily_strategy_snapshot",
+                job_id=getattr(getattr(run_daily_strategy_snapshot, "request", None), "id", None),
+            ):
+                analysis = analyze_strategies(
+                    user_id=user_id,
+                    strategies=[{
+                        "strategy_id": base_strategy["strategy_id"],
+                        "setup_id": setup_id,
+                        "setup_type": setup_type,
+                        "entry": base_strategy.get("entry"),
+                        "targets": base_strategy.get("targets"),
+                        "stop_loss": base_strategy.get("stop_loss"),
+                        "market_context": market_context,
+                    }],
+                )
+        else:
+            analysis = {
+                "comment": "De strategiecontext is mechanisch bijgewerkt zonder nieuwe AI-interpretatie.",
+                "recommendation": "Controleer de setup- en risicoregels handmatig zolang AI niet beschikbaar is.",
+                "confidence_score": None,
+                "source": "deterministic_fallback",
+                "ai_status": availability.get("reason"),
+            }
 
         if not analysis:
             raise RuntimeError("AI analyse failed")

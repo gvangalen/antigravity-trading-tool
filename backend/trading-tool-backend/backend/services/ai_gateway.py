@@ -15,6 +15,7 @@ from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.services.ai_usage_log_compat import AI_USAGE_LOG_COLUMN_ORDER, filter_ai_usage_log_values
 from backend.services.ai_usage_observability_service import classify_request_source
+from backend.services.ai_availability_service import get_ai_availability
 from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,10 @@ class AiGateway:
                 entry_point=f"ai_gateway:{purpose}", user_email_snapshot=user_email
             )
             return response
+
+        availability = get_ai_availability()
+        if not availability["available"]:
+            return self._handle_ai_unavailable(mode, availability)
             
         # 2. STEP 2: Semantic Match (Only for non-trading, non-assistant categories)
         not_allowed_semantic = ["trading_signal", "entry_exit", "live_price", "assistant"]
@@ -201,6 +206,11 @@ class AiGateway:
             content = await ask_gpt_text_async(prompt=original_prompt, system_role=system_role)
             usage = {} 
 
+        if isinstance(content, dict) and str(content.get("error", "")).startswith("ai_"):
+            return self._handle_ai_unavailable(mode, content.get("ai_status") or get_ai_availability())
+        if isinstance(content, str) and content.startswith(("AI is tijdelijk niet beschikbaar", "AI is tijdelijk begrensd")):
+            return self._handle_ai_unavailable(mode, get_ai_availability())
+
         p_tokens = usage.get("prompt_tokens", 0)
         c_tokens = usage.get("completion_tokens", 0)
         model = usage.get("model", "gpt-4o-mini")
@@ -242,6 +252,30 @@ class AiGateway:
             self.vector_store.add(query_hash, emb)
 
         return content
+
+    @staticmethod
+    def _handle_ai_unavailable(mode: str, availability: Dict[str, Any]) -> Union[str, Dict[str, Any]]:
+        message = (
+            "AI is tijdelijk niet beschikbaar omdat het OpenAI-budget is uitgeschakeld. "
+            "FINN gebruikt momenteel alleen actuele databasegegevens en mechanisch berekende inzichten."
+        )
+        if mode == "json":
+            return {
+                "greeting": "FINN werkt in datamodus",
+                "bot_insight": {
+                    "conclusion": "AI tijdelijk niet beschikbaar",
+                    "action": "Bekijk de opgeslagen platformdata",
+                    "why": message,
+                },
+                "market_insight": {
+                    "conclusion": "Geen nieuwe AI-interpretatie gegenereerd",
+                    "action": "Gebruik scores en indicatoren met hun tijdstempel",
+                    "why": "Er is geen modelcall uitgevoerd.",
+                },
+                "ai_availability": availability,
+                "response_source": "deterministic_fallback",
+            }
+        return message
 
     async def _handle_fallback(self, user_id: int, prompt: str, mode: str) -> Union[str, Dict[str, Any]]:
         global_macro = await self.score_repo.get_global_insight("macro")

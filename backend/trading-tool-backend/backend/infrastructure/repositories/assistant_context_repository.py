@@ -66,7 +66,7 @@ class AssistantContextRepository:
         user = await self.user_repo.get_by_id(user_id)
         
         # Build build-context sequentially
-        context = await self.build_context_sequential(user_id, intent)
+        context = await self.build_context_sequential(user_id, intent, resolved_symbol)
         
         return {
             "resolved_symbol": resolved_symbol,
@@ -78,7 +78,7 @@ class AssistantContextRepository:
             "user": user
         }
 
-    async def build_context_sequential(self, user_id: int, intent: str) -> str:
+    async def build_context_sequential(self, user_id: int, intent: str, resolved_symbol: str = "BTC") -> str:
         """
         Builds historical/analysis context sequentially on the single session transaction.
         """
@@ -142,7 +142,8 @@ class AssistantContextRepository:
             for cat in categories:
                 stmt = select(AiCategoryInsight).where(
                     AiCategoryInsight.user_id == user_id,
-                    AiCategoryInsight.category == cat
+                    AiCategoryInsight.category == cat,
+                    AiCategoryInsight.symbol == resolved_symbol,
                 ).order_by(AiCategoryInsight.date.desc()).limit(1)
                 
                 res = await self.session.execute(stmt)

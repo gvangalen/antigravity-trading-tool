@@ -1,6 +1,7 @@
 import logging
 from typing import List
 from backend.utils.openai_client import client
+from backend.services.ai_availability_service import acquire_ai_call_slot, get_ai_availability
 
 logger = logging.getLogger(__name__)
 
@@ -11,8 +12,13 @@ def get_embedding(text: str) -> List[float]:
     Genereert een vector embedding voor de opgegeven tekst.
     Gebruikt het text-embedding-3-small model (1536 dimensies).
     """
+    if not get_ai_availability()["available"]:
+        return []
     if not client:
         logger.error("❌ Embedding Client gefaald: Geen OpenAI Client")
+        return []
+    if not acquire_ai_call_slot("embedding:single"):
+        logger.warning("Embedding overgeslagen: centrale AI-limiet bereikt")
         return []
 
     try:
@@ -32,7 +38,12 @@ def get_embeddings_batch(texts: List[str]) -> List[List[float]]:
     """
     Genereert embeddings voor een lijst van teksten (batch verwerking).
     """
+    if not get_ai_availability()["available"]:
+        return []
     if not client or not texts:
+        return []
+    if not acquire_ai_call_slot("embedding:batch"):
+        logger.warning("Embedding-batch overgeslagen: centrale AI-limiet bereikt")
         return []
 
     try:

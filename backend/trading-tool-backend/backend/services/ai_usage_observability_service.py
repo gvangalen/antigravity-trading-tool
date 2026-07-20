@@ -332,7 +332,11 @@ def log_openai_usage_from_context(
     )
 
 
-def log_openai_quota_skip_from_context(*, status: str = "quota_blocked") -> None:
+def log_openai_quota_skip_from_context(
+    *,
+    status: str = "quota_blocked",
+    rejected_reason: str = "insufficient_quota",
+) -> None:
     context = get_ai_usage_context()
     if not context:
         return
@@ -366,10 +370,10 @@ def log_openai_quota_skip_from_context(*, status: str = "quota_blocked") -> None
         status=status,
         response_time_ms=0,
         estimated_cost_if_full=estimated_cost,
-        rejected_reason="insufficient_quota",
+        rejected_reason=rejected_reason,
         symbol=str(context.get("symbol") or "GLOBAL"),
         trace_id=context.get("trace_id"),
-        completion_status="quota_blocked",
+        completion_status=status,
         request_source=request_source,
         app_env=app_env,
         run_kind=run_kind,
