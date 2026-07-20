@@ -19,6 +19,13 @@ DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
 AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"
 DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-6}"
 DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"
+SSH_ARGS=(
+  -i "$SSH_KEY"
+  -o StrictHostKeyChecking=no
+  -o ConnectTimeout=20
+  -o ServerAliveInterval=30
+  -o ServerAliveCountMax=20
+)
 
 lower_bool() {
   printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]'
@@ -82,7 +89,7 @@ fi
 
 TARGET_COMMIT="$(git rev-parse --short HEAD)"
 REMOTE_LAST_GOOD="$(
-  ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
+  ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
     cd $REMOTE_DIR 2>/dev/null || exit 0
     if [ -f ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT ]; then
       cat ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
@@ -97,7 +104,7 @@ ROLLBACK_COMMAND="ssh -i \"$SSH_KEY\" ubuntu@$SERVER_IP 'cd $REMOTE_DIR && ENVIR
 echo "🌐 2. Deploying ${ENVIRONMENT} commit ${TARGET_COMMIT}..."
 echo "🧭 Previous known-good commit: ${ROLLBACK_COMMIT}"
 
-if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
+if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   set -euo pipefail
   export PATH=$NODE_BIN:\$PATH
   export APP_ENV=$ENVIRONMENT
@@ -339,7 +346,7 @@ PY
   echo "❌ ${ENVIRONMENT} deployment failed for ${TARGET_COMMIT}." >&2
   if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
     echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
-    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" \
+    ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" \
       "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
   fi
   echo "Rollback command:" >&2
@@ -377,7 +384,7 @@ if ! check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health
   echo "❌ External smoke failed for ${TARGET_COMMIT}." >&2
   if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
     echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
-    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" \
+    ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" \
       "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
   fi
   echo "Rollback command:" >&2
@@ -385,7 +392,7 @@ if ! check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health
   exit 1
 fi
 
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@$SERVER_IP" "
+ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   set -euo pipefail
   cd $REMOTE_DIR
   printf '%s\n' '$TARGET_COMMIT' > ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
