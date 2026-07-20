@@ -116,12 +116,14 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
         strategy_id: id,
         setup_id: strategy.setup_id || null,
       };
-      const [review, adherence] = await Promise.all([
-        assistantChat(`Beoordeel deze strategie voor ${symbol}.`, context, []),
-        assistantChat(`Past dit nog bij mijn plan voor strategie ${id}?`, context, []),
-      ]);
-      setFinnReview(review?.analysis || review?.state?.analysis || null);
-      setFinnAdherence(adherence?.analysis || adherence?.state?.analysis || null);
+      const response = await assistantChat(
+        `Beoordeel deze strategie voor ${symbol} en controleer in dezelfde review of deze nog bij mijn plan past.`,
+        context,
+        []
+      );
+      const analysis = response?.analysis || response?.state?.analysis || null;
+      setFinnReview(analysis);
+      setFinnAdherence(analysis);
     } catch (err) {
       console.error("FINN strategy review failed:", err);
       showSnackbar(copy.finnFailed, "danger");

@@ -120,9 +120,10 @@ export async function updateIntelligenceWeights(weights) {
 // =====================================================
 function fallbackScores() {
   return {
-    macro: { score: 50, interpretation: "Licht neutraal", top_contributors: [] },
-    technical: { score: 50, interpretation: "Licht neutraal", top_contributors: [] },
-    market: { score: 50, interpretation: "Licht neutraal", top_contributors: [] },
-    setup: { score: 50, interpretation: "Licht neutraal", top_contributors: [], active_setups: [] }
+    macro: { score: null, interpretation: "Onvoldoende data", top_contributors: [] },
+    technical: { score: null, interpretation: "Onvoldoende data", top_contributors: [] },
+    market: { score: null, interpretation: "Onvoldoende data", top_contributors: [] },
+    setup: { score: null, interpretation: "Onvoldoende data", top_contributors: [], active_setups: [] },
+    data_status: "insufficient_data"
   };
 }

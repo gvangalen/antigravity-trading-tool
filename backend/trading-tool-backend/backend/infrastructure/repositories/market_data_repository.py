@@ -29,6 +29,29 @@ class MarketDataRepository:
     async def get_latest_snapshot(self, symbol: str = 'BTC') -> Optional[MarketData]:
         return await self.get_latest_market_data(symbol.upper())
 
+    async def get_latest_snapshots(self, symbols: Sequence[str]) -> Sequence[MarketData]:
+        normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))
+        if not normalized:
+            return []
+
+        ranked = (
+            select(
+                MarketData.id.label("id"),
+                func.row_number()
+                .over(partition_by=MarketData.symbol, order_by=MarketData.timestamp.desc())
+                .label("row_number"),
+            )
+            .where(MarketData.symbol.in_(normalized))
+            .subquery()
+        )
+        stmt = (
+            select(MarketData)
+            .join(ranked, MarketData.id == ranked.c.id)
+            .where(ranked.c.row_number == 1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def get_recent_market_data(self, min_timestamp) -> Sequence[MarketData]:
         stmt = (
             select(MarketData)

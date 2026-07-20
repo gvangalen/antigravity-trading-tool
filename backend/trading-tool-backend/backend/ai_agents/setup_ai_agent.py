@@ -1,16 +1,78 @@
 import logging
 import json
+import hashlib
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from backend.utils.db import get_db_connection
 from backend.utils.openai_client import ask_gpt_text, ask_gpt_json
 from backend.ai_core.system_prompt_builder import build_system_prompt
 from backend.ai_core.agent_context import build_agent_context  # ✅ gedeelde context
-from backend.services.ai_usage_observability_service import ai_usage_context
+from backend.services.ai_usage_observability_service import ai_usage_context, log_background_ai_skip
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+def _setup_input_hash(asset: str, best: Dict[str, Any]) -> str:
+    components = best.get("components") or {}
+    payload = {
+        "asset": str(asset or "BTC").upper(),
+        "setup_id": best.get("setup_id"),
+        "name": best.get("name"),
+        "setup_type": best.get("setup_type"),
+        "dca_config": best.get("dca_config") or {},
+        # Five-point buckets prevent insignificant score noise from invoking AI.
+        "score_bucket": round(float(best.get("score") or 0) / 5) * 5,
+        "component_buckets": {
+            key: round(float(value or 0) / 5) * 5
+            for key, value in sorted(components.items())
+        },
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _stored_setup_explanation(conn, *, user_id: int, asset: str, setup_id: int, input_hash: str) -> Optional[str]:
+    marker = f"input_hash:{input_hash}"
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT date
+            FROM ai_category_insights
+            WHERE user_id = %s
+              AND category = 'setup'
+              AND symbol = %s
+              AND top_signals @> %s::jsonb
+            ORDER BY date DESC, created_at DESC
+            LIMIT 1
+            """,
+            (user_id, asset, json.dumps([marker])),
+        )
+        insight_row = cur.fetchone()
+        if not insight_row:
+            return None
+        cur.execute(
+            """
+            SELECT explanation
+            FROM daily_setup_scores
+            WHERE user_id = %s AND setup_id = %s AND report_date = %s
+            LIMIT 1
+            """,
+            (user_id, setup_id, insight_row[0]),
+        )
+        row = cur.fetchone()
+    return str(row[0]) if row and row[0] else None
+
+
+def _reuse_or_generate_explanation(
+    existing: Optional[str],
+    generator: Callable[[], str],
+) -> Tuple[str, bool]:
+    """Return persisted text without evaluating the AI generator when possible."""
+    if existing is not None:
+        return existing, True
+    return generator(), False
 
 
 # ======================================================
@@ -201,6 +263,15 @@ def run_setup_agent(*, user_id: int, asset: str = "BTC"):
         # Sorteer om de winnaar te bepalen
         ranked = sorted(evaluations, key=lambda x: x["score"], reverse=True)
         best = ranked[0]
+        asset = str(asset or "BTC").upper()
+        input_hash = _setup_input_hash(asset, best)
+        explanation = _stored_setup_explanation(
+            conn,
+            user_id=user_id,
+            asset=asset,
+            setup_id=best["setup_id"],
+            input_hash=input_hash,
+        )
 
         # ==================================================
         # 5️⃣ AI TASK (EENMALIG VOOR DE BESTE SETUP)
@@ -227,24 +298,40 @@ Output: 2–3 zinnen.
 """
         system_prompt = build_system_prompt(agent="setup", task=SETUP_TASK)
 
-        with ai_usage_context(
-            user_id=user_id,
-            symbol=asset,
-            purpose="setup_analysis",
-            entry_point="setup_ai_agent:run_setup_agent",
-            caller_tag="setup_ai_agent:run_setup_agent",
-        ):
-            explanation = ask_gpt_text(
-                prompt=json.dumps({
-                    "setup": best["name"],
-                    "setup_type": best["setup_type"],
-                    "dca_config": best["dca_config"],
-                    "macro_score": macro,
-                    "technical_score": technical,
-                    "market_score": market,
-                    "component_overlap": best["components"]
-                }, ensure_ascii=False, indent=2),
-                system_role=system_prompt
+        def generate_explanation() -> str:
+            with ai_usage_context(
+                user_id=user_id,
+                symbol=asset,
+                purpose="setup_analysis",
+                request_source="background_job",
+                run_kind="scheduled",
+                entry_point="setup_ai_agent:run_setup_agent",
+                caller_tag="setup_ai_agent:run_setup_agent",
+            ):
+                return ask_gpt_text(
+                    prompt=json.dumps({
+                        "setup": best["name"],
+                        "setup_type": best["setup_type"],
+                        "dca_config": best["dca_config"],
+                        "macro_score": macro,
+                        "technical_score": technical,
+                        "market_score": market,
+                        "component_overlap": best["components"]
+                    }, ensure_ascii=False, indent=2),
+                    system_role=system_prompt
+                )
+
+        explanation, reused_explanation = _reuse_or_generate_explanation(
+            explanation,
+            generate_explanation,
+        )
+        if reused_explanation:
+            logger.info("♻️ Setup AI overgeslagen: input onveranderd | user=%s asset=%s", user_id, asset)
+            log_background_ai_skip(
+                user_id=user_id,
+                symbol=asset,
+                purpose="setup_analysis",
+                entry_point="setup_ai_agent:run_setup_agent",
             )
 
         # ==================================================
@@ -293,7 +380,8 @@ Output: 2–3 zinnen.
                 SET setup_score = %s
                 WHERE user_id = %s
                   AND report_date = CURRENT_DATE
-            """, (best["score"], user_id))
+                  AND symbol = %s
+            """, (best["score"], user_id, asset))
 
 
         # ==================================================
@@ -304,15 +392,17 @@ Output: 2–3 zinnen.
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO ai_category_insights
-                    (category, user_id, avg_score, trend, bias, risk, summary, top_signals)
-                VALUES ('setup', %s, %s, %s, %s, %s, %s, %s::jsonb)
-                ON CONFLICT (user_id, category, date)
+                    (category, user_id, symbol, avg_score, trend, bias, risk, summary, top_signals)
+                VALUES ('setup', %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                ON CONFLICT (user_id, category, symbol, date)
                 DO UPDATE SET
                     avg_score = EXCLUDED.avg_score,
                     summary = EXCLUDED.summary,
+                    top_signals = EXCLUDED.top_signals,
                     created_at = NOW()
             """, (
                 user_id,
+                asset,
                 best["score"],
                 "Actief" if best["score"] >= 60 else "Neutraal",
                 "Kansrijk" if best["score"] >= 60 else "Afwachten",
@@ -320,7 +410,8 @@ Output: 2–3 zinnen.
                 summary,
                 json.dumps([
                     f"{best['name']} beste match",
-                    f"Type: {best['setup_type']}"
+                    f"Type: {best['setup_type']}",
+                    f"input_hash:{input_hash}",
                 ])
             ))
 

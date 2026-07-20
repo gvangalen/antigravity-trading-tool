@@ -208,13 +208,15 @@ export default function OrderPreviewModal({
           setup_id: preview.setup_id || null,
         };
         const orderSummary = `${preview.side === "buy" ? copy.buy : copy.sell} ${preview.symbol} ${copy.orderSummaryFor} ${fmt(preview.notional_eur ?? preview.gross_eur ?? 0, locale)} ${currencySymbol}`;
-        const [review, adherence] = await Promise.all([
-          assistantChat(copy.reviewPrompt.replace("{order}", orderSummary), context, []),
-          assistantChat(copy.planCheckPrompt.replace("{order}", orderSummary), context, []),
-        ]);
+        const response = await assistantChat(
+          `${copy.reviewPrompt.replace("{order}", orderSummary)} ${copy.planCheckPrompt.replace("{order}", orderSummary)}`,
+          context,
+          []
+        );
         if (cancelled) return;
-        setFinnReview(review?.analysis || review?.state?.analysis || null);
-        setFinnAdherence(adherence?.analysis || adherence?.state?.analysis || null);
+        const analysis = response?.analysis || response?.state?.analysis || null;
+        setFinnReview(analysis);
+        setFinnAdherence(analysis);
       } catch (error) {
         if (cancelled) return;
         console.error("Finn governance preview failed:", error);

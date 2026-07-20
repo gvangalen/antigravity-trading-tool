@@ -27,9 +27,11 @@ class AdminAiService:
                 COALESCE(SUM(cost), 0) as total_cost,
                 COALESCE(SUM(estimated_cost_if_full) FILTER (WHERE status = 'cache_exact'), 0) as exact_savings,
                 COALESCE(SUM(estimated_cost_if_full) FILTER (WHERE status = 'cache_semantic'), 0) as semantic_savings,
+                COALESCE(SUM(estimated_cost_if_full) FILTER (WHERE status = 'input_unchanged'), 0) as reuse_savings,
                 COALESCE(SUM(CASE WHEN user_id IS NULL THEN cost ELSE 0 END), 0) as platform_overhead,
                 COALESCE(SUM(CASE WHEN status = 'cache_exact' THEN 1 ELSE 0 END), 0) as exact_hits,
                 COALESCE(SUM(CASE WHEN status = 'cache_semantic' THEN 1 ELSE 0 END), 0) as semantic_hits,
+                COALESCE(SUM(CASE WHEN status = 'input_unchanged' THEN 1 ELSE 0 END), 0) as reuse_hits,
                 COALESCE(AVG(response_time_ms), 0) as avg_latency,
                 COALESCE(SUM(cost) FILTER (WHERE status = 'full_ai'), 0) / NULLIF(COUNT(*) FILTER (WHERE status = 'full_ai'), 0) as avg_cost_full,
                 COALESCE(SUM(cost) FILTER (WHERE COALESCE(request_source, 'unclassified') = 'qa_user'), 0) as qa_cost_month,
@@ -107,7 +109,10 @@ class AdminAiService:
             SELECT 
                 purpose, 
                 count(*) as total_requests, 
-                COALESCE(sum(cost), 0) as total_cost
+                COALESCE(sum(cost), 0) as total_cost,
+                COALESCE(SUM(CASE WHEN status = 'full_ai' THEN 1 ELSE 0 END), 0)::int as full_ai_requests,
+                COALESCE(SUM(CASE WHEN status = 'input_unchanged' THEN 1 ELSE 0 END), 0)::int as reuse_hits,
+                COALESCE(SUM(estimated_cost_if_full) FILTER (WHERE status = 'input_unchanged'), 0) as reuse_savings
             FROM ai_usage_logs
             WHERE timestamp >= date_trunc('month', current_date)
             GROUP BY purpose
@@ -120,7 +125,10 @@ class AdminAiService:
                 "purpose": row['purpose'],
                 "total_requests": row['total_requests'] or 0,
                 "total_cost": float(row['total_cost'] or 0),
-                "avg_cost": float(row['total_cost'] or 0) / (row['total_requests'] or 1) if row['total_requests'] else 0
+                "avg_cost": float(row['total_cost'] or 0) / (row['total_requests'] or 1) if row['total_requests'] else 0,
+                "full_ai_requests": int(row['full_ai_requests'] or 0),
+                "reuse_hits": int(row['reuse_hits'] or 0),
+                "reuse_savings": float(row['reuse_savings'] or 0),
             })
 
         stmt_sources = text("""
@@ -156,6 +164,9 @@ class AdminAiService:
                 COUNT(*)::int as total_requests,
                 COALESCE(SUM(cost), 0) as total_cost,
                 COALESCE(AVG(cost), 0) as avg_cost,
+                COALESCE(SUM(CASE WHEN status = 'full_ai' THEN 1 ELSE 0 END), 0)::int as full_ai_requests,
+                COALESCE(SUM(CASE WHEN status = 'input_unchanged' THEN 1 ELSE 0 END), 0)::int as reuse_hits,
+                COALESCE(SUM(estimated_cost_if_full) FILTER (WHERE status = 'input_unchanged'), 0) as reuse_savings,
                 COALESCE(SUM(CASE WHEN status = 'quota_blocked' THEN 1 ELSE 0 END), 0)::int as blocked_requests,
                 COALESCE(SUM(CASE WHEN status = 'quota_blocked' THEN COALESCE(estimated_cost_if_full, 0) ELSE 0 END), 0) as blocked_estimated_cost
             FROM ai_usage_logs
@@ -173,6 +184,9 @@ class AdminAiService:
                 "total_requests": row["total_requests"] or 0,
                 "total_cost": float(row["total_cost"] or 0),
                 "avg_cost": float(row["avg_cost"] or 0),
+                "full_ai_requests": int(row["full_ai_requests"] or 0),
+                "reuse_hits": int(row["reuse_hits"] or 0),
+                "reuse_savings": float(row["reuse_savings"] or 0),
                 "blocked_requests": row["blocked_requests"] or 0,
                 "blocked_estimated_cost": float(row["blocked_estimated_cost"] or 0),
             })
@@ -354,9 +368,14 @@ class AdminAiService:
                 "total_cost_month_eur": total_cost_month,
                 "total_revenue_month_eur": total_revenue,
                 "total_profit_month_eur": total_revenue - total_cost_month,
-                "total_savings_month_eur": float((logs_stats['exact_savings'] or 0) + (logs_stats['semantic_savings'] or 0)),
+                "total_savings_month_eur": float(
+                    (logs_stats['exact_savings'] or 0)
+                    + (logs_stats['semantic_savings'] or 0)
+                    + (logs_stats['reuse_savings'] or 0)
+                ),
                 "platform_overhead_eur": float(logs_stats['platform_overhead'] or 0),
                 "cache_hit_rate": ((float(logs_stats['exact_hits'] or 0) + float(logs_stats['semantic_hits'] or 0)) / total_logs) * 100,
+                "reuse_hit_rate": (float(logs_stats['reuse_hits'] or 0) / total_logs) * 100,
                 "avg_latency_ms": float(logs_stats['avg_latency'] or 0),
                 "avg_cost_per_full_request": float(logs_stats['avg_cost_full'] or 0),
                 "qa_cost_month_eur": float(logs_stats['qa_cost_month'] or 0),
@@ -367,6 +386,8 @@ class AdminAiService:
                 "blocked_estimated_cost_month_eur": float(logs_stats['blocked_estimated_cost_month'] or 0),
                 "exact_hits": int(logs_stats['exact_hits'] or 0),
                 "semantic_hits": int(logs_stats['semantic_hits'] or 0),
+                "reuse_hits": int(logs_stats['reuse_hits'] or 0),
+                "reuse_savings_month_eur": float(logs_stats['reuse_savings'] or 0),
                 "rejection_breakdown": rejection_breakdown
             },
             "top_users": heavy_users,

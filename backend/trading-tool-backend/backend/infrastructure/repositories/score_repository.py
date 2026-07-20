@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text
-from backend.infrastructure.models import AiCategoryInsight, Setup, DailySetupScore
+from sqlalchemy import func, select, text
+from backend.infrastructure.models import AiCategoryInsight, DailyScore, Setup, DailySetupScore
 from datetime import date
 from typing import List, Dict, Any, Optional
 
@@ -115,6 +115,46 @@ class ScoreRepository:
         result = await self.db.execute(stmt, {"user_id": user_id, "symbol": symbol})
         row = result.mappings().first()
         return dict(row) if row else None
+
+    async def fetch_daily_scores_batch(
+        self,
+        user_id: int,
+        symbols: List[str],
+    ) -> Dict[str, Dict[str, Any]]:
+        normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))
+        if not normalized:
+            return {}
+
+        ranked = (
+            select(
+                DailyScore.id.label("id"),
+                func.row_number()
+                .over(partition_by=DailyScore.symbol, order_by=DailyScore.report_date.desc())
+                .label("row_number"),
+            )
+            .where(
+                DailyScore.user_id == user_id,
+                DailyScore.symbol.in_(normalized),
+            )
+            .subquery()
+        )
+        stmt = (
+            select(DailyScore)
+            .join(ranked, DailyScore.id == ranked.c.id)
+            .where(ranked.c.row_number == 1)
+        )
+        result = await self.db.execute(stmt)
+        return {
+            str(row.symbol).upper(): {
+                "symbol": row.symbol,
+                "macro_score": row.macro_score,
+                "technical_score": row.technical_score,
+                "market_score": row.market_score,
+                "setup_score": row.setup_score,
+                "report_date": row.report_date,
+            }
+            for row in result.scalars().all()
+        }
 
     async def fetch_historical_scores(self, user_id: int, days: int = 30, symbol: str = "BTC") -> List[Dict[str, Any]]:
         """

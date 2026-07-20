@@ -11,7 +11,7 @@ export default function GlobalMarketDecisionCard({
   compact = false,
 }) {
   const { t } = useTranslation();
-  const fallbackSnapshot = useMarketIntelligence(symbol);
+  const fallbackSnapshot = useMarketIntelligence(symbol, { enabled: !snapshot });
   const { data, loading } = snapshot || fallbackSnapshot;
 
   if (loading) {
@@ -19,6 +19,14 @@ export default function GlobalMarketDecisionCard({
       <div className="flex items-center gap-3 text-xs font-black text-secondary uppercase tracking-widest p-12 justify-center">
         <div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-[var(--primary)] animate-spin" />
         {t.dashboard.loadingMarketContext}
+      </div>
+    );
+  }
+
+  if (data?.available === false || data?.data_status === "insufficient_data") {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm font-semibold text-slate-500">
+        {t?.common?.insufficientData || "Onvoldoende data"}
       </div>
     );
   }

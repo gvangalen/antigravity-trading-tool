@@ -575,7 +575,7 @@ def fetch_market_indicators(user_id: int):
     ✔ Slaat waarden op in market_data_indicators
     ✔ Berekent market_score centraal via generate_scores_db
     ✔ Slaat market_score + top contributors op in daily_scores
-    ✔ Triggert daarna Market AI Agent
+    ✔ Start geen AI; de nachtelijke Market AI-taak verwerkt de opgeslagen data
     """
     if user_id is None:
         raise ValueError("❌ user_id verplicht")
@@ -586,14 +586,6 @@ def fetch_market_indicators(user_id: int):
 
     # 1️⃣ Indicators + market_score/top contributors
     fetch_and_process_market_indicators(user_id)
-
-    # 2️⃣ Market AI Agent
-    try:
-        logger.info("🧠 Trigger Market AI Agent...")
-        run_market_agent(user_id=user_id)
-        logger.info("✅ Market AI Agent afgerond")
-    except Exception:
-        logger.exception("❌ Market AI Agent crash")
 
     logger.info(f"🏁 EINDE market pipeline (user_id={user_id})")
     logger.info("========================================")

@@ -7,8 +7,9 @@ from typing import Any, Dict, List, Optional
 from celery import shared_task
 
 from backend.utils.db import get_db_connection
-from backend.utils.openai_client import ask_gpt_text, ask_gpt_json, ask_gpt_text
+from backend.utils.openai_client import ask_gpt_json
 from backend.ai_core.system_prompt_builder import build_system_prompt
+from backend.services.ai_usage_observability_service import ai_usage_context
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -120,8 +121,9 @@ def calculate_strategy_score(
 # ============================================================
 # 📥 1. Insights ophalen → ai_category_insights (lookback)
 # ============================================================
-def fetch_today_insights(conn, user_id: int) -> Dict[str, dict]:
+def fetch_today_insights(conn, user_id: int, symbol: str = "BTC") -> Dict[str, dict]:
     insights: Dict[str, dict] = {}
+    symbol = str(symbol or "BTC").upper()
     today = date.today()
     lookback = [today, today - timedelta(days=1), today - timedelta(days=2)]
 
@@ -132,12 +134,16 @@ def fetch_today_insights(conn, user_id: int) -> Dict[str, dict]:
             for d in lookback:
                 cur.execute(
                     """
-                    SELECT category, avg_score, trend, bias, risk, summary, top_signals, date
+                    SELECT category, avg_score, trend, bias, risk, summary, top_signals, date, symbol
                     FROM ai_category_insights
-                    WHERE category = %s AND user_id = %s AND date = %s
+                    WHERE category = %s
+                      AND user_id = %s
+                      AND date = %s
+                      AND symbol IN (%s, 'GLOBAL')
+                    ORDER BY CASE WHEN symbol = %s THEN 0 ELSE 1 END
                     LIMIT 1;
                     """,
-                    (cat, user_id, d),
+                    (cat, user_id, d, symbol, symbol),
                 )
                 row = cur.fetchone()
                 if row:
@@ -150,6 +156,7 @@ def fetch_today_insights(conn, user_id: int) -> Dict[str, dict]:
                         "summary": row[5] or "",
                         "top_signals": safe_json(row[6] or "[]", []),
                         "date": str(row[7] or d),
+                        "symbol": row[8] or symbol,
                     }
                     break
 
@@ -175,8 +182,14 @@ def fetch_setup_score_from_insights(insights: Dict[str, dict]) -> Optional[float
 # ============================================================
 # 📊 2. Numerieke context uit daily_scores + ai_reflections
 # ============================================================
-def fetch_numeric_scores(conn, user_id: int, insights: Dict[str, dict]) -> Dict[str, Any]:
+def fetch_numeric_scores(
+    conn,
+    user_id: int,
+    insights: Dict[str, dict],
+    symbol: str = "BTC",
+) -> Dict[str, Any]:
     numeric: Dict[str, Any] = {"daily_scores": {}, "ai_reflections": {}}
+    symbol = str(symbol or "BTC").upper()
 
     with conn.cursor() as cur:
         # Check welke domeinen actief zijn in de setups van deze user
@@ -185,8 +198,8 @@ def fetch_numeric_scores(conn, user_id: int, insights: Dict[str, dict]) -> Dict[
                    min_market_score, max_market_score,
                    min_technical_score, max_technical_score
             FROM setups
-            WHERE user_id = %s
-        """, (user_id,))
+            WHERE user_id = %s AND UPPER(COALESCE(symbol, 'BTC')) = %s
+        """, (user_id, symbol))
         setup_rows = cur.fetchall()
 
         if not setup_rows:
@@ -202,10 +215,10 @@ def fetch_numeric_scores(conn, user_id: int, insights: Dict[str, dict]) -> Dict[
             """
             SELECT macro_score, market_score, technical_score, setup_score
             FROM daily_scores
-            WHERE report_date = CURRENT_DATE AND user_id = %s
+            WHERE report_date = CURRENT_DATE AND user_id = %s AND symbol = %s
             LIMIT 1;
             """,
-            (user_id,),
+            (user_id, symbol),
         )
         row = cur.fetchone()
 
@@ -360,7 +373,7 @@ def to_float_or_none(v: Any) -> Optional[float]:
 # ============================================================
 # 💾 4. Opslaan → ai_category_insights (categorie: 'master')
 # ============================================================
-def store_master_result(conn, result: dict, user_id: int):
+def store_master_result(conn, result: dict, user_id: int, symbol: str = "BTC"):
     """
     Slaat master score robuust op.
     Beschermt tegen:
@@ -482,9 +495,9 @@ def store_master_result(conn, result: dict, user_id: int):
         cur.execute(
             """
             INSERT INTO ai_category_insights
-                (category, user_id, avg_score, trend, bias, risk, summary, top_signals)
-            VALUES ('master', %s, %s, %s, %s, %s, %s, %s::jsonb)
-            ON CONFLICT (user_id, category, date)
+                (category, user_id, symbol, avg_score, trend, bias, risk, summary, top_signals)
+            VALUES ('master', %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+            ON CONFLICT (user_id, category, symbol, date)
             DO UPDATE SET
                 avg_score = EXCLUDED.avg_score,
                 trend = EXCLUDED.trend,
@@ -496,6 +509,7 @@ def store_master_result(conn, result: dict, user_id: int):
             """,
             (
                 user_id,
+                str(symbol or "BTC").upper(),
                 master_score,
                 trend,
                 bias,
@@ -598,8 +612,9 @@ def store_daily_scores(conn, insights: Dict[str, dict], user_id: int):
 # ============================================================
 # 🚀 Per-user runner
 # ============================================================
-def generate_master_score_for_user(user_id: int):
-    logger.info(f"🧠 MASTER Orchestrator | user_id={user_id}")
+def generate_master_score_for_user(user_id: int, symbol: str = "BTC"):
+    symbol = str(symbol or "BTC").upper()
+    logger.info("🧠 MASTER Orchestrator | user_id=%s symbol=%s", user_id, symbol)
 
     conn = get_db_connection()
     if not conn:
@@ -610,8 +625,8 @@ def generate_master_score_for_user(user_id: int):
         # ======================================================
         # 1️⃣ DATA OPHALEN
         # ======================================================
-        insights = fetch_today_insights(conn, user_id=user_id)
-        numeric = fetch_numeric_scores(conn, user_id=user_id, insights=insights)
+        insights = fetch_today_insights(conn, user_id=user_id, symbol=symbol)
+        numeric = fetch_numeric_scores(conn, user_id=user_id, insights=insights, symbol=symbol)
 
         # ======================================================
         # 2️⃣ PRE-FLIGHT DATA WARNINGS (TECHNISCH AFDWINGEN)
@@ -727,10 +742,20 @@ RICHTLIJNEN:
         # ======================================================
         prompt = build_prompt(insights, numeric)
 
-        result = ask_gpt_json(
-            prompt=prompt,
-            system_role=system_prompt
-        )
+        with ai_usage_context(
+            user_id=user_id,
+            symbol=symbol,
+            purpose="master_score_generation",
+            request_source="background_job",
+            run_kind="scheduled",
+            entry_point="ai_agents.score_ai_agent:generate_master_score_for_user",
+            caller_tag="ai_agents.score_ai_agent:generate_master_score_for_user",
+            job_name="generate_master_score",
+        ):
+            result = ask_gpt_json(
+                prompt=prompt,
+                system_role=system_prompt
+            )
 
         if not isinstance(result, dict):
             raise ValueError("❌ Master orchestrator gaf geen geldige JSON dict terug")
@@ -738,13 +763,13 @@ RICHTLIJNEN:
         # ======================================================
         # 5️⃣ OPSLAAN
         # ======================================================
-        store_master_result(conn, result, user_id=user_id)
+        store_master_result(conn, result, user_id=user_id, symbol=symbol)
 
         if WRITE_DAILY_SCORES:
             store_daily_scores(conn, insights, user_id=user_id)
 
         conn.commit()
-        logger.info(f"✅ Master score opgeslagen voor user_id={user_id}")
+        logger.info("✅ Master score opgeslagen | user_id=%s symbol=%s", user_id, symbol)
 
     except Exception:
         conn.rollback()
@@ -768,14 +793,30 @@ def generate_master_score():
 
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id FROM users;")
-            users = [row[0] for row in cur.fetchall()]
-        logger.info(f"👥 {len(users)} gebruikers gevonden.")
+            cur.execute(
+                """
+                SELECT u.id, COALESCE(a.symbol, 'BTC')
+                FROM users u
+                LEFT JOIN LATERAL (
+                    SELECT DISTINCT UPPER(COALESCE(symbol, 'BTC')) AS symbol
+                    FROM (
+                        SELECT symbol FROM daily_scores WHERE user_id = u.id
+                        UNION ALL
+                        SELECT symbol FROM setups WHERE user_id = u.id
+                    ) asset_sources
+                    WHERE symbol IS NOT NULL AND BTRIM(symbol) <> ''
+                ) a ON TRUE
+                WHERE COALESCE(u.is_active, TRUE) = TRUE
+                ORDER BY u.id, COALESCE(a.symbol, 'BTC')
+                """
+            )
+            user_assets = [(int(row[0]), str(row[1] or "BTC").upper()) for row in cur.fetchall()]
+        logger.info("👥 %s gebruiker/asset-combinaties gevonden.", len(user_assets))
     except Exception:
         logger.error("❌ Kon users niet ophalen", exc_info=True)
         return
     finally:
         conn.close()
 
-    for user_id in users:
-        generate_master_score_for_user(user_id)
+    for user_id, symbol in user_assets:
+        generate_master_score_for_user(user_id, symbol=symbol)

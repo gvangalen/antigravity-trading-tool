@@ -139,15 +139,17 @@ export default function SetupList({
         setup_id: setup.id,
         strategy_id: lineage.strategy?.id || null,
       };
-      const [review, adherence] = await Promise.all([
-        assistantChat(copy.finnReviewPrompt.replace("{symbol}", setup.symbol), context, []),
-        assistantChat(copy.finnPlanPrompt.replace("{symbol}", setup.symbol), context, []),
-      ]);
+      const response = await assistantChat(
+        `${copy.finnReviewPrompt.replace("{symbol}", setup.symbol)} ${copy.finnPlanPrompt.replace("{symbol}", setup.symbol)}`,
+        context,
+        []
+      );
+      const analysis = response?.analysis || response?.state?.analysis || null;
       setFinnPanels((p) => ({
         ...p,
         [setup.id]: {
-          review: review?.analysis || review?.state?.analysis || null,
-          adherence: adherence?.analysis || adherence?.state?.analysis || null,
+          review: analysis,
+          adherence: analysis,
         },
       }));
     } catch (e) {

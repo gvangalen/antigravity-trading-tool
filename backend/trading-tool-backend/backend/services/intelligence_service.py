@@ -3,6 +3,7 @@ import asyncio
 import os
 import time
 from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Dict, Any
 
 from backend.infrastructure.repositories.intelligence_repository import IntelligenceRepository
@@ -72,19 +73,36 @@ class IntelligenceService:
         daily_score = await self.repository.get_latest_daily_scores(user_id, symbol)
         
         if not daily_score:
-            scores = {
-                "macro": 10.0,
-                "technical": 10.0,
-                "market": 10.0,
-                "setup": 10.0,
+            return {
+                "available": False,
+                "data_status": "insufficient_data",
+                "reason": "daily_scores_missing",
+                "symbol": str(symbol or "BTC").upper(),
+                "as_of": None,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "source": "daily_scores",
             }
-        else:
-            scores = {
-                "macro": float(daily_score.macro_score or 10.0),
-                "technical": float(daily_score.technical_score or 10.0),
-                "market": float(daily_score.market_score or 10.0),
-                "setup": float(daily_score.setup_score or 10.0),
+
+        score_values = {
+            "macro": daily_score.macro_score,
+            "technical": daily_score.technical_score,
+            "market": daily_score.market_score,
+            "setup": daily_score.setup_score,
+        }
+        missing = [name for name, value in score_values.items() if value is None]
+        if missing:
+            return {
+                "available": False,
+                "data_status": "insufficient_data",
+                "reason": "category_scores_missing",
+                "missing_categories": missing,
+                "symbol": str(symbol or "BTC").upper(),
+                "as_of": daily_score.report_date.isoformat() if daily_score.report_date else None,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "source": "daily_scores",
             }
+
+        scores = {name: float(value) for name, value in score_values.items()}
 
         # 3. Execute heavy engine in threadpool with Semaphore protection
         # logger.info(f"⚙️ Cache MISS: Berekenen Market Intelligence in nieuwe thread (user: {user_id})")

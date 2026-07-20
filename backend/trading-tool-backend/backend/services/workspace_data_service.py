@@ -1,0 +1,385 @@
+from __future__ import annotations
+
+import asyncio
+from datetime import date, datetime, timezone
+from typing import Any, Iterable
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.infrastructure.repositories.intelligence_repository import IntelligenceRepository
+from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
+from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
+from backend.infrastructure.repositories.score_repository import ScoreRepository
+from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
+from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.services.intelligence_service import IntelligenceService
+from backend.services.score_service import ScoreService
+
+
+PERIOD_DAYS = {"day": 1, "week": 7, "month": 30, "quarter": 90}
+STALE_AFTER_SECONDS = {
+    "quote": 5 * 60,
+    "day": 36 * 60 * 60,
+    "week": 9 * 24 * 60 * 60,
+    "month": 35 * 24 * 60 * 60,
+    "quarter": 100 * 24 * 60 * 60,
+}
+DEFAULT_WEIGHTS = {"market": 1 / 3, "macro": 1 / 3, "technical": 1 / 3}
+
+
+def _iso(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)
+
+
+def _as_utc(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=value.tzinfo or timezone.utc)
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+    return None
+
+
+def _freshness(as_of: Any, threshold_seconds: int, source: str) -> dict[str, Any]:
+    timestamp = _as_utc(as_of)
+    age_seconds = None
+    if timestamp is not None:
+        age_seconds = max(0, int((datetime.now(timezone.utc) - timestamp).total_seconds()))
+    return {
+        "source": source,
+        "as_of": _iso(as_of),
+        "stale": age_seconds is None or age_seconds > threshold_seconds,
+        "age_seconds": age_seconds,
+        "status": "available" if timestamp is not None else "insufficient_data",
+    }
+
+
+def _number(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalized_weights(weights: dict[str, Any] | None) -> dict[str, float]:
+    values = {}
+    for category, fallback in DEFAULT_WEIGHTS.items():
+        value = _number((weights or {}).get(category))
+        values[category] = value if value is not None and value >= 0 else fallback
+    total = sum(values.values())
+    if total <= 0:
+        return dict(DEFAULT_WEIGHTS)
+    return {category: value / total for category, value in values.items()}
+
+
+def _weighted_score(scores: dict[str, Any], weights: dict[str, Any] | None) -> float | None:
+    normalized = _normalized_weights(weights)
+    available = [
+        (score, normalized[category])
+        for category, raw_score in scores.items()
+        if (score := _number(raw_score)) is not None and normalized.get(category, 0) > 0
+    ]
+    included_weight = sum(weight for _, weight in available)
+    if included_weight <= 0:
+        return None
+    return round(sum(score * weight for score, weight in available) / included_weight, 1)
+
+
+def _latest_by_name(rows: Iterable[Any], name_attr: str) -> list[Any]:
+    latest: dict[str, Any] = {}
+    for row in rows:
+        name = str(getattr(row, name_attr, "") or "").strip()
+        if not name:
+            continue
+        current = latest.get(name)
+        row_ts = getattr(row, "timestamp", None) or datetime.min
+        current_ts = (
+            getattr(current, "timestamp", None) or datetime.min
+            if current is not None
+            else datetime.min
+        )
+        if current is None or row_ts > current_ts:
+            latest[name] = row
+    return sorted(latest.values(), key=lambda item: str(getattr(item, name_attr, "")).lower())
+
+
+def _score_summary(rows: list[dict[str, Any]], period: str) -> dict[str, Any]:
+    scores = [row["score"] for row in rows if row.get("value") is not None and row.get("score") is not None]
+    if not scores:
+        return {
+            "score": None,
+            "period": period,
+            "basis": "indicator_average",
+            "status": "insufficient_data",
+            "reason": "no_scored_indicators",
+            "sample_size": 0,
+        }
+    return {
+        "score": round(sum(scores) / len(scores), 1),
+        "period": period,
+        "basis": "indicator_average",
+        "status": "available",
+        "reason": None,
+        "sample_size": len(scores),
+    }
+
+
+def _market_row(row: Any) -> dict[str, Any]:
+    return {
+        "name": row.name,
+        "value": _number(row.value),
+        "score": _number(row.score),
+        "trend": row.trend,
+        "interpretation": row.interpretation,
+        "action": row.action,
+        "timestamp": _iso(row.timestamp),
+        "sample_size": 1,
+        "period_aggregate": False,
+    }
+
+
+def _macro_row(row: Any) -> dict[str, Any]:
+    return {
+        "name": row.name,
+        "value": _number(row.value),
+        "score": _number(row.score),
+        "trend": row.trend,
+        "interpretation": row.interpretation,
+        "action": row.action,
+        "timestamp": _iso(row.timestamp),
+        "sample_size": 1,
+        "period_aggregate": False,
+    }
+
+
+def _technical_row(row: Any) -> dict[str, Any]:
+    return {
+        "name": row.indicator,
+        "value": _number(row.value),
+        "score": _number(row.score),
+        "action": row.advies,
+        "interpretation": row.uitleg,
+        "timestamp": _iso(row.timestamp),
+        "sample_size": 1,
+        "period_aggregate": False,
+    }
+
+
+def _aggregate_by_name(
+    rows: Iterable[Any],
+    name_attr: str,
+    serializer: Any,
+) -> list[dict[str, Any]]:
+    grouped: dict[str, list[Any]] = {}
+    for row in rows:
+        name = str(getattr(row, name_attr, "") or "").strip()
+        if name:
+            grouped.setdefault(name, []).append(row)
+
+    aggregated = []
+    for name in sorted(grouped, key=str.lower):
+        samples = grouped[name]
+        latest = max(samples, key=lambda item: getattr(item, "timestamp", None) or datetime.min)
+        payload = serializer(latest)
+        values = [_number(getattr(item, "value", None)) for item in samples]
+        scores = [_number(getattr(item, "score", None)) for item in samples]
+        available_values = [value for value in values if value is not None]
+        available_scores = [score for score in scores if score is not None]
+        payload.update({
+            "value": round(sum(available_values) / len(available_values), 6) if available_values else None,
+            "score": round(sum(available_scores) / len(available_scores), 1) if available_scores else None,
+            "sample_size": len(samples),
+            "period_aggregate": True,
+        })
+        aggregated.append(payload)
+    return aggregated
+
+
+class WorkspaceDataService:
+    """Read-only projection for an asset workspace. It never refreshes data or invokes AI."""
+
+    def __init__(self, session: AsyncSession):
+        self.market = MarketDataRepository(session)
+        self.macro = MacroDataRepository(session)
+        self.technical = TechnicalDataRepository(session)
+        self.scores = ScoreRepository(session)
+        self.users = UserRepository(session)
+        self.score_service = ScoreService(self.scores, self.users)
+        self.intelligence = IntelligenceService(IntelligenceRepository(session))
+
+    async def get_asset_workspace(
+        self,
+        user_id: int,
+        symbol: str,
+        market_period: str,
+        macro_period: str,
+        technical_period: str,
+    ) -> dict[str, Any]:
+        symbol = str(symbol or "BTC").upper()
+        periods = {
+            "market": str(market_period or "day").lower(),
+            "macro": str(macro_period or "day").lower(),
+            "technical": str(technical_period or "day").lower(),
+        }
+        periods = {key: value if value in PERIOD_DAYS else "day" for key, value in periods.items()}
+
+        market_rows, macro_rows, technical_rows, quote, regime, master, daily = await asyncio.gather(
+            self._market_rows(user_id, symbol, periods["market"]),
+            self._macro_rows(user_id, periods["macro"]),
+            self._technical_rows(user_id, symbol, periods["technical"]),
+            self.market.get_latest_snapshot(symbol),
+            self.intelligence.get_market_intelligence(user_id, symbol),
+            self.score_service.get_master_score(user_id, symbol),
+            self._daily_scores(user_id, symbol),
+        )
+
+        quote_payload = {
+            "price": _number(getattr(quote, "price", None)),
+            "change_24h": _number(getattr(quote, "change_24h", None)),
+            "volume": _number(getattr(quote, "volume", None)),
+            **_freshness(getattr(quote, "timestamp", None), STALE_AFTER_SECONDS["quote"], "market_data"),
+        }
+        categories = {
+            "market": self._category_payload(market_rows, periods["market"], STALE_AFTER_SECONDS[periods["market"]], "market_data_indicators"),
+            "macro": self._category_payload(macro_rows, periods["macro"], STALE_AFTER_SECONDS[periods["macro"]], "macro_data"),
+            "technical": self._category_payload(technical_rows, periods["technical"], STALE_AFTER_SECONDS[periods["technical"]], "technical_indicators"),
+        }
+        master_payload = master.model_dump() if hasattr(master, "model_dump") else master.dict()
+        if not master_payload.get("date"):
+            master_payload.update({
+                "master_score": None,
+                "status": "insufficient_data",
+                "reason": "master_score_missing",
+            })
+        else:
+            master_payload.update({"status": "available", "reason": None})
+        combined = _weighted_score(
+            {category: payload["score"]["score"] for category, payload in categories.items()},
+            master_payload.get("weights"),
+        )
+
+        return {
+            "symbol": symbol,
+            "periods": periods,
+            "quote": quote_payload,
+            "categories": categories,
+            "combined": {
+                "score": combined,
+                "periods": periods,
+                "basis": "weighted_category_average",
+                "weights": _normalized_weights(master_payload.get("weights")),
+                "status": "available" if combined is not None else "insufficient_data",
+            },
+            "daily": daily,
+            "master": master_payload,
+            "regime": regime,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "ai_calls": 0,
+        }
+
+    async def _daily_scores(self, user_id: int, symbol: str) -> dict[str, Any] | None:
+        try:
+            payload = await self.score_service.get_daily_scores(user_id, symbol)
+        except LookupError:
+            return None
+        return payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+
+    async def get_watchlist(self, user_id: int, symbols: list[str]) -> dict[str, Any]:
+        normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))[:25]
+        quotes, scores, user = await asyncio.gather(
+            self.market.get_latest_snapshots(normalized),
+            self.scores.fetch_daily_scores_batch(user_id, normalized),
+            self.users.get_by_id(user_id),
+        )
+        preferences = getattr(user, "ai_preferences", None) or {}
+        weights = preferences.get("intelligence_weights", {})
+        quote_map = {str(row.symbol).upper(): row for row in quotes}
+        rows = []
+        for symbol in normalized:
+            quote = quote_map.get(symbol)
+            daily = scores.get(symbol)
+            category_scores = [
+                _number(daily.get(key)) if daily else None
+                for key in ("market_score", "macro_score", "technical_score")
+            ]
+            combined = _weighted_score(
+                dict(zip(("market", "macro", "technical"), category_scores)),
+                weights,
+            )
+            score_freshness = _freshness(
+                daily.get("report_date") if daily else None,
+                STALE_AFTER_SECONDS["day"],
+                "daily_scores",
+            )
+            rows.append({
+                "symbol": symbol,
+                "price": _number(getattr(quote, "price", None)),
+                "change_24h": _number(getattr(quote, "change_24h", None)),
+                "score": combined,
+                "score_period": "day",
+                "score_status": "available" if combined is not None else "insufficient_data",
+                "quote": _freshness(getattr(quote, "timestamp", None), STALE_AFTER_SECONDS["quote"], "market_data"),
+                "score_freshness": score_freshness,
+            })
+        return {
+            "period": "day",
+            "weights": _normalized_weights(weights),
+            "rows": rows,
+            "ai_calls": 0,
+        }
+
+    async def _market_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
+        if period == "day":
+            rows = await self.market.get_active_day_indicators(user_id, symbol)
+            return [_market_row(row) for row in _latest_by_name(rows, "name")]
+        else:
+            rows = await self.market.get_period_indicators(user_id, symbol, PERIOD_DAYS[period])
+            return _aggregate_by_name(rows, "name", _market_row)
+
+    async def _macro_rows(self, user_id: int, period: str) -> list[dict[str, Any]]:
+        if period == "day":
+            rows = await self.macro.get_active_day_macro_data(user_id)
+            return [_macro_row(row) for row in _latest_by_name(rows, "name")]
+        else:
+            rows = await self.macro._get_data_by_days(user_id, PERIOD_DAYS[period])
+            return _aggregate_by_name(rows, "name", _macro_row)
+
+    async def _technical_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
+        if period == "day":
+            rows = await self.technical.get_day_data(user_id, symbol)
+            return [_technical_row(row) for row in _latest_by_name(rows, "indicator")]
+        elif period == "week":
+            rows = await self.technical.get_week_data(user_id, symbol)
+        elif period == "month":
+            rows = await self.technical.get_month_data(user_id, symbol)
+        else:
+            rows = await self.technical.get_quarter_data(user_id, symbol)
+        return _aggregate_by_name(rows, "indicator", _technical_row)
+
+    @staticmethod
+    def _category_payload(
+        rows: list[dict[str, Any]],
+        period: str,
+        threshold: int,
+        source: str,
+    ) -> dict[str, Any]:
+        timestamps = [row.get("timestamp") for row in rows if row.get("timestamp")]
+        latest_timestamp = max(timestamps) if timestamps else None
+        return {
+            "rows": rows,
+            "score": _score_summary(rows, period),
+            "freshness": _freshness(
+                datetime.fromisoformat(latest_timestamp) if latest_timestamp else None,
+                threshold,
+                source,
+            ),
+        }

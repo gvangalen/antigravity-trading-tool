@@ -19,22 +19,20 @@ import {
 
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { useMarketData } from "@/hooks/useMarketData";
-import { useMacroData } from "@/hooks/useMacroData";
-import { useTechnicalData } from "@/hooks/useTechnicalData";
-import { useScoresData } from "@/hooks/useScoresData";
+import { useAssetWorkspaceData } from "@/hooks/useAssetWorkspaceData";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
 import {
-  fetchLatestPrice,
   fetchForwardReturnsMonth,
   fetchForwardReturnsQuarter,
   fetchForwardReturnsWeek,
   fetchForwardReturnsYear,
+  marketIndicatorAdd,
 } from "@/lib/api/market";
-import { getDailyScores } from "@/lib/api/scores";
-import { useOverviewSnapshot } from "@/hooks/useOverviewSnapshot";
+import { macroDataAdd, deleteMacroIndicator } from "@/lib/api/macro";
+import { technicalDataAdd, deleteTechnicalIndicator } from "@/lib/api/technical";
+import { updateIntelligenceWeights } from "@/lib/api/scores";
 import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
 import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
@@ -1504,52 +1502,79 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     }
   }, [selectedAsset, setSelectedAsset, symbolFromUrl]);
 
-  const {
-    addMarket,
-    btcLive,
-    loading: marketLoading,
-    marketDayData,
-    reload: reloadMarketData,
-  } = useMarketData(activeSymbol, {
-    includeDailyScores: false,
-    includeSevenDayData: false,
-    includeForwardData: false,
-    timeframe: marketTimeframe,
-  });
+  const watchlistSymbols = useMemo(() => {
+    const preferred =
+      Array.isArray(watchlist) && watchlist.length
+        ? watchlist
+        : Array.isArray(availableAssets) && availableAssets.length
+        ? availableAssets
+        : ["BTC", "ETH", "SOL", "ADA", "DOT"];
+    return Array.from(
+      new Set(preferred.map((symbol) => String(symbol || "").toUpperCase()).filter(Boolean))
+    ).slice(0, 6);
+  }, [availableAssets, watchlist]);
 
+  const periods = useMemo(
+    () => ({
+      market: marketTimeframe,
+      macro: macroTimeframe,
+      technical: technicalTimeframe,
+    }),
+    [macroTimeframe, marketTimeframe, technicalTimeframe]
+  );
   const {
-    macroData,
-    addMacroIndicator,
-    loading: macroLoading,
-    removeMacroIndicator,
-    reload: reloadMacroData,
-  } = useMacroData(macroTimeframe, activeSymbol);
+    workspace,
+    watchlist: watchlistData,
+    loading: workspaceLoading,
+    watchlistLoading,
+    reloadWorkspace,
+    reloadWatchlist,
+  } = useAssetWorkspaceData(activeSymbol, periods, watchlistSymbols);
 
-  const {
-    technicalData,
-    addTechnicalIndicator,
-    loading: technicalLoading,
-    removeTechnicalIndicator,
-    reload: reloadTechnicalData,
-  } = useTechnicalData(technicalTimeframe, activeSymbol, { includeScoreSummary: false });
+  const categoryData = workspace?.categories || {};
+  const marketDayData = categoryData.market?.rows || [];
+  const macroData = categoryData.macro?.rows || [];
+  const technicalData = categoryData.technical?.rows || [];
+  const market = { score: categoryData.market?.score?.score ?? null };
+  const macro = { score: categoryData.macro?.score?.score ?? null };
+  const technical = { score: categoryData.technical?.score?.score ?? null };
+  const setup = workspace?.daily?.setup || null;
+  const master = {
+    weights: workspace?.master?.weights || {},
+    bias: workspace?.master?.master_bias || "–",
+  };
+  const btcLive = workspace?.quote || null;
+  const hasScoreData = [market.score, macro.score, technical.score].some((score) => score !== null);
+  const marketLoading = workspaceLoading;
+  const macroLoading = workspaceLoading;
+  const technicalLoading = workspaceLoading;
+  const scoresLoading = workspaceLoading;
 
-  const {
-    market,
-    macro,
-    technical,
-    setup,
-    master,
-    loading: scoresLoading,
-    hasData: hasScoreData,
-    saveWeights,
-  } = useScoresData(activeSymbol, {
-    includeHistory: false,
-    includeMaster: true,
-    fallbackOnError: false,
-  });
-  const { snapshot: overviewSnapshot, loading: overviewLoading } = useOverviewSnapshot(activeSymbol, {
-    includeLive: false,
-  });
+  const addMarket = async (name) => {
+    await marketIndicatorAdd(name, activeSymbol);
+    await reloadWorkspace();
+  };
+  const addMacroIndicator = async (name) => {
+    await macroDataAdd(name);
+    await reloadWorkspace();
+  };
+  const addTechnicalIndicator = async (name) => {
+    await technicalDataAdd(name, activeSymbol);
+    await reloadWorkspace();
+  };
+  const removeMacroIndicator = async (name) => {
+    await deleteMacroIndicator(name);
+    await reloadWorkspace();
+  };
+  const removeTechnicalIndicator = async (name) => {
+    await deleteTechnicalIndicator(name, activeSymbol);
+    await reloadWorkspace();
+  };
+  const saveWeights = async (weights) => {
+    const result = await updateIntelligenceWeights(weights);
+    await Promise.all([reloadWorkspace(), reloadWatchlist()]);
+    return result;
+  };
 
   useEffect(() => {
     if (!marketIndicatorFromUrl) return;
@@ -1595,115 +1620,44 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       const detail = event?.detail || {};
       if (String(detail.assetSymbol || "").toUpperCase() !== activeSymbol) return;
 
-      if (detail.category === "market") void reloadMarketData();
-      if (detail.category === "macro") void reloadMacroData();
-      if (detail.category === "technical") void reloadTechnicalData();
+      if (["market", "macro", "technical"].includes(detail.category)) void reloadWorkspace();
     };
 
     window.addEventListener(FINN_INDICATOR_MODAL_COMPLETED_EVENT, refreshCompletedIndicator);
     return () =>
       window.removeEventListener(FINN_INDICATOR_MODAL_COMPLETED_EVENT, refreshCompletedIndicator);
-  }, [activeSymbol, reloadMacroData, reloadMarketData, reloadTechnicalData]);
-
-  const watchlistSymbols = useMemo(() => {
-    const preferred =
-      Array.isArray(watchlist) && watchlist.length
-        ? watchlist
-        : Array.isArray(availableAssets) && availableAssets.length
-        ? availableAssets
-        : ["BTC", "ETH", "SOL", "ADA", "DOT"];
-    return Array.from(
-      new Set(preferred.map((symbol) => String(symbol || "").toUpperCase()).filter(Boolean))
-    ).slice(0, 6);
-  }, [availableAssets, watchlist]);
+  }, [activeSymbol, reloadWorkspace]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadWatchlistRows() {
-      const nextRows = await Promise.all(
-        watchlistSymbols.map(async (symbol) => {
-          try {
-            if (symbol === activeSymbol) {
-              const combined = hasScoreData
-                ? summarizeWeightedScores(
-                    {
-                      market: market?.score,
-                      macro: macro?.score,
-                      technical: technical?.score,
-                    },
-                    master?.weights,
-                    ui
-                  )
-                : summarizeContextScores([], ui);
-              const changeValue = Number(btcLive?.change_24h);
-
-              return {
-                symbol,
-                lastPrice: formatPrice(btcLive?.price, locale),
-                change24h: formatPercent(changeValue, 2),
-                changeTone: Number.isFinite(changeValue)
-                  ? changeValue >= 0 ? "text-emerald-600" : "text-red-600"
-                  : "text-slate-400",
-                score: formatScore(combined.score),
-                bias: combined.bias,
-                biasTone: combined.tone.pill,
-              };
-            }
-
-            const [latestResult, scoresResult] = await Promise.allSettled([
-              fetchLatestPrice(symbol, { forceFresh: false }),
-              getDailyScores(symbol, { fallbackOnError: false }),
-            ]);
-
-            const latest = latestResult.status === "fulfilled" ? latestResult.value : null;
-            const scores = scoresResult.status === "fulfilled" ? scoresResult.value : null;
-            const combined = summarizeWeightedScores(
-              {
-                market: scores?.market?.score,
-                macro: scores?.macro?.score,
-                technical: scores?.technical?.score,
-              },
-              master?.weights,
-              ui
-            );
-            const changeValue = Number(latest?.change_24h);
-
-            return {
-              symbol,
-              lastPrice: formatPrice(latest?.price, locale),
-              change24h: formatPercent(changeValue, 2),
-              changeTone: Number.isFinite(changeValue)
-                ? changeValue >= 0 ? "text-emerald-600" : "text-red-600"
-                : "text-slate-400",
-              score: formatScore(combined.score),
-              bias: combined.bias,
-              biasTone: combined.tone.pill,
-            };
-          } catch {
-            return {
-              symbol,
-              lastPrice: "—",
-              change24h: "—",
-              changeTone: "text-slate-400",
-              score: "—",
-              bias: ui.neutral,
-              biasTone: "border-slate-200 bg-slate-50 text-slate-700",
-            };
-          }
-        })
-      );
+      const nextRows = (watchlistData || []).map((row) => {
+        const changeValue = Number(row?.change_24h);
+        const tone = scoreTone(row?.score, ui);
+        return {
+          symbol: row.symbol,
+          lastPrice: formatPrice(row?.price, locale),
+          change24h: formatPercent(changeValue, 2),
+          changeTone: Number.isFinite(changeValue)
+            ? changeValue >= 0 ? "text-emerald-600" : "text-red-600"
+            : "text-slate-400",
+          score: formatScore(row?.score),
+          bias: row?.score === null ? ui.unavailable : tone.label,
+          biasTone: tone.pill,
+        };
+      });
 
       if (!cancelled) {
         setWatchlistRows(nextRows);
       }
     }
 
-    loadWatchlistRows();
+    if (!watchlistLoading) loadWatchlistRows();
     return () => {
       cancelled = true;
     };
-  }, [activeSymbol, btcLive, hasScoreData, locale, macro, master, market, technical, ui, watchlistSymbols]);
+  }, [locale, ui, watchlistData, watchlistLoading]);
 
   const combinedSummary = useMemo(() => {
     if (!hasScoreData) return summarizeContextScores([], ui);
@@ -1787,7 +1741,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         assetName={ASSET_NAMES[activeSymbol]}
         price={formatPrice(btcLive?.price, locale)}
         change24h={btcLive?.change_24h}
-        updatedAt={formatTimestamp(btcLive?.timestamp, locale)}
+        updatedAt={formatTimestamp(btcLive?.as_of, locale)}
         combinedSummary={combinedSummary}
         onSelectAsset={() => openSearch()}
         ui={ui}
@@ -1817,8 +1771,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         <GlobalMarketDecisionCard
           symbol={activeSymbol}
           snapshot={{
-            data: overviewSnapshot?.intelligence ?? null,
-            loading: overviewLoading && !overviewSnapshot?.intelligence,
+            data: workspace?.regime ?? null,
+            loading: workspaceLoading && !workspace?.regime,
           }}
           compact
         />

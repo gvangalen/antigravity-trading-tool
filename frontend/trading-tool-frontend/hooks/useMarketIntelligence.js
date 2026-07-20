@@ -8,11 +8,12 @@ const INTELLIGENCE_CACHE_TTL_MS = 60_000;
 const intelligenceCache = new Map();
 const inflightIntelligenceRequests = new Map();
 
-export function useMarketIntelligence(symbol = "BTC") {
+export function useMarketIntelligence(symbol = "BTC", options = {}) {
+  const { enabled = true } = options;
   const { locale } = useTranslation();
 
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   const cacheKey = `${String(symbol || "BTC").toUpperCase()}:${String(locale || "nl").toLowerCase()}`;
 
@@ -62,8 +63,9 @@ export function useMarketIntelligence(symbol = "BTC") {
   };
 
   useEffect(() => {
-    load();
-  }, [locale, symbol]);
+    if (enabled) load();
+    else setLoading(false);
+  }, [enabled, locale, symbol]);
 
   return { data, loading, reload: load };
 }

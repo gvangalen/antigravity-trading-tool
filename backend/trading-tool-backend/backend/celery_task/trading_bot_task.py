@@ -9,7 +9,6 @@ from celery import shared_task
 from backend.ai_agents.trading_bot_agent import run_trading_bot_agent
 from backend.services.platform_metrics import increment_retry_counter
 from backend.services.portfolio_snapshot_service import snapshot_all_for_user
-from backend.celery_task.strategy_task import run_daily_strategy_snapshot
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -32,13 +31,8 @@ def run_daily_trading_bot(self, user_id: int, report_date: Optional[str] = None)
     logger.info(f"🤖 START | user={user_id} | date={run_date}")
 
     try:
-        # 1️⃣ Strategy snapshot
-        try:
-            run_daily_strategy_snapshot(user_id=user_id)
-        except Exception:
-            logger.exception("Strategy snapshot failed")
-
-        # 2️⃣ Bot agent (ALLE LOGIC HIERIN)
+        # Strategy snapshots are generated independently. A high-frequency bot
+        # check must only consume the latest valid snapshot, never invoke AI.
         result = run_trading_bot_agent(
             user_id=user_id,
             report_date=run_date,

@@ -38,6 +38,10 @@ DEFAULT_COST_TOKEN_BUDGETS = {
     "chat_general": (1200, 450),
     "chat_analysis": (1500, 550),
     "chat_chat": (1100, 450),
+    "setup_analysis": (1200, 350),
+    "strategy_snapshot_analysis": (1600, 550),
+    "master_score_generation": (2200, 750),
+    "market_analysis": (1500, 500),
 }
 
 
@@ -229,6 +233,39 @@ def log_ai_usage_sync(
         logger.warning("⚠️ Kon AI usage log niet opslaan: %s", exc)
     finally:
         conn.close()
+
+
+def log_background_ai_skip(
+    *,
+    user_id: int,
+    symbol: str,
+    purpose: str,
+    entry_point: str,
+    reason: str = "input_unchanged",
+) -> None:
+    """Record a zero-cost reuse decision alongside normal AI usage rows."""
+    log_ai_usage_sync(
+        user_id=user_id,
+        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        prompt_tokens=0,
+        completion_tokens=0,
+        cost=0.0,
+        purpose=purpose,
+        status="input_unchanged",
+        estimated_cost_if_full=estimate_blocked_cost(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            purpose=purpose,
+            entry_point=entry_point,
+        ),
+        rejected_reason=reason,
+        symbol=symbol,
+        completion_status="skipped",
+        request_source="background_job",
+        app_env=get_app_env(),
+        run_kind="scheduled",
+        entry_point=entry_point,
+        user_email_snapshot=get_user_email_snapshot(user_id),
+    )
 
 
 def get_user_email_snapshot(user_id: Optional[int]) -> Optional[str]:

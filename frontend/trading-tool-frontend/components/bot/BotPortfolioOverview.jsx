@@ -1,7 +1,7 @@
 "use client";
 
 import { Wallet, Info, Zap, Clock, LayoutGrid } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency, formatNumber } from "@/lib/i18n";
 
@@ -24,28 +24,6 @@ export default function BotPortfolioOverview({
 }) {
   const { t, locale } = useTranslation();
   const copy = t?.botPage?.portfolioOverview || {};
-  const [exchangeBalances, setExchangeBalances] = useState([]);
-  const [exchangeLoading, setExchangeLoading] = useState(false);
-
-  useEffect(() => {
-    if (envFilter === "live") {
-      const fetchEx = async () => {
-        setExchangeLoading(true);
-        try {
-          const res = await fetch("/api/exchange/balances");
-          if (res.ok) {
-            const data = await res.json();
-            setExchangeBalances(data);
-          }
-        } catch (err) {
-          console.error("Exchange fetch failed", err);
-        } finally {
-          setExchangeLoading(false);
-        }
-      };
-      fetchEx();
-    }
-  }, [envFilter]);
 
   const list = useMemo(() => {
     const raw = Array.isArray(bots) ? bots : [];
@@ -186,20 +164,6 @@ export default function BotPortfolioOverview({
                <div className="text-[11px] font-bold text-blue-600/60 uppercase">{copy.backendSource}</div>
             </div>
           </div>
-
-          {envFilter === 'live' && exchangeBalances.length > 0 && (
-            <div className="flex items-center gap-4 animate-in fade-in slide-in-from-right-4 duration-500">
-               <div className="text-right">
-                  <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.bitvavoCash}</div>
-                  <div className="text-sm font-black text-emerald-600">{formatCurrency(Number(exchangeBalances[0]?.free?.EUR ?? 0), locale, "EUR", { maximumFractionDigits: 0 })}</div>
-               </div>
-               <div className="w-px h-8 bg-slate-200 dark:bg-slate-800" />
-               <div className="text-right">
-                  <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.totalValue}</div>
-                  <div className="text-sm font-black text-slate-900 dark:text-white">{formatCurrency(Number(exchangeBalances[0]?.total_eur ?? 0), locale, "EUR", { maximumFractionDigits: 0 })}</div>
-               </div>
-            </div>
-          )}
         </div>
 
         {hasBudget ? (

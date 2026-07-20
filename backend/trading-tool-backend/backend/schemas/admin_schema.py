@@ -12,6 +12,9 @@ class FeatureStat(BaseModel):
     total_requests: int
     total_cost: float
     avg_cost: float
+    full_ai_requests: int = 0
+    reuse_hits: int = 0
+    reuse_savings: float = 0.0
 
 class UserUsageStat(BaseModel):
     user_id: Optional[int]
@@ -46,6 +49,7 @@ class PlatformAiOverview(BaseModel):
     total_savings_month_eur: float
     platform_overhead_eur: float
     cache_hit_rate: float
+    reuse_hit_rate: float = 0.0
     avg_latency_ms: float
     avg_cost_per_full_request: float
     qa_cost_month_eur: float = 0.0
@@ -54,6 +58,8 @@ class PlatformAiOverview(BaseModel):
     staging_cost_month_eur: float = 0.0
     blocked_requests_month: int = 0
     blocked_estimated_cost_month_eur: float = 0.0
+    reuse_hits: int = 0
+    reuse_savings_month_eur: float = 0.0
     rejection_breakdown: Optional[Dict[str, int]] = {}
 
 class AiSourceStat(BaseModel):
@@ -71,6 +77,9 @@ class AiEntryPointStat(BaseModel):
     total_requests: int
     total_cost: float
     avg_cost: float
+    full_ai_requests: int = 0
+    reuse_hits: int = 0
+    reuse_savings: float = 0.0
     blocked_requests: int = 0
     blocked_estimated_cost: float = 0.0
 

@@ -66,7 +66,8 @@ def run_technical_agent(user_id: int):
             cur.execute("""
                 SELECT avg_score, trend, bias, summary
                 FROM ai_category_insights
-                WHERE user_id = %s AND category = 'technical' AND date = CURRENT_DATE - INTERVAL '1 day'
+                WHERE user_id = %s AND category = 'technical' AND symbol = 'GLOBAL'
+                  AND date = CURRENT_DATE - INTERVAL '1 day'
                 LIMIT 1;
             """, (user_id,))
             y_row = cur.fetchone()
@@ -134,9 +135,9 @@ WAARSCHUWING: Geef GEEN financieel advies.
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO ai_category_insights
-                    (user_id, category, avg_score, trend, bias, risk, summary, top_signals, date)
-                VALUES (%s, 'technical', %s, %s, %s, %s, %s, %s, CURRENT_DATE)
-                ON CONFLICT (user_id, category, date)
+                    (user_id, category, symbol, avg_score, trend, bias, risk, summary, top_signals, date)
+                VALUES (%s, 'technical', 'GLOBAL', %s, %s, %s, %s, %s, %s, CURRENT_DATE)
+                ON CONFLICT (user_id, category, symbol, date)
                 DO UPDATE SET
                     avg_score = EXCLUDED.avg_score,
                     trend = EXCLUDED.trend,
