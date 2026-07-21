@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import re
 from datetime import date, datetime, timezone
 from typing import Any, Iterable
@@ -283,15 +282,15 @@ class WorkspaceDataService:
         }
         periods = {key: value if value in PERIOD_DAYS else "day" for key, value in periods.items()}
 
-        market_rows, macro_rows, technical_rows, quote, regime, master, daily = await asyncio.gather(
-            self._market_rows(user_id, symbol, periods["market"]),
-            self._macro_rows(user_id, periods["macro"]),
-            self._technical_rows(user_id, symbol, periods["technical"]),
-            self.market.get_latest_snapshot(symbol),
-            self.intelligence.get_market_intelligence(user_id, symbol),
-            self.score_service.get_master_score(user_id, symbol),
-            self._daily_scores(user_id, symbol),
-        )
+        # Repositories share this request's AsyncSession. SQLAlchemy sessions may
+        # not provision or execute multiple connections concurrently.
+        market_rows = await self._market_rows(user_id, symbol, periods["market"])
+        macro_rows = await self._macro_rows(user_id, periods["macro"])
+        technical_rows = await self._technical_rows(user_id, symbol, periods["technical"])
+        quote = await self.market.get_latest_snapshot(symbol)
+        regime = await self.intelligence.get_market_intelligence(user_id, symbol)
+        master = await self.score_service.get_master_score(user_id, symbol)
+        daily = await self._daily_scores(user_id, symbol)
 
         quote_payload = {
             "price": _number(getattr(quote, "price", None)),
@@ -346,11 +345,9 @@ class WorkspaceDataService:
 
     async def get_watchlist(self, user_id: int, symbols: list[str]) -> dict[str, Any]:
         normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))[:25]
-        quotes, scores, user = await asyncio.gather(
-            self.market.get_latest_snapshots(normalized),
-            self.scores.fetch_daily_scores_batch(user_id, normalized),
-            self.users.get_by_id(user_id),
-        )
+        quotes = await self.market.get_latest_snapshots(normalized)
+        scores = await self.scores.fetch_daily_scores_batch(user_id, normalized)
+        user = await self.users.get_by_id(user_id)
         preferences = getattr(user, "ai_preferences", None) or {}
         weights = preferences.get("intelligence_weights", {})
         quote_map = {str(row.symbol).upper(): row for row in quotes}

@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -153,6 +154,14 @@ def test_watchlist_uses_one_batch_for_quotes_and_one_for_scores():
     assert result["rows"][1]["score"] is None
     assert result["rows"][1]["score_status"] == "insufficient_data"
     assert result["rows"][0]["score_freshness"]["source"] == "daily_scores"
+
+
+def test_workspace_reads_do_not_parallelize_a_shared_async_session():
+    asset_source = inspect.getsource(WorkspaceDataService.get_asset_workspace)
+    watchlist_source = inspect.getsource(WorkspaceDataService.get_watchlist)
+
+    assert "asyncio.gather" not in asset_source
+    assert "asyncio.gather" not in watchlist_source
 
 
 def test_frontend_workspace_reads_are_centralized_and_ai_is_explicit():
