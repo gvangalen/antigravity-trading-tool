@@ -25,6 +25,7 @@ import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import SetupForm from "@/components/setup/SetupForm";
 import StrategyForm from "@/components/strategy/StrategyForm";
+import FinnSpecialistContext from "@/components/finn/FinnSpecialistContext";
 import Drawer from "@/components/ui/Drawer";
 import { useStrategyData } from "@/hooks/useStrategyData";
 import { deleteSetup } from "@/lib/api/setups";
@@ -516,6 +517,27 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
             </div>
           </div>
         </section>
+      ) : null}
+
+      {activePlan ? (
+        <div className={`grid gap-4 ${activePlan.hasStrategy ? "lg:grid-cols-2" : ""}`}>
+          <FinnSpecialistContext
+            subjectType="setup"
+            subjectId={activePlan.setup?.id}
+            symbol={activePlan.setup?.symbol || activeSymbol}
+            timeframe={activePlan.setup?.timeframe || "1D"}
+            compact
+          />
+          {activePlan.hasStrategy ? (
+            <FinnSpecialistContext
+              subjectType="strategy"
+              subjectId={activePlan.strategy?.id}
+              symbol={activePlan.setup?.symbol || activeSymbol}
+              timeframe={activePlan.setup?.timeframe || "1D"}
+              compact
+            />
+          ) : null}
+        </div>
       ) : null}
 
       <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_50px_-40px_rgba(15,23,42,0.3)] dark:border-slate-800 dark:bg-[#0f172a]">

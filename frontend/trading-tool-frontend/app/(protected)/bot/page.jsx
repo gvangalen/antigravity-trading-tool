@@ -27,6 +27,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
+import FinnSpecialistContext from "@/components/finn/FinnSpecialistContext";
 
 function BotPageInner() {
   const router = useRouter();
@@ -413,6 +414,15 @@ function BotPageInner() {
           nextHref="/onboarding/complete"
         />
       ) : null}
+
+      <div className="mb-10">
+        <FinnSpecialistContext
+          subjectType="automation"
+          subjectId={activeBot?.id}
+          symbol={activeBot?.symbol || searchParams.get("symbol") || "BTC"}
+          timeframe={activeBot?.timeframe || "1D"}
+        />
+      </div>
 
       <div className="max-w-full flex flex-col lg:flex-row gap-10 pb-24 items-start relative">
         

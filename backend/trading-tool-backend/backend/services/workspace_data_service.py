@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import date, datetime, timezone
 from typing import Any, Iterable
 
@@ -44,6 +45,12 @@ def _as_utc(value: Any) -> datetime | None:
         return value.replace(tzinfo=value.tzinfo or timezone.utc)
     if isinstance(value, date):
         return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+    if isinstance(value, str) and value:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.replace(tzinfo=parsed.tzinfo or timezone.utc)
+        except ValueError:
+            return None
     return None
 
 
@@ -131,6 +138,50 @@ def _score_summary(rows: list[dict[str, Any]], period: str) -> dict[str, Any]:
         "reason": None,
         "sample_size": len(scores),
     }
+
+
+def _indicator_key(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower()).strip("_")
+
+
+def _enrich_indicator_rows(
+    rows: list[dict[str, Any]],
+    *,
+    period: str,
+    threshold: int,
+    source: str,
+) -> list[dict[str, Any]]:
+    scored = [
+        row
+        for row in rows
+        if row.get("value") is not None and row.get("score") is not None
+    ]
+    contribution_weight = 1 / len(scored) if scored else 0
+
+    enriched = []
+    for row in rows:
+        available = row.get("value") is not None
+        scored_row = available and row.get("score") is not None
+        payload = dict(row)
+        payload.update({
+            "indicator_key": _indicator_key(row.get("name")),
+            "period": period,
+            "source": source,
+            "freshness": _freshness(row.get("timestamp"), threshold, source),
+            "data_status": "available" if available else "insufficient_data",
+            "score_contribution": {
+                "status": "available" if scored_row else "insufficient_data",
+                "basis": "equal_indicator_average",
+                "weight": round(contribution_weight, 6) if scored_row else None,
+                "weighted_points": (
+                    round(float(row["score"]) * contribution_weight, 2)
+                    if scored_row
+                    else None
+                ),
+            },
+        })
+        enriched.append(payload)
+    return enriched
 
 
 def _market_row(row: Any) -> dict[str, Any]:
@@ -337,6 +388,55 @@ class WorkspaceDataService:
             "ai_calls": 0,
         }
 
+    async def get_indicator_detail(
+        self,
+        user_id: int,
+        symbol: str,
+        category: str,
+        period: str,
+        indicator: str,
+    ) -> dict[str, Any] | None:
+        symbol = str(symbol or "BTC").upper()
+        category = str(category or "").lower()
+        period = str(period or "day").lower()
+        if category not in {"market", "macro", "technical"}:
+            return None
+        if period not in PERIOD_DAYS:
+            period = "day"
+
+        if category == "market":
+            rows = await self._market_rows(user_id, symbol, period)
+            source = "market_data_indicators"
+        elif category == "macro":
+            rows = await self._macro_rows(user_id, period)
+            source = "macro_data"
+        else:
+            rows = await self._technical_rows(user_id, symbol, period)
+            source = "technical_indicators"
+
+        category_payload = self._category_payload(
+            rows,
+            period,
+            STALE_AFTER_SECONDS[period],
+            source,
+        )
+        target = _indicator_key(indicator)
+        row = next(
+            (item for item in category_payload["rows"] if item.get("indicator_key") == target),
+            None,
+        )
+        if row is None:
+            return None
+        return {
+            "symbol": symbol,
+            "category": category,
+            "period": period,
+            "indicator": row,
+            "category_score": category_payload["score"],
+            "category_freshness": category_payload["freshness"],
+            "ai_calls": 0,
+        }
+
     async def _market_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
         if period == "day":
             rows = await self.market.get_active_day_indicators(user_id, symbol)
@@ -374,9 +474,15 @@ class WorkspaceDataService:
     ) -> dict[str, Any]:
         timestamps = [row.get("timestamp") for row in rows if row.get("timestamp")]
         latest_timestamp = max(timestamps) if timestamps else None
+        enriched_rows = _enrich_indicator_rows(
+            rows,
+            period=period,
+            threshold=threshold,
+            source=source,
+        )
         return {
-            "rows": rows,
-            "score": _score_summary(rows, period),
+            "rows": enriched_rows,
+            "score": _score_summary(enriched_rows, period),
             "freshness": _freshness(
                 datetime.fromisoformat(latest_timestamp) if latest_timestamp else None,
                 threshold,

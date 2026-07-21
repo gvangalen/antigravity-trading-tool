@@ -36,6 +36,7 @@ import { updateIntelligenceWeights } from "@/lib/api/scores";
 import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
 import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
+import { requestIndicatorContext } from "@/lib/api/workspace";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -160,6 +161,20 @@ function getUiCopy(locale = "nl") {
       assessment: "Assessment",
       details: "Details",
       latestSignal: "Latest signal",
+      dataSource: "Source",
+      periodLabel: "Period",
+      freshness: "Freshness",
+      currentData: "Current",
+      staleData: "Stale",
+      scoreContribution: "Score contribution",
+      sampleSize: "Samples",
+      askFinnContext: "Ask FINN for context",
+      finnContext: "FINN context",
+      finnContextLoading: "FINN is reviewing this indicator...",
+      finnContextUnavailable: "Extra AI context is currently unavailable. The current data and rule-based explanation above remain available.",
+      whyCounts: "Why this counts",
+      confirmation: "What to monitor",
+      conflicts: "Conflicts and caveats",
       live: "Live",
       edit: "Edit",
       remove: "Remove",
@@ -255,6 +270,20 @@ function getUiCopy(locale = "nl") {
       assessment: "Bewertung",
       details: "Details",
       latestSignal: "Letztes Signal",
+      dataSource: "Quelle",
+      periodLabel: "Zeitraum",
+      freshness: "Aktualität",
+      currentData: "Aktuell",
+      staleData: "Veraltet",
+      scoreContribution: "Score-Beitrag",
+      sampleSize: "Stichproben",
+      askFinnContext: "FINN nach Kontext fragen",
+      finnContext: "FINN-Kontext",
+      finnContextLoading: "FINN prüft diesen Indikator...",
+      finnContextUnavailable: "Zusätzlicher AI-Kontext ist derzeit nicht verfügbar. Die aktuellen Daten und die regelbasierte Erklärung oben bleiben verfügbar.",
+      whyCounts: "Warum dies zählt",
+      confirmation: "Was zu beobachten ist",
+      conflicts: "Konflikte und Einschränkungen",
       live: "Live",
       edit: "Bearbeiten",
       remove: "Entfernen",
@@ -349,6 +378,20 @@ function getUiCopy(locale = "nl") {
     assessment: "Beoordeling",
     details: "Verdieping",
     latestSignal: "Laatste signaal",
+    dataSource: "Bron",
+    periodLabel: "Periode",
+    freshness: "Actualiteit",
+    currentData: "Actueel",
+    staleData: "Verouderd",
+    scoreContribution: "Scorebijdrage",
+    sampleSize: "Meetpunten",
+    askFinnContext: "Vraag FINN om context",
+    finnContext: "FINN-context",
+    finnContextLoading: "FINN beoordeelt deze indicator...",
+    finnContextUnavailable: "Extra AI-context is nu niet beschikbaar. De actuele data en regeluitleg hierboven blijven wel beschikbaar.",
+    whyCounts: "Waarom dit meetelt",
+    confirmation: "Wat je kunt volgen",
+    conflicts: "Conflicten en kanttekeningen",
     live: "Live",
     edit: "Bewerken",
     remove: "Verwijderen",
@@ -1185,7 +1228,54 @@ function SectionScorePill({ score }) {
   );
 }
 
-function EvidenceRow({ row, expanded, onToggle, renderExpandedActions, ui }) {
+function EvidenceRow({
+  row,
+  expanded,
+  onToggle,
+  renderExpandedActions,
+  category,
+  symbol,
+  period,
+  locale,
+  ui,
+}) {
+  const [finnResult, setFinnResult] = useState(null);
+  const [finnLoading, setFinnLoading] = useState(false);
+
+  const requestFinnContext = async () => {
+    if (finnLoading) return;
+    setFinnLoading(true);
+    try {
+      const result = await requestIndicatorContext({
+        symbol,
+        category,
+        indicator: row.name,
+        period,
+        timeframe: period === "day" ? "1D" : period,
+        locale,
+      });
+      setFinnResult(result);
+    } catch (error) {
+      setFinnResult({ status: "unavailable", reason: error?.message || "request_failed" });
+    } finally {
+      setFinnLoading(false);
+    }
+  };
+
+  const contribution = row.raw?.score_contribution;
+  const contributionText =
+    contribution?.status === "available"
+      ? `${Math.round(Number(contribution.weight || 0) * 100)}% · ${Number(contribution.weighted_points || 0).toFixed(1)} pt`
+      : ui.unavailable;
+  const freshness = row.raw?.freshness;
+  const freshnessText =
+    freshness?.status !== "available"
+      ? ui.unavailable
+      : freshness.stale
+      ? ui.staleData
+      : ui.currentData;
+  const specialist = finnResult?.context;
+
   return (
     <div className="border-t border-slate-100">
       <button
@@ -1243,7 +1333,7 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions, ui }) {
 
       {expanded ? (
         <div className="bg-slate-50/70 px-4 py-3">
-          <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
                 {ui.details}
@@ -1253,18 +1343,56 @@ function EvidenceRow({ row, expanded, onToggle, renderExpandedActions, ui }) {
               </p>
             </div>
 
-            <div className="flex flex-col gap-3 lg:items-end">
-              <div className="text-left lg:text-right">
-                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                  {ui.latestSignal}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {[
+                [ui.dataSource, String(row.raw?.source || "—").replaceAll("_", " ")],
+                [ui.periodLabel, ui[row.raw?.period || period] || row.raw?.period || period],
+                [ui.freshness, freshnessText],
+                [ui.latestSignal, row.timestamp ? formatTimestamp(row.timestamp, locale) : ui.live],
+                [ui.scoreContribution, contributionText],
+                [ui.sampleSize, row.raw?.sample_size ?? 1],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</div>
+                  <div className="mt-1 text-[12px] font-bold capitalize text-slate-800">{value}</div>
                 </div>
-                <div className="mt-1.5 text-[13px] font-black text-slate-900">
-                  {row.timestamp ? formatTimestamp(row.timestamp) : ui.live}
-                </div>
-              </div>
-              {renderExpandedActions ? renderExpandedActions(row) : null}
+              ))}
             </div>
           </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
+            <button
+              type="button"
+              onClick={requestFinnContext}
+              disabled={finnLoading}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-blue-600 disabled:cursor-wait disabled:opacity-60"
+            >
+              <Brain size={13} />
+              {finnLoading ? ui.finnContextLoading : ui.askFinnContext}
+            </button>
+            {renderExpandedActions ? renderExpandedActions(row) : null}
+          </div>
+
+          {finnResult ? (
+            <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-3.5">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-700">
+                <Brain size={13} />
+                {ui.finnContext}
+              </div>
+              {finnResult.status === "available" && specialist ? (
+                <div className="mt-2.5 grid gap-3 text-[12px] leading-5 text-slate-700 lg:grid-cols-3">
+                  <div><strong className="block text-slate-950">{ui.details}</strong>{specialist.summary}</div>
+                  <div><strong className="block text-slate-950">{ui.whyCounts}</strong>{specialist.why_it_counts}</div>
+                  <div><strong className="block text-slate-950">{ui.confirmation}</strong>{specialist.confirmation}</div>
+                  {specialist.conflicts?.length ? (
+                    <div className="lg:col-span-3"><strong className="block text-slate-950">{ui.conflicts}</strong>{specialist.conflicts.join(" · ")}</div>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mt-2 text-[12px] font-medium leading-5 text-slate-600">{ui.finnContextUnavailable}</p>
+              )}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -1313,6 +1441,9 @@ function EvidenceSection({
   toolbar,
   renderExpandedActions,
   emptyState,
+  symbol,
+  period,
+  locale,
   ui,
 }) {
   return (
@@ -1364,6 +1495,10 @@ function EvidenceSection({
                 expanded={expandedRowKey === rowKey}
                 onToggle={() => onToggleRow(rowKey)}
                 renderExpandedActions={renderExpandedActions}
+                category={id}
+                symbol={symbol}
+                period={period}
+                locale={locale}
                 ui={ui}
               />
             );
@@ -1803,6 +1938,15 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             expandedRowKey={expandedRowKey}
             onToggleRow={(key) => setExpandedRowKey((current) => (current === key ? null : key))}
             emptyState={section.emptyState}
+            symbol={activeSymbol}
+            period={
+              section.id === "market"
+                ? marketTimeframe
+                : section.id === "macro"
+                ? macroTimeframe
+                : technicalTimeframe
+            }
+            locale={locale}
             ui={ui}
             toolbar={
               section.id === "market" ? (

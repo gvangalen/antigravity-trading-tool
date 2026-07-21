@@ -1,1 +1,0 @@
-(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[6883],{52657:(e,a,n)=>{Promise.resolve().then(n.bind(n,68673))},68673:(e,a,n)=>{"use strict";n.r(a),n.d(a,{default:()=>r});var s=n(95155),c=n(48511);function r(){return(0,s.jsx)(c.A,{tab:"macro",canonicalizeLegacy:!0})}}},e=>{e.O(0,[8426,8327,7198,8111,4795,4968,3916,362,8511,8441,1255,7358],()=>e(e.s=52657)),_N_E=e.O()}]);

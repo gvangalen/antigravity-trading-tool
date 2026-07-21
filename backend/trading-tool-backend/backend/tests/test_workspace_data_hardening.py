@@ -9,6 +9,7 @@ from backend.services.intelligence_service import IntelligenceService
 from backend.services.workspace_data_service import (
     WorkspaceDataService,
     _aggregate_by_name,
+    _enrich_indicator_rows,
     _market_row,
     _score_summary,
 )
@@ -68,6 +69,30 @@ def test_period_rows_are_aggregated_and_expose_their_sample_size():
         }
     ]
 
+
+def test_indicator_rows_expose_source_period_freshness_and_score_contribution():
+    rows = _enrich_indicator_rows(
+        [
+            {"name": "rsi", "value": 54.0, "score": 50.0, "timestamp": "2026-07-21T08:00:00+00:00"},
+            {"name": "ma_200", "value": 0.9, "score": 70.0, "timestamp": "2026-07-21T08:00:00+00:00"},
+            {"name": "missing", "value": None, "score": 10.0, "timestamp": None},
+        ],
+        period="day",
+        threshold=36 * 60 * 60,
+        source="technical_indicators",
+    )
+
+    assert rows[0]["source"] == "technical_indicators"
+    assert rows[0]["period"] == "day"
+    assert rows[0]["freshness"]["status"] == "available"
+    assert rows[0]["score_contribution"] == {
+        "status": "available",
+        "basis": "equal_indicator_average",
+        "weight": 0.5,
+        "weighted_points": 25.0,
+    }
+    assert rows[2]["data_status"] == "insufficient_data"
+    assert rows[2]["score_contribution"]["weighted_points"] is None
 
 def test_intelligence_read_returns_insufficient_data_without_running_engine():
     repository = SimpleNamespace(get_latest_daily_scores=AsyncMock(return_value=None))
@@ -157,6 +182,8 @@ def test_frontend_workspace_reads_are_centralized_and_ai_is_explicit():
     assert "fetchAssetWorkspace" in hook
     assert "fetchWorkspaceWatchlist" in hook
     assert "assistantChat" not in hook
+    assert "requestIndicatorContext" in workspace
+    assert "onClick={requestFinnContext}" in workspace
 
 
 def test_each_explicit_review_flow_uses_one_ai_request():

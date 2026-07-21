@@ -39,7 +39,9 @@ import { waitUntilVisible } from '@/hooks/useVisibilityPolling';
 import { actionButtonStyles } from '@/components/ui/actionButtonStyles';
 import { trackAssistantEvent } from '@/lib/api/assistantAnalytics';
 import { useTranslation } from '@/app/providers/I18nProvider';
+import { useAsset } from '@/app/providers/AssetProvider';
 import { formatDateTime, getIntlLocale, getLocaleValue, normalizeLocale } from '@/lib/i18n';
+import FinnSpecialistContext from '@/components/finn/FinnSpecialistContext';
 
 import {
   Download,
@@ -1431,6 +1433,7 @@ PAGE
 export default function ReportPage() {
   const { showSnackbar } = useModal();
   const { t } = useTranslation();
+  const { selectedAsset } = useAsset();
   const reportT = t.pages.report;
 
   const [reportType, setReportType] = useState('daily');
@@ -1642,6 +1645,14 @@ RENDER
       <DashboardErrorBoundary>
         <ReportTerminalHUD report={report} type={reportType} loading={loading} />
       </DashboardErrorBoundary>
+
+      <div className="mt-6">
+        <FinnSpecialistContext
+          subjectType="reflection"
+          symbol={selectedAsset || "BTC"}
+          period={{ daily: "day", weekly: "week", monthly: "month", quarterly: "quarter" }[reportType]}
+        />
+      </div>
 
       <DashboardErrorBoundary>
         <FinnReportsPanel />
