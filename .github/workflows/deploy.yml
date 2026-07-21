@@ -26,6 +26,21 @@ jobs:
           printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/tradamind-deploy-key"
           chmod 600 "$RUNNER_TEMP/tradamind-deploy-key"
 
+      - name: Verify tracked frontend export
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed_files="$(git diff --name-only HEAD^ HEAD)"
+          frontend_source_changed="$(printf '%s\n' "$changed_files" | grep '^frontend/trading-tool-frontend/' | grep -v '^frontend/trading-tool-frontend/out/' || true)"
+          frontend_export_changed="$(printf '%s\n' "$changed_files" | grep '^frontend/trading-tool-frontend/out/' || true)"
+
+          if [ -n "$frontend_source_changed" ] && [ -z "$frontend_export_changed" ]; then
+            echo "Frontend source changed, but the tracked frontend export was not updated:" >&2
+            printf '%s\n' "$frontend_source_changed" >&2
+            echo "Run npm run build in frontend/trading-tool-frontend and commit out/ before deploying." >&2
+            exit 1
+          fi
+
       - name: Deploy production
         shell: bash
         env:
