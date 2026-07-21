@@ -26,6 +26,7 @@ from backend.celery_task.queue_policy import (
     celery_task_annotations,
     celery_task_routes,
 )
+from backend.services.legacy_ai_runtime import legacy_periodic_ai_enabled
 
 # =========================================================
 # 🪵 Logging
@@ -189,6 +190,24 @@ celery_app.conf.beat_schedule = {
         crontab(hour=5, minute=20),
     ),
 }
+
+LEGACY_PERIODIC_AI_SCHEDULES = frozenset(
+    {
+        "dispatch_setup_agent",
+        "macro_ai",
+        "market_ai",
+        "technical_ai",
+        "dispatch_regime_memory",
+        "dispatch_strategy_snapshot",
+        "run_master_score_ai",
+        "dispatch_daily_report",
+    }
+)
+
+if not legacy_periodic_ai_enabled():
+    for schedule_name in LEGACY_PERIODIC_AI_SCHEDULES:
+        celery_app.conf.beat_schedule.pop(schedule_name, None)
+    logger.info("Legacy periodieke AI-taken zijn uitgeschakeld.")
 
 logger.info("🚀 Celery Beat schedule geladen (OPTIMIZED)")
 

@@ -3,6 +3,7 @@ from celery import shared_task
 
 from backend.ai_agents.setup_ai_agent import run_setup_agent
 from backend.services.ai_usage_observability_service import ai_usage_context
+from backend.services.legacy_ai_runtime import legacy_periodic_ai_enabled
 from backend.utils.db import get_db_connection
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,17 @@ def run_setup_agent_daily(user_id: int):
     - daily_setup_scores
     - ai_category_insights
     """
+
+    if not legacy_periodic_ai_enabled():
+        logger.info(
+            "Legacy Setup-Agent overgeslagen voor user_id=%s; gebruik FINN specialist on-demand.",
+            user_id,
+        )
+        return {
+            "status": "disabled",
+            "reason": "legacy_periodic_ai_disabled",
+            "user_id": user_id,
+        }
 
     logger.info(f"🤖 [Setup-Task] Start Setup-Agent voor user_id={user_id}")
 
