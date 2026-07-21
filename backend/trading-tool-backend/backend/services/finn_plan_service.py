@@ -5891,7 +5891,10 @@ class FinnPlanService:
     ) -> Dict[str, Any]:
         context = context or {}
         q = self._normalized_query(query)
-        if any(term in q for term in ["trade", "instap", "entry", "kopen", "verkopen"]):
+        explicit_subject = str(context.get("finn_subject_type") or "").strip().lower()
+        if explicit_subject in {"plan", "setup", "strategy", "bot", "trade"}:
+            entity_type = explicit_subject
+        elif any(term in q for term in ["trade", "instap", "entry", "kopen", "verkopen"]):
             entity_type = "trade"
         else:
             entity_type = None
@@ -5902,17 +5905,20 @@ class FinnPlanService:
             or ("strategy" if context.get("strategy_id") else None)
             or ("setup" if context.get("setup_id") else None)
         )
-        if "bot" in q and "decision" in q:
+        if explicit_subject:
+            pass
+        elif "bot" in q and "decision" in q:
             entity_type = "bot"
-        elif "setup" in q:
-            entity_type = "setup"
         elif "strategie" in q or "strategy" in q:
             entity_type = "strategy"
+        elif "setup" in q:
+            entity_type = "setup"
         entity_type = entity_type or "trade"
         review_type_map = {
             "trade": "trade_intent_review",
             "setup": "setup_readiness_review",
             "strategy": "strategy_fit_review",
+            "plan": "plan_readiness_review",
             "bot": "bot_decision_review",
         }
         return {
@@ -5921,6 +5927,7 @@ class FinnPlanService:
                 context.get("bot_id") if entity_type == "bot" else
                 context.get("strategy_id") if entity_type == "strategy" else
                 context.get("setup_id") if entity_type == "setup" else
+                context.get("strategy_id") or context.get("setup_id") if entity_type == "plan" else
                 None
             ),
             "review_type": review_type_map.get(entity_type, "trade_intent_review"),
@@ -6041,40 +6048,151 @@ class FinnPlanService:
             "trade_intent_review": "trade review",
             "setup_readiness_review": "setup review",
             "strategy_fit_review": "strategie review",
+            "plan_readiness_review": "plan review",
             "bot_decision_review": "bot review",
         }.get(review_type, review_type.replace("_", " "))
 
-    def _decision_review_message(self, analysis: Dict[str, Any]) -> str:
-        checks = analysis.get("checks") or []
-        top_blockers = analysis.get("top_blockers") or []
-        recommended_changes = analysis.get("recommended_changes") or []
-        behavioral_coaching = analysis.get("behavioral_coaching") or {}
-        lines = [
-            analysis.get("headline") or "Hier is mijn review van je volgende trading-beslissing.",
-            f"Status: {analysis.get('decision_status')}.",
-            analysis.get("risk_summary") or "",
-        ]
-        if analysis.get("context_anchor"):
-            lines.append(f"Contextanker: {analysis.get('context_anchor')}.")
-        if checks:
-            lines.append("Checks:")
-            for check in checks[:4]:
-                lines.append(f"- {check.get('label')}: {check.get('detail')}")
-        if top_blockers:
-            lines.append("Top blockers:")
-            lines.extend(f"- {item}" for item in top_blockers[:3])
-        if recommended_changes:
-            lines.append("Aanpassingen:")
-            lines.extend(f"- {item}" for item in recommended_changes[:3])
-        if behavioral_coaching.get("summary") or behavioral_coaching.get("risk"):
-            lines.append("Coachingsfocus:")
-            if behavioral_coaching.get("summary"):
-                lines.append(f"- {behavioral_coaching.get('summary')}")
-            if behavioral_coaching.get("risk"):
-                lines.append(f"- {behavioral_coaching.get('risk')}")
-        if analysis.get("operator_next_step"):
-            lines.append(f"Volgende stap: {analysis.get('operator_next_step')}")
-        return "\n".join([line for line in lines if line])
+    def _decision_review_message(self, analysis: Dict[str, Any], locale: str = "nl") -> str:
+        language = str(locale or "nl").lower().split("-", 1)[0]
+        language = language if language in {"nl", "en", "de"} else "nl"
+        status = str(analysis.get("decision_status") or "insufficient_context")
+        subject_type = str((analysis.get("subject") or {}).get("type") or "trade")
+        asset = str((analysis.get("subject") or {}).get("asset") or "").upper()
+
+        copy = {
+            "nl": {
+                "headers": ("Mijn oordeel", "Aandachtspunt", "Volgende stap"),
+                "approve": {
+                    "plan": "Dit plan is in de basis uitvoerbaar: de setup en strategie zijn gekoppeld en ik zie geen directe risicoblokkade.",
+                    "setup": "Deze setup is bruikbaar als handelsvoorwaarde en past binnen het huidige risicokader.",
+                    "strategy": "Deze strategie sluit in de basis aan op de gekoppelde setup en is uitvoerbaar binnen het huidige risicokader.",
+                    "trade": "Deze handelsbeslissing is verdedigbaar binnen je huidige plan en risicokader.",
+                    "bot": "Deze automatiseringsbeslissing is verdedigbaar binnen de huidige plan- en risicoregels.",
+                },
+                "modify": "De basis is bruikbaar, maar ik zou dit eerst aanscherpen voordat je het uitvoert.",
+                "block": "Ik zou dit nu niet uitvoeren. Er is een blokkade in de context of het risico die eerst opgelost moet worden.",
+                "insufficient_context": "Ik kan dit nog niet betrouwbaar beoordelen, omdat essentiële planinformatie ontbreekt.",
+                "attention": {
+                    "plan": "Controleer vlak voor uitvoering of de marktcontext nog geldig is en of entry, stop-loss en invalidatie eenduidig zijn.",
+                    "setup": "Een goede setup is pas handelbaar zolang de markt-, macro- en technische voorwaarden binnen je ingestelde ranges blijven.",
+                    "strategy": "Controleer of entry, stop-loss, targets en positiegrootte nog passen bij de gekoppelde setup.",
+                    "trade": "Controleer of de oorspronkelijke setupvoorwaarden nog gelden voordat je een positie opent of laat doorlopen.",
+                    "bot": "Controleer of de bot alleen kan uitvoeren binnen de afgesproken setup- en risicogrenzen.",
+                },
+                "next": "Leg één duidelijke invalidatiegrens vast en voer alleen uit zolang de oorspronkelijke voorwaarden nog geldig zijn.",
+                "next_by_status": {
+                    "modify": "Scherp eerst het genoemde aandachtspunt aan en laat FINN het plan daarna opnieuw beoordelen.",
+                    "block": "Los eerst de blokkade op en beoordeel het plan opnieuw voordat je iets uitvoert.",
+                    "insufficient_context": "Vul de ontbrekende setup- of strategiegegevens aan en start daarna een nieuwe beoordeling.",
+                },
+                "issues": {
+                    "context_ready": "De actieve asset, setup of strategie is nog niet duidelijk genoeg gekoppeld voor een betrouwbare beoordeling.",
+                    "setup_validity": "De setup is nog niet actief of bevat onvoldoende bevestiging om dit plan nu uit te voeren.",
+                    "strategy_fit": "Er ontbreekt een duidelijke strategie met uitvoeringsregels voor deze setup.",
+                    "risk_sizing": "De positiegrootte of het risico is te hoog voor een beheerste uitvoering.",
+                    "portfolio_exposure": "De bestaande blootstelling aan dit asset maakt extra risico nu onwenselijk.",
+                    "market_readiness": "De actuele markt- en setupscore geven nog onvoldoende bevestiging.",
+                },
+            },
+            "en": {
+                "headers": ("My assessment", "Watch this", "Next step"),
+                "approve": {
+                    "plan": "This plan is executable in principle: the setup and strategy are linked and I see no immediate risk blocker.",
+                    "setup": "This setup is usable as a trading condition and fits the current risk framework.",
+                    "strategy": "This strategy broadly fits the linked setup and is executable within the current risk framework.",
+                    "trade": "This trade decision is defensible within your current plan and risk framework.",
+                    "bot": "This automation decision is defensible within the current plan and risk rules.",
+                },
+                "modify": "The foundation is usable, but I would tighten this before execution.",
+                "block": "I would not execute this now. A context or risk blocker needs to be resolved first.",
+                "insufficient_context": "I cannot assess this reliably yet because essential plan information is missing.",
+                "attention": {
+                    "plan": "Before execution, confirm that the market context is still valid and that entry, stop loss and invalidation are unambiguous.",
+                    "setup": "A setup remains tradable only while its market, macro and technical conditions stay within your configured ranges.",
+                    "strategy": "Confirm that entry, stop loss, targets and position size still fit the linked setup.",
+                    "trade": "Confirm that the original setup conditions still hold before opening or continuing a position.",
+                    "bot": "Confirm that the bot can only execute within the agreed setup and risk limits.",
+                },
+                "next": "Define one clear invalidation level and execute only while the original conditions remain valid.",
+                "next_by_status": {
+                    "modify": "Tighten the highlighted point first, then ask FINN to review the plan again.",
+                    "block": "Resolve the blocker first and review the plan again before executing anything.",
+                    "insufficient_context": "Add the missing setup or strategy details, then start a new review.",
+                },
+                "issues": {
+                    "context_ready": "The active asset, setup or strategy is not linked clearly enough for a reliable assessment.",
+                    "setup_validity": "The setup is not active or lacks enough confirmation to execute this plan now.",
+                    "strategy_fit": "A clear strategy with execution rules is still missing for this setup.",
+                    "risk_sizing": "The position size or risk is too high for controlled execution.",
+                    "portfolio_exposure": "Existing exposure to this asset makes additional risk undesirable right now.",
+                    "market_readiness": "Current market and setup scores do not provide enough confirmation yet.",
+                },
+            },
+            "de": {
+                "headers": ("Meine Einschätzung", "Darauf achten", "Nächster Schritt"),
+                "approve": {
+                    "plan": "Dieser Plan ist grundsätzlich ausführbar: Setup und Strategie sind verknüpft und ich sehe keinen direkten Risikoblocker.",
+                    "setup": "Dieses Setup ist als Handelsbedingung nutzbar und passt zum aktuellen Risikorahmen.",
+                    "strategy": "Diese Strategie passt grundsätzlich zum verknüpften Setup und ist im aktuellen Risikorahmen ausführbar.",
+                    "trade": "Diese Handelsentscheidung ist innerhalb deines aktuellen Plans und Risikorahmens vertretbar.",
+                    "bot": "Diese Automatisierungsentscheidung ist innerhalb der aktuellen Plan- und Risikoregeln vertretbar.",
+                },
+                "modify": "Die Grundlage ist brauchbar, aber ich würde sie vor der Ausführung noch schärfen.",
+                "block": "Ich würde das jetzt nicht ausführen. Zuerst muss ein Kontext- oder Risikoblocker gelöst werden.",
+                "insufficient_context": "Ich kann das noch nicht zuverlässig bewerten, weil wesentliche Planinformationen fehlen.",
+                "attention": {
+                    "plan": "Prüfe vor der Ausführung, ob der Marktkontext noch gültig ist und Entry, Stop-Loss und Invalidierung eindeutig sind.",
+                    "setup": "Ein Setup bleibt nur handelbar, solange Markt-, Makro- und technische Bedingungen in deinen festgelegten Bereichen liegen.",
+                    "strategy": "Prüfe, ob Entry, Stop-Loss, Ziele und Positionsgröße weiterhin zum verknüpften Setup passen.",
+                    "trade": "Prüfe, ob die ursprünglichen Setup-Bedingungen noch gelten, bevor du eine Position öffnest oder weiterlaufen lässt.",
+                    "bot": "Prüfe, ob der Bot nur innerhalb der vereinbarten Setup- und Risikogrenzen ausführen kann.",
+                },
+                "next": "Lege eine klare Invalidierungsgrenze fest und führe nur aus, solange die ursprünglichen Bedingungen gültig bleiben.",
+                "next_by_status": {
+                    "modify": "Schärfe zuerst den genannten Punkt und lasse FINN den Plan danach erneut bewerten.",
+                    "block": "Löse zuerst den Blocker und bewerte den Plan erneut, bevor du etwas ausführst.",
+                    "insufficient_context": "Ergänze die fehlenden Setup- oder Strategiedaten und starte danach eine neue Bewertung.",
+                },
+                "issues": {
+                    "context_ready": "Aktives Asset, Setup oder Strategie sind noch nicht eindeutig genug für eine zuverlässige Bewertung verknüpft.",
+                    "setup_validity": "Das Setup ist nicht aktiv oder bietet noch nicht genug Bestätigung für eine Ausführung.",
+                    "strategy_fit": "Für dieses Setup fehlt noch eine klare Strategie mit Ausführungsregeln.",
+                    "risk_sizing": "Positionsgröße oder Risiko sind für eine kontrollierte Ausführung zu hoch.",
+                    "portfolio_exposure": "Die bestehende Gewichtung dieses Assets macht zusätzliches Risiko aktuell unattraktiv.",
+                    "market_readiness": "Die aktuellen Markt- und Setup-Scores liefern noch nicht genug Bestätigung.",
+                },
+            },
+        }[language]
+
+        subject_key = subject_type if subject_type in copy["attention"] else "trade"
+        if status == "approve":
+            assessment = copy["approve"].get(subject_key, copy["approve"]["trade"])
+        else:
+            assessment = copy.get(status, copy["insufficient_context"])
+        if asset:
+            assessment = f"{assessment} ({asset})"
+
+        attention = copy["attention"][subject_key]
+        if status in {"modify", "block", "insufficient_context"}:
+            issue = next(
+                (
+                    check
+                    for check in analysis.get("checks") or []
+                    if check.get("status") in {"modify", "warn", "block", "needs_context"}
+                ),
+                None,
+            )
+            if issue:
+                attention = copy["issues"].get(str(issue.get("id")), attention)
+
+        next_step = copy["next"] if status == "approve" else copy["next_by_status"].get(status, copy["next"])
+
+        assessment_header, attention_header, next_header = copy["headers"]
+        return (
+            f"**{assessment_header}**\n{assessment}\n\n"
+            f"**{attention_header}**\n{attention}\n\n"
+            f"**{next_header}**\n{next_step}"
+        )
 
     def _governance_event_signature(self, event_type: str, payload: Dict[str, Any]) -> str:
         stable_payload = {
@@ -6974,7 +7092,7 @@ class FinnPlanService:
         )
 
         return self._enrich_operator_contract({
-            "response": self._decision_review_message(analysis),
+            "response": self._decision_review_message(analysis, locale=str(context.get("locale") or "nl")),
             "intent": "decision_review",
             "flow": "decision_review",
             "draft": None,

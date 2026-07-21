@@ -110,6 +110,7 @@ def _audit_context_summary(context: Optional[dict]) -> Dict[str, Any]:
         "setup_timeframe": payload.get("setup_timeframe"),
         "setup_type": payload.get("setup_type"),
         "setup_name": payload.get("setup_name"),
+        "finn_subject_type": payload.get("finn_subject_type"),
         "current_flow": payload.get("current_flow"),
         "trader_profile_used": payload.get("trader_profile_used"),
         "trader_profile_summary": payload.get("trader_profile_summary"),
@@ -130,7 +131,11 @@ async def _enrich_with_trader_profile(
     user = await UserRepository(db).get_by_id(user_id)
     preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
     context_payload.update(build_trader_profile_context(preferences, request_context=context_payload, query=query))
-    context_payload["locale"] = resolve_locale(preferences, context_payload)
+    requested_locale = context_payload.get("locale")
+    context_payload["locale"] = resolve_locale(
+        {"locale": requested_locale} if requested_locale else preferences,
+        context_payload,
+    )
     return context_payload
 
 

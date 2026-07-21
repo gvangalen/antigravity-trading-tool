@@ -14,6 +14,8 @@ class AssistantContextSchema(BaseModel):
     setup_timeframe: Optional[str] = None
     strategy_id: Optional[int] = None
     setup_name: Optional[str] = None
+    finn_subject_type: Optional[str] = None
+    locale: Optional[str] = None
     finn_draft: Optional[Dict[str, Any]] = None
 
     class Config:

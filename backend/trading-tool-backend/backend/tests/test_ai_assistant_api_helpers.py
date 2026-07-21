@@ -280,6 +280,41 @@ def test_setup_strategy_listing_detection_matches_real_prompt():
     assert api._looks_like_setup_strategy_listing_request("Laat mijn actieve setups en strategieën zien.") is True
 
 
+def test_assistant_context_preserves_explicit_finn_subject_type():
+    from backend.schemas.assistant_schema import AssistantContextSchema
+
+    context = AssistantContextSchema(
+        page="/setup",
+        symbol="BTC",
+        setup_id=62,
+        strategy_id=257,
+        finn_subject_type="plan",
+        locale="en",
+    )
+
+    payload = api._assistant_context_payload(context)
+
+    assert payload["finn_subject_type"] == "plan"
+    assert payload["locale"] == "en"
+
+
+def test_explicit_request_locale_wins_over_stale_account_locale(monkeypatch):
+    async def _get_user(_self, _user_id):
+        return SimpleNamespace(ai_preferences={"locale": "nl"})
+
+    monkeypatch.setattr(api.UserRepository, "get_by_id", _get_user)
+
+    payload = asyncio.run(api._enrich_with_trader_profile(
+        object(),
+        7,
+        {"page": "/setup", "locale": "en", "finn_subject_type": "plan"},
+        query="Review this plan",
+    ))
+
+    assert payload["locale"] == "en"
+    assert payload["finn_subject_type"] == "plan"
+
+
 def test_transactional_legacy_state_does_not_get_rescued_into_general_help():
     class _Finn:
         def looks_like_general_capability_request(self, query): return False

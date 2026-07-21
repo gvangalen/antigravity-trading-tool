@@ -358,6 +358,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
         setup_timeframe: setup?.timeframe || null,
         strategy_id: strategy?.id || null,
         finn_subject_type: subjectType,
+        locale,
       },
     });
   };

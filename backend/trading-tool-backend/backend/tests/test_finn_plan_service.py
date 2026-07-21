@@ -6144,8 +6144,50 @@ def test_build_decision_review_response_can_approve_contextual_trade():
     assert result["analysis"]["review_type"] == "trade_intent_review"
     assert result["analysis"]["snapshot"]["asset"] == "BTC"
     assert "setup #62" in (result["analysis"]["context_anchor"] or "")
-    assert "Contextanker:" in result["response"]
-    assert "trade review" in result["response"].lower()
+    assert "**Mijn oordeel**" in result["response"]
+    assert "**Volgende stap**" in result["response"]
+    assert "Contextanker:" not in result["response"]
+    assert "Status: approve" not in result["response"]
+    assert "setup #62" not in result["response"]
+
+
+def test_build_decision_review_response_honors_explicit_plan_subject_and_locale():
+    service = _service()
+
+    result = asyncio.run(service.build_decision_review_response(30, "Review this complete plan", {
+        "page": "/setup",
+        "page_type": "My Plan",
+        "symbol": "BTC",
+        "setup_id": 62,
+        "strategy_id": 257,
+        "finn_subject_type": "plan",
+        "locale": "en",
+    }))
+
+    assert result["analysis"]["review_type"] == "plan_readiness_review"
+    assert result["analysis"]["subject"]["type"] == "plan"
+    assert "**My assessment**" in result["response"]
+    assert "setup and strategy are linked" in result["response"]
+    assert "Context anchor" not in result["response"]
+    assert "#62" not in result["response"]
+
+
+def test_build_decision_review_response_honors_explicit_strategy_subject():
+    service = _service()
+
+    result = asyncio.run(service.build_decision_review_response(30, "Review this strategy and its linked setup", {
+        "page": "/setup",
+        "symbol": "BTC",
+        "setup_id": 62,
+        "strategy_id": 257,
+        "finn_subject_type": "strategy",
+        "locale": "nl",
+    }))
+
+    assert result["analysis"]["review_type"] == "strategy_fit_review"
+    assert result["analysis"]["subject"]["type"] == "strategy"
+    assert "Deze strategie sluit in de basis aan" in result["response"]
+    assert "Checks:" not in result["response"]
 
 
 def test_build_decision_review_response_surfaces_behavioral_coaching():
