@@ -406,6 +406,7 @@ function AIAssistantContent({
   const scrollRef = useRef(null);
   const composerInputRef = useRef(null);
   const commandCenterRef = useRef(null);
+  const handledContextRequestRef = useRef(null);
   const loadedFinnStateRef = useRef(false);
   const missionControlCacheKeyRef = useRef("");
   const activeStreamIdRef = useRef(null);
@@ -4068,9 +4069,13 @@ function AIAssistantContent({
       ];
 
       const latestAssistantState = overrideContext || activeState || getLatestAssistantState();
-      const requestContext = latestAssistantState?.current_flow
+      const baseRequestContext = latestAssistantState?.current_flow
         ? { ...context, ...latestAssistantState }
         : context;
+      const requestContext = {
+        ...baseRequestContext,
+        ...(commandRequest?.context || {}),
+      };
       const sessionId = getAssistantSessionId();
 
       await assistantChatStream(
@@ -5383,6 +5388,13 @@ function AIAssistantContent({
       next_best_action: profileSummaryLabel,
     });
   }, [isOpen, hasTraderProfile, pathname, globalSymbol, context.symbol, profileSummaryLabel]);
+
+  useEffect(() => {
+    if (!isOpen || !commandRequest?.autoSubmit || !commandRequest?.query) return;
+    if (handledContextRequestRef.current === commandRequest.nonce) return;
+    handledContextRequestRef.current = commandRequest.nonce;
+    handleChat(commandRequest.query);
+  }, [commandRequest?.nonce, isOpen]);
 
   if (!isOpen) return null;
 

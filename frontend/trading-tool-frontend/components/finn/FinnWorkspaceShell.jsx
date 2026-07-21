@@ -76,6 +76,9 @@ export default function FinnWorkspaceShell({ children }) {
       setCommandRequest({
         mode: detail.mode || "all",
         category: detail.category || null,
+        context: detail.context || null,
+        query: detail.query || "",
+        autoSubmit: Boolean(detail.autoSubmit),
         nonce: commandNonceRef.current,
       });
       setAssistantOpen(true);

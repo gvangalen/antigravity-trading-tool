@@ -25,10 +25,10 @@ import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import SetupForm from "@/components/setup/SetupForm";
 import StrategyForm from "@/components/strategy/StrategyForm";
-import FinnSpecialistContext from "@/components/finn/FinnSpecialistContext";
 import Drawer from "@/components/ui/Drawer";
 import { useStrategyData } from "@/hooks/useStrategyData";
 import { deleteSetup } from "@/lib/api/setups";
+import { openFinnContext } from "@/lib/finnCommandSearch";
 
 const COPY = {
   nl: {
@@ -53,6 +53,11 @@ const COPY = {
     editStrategy: "Strategie bewerken",
     addStrategy: "Strategie toevoegen",
     openAutomation: "Naar Automation",
+    askFinn: "Vraag FINN",
+    reviewPlan: "Beoordeel plan",
+    setupQuestion: "Beoordeel deze setup. Wat zijn de belangrijkste sterke en zwakke punten?",
+    strategyQuestion: "Beoordeel deze strategie en leg uit of deze goed bij de gekoppelde setup past.",
+    planQuestion: "Beoordeel dit volledige plan en geef één concreet advies voor de volgende stap.",
     plansTitle: "Mijn plannen",
     plansIntro: "Setup en strategie blijven zichtbaar als twee onderdelen van hetzelfde plan.",
     allPlans: "Alle plannen",
@@ -113,6 +118,11 @@ const COPY = {
     editStrategy: "Edit strategy",
     addStrategy: "Add strategy",
     openAutomation: "Open Automation",
+    askFinn: "Ask FINN",
+    reviewPlan: "Review plan",
+    setupQuestion: "Review this setup. What are its main strengths and weaknesses?",
+    strategyQuestion: "Review this strategy and explain whether it fits the linked setup.",
+    planQuestion: "Review this complete plan and give one concrete recommendation for the next step.",
     plansTitle: "My plans",
     plansIntro: "Setup and strategy remain visible as two parts of the same plan.",
     allPlans: "All plans",
@@ -173,6 +183,11 @@ const COPY = {
     editStrategy: "Strategie bearbeiten",
     addStrategy: "Strategie hinzufügen",
     openAutomation: "Zu Automation",
+    askFinn: "FINN fragen",
+    reviewPlan: "Plan bewerten",
+    setupQuestion: "Bewerte dieses Setup. Was sind die wichtigsten Stärken und Schwächen?",
+    strategyQuestion: "Bewerte diese Strategie und erkläre, ob sie zum verknüpften Setup passt.",
+    planQuestion: "Bewerte diesen vollständigen Plan und gib eine konkrete Empfehlung für den nächsten Schritt.",
     plansTitle: "Meine Pläne",
     plansIntro: "Setup und Strategie bleiben als zwei Teile desselben Plans sichtbar.",
     allPlans: "Alle Pläne",
@@ -319,6 +334,33 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
     removeStrategy,
   } = useStrategyData();
   const [drawer, setDrawer] = useState(null);
+
+  const askFinnForPlan = (plan, subjectType = "plan") => {
+    const setup = plan?.setup || null;
+    const strategy = plan?.strategy || null;
+    const query = subjectType === "setup"
+      ? `${copy.setupQuestion} ${copy.setupTerm}: ${setup?.name || copy.notReady}.`
+      : subjectType === "strategy"
+        ? `${copy.strategyQuestion} ${copy.strategyTerm}: ${strategy?.name || copy.notReady}.`
+        : `${copy.planQuestion} ${copy.planTerm}: ${getPlanName(plan, copy)}.`;
+
+    openFinnContext({
+      query,
+      context: {
+        page: "/setup",
+        page_type: copy.eyebrow,
+        symbol: setup?.symbol || strategy?.symbol || activeSymbol,
+        timeframe: setup?.timeframe || strategy?.timeframe || "1D",
+        setup_id: setup?.id || null,
+        setup_name: setup?.name || null,
+        setup_type: setup?.setup_type || setup?.type || null,
+        setup_symbol: setup?.symbol || null,
+        setup_timeframe: setup?.timeframe || null,
+        strategy_id: strategy?.id || null,
+        finn_subject_type: subjectType,
+      },
+    });
+  };
 
   const plans = useMemo(() => {
     const result = buildPlans(setups, strategies);
@@ -480,6 +522,8 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
               detail={activePlan.setup ? `${activePlan.setup.min_market_score ?? 0}–${activePlan.setup.max_market_score ?? 100} ${copy.market} · ${activePlan.setup.min_macro_score ?? 0}–${activePlan.setup.max_macro_score ?? 100} ${copy.macro} · ${activePlan.setup.min_technical_score ?? 0}–${activePlan.setup.max_technical_score ?? 100} ${copy.technical}` : copy.notReady}
               actionLabel={copy.editSetup}
               onAction={() => setDrawer({ type: "edit-setup", setup: activePlan.setup, strategy: activePlan.strategy })}
+              finnActionLabel={copy.askFinn}
+              onFinnAction={() => askFinnForPlan(activePlan, "setup")}
             />
             <div className="hidden items-center justify-center text-slate-300 lg:flex"><ChevronRight size={20} /></div>
             <PlanPart
@@ -490,6 +534,8 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
               detail={activePlan.hasStrategy ? getExecutionSummary(activePlan, copy) : copy.strategyHelp}
               actionLabel={activePlan.hasStrategy ? copy.editStrategy : copy.addStrategy}
               onAction={() => openStrategyDrawer(activePlan.setup, activePlan.strategy, activePlan.strategy?.id ? "edit-strategy" : "new-strategy")}
+              finnActionLabel={activePlan.hasStrategy ? copy.askFinn : null}
+              onFinnAction={activePlan.hasStrategy ? () => askFinnForPlan(activePlan, "strategy") : null}
               muted={!activePlan.hasStrategy}
             />
             <div className="hidden items-center justify-center text-slate-300 lg:flex"><ChevronRight size={20} /></div>
@@ -500,6 +546,13 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
                   {activePlan.complete ? <CheckCircle2 size={20} className="text-emerald-500" /> : <CircleDashed size={20} className="text-amber-500" />}
                   <span className="text-sm font-black text-slate-900 dark:text-white">{activePlan.complete ? copy.readyForAutomation : copy.notReady}</span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => askFinnForPlan(activePlan)}
+                  className="mt-4 inline-flex items-center gap-1.5 text-xs font-black text-blue-700 transition hover:text-blue-900 dark:text-blue-300"
+                >
+                  <Sparkles size={13} /> {copy.reviewPlan}
+                </button>
               </div>
               {activePlan.complete ? (
                 <Link href={`/bot?symbol=${encodeURIComponent(activePlan.setup?.symbol || activeSymbol)}`} className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-black text-white transition hover:bg-blue-700">
@@ -517,27 +570,6 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
             </div>
           </div>
         </section>
-      ) : null}
-
-      {activePlan ? (
-        <div className={`grid gap-4 ${activePlan.hasStrategy ? "lg:grid-cols-2" : ""}`}>
-          <FinnSpecialistContext
-            subjectType="setup"
-            subjectId={activePlan.setup?.id}
-            symbol={activePlan.setup?.symbol || activeSymbol}
-            timeframe={activePlan.setup?.timeframe || "1D"}
-            compact
-          />
-          {activePlan.hasStrategy ? (
-            <FinnSpecialistContext
-              subjectType="strategy"
-              subjectId={activePlan.strategy?.id}
-              symbol={activePlan.setup?.symbol || activeSymbol}
-              timeframe={activePlan.setup?.timeframe || "1D"}
-              compact
-            />
-          ) : null}
-        </div>
       ) : null}
 
       <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_50px_-40px_rgba(15,23,42,0.3)] dark:border-slate-800 dark:bg-[#0f172a]">
@@ -561,6 +593,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
                 copy={copy}
                 onEditSetup={() => setDrawer({ type: "edit-setup", setup: plan.setup, strategy: plan.strategy })}
                 onEditStrategy={() => openStrategyDrawer(plan.setup, plan.strategy, plan.strategy ? "edit-strategy" : "new-strategy")}
+                onAskFinn={() => askFinnForPlan(plan)}
                 onDelete={() => handleDeletePlan(plan)}
               />
             ))}
@@ -610,7 +643,18 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   );
 }
 
-function PlanPart({ icon: Icon, eyebrow, title, meta, detail, actionLabel, onAction, muted = false }) {
+function PlanPart({
+  icon: Icon,
+  eyebrow,
+  title,
+  meta,
+  detail,
+  actionLabel,
+  onAction,
+  finnActionLabel,
+  onFinnAction,
+  muted = false,
+}) {
   return (
     <div className={`p-5 lg:p-6 ${muted ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}>
       <div className="flex items-start gap-3">
@@ -622,16 +666,23 @@ function PlanPart({ icon: Icon, eyebrow, title, meta, detail, actionLabel, onAct
         </div>
       </div>
       <p className="mt-4 line-clamp-2 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">{detail}</p>
-      <button type="button" onClick={onAction} className="mt-4 inline-flex items-center gap-2 text-xs font-black text-blue-700 transition hover:text-blue-900 dark:text-blue-300">
-        <Pencil size={13} /> {actionLabel}
-      </button>
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <button type="button" onClick={onAction} className="inline-flex items-center gap-2 text-xs font-black text-blue-700 transition hover:text-blue-900 dark:text-blue-300">
+          <Pencil size={13} /> {actionLabel}
+        </button>
+        {onFinnAction && finnActionLabel ? (
+          <button type="button" onClick={onFinnAction} className="inline-flex items-center gap-2 text-xs font-black text-slate-500 transition hover:text-blue-700 dark:text-slate-400 dark:hover:text-blue-300">
+            <Sparkles size={13} /> {finnActionLabel}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-function PlanRow({ plan, copy, onEditSetup, onEditStrategy, onDelete }) {
+function PlanRow({ plan, copy, onEditSetup, onEditStrategy, onAskFinn, onDelete }) {
   return (
-    <div className="grid gap-4 px-5 py-4 transition hover:bg-slate-50/70 dark:hover:bg-slate-900/40 lg:grid-cols-[1.1fr_1fr_1fr_auto] lg:items-center lg:px-6">
+    <div className="group grid gap-4 px-5 py-4 transition hover:bg-slate-50/70 dark:hover:bg-slate-900/40 lg:grid-cols-[1.1fr_1fr_1fr_auto_auto] lg:items-center lg:px-6">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h4 className="truncate text-sm font-black text-slate-950 dark:text-white">{getPlanName(plan, copy)}</h4>
@@ -656,6 +707,15 @@ function PlanRow({ plan, copy, onEditSetup, onEditStrategy, onDelete }) {
           <span className="block truncate text-xs font-black text-slate-800 dark:text-slate-200">{plan.hasStrategy ? plan.strategy.name : copy.addStrategy}</span>
         </span>
         {plan.complete ? <Check size={14} className="ml-auto shrink-0 text-emerald-500" /> : plan.hasStrategy ? <CircleDashed size={14} className="ml-auto shrink-0 text-amber-600" /> : <Plus size={14} className="ml-auto shrink-0 text-amber-600" />}
+      </button>
+
+      <button
+        type="button"
+        onClick={onAskFinn}
+        className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl px-2.5 text-[11px] font-black text-slate-400 opacity-100 transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/30 dark:hover:text-blue-300 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
+      >
+        <Sparkles size={14} />
+        <span className="lg:hidden xl:inline">{copy.reviewPlan}</span>
       </button>
 
       <button type="button" onClick={onDelete} aria-label={copy.deletePlan} className="inline-flex h-9 w-9 items-center justify-center justify-self-end rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/20">

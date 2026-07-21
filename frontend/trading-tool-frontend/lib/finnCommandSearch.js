@@ -2,6 +2,20 @@ export const FINN_COMMAND_OPEN_EVENT = "finn-command-search:open";
 export const FINN_INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 export const FINN_INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
 
+export function openFinnContext({ query, context = {}, autoSubmit = true } = {}) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(FINN_COMMAND_OPEN_EVENT, {
+      detail: {
+        mode: "chat",
+        query: String(query || "").trim(),
+        context,
+        autoSubmit,
+      },
+    })
+  );
+}
+
 export const FINN_ASSETS = [
   { symbol: "BTC", name: "Bitcoin", icon: "₿" },
   { symbol: "ETH", name: "Ethereum", icon: "Ξ" },
