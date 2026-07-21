@@ -45,7 +45,6 @@ export default function FinnWorkspaceShell({ children }) {
   const isAnalysisV3 = searchParams.get("variant") !== "legacy";
 
   const activeWorkflow = useMemo(() => getWorkflowMeta(pathname, isAnalysisV3, locale), [isAnalysisV3, locale, pathname]);
-  const isPlanWorkspace = pathname === "/setup" || pathname === "/strategy";
   const userName = user?.first_name || "Trader";
   const shellStatus = t?.ui?.shell?.appSlogan || "Professional";
   const currentAsset = selectedAsset || "BTC";
@@ -161,15 +160,13 @@ export default function FinnWorkspaceShell({ children }) {
                 assistantOpen ? "pb-8" : "pb-10 lg:pb-12"
               }`}
             >
-              {!isPlanWorkspace ? (
-                <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-35px_rgba(37,99,235,0.32)] dark:border-slate-800 dark:bg-[#0f172a]">
-                  <FinnPanel
-                    previewSectionsOnly
-                    eventsEnabled={!assistantOpen}
-                    className="h-auto min-h-0"
-                  />
-                </section>
-              ) : null}
+              <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-35px_rgba(37,99,235,0.32)] dark:border-slate-800 dark:bg-[#0f172a]">
+                <FinnPanel
+                  previewSectionsOnly
+                  eventsEnabled={!assistantOpen}
+                  className="h-auto min-h-0"
+                />
+              </section>
 
               <section className="rounded-[32px] border border-slate-200/80 bg-white p-4 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.35)] dark:border-slate-800 dark:bg-[#06101f] lg:p-6">
                 <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-5 dark:border-slate-800 lg:flex-row lg:items-end lg:justify-between">
