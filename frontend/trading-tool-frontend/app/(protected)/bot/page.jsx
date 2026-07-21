@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Wallet, Plus } from "lucide-react";
+import { Bot, ChevronDown, Plus, Sparkles, Wallet } from "lucide-react";
 
 import useBotData from "@/hooks/useBotData";
 import { useStrategyData } from "@/hooks/useStrategyData";
@@ -27,11 +27,11 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
-import FinnSpecialistContext from "@/components/finn/FinnSpecialistContext";
+import { openFinnContext } from "@/lib/finnCommandSearch";
 
 function BotPageInner() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const { status, completeStep } = useOnboarding();
   const { openConfirm, showSnackbar } = useModal();
   const searchParams = useSearchParams();
@@ -200,6 +200,64 @@ function BotPageInner() {
       return true;
     });
   }, [bots, statusFilter, assetFilter, portfolios]);
+
+  useEffect(() => {
+    if (!filteredBots.length) {
+      if (activeBot) setActiveBot(null);
+      return;
+    }
+    if (!filteredBots.some((bot) => bot.id === activeBot?.id)) {
+      setActiveBot(filteredBots[0]);
+    }
+  }, [activeBot, filteredBots, setActiveBot]);
+
+  const getBotPresentation = (bot) => {
+    const portfolio = portfolios.find((item) => item.bot_id === bot.id);
+    const decision = decisionsByBot?.[bot.id] || {};
+    const symbol = String(
+      portfolio?.symbol ||
+      bot?.strategy?.setup?.symbol ||
+      bot?.strategy?.symbol ||
+      bot?.symbol ||
+      "BTC"
+    ).toUpperCase();
+    const timeframe =
+      bot?.strategy?.setup?.timeframe ||
+      bot?.strategy?.timeframe ||
+      bot?.timeframe ||
+      "1D";
+    const action = String(decision?.action || copy.botList?.waiting || "Waiting").toUpperCase();
+    const confidence = String(
+      decision?.confidence_label || decision?.confidence || copy.botList?.low || "Low"
+    ).toUpperCase();
+
+    return { portfolio, decision, symbol, timeframe, action, confidence };
+  };
+
+  const askFinnAboutBot = (bot) => {
+    const { symbol, timeframe } = getBotPresentation(bot);
+    const language = String(locale || "nl").slice(0, 2);
+    const query = language === "en"
+      ? `Review bot ${bot.name}. Briefly explain its current status and risks, then give one concrete next step.`
+      : language === "de"
+        ? `Bewerte Bot ${bot.name}. Erklaere kurz den aktuellen Status und die Risiken und nenne einen konkreten naechsten Schritt.`
+        : `Beoordeel bot ${bot.name}. Leg kort uit wat de huidige status en risico's betekenen en geef een concrete volgende stap.`;
+
+    openFinnContext({
+      query,
+      context: {
+        page: "/bot",
+        page_type: copy.title || "Automation",
+        symbol,
+        timeframe,
+        bot_id: bot.id,
+        bot_name: bot.name,
+        strategy_id: bot?.strategy?.id || bot?.strategy_id || null,
+        finn_subject_type: "bot",
+        locale,
+      },
+    });
+  };
 
   const totalPortfolioValueEur = useMemo(() => {
     return portfolios.reduce((acc, p) => {
@@ -415,15 +473,6 @@ function BotPageInner() {
         />
       ) : null}
 
-      <div className="mb-10">
-        <FinnSpecialistContext
-          subjectType="automation"
-          subjectId={activeBot?.id}
-          symbol={activeBot?.symbol || searchParams.get("symbol") || "BTC"}
-          timeframe={activeBot?.timeframe || "1D"}
-        />
-      </div>
-
       <div className="max-w-full flex flex-col lg:flex-row gap-10 pb-24 items-start relative">
         
         {/* 🕋 LEFT: MAIN COMMAND CENTER */}
@@ -482,32 +531,90 @@ function BotPageInner() {
               </div>
             </div>
 
-            <div className="space-y-10">
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              <div className="hidden grid-cols-[minmax(0,2fr)_0.8fr_0.8fr_0.8fr_auto] gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-3 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 dark:border-slate-800 dark:bg-slate-900/60 md:grid">
+                <span>{copy.botList?.bot || "Bot"}</span>
+                <span>{copy.botList?.status || "Status"}</span>
+                <span>{copy.botList?.action || "Action"}</span>
+                <span>{copy.botList?.confidence || "Confidence"}</span>
+                <span className="sr-only">{copy.botList?.open || "Open"}</span>
+              </div>
+
               {filteredBots.map((bot) => {
                 const isActive = activeBot?.id === bot.id;
+                const presentation = getBotPresentation(bot);
                 return (
-                  <div key={bot.id} onClick={(e) => { if (e.target.closest("button") || e.target.closest("input")) return; setActiveBot(bot); }} 
-                  className={`relative transition-all duration-300 cursor-pointer ${isActive ? "ring-4 ring-blue-500 shadow-[0_0_25px_rgba(59,130,246,0.25)] ring-offset-4 dark:ring-offset-[#020617] rounded-[2.5rem] z-10" : "hover:scale-[1.002]"}`}>
-                    <BotAgentCard
-                      bot={bot}
-                      decision={decisionsByBot?.[bot.id]}
-                      order={(today?.orders || []).find((o) => o.bot_id === bot.id)}
-                      marketIntelligence={marketIntelligence}
-                      loadingMarketIntelligence={loadingMarketIntelligence}
-                      portfolio={portfolios.find((p) => p.bot_id === bot.id)}
-                      trades={tradesByBot?.[bot.id] ?? []}
-                      history={history}
-                      loadingDecision={generatingBotId === bot.id}
-                      onGenerate={() => handleGenerateDecision(bot)}
-                      onExecute={() => {}} 
-                      onSkip={() => {}} 
-                      onOpenSettings={handleOpenBotSettings}
-                      onSaveTradePlan={() => {}}
-                      onPlaceManualOrder={() => {}}
-                      onBacktest={runBacktest}
-                    />
+                  <div key={bot.id} className="border-b border-slate-100 last:border-b-0 dark:border-slate-800">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isActive}
+                      onClick={() => setActiveBot(bot)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setActiveBot(bot);
+                        }
+                      }}
+                      className={`group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-5 py-4 transition md:grid-cols-[minmax(0,2fr)_0.8fr_0.8fr_0.8fr_auto] ${isActive ? "bg-blue-50/70 dark:bg-blue-950/20" : "hover:bg-slate-50 dark:hover:bg-slate-900/50"}`}
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isActive ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-900"}`}>
+                          <Bot size={18} />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-black text-slate-950 dark:text-white">{bot.name}</span>
+                          <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                            {presentation.symbol} · {presentation.timeframe} · {bot.is_live ? copy.modeLive : copy.modePaper}
+                          </span>
+                        </span>
+                      </div>
+
+                      <span className={`hidden w-fit rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] md:inline-flex ${bot.is_active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                        {bot.is_active ? copy.filterActive : copy.filterPaused}
+                      </span>
+                      <span className="hidden text-xs font-black uppercase text-blue-700 dark:text-blue-300 md:block">{presentation.action}</span>
+                      <span className="hidden text-xs font-black uppercase text-slate-600 dark:text-slate-300 md:block">{presentation.confidence}</span>
+
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            askFinnAboutBot(bot);
+                          }}
+                          className="inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-black text-slate-400 opacity-100 transition hover:bg-blue-100 hover:text-blue-700 focus-visible:opacity-100 dark:hover:bg-blue-950/50 dark:hover:text-blue-300 lg:opacity-0 lg:group-hover:opacity-100"
+                        >
+                          <Sparkles size={14} />
+                          <span className="hidden xl:inline">{copy.botList?.askFinn || "Ask FINN"}</span>
+                        </button>
+                        <ChevronDown size={17} className={`text-slate-400 transition-transform ${isActive ? "rotate-180 text-blue-600" : ""}`} />
+                      </div>
+                    </div>
+
                     {isActive && (
-                      <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-12 bg-blue-600 rounded-full" />
+                      <div className="border-t border-blue-100 bg-blue-50/30 p-3 sm:p-5 dark:border-blue-950 dark:bg-blue-950/10">
+                        <BotAgentCard
+                          bot={bot}
+                          decision={presentation.decision}
+                          order={(today?.orders || []).find((o) => o.bot_id === bot.id)}
+                          marketIntelligence={marketIntelligence}
+                          loadingMarketIntelligence={loadingMarketIntelligence}
+                          portfolio={presentation.portfolio}
+                          trades={tradesByBot?.[bot.id] ?? []}
+                          history={history}
+                          loadingDecision={generatingBotId === bot.id}
+                          onGenerate={() => handleGenerateDecision(bot)}
+                          onExecute={() => {}}
+                          onSkip={() => {}}
+                          onOpenSettings={handleOpenBotSettings}
+                          onSaveTradePlan={() => {}}
+                          onPlaceManualOrder={() => {}}
+                          onBacktest={runBacktest}
+                          onAskFinn={() => askFinnAboutBot(bot)}
+                          finnActionLabel={copy.botList?.askFinn || "Ask FINN"}
+                        />
+                      </div>
                     )}
                   </div>
                 );

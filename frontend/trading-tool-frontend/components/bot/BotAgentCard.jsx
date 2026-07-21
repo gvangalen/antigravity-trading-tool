@@ -20,6 +20,7 @@ import {
   Rocket,
   Activity,
   RotateCcw,
+  Sparkles,
   Zap,
   ChevronDown,
   ChevronUp,
@@ -46,6 +47,8 @@ export default function BotAgentCard({
 
   onSaveTradePlan,
   onBacktest,
+  onAskFinn,
+  finnActionLabel = "Ask FINN",
 }) {
   const { t, locale } = useTranslation();
   const copy = t?.botPage?.agentCard || {};
@@ -473,7 +476,22 @@ export default function BotAgentCard({
             </div>
           </div>
 
-          <div className="relative" ref={settingsRef}>
+          <div className="relative flex items-center gap-2" ref={settingsRef}>
+            {onAskFinn ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onAskFinn();
+                }}
+                aria-label={finnActionLabel}
+                title={finnActionLabel}
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 text-[10px] font-black uppercase tracking-[0.14em] text-blue-700 transition hover:border-blue-200 hover:bg-blue-100 dark:border-blue-950 dark:bg-blue-950/30 dark:text-blue-300"
+              >
+                <Sparkles size={14} />
+                <span className="hidden sm:inline">{finnActionLabel}</span>
+              </button>
+            ) : null}
             <button
               className="w-10 h-10 flex items-center justify-center rounded-xl border border-slate-200 bg-card text-secondary hover:text-slate-800 hover:border-slate-400 transition-all shadow-sm active:scale-95"
               onClick={(e) => {

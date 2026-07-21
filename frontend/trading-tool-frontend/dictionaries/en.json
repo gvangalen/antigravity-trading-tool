@@ -1581,6 +1581,16 @@
     "filterPaused": "Paused",
     "filterAll": "All",
     "allAssets": "ALL ASSETS",
+    "botList": {
+      "bot": "Bot",
+      "status": "Status",
+      "action": "Market action",
+      "confidence": "Confidence",
+      "open": "Open bot",
+      "askFinn": "Ask FINN",
+      "waiting": "Waiting",
+      "low": "Low"
+    },
     "form": {
       "nameLabel": "Identifier",
       "namePlaceholder": "e.g. DCA BTC ALGO",

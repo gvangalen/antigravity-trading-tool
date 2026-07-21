@@ -1582,6 +1582,16 @@
     "filterPaused": "Gepauzeerd",
     "filterAll": "Alle",
     "allAssets": "ALLE ASSETS",
+    "botList": {
+      "bot": "Bot",
+      "status": "Status",
+      "action": "Marktactie",
+      "confidence": "Vertrouwen",
+      "open": "Bot openen",
+      "askFinn": "Vraag FINN",
+      "waiting": "Wachten",
+      "low": "Laag"
+    },
     "form": {
       "nameLabel": "Identificatielabel",
       "namePlaceholder": "bijv. DCA BTC ALGO",
