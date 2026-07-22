@@ -1588,6 +1588,8 @@
       "confidence": "Confidence",
       "open": "Open bot",
       "askFinn": "Ask FINN",
+      "trade": "Trade",
+      "closeTrade": "Close trade",
       "waiting": "Waiting",
       "observe": "Observe",
       "low": "Low"
@@ -1980,6 +1982,7 @@
       "scoreSuffixTemplate": "{key} score"
     },
     "globalTradePanel": {
+      "close": "Close trade panel",
       "selectBot": "Select a bot to trade",
       "tradingWith": "Trading with",
       "botFallback": "Bot"

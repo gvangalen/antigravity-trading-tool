@@ -49,6 +49,7 @@ function BotPageInner() {
   const { activeBot, setActiveBot } = useActiveBot();
 
   const [expandedBotId, setExpandedBotId] = useState(null);
+  const [tradePanelBotId, setTradePanelBotId] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [assetFilter, setAssetFilter] = useState("all");
   const [currentTime, setCurrentTime] = useState(null);
@@ -114,6 +115,7 @@ function BotPageInner() {
     if (bots.length === 0) {
       setActiveBot(null);
       setExpandedBotId(null);
+      setTradePanelBotId(null);
       hasInitializedExpansionRef.current = false;
       return;
     }
@@ -160,7 +162,8 @@ function BotPageInner() {
       setExpandedBotId(targetBot.id);
     }
 
-    if (requestedFocus === "trade") {
+    if (requestedFocus === "trade" && targetBot) {
+      setTradePanelBotId(targetBot.id);
       requestAnimationFrame(() => {
         document.getElementById("execution-guardrail-panel")?.scrollIntoView({
           behavior: "smooth",
@@ -182,6 +185,7 @@ function BotPageInner() {
       if (targetBot) {
         setActiveBot(targetBot);
         setExpandedBotId(targetBot.id);
+        setTradePanelBotId(targetBot.id);
         persistBotSelection(targetBot.id);
       }
 
@@ -475,7 +479,7 @@ function BotPageInner() {
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [bots.length]); 
+  }, [bots.length, tradePanelBotId]);
 
   return (
     <div className="page-container !max-w-none !px-6 bg-white dark:bg-[#020617] transition-colors h-auto overflow-visible">
@@ -581,10 +585,20 @@ function BotPageInner() {
                   if (!isSelected) {
                     setActiveBot(bot);
                     setExpandedBotId(bot.id);
+                    setTradePanelBotId(null);
                     persistBotSelection(bot.id);
                     return;
                   }
                   setExpandedBotId((currentId) => currentId === bot.id ? null : bot.id);
+                };
+                const toggleTradePanel = (event) => {
+                  event.stopPropagation();
+                  if (!isSelected) {
+                    setActiveBot(bot);
+                    setExpandedBotId(bot.id);
+                    persistBotSelection(bot.id);
+                  }
+                  setTradePanelBotId((currentId) => currentId === bot.id ? null : bot.id);
                 };
                 return (
                   <div key={bot.id} className="border-b border-slate-100 last:border-b-0 dark:border-slate-800">
@@ -620,6 +634,19 @@ function BotPageInner() {
                       <span className="hidden text-xs font-black uppercase text-slate-600 dark:text-slate-300 md:block">{presentation.confidence}</span>
 
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          aria-pressed={tradePanelBotId === bot.id}
+                          onClick={toggleTradePanel}
+                          className={`inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-black transition ${tradePanelBotId === bot.id ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-950/50 dark:hover:text-blue-300"}`}
+                        >
+                          <Wallet size={14} />
+                          <span className="hidden xl:inline">
+                            {tradePanelBotId === bot.id
+                              ? (copy.botList?.closeTrade || "Close")
+                              : (copy.botList?.trade || "Trade")}
+                          </span>
+                        </button>
                         <button
                           type="button"
                           onClick={(event) => {
@@ -667,23 +694,25 @@ function BotPageInner() {
           </div>
         </div>
 
-        {/* 🛰️ RIGHT: GLOBAL OVERRIDES (v2200-SMOOTH) */}
-        <div 
-          className="w-full lg:w-[350px] shrink-0"
-          style={{ 
-            willChange: 'transform',
-            backfaceVisibility: 'hidden'
-          }}
-          ref={gliderRef}
-        >
-          <div id="tp-final-v2200-smooth">
-            <GlobalTradePanel 
-              decision={decisionsByBot?.[activeBot?.id]}
-              portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
-              onManualTrade={() => handleGenerateDecision(activeBot)}
-            />
+        {tradePanelBotId === activeBot?.id && (
+          <div
+            className="w-full lg:w-[350px] shrink-0"
+            style={{
+              willChange: 'transform',
+              backfaceVisibility: 'hidden'
+            }}
+            ref={gliderRef}
+          >
+            <div id="tp-final-v2200-smooth">
+              <GlobalTradePanel
+                decision={decisionsByBot?.[activeBot?.id]}
+                portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
+                onManualTrade={() => handleGenerateDecision(activeBot)}
+                onClose={() => setTradePanelBotId(null)}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
     </div>

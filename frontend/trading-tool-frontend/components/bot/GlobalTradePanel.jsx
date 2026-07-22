@@ -2,13 +2,14 @@
 
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import TradePanelContainer from "./TradePanelContainer";
-import { Target } from "lucide-react";
+import { Target, X } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function GlobalTradePanel({
   decision,
   portfolio,
   onManualTrade,
+  onClose,
 }) {
   const { activeBot } = useActiveBot();
   const { t } = useTranslation();
@@ -41,6 +42,14 @@ export default function GlobalTradePanel({
                  <p className="text-[10px] font-black text-secondary uppercase tracking-widest leading-none mb-1">{copy.tradingWith}</p>
                  <h2 className="text-sm font-extrabold text-foreground tracking-tight">{activeBot?.name || copy.botFallback}</h2>
               </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label={copy.close}
+                className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X size={17} />
+              </button>
            </div>
            
            <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-slate-500">

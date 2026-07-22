@@ -1589,6 +1589,8 @@
       "confidence": "Vertrouwen",
       "open": "Bot openen",
       "askFinn": "Vraag FINN",
+      "trade": "Handelen",
+      "closeTrade": "Sluiten",
       "waiting": "Wachten",
       "observe": "Observeren",
       "low": "Laag"
@@ -1981,6 +1983,7 @@
       "scoreSuffixTemplate": "{key}-score"
     },
     "globalTradePanel": {
+      "close": "Handelspaneel sluiten",
       "selectBot": "Selecteer een bot om te handelen",
       "tradingWith": "Handelen met",
       "botFallback": "Bot"
