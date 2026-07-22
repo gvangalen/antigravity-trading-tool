@@ -10,10 +10,10 @@ export function useDashboardData() {
   const [loading, setLoading] = useState(true);
   const loadingRef = useRef(false);
 
-  const [macroScore, setMacroScore] = useState(0);
-  const [technicalScore, setTechnicalScore] = useState(0);
-  const [marketScore, setMarketScore] = useState(0);
-  const [setupScore, setSetupScore] = useState(0);
+  const [macroScore, setMacroScore] = useState(null);
+  const [technicalScore, setTechnicalScore] = useState(null);
+  const [marketScore, setMarketScore] = useState(null);
+  const [setupScore, setSetupScore] = useState(null);
 
   const [macroExplanation, setMacroExplanation] = useState('–');
   const [technicalExplanation, setTechnicalExplanation] = useState('–');
@@ -41,19 +41,19 @@ export function useDashboardData() {
         if (!mounted || !res) return;
 
         // 🟩 EXACTE BACKEND-FIELDS (dit komt uit daily_scores)
-        setMacroScore(res.macro_score ?? 0);
+        setMacroScore(Number.isFinite(Number(res.macro_score)) ? Number(res.macro_score) : null);
         setMacroExplanation(res.macro_interpretation ?? '–');
         setMacroTop(res.macro_top_contributors ?? []);
 
-        setTechnicalScore(res.technical_score ?? 0);
+        setTechnicalScore(Number.isFinite(Number(res.technical_score)) ? Number(res.technical_score) : null);
         setTechnicalExplanation(res.technical_interpretation ?? '–');
         setTechnicalTop(res.technical_top_contributors ?? []);
 
-        setMarketScore(res.market_score ?? 0);
+        setMarketScore(Number.isFinite(Number(res.market_score)) ? Number(res.market_score) : null);
         setMarketExplanation(res.market_interpretation ?? '–');
         setMarketTop(res.market_top_contributors ?? []);
 
-        setSetupScore(res.setup_score ?? 0);
+        setSetupScore(Number.isFinite(Number(res.setup_score)) ? Number(res.setup_score) : null);
         setSetupExplanation(res.setup_interpretation ?? '–');
         setSetupTop(res.setup_top_contributors ?? []);
 

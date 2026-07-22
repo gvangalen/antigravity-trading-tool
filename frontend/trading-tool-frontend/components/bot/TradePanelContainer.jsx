@@ -19,7 +19,11 @@ export default function TradePanelContainer({
   const { showSnackbar } = useModal();
   const { t } = useTranslation();
   const copy = t?.botPage?.tradePanel || {};
-  const tradingDisabled = bot?.is_active === false;
+  const tradingDisabled = Boolean(
+    bot?.is_active === false ||
+    bot?.is_paused === true ||
+    String(bot?.status || "").toLowerCase() === "paused"
+  );
   const botId = bot?.id;
   const decisionId = decision?.id;
   const tradeSymbol = (
@@ -27,7 +31,7 @@ export default function TradePanelContainer({
     bot?.strategy?.symbol ||
     bot?.symbol ||
     decision?.symbol ||
-    "BTC"
+    ""
   ).toUpperCase();
 
   const [price, setPrice] = useState(null);
@@ -166,7 +170,7 @@ export default function TradePanelContainer({
   ===================================================== */
 
   useVisibilityPolling(loadPrice, {
-    enabled: Boolean(botId),
+    enabled: Boolean(botId && tradeSymbol),
     intervalMs: 60000,
     backgroundIntervalMs: 300000,
     runImmediately: true,
@@ -345,22 +349,13 @@ export default function TradePanelContainer({
      PRICE LOADING STATE
   ===================================================== */
 
-  /* =====================================================
-     AGGRESSIVE SCROLL SYNC (FOR SAFARI)
-  ===================================================== */
-  useEffect(() => {
-    const sync = () => {
-      const el = document.getElementById("tp-final-v2155");
-      if (el) {
-        el.style.position = "relative";
-        el.style.height = "auto";
-        el.style.display = "block";
-      }
-    };
-    window.addEventListener("scroll", sync);
-    sync();
-    return () => window.removeEventListener("scroll", sync);
-  }, []);
+  if (!tradeSymbol) {
+    return (
+      <div className="p-4 text-sm font-semibold text-amber-700 dark:text-amber-300">
+        {copy.missingBotContext}
+      </div>
+    );
+  }
 
   if (!price) {
     return (

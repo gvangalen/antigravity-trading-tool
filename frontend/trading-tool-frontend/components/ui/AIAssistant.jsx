@@ -108,6 +108,12 @@ function buildAssistantUiText(at) {
     noHistory: at("uiText.noHistory"),
     retry: at("uiText.retry"),
     inputPlaceholder: at("uiText.inputPlaceholder"),
+    composerAsset: at("uiText.composerAsset"),
+    composerIndicator: at("uiText.composerIndicator"),
+    composerMenu: at("uiText.composerMenu"),
+    composerInstruction: at("uiText.composerInstruction"),
+    recentConversations: at("uiText.recentConversations"),
+    continueConversation: at("uiText.continueConversation"),
     setupWizard: at("uiText.setupWizard"),
     startGuide: at("uiText.startGuide"),
     decisionReviewFallback: at("uiText.decisionReviewFallback"),
@@ -420,11 +426,12 @@ function AIAssistantContent({
   const updateQuery = onQueryChange || setQuery;
   const isSimpleFinnModal = modal;
 
-  const composerMenuCopy = String(locale || "nl").toLowerCase().startsWith("en")
-    ? { asset: "Add asset", indicator: "Add indicator", placeholder: "Ask FINN or give an instruction...", menu: "Open add menu" }
-    : String(locale || "nl").toLowerCase().startsWith("de")
-      ? { asset: "Asset hinzufügen", indicator: "Indikator hinzufügen", placeholder: "FINN fragen oder einen Auftrag geben...", menu: "Hinzufügen-Menü öffnen" }
-      : { asset: "Asset toevoegen", indicator: "Indicator toevoegen", placeholder: "Vraag FINN of voer een opdracht uit...", menu: "Toevoegmenu openen" };
+  const composerMenuCopy = {
+    asset: at("uiText.composerAsset"),
+    indicator: at("uiText.composerIndicator"),
+    placeholder: at("uiText.composerInstruction"),
+    menu: at("uiText.composerMenu"),
+  };
 
   const humanizeSurfaceStatus = (value) => {
     const raw = String(value || "").toLowerCase();
@@ -5756,7 +5763,7 @@ function AIAssistantContent({
           {isSimpleFinnModal && messages.length === 0 && recentConversationItems.length > 0 && (
             <div className="space-y-2">
               <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
-                Recente gesprekken
+                {uiText.recentConversations}
               </div>
               <div className="space-y-2">
                 {recentConversationItems.map((conversation) => (
@@ -5775,7 +5782,7 @@ function AIAssistantContent({
                       </span>
                     </div>
                     <p className="mt-1 text-[12px] text-slate-500 dark:text-slate-400">
-                      Ga verder waar je was gebleven.
+                      {uiText.continueConversation}
                     </p>
                   </button>
                 ))}

@@ -275,7 +275,13 @@ export default function MarketConditionsInline({
       color: exposureColor,
       getLabel: () => exposureLabel,
     },
-  ].filter((item) => !hideMetrics.includes(item.key));
+  ].filter(
+    (item) =>
+      !hideMetrics.includes(item.key) &&
+      item.value !== null &&
+      item.value !== undefined &&
+      Number.isFinite(Number(item.value))
+  );
 
   return (
     <div className="flex flex-col gap-2 w-full">

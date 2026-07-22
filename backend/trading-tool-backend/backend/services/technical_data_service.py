@@ -9,6 +9,7 @@ from backend.utils.scoring_engine import score_indicator
 from backend.utils.scoring_utils import normalize_indicator_name
 from backend.utils.db import get_db_connection
 from backend.services.onboarding_service import mark_step_completed
+from backend.utils.indicator_score_validation import require_indicator_score
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class TechnicalDataService:
 
         scored = await asyncio.to_thread(_score_fallback)
 
-        score = scored.get("score", 10)
+        score = require_indicator_score(scored, name)
         advies = scored.get("trend") or "neutral"
         uitleg = scored.get("interpretation") or "Geen interpretatie beschikbaar"
 

@@ -10,6 +10,7 @@ from backend.infrastructure.repositories.macro_data_repository import MacroDataR
 from backend.schemas.macro_data_schema import (
     MacroDataResponse, MacroAggregateResponse, MacroAddResponse, MacroIndicatorNamesResponse, MacroIndicatorRuleResponse
 )
+from backend.utils.indicator_score_validation import require_indicator_score
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ class MacroDataService:
         normalized = normalize_indicator_name(indicator_name)
 
         scored = await asyncio.to_thread(self._sync_score_indicator, "macro", normalized, value, user_id)
-        score = scored.get("score", 10.0)
+        score = require_indicator_score(scored, indicator_name)
         trend = scored.get("trend") or "neutral"
         interpretation = scored.get("interpretation") or "Geen interpretatie beschikbaar"
         action = scored.get("action") or "Geen actie"

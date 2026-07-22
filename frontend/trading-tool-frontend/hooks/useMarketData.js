@@ -175,9 +175,10 @@ export function useMarketData(symbol = "BTC", options = {}) {
 
       if (shouldLoadDailyScores) {
         const dailyScores = unwrapSettled(dailyScoresResult, null);
-        const score = dailyScores?.market?.score ?? 50;
+        const rawScore = dailyScores?.market?.score;
+        const score = Number.isFinite(Number(rawScore)) ? Number(rawScore) : null;
         setMarketScore(score);
-        setAdviesState(getAdvies(score, commonT));
+        setAdviesState(score === null ? null : getAdvies(score, commonT));
       }
 
       if (shouldLoadMarketDayData) {

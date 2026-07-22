@@ -34,8 +34,16 @@ export default function MarketDecisionCard({ data, symbol = "BTC", compact = fal
      MARKET STRUCTURE (CENTRAL SEMANTICS)
   ====================================== */
   const { getMacroSemantics, getMarketSemantics } = useIntelligenceSemantics();
-  const macroData = getMacroSemantics(data?.debug?.scores?.macro_score ?? data?.scores?.macro_score ?? 65);
-  const marketData = getMarketSemantics(data?.debug?.scores?.market_score ?? data?.scores?.market_score ?? 60);
+  const macroData = getMacroSemantics(data?.debug?.scores?.macro_score ?? data?.scores?.macro_score);
+  const marketData = getMarketSemantics(data?.debug?.scores?.market_score ?? data?.scores?.market_score);
+
+  if (!macroData || !marketData) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
+        {t?.common?.insufficientData}
+      </div>
+    );
+  }
 
   const phase = data?.cycle || "expansion";
 

@@ -15,6 +15,7 @@ from backend.schemas.market_data_schema import (
 )
 from backend.infrastructure.models import MarketDataIndicator, MarketData7D
 from backend.utils.scoring_utils import normalize_indicator_name
+from backend.utils.indicator_score_validation import require_indicator_score
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ def sync_score_indicator(category: str, indicator: str, value: float, user_id: i
     conn = get_db_connection()
     try:
         if not conn:
-            return {"score": 10, "trend": "neutral", "interpretation": "Geen DB", "action": "Geen actie"}
+            raise RuntimeError("Geen databaseverbinding voor scoring engine.")
         return score_indicator(conn=conn, category=category, indicator=indicator, value=value, user_id=user_id)
     finally:
         if conn:
@@ -133,7 +134,7 @@ class MarketDataService:
         normalized = normalize_indicator_name(indicator_name)
         scored = await asyncio.to_thread(sync_score_indicator, "market", normalized, value, int(user_id))
 
-        score = scored.get("score", 10)
+        score = require_indicator_score(scored, indicator_name)
         trend = scored.get("trend") or "neutral"
         interpretation = scored.get("interpretation") or "Geen interpretatie beschikbaar"
         action = scored.get("action") or "Geen actie"

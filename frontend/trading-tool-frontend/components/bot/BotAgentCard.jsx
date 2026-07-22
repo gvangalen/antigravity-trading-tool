@@ -9,7 +9,6 @@ import BotSettingsMenu from "@/components/bot/BotSettingsMenu";
 import TradePlanCard from "@/components/bot/TradePlanCard";
 import MarketDecisionCard from "@/components/bot/MarketDecisionCard";
 import GuardrailsPanel from "@/components/bot/GuardrailsPanel";
-import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
 
 import {
   Bot,
@@ -81,7 +80,7 @@ export default function BotAgentCard({
     bot?.strategy?.symbol ||
     bot?.symbol ||
     safeDecision?.symbol ||
-    "BTC"
+    "—"
   ).toUpperCase();
 
   const timeframe =
@@ -90,19 +89,13 @@ export default function BotAgentCard({
     bot?.timeframe ||
     "—";
 
-  const normalizedActionLabel = String(safeDecision?.action || "observe").toLowerCase();
+  const normalizedActionLabel = String(safeDecision?.action || "").toLowerCase();
 
   const normalizedConfidence = String(
     safeDecision?.confidence_label ||
     safeDecision?.confidence ||
-    "low"
+    ""
   ).toLowerCase();
-
-  /* ================= DYNAMIC BOT BRAIN ================= */
-  const {
-    data: botMarketIntelligence,
-    loading: loadingBotMarketIntelligence,
-  } = useMarketIntelligence(symbol);
 
   /* ================= BOT STATE ================= */
   const normalizedAction = String(safeDecision?.action || "").toLowerCase();
@@ -135,17 +128,13 @@ export default function BotAgentCard({
   const rawPositionSize =
     safeDecision?.position_size ??
     scores?.position_size ??
-    0.5;
+    null;
 
   const parsedPositionSize = Number(rawPositionSize);
 
-  const normalizedPositionSize = Math.max(
-    0,
-    Math.min(
-      Number.isFinite(parsedPositionSize) ? parsedPositionSize : 0.5,
-      1
-    )
-  );
+  const normalizedPositionSize = rawPositionSize !== null && Number.isFinite(parsedPositionSize)
+    ? Math.max(0, Math.min(parsedPositionSize, 1))
+    : null;
 
   const normalized = {
     ...safeDecision,
@@ -539,7 +528,7 @@ export default function BotAgentCard({
              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.marketAction}</div>
              <div className="text-xs font-black text-[var(--primary)] uppercase tracking-tight flex items-center gap-2">
                 <Rocket size={12} strokeWidth={3} />
-                {actionLabels[normalizedActionLabel] || normalizedActionLabel.toUpperCase()}
+                {actionLabels[normalizedActionLabel] || normalizedActionLabel.toUpperCase() || copy.insufficientData}
              </div>
           </div>
 
@@ -547,7 +536,7 @@ export default function BotAgentCard({
              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.logicalConfidence}</div>
              <div className="text-xs font-black text-foreground uppercase tracking-tight flex items-center gap-2">
                 <Layers size={12} strokeWidth={3} />
-                {confidenceLabels[normalizedConfidence] || normalizedConfidence.toUpperCase()}
+                {confidenceLabels[normalizedConfidence] || normalizedConfidence.toUpperCase() || copy.insufficientData}
              </div>
           </div>
 
@@ -803,13 +792,13 @@ export default function BotAgentCard({
 
             {/* Module 2: Market Intelligence (THE BRAIN) */}
             <div className="bg-card rounded-[2rem] border border-slate-200 p-6 lg:p-8 shadow-sm">
-              {loadingBotMarketIntelligence ? (
+              {loadingMarketIntelligence ? (
                 <div className="flex items-center gap-3 text-xs font-black text-secondary uppercase tracking-widest p-10 justify-center">
                   <div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-[var(--primary)] animate-spin" />
                   {copy.syncingBrain}
                 </div>
               ) : (
-                <MarketDecisionCard data={botMarketIntelligence} />
+                <MarketDecisionCard data={marketIntelligence} />
               )}
             </div>
 

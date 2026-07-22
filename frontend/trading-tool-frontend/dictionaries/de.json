@@ -33,7 +33,35 @@
     "afternoon": "Good afternoon",
     "evening": "Good evening"
   },
+  "finnWorkspace": {
+    "canvasEyebrow": "Arbeitsbereich",
+    "defaultDescription": "Arbeite in diesem Ablauf mit dem aktiven FINN-Briefing direkt darüber.",
+    "activeStatus": "Aktiv",
+    "closeBackdrop": "FINN-Chat schließen",
+    "workspaceLabel": "Arbeitsbereich",
+    "workflowLabel": "Workflow",
+    "composer": { "asset": "Asset hinzufügen", "indicator": "Indikator hinzufügen", "menu": "Hinzufügen-Menü öffnen", "placeholder": "FINN fragen, ein Asset suchen oder einen Indikator hinzufügen..." },
+    "pages": {
+      "analysis": { "label": "Analyse", "eyebrow": "Analyse-Arbeitsbereich", "description": "Untersuche ein Asset anhand von Markt-, Makro- und technischen Daten." },
+      "automation": { "label": "Automatisierung", "eyebrow": "Automatisierungsbereich", "description": "Verwalte die Ausführung und überwache jeden Bot innerhalb deiner Risikogrenzen." },
+      "plan": { "label": "Mein Plan", "eyebrow": "Plan-Arbeitsbereich", "description": "Erstelle und verwalte deine Handelspläne für das ausgewählte Asset." },
+      "reflection": { "label": "Reflexion", "eyebrow": "Reflexionsbereich", "description": "Bewerte Ergebnisse, Verhalten und Verbesserungen in deinem Handelsprozess." },
+      "portfolio": { "label": "Portfolio", "eyebrow": "Portfolio-Arbeitsbereich", "description": "Prüfe Positionen, Exposition und Aktionen, die Aufmerksamkeit erfordern." }
+    },
+    "steps": {
+      "analysis": [{ "label": "Asset", "description": "Was analysiere ich?" }, { "label": "Evidenz", "description": "Was zeigen Markt, Makro und Technik?" }, { "label": "Fazit", "description": "Was bedeutet das für meinen Plan?" }],
+      "portfolio": [{ "label": "Positionen", "description": "Was besitze ich?" }, { "label": "Risiko", "description": "Wo liegt meine Exposition?" }, { "label": "Aktion", "description": "Was braucht meine Aufmerksamkeit?" }],
+      "automation": [{ "label": "Plan", "description": "Welche Regeln gelten?" }, { "label": "Ausführung", "description": "Was führt die Automatisierung aus?" }, { "label": "Überwachung", "description": "Bleibt alles innerhalb meines Risikos?" }],
+      "reflection": [{ "label": "Ergebnis", "description": "Was ist passiert?" }, { "label": "Auswertung", "description": "Habe ich meinen Plan befolgt?" }, { "label": "Verbesserung", "description": "Was ändere ich beim nächsten Mal?" }]
+    },
+    "legacyPages": { "/asset": "Übersicht", "/bot": "Bots", "/market": "Markt", "/macro": "Makro", "/technical": "Technik", "/setup": "Setups", "/strategy": "Strategien", "/report": "Berichte" }
+  },
   "nav": {
+    "portfolio": "Portfolio",
+    "analysis": "Analyse",
+    "myPlan": "Mein Plan",
+    "automation": "Automation",
+    "reflection": "Reflexion",
     "marketContext": "Market context",
     "watchlistEmptyTitle": "No watchlist yet",
     "watchlistEmptyBody": "Add assets through the search bar or let Finn add one to your watchlist. Your market context will appear here.",
@@ -1593,7 +1621,8 @@
       "closeTrade": "Schliessen",
       "waiting": "Warten",
       "observe": "Beobachten",
-      "low": "Niedrig"
+      "low": "Niedrig",
+      "insufficientData": "Unzureichende Daten"
     },
     "form": {
       "nameLabel": "Identifier",
@@ -1661,6 +1690,7 @@
     },
     "decisionCard": {
       "loading": "Bot is analyzing the market…",
+      "insufficientData": "Unzureichende Daten",
       "pipelineLabel": "Bot intelligence pipeline",
       "dailyProposalLabel": "Daily execution proposal",
       "executeProposal": "EXECUTE PROPOSAL",
@@ -1986,7 +2016,11 @@
       "close": "Handelspanel schliessen",
       "selectBot": "Wähle einen Bot zum Handeln aus",
       "tradingWith": "Handeln mit",
-      "botFallback": "Bot"
+      "botFallback": "Bot",
+      "paper": "Paper",
+      "live": "Live",
+      "active": "Aktiv",
+      "paused": "Pausiert"
     },
     "exchangeSettings": {
       "statusSuccess": "Erfolgreich mit {exchange} verbunden",
@@ -2029,6 +2063,7 @@
       "sell": "Verkaufen",
       "orderPrice": "Orderpreis",
       "liveLabel": "Live",
+      "missingBotContext": "Diesem Bot fehlt ein gültiges Asset. Der Handel bleibt gesperrt, bis die Bot-Konfiguration repariert wurde.",
       "amount": "Betrag",
       "amountInQuote": "Betrag in {symbol}",
       "sizeInBase": "Menge in {symbol}",
@@ -2644,6 +2679,12 @@
       "noHistory": "No recent Finn history yet. Once you complete, postpone, or review actions with Finn, it will appear here.",
       "retry": "Retry",
       "inputPlaceholder": "Ask Finn for context, risk, or the next step...",
+      "composerAsset": "Asset hinzufügen",
+      "composerIndicator": "Indikator hinzufügen",
+      "composerMenu": "Hinzufügen-Menü öffnen",
+      "composerInstruction": "FINN fragen oder einen Auftrag geben...",
+      "recentConversations": "Letzte Gespräche",
+      "continueConversation": "Setze dort fort, wo du aufgehört hast.",
       "setupWizard": "Setup wizard",
       "startGuide": "Start guide",
       "decisionReviewFallback": "Finn is reviewing this decision.",
@@ -3544,6 +3585,74 @@
         "aggressive": "Aggressiv",
         "standard": "Standard",
         "defensive": "Defensiv"
+      }
+    },
+    "indicatorConfigModal": {
+      "eyebrow": "Indikator einstellen",
+      "categoryConfiguration": "{category} konfigurieren",
+      "categories": { "technical": "Technik", "macro": "Makro", "market": "Markt", "indicator": "Indikator" },
+      "save": "Speichern",
+      "addIndicator": "{indicator} hinzufügen",
+      "loading": "Konfiguration wird geladen...",
+      "recommendedForProfile": "Für dein Profil empfohlen",
+      "customTitle": "Benutzerdefiniert",
+      "customDescription": "Deine erweiterten Einstellungen verwenden eine eigene Punkteverteilung.",
+      "influence": "Einfluss",
+      "summary": "Zusammenfassung",
+      "advancedTitle": "Erweiterte Einstellungen",
+      "advancedDescription": "Für erfahrene Nutzer: Bewertungsmodus, genaue Gewichtung und Bereiche.",
+      "cancel": "Abbrechen",
+      "saving": "Speichern...",
+      "loadFailed": "Die Konfiguration für {indicator} konnte nicht vollständig geladen werden.",
+      "saved": "{indicator} wurde für {asset} {category} gespeichert.",
+      "added": "{indicator} wurde zu {asset} {category} hinzugefügt.",
+      "actionFailed": "Die Aktion für {indicator} ist fehlgeschlagen.",
+      "thisWorkflow": "diesen Workflow",
+      "onTimeframes": "auf",
+      "and": "und",
+      "noExtraMoments": "ohne zusätzliche Marktbedingungen",
+      "summaryTemplate": "FINN nutzt {indicator}: {interpretation}, {when}, mit {weight} Einfluss.",
+      "weightOptions": { "low": "Niedrig", "normal": "Normal", "high": "Hoch" },
+      "interpretationLabels": { "standard": "standardmäßig", "contrarian": "konträr", "custom": "benutzerdefiniert" },
+      "profileTypes": {
+        "swing_trader": "dein Swing-Profil",
+        "day_trader": "dein Daytrading-Profil",
+        "scalper": "dein Scalping-Profil",
+        "investor": "dein Anlageprofil",
+        "dca_investor": "dein Anlageprofil"
+      },
+      "roles": {
+        "generic": {
+          "description": "Lege fest, wann FINN auf {indicator} achtet, wie das Signal gelesen wird und wie stark es zählt.",
+          "whenQuestion": "Wann soll FINN diesen Indikator besonders berücksichtigen?",
+          "always": { "label": "Immer verwenden", "help": "Dieser Indikator wird standardmäßig in die Routine einbezogen." },
+          "interpretationQuestion": "Wie soll FINN das Signal interpretieren?",
+          "standard": { "label": "Standard", "help": "Höhere Werte zählen als stärker oder positiver." },
+          "contrarian": { "label": "Konträr", "help": "Hohe und niedrige Werte werden umgekehrt, wenn das sinnvoller ist." },
+          "recommendation": "Als sicherer Ausgangspunkt für {profile} empfohlen."
+        },
+        "rsi": {
+          "description": "Der RSI hilft FINN zu erkennen, wann das Momentum überdehnt ist oder Stärke behält.",
+          "whenQuestion": "Wann soll FINN den RSI besonders berücksichtigen?",
+          "oversold": { "label": "Überverkauft", "help": "Ein RSI unter 30 kann auf eine Erholung oder Kaufchance hindeuten." },
+          "overbought": { "label": "Überkauft", "help": "Ein RSI über 70 kann auf eine nachlassende Bewegung hindeuten." },
+          "always": { "label": "Immer verwenden", "help": "Der RSI zählt auch außerhalb extremer Zonen als Bestätigung." },
+          "standard": { "label": "Standard", "help": "Ein hoher RSI zählt positiver, ein niedriger RSI schwächer." },
+          "contrarian": { "label": "Konträr", "help": "Ein niedriger RSI zählt positiver, ein hoher RSI vorsichtiger." },
+          "fastRecommendation": "Für schnellere Momentum-Analysen innerhalb von {profile} empfohlen.",
+          "swingRecommendation": "Für dein Swing-Profil empfohlen: Nutze den RSI vor allem bei überverkauften und überkauften Bedingungen."
+        },
+        "ma200": {
+          "description": "Der MA 200 zeigt FINN, ob der übergeordnete Trend unterstützt, entgegenwirkt oder als Filter dient.",
+          "whenQuestion": "Wann soll FINN den MA 200 besonders berücksichtigen?",
+          "bull": { "label": "Bullenmarkt", "help": "Nutze den MA 200 zur Kontrolle von positiver Tendenz und Trendfortsetzung." },
+          "bear": { "label": "Bärenmarkt", "help": "Nutze den MA 200 defensiv, wenn der übergeordnete Trend schwach ist." },
+          "sideways": { "label": "Seitwärts", "help": "Nutze den MA 200 als Filter, wenn der Markt keinen klaren Trend zeigt." },
+          "standard": { "label": "Standard", "help": "Über dem MA 200 ist stärker, darunter schwächer." },
+          "contrarian": { "label": "Konträr", "help": "Nutze den MA 200 konträr als Mean-Reversion-Filter." },
+          "fastRecommendation": "Als Richtungsfilter empfohlen, ohne seitliches Rauschen in {profile} zu stark zu gewichten.",
+          "standardRecommendation": "Für {profile} empfohlen: Nutze den MA 200 als Trendfilter in steigenden, fallenden und seitlichen Phasen."
+        }
       }
     },
     "indicatorScore": {

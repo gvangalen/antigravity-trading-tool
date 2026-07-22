@@ -6,8 +6,14 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 export function useIntelligenceSemantics() {
   const { t } = useTranslation();
   const semanticsT = t?.dashboard?.intelligenceSemantics || {};
+  const toValidScore = (score) => {
+    if (score === null || score === undefined || score === "") return null;
+    const value = Number(score);
+    return Number.isFinite(value) ? value : null;
+  };
   const getMacroSemantics = (score) => {
-    const val = score === null || score === undefined ? 50 : Number(score);
+    const val = toValidScore(score);
+    if (val === null) return null;
     const conviction = Math.round(val);
 
     if (val >= 70) {
@@ -51,7 +57,8 @@ export function useIntelligenceSemantics() {
   };
 
   const getTechnicalSemantics = (score) => {
-    const val = score === null || score === undefined ? 50 : Number(score);
+    const val = toValidScore(score);
+    if (val === null) return null;
     const conviction = Math.round(val);
 
     if (val >= 70) {
@@ -91,7 +98,8 @@ export function useIntelligenceSemantics() {
   };
 
   const getMarketSemantics = (score) => {
-    const val = score === null || score === undefined ? 50 : Number(score);
+    const val = toValidScore(score);
+    if (val === null) return null;
     const conviction = Math.round(val);
 
     if (val >= 70) {

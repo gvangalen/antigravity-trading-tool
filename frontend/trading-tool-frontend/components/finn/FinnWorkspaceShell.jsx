@@ -36,7 +36,7 @@ export default function FinnWorkspaceShell({ children }) {
   const searchParams = useSearchParams();
   const { selectedAsset } = useAsset();
   const { user } = useAuth();
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [composerQuery, setComposerQuery] = useState("");
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
@@ -44,16 +44,15 @@ export default function FinnWorkspaceShell({ children }) {
   const commandNonceRef = useRef(0);
   const isAnalysisV3 = searchParams.get("variant") !== "legacy";
 
-  const activeWorkflow = useMemo(() => getWorkflowMeta(pathname, isAnalysisV3, locale), [isAnalysisV3, locale, pathname]);
+  const workspaceCopy = t?.finnWorkspace || {};
+  const activeWorkflow = useMemo(
+    () => getWorkflowMeta(pathname, isAnalysisV3, workspaceCopy),
+    [isAnalysisV3, pathname, workspaceCopy],
+  );
   const userName = user?.first_name || "Trader";
   const shellStatus = t?.ui?.shell?.appSlogan || "Professional";
   const currentAsset = selectedAsset || "BTC";
-  const normalizedLocale = String(locale || "nl").toLowerCase();
-  const composerCopy = normalizedLocale.startsWith("en")
-    ? { asset: "Add asset", indicator: "Add indicator", menu: "Open add menu", placeholder: "Ask FINN, search an asset or add an indicator..." }
-    : normalizedLocale.startsWith("de")
-      ? { asset: "Asset hinzufügen", indicator: "Indikator hinzufügen", menu: "Hinzufügen-Menü öffnen", placeholder: "FINN fragen, ein Asset suchen oder einen Indikator hinzufügen..." }
-      : { asset: "Asset toevoegen", indicator: "Indicator toevoegen", menu: "Toevoegmenu openen", placeholder: "Vraag FINN, zoek een asset of voeg een indicator toe..." };
+  const composerCopy = workspaceCopy.composer || {};
 
   const openAssistant = () => {
     commandNonceRef.current += 1;
@@ -176,22 +175,20 @@ export default function FinnWorkspaceShell({ children }) {
                   <div>
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.28em] text-blue-600 dark:text-blue-400">
                       <Workflow size={12} />
-                      {activeWorkflow.eyebrow || (isAnalysisV3 ? "Analysis Canvas" : "Workflow Canvas")}
+                      {activeWorkflow.eyebrow || workspaceCopy.canvasEyebrow}
                     </div>
                     <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-slate-50">
                       {activeWorkflow.label}
                     </h2>
                     <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
-                      {activeWorkflow.description || (isAnalysisV3
-                        ? "Bekijk een asset in drie contexten met de actieve FINN-briefing direct erboven."
-                        : "Werk in deze flow met de actieve FINN-briefing direct erboven.")}
+                      {activeWorkflow.description || workspaceCopy.defaultDescription}
                     </p>
                   </div>
 
                   {activeWorkflow.status !== null ? (
                     <div className="inline-flex items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300">
                       <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                      {activeWorkflow.status || (isAnalysisV3 ? "Live Analysis" : "Workflow Active")}
+                      {activeWorkflow.status || workspaceCopy.activeStatus}
                     </div>
                   ) : null}
                 </div>
@@ -269,7 +266,7 @@ export default function FinnWorkspaceShell({ children }) {
           <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
             <button
               type="button"
-              aria-label="Close FINN chat backdrop"
+              aria-label={workspaceCopy.closeBackdrop}
               className="absolute inset-0 cursor-default"
               onClick={() => setAssistantOpen(false)}
             />
@@ -323,124 +320,40 @@ function WorkspaceSteps({ steps }) {
   );
 }
 
-function getWorkflowMeta(pathname, isAnalysisV3, locale) {
+function getWorkflowMeta(pathname, isAnalysisV3, copy) {
   if (isAnalysisV3) {
-    const workspaceCopies = {
-      nl: {
-        analysis: [
-          { label: "Asset", description: "Wat analyseer ik?", icon: Search },
-          { label: "Bewijs", description: "Wat zeggen Markt, Macro en Technisch?", icon: BarChart3 },
-          { label: "Conclusie", description: "Wat betekent dit voor mijn plan?", icon: Lightbulb },
-        ],
-        portfolio: [
-          { label: "Posities", description: "Wat bezit ik?", icon: WalletCards },
-          { label: "Risico", description: "Waar zit mijn blootstelling?", icon: ShieldAlert },
-          { label: "Actie", description: "Wat vraagt mijn aandacht?", icon: ListChecks },
-        ],
-        automation: [
-          { label: "Plan", description: "Welke regels gelden?", icon: ClipboardList },
-          { label: "Uitvoering", description: "Wat voert Automatisering uit?", icon: Bot },
-          { label: "Bewaking", description: "Blijft alles binnen mijn risico?", icon: ShieldCheck },
-        ],
-        reflection: [
-          { label: "Resultaat", description: "Wat gebeurde er?", icon: FileBarChart2 },
-          { label: "Evaluatie", description: "Volgde ik mijn plan?", icon: ClipboardCheck },
-          { label: "Verbetering", description: "Wat pas ik de volgende keer aan?", icon: TrendingUp },
-        ],
-      },
-      en: {
-        analysis: [
-          { label: "Asset", description: "What am I analysing?", icon: Search },
-          { label: "Evidence", description: "What do Market, Macro and Technical show?", icon: BarChart3 },
-          { label: "Conclusion", description: "What does this mean for my plan?", icon: Lightbulb },
-        ],
-        portfolio: [
-          { label: "Positions", description: "What do I own?", icon: WalletCards },
-          { label: "Risk", description: "Where is my exposure?", icon: ShieldAlert },
-          { label: "Action", description: "What needs my attention?", icon: ListChecks },
-        ],
-        automation: [
-          { label: "Plan", description: "Which rules apply?", icon: ClipboardList },
-          { label: "Execution", description: "What does Automation execute?", icon: Bot },
-          { label: "Monitoring", description: "Does everything remain within my risk?", icon: ShieldCheck },
-        ],
-        reflection: [
-          { label: "Result", description: "What happened?", icon: FileBarChart2 },
-          { label: "Evaluation", description: "Did I follow my plan?", icon: ClipboardCheck },
-          { label: "Improvement", description: "What will I change next time?", icon: TrendingUp },
-        ],
-      },
-      de: {
-        analysis: [
-          { label: "Asset", description: "Was analysiere ich?", icon: Search },
-          { label: "Evidenz", description: "Was zeigen Markt, Makro und Technik?", icon: BarChart3 },
-          { label: "Fazit", description: "Was bedeutet das für meinen Plan?", icon: Lightbulb },
-        ],
-        portfolio: [
-          { label: "Positionen", description: "Was besitze ich?", icon: WalletCards },
-          { label: "Risiko", description: "Wo liegt meine Exposition?", icon: ShieldAlert },
-          { label: "Aktion", description: "Was braucht meine Aufmerksamkeit?", icon: ListChecks },
-        ],
-        automation: [
-          { label: "Plan", description: "Welche Regeln gelten?", icon: ClipboardList },
-          { label: "Ausführung", description: "Was führt die Automatisierung aus?", icon: Bot },
-          { label: "Überwachung", description: "Bleibt alles innerhalb meines Risikos?", icon: ShieldCheck },
-        ],
-        reflection: [
-          { label: "Ergebnis", description: "Was ist passiert?", icon: FileBarChart2 },
-          { label: "Auswertung", description: "Habe ich meinen Plan befolgt?", icon: ClipboardCheck },
-          { label: "Verbesserung", description: "Was ändere ich beim nächsten Mal?", icon: TrendingUp },
-        ],
-      },
+    const icons = {
+      analysis: [Search, BarChart3, Lightbulb],
+      portfolio: [WalletCards, ShieldAlert, ListChecks],
+      automation: [ClipboardList, Bot, ShieldCheck],
+      reflection: [FileBarChart2, ClipboardCheck, TrendingUp],
     };
-    const localizedWorkspaces = workspaceCopies[String(locale || "nl").toLowerCase()] || workspaceCopies.nl;
-    const planCopies = {
-      nl: {
-        label: "Mijn Plan",
-        eyebrow: "Planwerkruimte",
-        description: "Bouw en beheer je handelsplannen voor de geselecteerde asset.",
-        status: null,
-      },
-      en: {
-        label: "My Plan",
-        eyebrow: "Plan Workspace",
-        description: "Build and manage your trading plans for the selected asset.",
-        status: null,
-      },
-      de: {
-        label: "Mein Plan",
-        eyebrow: "Plan-Arbeitsbereich",
-        description: "Erstelle und verwalte deine Handelspläne für das ausgewählte Asset.",
-        status: null,
-      },
-    };
-    const planCopy = planCopies[String(locale || "nl").toLowerCase()] || planCopies.nl;
+    const steps = Object.fromEntries(
+      Object.entries(icons).map(([key, workflowIcons]) => [
+        key,
+        (copy?.steps?.[key] || []).map((step, index) => ({ ...step, icon: workflowIcons[index] })),
+      ]),
+    );
+    const planCopy = { ...copy?.pages?.plan, status: null };
     const v3Workflows = {
-      "/asset": { label: "Analyse", steps: localizedWorkspaces.analysis },
-      "/market": { label: "Analyse", steps: localizedWorkspaces.analysis },
-      "/macro": { label: "Analyse", steps: localizedWorkspaces.analysis },
-      "/technical": { label: "Analyse", steps: localizedWorkspaces.analysis },
-      "/bot": { label: "Automation", steps: localizedWorkspaces.automation },
+      "/asset": { ...copy?.pages?.analysis, steps: steps.analysis },
+      "/market": { ...copy?.pages?.analysis, steps: steps.analysis },
+      "/macro": { ...copy?.pages?.analysis, steps: steps.analysis },
+      "/technical": { ...copy?.pages?.analysis, steps: steps.analysis },
+      "/bot": { ...copy?.pages?.automation, steps: steps.automation },
       "/setup": planCopy,
       "/strategy": planCopy,
-      "/report": { label: "Reflectie", steps: localizedWorkspaces.reflection },
-      "/portfolio": { label: "Portfolio", steps: localizedWorkspaces.portfolio },
-      "/dashboard": { label: "Analyse", steps: localizedWorkspaces.analysis },
+      "/report": { ...copy?.pages?.reflection, steps: steps.reflection },
+      "/portfolio": { ...copy?.pages?.portfolio, steps: steps.portfolio },
+      "/dashboard": { ...copy?.pages?.analysis, steps: steps.analysis },
     };
 
-    return v3Workflows[pathname] || { label: "Workspace" };
+    return v3Workflows[pathname] || { label: copy?.workspaceLabel };
   }
 
-  const workflows = {
-    "/asset": { label: "Overview" },
-    "/bot": { label: "Bots" },
-    "/market": { label: "Market" },
-    "/macro": { label: "Macro" },
-    "/technical": { label: "Technical" },
-    "/setup": { label: "Setups" },
-    "/strategy": { label: "Strategies" },
-    "/report": { label: "Reports" },
-  };
+  const workflows = Object.fromEntries(
+    Object.entries(copy?.legacyPages || {}).map(([path, label]) => [path, { label }]),
+  );
 
-  return workflows[pathname] || { label: "Workflow" };
+  return workflows[pathname] || { label: copy?.workflowLabel };
 }

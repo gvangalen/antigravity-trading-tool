@@ -90,19 +90,26 @@ export default function BotTodayProposal({
   const strategyMultiplier = Number(decision.exposure_multiplier ?? 1);
   const safeStrategyMultiplier = Number.isFinite(strategyMultiplier) ? strategyMultiplier : 1;
   
-  const safeMarketMultiplier = Number(
-    decision?.metrics?.position_size ?? 1
-  );
+  const rawMarketMultiplier = decision?.metrics?.position_size;
+  const parsedMarketMultiplier = Number(rawMarketMultiplier);
+  const hasMarketMultiplier =
+    rawMarketMultiplier !== null &&
+    rawMarketMultiplier !== undefined &&
+    Number.isFinite(parsedMarketMultiplier);
+  const safeMarketMultiplier = hasMarketMultiplier ? parsedMarketMultiplier : null;
 
-  // ✅ FIX
-  const deviation = safeStrategyMultiplier - safeMarketMultiplier;
+  const deviation = hasMarketMultiplier
+    ? safeStrategyMultiplier - safeMarketMultiplier
+    : null;
     const deviationLabel =
-      deviation > 0 ? copy.higherRisk
+      deviation === null ? copy.insufficientData
+      : deviation > 0 ? copy.higherRisk
       : deviation < 0 ? copy.saferThanMarket
       : copy.aligned;
 
   const deviationColor =
-    deviation > 0 ? "text-red-600"
+    deviation === null ? "text-[var(--text-muted)]"
+    : deviation > 0 ? "text-red-600"
     : deviation < 0 ? "text-emerald-600"
     : "text-[var(--text-muted)]";
 
@@ -158,7 +165,6 @@ export default function BotTodayProposal({
 
   const setupMatch = decision.setup_match || null;
 
-  // 🔥 FIX: correcte score fallback
   const score = (() => {
     if (typeof setupMatch?.score === "number") {
       return Math.min(setupMatch.score, 100);
@@ -166,7 +172,7 @@ export default function BotTodayProposal({
     if (typeof decision?.scores?.total === "number") {
       return Math.min(decision.scores.total, 100);
     }
-    return 10;
+    return null;
   })();
 
   const setupName = setupMatch?.name ?? copy.noStrategyMatch;
@@ -217,7 +223,7 @@ export default function BotTodayProposal({
   const governanceStatus = (() => {
     if (!hasTrade) return "watch";
     if (guardrails?.blocked || guardrails?.allow === false || status === "skipped") return "block";
-    if (deviation > 0.2 || score < 55) return "modify";
+    if ((deviation !== null && deviation > 0.2) || (score !== null && score < 55)) return "modify";
     return "approve";
   })();
 
@@ -238,13 +244,19 @@ export default function BotTodayProposal({
           : copy.approveHeadline;
 
   const setupFitText =
-    score >= 75 ? copy.setupFitStrong : score >= 55 ? copy.setupFitReasonable : copy.setupFitWeak;
+    score === null
+      ? copy.insufficientData
+      : score >= 75
+        ? copy.setupFitStrong
+        : score >= 55
+          ? copy.setupFitReasonable
+          : copy.setupFitWeak;
 
   const portfolioMessage = (() => {
     if (budgetTotal > 0 && positionValue / budgetTotal >= 0.7) {
       return copy.portfolioHeavyExposure.replace("{symbol}", decision?.symbol || bot?.symbol || "BTC");
     }
-    if (deviation > 0.2) {
+    if (deviation !== null && deviation > 0.2) {
       return copy.portfolioSizingWarning;
     }
     return copy.portfolioFitWorkable;
@@ -345,7 +357,7 @@ export default function BotTodayProposal({
         <div className="rounded-xl border border-white/70 bg-white/75 p-3">
           <div className="text-[8px] font-black uppercase tracking-widest opacity-70">{copy.planFitLabel}</div>
           <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700">
-            {score >= 60 ? copy.planFitPositive : copy.planFitNegative}
+            {score === null ? copy.insufficientData : score >= 60 ? copy.planFitPositive : copy.planFitNegative}
           </p>
         </div>
         <div className="rounded-xl border border-white/70 bg-white/75 p-3">
@@ -387,11 +399,11 @@ export default function BotTodayProposal({
             <div className="text-sm font-black text-foreground tracking-tight">{setupName}</div>
           </div>
           <div className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/40 px-2 py-1 rounded border border-blue-100 dark:border-blue-800 font-mono">
-            SCORE {score}/100
+            {score === null ? copy.insufficientData : `SCORE ${score}/100`}
           </div>
         </div>
 
-        <ScoreBar score={score} />
+        {score !== null && <ScoreBar score={score} />}
 
         <div className="grid grid-cols-2 gap-3 pt-2">
           <div className="bg-white/80 p-2 rounded-lg border border-slate-200/50">
@@ -419,7 +431,9 @@ export default function BotTodayProposal({
         <div className="space-y-2.5">
            <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-slate-200/40">
               <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">{copy.marketWeightLabel}</span>
-              <span className="text-xs font-black text-slate-700 font-mono">{safeMarketMultiplier.toFixed(2)}x</span>
+              <span className="text-xs font-black text-slate-700 font-mono">
+                {safeMarketMultiplier === null ? copy.insufficientData : `${safeMarketMultiplier.toFixed(2)}x`}
+              </span>
            </div>
            <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-slate-200/40">
               <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">{copy.setupWeightLabel}</span>
@@ -427,7 +441,11 @@ export default function BotTodayProposal({
            </div>
            <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-slate-200/40">
               <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">{copy.deviationLabel}</span>
-              <span className={`text-[10px] font-black uppercase ${deviationColor}`}>{deviationLabel} ({deviation >= 0 ? "+" : ""}{deviation.toFixed(2)})</span>
+              <span className={`text-[10px] font-black uppercase ${deviationColor}`}>
+                {deviation === null
+                  ? deviationLabel
+                  : `${deviationLabel} (${deviation >= 0 ? "+" : ""}${deviation.toFixed(2)})`}
+              </span>
            </div>
         </div>
 

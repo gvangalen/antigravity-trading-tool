@@ -98,17 +98,29 @@ export function useScoresData(symbol = "BTC", options = {}) {
       const mkData = master?.domains?.market || {};
       const sData = master?.domains?.setup || {};
 
-      const macroScore = daily.macro?.score ?? mData.score ?? 0;
-      const technicalScore = daily.technical?.score ?? tData.score ?? 0;
-      const marketScore = daily.market?.score ?? mkData.score ?? 0;
-      const setupScore = daily.setup?.score ?? sData.score ?? 0;
+      const toFiniteScore = (...values) => {
+        for (const value of values) {
+          if (value === null || value === undefined || value === '') continue;
+          const parsed = Number(value);
+          if (Number.isFinite(parsed)) return Math.max(0, Math.min(100, parsed));
+        }
+        return null;
+      };
+
+      const macroScore = toFiniteScore(daily.macro?.score, mData.score);
+      const technicalScore = toFiniteScore(daily.technical?.score, tData.score);
+      const marketScore = toFiniteScore(daily.market?.score, mkData.score);
+      const setupScore = toFiniteScore(daily.setup?.score, sData.score);
 
       const weights = normalizeContextWeights(master?.weights);
-      const calculatedMasterScore = Math.round(
-        macroScore * weights.macro +
-        technicalScore * weights.technical +
-        marketScore * weights.market
-      );
+      const hasCompleteContext = [macroScore, technicalScore, marketScore].every(Number.isFinite);
+      const calculatedMasterScore = hasCompleteContext
+        ? Math.round(
+            macroScore * weights.macro +
+            technicalScore * weights.technical +
+            marketScore * weights.market
+          )
+        : null;
 
       const nextScores = {
         macro: {
@@ -117,7 +129,7 @@ export function useScoresData(symbol = "BTC", options = {}) {
           bias: mData.bias ?? daily.macro?.advies ?? gaugesT.macro,
           risk: mData.risk ?? 'Low',
           uitleg: daily.macro?.interpretation ?? gaugesT.emptyState?.macro,
-          advies: getAdvies(macroScore),
+          advies: macroScore === null ? gaugesT.insufficientData : getAdvies(macroScore),
           top_contributors: normalizeArray(daily.macro?.top_contributors),
         },
         technical: {
@@ -126,7 +138,7 @@ export function useScoresData(symbol = "BTC", options = {}) {
           bias: tData.bias ?? daily.technical?.advies ?? gaugesT.technical,
           risk: tData.risk ?? 'Low',
           uitleg: daily.technical?.interpretation ?? gaugesT.emptyState?.technical,
-          advies: getAdvies(technicalScore),
+          advies: technicalScore === null ? gaugesT.insufficientData : getAdvies(technicalScore),
           top_contributors: normalizeArray(daily.technical?.top_contributors),
         },
         market: {
@@ -135,7 +147,7 @@ export function useScoresData(symbol = "BTC", options = {}) {
           bias: mkData.bias ?? daily.market?.advies ?? gaugesT.market,
           risk: mkData.risk ?? 'Low',
           uitleg: daily.market?.interpretation ?? gaugesT.emptyState?.market,
-          advies: getAdvies(marketScore),
+          advies: marketScore === null ? gaugesT.insufficientData : getAdvies(marketScore),
           top_contributors: normalizeArray(daily.market?.top_contributors),
         },
         setup: {
@@ -144,7 +156,7 @@ export function useScoresData(symbol = "BTC", options = {}) {
           bias: sData.bias ?? daily.setup?.advies ?? gaugesT.setup,
           risk: sData.risk ?? 'Low',
           uitleg: daily.setup?.interpretation ?? gaugesT.emptyState?.setup,
-          advies: getAdvies(setupScore),
+          advies: setupScore === null ? gaugesT.insufficientData : getAdvies(setupScore),
           top_contributors: normalizeArray(daily.setup?.top_contributors),
         },
         master: {

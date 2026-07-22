@@ -11,6 +11,8 @@ const CORE_PREFIXES = [
 const EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const IGNORE_FILES = new Set([
   "app/providers/I18nProvider.tsx",
+  // Retained only for the explicit legacy variant; the 3.0 workspace has its own translated UI.
+  "components/workflows/MarketAnalysisWorkflow.jsx",
 ]);
 
 const IGNORE_PREFIXES = [

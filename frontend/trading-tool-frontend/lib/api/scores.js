@@ -62,10 +62,18 @@ export async function getDailyScores(symbol = "BTC", options = {}) {
 export async function getAiMasterScore(symbol = "BTC") {
   try {
     const data = await fetchAuth(`/api/ai/master_score?symbol=${symbol}`);
-    return data || { master_score: 50 };
+    const masterScore = Number(data?.master_score);
+    if (!Number.isFinite(masterScore)) {
+      return { master_score: null, data_status: 'insufficient_data' };
+    }
+    return { ...data, master_score: masterScore };
   } catch (err) {
     console.error('❌ getAiMasterScore ERROR:', err);
-    return { master_score: 50 };
+    return {
+      master_score: null,
+      data_status: 'insufficient_data',
+      reason: 'request_failed',
+    };
   }
 }
 

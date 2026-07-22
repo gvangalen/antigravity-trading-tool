@@ -33,7 +33,40 @@
     "afternoon": "Goedemiddag",
     "evening": "Goedenavond"
   },
+  "finnWorkspace": {
+    "canvasEyebrow": "Werkruimte",
+    "defaultDescription": "Werk in deze flow met de actieve FINN-briefing direct erboven.",
+    "activeStatus": "Actief",
+    "closeBackdrop": "FINN-chat sluiten",
+    "workspaceLabel": "Werkruimte",
+    "workflowLabel": "Workflow",
+    "composer": {
+      "asset": "Asset toevoegen",
+      "indicator": "Indicator toevoegen",
+      "menu": "Toevoegmenu openen",
+      "placeholder": "Vraag FINN, zoek een asset of voeg een indicator toe..."
+    },
+    "pages": {
+      "analysis": { "label": "Analyse", "eyebrow": "Analysewerkruimte", "description": "Onderzoek één asset met markt-, macro- en technisch bewijs." },
+      "automation": { "label": "Automatisering", "eyebrow": "Automatiseringswerkruimte", "description": "Beheer uitvoering en bewaak iedere bot binnen je risicokaders." },
+      "plan": { "label": "Mijn Plan", "eyebrow": "Planwerkruimte", "description": "Bouw en beheer je handelsplannen voor de geselecteerde asset." },
+      "reflection": { "label": "Reflectie", "eyebrow": "Reflectiewerkruimte", "description": "Beoordeel resultaten, gedrag en verbeterpunten uit je handelsproces." },
+      "portfolio": { "label": "Portfolio", "eyebrow": "Portfoliowerkruimte", "description": "Bekijk posities, blootstelling en acties die aandacht vragen." }
+    },
+    "steps": {
+      "analysis": [{ "label": "Asset", "description": "Wat analyseer ik?" }, { "label": "Bewijs", "description": "Wat zeggen Markt, Macro en Technisch?" }, { "label": "Conclusie", "description": "Wat betekent dit voor mijn plan?" }],
+      "portfolio": [{ "label": "Posities", "description": "Wat bezit ik?" }, { "label": "Risico", "description": "Waar zit mijn blootstelling?" }, { "label": "Actie", "description": "Wat vraagt mijn aandacht?" }],
+      "automation": [{ "label": "Plan", "description": "Welke regels gelden?" }, { "label": "Uitvoering", "description": "Wat voert Automatisering uit?" }, { "label": "Bewaking", "description": "Blijft alles binnen mijn risico?" }],
+      "reflection": [{ "label": "Resultaat", "description": "Wat gebeurde er?" }, { "label": "Evaluatie", "description": "Volgde ik mijn plan?" }, { "label": "Verbetering", "description": "Wat pas ik de volgende keer aan?" }]
+    },
+    "legacyPages": { "/asset": "Overzicht", "/bot": "Bots", "/market": "Markt", "/macro": "Macro", "/technical": "Technisch", "/setup": "Setups", "/strategy": "Strategieën", "/report": "Rapporten" }
+  },
   "nav": {
+    "portfolio": "Portfolio",
+    "analysis": "Analyse",
+    "myPlan": "Mijn Plan",
+    "automation": "Automation",
+    "reflection": "Reflectie",
     "dashboard": "Overzicht",
     "market": "Markt",
     "macro": "Macro",
@@ -1593,7 +1626,8 @@
       "closeTrade": "Sluiten",
       "waiting": "Wachten",
       "observe": "Observeren",
-      "low": "Laag"
+      "low": "Laag",
+      "insufficientData": "Onvoldoende data"
     },
     "form": {
       "nameLabel": "Identificatielabel",
@@ -1661,6 +1695,7 @@
     },
     "decisionCard": {
       "loading": "Bot analyseert de markt…",
+      "insufficientData": "Onvoldoende data",
       "pipelineLabel": "Bot intelligence pipeline",
       "dailyProposalLabel": "Daily execution proposal",
       "executeProposal": "VOER VOORSTEL UIT",
@@ -1986,7 +2021,11 @@
       "close": "Handelspaneel sluiten",
       "selectBot": "Selecteer een bot om te handelen",
       "tradingWith": "Handelen met",
-      "botFallback": "Bot"
+      "botFallback": "Bot",
+      "paper": "Paper",
+      "live": "Live",
+      "active": "Actief",
+      "paused": "Gepauzeerd"
     },
     "exchangeSettings": {
       "statusSuccess": "Succesvol verbonden met {exchange}",
@@ -2029,6 +2068,7 @@
       "sell": "Verkopen",
       "orderPrice": "Orderprijs",
       "liveLabel": "Live",
+      "missingBotContext": "Deze bot mist een geldig asset. Handelen is geblokkeerd totdat de botconfiguratie is hersteld.",
       "amount": "Aantal",
       "amountInQuote": "Bedrag in {symbol}",
       "sizeInBase": "Grootte in {symbol}",
@@ -2624,6 +2664,12 @@
       "noHistory": "Nog geen recente Finn-historie. Zodra je dingen afrondt, uitstelt of met Finn terugkijkt, verschijnt dat hier.",
       "retry": "Opnieuw",
       "inputPlaceholder": "Vraag Finn om context, risico of een volgende stap...",
+      "composerAsset": "Asset toevoegen",
+      "composerIndicator": "Indicator toevoegen",
+      "composerMenu": "Toevoegmenu openen",
+      "composerInstruction": "Vraag FINN of voer een opdracht uit...",
+      "recentConversations": "Recente gesprekken",
+      "continueConversation": "Ga verder waar je was gebleven.",
       "setupWizard": "Setupwizard",
       "startGuide": "Startgids",
       "decisionReviewFallback": "Finn reviewt deze beslissing.",
@@ -3545,6 +3591,74 @@
         "aggressive": "Agressief",
         "standard": "Standaard",
         "defensive": "Defensief"
+      }
+    },
+    "indicatorConfigModal": {
+      "eyebrow": "Indicator instellen",
+      "categoryConfiguration": "{category} instellen",
+      "categories": { "technical": "Technisch", "macro": "Macro", "market": "Markt", "indicator": "Indicator" },
+      "save": "Opslaan",
+      "addIndicator": "{indicator} toevoegen",
+      "loading": "Configuratie laden...",
+      "recommendedForProfile": "Aanbevolen voor jouw profiel",
+      "customTitle": "Aangepast",
+      "customDescription": "Je geavanceerde instellingen gebruiken een eigen scoreverdeling.",
+      "influence": "Invloed",
+      "summary": "Samenvatting",
+      "advancedTitle": "Geavanceerde instellingen",
+      "advancedDescription": "Voor gevorderde gebruikers: scoringsmodus, exacte weging en bereiken.",
+      "cancel": "Annuleren",
+      "saving": "Bezig...",
+      "loadFailed": "De configuratie voor {indicator} kon niet volledig worden geladen.",
+      "saved": "{indicator} is opgeslagen voor {asset} {category}.",
+      "added": "{indicator} is toegevoegd aan {asset} {category}.",
+      "actionFailed": "De actie voor {indicator} is mislukt.",
+      "thisWorkflow": "deze workflow",
+      "onTimeframes": "op",
+      "and": "en",
+      "noExtraMoments": "zonder extra marktmomenten",
+      "summaryTemplate": "FINN gebruikt {indicator}: {interpretation}, {when}, met {weight} invloed.",
+      "weightOptions": { "low": "Laag", "normal": "Normaal", "high": "Hoog" },
+      "interpretationLabels": { "standard": "standaard", "contrarian": "contrair", "custom": "aangepast" },
+      "profileTypes": {
+        "swing_trader": "jouw swingprofiel",
+        "day_trader": "jouw daytradingprofiel",
+        "scalper": "jouw scalpingprofiel",
+        "investor": "jouw investeringsprofiel",
+        "dca_investor": "jouw investeringsprofiel"
+      },
+      "roles": {
+        "generic": {
+          "description": "Bepaal wanneer FINN naar {indicator} luistert, hoe het signaal wordt gelezen en hoe zwaar het meetelt.",
+          "whenQuestion": "Wanneer moet FINN extra naar deze indicator luisteren?",
+          "always": { "label": "Altijd gebruiken", "help": "Deze indicator telt standaard mee in de routine." },
+          "interpretationQuestion": "Hoe moet FINN het signaal interpreteren?",
+          "standard": { "label": "Standaard", "help": "Hoge waarden tellen als sterker of positiever." },
+          "contrarian": { "label": "Contrair", "help": "Hoge en lage waarden worden omgekeerd wanneer dat logischer is." },
+          "recommendation": "Aanbevolen als veilige start voor {profile}."
+        },
+        "rsi": {
+          "description": "RSI helpt FINN inschatten wanneer momentum te ver is doorgeschoten of juist kracht houdt.",
+          "whenQuestion": "Wanneer moet FINN extra naar RSI luisteren?",
+          "oversold": { "label": "Oververkocht", "help": "RSI onder 30 kan op een herstel- of koopkans wijzen." },
+          "overbought": { "label": "Overgekocht", "help": "RSI boven 70 kan aangeven dat de beweging uitgeput raakt." },
+          "always": { "label": "Altijd gebruiken", "help": "RSI telt ook buiten extreme zones mee als bevestiging." },
+          "standard": { "label": "Standaard", "help": "Hoge RSI telt positiever, lage RSI zwakker." },
+          "contrarian": { "label": "Contrair", "help": "Lage RSI telt positiever, hoge RSI juist voorzichtiger." },
+          "fastRecommendation": "Aanbevolen voor sneller momentumwerk binnen {profile}.",
+          "swingRecommendation": "Aanbevolen voor jouw swingprofiel: gebruik RSI vooral bij oververkochte en overgekochte situaties."
+        },
+        "ma200": {
+          "description": "MA 200 helpt FINN zien of de grotere trend meewerkt, tegenwerkt of als filter dient.",
+          "whenQuestion": "Wanneer moet FINN extra naar MA 200 luisteren?",
+          "bull": { "label": "Stijgende markt", "help": "Gebruik MA 200 om een positieve bias en trendvoortzetting te bewaken." },
+          "bear": { "label": "Dalende markt", "help": "Gebruik MA 200 om defensief te blijven wanneer de grotere trend zwak is." },
+          "sideways": { "label": "Zijwaarts", "help": "Gebruik MA 200 als filter wanneer de markt geen duidelijke trend toont." },
+          "standard": { "label": "Standaard", "help": "Boven MA 200 is sterker, onder MA 200 is zwakker." },
+          "contrarian": { "label": "Contrair", "help": "Gebruik MA 200 tegendraads als mean-reversionfilter." },
+          "fastRecommendation": "Aanbevolen als richtingfilter zonder zijwaartse ruis te zwaar mee te nemen binnen {profile}.",
+          "standardRecommendation": "Aanbevolen voor {profile}: gebruik MA 200 als trendfilter in stijgende, dalende en zijwaartse fases."
+        }
       }
     },
     "indicatorScore": {

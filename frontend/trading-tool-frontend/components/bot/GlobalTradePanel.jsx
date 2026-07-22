@@ -25,8 +25,23 @@ export default function GlobalTradePanel({
     );
   }
 
-  const symbol = (activeBot?.strategy?.symbol || activeBot?.symbol || "—").toUpperCase();
-  const timeframe = activeBot?.strategy?.timeframe || activeBot?.timeframe || "—";
+  const symbol = (
+    activeBot?.strategy?.setup?.symbol ||
+    activeBot?.strategy?.symbol ||
+    activeBot?.symbol ||
+    "—"
+  ).toUpperCase();
+  const timeframe =
+    activeBot?.strategy?.setup?.timeframe ||
+    activeBot?.strategy?.timeframe ||
+    activeBot?.timeframe ||
+    "—";
+  const isPaused = Boolean(
+    activeBot?.is_active === false ||
+    activeBot?.is_paused ||
+    activeBot?.status === "paused"
+  );
+  const isLive = Boolean(activeBot?.is_live);
 
   return (
     <div id="execution-guardrail-panel" className="space-y-6">
@@ -52,9 +67,15 @@ export default function GlobalTradePanel({
               </button>
            </div>
            
-           <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-slate-500">
-              <span className="bg-[var(--color-border-subtle)] px-2 py-1 rounded-lg border border-slate-100">{symbol}</span>
-              <span className="bg-[var(--color-border-subtle)] px-2 py-1 rounded-lg border border-slate-100">{timeframe}</span>
+           <div className="grid grid-cols-2 gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 sm:grid-cols-4">
+              <span className="rounded-lg border border-slate-100 bg-[var(--color-border-subtle)] px-2 py-1.5 text-center">{symbol}</span>
+              <span className="rounded-lg border border-slate-100 bg-[var(--color-border-subtle)] px-2 py-1.5 text-center">{timeframe}</span>
+              <span className={`rounded-lg border px-2 py-1.5 text-center ${isLive ? "border-red-200 bg-red-50 text-red-700" : "border-blue-200 bg-blue-50 text-blue-700"}`}>
+                {isLive ? copy.live : copy.paper}
+              </span>
+              <span className={`rounded-lg border px-2 py-1.5 text-center ${isPaused ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                {isPaused ? copy.paused : copy.active}
+              </span>
            </div>
         </div>
       </div>

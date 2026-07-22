@@ -201,9 +201,7 @@ function BotPageInner() {
     return () => window.removeEventListener("execution-guardrail-handoff", handleExecutionHandoff);
   }, [bots, setActiveBot]);
 
-  const dailyScores = today?.daily_scores ?? today?.scores ?? {
-    macro: 10, technical: 10, market: 10, setup: 10
-  };
+  const dailyScores = today?.daily_scores ?? today?.scores ?? {};
 
   const availableAssets = useMemo(() => {
     const assets = new Set(
@@ -252,21 +250,21 @@ function BotPageInner() {
       bot?.strategy?.setup?.symbol ||
       bot?.strategy?.symbol ||
       bot?.symbol ||
-      "BTC"
+      "—"
     ).toUpperCase();
     const timeframe =
       bot?.strategy?.setup?.timeframe ||
       bot?.strategy?.timeframe ||
       bot?.timeframe ||
-      "1D";
-    const rawAction = String(decision?.action || "observe").toLowerCase();
-    const action =
-      copy.agentCard?.actionLabels?.[rawAction] ||
-      copy.botList?.observe ||
-      rawAction.toUpperCase();
-    const confidence = String(
-      decision?.confidence_label || decision?.confidence || copy.botList?.low || "Low"
-    ).toUpperCase();
+      "—";
+    const rawAction = String(decision?.action || "").toLowerCase();
+    const action = rawAction
+      ? copy.agentCard?.actionLabels?.[rawAction] || rawAction.toUpperCase()
+      : copy.botList?.insufficientData || "Onvoldoende data";
+    const rawConfidence = decision?.confidence_label || decision?.confidence;
+    const confidence = rawConfidence
+      ? String(rawConfidence).toUpperCase()
+      : copy.botList?.insufficientData || "Onvoldoende data";
 
     return { portfolio, decision, symbol, timeframe, action, confidence };
   };
@@ -445,41 +443,6 @@ function BotPageInner() {
       });
     }
   };
-
-  /* =====================================================
-     🛸 THE GLIDER (ULTRA-SMOOTH 60FPS VERSION)
-  ===================================================== */
-  const gliderRef = useRef(null);
-  const requestRef = useRef();
-
-  useEffect(() => {
-    const updatePosition = () => {
-      if (!gliderRef.current) return;
-      
-      const container = gliderRef.current.parentElement;
-      if (!container) return;
-
-      const rect = container.getBoundingClientRect();
-      const offset = Math.max(0, -rect.top + 100); // 100px margin from top
-      
-      const containerHeight = container.offsetHeight;
-      const gliderHeight = gliderRef.current.offsetHeight;
-      const maxOffset = Math.max(0, containerHeight - gliderHeight - 40);
-      
-      const finalOffset = Math.min(offset, maxOffset);
-      
-      // Direct DOM manipulation for maximum performance (no React jitter)
-      gliderRef.current.style.transform = `translate3d(0, ${finalOffset}px, 0)`;
-      
-      requestRef.current = requestAnimationFrame(updatePosition);
-    };
-
-    requestRef.current = requestAnimationFrame(updatePosition);
-    
-    return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-    };
-  }, [bots.length, tradePanelBotId]);
 
   return (
     <div className="page-container !max-w-none !px-6 bg-white dark:bg-[#020617] transition-colors h-auto overflow-visible">
@@ -695,14 +658,14 @@ function BotPageInner() {
         </div>
 
         {tradePanelBotId === activeBot?.id && (
-          <div
-            className="w-full lg:w-[350px] shrink-0"
-            style={{
-              willChange: 'transform',
-              backfaceVisibility: 'hidden'
-            }}
-            ref={gliderRef}
-          >
+          <>
+            <button
+              type="button"
+              aria-label={copy.botList?.closeTrade || "Sluiten"}
+              onClick={() => setTradePanelBotId(null)}
+              className="fixed inset-0 z-[80] bg-slate-950/45 backdrop-blur-[2px] lg:hidden"
+            />
+            <div className="fixed inset-x-0 bottom-0 z-[90] max-h-[88vh] overflow-y-auto rounded-t-[2rem] bg-white p-3 shadow-2xl dark:bg-slate-950 lg:sticky lg:inset-auto lg:top-24 lg:z-auto lg:max-h-none lg:w-[350px] lg:shrink-0 lg:overflow-visible lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none lg:dark:bg-transparent">
             <div id="tp-final-v2200-smooth">
               <GlobalTradePanel
                 decision={decisionsByBot?.[activeBot?.id]}
@@ -711,7 +674,8 @@ function BotPageInner() {
                 onClose={() => setTradePanelBotId(null)}
               />
             </div>
-          </div>
+            </div>
+          </>
         )}
 
       </div>

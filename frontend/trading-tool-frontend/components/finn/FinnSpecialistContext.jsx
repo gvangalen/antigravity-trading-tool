@@ -8,6 +8,7 @@ import { requestWorkspaceContext } from "@/lib/api/workspace";
 
 const COPY = {
   nl: {
+    finnLabel: "FINN ·",
     setup: "Setup-context",
     strategy: "Strategie-context",
     automation: "Automation-context",
@@ -24,6 +25,7 @@ const COPY = {
     source: "Bron",
   },
   en: {
+    finnLabel: "FINN ·",
     setup: "Setup context",
     strategy: "Strategy context",
     automation: "Automation context",
@@ -40,6 +42,7 @@ const COPY = {
     source: "Source",
   },
   de: {
+    finnLabel: "FINN ·",
     setup: "Setup-Kontext",
     strategy: "Strategie-Kontext",
     automation: "Automationskontext",
@@ -109,7 +112,7 @@ export default function FinnSpecialistContext({
         <div className="flex items-start gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white"><Sparkles size={16} /></span>
           <div>
-            <div className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">FINN · {copy[subjectType]}</div>
+            <div className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">{copy.finnLabel} {copy[subjectType]}</div>
             {detail ? (
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
                 <span className={ready ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>{ready ? copy.ready : copy.incomplete}</span>

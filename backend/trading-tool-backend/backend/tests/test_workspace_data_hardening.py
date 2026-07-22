@@ -200,10 +200,12 @@ def test_each_explicit_review_flow_uses_one_ai_request():
     review_surfaces = [
         root / "components" / "setup" / "SetupList.jsx",
         root / "components" / "strategy" / "StrategyCard.jsx",
-        root / "components" / "bot" / "OrderPreviewModal.jsx",
     ]
 
     for surface in review_surfaces:
         source = surface.read_text()
         assert source.count("assistantChat(") == 1, surface
         assert "Promise.all([\n          assistantChat(" not in source
+
+    order_preview = (root / "components" / "bot" / "OrderPreviewModal.jsx").read_text()
+    assert "assistantChat(" not in order_preview

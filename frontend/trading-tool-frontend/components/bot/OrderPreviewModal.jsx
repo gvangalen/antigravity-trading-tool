@@ -1,18 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { assistantChat } from "@/lib/api/ai";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import {
   AlertCircle,
   ArrowRight,
-  Brain,
   CheckCircle2,
   RefreshCw,
   Shield,
   ShieldAlert,
   ShieldCheck,
-  Target,
   X,
   XCircle,
 } from "lucide-react";
@@ -155,10 +152,6 @@ export default function OrderPreviewModal({
   const detailLabels = { booleanTrue: copy.booleanTrue, booleanFalse: copy.booleanFalse };
   const [seconds, setSeconds] = useState(10);
   const [liveIntentConfirmed, setLiveIntentConfirmed] = useState(false);
-  const [finnReview, setFinnReview] = useState(null);
-  const [finnAdherence, setFinnAdherence] = useState(null);
-  const [finnLoading, setFinnLoading] = useState(false);
-  const [finnError, setFinnError] = useState("");
   const telemetryKeyRef = useRef("");
   const ackTelemetryKeyRef = useRef("");
 
@@ -184,53 +177,6 @@ export default function OrderPreviewModal({
   useEffect(() => {
     setLiveIntentConfirmed(false);
   }, [preview?.trace_id, preview?.code, preview?.price, preview?.quantity]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadFinnGovernance() {
-      if (!preview?.symbol || !preview?.bot_id) {
-        setFinnReview(null);
-        setFinnAdherence(null);
-        setFinnError("");
-        return;
-      }
-
-      setFinnLoading(true);
-      setFinnError("");
-      try {
-        const context = {
-          page: "/bot",
-          page_type: "Bots",
-          symbol: preview.symbol,
-          bot_id: preview.bot_id,
-          strategy_id: preview.strategy_id || null,
-          setup_id: preview.setup_id || null,
-        };
-        const orderSummary = `${preview.side === "buy" ? copy.buy : copy.sell} ${preview.symbol} ${copy.orderSummaryFor} ${fmt(preview.notional_eur ?? preview.gross_eur ?? 0, locale)} ${currencySymbol}`;
-        const response = await assistantChat(
-          `${copy.reviewPrompt.replace("{order}", orderSummary)} ${copy.planCheckPrompt.replace("{order}", orderSummary)}`,
-          context,
-          []
-        );
-        if (cancelled) return;
-        const analysis = response?.analysis || response?.state?.analysis || null;
-        setFinnReview(analysis);
-        setFinnAdherence(analysis);
-      } catch (error) {
-        if (cancelled) return;
-        console.error("Finn governance preview failed:", error);
-        setFinnError(copy.finnLoadError);
-      } finally {
-        if (!cancelled) setFinnLoading(false);
-      }
-    }
-
-    loadFinnGovernance();
-    return () => {
-      cancelled = true;
-    };
-  }, [copy.buy, copy.finnLoadError, copy.orderSummaryFor, copy.sell, currencySymbol, locale, preview?.bot_id, preview?.strategy_id, preview?.setup_id, preview?.symbol, preview?.side, preview?.notional_eur, preview?.gross_eur]);
 
   const isLive = Boolean(preview?.is_live);
   const isLivePreflight = preview?.mode === "manual_order_preflight" || isLive;
@@ -273,7 +219,7 @@ export default function OrderPreviewModal({
     Number.isFinite(Number(liveMarketPrice?.age_seconds)) ? [copy.marketPriceAgeLabel, `${liveMarketPrice.age_seconds} ${copy.secondsShort}`] : null,
     liveMarketPrice?.market_timestamp ? [copy.marketTimestampLabel, liveMarketPrice.market_timestamp] : null,
   ].filter(Boolean);
-  const behavioralFriction = extractBehavioralFriction(preview, finnReview, finnAdherence, behaviorLabels);
+  const behavioralFriction = extractBehavioralFriction(preview, null, null, behaviorLabels);
 
   useEffect(() => {
     if (!behavioralFriction?.message) return;
@@ -297,15 +243,13 @@ export default function OrderPreviewModal({
       next_best_action: behavioralFriction?.safe_alternative || null,
       metadata: {
         behavior_flag:
-          finnReview?.profile_habit_alignment?.primary_alignment?.flag ||
-          finnAdherence?.profile_habit_alignment?.primary_alignment?.flag ||
           preview?.profile_habit_alignment?.primary_alignment?.flag ||
           null,
         behavior_label: behavioralFriction?.label || null,
         source: behavioralFriction?.source || null,
       },
     });
-  }, [behavioralFriction, finnAdherence?.profile_habit_alignment, finnReview?.profile_habit_alignment, isLive, preview?.bot_id, preview?.decision_id, preview?.symbol, preview?.trace_id, preview?.profile_habit_alignment]);
+  }, [behavioralFriction, isLive, preview?.bot_id, preview?.decision_id, preview?.symbol, preview?.trace_id, preview?.profile_habit_alignment]);
 
   useEffect(() => {
     if (!liveIntentConfirmed || !behavioralFriction?.message || !isLive) return;
@@ -325,15 +269,13 @@ export default function OrderPreviewModal({
       next_best_action: behavioralFriction?.safe_alternative || null,
       metadata: {
         behavior_flag:
-          finnReview?.profile_habit_alignment?.primary_alignment?.flag ||
-          finnAdherence?.profile_habit_alignment?.primary_alignment?.flag ||
           preview?.profile_habit_alignment?.primary_alignment?.flag ||
           null,
         behavior_label: behavioralFriction?.label || null,
         source: behavioralFriction?.source || null,
       },
     });
-  }, [behavioralFriction, finnAdherence?.profile_habit_alignment, finnReview?.profile_habit_alignment, isLive, liveIntentConfirmed, preview?.bot_id, preview?.decision_id, preview?.symbol, preview?.trace_id, preview?.profile_habit_alignment]);
+  }, [behavioralFriction, isLive, liveIntentConfirmed, preview?.bot_id, preview?.decision_id, preview?.symbol, preview?.trace_id, preview?.profile_habit_alignment]);
 
   const canConfirm = !loading && !isBlocked && (!isLive || liveIntentConfirmed);
   const primaryButtonLabel = loading
@@ -415,107 +357,17 @@ export default function OrderPreviewModal({
                 </div>
               </div>
 
-              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950/45">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                      <Brain size={13} className="text-violet-500" />
-                      {copy.finnPreflight}
-                    </div>
-                    <p className="mt-2 text-sm font-black leading-relaxed text-slate-900 dark:text-white">
-                      {copy.finnPreflightBody}
-                    </p>
+              {behavioralFriction?.message && (
+                <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50/80 p-5 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                  <div className="text-[10px] font-black uppercase tracking-widest">
+                    {copy.behavioralBrake}{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
                   </div>
-                  {finnLoading && (
-                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                      <RefreshCw size={12} className="animate-spin" />
-                      {copy.loading}
-                    </span>
+                  <p className="mt-2 text-sm font-semibold leading-relaxed">{behavioralFriction.message}</p>
+                  {behavioralFriction?.safe_alternative && (
+                    <p className="mt-2 text-xs font-black leading-relaxed">{behavioralFriction.safe_alternative}</p>
                   )}
                 </div>
-
-                {finnError && (
-                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs font-semibold leading-relaxed text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
-                    {finnError}
-                  </div>
-                )}
-
-                {finnReview && (
-                  <div className={`mt-4 rounded-2xl border p-4 ${
-                    finnReview.decision_status === "block"
-                      ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300"
-                      : finnReview.decision_status === "modify" || finnReview.decision_status === "insufficient_context"
-                        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300"
-                        : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300"
-                  }`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
-                        <Target size={13} />
-                        {copy.decisionCheck}
-                      </span>
-                      <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
-                        {finnReview.decision_status}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-sm font-semibold leading-relaxed">{finnReview.risk_summary}</p>
-                    {Array.isArray(finnReview.top_blockers) && finnReview.top_blockers.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        {finnReview.top_blockers.slice(0, 2).map((item, index) => (
-                          <div key={`review-blocker-${index}`} className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3 text-xs font-semibold leading-relaxed">
-                            {item}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {behavioralFriction?.message && (
-                      <div className="mt-3 rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
-                        <div className="text-[9px] font-black uppercase tracking-widest opacity-70">
-                          {copy.behavioralBrake}{behavioralFriction?.label ? ` · ${behavioralFriction.label}` : ""}
-                        </div>
-                        <p className="mt-2 text-xs font-semibold leading-relaxed">{behavioralFriction.message}</p>
-                        {behavioralFriction?.safe_alternative && (
-                          <p className="mt-2 text-[11px] font-black leading-relaxed">{behavioralFriction.safe_alternative}</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {finnAdherence && (
-                  <div className={`mt-4 rounded-2xl border p-4 ${
-                    finnAdherence.adherence_status === "in_plan"
-                      ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300"
-                      : finnAdherence.adherence_status === "insufficiently_justified"
-                        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300"
-                        : "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300"
-                  }`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
-                        <ShieldCheck size={13} />
-                        {copy.planAdherence}
-                      </span>
-                      <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-3 py-1 text-[9px] font-black uppercase tracking-widest">
-                        {finnAdherence.adherence_status}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-sm font-semibold leading-relaxed">{finnAdherence.adherence_reason}</p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      {finnAdherence.threatened_rule && (
-                        <div className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
-                          <div className="text-[9px] font-black uppercase tracking-widest opacity-70">{copy.threatenedRule}</div>
-                          <p className="mt-2 text-xs font-semibold leading-relaxed">{finnAdherence.threatened_rule}</p>
-                        </div>
-                      )}
-                      {finnAdherence.suggested_recovery_step && (
-                        <div className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3">
-                          <div className="text-[9px] font-black uppercase tracking-widest opacity-70">{copy.safeNextStep}</div>
-                          <p className="mt-2 text-xs font-semibold leading-relaxed">{finnAdherence.suggested_recovery_step}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
 
               {isLive && (
                 <div className="rounded-[1.5rem] border border-blue-200 bg-blue-50/80 p-5 dark:border-blue-900/40 dark:bg-blue-950/20">

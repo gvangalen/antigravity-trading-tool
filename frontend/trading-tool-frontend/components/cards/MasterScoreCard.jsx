@@ -38,7 +38,7 @@ export default function MasterScoreCard() {
         )}
 
         {/* ✅ CONTENT */}
-        {!loading && master && (
+        {!loading && master && Number.isFinite(master.score) && (
           <>
             {/* SCORE NUMBER */}
             <p className={`text-4xl font-bold ${getScoreColor(master.score)}`}>
@@ -57,6 +57,12 @@ export default function MasterScoreCard() {
               <AIInsightBlock text={outlook} variant="dashboard" />
             )}
           </>
+        )}
+
+        {!loading && master && !Number.isFinite(master.score) && (
+          <p className="text-[var(--text-muted)] text-center text-sm">
+            {t.dashboard?.gauges?.insufficientData || t.common?.insufficientData || "Onvoldoende data"}
+          </p>
         )}
       </div>
     </CardWrapper>

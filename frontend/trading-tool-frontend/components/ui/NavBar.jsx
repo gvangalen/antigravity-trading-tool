@@ -39,31 +39,31 @@ export default function NavBar() {
     {
       href: "/portfolio",
       matchPathnames: ["/portfolio"],
-      label: t?.assistant?.uiText?.portfolio || "Portfolio",
+      label: t?.nav?.portfolio,
       icon: <Wallet size={18} />,
     },
     {
       href: analysisHref,
       matchPathnames: ["/", "/asset", "/market", "/macro", "/technical"],
-      label: t?.marketAnalysisWorkflow?.title || "Analyse",
+      label: t?.nav?.analysis,
       icon: <LineChart size={18} />,
     },
     {
       href: "/setup",
       matchPathnames: ["/setup", "/strategy"],
-      label: "Mijn Plan",
+      label: t?.nav?.myPlan,
       icon: <Layers size={18} />,
     },
     {
       href: "/bot",
       matchPathnames: ["/bot"],
-      label: t?.assistant?.draftRows?.automation || "Automation",
+      label: t?.nav?.automation,
       icon: <Bot size={18} />,
     },
     {
       href: "/report",
       matchPathnames: ["/report"],
-      label: t?.assistant?.signals?.reflection?.title || "Reflectie",
+      label: t?.nav?.reflection,
       icon: <FileText size={18} />,
     },
   ];

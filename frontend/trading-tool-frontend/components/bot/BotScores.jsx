@@ -1,6 +1,5 @@
 "use client";
 
-import CardWrapper from "@/components/ui/CardWrapper";
 import CardLoader from "@/components/ui/CardLoader";
 import { BarChart3 } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
@@ -11,8 +10,10 @@ export default function BotScores({
 }) {
   const { t } = useTranslation();
   const copy = t?.botPage?.botScores || {};
-  const hasScores =
-    scores && Object.keys(scores).length > 0;
+  const scoreEntries = Object.entries(scores || {}).filter(([, value]) =>
+    Number.isFinite(Number(value))
+  );
+  const hasScores = scoreEntries.length > 0;
 
   return (
     <div className="bg-card border border-[var(--color-border)] rounded-[2rem] p-6 shadow-sm transition-colors duration-300">
@@ -40,8 +41,8 @@ export default function BotScores({
 
       {!loading && hasScores && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {Object.entries(scores).map(([key, value]) => {
-            const score = Number(value) || 0;
+          {scoreEntries.map(([key, value]) => {
+            const score = Number(value);
 
             let colorClass = "text-secondary";
             let bgClass = "bg-[var(--color-border-subtle)] border-[var(--color-border)]";
