@@ -5,11 +5,12 @@ import test from "node:test";
 const readSource = (path) =>
   readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-const [botPage, tradeContainer, orderPreview, navBar] = await Promise.all([
+const [botPage, tradeContainer, orderPreview, navBar, indicatorConfigModal] = await Promise.all([
   readSource("app/(protected)/bot/page.jsx"),
   readSource("components/bot/TradePanelContainer.jsx"),
   readSource("components/bot/OrderPreviewModal.jsx"),
   readSource("components/ui/NavBar.jsx"),
+  readSource("components/scoring/IndicatorConfigModal.jsx"),
 ]);
 
 test("opens trading only through the explicit bot action", () => {
@@ -34,4 +35,12 @@ test("requires explicit confirmation for a live order", () => {
 
 test("keeps administrator navigation role-gated", () => {
   assert.match(navBar, /user\?\.role\s*===\s*['"]admin['"]/);
+});
+
+test("reads indicator configuration copy from the shared dictionary namespace", () => {
+  assert.match(
+    indicatorConfigModal,
+    /t\.legacyComponents\.indicatorConfigModal/
+  );
+  assert.doesNotMatch(indicatorConfigModal, /t\.scoring\.indicatorConfigModal/);
 });

@@ -274,7 +274,7 @@ export default function IndicatorConfigModal({
 }) {
   const { showSnackbar } = useModal();
   const { t } = useTranslation();
-  const copy = t.scoring.indicatorConfigModal;
+  const copy = t.legacyComponents.indicatorConfigModal;
   const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
