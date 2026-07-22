@@ -37,9 +37,11 @@ function BotPageInner() {
   const searchParams = useSearchParams();
   const formRef = useRef({});
   const budgetRef = useRef({});
+  const hasInitializedExpansionRef = useRef(false);
 
   const { activeBot, setActiveBot } = useActiveBot();
 
+  const [expandedBotId, setExpandedBotId] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [assetFilter, setAssetFilter] = useState("all");
   const [currentTime, setCurrentTime] = useState(null);
@@ -104,11 +106,25 @@ function BotPageInner() {
   useEffect(() => {
     if (bots.length === 0) {
       setActiveBot(null);
+      setExpandedBotId(null);
+      hasInitializedExpansionRef.current = false;
       return;
     }
     if (!activeBot || !bots.find((b) => b.id === activeBot.id)) {
-      setActiveBot(bots[0]);
+      const defaultBot = bots[0];
+      setActiveBot(defaultBot);
+      setExpandedBotId(defaultBot.id);
+      hasInitializedExpansionRef.current = true;
+      return;
     }
+    if (!hasInitializedExpansionRef.current) {
+      setExpandedBotId(activeBot.id);
+      hasInitializedExpansionRef.current = true;
+      return;
+    }
+    setExpandedBotId((currentId) => (
+      currentId && !bots.some((bot) => bot.id === currentId) ? null : currentId
+    ));
   }, [bots, activeBot, setActiveBot]);
 
   useEffect(() => {
@@ -134,6 +150,7 @@ function BotPageInner() {
 
     if (targetBot && activeBot?.id !== targetBot.id) {
       setActiveBot(targetBot);
+      setExpandedBotId(targetBot.id);
     }
 
     if (requestedFocus === "trade") {
@@ -157,6 +174,7 @@ function BotPageInner() {
 
       if (targetBot) {
         setActiveBot(targetBot);
+        setExpandedBotId(targetBot.id);
       }
 
       requestAnimationFrame(() => {
@@ -541,25 +559,34 @@ function BotPageInner() {
               </div>
 
               {filteredBots.map((bot) => {
-                const isActive = activeBot?.id === bot.id;
+                const isSelected = activeBot?.id === bot.id;
+                const isExpanded = expandedBotId === bot.id;
                 const presentation = getBotPresentation(bot);
+                const toggleBot = () => {
+                  if (!isSelected) {
+                    setActiveBot(bot);
+                    setExpandedBotId(bot.id);
+                    return;
+                  }
+                  setExpandedBotId((currentId) => currentId === bot.id ? null : bot.id);
+                };
                 return (
                   <div key={bot.id} className="border-b border-slate-100 last:border-b-0 dark:border-slate-800">
                     <div
                       role="button"
                       tabIndex={0}
-                      aria-expanded={isActive}
-                      onClick={() => setActiveBot(bot)}
+                      aria-expanded={isExpanded}
+                      onClick={toggleBot}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          setActiveBot(bot);
+                          toggleBot();
                         }
                       }}
-                      className={`group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-5 py-4 transition md:grid-cols-[minmax(0,2fr)_0.8fr_0.8fr_0.8fr_auto] ${isActive ? "bg-blue-50/70 dark:bg-blue-950/20" : "hover:bg-slate-50 dark:hover:bg-slate-900/50"}`}
+                      className={`group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-5 py-4 transition md:grid-cols-[minmax(0,2fr)_0.8fr_0.8fr_0.8fr_auto] ${isSelected ? "bg-blue-50/70 dark:bg-blue-950/20" : "hover:bg-slate-50 dark:hover:bg-slate-900/50"}`}
                     >
                       <div className="flex min-w-0 items-center gap-3">
-                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isActive ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-900"}`}>
+                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-900"}`}>
                           <Bot size={18} />
                         </span>
                         <span className="min-w-0">
@@ -588,11 +615,11 @@ function BotPageInner() {
                           <Sparkles size={14} />
                           <span className="hidden xl:inline">{copy.botList?.askFinn || "Ask FINN"}</span>
                         </button>
-                        <ChevronDown size={17} className={`text-slate-400 transition-transform ${isActive ? "rotate-180 text-blue-600" : ""}`} />
+                        <ChevronDown size={17} className={`text-slate-400 transition-transform ${isExpanded ? "rotate-180 text-blue-600" : ""}`} />
                       </div>
                     </div>
 
-                    {isActive && (
+                    {isExpanded && (
                       <div className="border-t border-blue-100 bg-blue-50/30 p-3 sm:p-5 dark:border-blue-950 dark:bg-blue-950/10">
                         <BotAgentCard
                           bot={bot}
