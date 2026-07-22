@@ -45,6 +45,8 @@ export default function TradePanel({
   symbol = "BTC",
   loading = false,
   error = null,
+  disabled = false,
+  disabledReason = "",
   onSubmit,
 }) {
 
@@ -184,6 +186,9 @@ export default function TradePanel({
 
   const validation = useMemo(() => {
 
+    if (disabled)
+      return { ok: false, reason: disabledReason || copy.pausedBotTradingBlocked };
+
     if (!hasBalance)
       return { ok: false, reason: copy.validationNoBalance };
 
@@ -213,9 +218,12 @@ export default function TradePanel({
     orderValueQuote,
     balanceBase,
     side,
+    disabled,
+    disabledReason,
+    copy.pausedBotTradingBlocked,
   ]);
 
-  const canSubmit = validation.ok && !loading;
+  const canSubmit = validation.ok && !loading && !disabled;
 
   /* =========================
      Sync slider -> input

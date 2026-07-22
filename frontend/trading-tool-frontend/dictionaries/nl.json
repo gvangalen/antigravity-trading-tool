@@ -1590,6 +1590,7 @@
       "open": "Bot openen",
       "askFinn": "Vraag FINN",
       "waiting": "Wachten",
+      "observe": "Observeren",
       "low": "Laag"
     },
     "form": {
@@ -1768,6 +1769,10 @@
       "logicalConfidence": "Logische zekerheid",
       "telemetrySync": "Telemetrie-sync",
       "syncing": "SYNCHRONISEREN...",
+      "selectedBotDetails": "Details geselecteerde bot",
+      "noStrategy": "Geen strategie gekoppeld",
+      "lastChecked": "Laatst gecontroleerd",
+      "dataUpdating": "Data wordt bijgewerkt",
       "collapseDiagnostics": "Diagnostiek inklappen",
       "viewFullDiagnostics": "Volledige diagnostiek bekijken",
       "scenarioLoading": "Parallelle scenario's doorrekenen...",
@@ -2042,7 +2047,8 @@
       "validationZeroAmount": "Aantal is 0",
       "validationUnknownOrderValue": "Orderwaarde onbekend",
       "validationInsufficientBalance": "Onvoldoende saldo",
-      "validationInsufficientAsset": "Onvoldoende {asset}"
+      "validationInsufficientAsset": "Onvoldoende {asset}",
+      "pausedBotTradingBlocked": "Deze bot is gepauzeerd. Hervat de bot voordat je handmatig een order plaatst."
     },
     "proposalCreatedPrefix": "Nieuw voorstel voor",
     "proposalCreateFailed": "Voorstel genereren mislukt",

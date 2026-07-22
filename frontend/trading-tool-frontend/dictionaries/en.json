@@ -1589,6 +1589,7 @@
       "open": "Open bot",
       "askFinn": "Ask FINN",
       "waiting": "Waiting",
+      "observe": "Observe",
       "low": "Low"
     },
     "form": {
@@ -1767,6 +1768,10 @@
       "logicalConfidence": "Logical confidence",
       "telemetrySync": "Telemetry sync",
       "syncing": "SYNCING...",
+      "selectedBotDetails": "Selected bot details",
+      "noStrategy": "No strategy linked",
+      "lastChecked": "Last checked",
+      "dataUpdating": "Data is updating",
       "collapseDiagnostics": "Collapse diagnostics",
       "viewFullDiagnostics": "View full diagnostics",
       "scenarioLoading": "Running parallel scenarios...",
@@ -2041,7 +2046,8 @@
       "validationZeroAmount": "Amount is 0",
       "validationUnknownOrderValue": "Order value unknown",
       "validationInsufficientBalance": "Insufficient balance",
-      "validationInsufficientAsset": "Insufficient {asset}"
+      "validationInsufficientAsset": "Insufficient {asset}",
+      "pausedBotTradingBlocked": "This bot is paused. Resume it before placing a manual order."
     },
     "proposalCreatedPrefix": "New proposal for",
     "proposalCreateFailed": "Could not generate proposal",

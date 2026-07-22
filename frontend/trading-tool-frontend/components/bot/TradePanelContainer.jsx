@@ -19,6 +19,7 @@ export default function TradePanelContainer({
   const { showSnackbar } = useModal();
   const { t } = useTranslation();
   const copy = t?.botPage?.tradePanel || {};
+  const tradingDisabled = bot?.is_active === false;
   const botId = bot?.id;
   const decisionId = decision?.id;
   const tradeSymbol = (
@@ -199,6 +200,10 @@ export default function TradePanelContainer({
   ===================================================== */
 
   async function handleOrderRequest(order) {
+    if (tradingDisabled) {
+      showSnackbar(copy.pausedBotTradingBlocked, "warning");
+      return;
+    }
     const preflightToken =
       order.live_preflight_token ||
       order.live_preflight_action_id ||
@@ -269,6 +274,11 @@ export default function TradePanelContainer({
   }
 
   async function handleConfirmOrder() {
+    if (tradingDisabled) {
+      setShowPreview(false);
+      showSnackbar(copy.pausedBotTradingBlocked, "warning");
+      return;
+    }
     if (!previewData || !draftOrder) return;
     setError(null);
 
@@ -378,6 +388,8 @@ export default function TradePanelContainer({
         strategy={strategy}
         loading={loading}
         error={error}
+        disabled={tradingDisabled}
+        disabledReason={copy.pausedBotTradingBlocked}
         onSubmit={handleOrderRequest}
       />
 

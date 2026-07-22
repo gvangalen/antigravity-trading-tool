@@ -29,6 +29,13 @@ import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 
+function persistBotSelection(botId) {
+  if (typeof window === "undefined" || !botId) return;
+  const url = new URL(window.location.href);
+  url.searchParams.set("bot_id", String(botId));
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 function BotPageInner() {
   const router = useRouter();
   const { t, locale } = useTranslation();
@@ -175,6 +182,7 @@ function BotPageInner() {
       if (targetBot) {
         setActiveBot(targetBot);
         setExpandedBotId(targetBot.id);
+        persistBotSelection(targetBot.id);
       }
 
       requestAnimationFrame(() => {
@@ -225,7 +233,10 @@ function BotPageInner() {
       return;
     }
     if (!filteredBots.some((bot) => bot.id === activeBot?.id)) {
-      setActiveBot(filteredBots[0]);
+      const nextBot = filteredBots[0];
+      setActiveBot(nextBot);
+      setExpandedBotId(nextBot.id);
+      persistBotSelection(nextBot.id);
     }
   }, [activeBot, filteredBots, setActiveBot]);
 
@@ -244,7 +255,11 @@ function BotPageInner() {
       bot?.strategy?.timeframe ||
       bot?.timeframe ||
       "1D";
-    const action = String(decision?.action || copy.botList?.waiting || "Waiting").toUpperCase();
+    const rawAction = String(decision?.action || "observe").toLowerCase();
+    const action =
+      copy.agentCard?.actionLabels?.[rawAction] ||
+      copy.botList?.observe ||
+      rawAction.toUpperCase();
     const confidence = String(
       decision?.confidence_label || decision?.confidence || copy.botList?.low || "Low"
     ).toUpperCase();
@@ -466,13 +481,13 @@ function BotPageInner() {
     <div className="page-container !max-w-none !px-6 bg-white dark:bg-[#020617] transition-colors h-auto overflow-visible">
       
       {/* 🟢 STANDARD PAGE HEADER */}
-      <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
+      <header className="page-header border-l-4 border-blue-600 pl-8 mb-8">
         <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
            <Wallet size={12} />
            {copy.eyebrow}
         </div>
           <div className="max-w-2xl">
-            <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">{copy.title}</h1>
+            <h1 className="page-title text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">{copy.title}</h1>
             <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 leading-relaxed">
               {copy.subtitle}
             </p>
@@ -491,10 +506,10 @@ function BotPageInner() {
         />
       ) : null}
 
-      <div className="max-w-full flex flex-col lg:flex-row gap-10 pb-24 items-start relative">
+      <div className="max-w-full flex flex-col lg:flex-row gap-8 pb-24 items-start relative">
         
         {/* 🕋 LEFT: MAIN COMMAND CENTER */}
-        <div className="flex-1 min-w-0 space-y-12">
+        <div className="flex-1 min-w-0 space-y-8">
           {error && (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
               {copy.partialError}
@@ -507,10 +522,10 @@ function BotPageInner() {
           </div>
 
           {/* BOT DEPLOYMENT SECTION */}
-          <div className="space-y-8 pt-8 border-t border-slate-100 dark:border-slate-800">
-            <div className="space-y-6">
+          <div className="space-y-6 pt-5 border-t border-slate-100 dark:border-slate-800">
+            <div className="space-y-4">
               <div>
-                <h2 className="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tighter">{copy.myBotsTitle}</h2>
+                <h2 className="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tighter">{copy.myBotsTitle}</h2>
                 <p className="text-[13px] font-medium text-slate-400 dark:text-slate-500 mt-1">{copy.myBotsSubtitle}</p>
               </div>
 
@@ -566,6 +581,7 @@ function BotPageInner() {
                   if (!isSelected) {
                     setActiveBot(bot);
                     setExpandedBotId(bot.id);
+                    persistBotSelection(bot.id);
                     return;
                   }
                   setExpandedBotId((currentId) => currentId === bot.id ? null : bot.id);
@@ -583,7 +599,7 @@ function BotPageInner() {
                           toggleBot();
                         }
                       }}
-                      className={`group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-5 py-4 transition md:grid-cols-[minmax(0,2fr)_0.8fr_0.8fr_0.8fr_auto] ${isSelected ? "bg-blue-50/70 dark:bg-blue-950/20" : "hover:bg-slate-50 dark:hover:bg-slate-900/50"}`}
+                      className={`group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-5 py-4 transition md:grid-cols-[minmax(0,2fr)_0.8fr_0.8fr_0.8fr_auto] ${isSelected ? "bg-blue-50 ring-1 ring-inset ring-blue-200 shadow-[inset_3px_0_0_#2563eb] dark:bg-blue-950/25 dark:ring-blue-900" : "hover:bg-slate-50 dark:hover:bg-slate-900/50"}`}
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-900"}`}>
@@ -640,6 +656,7 @@ function BotPageInner() {
                           onBacktest={runBacktest}
                           onAskFinn={() => askFinnAboutBot(bot)}
                           finnActionLabel={copy.botList?.askFinn || "Ask FINN"}
+                          compact
                         />
                       </div>
                     )}

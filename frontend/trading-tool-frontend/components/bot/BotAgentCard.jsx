@@ -49,6 +49,7 @@ export default function BotAgentCard({
   onBacktest,
   onAskFinn,
   finnActionLabel = "Ask FINN",
+  compact = false,
 }) {
   const { t, locale } = useTranslation();
   const copy = t?.botPage?.agentCard || {};
@@ -115,6 +116,8 @@ export default function BotAgentCard({
   const lastRun =
     bot?.last_run
       ? formatDateTime(bot.last_run, locale, {
+          day: "2-digit",
+          month: "short",
           hour: "2-digit",
           minute: "2-digit",
         })
@@ -402,23 +405,30 @@ export default function BotAgentCard({
   /* ================= RENDER ================= */
 
   return (
-    <div className="w-full rounded-[2.5rem] border border-slate-200 bg-card shadow-xl overflow-hidden flex flex-col transition-all hover:shadow-2xl">
+    <div className={`w-full overflow-hidden border border-slate-200 bg-card flex flex-col transition-all ${compact ? "rounded-3xl shadow-sm" : "rounded-[2.5rem] shadow-xl hover:shadow-2xl"}`}>
       
       {/* 🕋 MODULAR HEADER HUD */}
-      <div className="p-8 pb-4 space-y-6">
+      <div className={`${compact ? "p-5 pb-3 space-y-4" : "p-8 pb-4 space-y-6"}`}>
         <div className="flex items-start justify-between gap-6">
           <div className="flex items-start gap-5">
-            <div className="w-14 h-14 rounded-2xl bg-[var(--color-border-subtle)] border border-slate-100 text-[var(--primary)] flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform mt-1">
-               <Bot size={28} className="opacity-80" />
+            <div className={`${compact ? "w-10 h-10 rounded-xl" : "w-14 h-14 rounded-2xl"} bg-[var(--color-border-subtle)] border border-slate-100 text-[var(--primary)] flex items-center justify-center shadow-inner transition-transform mt-1`}>
+               <Bot size={compact ? 19 : 28} className="opacity-80" />
             </div>
 
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-black text-foreground tracking-tight">{bot?.name}</h2>
-                <div className={`w-2.5 h-2.5 rounded-full ${botState === 'live' ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)] animate-pulse' : botState === 'waiting' ? 'bg-yellow-400' : 'bg-slate-300'}`} />
-              </div>
+            <div className={compact ? "space-y-1.5" : "space-y-2.5"}>
+              {compact ? (
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">{copy.selectedBotDetails}</p>
+                  <p className="mt-1 text-sm font-black text-foreground">{bot?.strategy?.name || copy.noStrategy}</p>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <h2 className="text-2xl font-black text-foreground tracking-tight">{bot?.name}</h2>
+                  <div className={`w-2.5 h-2.5 rounded-full ${botState === 'live' ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)] animate-pulse' : botState === 'waiting' ? 'bg-yellow-400' : 'bg-slate-300'}`} />
+                </div>
+              )}
               
-              <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+              {!compact ? <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
                 <span className="text-dim bg-[var(--color-border-subtle)] px-2 py-0.5 rounded-md">{symbol}</span>
                 <div className="w-1 h-1 rounded-full bg-slate-300" />
                 <span>{timeframe}</span>
@@ -428,7 +438,7 @@ export default function BotAgentCard({
                     <span className="text-[var(--primary)] font-bold">{bot.strategy.name}</span>
                   </>
                 )}
-              </div>
+              </div> : null}
 
               {/* HORIZONTAL PILLS CONTAINER */}
               <div className="flex flex-wrap items-center gap-2 pt-1.5">
@@ -516,7 +526,7 @@ export default function BotAgentCard({
         </div>
 
         {/* 📊 SYSTEM STATUS BAR (UPGRADED PADDING) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-2 bg-[var(--color-border-subtle)] border border-slate-100 rounded-[1.5rem]">
+        <div className={`grid grid-cols-2 lg:grid-cols-4 ${compact ? "gap-2 p-1.5 rounded-2xl" : "gap-4 p-2 rounded-[1.5rem]"} bg-[var(--color-border-subtle)] border border-slate-100`}>
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.statusReaction}</div>
              <div className={`text-xs font-black uppercase tracking-tight flex items-center gap-2 ${bot?.is_live ? 'text-emerald-600' : 'text-blue-600'}`}>
@@ -542,8 +552,8 @@ export default function BotAgentCard({
           </div>
 
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.telemetrySync}</div>
-             <div className="text-xs font-black text-muted tracking-tight font-mono">{lastRun || copy.syncing}</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.lastChecked}</div>
+             <div className="text-xs font-black text-muted tracking-tight">{lastRun || copy.dataUpdating}</div>
           </div>
         </div>
 
