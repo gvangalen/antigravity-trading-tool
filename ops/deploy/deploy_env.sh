@@ -111,6 +111,14 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   export BACKEND_PORT=$BACKEND_PORT
   export FRONTEND_PORT=$FRONTEND_PORT
   cd $REMOTE_DIR
+  PREVIOUS_FRONTEND_STATIC=\"\$(mktemp -d)\"
+  cleanup_previous_frontend_static() {
+    rm -rf \"\$PREVIOUS_FRONTEND_STATIC\"
+  }
+  trap cleanup_previous_frontend_static EXIT
+  if [ -d frontend/trading-tool-frontend/out/_next/static ]; then
+    cp -R frontend/trading-tool-frontend/out/_next/static/. \"\$PREVIOUS_FRONTEND_STATIC/\"
+  fi
   mkdir -p $DEPLOY_STATE_DIR
   printf '%s\n' '$ROLLBACK_COMMIT' > ${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT
   sync_git_ref() {
@@ -126,6 +134,11 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   }
   sync_git_ref
   git reset --hard $DEPLOY_REF
+  mkdir -p frontend/trading-tool-frontend/out/_next/static
+  if [ -n \"\$(find \"\$PREVIOUS_FRONTEND_STATIC\" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)\" ]; then
+    cp -Rn \"\$PREVIOUS_FRONTEND_STATIC/.\" frontend/trading-tool-frontend/out/_next/static/
+    echo \"✅ Previous static chunks retained for browsers opened before this deploy.\"
+  fi
   bash ./ops/deploy/bootstrap_runtime_dependencies.sh
 
   cd backend/trading-tool-backend

@@ -5,12 +5,22 @@ import test from "node:test";
 const readSource = (path) =>
   readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-const [botPage, tradeContainer, orderPreview, navBar, indicatorConfigModal] = await Promise.all([
+const [
+  botPage,
+  tradeContainer,
+  orderPreview,
+  navBar,
+  indicatorConfigModal,
+  rootLayout,
+  staticServer,
+] = await Promise.all([
   readSource("app/(protected)/bot/page.jsx"),
   readSource("components/bot/TradePanelContainer.jsx"),
   readSource("components/bot/OrderPreviewModal.jsx"),
   readSource("components/ui/NavBar.jsx"),
   readSource("components/scoring/IndicatorConfigModal.jsx"),
+  readSource("app/layout.jsx"),
+  readSource("server.js"),
 ]);
 
 test("opens trading only through the explicit bot action", () => {
@@ -43,4 +53,17 @@ test("reads indicator configuration copy from the shared dictionary namespace", 
     /t\.legacyComponents\.indicatorConfigModal/
   );
   assert.doesNotMatch(indicatorConfigModal, /t\.scoring\.indicatorConfigModal/);
+});
+
+test("recovers a failed navigation chunk with a cache-busting reload", () => {
+  assert.match(rootLayout, /ChunkLoadError\|Loading chunk\|Cannot find module/);
+  assert.match(rootLayout, /RECOVERY_COOLDOWN_MS\s*=\s*30000/);
+  assert.match(rootLayout, /searchParams\.set\("__tm_recover"/);
+  assert.match(rootLayout, /window\.location\.replace/);
+});
+
+test("keeps route documents fresh while caching immutable build assets", () => {
+  assert.match(staticServer, /relativePath\.startsWith\('_next\/static\/'\)/);
+  assert.match(staticServer, /max-age=31536000, immutable/);
+  assert.match(staticServer, /no-store, no-cache, must-revalidate/);
 });

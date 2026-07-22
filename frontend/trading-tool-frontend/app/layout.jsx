@@ -38,17 +38,32 @@ function StaleAppRecoveryScript() {
 (function () {
   var VERSION = ${JSON.stringify(STALE_APP_RECOVERY_VERSION)};
   var VERSION_KEY = "tradamind_app_cache_version";
-  var RECOVERY_KEY = "tradamind_app_cache_recovered_" + VERSION;
+  var RECOVERY_PREFIX = "tradamind_app_cache_recovered_" + VERSION + "_";
+  var RECOVERY_COOLDOWN_MS = 30000;
 
   function shouldRecover(reason) {
     var text = String(reason || "");
     return /copy|ChunkLoadError|Loading chunk|Cannot find module|page-6ba98bbaffeb4e74|Minified React error/i.test(text);
   }
 
+  function recoveryKind(reason) {
+    var text = String(reason || "");
+    if (/ChunkLoadError|Loading chunk|Cannot find module/i.test(text)) return "chunk";
+    if (text === "build-version-change") return "version";
+    return "runtime";
+  }
+
   async function clearStaleApp(reason) {
+    var kind = recoveryKind(reason);
+    var recoveryKey = RECOVERY_PREFIX + kind;
+    var now = Date.now();
+
     try {
-      if (window.sessionStorage && sessionStorage.getItem(RECOVERY_KEY)) return;
-      if (window.sessionStorage) sessionStorage.setItem(RECOVERY_KEY, "1");
+      if (window.sessionStorage) {
+        var previousRecovery = Number(sessionStorage.getItem(recoveryKey) || 0);
+        if (previousRecovery && now - previousRecovery < RECOVERY_COOLDOWN_MS) return;
+        sessionStorage.setItem(recoveryKey, String(now));
+      }
 
       if ("serviceWorker" in navigator && navigator.serviceWorker.getRegistrations) {
         var registrations = await navigator.serviceWorker.getRegistrations();
@@ -69,7 +84,13 @@ function StaleAppRecoveryScript() {
       // Best effort only: recovery must never block the app from loading.
     }
 
-    window.location.reload();
+    try {
+      var recoveryUrl = new URL(window.location.href);
+      recoveryUrl.searchParams.set("__tm_recover", VERSION + "-" + kind + "-" + now);
+      window.location.replace(recoveryUrl.toString());
+    } catch (error) {
+      window.location.reload();
+    }
   }
 
   try {

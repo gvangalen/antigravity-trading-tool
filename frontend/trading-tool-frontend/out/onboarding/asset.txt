@@ -2,21 +2,36 @@
 9:I[57150,[],""]
 :HL["/_next/static/css/8e14850d160be792.css","style"]
 :HL["/_next/static/css/19c9db1a3af975a5.css","style"]
-2:T937,
+2:Tc22,
 (function () {
-  var VERSION = "local-build-2026-07-22T18:55:29.004Z";
+  var VERSION = "local-build-2026-07-22T20:06:39.132Z";
   var VERSION_KEY = "tradamind_app_cache_version";
-  var RECOVERY_KEY = "tradamind_app_cache_recovered_" + VERSION;
+  var RECOVERY_PREFIX = "tradamind_app_cache_recovered_" + VERSION + "_";
+  var RECOVERY_COOLDOWN_MS = 30000;
 
   function shouldRecover(reason) {
     var text = String(reason || "");
     return /copy|ChunkLoadError|Loading chunk|Cannot find module|page-6ba98bbaffeb4e74|Minified React error/i.test(text);
   }
 
+  function recoveryKind(reason) {
+    var text = String(reason || "");
+    if (/ChunkLoadError|Loading chunk|Cannot find module/i.test(text)) return "chunk";
+    if (text === "build-version-change") return "version";
+    return "runtime";
+  }
+
   async function clearStaleApp(reason) {
+    var kind = recoveryKind(reason);
+    var recoveryKey = RECOVERY_PREFIX + kind;
+    var now = Date.now();
+
     try {
-      if (window.sessionStorage && sessionStorage.getItem(RECOVERY_KEY)) return;
-      if (window.sessionStorage) sessionStorage.setItem(RECOVERY_KEY, "1");
+      if (window.sessionStorage) {
+        var previousRecovery = Number(sessionStorage.getItem(recoveryKey) || 0);
+        if (previousRecovery && now - previousRecovery < RECOVERY_COOLDOWN_MS) return;
+        sessionStorage.setItem(recoveryKey, String(now));
+      }
 
       if ("serviceWorker" in navigator && navigator.serviceWorker.getRegistrations) {
         var registrations = await navigator.serviceWorker.getRegistrations();
@@ -37,7 +52,13 @@
       // Best effort only: recovery must never block the app from loading.
     }
 
-    window.location.reload();
+    try {
+      var recoveryUrl = new URL(window.location.href);
+      recoveryUrl.searchParams.set("__tm_recover", VERSION + "-" + kind + "-" + now);
+      window.location.replace(recoveryUrl.toString());
+    } catch (error) {
+      window.location.reload();
+    }
   }
 
   try {
@@ -69,7 +90,24 @@
     var reason = value ? (value.stack || value.message || String(value)) : "";
     if (shouldRecover(reason)) clearStaleApp(reason);
   });
-})();3:T619,
+})();0:{"P":null,"b":"build-1784750787477","p":"","c":["","onboarding","asset"],"i":false,"f":[[["",{"children":["onboarding",{"children":["asset",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/8e14850d160be792.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["onboarding","$L5",{"children":["asset","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
+b:I[30416,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-720f44043727e5fc.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
+c:I[69835,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-720f44043727e5fc.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
+d:I[55038,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-720f44043727e5fc.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
+e:I[9766,[],""]
+f:I[98924,[],""]
+10:I[33293,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-720f44043727e5fc.js","4345","static/chunks/app/not-found-17cd3950fc4a8a24.js"],"default"]
+11:I[11803,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-720f44043727e5fc.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
+12:I[17989,[],"ClientSegmentRoot"]
+13:I[18925,["8327","static/chunks/8327-75c87b9395525913.js","2619","static/chunks/2619-04bc32f026a0d946.js","979","static/chunks/979-a07ec218b132718e.js","8111","static/chunks/8111-720f44043727e5fc.js","1998","static/chunks/1998-011d41ca2e00d85a.js","5101","static/chunks/5101-df8684661094b9d4.js","6155","static/chunks/6155-c5b4a406b0400694.js","8244","static/chunks/8244-900514b96a8089ab.js","1510","static/chunks/1510-4a7798e18ef27c4a.js","2844","static/chunks/2844-e9fa5da7ec6c1162.js","2079","static/chunks/2079-b9c75ad2413eced8.js","6937","static/chunks/app/onboarding/layout-d933d8b46be8e38e.js"],"default"]
+15:I[81959,[],"ClientPageRoot"]
+16:I[53979,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-720f44043727e5fc.js","6409","static/chunks/app/onboarding/asset/page-6883d6e4270150c5.js"],"default"]
+19:I[24431,[],"OutletBoundary"]
+1b:I[15278,[],"AsyncMetadataOutlet"]
+1d:I[24431,[],"ViewportBoundary"]
+1f:I[24431,[],"MetadataBoundary"]
+20:"$Sreact.suspense"
+a:T619,
     (function () {
       try {
         var STORAGE_KEY = "antigravity_locale";
@@ -106,32 +144,16 @@
         document.cookie = COOKIE_KEY + "=" + encodeURIComponent(locale) + "; path=/; max-age=31536000; samesite=lax";
       } catch (error) {}
     })();
-  0:{"P":null,"b":"build-1784746515086","p":"","c":["","onboarding","asset"],"i":false,"f":[[["",{"children":["onboarding",{"children":["asset",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/8e14850d160be792.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$3"}}]]}],"$L4"]}]]}],{"children":["onboarding","$L5",{"children":["asset","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
-a:I[30416,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-720f44043727e5fc.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
-b:I[69835,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-720f44043727e5fc.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
-c:I[55038,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-720f44043727e5fc.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
-d:I[9766,[],""]
-e:I[98924,[],""]
-f:I[33293,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-720f44043727e5fc.js","4345","static/chunks/app/not-found-17cd3950fc4a8a24.js"],"default"]
-10:I[11803,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-720f44043727e5fc.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
-11:I[17989,[],"ClientSegmentRoot"]
-12:I[18925,["8327","static/chunks/8327-75c87b9395525913.js","2619","static/chunks/2619-04bc32f026a0d946.js","979","static/chunks/979-a07ec218b132718e.js","8111","static/chunks/8111-720f44043727e5fc.js","1998","static/chunks/1998-011d41ca2e00d85a.js","5101","static/chunks/5101-df8684661094b9d4.js","6155","static/chunks/6155-c5b4a406b0400694.js","8244","static/chunks/8244-900514b96a8089ab.js","1510","static/chunks/1510-4a7798e18ef27c4a.js","2844","static/chunks/2844-e9fa5da7ec6c1162.js","2079","static/chunks/2079-b9c75ad2413eced8.js","6937","static/chunks/app/onboarding/layout-d933d8b46be8e38e.js"],"default"]
-14:I[81959,[],"ClientPageRoot"]
-15:I[53979,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-720f44043727e5fc.js","6409","static/chunks/app/onboarding/asset/page-6883d6e4270150c5.js"],"default"]
-18:I[24431,[],"OutletBoundary"]
-1a:I[15278,[],"AsyncMetadataOutlet"]
-1c:I[24431,[],"ViewportBoundary"]
-1e:I[24431,[],"MetadataBoundary"]
-1f:"$Sreact.suspense"
-4:["$","body",null,{"className":"bg-background text-foreground transition-colors duration-300 selection:bg-blue-600/30","children":[["$","$La",null,{}],["$","$Lb",null,{"children":[["$","$Lc",null,{"children":["$","$Ld",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$Le",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","$Lf",null,{}],[]],"forbidden":"$undefined","unauthorized":"$undefined"}]}],["$","$L10",null,{}]]}]]}]
-5:["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/19c9db1a3af975a5.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","$L11",null,{"Component":"$12","slots":{"children":["$","$Ld",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$Le",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]},"params":{},"promise":"$@13"}]]}]
-6:["$","$1","c",{"children":[null,["$","$Ld",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$Le",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}]
-7:["$","$1","c",{"children":[["$","$L14",null,{"Component":"$15","searchParams":{},"params":"$5:props:children:1:props:params","promises":["$@16","$@17"]}],null,["$","$L18",null,{"children":["$L19",["$","$L1a",null,{"promise":"$@1b"}]]}]]}]
-8:["$","$1","h",{"children":[null,[["$","$L1c",null,{"children":"$L1d"}],null],["$","$L1e",null,{"children":["$","div",null,{"hidden":true,"children":["$","$1f",null,{"fallback":null,"children":"$L20"}]}]}]]}]
-13:"$5:props:children:1:props:params"
-16:{}
-17:"$5:props:children:1:props:params"
-1d:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1, viewport-fit=cover"}],["$","meta","2",{"name":"theme-color","content":"#2F6BFF"}]]
-19:null
-1b:{"metadata":[["$","title","0",{"children":"Tradamind — Professional Trading Discipline Engine"}],["$","meta","1",{"name":"description","content":"Premium Trading Dashboard for automated strategies and market intelligence."}],["$","link","2",{"rel":"manifest","href":"/manifest.json","crossOrigin":"$undefined"}],["$","link","3",{"rel":"canonical","href":"https://www.tradamind.com"}],["$","meta","4",{"name":"mobile-web-app-capable","content":"yes"}],["$","meta","5",{"name":"apple-mobile-web-app-title","content":"Tradamind"}],["$","meta","6",{"name":"apple-mobile-web-app-status-bar-style","content":"default"}]],"error":null,"digest":"$undefined"}
-20:"$1b:metadata"
+  3:["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$a"}}]
+4:["$","body",null,{"className":"bg-background text-foreground transition-colors duration-300 selection:bg-blue-600/30","children":[["$","$Lb",null,{}],["$","$Lc",null,{"children":[["$","$Ld",null,{"children":["$","$Le",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$Lf",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","$L10",null,{}],[]],"forbidden":"$undefined","unauthorized":"$undefined"}]}],["$","$L11",null,{}]]}]]}]
+5:["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/19c9db1a3af975a5.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","$L12",null,{"Component":"$13","slots":{"children":["$","$Le",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$Lf",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]},"params":{},"promise":"$@14"}]]}]
+6:["$","$1","c",{"children":[null,["$","$Le",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$Lf",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}]
+7:["$","$1","c",{"children":[["$","$L15",null,{"Component":"$16","searchParams":{},"params":"$5:props:children:1:props:params","promises":["$@17","$@18"]}],null,["$","$L19",null,{"children":["$L1a",["$","$L1b",null,{"promise":"$@1c"}]]}]]}]
+8:["$","$1","h",{"children":[null,[["$","$L1d",null,{"children":"$L1e"}],null],["$","$L1f",null,{"children":["$","div",null,{"hidden":true,"children":["$","$20",null,{"fallback":null,"children":"$L21"}]}]}]]}]
+14:"$5:props:children:1:props:params"
+17:{}
+18:"$5:props:children:1:props:params"
+1e:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1, viewport-fit=cover"}],["$","meta","2",{"name":"theme-color","content":"#2F6BFF"}]]
+1a:null
+1c:{"metadata":[["$","title","0",{"children":"Tradamind — Professional Trading Discipline Engine"}],["$","meta","1",{"name":"description","content":"Premium Trading Dashboard for automated strategies and market intelligence."}],["$","link","2",{"rel":"manifest","href":"/manifest.json","crossOrigin":"$undefined"}],["$","link","3",{"rel":"canonical","href":"https://www.tradamind.com"}],["$","meta","4",{"name":"mobile-web-app-capable","content":"yes"}],["$","meta","5",{"name":"apple-mobile-web-app-title","content":"Tradamind"}],["$","meta","6",{"name":"apple-mobile-web-app-status-bar-style","content":"default"}]],"error":null,"digest":"$undefined"}
+21:"$1c:metadata"

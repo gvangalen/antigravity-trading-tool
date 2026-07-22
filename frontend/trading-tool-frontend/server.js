@@ -24,6 +24,33 @@ const mimeTypes = {
   '.txt': 'text/plain'
 };
 
+function getCacheHeaders(filePath, statusCode = 200) {
+  if (statusCode !== 200) {
+    return {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0'
+    };
+  }
+
+  const relativePath = path.relative(PUBLIC_DIR, filePath).split(path.sep).join('/');
+  const extension = path.extname(filePath).toLowerCase();
+
+  if (relativePath.startsWith('_next/static/')) {
+    return { 'Cache-Control': 'public, max-age=31536000, immutable' };
+  }
+
+  if (extension === '.html' || extension === '.txt' || extension === '.json') {
+    return {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0'
+    };
+  }
+
+  return { 'Cache-Control': 'public, max-age=3600' };
+}
+
 http.createServer((req, res) => {
   // Strip query string from URL to correctly find static files (e.g. macro.txt?_rsc=...)
   const cleanUrl = req.url.split('?')[0];
@@ -52,7 +79,10 @@ http.createServer((req, res) => {
     if (error) {
       if (error.code === 'ENOENT') {
         fs.readFile(path.join(PUBLIC_DIR, '404.html'), (err, content404) => {
-          res.writeHead(404, { 'Content-Type': 'text/html' });
+          res.writeHead(404, {
+            'Content-Type': 'text/html',
+            ...getCacheHeaders(filePath, 404)
+          });
           res.end(content404 || '404 Not Found', 'utf-8');
         });
       } else {
@@ -60,7 +90,10 @@ http.createServer((req, res) => {
         res.end(`Sorry, check with the site admin for error: ${error.code} ..\n`);
       }
     } else {
-      res.writeHead(200, { 'Content-Type': contentType });
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        ...getCacheHeaders(filePath)
+      });
       res.end(content, 'utf-8');
     }
   });
