@@ -555,7 +555,7 @@ function BotPageInner() {
                   setExpandedBotId((currentId) => currentId === bot.id ? null : bot.id);
                 };
                 const toggleTradePanel = (event) => {
-                  event.stopPropagation();
+                  event?.stopPropagation();
                   if (!isSelected) {
                     setActiveBot(bot);
                     setExpandedBotId(bot.id);
@@ -644,6 +644,13 @@ function BotPageInner() {
                           onSaveTradePlan={() => {}}
                           onPlaceManualOrder={() => {}}
                           onBacktest={runBacktest}
+                          onTrade={() => toggleTradePanel()}
+                          tradeActionLabel={
+                            tradePanelBotId === bot.id
+                              ? (copy.botList?.closeTrade || "Close")
+                              : (copy.botList?.trade || "Trade")
+                          }
+                          tradeActive={tradePanelBotId === bot.id}
                           onAskFinn={() => askFinnAboutBot(bot)}
                           finnActionLabel={copy.botList?.askFinn || "Ask FINN"}
                           compact

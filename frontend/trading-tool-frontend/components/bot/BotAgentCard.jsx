@@ -20,6 +20,7 @@ import {
   Activity,
   RotateCcw,
   Sparkles,
+  Wallet,
   Zap,
   ChevronDown,
   ChevronUp,
@@ -48,6 +49,9 @@ export default function BotAgentCard({
   onBacktest,
   onAskFinn,
   finnActionLabel = "Ask FINN",
+  onTrade,
+  tradeActionLabel = "Trade",
+  tradeActive = false,
   compact = false,
 }) {
   const { t, locale } = useTranslation();
@@ -476,6 +480,26 @@ export default function BotAgentCard({
           </div>
 
           <div className="relative flex items-center gap-2" ref={settingsRef}>
+            {onTrade ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onTrade();
+                }}
+                aria-label={tradeActionLabel}
+                aria-pressed={tradeActive}
+                title={tradeActionLabel}
+                className={`inline-flex min-h-10 items-center gap-2 rounded-xl border px-3 text-[10px] font-black uppercase tracking-[0.14em] transition ${
+                  tradeActive
+                    ? "border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-blue-900 dark:hover:bg-blue-950/30 dark:hover:text-blue-300"
+                }`}
+              >
+                <Wallet size={14} />
+                <span className="hidden sm:inline">{tradeActionLabel}</span>
+              </button>
+            ) : null}
             {onAskFinn ? (
               <button
                 type="button"

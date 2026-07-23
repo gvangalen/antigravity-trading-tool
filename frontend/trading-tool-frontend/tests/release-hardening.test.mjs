@@ -7,6 +7,7 @@ const readSource = (path) =>
 
 const [
   botPage,
+  botAgentCard,
   tradeContainer,
   orderPreview,
   navBar,
@@ -15,6 +16,7 @@ const [
   staticServer,
 ] = await Promise.all([
   readSource("app/(protected)/bot/page.jsx"),
+  readSource("components/bot/BotAgentCard.jsx"),
   readSource("components/bot/TradePanelContainer.jsx"),
   readSource("components/bot/OrderPreviewModal.jsx"),
   readSource("components/ui/NavBar.jsx"),
@@ -27,6 +29,9 @@ test("opens trading only through the explicit bot action", () => {
   assert.match(botPage, /setTradePanelBotId\(\(currentId\)\s*=>\s*currentId\s*===\s*bot\.id\s*\?\s*null\s*:\s*bot\.id\)/);
   assert.match(botPage, /tradePanelBotId\s*===\s*activeBot\?\.id/);
   assert.match(botPage, /event\.stopPropagation\(\)/);
+  assert.match(botPage, /onTrade=\{\(\)\s*=>\s*toggleTradePanel\(\)\}/);
+  assert.match(botAgentCard, /aria-pressed=\{tradeActive\}/);
+  assert.match(botAgentCard, /<Wallet size=\{14\}/);
 });
 
 test("blocks every supported paused bot representation", () => {
