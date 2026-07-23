@@ -2011,11 +2011,29 @@
       }
     },
     "botScores": {
-      "eyebrow": "Omgevingsanalyse",
-      "title": "Systeemstatus en marktdomeinen",
+      "eyebrow": "Actieve uitvoeringsketen",
+      "title": "Wat deze bot nu uitvoert",
       "loading": "SIGNALEN LADEN...",
       "empty": "Nog geen meetdata beschikbaar voor deze sessie",
-      "scoreSuffixTemplate": "{key}-score"
+      "selectBot": "Selecteer een bot om de uitvoeringsketen te bekijken",
+      "linkedPlan": "Plan",
+      "setup": "Setup",
+      "strategy": "Strategie",
+      "decision": "Beslissing",
+      "confidence": "Vertrouwen",
+      "active": "Actief",
+      "paused": "Gepauzeerd",
+      "notLinked": "Niet gekoppeld",
+      "insufficientData": "Onvoldoende data",
+      "evidence": "Onderbouwing",
+      "mismatchTitle": "Aandacht nodig",
+      "mismatchBody": "Deze setup past momenteel onvoldoende bij de actuele marktcontext.",
+      "scoreLabels": {
+        "market": "Markt",
+        "macro": "Macro",
+        "technical": "Technisch",
+        "setup": "Setup"
+      }
     },
     "globalTradePanel": {
       "close": "Handelspaneel sluiten",

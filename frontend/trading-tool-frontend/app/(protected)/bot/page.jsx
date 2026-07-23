@@ -527,7 +527,12 @@ function BotPageInner() {
 
           {/* ... existing content ... */}
           <div className="space-y-6">
-            <BotScores scores={dailyScores} loading={loading?.today} />
+            <BotScores
+              scores={dailyScores}
+              bot={activeBot}
+              presentation={activeBot ? getBotPresentation(activeBot) : null}
+              loading={loading?.today}
+            />
           </div>
 
           {/* BOT DEPLOYMENT SECTION */}

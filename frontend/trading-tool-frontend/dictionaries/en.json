@@ -2005,11 +2005,29 @@
       }
     },
     "botScores": {
-      "eyebrow": "Environment analysis",
-      "title": "System status and market domains",
+      "eyebrow": "Active execution chain",
+      "title": "What this bot is executing now",
       "loading": "LOADING SIGNALS...",
       "empty": "No measurement data is available for this session yet",
-      "scoreSuffixTemplate": "{key} score"
+      "selectBot": "Select a bot to view its execution chain",
+      "linkedPlan": "Plan",
+      "setup": "Setup",
+      "strategy": "Strategy",
+      "decision": "Decision",
+      "confidence": "Confidence",
+      "active": "Active",
+      "paused": "Paused",
+      "notLinked": "Not linked",
+      "insufficientData": "Insufficient data",
+      "evidence": "Evidence",
+      "mismatchTitle": "Needs attention",
+      "mismatchBody": "This setup currently has an insufficient fit with the market context.",
+      "scoreLabels": {
+        "market": "Market",
+        "macro": "Macro",
+        "technical": "Technical",
+        "setup": "Setup"
+      }
     },
     "globalTradePanel": {
       "close": "Close trade panel",

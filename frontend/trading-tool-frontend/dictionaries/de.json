@@ -2006,11 +2006,29 @@
       }
     },
     "botScores": {
-      "eyebrow": "Umgebungsanalyse",
-      "title": "Systemstatus und Marktdomänen",
+      "eyebrow": "Aktive Ausführungskette",
+      "title": "Was dieser Bot jetzt ausführt",
       "loading": "SIGNALE LADEN...",
       "empty": "Für diese Sitzung liegen noch keine Messdaten vor",
-      "scoreSuffixTemplate": "{key}-Score"
+      "selectBot": "Wähle einen Bot aus, um seine Ausführungskette anzuzeigen",
+      "linkedPlan": "Plan",
+      "setup": "Setup",
+      "strategy": "Strategie",
+      "decision": "Entscheidung",
+      "confidence": "Vertrauen",
+      "active": "Aktiv",
+      "paused": "Pausiert",
+      "notLinked": "Nicht verknüpft",
+      "insufficientData": "Unzureichende Daten",
+      "evidence": "Grundlage",
+      "mismatchTitle": "Aufmerksamkeit erforderlich",
+      "mismatchBody": "Dieses Setup passt derzeit nicht ausreichend zum aktuellen Marktkontext.",
+      "scoreLabels": {
+        "market": "Markt",
+        "macro": "Makro",
+        "technical": "Technisch",
+        "setup": "Setup"
+      }
     },
     "globalTradePanel": {
       "close": "Handelspanel schliessen",

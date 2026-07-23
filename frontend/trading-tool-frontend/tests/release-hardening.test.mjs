@@ -8,6 +8,7 @@ const readSource = (path) =>
 const [
   botPage,
   botAgentCard,
+  botScores,
   tradeContainer,
   orderPreview,
   navBar,
@@ -17,6 +18,7 @@ const [
 ] = await Promise.all([
   readSource("app/(protected)/bot/page.jsx"),
   readSource("components/bot/BotAgentCard.jsx"),
+  readSource("components/bot/BotScores.jsx"),
   readSource("components/bot/TradePanelContainer.jsx"),
   readSource("components/bot/OrderPreviewModal.jsx"),
   readSource("components/ui/NavBar.jsx"),
@@ -40,6 +42,17 @@ test("aligns the desktop trade panel with the selected bot row", () => {
   assert.match(botPage, /row\.getBoundingClientRect\(\)\.top\s*-\s*column\.getBoundingClientRect\(\)\.top/);
   assert.match(botPage, /--trade-panel-offset/);
   assert.match(botPage, /lg:mt-\[var\(--trade-panel-offset\)\]/);
+});
+
+test("ties automation context scores to the selected execution chain", () => {
+  assert.match(botPage, /<BotScores[\s\S]*?bot=\{activeBot\}/);
+  assert.match(botScores, /const strategy = bot\?\.strategy \|\| null/);
+  assert.match(botScores, /const setup = strategy\?\.setup \|\| null/);
+  assert.match(botScores, /const hasSetupMismatch = setupScore !== null && setupScore < 40/);
+  assert.match(botScores, /key: "market"/);
+  assert.match(botScores, /key: "macro"/);
+  assert.match(botScores, /key: "technical"/);
+  assert.match(botScores, /key: "setup"/);
 });
 
 test("blocks every supported paused bot representation", () => {

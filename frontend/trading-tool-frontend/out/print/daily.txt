@@ -1,10 +1,10 @@
 1:"$Sreact.fragment"
 9:I[57150,[],""]
-:HL["/_next/static/css/82be5aa1db887e33.css","style"]
+:HL["/_next/static/css/2d43496199998a04.css","style"]
 :HL["/_next/static/css/965a7aa047811ad4.css","style"]
 2:Tc22,
 (function () {
-  var VERSION = "local-build-2026-07-23T15:57:37.117Z";
+  var VERSION = "local-build-2026-07-23T16:14:56.903Z";
   var VERSION_KEY = "tradamind_app_cache_version";
   var RECOVERY_PREFIX = "tradamind_app_cache_recovered_" + VERSION + "_";
   var RECOVERY_COOLDOWN_MS = 30000;
@@ -90,16 +90,16 @@
     var reason = value ? (value.stack || value.message || String(value)) : "";
     if (shouldRecover(reason)) clearStaleApp(reason);
   });
-})();0:{"P":null,"b":"build-1784822244018","p":"","c":["","print","daily"],"i":false,"f":[[["",{"children":["print",{"children":["daily",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/82be5aa1db887e33.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["print","$L5",{"children":["daily","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
-b:I[30416,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-720f44043727e5fc.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
-c:I[69835,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-720f44043727e5fc.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
-d:I[55038,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-720f44043727e5fc.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
+})();0:{"P":null,"b":"build-1784823284796","p":"","c":["","print","daily"],"i":false,"f":[[["",{"children":["print",{"children":["daily",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/2d43496199998a04.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["print","$L5",{"children":["daily","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
+b:I[30416,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-969f922de8711217.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
+c:I[69835,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-969f922de8711217.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
+d:I[55038,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-969f922de8711217.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
 e:I[9766,[],""]
 f:I[98924,[],""]
-10:I[33293,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-720f44043727e5fc.js","4345","static/chunks/app/not-found-17cd3950fc4a8a24.js"],"default"]
-11:I[11803,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-720f44043727e5fc.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
+10:I[33293,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-969f922de8711217.js","4345","static/chunks/app/not-found-17cd3950fc4a8a24.js"],"default"]
+11:I[11803,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-969f922de8711217.js","7177","static/chunks/app/layout-1ac9f4f28f89f165.js"],"default"]
 12:I[81959,[],"ClientPageRoot"]
-13:I[30632,["8111","static/chunks/8111-720f44043727e5fc.js","638","static/chunks/638-28f3abbb6aa0c8cb.js","3668","static/chunks/app/print/daily/page-b7529fb8c350dd00.js"],"default"]
+13:I[30632,["8111","static/chunks/8111-969f922de8711217.js","638","static/chunks/638-28f3abbb6aa0c8cb.js","3668","static/chunks/app/print/daily/page-b7529fb8c350dd00.js"],"default"]
 16:I[24431,[],"OutletBoundary"]
 18:I[15278,[],"AsyncMetadataOutlet"]
 1a:I[24431,[],"ViewportBoundary"]
