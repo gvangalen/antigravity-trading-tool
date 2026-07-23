@@ -34,6 +34,14 @@ test("opens trading only through the explicit bot action", () => {
   assert.match(botAgentCard, /<Wallet size=\{14\}/);
 });
 
+test("aligns the desktop trade panel with the selected bot row", () => {
+  assert.match(botPage, /botListColumnRef/);
+  assert.match(botPage, /botRowRefs\.current\.get\(String\(tradePanelBotId\)\)/);
+  assert.match(botPage, /row\.getBoundingClientRect\(\)\.top\s*-\s*column\.getBoundingClientRect\(\)\.top/);
+  assert.match(botPage, /--trade-panel-offset/);
+  assert.match(botPage, /lg:mt-\[var\(--trade-panel-offset\)\]/);
+});
+
 test("blocks every supported paused bot representation", () => {
   assert.match(tradeContainer, /bot\?\.is_active\s*===\s*false/);
   assert.match(tradeContainer, /bot\?\.is_paused\s*===\s*true/);

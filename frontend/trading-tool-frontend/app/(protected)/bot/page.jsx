@@ -45,11 +45,14 @@ function BotPageInner() {
   const formRef = useRef({});
   const budgetRef = useRef({});
   const hasInitializedExpansionRef = useRef(false);
+  const botListColumnRef = useRef(null);
+  const botRowRefs = useRef(new Map());
 
   const { activeBot, setActiveBot } = useActiveBot();
 
   const [expandedBotId, setExpandedBotId] = useState(null);
   const [tradePanelBotId, setTradePanelBotId] = useState(null);
+  const [tradePanelOffset, setTradePanelOffset] = useState(0);
   const [statusFilter, setStatusFilter] = useState("all");
   const [assetFilter, setAssetFilter] = useState("all");
   const [currentTime, setCurrentTime] = useState(null);
@@ -228,6 +231,45 @@ function BotPageInner() {
       return true;
     });
   }, [bots, statusFilter, assetFilter, portfolios]);
+
+  useEffect(() => {
+    if (!tradePanelBotId) {
+      setTradePanelOffset(0);
+      return;
+    }
+
+    const updateTradePanelOffset = () => {
+      const column = botListColumnRef.current;
+      const row = botRowRefs.current.get(String(tradePanelBotId));
+      if (!column || !row) return;
+
+      const nextOffset = Math.max(
+        0,
+        Math.round(row.getBoundingClientRect().top - column.getBoundingClientRect().top)
+      );
+      setTradePanelOffset((currentOffset) => (
+        currentOffset === nextOffset ? currentOffset : nextOffset
+      ));
+    };
+
+    const animationFrame = window.requestAnimationFrame(updateTradePanelOffset);
+    window.addEventListener("resize", updateTradePanelOffset);
+
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(updateTradePanelOffset);
+    if (resizeObserver) {
+      resizeObserver.observe(botListColumnRef.current);
+      const selectedRow = botRowRefs.current.get(String(tradePanelBotId));
+      if (selectedRow) resizeObserver.observe(selectedRow);
+    }
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("resize", updateTradePanelOffset);
+      resizeObserver?.disconnect();
+    };
+  }, [expandedBotId, filteredBots, tradePanelBotId]);
 
   useEffect(() => {
     if (!filteredBots.length) {
@@ -476,7 +518,7 @@ function BotPageInner() {
       <div className="max-w-full flex flex-col lg:flex-row gap-8 pb-24 items-start relative">
         
         {/* 🕋 LEFT: MAIN COMMAND CENTER */}
-        <div className="flex-1 min-w-0 space-y-8">
+        <div ref={botListColumnRef} className="flex-1 min-w-0 space-y-8">
           {error && (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
               {copy.partialError}
@@ -564,7 +606,15 @@ function BotPageInner() {
                   setTradePanelBotId((currentId) => currentId === bot.id ? null : bot.id);
                 };
                 return (
-                  <div key={bot.id} className="border-b border-slate-100 last:border-b-0 dark:border-slate-800">
+                  <div
+                    key={bot.id}
+                    ref={(node) => {
+                      const botKey = String(bot.id);
+                      if (node) botRowRefs.current.set(botKey, node);
+                      else botRowRefs.current.delete(botKey);
+                    }}
+                    className="border-b border-slate-100 last:border-b-0 dark:border-slate-800"
+                  >
                     <div
                       role="button"
                       tabIndex={0}
@@ -672,7 +722,10 @@ function BotPageInner() {
               onClick={() => setTradePanelBotId(null)}
               className="fixed inset-0 z-[80] bg-slate-950/45 backdrop-blur-[2px] lg:hidden"
             />
-            <div className="fixed inset-x-0 bottom-0 z-[90] max-h-[88vh] overflow-y-auto rounded-t-[2rem] bg-white p-3 shadow-2xl dark:bg-slate-950 lg:sticky lg:inset-auto lg:top-24 lg:z-auto lg:max-h-none lg:w-[350px] lg:shrink-0 lg:overflow-visible lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none lg:dark:bg-transparent">
+            <div
+              style={{ "--trade-panel-offset": `${tradePanelOffset}px` }}
+              className="fixed inset-x-0 bottom-0 z-[90] max-h-[88vh] overflow-y-auto rounded-t-[2rem] bg-white p-3 shadow-2xl dark:bg-slate-950 lg:sticky lg:inset-auto lg:top-24 lg:z-auto lg:mt-[var(--trade-panel-offset)] lg:max-h-none lg:w-[350px] lg:shrink-0 lg:overflow-visible lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none lg:dark:bg-transparent"
+            >
             <div id="tp-final-v2200-smooth">
               <GlobalTradePanel
                 decision={decisionsByBot?.[activeBot?.id]}
