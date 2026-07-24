@@ -4,7 +4,6 @@ import Link from "next/link";
 import CardLoader from "@/components/ui/CardLoader";
 import {
   AlertTriangle,
-  ArrowRight,
   Bot,
   CheckCircle2,
   Gauge,
@@ -103,17 +102,12 @@ export default function BotScores({
   const recommendedStrategy = strategies.find(
     (item) => String(item?.setup_id ?? item?.setup?.id ?? "") === String(recommendedSetupId ?? "")
   ) || null;
-  const recommendedBot = bots.find(
-    (item) => String(item?.strategy_id ?? item?.strategy?.id ?? "") === String(recommendedStrategy?.id ?? "")
-  ) || null;
   const showBestSetupNotice =
     recommendedSetup &&
     recommendedSetupId != null &&
     String(recommendedSetupId) !== String(currentSetupId ?? "") &&
     Number(recommendedSetup?.score ?? -1) > Number(setupScore ?? -1);
-  const recommendedActionHref = recommendedBot?.id
-    ? `/bot?symbol=${encodeURIComponent(recommendedSetup?.symbol || presentation?.symbol || bot?.symbol || "BTC")}&bot_id=${encodeURIComponent(recommendedBot.id)}`
-    : `/setup?symbol=${encodeURIComponent(recommendedSetup?.symbol || presentation?.symbol || bot?.symbol || "BTC")}`;
+  const recommendedActionHref = `/setup?symbol=${encodeURIComponent(recommendedSetup?.symbol || presentation?.symbol || bot?.symbol || "BTC")}`;
 
   if (loading) {
     return (
@@ -134,14 +128,6 @@ export default function BotScores({
   }
 
   const chain = [
-    {
-      key: "bot",
-      label: copy.bot,
-      value: bot?.name || copy.notLinked,
-      meta: bot?.is_active ? copy.active : copy.paused,
-      icon: Bot,
-      missing: !bot?.name,
-    },
     {
       key: "plan",
       label: copy.linkedPlan,
@@ -207,11 +193,19 @@ export default function BotScores({
       </div>
 
       <div className="px-5 py-4">
-        <div className="grid gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-stretch">
-          {chain.map((item, index) => {
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-900/50">
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
+            {copy.title}
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">
+            {copy.currentChainHint}
+          </p>
+
+          <div className="mt-3 grid gap-2 lg:grid-cols-4">
+            {chain.map((item) => {
             const Icon = item.icon;
             return (
-              <div key={item.key} className="contents">
+              <div key={item.key}>
                 <div className={`flex min-w-0 items-center gap-3 rounded-2xl border px-4 py-3 ${item.missing ? "border-dashed border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/10" : "border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/50"}`}>
                   <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${item.missing ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" : "bg-white text-blue-600 shadow-sm dark:bg-slate-950 dark:text-blue-300"}`}>
                     <Icon size={16} />
@@ -226,14 +220,10 @@ export default function BotScores({
                     ) : null}
                   </div>
                 </div>
-                {index < chain.length - 1 ? (
-                  <span className="hidden items-center justify-center text-slate-300 md:flex">
-                    <ArrowRight size={16} />
-                  </span>
-                ) : null}
               </div>
             );
           })}
+        </div>
         </div>
 
         {missingStrategy || missingSetup ? (
@@ -287,7 +277,7 @@ export default function BotScores({
               href={recommendedActionHref}
               className="inline-flex min-h-9 items-center justify-center rounded-lg border border-blue-300 bg-white px-3 text-[10px] font-black uppercase tracking-[0.14em] text-blue-800 transition hover:bg-blue-100 dark:border-blue-800 dark:bg-slate-950 dark:text-blue-200 dark:hover:bg-blue-950/40"
             >
-              {recommendedBot?.id ? (copy.openLinkedBotAction || copy.reviewPlanAction) : copy.reviewPlanAction}
+              {copy.reviewPlanAction}
             </Link>
           </div>
         ) : null}

@@ -2021,6 +2021,7 @@
     "botScores": {
       "eyebrow": "Actieve uitvoeringsketen",
       "title": "Wat deze bot nu uitvoert",
+      "currentChainHint": "Dit is de echte keten van deze bot: eerst plan en setup, daarna strategie en pas dan een beslissing.",
       "loading": "SIGNALEN LADEN...",
       "empty": "Nog geen meetdata beschikbaar voor deze sessie",
       "selectBot": "Selecteer een bot om de uitvoeringsketen te bekijken",

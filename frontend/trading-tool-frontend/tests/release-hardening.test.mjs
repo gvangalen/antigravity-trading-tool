@@ -56,7 +56,6 @@ test("ties automation context scores to the selected execution chain", () => {
   assert.match(botScores, /resolveBotExecutionChain\(/);
   assert.match(botScores, /readLinkedSetupScore\(/);
   assert.match(botScores, /const hasSetupMismatch = setupScore !== null && setupScore < 40/);
-  assert.match(botScores, /key: "bot"/);
   assert.match(botScores, /key: "plan"/);
   assert.match(botScores, /key: "market"/);
   assert.match(botScores, /key: "macro"/);
@@ -65,8 +64,9 @@ test("ties automation context scores to the selected execution chain", () => {
   assert.match(botScores, /copy\.cannotAssess/);
   assert.match(botScores, /recommendedSetup/);
   assert.match(botScores, /copy\.betterMatchTitle/);
-  assert.match(botScores, /const recommendedBot = bots\.find/);
-  assert.match(botScores, /copy\.openLinkedBotAction \|\| copy\.reviewPlanAction/);
+  assert.match(botScores, /copy\.currentChainHint/);
+  assert.match(botScores, /lg:grid-cols-4/);
+  assert.match(botScores, /copy\.reviewPlanAction/);
 });
 
 test("keeps my plan linked to concrete bot activation state", () => {

@@ -2016,6 +2016,7 @@
     "botScores": {
       "eyebrow": "Aktive Ausführungskette",
       "title": "Was dieser Bot jetzt ausführt",
+      "currentChainHint": "Dies ist die echte Kette dieses Bots: zuerst Plan und Setup, dann Strategie und erst danach eine Entscheidung.",
       "loading": "SIGNALE LADEN...",
       "empty": "Für diese Sitzung liegen noch keine Messdaten vor",
       "selectBot": "Wähle einen Bot aus, um seine Ausführungskette anzuzeigen",

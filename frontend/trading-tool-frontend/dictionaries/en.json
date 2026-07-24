@@ -2015,6 +2015,7 @@
     "botScores": {
       "eyebrow": "Active execution chain",
       "title": "What this bot is executing now",
+      "currentChainHint": "This is the bot's real chain: first plan and setup, then strategy, and only then a decision.",
       "loading": "LOADING SIGNALS...",
       "empty": "No measurement data is available for this session yet",
       "selectBot": "Select a bot to view its execution chain",
