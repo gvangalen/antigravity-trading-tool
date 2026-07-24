@@ -103,6 +103,11 @@ export default function BotScores({
   const recommendedStrategy = strategies.find(
     (item) => String(item?.setup_id ?? item?.setup?.id ?? "") === String(recommendedSetupId ?? "")
   ) || null;
+  const recommendedScore = Number.isFinite(Number(recommendedSetup?.score))
+    ? Math.round(Number(recommendedSetup.score))
+    : null;
+  const currentSetupScoreLabel = setupScore === null ? copy.notAvailable : `${Math.round(setupScore)}/100`;
+  const recommendedSetupScoreLabel = recommendedScore === null ? copy.notAvailable : `${recommendedScore}/100`;
   const showBestSetupNotice =
     !chainIncomplete &&
     recommendedSetup &&
@@ -255,7 +260,9 @@ export default function BotScores({
             <AlertTriangle className="mt-0.5 shrink-0" size={14} />
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.14em]">{copy.mismatchTitle}</p>
-              <p className="mt-0.5 text-xs font-semibold">{copy.mismatchBody}</p>
+              <p className="mt-0.5 text-xs font-semibold">
+                {copy.mismatchBody?.replace("{current}", currentSetupScoreLabel)}
+              </p>
             </div>
           </div>
         ) : null}
@@ -271,7 +278,14 @@ export default function BotScores({
                 <p className="mt-0.5 text-xs font-semibold">
                   {copy.betterMatchBody
                     ?.replace("{current}", setup?.name || copy.notLinked)
-                    ?.replace("{recommended}", recommendedSetup?.name || copy.notLinked)}
+                    ?.replace("{current_score}", currentSetupScoreLabel)
+                    ?.replace("{recommended}", recommendedSetup?.name || copy.notLinked)
+                    ?.replace("{recommended_score}", recommendedSetupScoreLabel)}
+                </p>
+                <p className="mt-1 text-[11px] font-bold text-blue-700 dark:text-blue-200">
+                  {copy.betterMatchMeta
+                    ?.replace("{recommended}", recommendedSetup?.name || copy.notLinked)
+                    ?.replace("{strategy}", recommendedStrategy?.name || copy.notLinked)}
                 </p>
               </div>
             </div>
@@ -279,7 +293,7 @@ export default function BotScores({
               href={recommendedActionHref}
               className="inline-flex min-h-9 items-center justify-center rounded-lg border border-blue-300 bg-white px-3 text-[10px] font-black uppercase tracking-[0.14em] text-blue-800 transition hover:bg-blue-100 dark:border-blue-800 dark:bg-slate-950 dark:text-blue-200 dark:hover:bg-blue-950/40"
             >
-              {copy.reviewPlanAction}
+              {recommendedStrategy ? copy.activateBestSetupAction : copy.reviewPlanAction}
             </Link>
           </div>
         ) : null}
