@@ -2047,7 +2047,7 @@
       "mismatchTitle": "Aandacht nodig",
       "mismatchBody": "Deze setup past momenteel onvoldoende bij de actuele marktcontext.",
       "betterMatchTitle": "Beter plan beschikbaar",
-      "betterMatchBody": "Deze bot gebruikt nu plan/setup {current}, maar {recommended} past momenteel beter.",
+      "betterMatchBody": "Deze bot gebruikt nu {current}. Vergeleken met de huidige marktomstandigheden past {recommended} op dit moment beter. Dit is een vergelijking, geen automatische wissel.",
       "reviewPlanAction": "Bekijk plan",
       "openLinkedBotAction": "Open gekoppelde bot",
       "scoreLabels": {

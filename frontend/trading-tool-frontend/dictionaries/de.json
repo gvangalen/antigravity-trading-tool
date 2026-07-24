@@ -2042,7 +2042,7 @@
       "mismatchTitle": "Aufmerksamkeit erforderlich",
       "mismatchBody": "Dieses Setup passt derzeit nicht ausreichend zum aktuellen Marktkontext.",
       "betterMatchTitle": "Besserer Plan verfügbar",
-      "betterMatchBody": "Dieser Bot verwendet derzeit Plan/Setup {current}, aber {recommended} passt momentan besser.",
+      "betterMatchBody": "Dieser Bot verwendet derzeit {current}. Verglichen mit den aktuellen Marktbedingungen passt {recommended} im Moment besser. Das ist ein Vergleich und kein automatischer Wechsel.",
       "reviewPlanAction": "Plan prüfen",
       "openLinkedBotAction": "Verknüpften Bot öffnen",
       "scoreLabels": {

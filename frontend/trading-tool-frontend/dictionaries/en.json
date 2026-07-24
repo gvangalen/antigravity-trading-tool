@@ -2041,7 +2041,7 @@
       "mismatchTitle": "Needs attention",
       "mismatchBody": "This setup currently has an insufficient fit with the market context.",
       "betterMatchTitle": "Better plan available",
-      "betterMatchBody": "This bot is using plan/setup {current}, but {recommended} is currently the better match.",
+      "betterMatchBody": "This bot is currently using {current}. Compared with current market conditions, {recommended} is the better fit right now. This is a comparison, not an automatic switch.",
       "reviewPlanAction": "Review plan",
       "openLinkedBotAction": "Open linked bot",
       "scoreLabels": {

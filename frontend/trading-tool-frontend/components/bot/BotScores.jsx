@@ -86,6 +86,7 @@ export default function BotScores({
   const hasScores = scoreEntries.some((entry) => entry.value !== null);
   const missingSetup = !setup;
   const missingStrategy = !strategy;
+  const chainIncomplete = missingSetup || missingStrategy;
   const hasSetupMismatch = setupScore !== null && setupScore < 40;
   const canAssessDecision = isComplete;
   const decisionLabel = canAssessDecision
@@ -103,6 +104,7 @@ export default function BotScores({
     (item) => String(item?.setup_id ?? item?.setup?.id ?? "") === String(recommendedSetupId ?? "")
   ) || null;
   const showBestSetupNotice =
+    !chainIncomplete &&
     recommendedSetup &&
     recommendedSetupId != null &&
     String(recommendedSetupId) !== String(currentSetupId ?? "") &&
@@ -226,7 +228,7 @@ export default function BotScores({
         </div>
         </div>
 
-        {missingStrategy || missingSetup ? (
+        {chainIncomplete ? (
           <div className="mt-3 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 shrink-0" size={14} />
@@ -248,7 +250,7 @@ export default function BotScores({
           </div>
         ) : null}
 
-        {!missingStrategy && !missingSetup && hasSetupMismatch ? (
+        {!chainIncomplete && hasSetupMismatch ? (
           <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 shrink-0" size={14} />
             <div>
