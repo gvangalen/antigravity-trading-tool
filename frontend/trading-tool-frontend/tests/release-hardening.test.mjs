@@ -94,9 +94,12 @@ test("prefills automation bot creation from my plan context", () => {
 
 test("shows the best current plan candidate on the analysis bridge", () => {
   assert.match(assetWorkspace, /workspace\?\.daily\?\.setup\?\.active_setups/);
+  assert.match(assetWorkspace, /fetchActiveSetup\(activeSymbol\)/);
+  assert.match(assetWorkspace, /if \(!matchingSetups\.length\)/);
   assert.match(assetWorkspace, /const linkedMatch = matchingSetups\.find/);
+  assert.match(assetWorkspace, /const runtimeMatch = runtimeSetupId == null/);
   assert.match(assetWorkspace, /strategy\?\.setup_id \?\? strategy\?\.setup\?\.id/);
-  assert.match(assetWorkspace, /displayName: linkedStrategy\?\.name \|\| bestMatch\?\.name/);
+  assert.match(assetWorkspace, /displayName:\s*linkedStrategy\?\.name \|\|\s*bestMatch\?\.name \|\|\s*marketBestSetup\?\.name/);
   assert.match(assetWorkspace, /candidate=\{hasScoreData \? planBridgeCandidate : null\}/);
   assert.doesNotMatch(assetWorkspace, /setup=\{hasScoreData \? setup : null\}/);
 });

@@ -32,6 +32,7 @@ import {
   marketIndicatorAdd,
 } from "@/lib/api/market";
 import { macroDataAdd, deleteMacroIndicator } from "@/lib/api/macro";
+import { fetchActiveSetup } from "@/lib/api/setups";
 import { technicalDataAdd, deleteTechnicalIndicator } from "@/lib/api/technical";
 import { updateIntelligenceWeights } from "@/lib/api/scores";
 import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
@@ -1669,6 +1670,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     reloadWatchlist,
   } = useAssetWorkspaceData(activeSymbol, periods, watchlistSymbols);
   const { strategies = [] } = useStrategyData();
+  const [marketBestSetup, setMarketBestSetup] = useState(null);
 
   const categoryData = workspace?.categories || {};
   const marketDayData = categoryData.market?.rows || [];
@@ -1687,6 +1689,32 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const macroLoading = workspaceLoading;
   const technicalLoading = workspaceLoading;
   const scoresLoading = workspaceLoading;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMarketBestSetup() {
+      try {
+        const result = await fetchActiveSetup(activeSymbol);
+        if (!cancelled) {
+          setMarketBestSetup(
+            result && String(result.symbol || activeSymbol).toUpperCase() === activeSymbol
+              ? result
+              : null
+          );
+        }
+      } catch (error) {
+        console.error("Failed to load active setup for asset workspace", error);
+        if (!cancelled) setMarketBestSetup(null);
+      }
+    }
+
+    loadMarketBestSetup();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSymbol]);
+
   const planBridgeCandidate = useMemo(() => {
     const activeSetups = Array.isArray(workspace?.daily?.setup?.active_setups)
       ? workspace.daily.setup.active_setups
@@ -1702,8 +1730,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       .filter((item) => item.resolvedSetupId !== null)
       .sort((left, right) => Number(right.resolvedScore ?? -1) - Number(left.resolvedScore ?? -1));
 
-    if (!matchingSetups.length) return null;
-
     const linkedStrategiesBySetupId = new Map();
     strategies.forEach((strategy) => {
       const setupId = strategy?.setup_id ?? strategy?.setup?.id ?? null;
@@ -1715,19 +1741,48 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       }
     });
 
+    if (!matchingSetups.length) {
+      const runtimeSetupId = marketBestSetup?.setup_id ?? marketBestSetup?.id ?? null;
+      const linkedStrategy = runtimeSetupId == null
+        ? null
+        : linkedStrategiesBySetupId.get(String(runtimeSetupId)) || null;
+
+      if (!marketBestSetup) return null;
+
+      return {
+        ...marketBestSetup,
+        resolvedSetupId: runtimeSetupId,
+        score: normalizeScore(marketBestSetup?.score),
+        strategyId: linkedStrategy?.id ?? null,
+        displayName:
+          linkedStrategy?.name ||
+          marketBestSetup?.name ||
+          ui.planBridgeTitle,
+      };
+    }
+
     const linkedMatch = matchingSetups.find((item) =>
       linkedStrategiesBySetupId.has(String(item.resolvedSetupId))
     );
-    const bestMatch = linkedMatch || matchingSetups[0];
+    const runtimeSetupId = marketBestSetup?.setup_id ?? marketBestSetup?.id ?? null;
+    const runtimeMatch = runtimeSetupId == null
+      ? null
+      : matchingSetups.find((item) => String(item.resolvedSetupId) === String(runtimeSetupId));
+    const bestMatch = runtimeMatch || linkedMatch || matchingSetups[0];
     const linkedStrategy = linkedStrategiesBySetupId.get(String(bestMatch.resolvedSetupId)) || null;
+    const fallbackScore = normalizeScore(marketBestSetup?.score);
 
     return {
       ...bestMatch,
-      score: bestMatch.resolvedScore,
+      score: bestMatch.resolvedScore ?? fallbackScore,
       strategyId: linkedStrategy?.id ?? null,
-      displayName: linkedStrategy?.name || bestMatch?.name || ui.planBridgeTitle,
+      displayName:
+        linkedStrategy?.name ||
+        bestMatch?.name ||
+        marketBestSetup?.name ||
+        ui.planBridgeTitle,
     };
-  }, [activeSymbol, strategies, ui.planBridgeTitle, workspace?.daily?.setup?.active_setups]);
+  }, [activeSymbol, marketBestSetup?.id, marketBestSetup?.name, marketBestSetup?.score, marketBestSetup?.setup_id, strategies, ui.planBridgeTitle, workspace?.daily?.setup?.active_setups]);
 
   const addMarket = async (name) => {
     await marketIndicatorAdd(name, activeSymbol);
