@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -27,7 +27,8 @@ import SetupForm from "@/components/setup/SetupForm";
 import StrategyForm from "@/components/strategy/StrategyForm";
 import Drawer from "@/components/ui/Drawer";
 import { useStrategyData } from "@/hooks/useStrategyData";
-import { deleteSetup } from "@/lib/api/setups";
+import { fetchBotConfigs } from "@/lib/api/botApi";
+import { deleteSetup, fetchActiveSetup } from "@/lib/api/setups";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 
 const COPY = {
@@ -45,6 +46,7 @@ const COPY = {
     finnLabel: "FINN planadvies",
     finishPlan: "Plan afmaken",
     activePlan: "Actief plan",
+    bestForMarket: "Beste match voor huidige markt",
     selectedAsset: "Asset en ritme",
     execution: "Uitvoering",
     readyForAutomation: "Klaar voor Automation",
@@ -53,6 +55,7 @@ const COPY = {
     editStrategy: "Strategie bewerken",
     addStrategy: "Strategie toevoegen",
     openAutomation: "Naar Automation",
+    createBotInAutomation: "Koppel bot in Automation",
     askFinn: "Vraag FINN",
     reviewPlan: "Beoordeel plan",
     setupQuestion: "Beoordeel deze setup. Wat zijn de belangrijkste sterke en zwakke punten?",
@@ -66,6 +69,9 @@ const COPY = {
     active: "Actief",
     ready: "Klaar",
     concept: "Concept",
+    botActive: "Bot actief",
+    botPaused: "Bot gepauzeerd",
+    noBotLinked: "Geen bot gekoppeld",
     missingStrategy: "Strategie ontbreekt",
     setupReady: "Setup gereed",
     strategyReady: "Strategie gereed",
@@ -110,6 +116,7 @@ const COPY = {
     finnLabel: "FINN plan check",
     finishPlan: "Finish plan",
     activePlan: "Active plan",
+    bestForMarket: "Best match for current market",
     selectedAsset: "Asset and cadence",
     execution: "Execution",
     readyForAutomation: "Ready for Automation",
@@ -118,6 +125,7 @@ const COPY = {
     editStrategy: "Edit strategy",
     addStrategy: "Add strategy",
     openAutomation: "Open Automation",
+    createBotInAutomation: "Link bot in Automation",
     askFinn: "Ask FINN",
     reviewPlan: "Review plan",
     setupQuestion: "Review this setup. What are its main strengths and weaknesses?",
@@ -131,6 +139,9 @@ const COPY = {
     active: "Active",
     ready: "Ready",
     concept: "Draft",
+    botActive: "Bot active",
+    botPaused: "Bot paused",
+    noBotLinked: "No linked bot",
     missingStrategy: "Strategy missing",
     setupReady: "Setup ready",
     strategyReady: "Strategy ready",
@@ -175,6 +186,7 @@ const COPY = {
     finnLabel: "FINN Planprüfung",
     finishPlan: "Plan vervollständigen",
     activePlan: "Aktiver Plan",
+    bestForMarket: "Beste Uebereinstimmung fuer den aktuellen Markt",
     selectedAsset: "Asset und Rhythmus",
     execution: "Ausführung",
     readyForAutomation: "Bereit für Automation",
@@ -183,6 +195,7 @@ const COPY = {
     editStrategy: "Strategie bearbeiten",
     addStrategy: "Strategie hinzufügen",
     openAutomation: "Zu Automation",
+    createBotInAutomation: "Bot in Automation verknüpfen",
     askFinn: "FINN fragen",
     reviewPlan: "Plan bewerten",
     setupQuestion: "Bewerte dieses Setup. Was sind die wichtigsten Stärken und Schwächen?",
@@ -196,6 +209,9 @@ const COPY = {
     active: "Aktiv",
     ready: "Bereit",
     concept: "Entwurf",
+    botActive: "Bot aktiv",
+    botPaused: "Bot pausiert",
+    noBotLinked: "Kein Bot verknüpft",
     missingStrategy: "Strategie fehlt",
     setupReady: "Setup bereit",
     strategyReady: "Strategie bereit",
@@ -247,9 +263,12 @@ function strategyIsComplete(setup, strategy) {
   return strategy.entry != null && strategy.entry !== "" && strategy.stop_loss != null && strategy.stop_loss !== "" && targets.length > 0;
 }
 
-function buildPlans(setups, strategies) {
+function buildPlans(setups, strategies, bots = []) {
   const setupIds = new Set(setups.map((setup) => normalizeId(setup.id)));
   const linked = new Map();
+  const botByStrategyId = new Map(
+    bots.map((bot) => [normalizeId(bot.strategy_id ?? bot.strategy?.id), bot])
+  );
 
   strategies.forEach((strategy) => {
     const setupId = normalizeId(strategy.setup_id ?? strategy.setup?.id);
@@ -272,6 +291,7 @@ function buildPlans(setups, strategies) {
 
   return plans.map((plan) => ({
     ...plan,
+    bot: plan.strategy ? botByStrategyId.get(normalizeId(plan.strategy.id)) || null : null,
     hasStrategy: hasUsableStrategy(plan.strategy),
     complete: strategyIsComplete(plan.setup, plan.strategy),
   }));
@@ -299,9 +319,9 @@ function formatNumber(value) {
 }
 
 function PlanStatus({ plan, copy }) {
-  const isActive = Boolean(plan.strategy?.is_active && plan.complete);
-  const label = isActive ? copy.active : plan.complete ? copy.ready : copy.concept;
-  const tone = isActive
+  const isBotActive = Boolean(plan.bot?.is_active && plan.complete);
+  const label = isBotActive ? copy.active : plan.complete ? copy.ready : copy.concept;
+  const tone = isBotActive
     ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"
     : plan.complete
       ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300"
@@ -322,6 +342,8 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   const activeSymbol = String(searchParams.get("symbol") || symbol || "BTC").toUpperCase();
   const { activeSetup } = useActiveSetup();
   const { openConfirm, showSnackbar } = useModal();
+  const [bots, setBots] = useState([]);
+  const [marketBestSetup, setMarketBestSetup] = useState(null);
   const {
     strategies,
     setups,
@@ -334,6 +356,50 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
     removeStrategy,
   } = useStrategyData();
   const [drawer, setDrawer] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBots() {
+      try {
+        const result = await fetchBotConfigs();
+        if (!cancelled) setBots(Array.isArray(result) ? result : []);
+      } catch (error) {
+        console.error("Failed to load bots for plan linkage", error);
+        if (!cancelled) setBots([]);
+      }
+    }
+
+    loadBots();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMarketBestSetup() {
+      try {
+        const result = await fetchActiveSetup(activeSymbol);
+        if (!cancelled) {
+          setMarketBestSetup(
+            result && String(result.symbol || activeSymbol).toUpperCase() === activeSymbol
+              ? result
+              : null
+          );
+        }
+      } catch (error) {
+        console.error("Failed to load best market setup for plan workflow", error);
+        if (!cancelled) setMarketBestSetup(null);
+      }
+    }
+
+    loadMarketBestSetup();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSymbol]);
 
   const askFinnForPlan = (plan, subjectType = "plan") => {
     const setup = plan?.setup || null;
@@ -364,25 +430,36 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   };
 
   const plans = useMemo(() => {
-    const result = buildPlans(setups, strategies);
-    const activeSetupId = normalizeId(activeSetup?.id);
+    const result = buildPlans(setups, strategies, bots);
+    const activeSetupId = normalizeId(marketBestSetup?.id || activeSetup?.id);
     return result.sort((a, b) => {
-      const aActive = Number(Boolean(a.strategy?.is_active)) + Number(normalizeId(a.setup?.id) === activeSetupId);
-      const bActive = Number(Boolean(b.strategy?.is_active)) + Number(normalizeId(b.setup?.id) === activeSetupId);
+      const aActive = Number(Boolean(a.bot?.is_active)) + Number(normalizeId(a.setup?.id) === activeSetupId);
+      const bActive = Number(Boolean(b.bot?.is_active)) + Number(normalizeId(b.setup?.id) === activeSetupId);
       if (aActive !== bActive) return bActive - aActive;
       if (a.complete !== b.complete) return Number(b.complete) - Number(a.complete);
       return getPlanName(a, copy).localeCompare(getPlanName(b, copy));
     });
-  }, [activeSetup?.id, copy, setups, strategies]);
+  }, [activeSetup?.id, bots, copy, marketBestSetup?.id, setups, strategies]);
+
+  const marketBestPlan = useMemo(() => {
+    const setupId = normalizeId(marketBestSetup?.id);
+    if (!setupId) return null;
+
+    return plans.find((plan) => plan.complete && normalizeId(plan.setup?.id) === setupId)
+      || plans.find((plan) => plan.hasStrategy && normalizeId(plan.setup?.id) === setupId)
+      || plans.find((plan) => normalizeId(plan.setup?.id) === setupId)
+      || null;
+  }, [marketBestSetup?.id, plans]);
 
   const activePlan = useMemo(() => {
     const setupId = normalizeId(activeSetup?.id);
-    return plans.find((plan) => plan.strategy?.is_active && normalizeId(plan.setup?.id) === setupId)
-      || plans.find((plan) => plan.strategy?.is_active)
+    return marketBestPlan
+      || plans.find((plan) => plan.bot?.is_active && normalizeId(plan.setup?.id) === setupId)
+      || plans.find((plan) => plan.bot?.is_active)
       || plans.find((plan) => normalizeId(plan.setup?.id) === setupId)
       || plans[0]
       || null;
-  }, [activeSetup?.id, plans]);
+  }, [activeSetup?.id, marketBestPlan, plans]);
 
   const closeDrawer = () => setDrawer(null);
 
@@ -411,6 +488,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       await addStrategy(payload);
     }
     await Promise.all([loadSetups(), loadStrategies()]);
+    setBots(await fetchBotConfigs().catch(() => []));
     closeDrawer();
   };
 
@@ -431,6 +509,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
         if (plan.strategy?.id) await removeStrategy(plan.strategy.id);
         if (removesSetup && plan.setup?.id) await deleteSetup(plan.setup.id);
         await Promise.all([loadSetups(), loadStrategies()]);
+        setBots(await fetchBotConfigs().catch(() => []));
         showSnackbar(copy.deletePlan, "success");
       },
     });
@@ -509,6 +588,12 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">{copy.activePlan}</div>
                 <h3 className="mt-0.5 text-lg font-black tracking-tight text-slate-950 dark:text-white">{getPlanName(activePlan, copy)}</h3>
+                {marketBestPlan && activePlan?.key === marketBestPlan.key ? (
+                  <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    {copy.bestForMarket}
+                  </div>
+                ) : null}
               </div>
             </div>
             <PlanStatus plan={activePlan} copy={copy} />
@@ -547,6 +632,10 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
                   {activePlan.complete ? <CheckCircle2 size={20} className="text-emerald-500" /> : <CircleDashed size={20} className="text-amber-500" />}
                   <span className="text-sm font-black text-slate-900 dark:text-white">{activePlan.complete ? copy.readyForAutomation : copy.notReady}</span>
                 </div>
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+                  <span className={`h-1.5 w-1.5 rounded-full ${activePlan.bot?.is_active ? "bg-emerald-500" : activePlan.bot ? "bg-amber-500" : "bg-slate-300"}`} />
+                  {activePlan.bot ? (activePlan.bot.is_active ? copy.botActive : copy.botPaused) : copy.noBotLinked}
+                </div>
                 <button
                   type="button"
                   onClick={() => askFinnForPlan(activePlan)}
@@ -556,8 +645,15 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
                 </button>
               </div>
               {activePlan.complete ? (
-                <Link href={`/bot?symbol=${encodeURIComponent(activePlan.setup?.symbol || activeSymbol)}`} className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-black text-white transition hover:bg-blue-700">
-                  <Bot size={15} /> {copy.openAutomation}
+                <Link
+                  href={
+                    activePlan.bot?.id
+                      ? `/bot?symbol=${encodeURIComponent(activePlan.setup?.symbol || activeSymbol)}&bot_id=${encodeURIComponent(activePlan.bot.id)}`
+                      : `/bot?action=new_bot&symbol=${encodeURIComponent(activePlan.setup?.symbol || activeSymbol)}&strategy_id=${encodeURIComponent(activePlan.strategy?.id || "")}&plan_name=${encodeURIComponent(getPlanName(activePlan, copy))}`
+                  }
+                  className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-black text-white transition hover:bg-blue-700"
+                >
+                  <Bot size={15} /> {activePlan.bot?.id ? copy.openAutomation : copy.createBotInAutomation}
                 </Link>
               ) : (
                 <button
@@ -690,6 +786,9 @@ function PlanRow({ plan, copy, onEditSetup, onEditStrategy, onAskFinn, onDelete 
           <PlanStatus plan={plan} copy={copy} />
         </div>
         <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{plan.setup?.symbol || plan.strategy?.symbol || "–"} · {plan.setup?.timeframe || plan.strategy?.timeframe || "–"}</p>
+        <p className="mt-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
+          {plan.bot ? (plan.bot.is_active ? copy.botActive : copy.botPaused) : copy.noBotLinked}
+        </p>
       </div>
 
       <button type="button" onClick={onEditSetup} className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-100 px-3 py-2.5 text-left transition hover:border-blue-200 hover:bg-blue-50 dark:border-slate-800 dark:hover:border-blue-900 dark:hover:bg-blue-950/20">

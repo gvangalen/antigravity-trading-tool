@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import CardLoader from "@/components/ui/CardLoader";
 import {
   AlertTriangle,
@@ -11,6 +12,10 @@ import {
   Target,
 } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import {
+  readLinkedSetupScore,
+  resolveBotExecutionChain,
+} from "@/lib/botExecutionChain.mjs";
 
 const SCORE_DEFINITIONS = [
   { key: "market", aliases: ["market", "market_score"] },
@@ -50,20 +55,65 @@ export default function BotScores({
   scores = {},
   bot = null,
   presentation = null,
+  strategies = [],
+  setups = [],
+  bots = [],
+  recommendedSetup = null,
   loading = false,
 }) {
   const { t } = useTranslation();
   const copy = t?.botPage?.botScores || {};
-  const strategy = bot?.strategy || null;
-  const setup = strategy?.setup || null;
-  const planName = strategy?.name || setup?.name || copy.notLinked;
+  const { strategy, setup, isComplete } = resolveBotExecutionChain(
+    bot,
+    strategies,
+    setups
+  );
+  const planName =
+    bot?.plan_name ||
+    bot?.linked_plan_name ||
+    strategy?.plan?.name ||
+    setup?.plan?.name ||
+    setup?.name ||
+    strategy?.name ||
+    copy.notLinked;
   const scoreEntries = SCORE_DEFINITIONS.map((definition) => ({
     ...definition,
     value: readScore(scores, definition.aliases),
   }));
-  const setupScore = scoreEntries.find((entry) => entry.key === "setup")?.value ?? null;
+  const setupScore =
+    readLinkedSetupScore(scores, setup) ??
+    scoreEntries.find((entry) => entry.key === "setup")?.value ??
+    null;
   const hasScores = scoreEntries.some((entry) => entry.value !== null);
+  const missingSetup = !setup;
+  const missingStrategy = !strategy;
   const hasSetupMismatch = setupScore !== null && setupScore < 40;
+  const canAssessDecision = isComplete;
+  const decisionLabel = canAssessDecision
+    ? presentation?.action || copy.insufficientData
+    : copy.cannotAssess;
+  const decisionMeta = canAssessDecision
+    ? `${copy.confidence}: ${presentation?.confidence || copy.insufficientData}`
+    : copy.completeChainHint;
+  const recommendationHref = setup?.id
+    ? `/strategy?setup_id=${encodeURIComponent(setup.id)}`
+    : "/strategy";
+  const recommendedSetupId = recommendedSetup?.setup_id ?? recommendedSetup?.id ?? null;
+  const currentSetupId = setup?.id ?? null;
+  const recommendedStrategy = strategies.find(
+    (item) => String(item?.setup_id ?? item?.setup?.id ?? "") === String(recommendedSetupId ?? "")
+  ) || null;
+  const recommendedBot = bots.find(
+    (item) => String(item?.strategy_id ?? item?.strategy?.id ?? "") === String(recommendedStrategy?.id ?? "")
+  ) || null;
+  const showBestSetupNotice =
+    recommendedSetup &&
+    recommendedSetupId != null &&
+    String(recommendedSetupId) !== String(currentSetupId ?? "") &&
+    Number(recommendedSetup?.score ?? -1) > Number(setupScore ?? -1);
+  const recommendedActionHref = recommendedBot?.id
+    ? `/bot?symbol=${encodeURIComponent(recommendedSetup?.symbol || presentation?.symbol || bot?.symbol || "BTC")}&bot_id=${encodeURIComponent(recommendedBot.id)}`
+    : `/setup?symbol=${encodeURIComponent(recommendedSetup?.symbol || presentation?.symbol || bot?.symbol || "BTC")}`;
 
   if (loading) {
     return (
@@ -85,26 +135,41 @@ export default function BotScores({
 
   const chain = [
     {
+      key: "bot",
+      label: copy.bot,
+      value: bot?.name || copy.notLinked,
+      meta: bot?.is_active ? copy.active : copy.paused,
+      icon: Bot,
+      missing: !bot?.name,
+    },
+    {
+      key: "plan",
+      label: copy.linkedPlan,
+      value: planName,
+      icon: Layers3,
+      missing: planName === copy.notLinked,
+    },
+    {
       key: "setup",
       label: copy.setup,
       value: setup?.name || copy.notLinked,
       icon: Layers3,
-      missing: !setup,
+      missing: missingSetup,
     },
     {
       key: "strategy",
       label: copy.strategy,
       value: strategy?.name || copy.notLinked,
       icon: Target,
-      missing: !strategy,
+      missing: missingStrategy,
     },
     {
       key: "decision",
       label: copy.decision,
-      value: presentation?.action || copy.insufficientData,
-      meta: `${copy.confidence}: ${presentation?.confidence || copy.insufficientData}`,
+      value: decisionLabel,
+      meta: decisionMeta,
       icon: Gauge,
-      missing: !presentation?.action,
+      missing: !canAssessDecision,
     },
   ];
 
@@ -171,13 +236,59 @@ export default function BotScores({
           })}
         </div>
 
-        {hasSetupMismatch ? (
+        {missingStrategy || missingSetup ? (
+          <div className="mt-3 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 shrink-0" size={14} />
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em]">
+                  {missingStrategy ? copy.linkMissingTitle : copy.setupMissingTitle}
+                </p>
+                <p className="mt-0.5 text-xs font-semibold">
+                  {missingStrategy ? copy.linkMissingBody : copy.setupMissingBody}
+                </p>
+              </div>
+            </div>
+            <Link
+              href={recommendationHref}
+              className="inline-flex min-h-9 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 text-[10px] font-black uppercase tracking-[0.14em] text-amber-800 transition hover:bg-amber-100 dark:border-amber-800 dark:bg-slate-950 dark:text-amber-200 dark:hover:bg-amber-950/40"
+            >
+              {missingStrategy ? copy.linkStrategyAction : copy.reviewSetupAction}
+            </Link>
+          </div>
+        ) : null}
+
+        {!missingStrategy && !missingSetup && hasSetupMismatch ? (
           <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 shrink-0" size={14} />
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.14em]">{copy.mismatchTitle}</p>
               <p className="mt-0.5 text-xs font-semibold">{copy.mismatchBody}</p>
             </div>
+          </div>
+        ) : null}
+
+        {showBestSetupNotice ? (
+          <div className="mt-3 flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-3 text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2">
+              <Target className="mt-0.5 shrink-0" size={14} />
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em]">
+                  {copy.betterMatchTitle}
+                </p>
+                <p className="mt-0.5 text-xs font-semibold">
+                  {copy.betterMatchBody
+                    ?.replace("{current}", setup?.name || copy.notLinked)
+                    ?.replace("{recommended}", recommendedSetup?.name || copy.notLinked)}
+                </p>
+              </div>
+            </div>
+            <Link
+              href={recommendedActionHref}
+              className="inline-flex min-h-9 items-center justify-center rounded-lg border border-blue-300 bg-white px-3 text-[10px] font-black uppercase tracking-[0.14em] text-blue-800 transition hover:bg-blue-100 dark:border-blue-800 dark:bg-slate-950 dark:text-blue-200 dark:hover:bg-blue-950/40"
+            >
+              {recommendedBot?.id ? (copy.openLinkedBotAction || copy.reviewPlanAction) : copy.reviewPlanAction}
+            </Link>
           </div>
         ) : null}
 

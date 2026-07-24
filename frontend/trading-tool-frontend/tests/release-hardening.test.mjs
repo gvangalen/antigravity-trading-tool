@@ -9,6 +9,8 @@ const [
   botPage,
   botAgentCard,
   botScores,
+  myPlanWorkflow,
+  assetWorkspace,
   tradeContainer,
   orderPreview,
   navBar,
@@ -19,6 +21,8 @@ const [
   readSource("app/(protected)/bot/page.jsx"),
   readSource("components/bot/BotAgentCard.jsx"),
   readSource("components/bot/BotScores.jsx"),
+  readSource("components/workflows/MyPlanWorkflow.jsx"),
+  readSource("components/workspaces/asset/AssetWorkspaceV3.jsx"),
   readSource("components/bot/TradePanelContainer.jsx"),
   readSource("components/bot/OrderPreviewModal.jsx"),
   readSource("components/ui/NavBar.jsx"),
@@ -46,13 +50,55 @@ test("aligns the desktop trade panel with the selected bot row", () => {
 
 test("ties automation context scores to the selected execution chain", () => {
   assert.match(botPage, /<BotScores[\s\S]*?bot=\{activeBot\}/);
-  assert.match(botScores, /const strategy = bot\?\.strategy \|\| null/);
-  assert.match(botScores, /const setup = strategy\?\.setup \|\| null/);
+  assert.match(botPage, /strategies=\{strategies\}/);
+  assert.match(botPage, /setups=\{setups\}/);
+  assert.match(botPage, /bots=\{bots\}/);
+  assert.match(botScores, /resolveBotExecutionChain\(/);
+  assert.match(botScores, /readLinkedSetupScore\(/);
   assert.match(botScores, /const hasSetupMismatch = setupScore !== null && setupScore < 40/);
+  assert.match(botScores, /key: "bot"/);
+  assert.match(botScores, /key: "plan"/);
   assert.match(botScores, /key: "market"/);
   assert.match(botScores, /key: "macro"/);
   assert.match(botScores, /key: "technical"/);
   assert.match(botScores, /key: "setup"/);
+  assert.match(botScores, /copy\.cannotAssess/);
+  assert.match(botScores, /recommendedSetup/);
+  assert.match(botScores, /copy\.betterMatchTitle/);
+  assert.match(botScores, /const recommendedBot = bots\.find/);
+  assert.match(botScores, /copy\.openLinkedBotAction \|\| copy\.reviewPlanAction/);
+});
+
+test("keeps my plan linked to concrete bot activation state", () => {
+  assert.match(myPlanWorkflow, /fetchBotConfigs/);
+  assert.match(myPlanWorkflow, /fetchActiveSetup\(activeSymbol\)/);
+  assert.match(myPlanWorkflow, /const marketBestPlan = useMemo/);
+  assert.match(myPlanWorkflow, /copy\.bestForMarket/);
+  assert.match(myPlanWorkflow, /bot:\s*plan\.strategy \? botByStrategyId\.get/);
+  assert.match(myPlanWorkflow, /copy\.botActive/);
+  assert.match(myPlanWorkflow, /copy\.botPaused/);
+  assert.match(myPlanWorkflow, /copy\.noBotLinked/);
+  assert.match(myPlanWorkflow, /bot_id=/);
+  assert.match(myPlanWorkflow, /action=new_bot/);
+  assert.match(myPlanWorkflow, /strategy_id=/);
+});
+
+test("prefills automation bot creation from my plan context", () => {
+  assert.match(botPage, /searchParams\.get\("strategy_id"\)/);
+  assert.match(botPage, /searchParams\.get\("plan_name"\)/);
+  assert.match(botPage, /strategies\.find\(\(strategy\) => strategy\.id === requestedStrategyId\)/);
+  assert.match(botPage, /strategy_id: matchingStrategy\?\.id \?\? null/);
+  assert.match(botPage, /const isPlanActivation = Boolean\(initialValues\?\.strategy_id\)/);
+  assert.match(botPage, /copy\.createFromPlanTitle/);
+});
+
+test("shows the best current plan candidate on the analysis bridge", () => {
+  assert.match(assetWorkspace, /workspace\?\.daily\?\.setup\?\.active_setups/);
+  assert.match(assetWorkspace, /const linkedMatch = matchingSetups\.find/);
+  assert.match(assetWorkspace, /strategy\?\.setup_id \?\? strategy\?\.setup\?\.id/);
+  assert.match(assetWorkspace, /displayName: linkedStrategy\?\.name \|\| bestMatch\?\.name/);
+  assert.match(assetWorkspace, /candidate=\{hasScoreData \? planBridgeCandidate : null\}/);
+  assert.doesNotMatch(assetWorkspace, /setup=\{hasScoreData \? setup : null\}/);
 });
 
 test("blocks every supported paused bot representation", () => {

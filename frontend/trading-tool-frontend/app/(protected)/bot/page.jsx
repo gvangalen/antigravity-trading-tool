@@ -28,6 +28,7 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 import { openFinnContext } from "@/lib/finnCommandSearch";
+import { fetchActiveSetup } from "@/lib/api/setups";
 
 function persistBotSelection(botId) {
   if (typeof window === "undefined" || !botId) return;
@@ -57,6 +58,7 @@ function BotPageInner() {
   const [assetFilter, setAssetFilter] = useState("all");
   const [currentTime, setCurrentTime] = useState(null);
   const [generatingBotId, setGeneratingBotId] = useState(null);
+  const [recommendedSetup, setRecommendedSetup] = useState(null);
   const copy = t?.botPage || {};
   const botGuideCopy = copy.onboardingGuide || {};
 
@@ -78,7 +80,7 @@ function BotPageInner() {
     runBacktest,
   } = useBotData();
 
-  const { strategies = [], loadStrategies } = useStrategyData();
+  const { strategies = [], setups = [], loadStrategies, loadSetups } = useStrategyData();
 
   const {
     data: marketIntelligence,
@@ -102,8 +104,9 @@ function BotPageInner() {
 
   useEffect(() => {
     setCurrentTime(new Date());
+    loadSetups();
     loadStrategies();
-  }, [loadStrategies]);
+  }, [loadSetups, loadStrategies]);
 
   useEffect(() => {
     trackAssistantEvent({
@@ -284,6 +287,38 @@ function BotPageInner() {
     }
   }, [activeBot, filteredBots, setActiveBot]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRecommendedSetup() {
+      const symbol = String(
+        activeBot?.symbol || activeBot?.strategy?.setup?.symbol || activeBot?.strategy?.symbol || "BTC"
+      ).toUpperCase();
+
+      try {
+        const active = await fetchActiveSetup(symbol);
+        if (!cancelled) {
+          setRecommendedSetup(
+            active && String(active.symbol || symbol).toUpperCase() === symbol ? active : null
+          );
+        }
+      } catch (error) {
+        console.error("Failed to load recommended setup", error);
+        if (!cancelled) setRecommendedSetup(null);
+      }
+    }
+
+    if (!activeBot) {
+      setRecommendedSetup(null);
+      return;
+    }
+
+    loadRecommendedSetup();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBot]);
+
   const getBotPresentation = (bot) => {
     const portfolio = portfolios.find((item) => item.bot_id === bot.id);
     const decision = decisionsByBot?.[bot.id] || {};
@@ -379,20 +414,21 @@ function BotPageInner() {
   };
 
   const handleAddBot = (initialValues = {}) => {
+    const isPlanActivation = Boolean(initialValues?.strategy_id);
     formRef.current = initialValues;
     openConfirm({
-      title: copy.createTitle,
-      statusLabel: copy.createStatus,
+      title: isPlanActivation ? copy.createFromPlanTitle : copy.createTitle,
+      statusLabel: isPlanActivation ? copy.createFromPlanStatus : copy.createStatus,
       description: <BotForm strategies={strategies} initialValues={initialValues} onChange={(v) => (formRef.current = v)} />,
       context: <p>{initialValues.symbol || formRef.current?.symbol || copy.newBotLabel} · {(initialValues.is_live || formRef.current?.is_live) ? copy.modeLive : copy.modeSimulation}</p>,
-      impact: <p>{copy.createImpact}</p>,
-      safety: <p>{copy.createSafety}</p>,
-      consequence: <p>{copy.createConsequence}</p>,
-      confirmText: copy.createConfirm,
-      busyText: copy.createBusy,
+      impact: <p>{isPlanActivation ? copy.createFromPlanImpact : copy.createImpact}</p>,
+      safety: <p>{isPlanActivation ? copy.createFromPlanSafety : copy.createSafety}</p>,
+      consequence: <p>{isPlanActivation ? copy.createFromPlanConsequence : copy.createConsequence}</p>,
+      confirmText: isPlanActivation ? copy.createFromPlanConfirm : copy.createConfirm,
+      busyText: isPlanActivation ? copy.createFromPlanBusy : copy.createBusy,
       onConfirm: async () => {
         if (!formRef.current?.name || !formRef.current?.strategy_id) { showSnackbar(copy.createValidation, "danger"); return; }
-        await createBot(formRef.current); showSnackbar(copy.createSuccess, "success");
+        await createBot(formRef.current); showSnackbar(isPlanActivation ? copy.createFromPlanSuccess : copy.createSuccess, "success");
       },
     });
   };
@@ -403,15 +439,27 @@ function BotPageInner() {
       if (!strategies.length) return;
 
       const symbol = searchParams.get("symbol") || "";
+      const requestedStrategyId = Number(searchParams.get("strategy_id"));
+      const requestedPlanName = searchParams.get("plan_name") || "";
       const mode = searchParams.get("mode") || "paper";
       const risk = searchParams.get("risk") || "balanced";
       const budget = searchParams.get("budget") || "";
+      const matchingStrategy =
+        Number.isFinite(requestedStrategyId) && requestedStrategyId > 0
+          ? strategies.find((strategy) => strategy.id === requestedStrategyId) || null
+          : null;
       
       // Auto-prefill the form values
       const initialValues = {
-        name: `Finn Bot ${symbol} ${mode === "paper" ? copy.modePaper : copy.modeLive}`,
+        name:
+          requestedPlanName ||
+          (matchingStrategy?.name
+            ? `${matchingStrategy.name} Bot`
+            : `Finn Bot ${symbol} ${mode === "paper" ? copy.modePaper : copy.modeLive}`),
         symbol: symbol,
+        strategy_id: matchingStrategy?.id ?? null,
         is_live: mode === "live",
+        risk_profile: risk,
         budget_total_eur: budget ? Number(budget) : 1000,
       };
 
@@ -531,6 +579,10 @@ function BotPageInner() {
               scores={dailyScores}
               bot={activeBot}
               presentation={activeBot ? getBotPresentation(activeBot) : null}
+              strategies={strategies}
+              setups={setups}
+              bots={bots}
+              recommendedSetup={recommendedSetup}
               loading={loading?.today}
             />
           </div>

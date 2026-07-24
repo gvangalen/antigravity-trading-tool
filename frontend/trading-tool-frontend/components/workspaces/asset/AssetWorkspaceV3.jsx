@@ -20,6 +20,7 @@ import {
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAssetWorkspaceData } from "@/hooks/useAssetWorkspaceData";
+import { useStrategyData } from "@/hooks/useStrategyData";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
@@ -127,8 +128,8 @@ function getUiCopy(locale = "nl") {
       technical: "Technical",
       combined: "Combined",
       nextStep: "Next step",
-      planBridgeTitle: "Continue this setup in My Plan",
-      planBridgeDescription: "Review setup quality, position sizing and risk/reward before taking action.",
+      planBridgeTitle: "Best matching plan for current market conditions",
+      planBridgeDescription: "Open My Plan to review the linked plan, setup and strategy before bot execution.",
       openMyPlan: "Open My Plan",
       setupScore: "Setup score",
       setup: "Setup",
@@ -236,8 +237,8 @@ function getUiCopy(locale = "nl") {
       technical: "Technisch",
       combined: "Kombiniert",
       nextStep: "Nächster Schritt",
-      planBridgeTitle: "Dieses Setup in Mein Plan ausarbeiten",
-      planBridgeDescription: "Prüfe Setup-Qualität, Positionsgröße und Risiko-Rendite vor der Ausführung.",
+      planBridgeTitle: "Bester Plan für die aktuellen Marktbedingungen",
+      planBridgeDescription: "Öffne Mein Plan, um den verknüpften Plan, das Setup und die Strategie vor der Bot-Ausführung zu prüfen.",
       openMyPlan: "Mein Plan öffnen",
       setupScore: "Setup-Score",
       setup: "Setup",
@@ -344,8 +345,8 @@ function getUiCopy(locale = "nl") {
     technical: "Technisch",
     combined: "Gecombineerd",
     nextStep: "Volgende stap",
-    planBridgeTitle: "Werk deze setup uit in Mijn Plan",
-    planBridgeDescription: "Controleer setupkwaliteit, positiegrootte en risk/reward voordat je handelt.",
+    planBridgeTitle: "Best passende plan voor de huidige marktomstandigheden",
+    planBridgeDescription: "Open Mijn Plan om het gekoppelde plan, de setup en strategie te beoordelen voordat de bot uitvoert.",
     openMyPlan: "Open Mijn Plan",
     setupScore: "Setupscore",
     setup: "Setup",
@@ -986,9 +987,11 @@ function AnalysisChartSection({ symbol, isOpen, onToggle, ui }) {
   );
 }
 
-function PlanBridge({ setup, onOpenPlan, ui }) {
-  const setupScore = normalizeScore(setup?.score);
+function PlanBridge({ candidate, onOpenPlan, ui }) {
+  const setupScore = normalizeScore(candidate?.score);
   const scoreLabel = setupScore === null ? "—" : `${Math.round(setupScore)}/100`;
+  const candidateName = String(candidate?.displayName || "").trim();
+  const bridgeTitle = candidateName || ui.planBridgeTitle;
 
   return (
     <section className="relative overflow-hidden rounded-[24px] border border-blue-100 bg-gradient-to-r from-blue-50/80 via-white to-white px-4 py-3.5 shadow-[0_18px_40px_-38px_rgba(37,99,235,0.45)]">
@@ -1003,7 +1006,7 @@ function PlanBridge({ setup, onOpenPlan, ui }) {
               {ui.nextStep}
             </div>
             <h3 className="mt-0.5 text-[15px] font-black tracking-tight text-slate-950">
-              {ui.planBridgeTitle}
+              {bridgeTitle}
             </h3>
             <p className="mt-0.5 text-[12px] font-medium leading-5 text-slate-500">
               {ui.planBridgeDescription}
@@ -1665,6 +1668,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     reloadWorkspace,
     reloadWatchlist,
   } = useAssetWorkspaceData(activeSymbol, periods, watchlistSymbols);
+  const { strategies = [] } = useStrategyData();
 
   const categoryData = workspace?.categories || {};
   const marketDayData = categoryData.market?.rows || [];
@@ -1673,7 +1677,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const market = { score: categoryData.market?.score?.score ?? null };
   const macro = { score: categoryData.macro?.score?.score ?? null };
   const technical = { score: categoryData.technical?.score?.score ?? null };
-  const setup = workspace?.daily?.setup || null;
   const master = {
     weights: workspace?.master?.weights || {},
     bias: workspace?.master?.master_bias || "–",
@@ -1684,6 +1687,47 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const macroLoading = workspaceLoading;
   const technicalLoading = workspaceLoading;
   const scoresLoading = workspaceLoading;
+  const planBridgeCandidate = useMemo(() => {
+    const activeSetups = Array.isArray(workspace?.daily?.setup?.active_setups)
+      ? workspace.daily.setup.active_setups
+      : [];
+
+    const matchingSetups = activeSetups
+      .filter((item) => String(item?.symbol || "").toUpperCase() === activeSymbol)
+      .map((item) => ({
+        ...item,
+        resolvedSetupId: item?.id ?? item?.setup_id ?? null,
+        resolvedScore: normalizeScore(item?.score),
+      }))
+      .filter((item) => item.resolvedSetupId !== null)
+      .sort((left, right) => Number(right.resolvedScore ?? -1) - Number(left.resolvedScore ?? -1));
+
+    if (!matchingSetups.length) return null;
+
+    const linkedStrategiesBySetupId = new Map();
+    strategies.forEach((strategy) => {
+      const setupId = strategy?.setup_id ?? strategy?.setup?.id ?? null;
+      if (setupId === null || setupId === undefined) return;
+      const key = String(setupId);
+      const current = linkedStrategiesBySetupId.get(key);
+      if (!current || strategy?.is_active) {
+        linkedStrategiesBySetupId.set(key, strategy);
+      }
+    });
+
+    const linkedMatch = matchingSetups.find((item) =>
+      linkedStrategiesBySetupId.has(String(item.resolvedSetupId))
+    );
+    const bestMatch = linkedMatch || matchingSetups[0];
+    const linkedStrategy = linkedStrategiesBySetupId.get(String(bestMatch.resolvedSetupId)) || null;
+
+    return {
+      ...bestMatch,
+      score: bestMatch.resolvedScore,
+      strategyId: linkedStrategy?.id ?? null,
+      displayName: linkedStrategy?.name || bestMatch?.name || ui.planBridgeTitle,
+    };
+  }, [activeSymbol, strategies, ui.planBridgeTitle, workspace?.daily?.setup?.active_setups]);
 
   const addMarket = async (name) => {
     await marketIndicatorAdd(name, activeSymbol);
@@ -2056,7 +2100,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       </section>
 
       <PlanBridge
-        setup={hasScoreData ? setup : null}
+        candidate={hasScoreData ? planBridgeCandidate : null}
         onOpenPlan={() => router.push(`/setup?symbol=${encodeURIComponent(activeSymbol)}`)}
         ui={ui}
       />

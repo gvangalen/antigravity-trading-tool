@@ -151,9 +151,11 @@ export const fetchLastSetup = async () => {
 // =========================================================
 // 9. ACTIEVE SETUP
 // =========================================================
-export const fetchActiveSetup = async () => {
+export const fetchActiveSetup = async (symbol = "BTC") => {
   try {
-    const res = await fetchAuth('/api/setups/active', { method: 'GET' });
+    const query = new URLSearchParams();
+    if (symbol) query.set("symbol", String(symbol).toUpperCase());
+    const res = await fetchAuth(`/api/setups/active${query.toString() ? `?${query.toString()}` : ""}`, { method: 'GET' });
     return res?.active ?? null;
   } catch (err) {
     console.error('❌ [fetchActiveSetup] Fout:', err);
