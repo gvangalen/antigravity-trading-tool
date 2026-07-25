@@ -1998,7 +1998,13 @@
       "setupScoreLabel": "Setup score",
       "stopLossLabel": "Stop loss",
       "targetCountLabel": "Targets",
-      "notAvailable": "n.v.t."
+      "notAvailable": "n.v.t.",
+      "marketActionNeedsStrategy": "Strategie ontbreekt",
+      "marketActionPaused": "Gepauzeerd",
+      "marketActionWaiting": "Wachten",
+      "marketActionNoDecision": "Geen beslissing",
+      "incompleteDiagnosticsLabel": "Diagnostiek beperkt",
+      "incompleteDiagnosticsBody": "Deze bot heeft nog geen complete keten. Koppel eerst een strategie of hervat de bot voordat diepere diagnostiek zinvol wordt."
     },
     "orderPreview": {
       "finnLoadError": "Finn kon deze preflight-review nu niet laden.",

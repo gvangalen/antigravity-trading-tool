@@ -86,6 +86,7 @@ export default function BotAgentCard({
     ""
   ).toLowerCase();
   const hasLinkedStrategy = Boolean(bot?.strategy?.id || bot?.strategy_id || bot?.strategy);
+  const chainReady = Boolean(hasLinkedStrategy && bot?.is_active);
 
   const deriveDecisionReason = (decisionState) => {
     const directReason =
@@ -116,6 +117,17 @@ export default function BotAgentCard({
 
   /* ================= BOT STATE ================= */
   const normalizedAction = String(safeDecision?.action || "").toLowerCase();
+  const marketActionLabel =
+    actionLabels[normalizedActionLabel] ||
+    (!hasLinkedStrategy
+      ? copy.marketActionNeedsStrategy
+      : !bot?.is_active
+        ? copy.marketActionPaused
+        : normalizedAction === "hold" || normalizedAction === "observe"
+          ? copy.marketActionWaiting
+          : normalizedAction
+            ? normalizedAction.toUpperCase()
+            : copy.marketActionNoDecision);
 
   const botState = bot?.is_active
     ? normalizedAction === "hold" || normalizedAction === "observe" || !normalizedAction
@@ -489,14 +501,14 @@ export default function BotAgentCard({
     <div className={`w-full overflow-hidden border border-slate-200 bg-card flex flex-col transition-all ${compact ? "rounded-3xl shadow-sm" : "rounded-[2.5rem] shadow-xl hover:shadow-2xl"}`}>
       
       {/* 🕋 MODULAR HEADER HUD */}
-      <div className={`${compact ? "p-5 pb-3 space-y-4" : "p-8 pb-4 space-y-6"}`}>
-        <div className="flex items-start justify-between gap-6">
-          <div className="flex items-start gap-5">
+      <div className={`${compact ? "p-4 pb-3 space-y-3" : "p-6 pb-4 space-y-4"}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
             <div className={`${compact ? "w-10 h-10 rounded-xl" : "w-14 h-14 rounded-2xl"} bg-[var(--color-border-subtle)] border border-slate-100 text-[var(--primary)] flex items-center justify-center shadow-inner transition-transform mt-1`}>
                <Bot size={compact ? 19 : 28} className="opacity-80" />
             </div>
 
-            <div className={compact ? "space-y-1.5" : "space-y-2.5"}>
+            <div className={compact ? "space-y-1" : "space-y-2"}>
               {compact ? (
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">{copy.selectedBotDetails}</p>
@@ -522,7 +534,7 @@ export default function BotAgentCard({
               </div> : null}
 
               {/* HORIZONTAL PILLS CONTAINER */}
-              <div className="flex flex-wrap items-center gap-2 pt-1.5">
+              <div className="flex flex-wrap items-center gap-2 pt-1">
                 <div className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1.5 ${risk.className}`}>
                    {risk.icon}
                    {risk.label.replace(copy.riskPrefix, "")}
@@ -600,24 +612,24 @@ export default function BotAgentCard({
           </div>
         </div>
 
-        <div className={`rounded-[1.5rem] border px-5 py-4 ${blockerToneClasses}`}>
+        <div className={`rounded-[1.35rem] border px-4 py-3 ${blockerToneClasses}`}>
           <div className="text-[10px] font-black uppercase tracking-[0.22em] opacity-70">
             {copy.primaryStateLabel}
           </div>
-          <div className="mt-2 text-lg font-black tracking-tight">
+          <div className="mt-1.5 text-base font-black tracking-tight">
             {blocker.title}
           </div>
-          <p className="mt-2 text-sm font-semibold leading-relaxed">
+          <p className="mt-1.5 text-sm font-semibold leading-relaxed">
             {blocker.body}
           </p>
-          <p className="mt-2 text-xs font-bold opacity-80">
+          <p className="mt-1.5 text-xs font-bold opacity-80">
             {blocker.nextStep}
           </p>
         </div>
 
         {/* 📊 SYSTEM STATUS BAR */}
-        <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 ${compact ? "gap-2 p-1.5 rounded-2xl" : "gap-4 p-2 rounded-[1.5rem]"} bg-[var(--color-border-subtle)] border border-slate-100`}>
-          <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
+        <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 ${compact ? "gap-2 p-1.5 rounded-2xl" : "gap-3 p-2 rounded-[1.35rem]"} bg-[var(--color-border-subtle)] border border-slate-100`}>
+          <div className="bg-card rounded-xl p-3 border border-slate-100 shadow-sm">
              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.statusReaction}</div>
              <div className={`text-xs font-black uppercase tracking-tight flex items-center gap-2 ${bot?.is_live ? 'text-emerald-600' : 'text-blue-600'}`}>
                 <div className={`w-2 h-2 rounded-full ${botState === 'live' ? (bot?.is_live ? 'bg-emerald-500' : 'bg-green-500') : botState === 'waiting' ? 'bg-amber-400' : 'bg-slate-400'}`} />
@@ -625,20 +637,20 @@ export default function BotAgentCard({
              </div>
           </div>
 
-          <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
+          <div className="bg-card rounded-xl p-3 border border-slate-100 shadow-sm">
              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.marketAction}</div>
              <div className="text-xs font-black text-[var(--primary)] uppercase tracking-tight flex items-center gap-2">
                 <Rocket size={12} strokeWidth={3} />
-                {actionLabels[normalizedActionLabel] || normalizedActionLabel.toUpperCase() || copy.insufficientData}
+                {marketActionLabel}
              </div>
           </div>
 
-          <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
+          <div className="bg-card rounded-xl p-3 border border-slate-100 shadow-sm">
              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.summaryReasonLabel}</div>
              <div className="text-xs font-black text-foreground tracking-tight">{summaryReason}</div>
           </div>
 
-          <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
+          <div className="bg-card rounded-xl p-3 border border-slate-100 shadow-sm">
              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.lastChecked}</div>
              <div className="text-xs font-black text-muted tracking-tight">{lastRun || copy.dataUpdating}</div>
           </div>
@@ -653,7 +665,7 @@ export default function BotAgentCard({
           {isExpanded ? copy.collapseDiagnostics : copy.viewFullDiagnostics}
         </button>
 
-        {isExpanded && (
+        {isExpanded && chainReady && (
           <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -695,9 +707,20 @@ export default function BotAgentCard({
           </div>
         )}
 
+        {isExpanded && !chainReady ? (
+          <div className="rounded-[1.35rem] border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+              {copy.incompleteDiagnosticsLabel}
+            </div>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700">
+              {copy.incompleteDiagnosticsBody}
+            </p>
+          </div>
+        ) : null}
+
         {/* 📊 BACKTEST RESULTS SECTION */}
         {/* ⏳ LOADING STATE */}
-        {isExpanded && (backtestLoading || scenariosLoading) && (
+        {isExpanded && chainReady && (backtestLoading || scenariosLoading) && (
           <div className="mt-4 p-6 bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl flex items-center justify-center gap-4 animate-pulse">
             <div className="w-5 h-5 border-2 border-slate-300 border-t-[var(--primary)] animate-spin rounded-full" />
             <div className="text-xs font-black text-secondary uppercase tracking-[0.2em]">
@@ -707,7 +730,7 @@ export default function BotAgentCard({
         )}
 
         {/* 📊 BACKTEST RESULTS SECTION (LIGHT MODE) */}
-        {isExpanded && backtestResult && !backtestLoading && (
+        {isExpanded && chainReady && backtestResult && !backtestLoading && (
           <div className="mt-4 space-y-4 animate-fade-in">
             <div className="bg-card rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden relative group">
               <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/50 blur-3xl rounded-full translate-x-1/2 -translate-y-1/2 opacity-50" />
@@ -854,7 +877,7 @@ export default function BotAgentCard({
         )}
 
         {/* 🚀 SCENARIO COMPARISON TABLE (LIGHT MODE) */}
-        {isExpanded && Object.keys(scenarios).length > 0 && !scenariosLoading && (
+        {isExpanded && chainReady && Object.keys(scenarios).length > 0 && !scenariosLoading && (
           <div className="mt-4 p-6 bg-[var(--color-border-subtle)] rounded-3xl border border-slate-200 shadow-sm animate-fade-in relative overflow-hidden">
              <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -910,7 +933,7 @@ export default function BotAgentCard({
       </div>
 
       {/* 🚀 MAIN COCKPIT MODULES */}
-      {isExpanded && (
+      {isExpanded && chainReady && (
         <>
           <div className="p-8 pt-4 space-y-10 border-t border-slate-100 dark:border-slate-800/50 mt-4 animate-fade-in">
             

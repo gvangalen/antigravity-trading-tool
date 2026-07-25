@@ -1998,7 +1998,13 @@
       "setupScoreLabel": "Setup-Score",
       "stopLossLabel": "Stop-Loss",
       "targetCountLabel": "Ziele",
-      "notAvailable": "n. v."
+      "notAvailable": "n. v.",
+      "marketActionNeedsStrategy": "Strategie fehlt",
+      "marketActionPaused": "Pausiert",
+      "marketActionWaiting": "Warten",
+      "marketActionNoDecision": "Keine Entscheidung",
+      "incompleteDiagnosticsLabel": "Diagnostik begrenzt",
+      "incompleteDiagnosticsBody": "Dieser Bot hat noch keine vollständige Kette. Verknüpfe zuerst eine Strategie oder aktiviere den Bot wieder, bevor tiefere Diagnostik sinnvoll wird."
     },
     "orderPreview": {
       "finnLoadError": "Finn konnte diese Preflight-Prüfung gerade nicht laden.",
