@@ -238,10 +238,22 @@ function getFinnDigestCopy(locale = 'nl') {
       primaryActionBlocked: (count) => `Review ${count} blocked moment${count === 1 ? '' : 's'}`,
       nextOpen: 'Review the open queue and close the highest-priority decision first.',
       nextBlocked: 'Review the blocked moments first before starting any new decision.',
-      rawReportLabel: 'Original Finn report',
-      rawReportHint: 'This is the original generated report text. It may be longer or in a different source language.',
-      rawReportOpen: 'Show original report text',
-      rawReportClose: 'Hide original report text',
+      rawReportLabel: 'Original report text',
+      rawReportHint: 'Only open this if you need the unedited source text.',
+      rawReportOpen: 'Show source text',
+      rawReportClose: 'Hide source text',
+      activityTitle: 'What happened today?',
+      activitySummary: (reviewed, open) => reviewed > 0
+        ? `${reviewed} decision${reviewed === 1 ? '' : 's'} were reviewed. ${open} remain open.`
+        : `${open} decision${open === 1 ? '' : 's'} are still open and waiting for follow-up.`,
+      blockedTitle: 'What did Finn stop?',
+      blockedSummary: (count) => count > 0
+        ? `Finn stopped ${count} moment${count === 1 ? '' : 's'} before you continued.`
+        : 'Finn did not have to stop you today.',
+      deviationTitle: 'Where did I drift?',
+      deviationSummary: (blocked) => blocked > 0
+        ? 'Review the blocked moments first to see where your process drifted.'
+        : 'No clear plan deviations were found in this period.',
       goodDefault: 'No clear plan deviations or impulsive execution signals were found.',
       attentionDefault: 'There is not enough strong evidence yet to make a heavier coaching claim.',
       nextDefault: 'Review open items first before starting a new decision flow.',
@@ -271,10 +283,22 @@ function getFinnDigestCopy(locale = 'nl') {
       primaryActionBlocked: (count) => `${count} gebremste Moment${count === 1 ? '' : 'e'} prüfen`,
       nextOpen: 'Prüfe die offene Liste und schließe zuerst die wichtigste Entscheidung ab.',
       nextBlocked: 'Prüfe die gebremsten Momente zuerst, bevor du neue Entscheidungen startest.',
-      rawReportLabel: 'Originaler Finn-Bericht',
-      rawReportHint: 'Dies ist der ursprüngliche generierte Berichtstext. Er kann länger sein oder in einer anderen Ausgangssprache stehen.',
-      rawReportOpen: 'Originalen Berichtstext anzeigen',
-      rawReportClose: 'Originalen Berichtstext ausblenden',
+      rawReportLabel: 'Originaler Berichtstext',
+      rawReportHint: 'Nur öffnen, wenn du den unbearbeiteten Quelltext brauchst.',
+      rawReportOpen: 'Quelltext anzeigen',
+      rawReportClose: 'Quelltext ausblenden',
+      activityTitle: 'Was ist heute passiert?',
+      activitySummary: (reviewed, open) => reviewed > 0
+        ? `${reviewed} Entscheidung${reviewed === 1 ? '' : 'en'} wurden geprüft. ${open} bleiben offen.`
+        : `${open} Entscheidung${open === 1 ? '' : 'en'} sind noch offen und brauchen Nacharbeit.`,
+      blockedTitle: 'Was hat Finn gestoppt?',
+      blockedSummary: (count) => count > 0
+        ? `Finn hat ${count} Moment${count === 1 ? '' : 'e'} gestoppt, bevor du weitergemacht hast.`
+        : 'Finn musste dich heute nicht stoppen.',
+      deviationTitle: 'Wo bin ich abgewichen?',
+      deviationSummary: (blocked) => blocked > 0
+        ? 'Prüfe zuerst die gestoppten Momente, um die Abweichung zu sehen.'
+        : 'In dieser Periode wurden keine klaren Planabweichungen gefunden.',
       goodDefault: 'Es wurden keine klaren Planabweichungen oder impulsiven Ausführungssignale gefunden.',
       attentionDefault: 'Es gibt noch nicht genug belastbare Belege für eine schwerere Coaching-Aussage.',
       nextDefault: 'Arbeite offene Punkte zuerst ab, bevor du einen neuen Entscheidungsfluss startest.',
@@ -303,10 +327,22 @@ function getFinnDigestCopy(locale = 'nl') {
     primaryActionBlocked: (count) => `Bekijk ${count} geblokkeerd moment${count === 1 ? '' : 'en'}`,
     nextOpen: 'Bekijk de open lijst en rond eerst de belangrijkste beslissing af.',
     nextBlocked: 'Bekijk eerst de geblokkeerde momenten voordat je nieuwe beslissingen start.',
-    rawReportLabel: 'Origineel Finn-rapport',
-    rawReportHint: 'Dit is de originele gegenereerde rapporttekst. Die kan langer zijn of in een andere brontaal staan.',
-    rawReportOpen: 'Toon originele rapporttekst',
-    rawReportClose: 'Verberg originele rapporttekst',
+    rawReportLabel: 'Originele rapporttekst',
+    rawReportHint: 'Open dit alleen als je de onbewerkte brontekst nodig hebt.',
+    rawReportOpen: 'Toon brontekst',
+    rawReportClose: 'Verberg brontekst',
+    activityTitle: 'Wat gebeurde er vandaag?',
+    activitySummary: (reviewed, open) => reviewed > 0
+      ? `${reviewed} beslissing${reviewed === 1 ? '' : 'en'} zijn beoordeeld. ${open} staan nog open.`
+      : `${open} beslissing${open === 1 ? '' : 'en'} staan nog open en vragen opvolging.`,
+    blockedTitle: 'Wat hield Finn tegen?',
+    blockedSummary: (count) => count > 0
+      ? `Finn hield ${count} moment${count === 1 ? '' : 'en'} tegen voordat je verderging.`
+      : 'Finn hoefde je vandaag niet af te remmen.',
+    deviationTitle: 'Waar week ik af?',
+    deviationSummary: (blocked) => blocked > 0
+      ? 'Bekijk eerst de geblokkeerde momenten om te zien waar je proces afweek.'
+      : 'Er zijn in deze periode geen duidelijke planafwijkingen gevonden.',
     goodDefault: 'Er zijn geen duidelijke planafwijkingen of impulsieve uitvoersignalen gevonden.',
     attentionDefault: 'Er is nog te weinig hard bewijs om hier een zwaardere coachingconclusie aan te hangen.',
     nextDefault: 'Rond eerst open items af voordat je een nieuwe beslisflow start.',
@@ -624,7 +660,15 @@ function FinnReflectionSectionCard({ icon: Icon, title, summary, entries = [], a
   );
 }
 
-function FinnReflectionBlocks({ analysis, showActivityEntries = false }) {
+function FinnReflectionBlocks({
+  analysis,
+  showActivityEntries = false,
+  variant = 'default',
+  copy = null,
+  reviewedCount = 0,
+  blockedCount = 0,
+  openActionCount = 0,
+}) {
   const { t } = useTranslation();
   const reflectionT = t.pages.report.finn.reflection;
   const sections = analysis?.sections || {};
@@ -636,13 +680,16 @@ function FinnReflectionBlocks({ analysis, showActivityEntries = false }) {
   const activityEntries = dedupeFinnEntries(whatIDid?.entries || []);
   const blockedEntries = dedupeFinnEntries(whatFinnBlocked?.entries || []);
   const deviationEntries = dedupeFinnEntries(whereIDeviated?.entries || []);
+  const todayMode = variant === 'today' && copy;
   const cards = [
-    whatIDid && {
+    {
       key: 'activity',
       icon: ClipboardList,
-      title: whatIDid?.title || reflectionT.todayTitle,
-      summary: whatIDid?.summary,
-      entries: showActivityEntries ? activityEntries : [],
+      title: todayMode ? copy.activityTitle : (whatIDid?.title || reflectionT.todayTitle),
+      summary: todayMode
+        ? copy.activitySummary(reviewedCount, openActionCount)
+        : whatIDid?.summary,
+      entries: todayMode ? [] : (showActivityEntries ? activityEntries : []),
       accent: 'slate',
       renderEntry: (entry) => (
         <>
@@ -663,12 +710,14 @@ function FinnReflectionBlocks({ analysis, showActivityEntries = false }) {
         </>
       ),
     },
-    whatFinnBlocked && {
+    {
       key: 'blocked',
       icon: ShieldAlert,
-      title: whatFinnBlocked?.title || reflectionT.blockedTitle,
-      summary: whatFinnBlocked?.summary,
-      entries: blockedEntries,
+      title: todayMode ? copy.blockedTitle : (whatFinnBlocked?.title || reflectionT.blockedTitle),
+      summary: todayMode
+        ? copy.blockedSummary(blockedCount)
+        : whatFinnBlocked?.summary,
+      entries: todayMode ? [] : blockedEntries,
       accent: 'rose',
       renderEntry: (entry) => (
         <>
@@ -686,13 +735,17 @@ function FinnReflectionBlocks({ analysis, showActivityEntries = false }) {
         </>
       ),
     },
-    whereIDeviated && {
+    {
       key: 'deviation',
       icon: Activity,
-      title: whereIDeviated?.title || reflectionT.deviationTitle,
-      summary: whereIDeviated?.summary,
-      entries: deviationEntries,
-      accent: whereIDeviated?.status === 'steady' ? 'emerald' : whereIDeviated?.status === 'disciplined' ? 'amber' : 'amber',
+      title: todayMode ? copy.deviationTitle : (whereIDeviated?.title || reflectionT.deviationTitle),
+      summary: todayMode
+        ? copy.deviationSummary(blockedCount)
+        : whereIDeviated?.summary,
+      entries: todayMode ? [] : deviationEntries,
+      accent: todayMode
+        ? 'emerald'
+        : whereIDeviated?.status === 'steady' ? 'emerald' : whereIDeviated?.status === 'disciplined' ? 'amber' : 'amber',
       renderEntry: (entry) => (
         <>
           <div className="flex items-center justify-between gap-3">
@@ -1543,70 +1596,78 @@ function FinnReportsPanel() {
 
               {expanded && (
                 <div ref={detailsRef} className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-5">
-                  <div className="flex flex-wrap items-center gap-2 mb-4">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.14em] border ${
-                      isContractValid
-                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300'
-                        : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300'
-                    }`}>
-                      <ShieldCheck size={12} />
-                      {isContractValid ? finnT.contractOk : finnT.contractCheck}
-                    </span>
-                    <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                      {finnT.sourcePrefix}: {source}
-                    </span>
-                  </div>
-                  <FinnReflectionBlocks analysis={analysis} showActivityEntries={false} />
-                  <div className="mt-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                          {digestCopy.rawReportLabel}
-                        </div>
-                        <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 max-w-3xl">
-                          {digestCopy.rawReportHint}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setShowRawReport((value) => !value)}
-                        className="text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100 transition-colors"
-                      >
-                        {showRawReport ? digestCopy.rawReportClose : digestCopy.rawReportOpen}
-                      </button>
-                    </div>
-                    {showRawReport && (
-                      <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-800 p-4">
-                        <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
-                          {finnReport?.response || finnT.noReportText}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
-                    {(metricItems.length
-                      ? metricItems
-                      : [
-                          [finnT?.detailMetrics?.source, source],
-                          [finnT?.detailMetrics?.type, reportType],
-                          [finnT?.detailMetrics?.separation, separateFrom],
-                        ].filter(([label]) => label)
-                    ).map(([label, value]) => (
-                      <div
-                        key={label}
-                        className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3"
-                      >
-                        <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                          {label}
-                        </div>
-                        <div className="mt-1 text-sm font-black text-slate-900 dark:text-slate-100 truncate">
-                          {String(value)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <FinnReflectionBlocks
+                    analysis={analysis}
+                    showActivityEntries={false}
+                    variant={isTodayView ? 'today' : 'default'}
+                    copy={digestCopy}
+                    reviewedCount={reviewedCount}
+                    blockedCount={blockedCount}
+                    openActionCount={openActionCount}
+                  />
 
                   {(activeOptionKey === 'week' || activeOptionKey === 'behavior') && (
                     <>
+                      <div className="flex flex-wrap items-center gap-2 mb-4">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.14em] border ${
+                          isContractValid
+                            ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300'
+                        }`}>
+                          <ShieldCheck size={12} />
+                          {isContractValid ? finnT.contractOk : finnT.contractCheck}
+                        </span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                          {finnT.sourcePrefix}: {source}
+                        </span>
+                      </div>
+                      <div className="mt-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                              {digestCopy.rawReportLabel}
+                            </div>
+                            <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 max-w-3xl">
+                              {digestCopy.rawReportHint}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setShowRawReport((value) => !value)}
+                            className="text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100 transition-colors"
+                          >
+                            {showRawReport ? digestCopy.rawReportClose : digestCopy.rawReportOpen}
+                          </button>
+                        </div>
+                        {showRawReport && (
+                          <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-800 p-4">
+                            <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
+                              {finnReport?.response || finnT.noReportText}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
+                        {(metricItems.length
+                          ? metricItems
+                          : [
+                              [finnT?.detailMetrics?.source, source],
+                              [finnT?.detailMetrics?.type, reportType],
+                              [finnT?.detailMetrics?.separation, separateFrom],
+                            ].filter(([label]) => label)
+                        ).map(([label, value]) => (
+                          <div
+                            key={label}
+                            className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3"
+                          >
+                            <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                              {label}
+                            </div>
+                            <div className="mt-1 text-sm font-black text-slate-900 dark:text-slate-100 truncate">
+                              {String(value)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                       <FinnAgentController controller={analysis?.agent_controller} />
                       <FinnPortfolioRisk portfolioRisk={portfolioRisk} />
                       <FinnBehavioralIntelligenceBlocks
@@ -1616,7 +1677,7 @@ function FinnReportsPanel() {
                       <FinnGovernanceSurface analysis={analysis} />
                     </>
                   )}
-                  {analysis?.agent_accountability?.performance_light?.summary && (
+                  {!isTodayView && analysis?.agent_accountability?.performance_light?.summary && (
                     <div className="mt-5 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 p-4 text-blue-700 dark:text-blue-300">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] mb-2">
                         {finnT.improvementPoint}
