@@ -2,12 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import BotDecisionCard from "@/components/bot/BotDecisionCard";
 import BotPortfolioCard from "@/components/bot/BotPortfolioCard";
 import BotHistoryTable from "@/components/bot/BotHistoryTable";
 import BotSettingsMenu from "@/components/bot/BotSettingsMenu";
-import TradePlanCard from "@/components/bot/TradePlanCard";
-import MarketDecisionCard from "@/components/bot/MarketDecisionCard";
 import GuardrailsPanel from "@/components/bot/GuardrailsPanel";
 
 import {
@@ -36,16 +33,8 @@ export default function BotAgentCard({
   history = [],
   trades = [],
   loadingDecision = false,
-
-  marketIntelligence,
   loadingMarketIntelligence = false,
-
-  onGenerate,
-  onExecute,
-  onSkip,
   onOpenSettings,
-
-  onSaveTradePlan,
   onBacktest,
   onAskFinn,
   finnActionLabel = "Ask FINN",
@@ -67,9 +56,6 @@ export default function BotAgentCard({
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef(null);
 
-  const [savingPlan, setSavingPlan] = useState(false);
-  const [saveError, setSaveError] = useState(null);
-
   const [isExpanded, setIsExpanded] = useState(false);
 
   const isAuto = bot?.mode === "auto";
@@ -77,7 +63,6 @@ export default function BotAgentCard({
   /* ================= SAFE BASE DATA ================= */
 
   const safeDecision = decision || {};
-  const safeOrder = order || {};
 
   const symbol = (
     bot?.strategy?.setup?.symbol ||
@@ -378,45 +363,6 @@ export default function BotAgentCard({
   const actionLabels = copy.actionLabels || {};
   const confidenceLabels = copy.confidenceLabels || {};
 
-  /* ================= SAVE TRADE PLAN ================= */
-
-  const decisionId =
-    normalizedDecision?.id ??
-    normalizedDecision?.decision_id ??
-    null;
-
-  const botId =
-    normalizedDecision?.bot_id ??
-    bot?.id ??
-    null;
-
-  const canSavePlan =
-    !isAuto &&
-    !!onSaveTradePlan &&
-    !!decisionId &&
-    !!botId;
-
-  const handleSaveTradePlan = async (planDraft) => {
-    if (!canSavePlan) return;
-
-    setSaveError(null);
-    setSavingPlan(true);
-
-    try {
-      await onSaveTradePlan({
-        bot_id: botId,
-        decision_id: decisionId,
-        draft: planDraft,
-      });
-    } catch (e) {
-      console.error("❌ Save plan error", e);
-      setSaveError(e?.message || copy.saveFailed);
-      throw e;
-    } finally {
-      setSavingPlan(false);
-    }
-  };
-
   /* =====================================================
      🔁 HANDLE BACKTEST
   ===================================================== */
@@ -469,6 +415,62 @@ export default function BotAgentCard({
   const planSource = useMemo(() => {
     return normalizedDecision?.trade_plan || null;
   }, [normalizedDecision?.trade_plan]);
+
+  const executionSummary = useMemo(() => {
+    const action = String(normalizedDecision?.action || "").toLowerCase();
+    const amount = Number(normalizedDecision?.amount_eur ?? normalizedDecision?.requested_amount_eur ?? 0);
+    const confidence = String(
+      normalizedDecision?.confidence_label ||
+      normalizedDecision?.confidence ||
+      ""
+    ).toLowerCase();
+    const setupName =
+      normalizedDecision?.setup_match?.name ||
+      bot?.strategy?.setup?.name ||
+      copy.noStrategy;
+    const setupScore = Number(normalizedDecision?.setup_match?.score ?? NaN);
+    const stopLoss = planSource?.stop_loss?.price ?? planSource?.stop_loss ?? null;
+    const targets = Array.isArray(planSource?.targets) ? planSource.targets : [];
+
+    return {
+      actionLabel:
+        actionLabels[action] ||
+        action.toUpperCase() ||
+        copy.insufficientData,
+      confidenceLabel:
+        confidenceLabels[confidence] ||
+        confidence.toUpperCase() ||
+        copy.insufficientData,
+      amountLabel:
+        amount > 0
+          ? formatCurrency(amount, locale, "EUR", { maximumFractionDigits: 0 })
+          : copy.insufficientData,
+      setupName,
+      setupScoreLabel: Number.isFinite(setupScore) ? `${Math.round(setupScore)}/100` : copy.insufficientData,
+      stopLossLabel:
+        stopLoss != null
+          ? formatCurrency(Number(stopLoss), locale, "EUR", { maximumFractionDigits: 0 })
+          : copy.notAvailable || "n.v.t.",
+      targetCount: targets.length,
+      hasPlanLevels: stopLoss != null || targets.length > 0,
+      reason:
+        normalizedDecision?.reason ||
+        normalizedDecision?.guardrail_reason ||
+        normalizedDecision?.reasons?.[0] ||
+        copy.dataUpdating,
+    };
+  }, [
+    actionLabels,
+    bot?.strategy?.setup?.name,
+    confidenceLabels,
+    copy.dataUpdating,
+    copy.insufficientData,
+    copy.noStrategy,
+    copy.notAvailable,
+    locale,
+    normalizedDecision,
+    planSource,
+  ]);
 
   
   /* ================= ORDER STATE ================= */
@@ -913,13 +915,15 @@ export default function BotAgentCard({
           <div className="p-8 pt-4 space-y-10 border-t border-slate-100 dark:border-slate-800/50 mt-4 animate-fade-in">
             
             {/* Module 1: Portfolio & Safety Check */}
-            <div className="bg-slate-50/50 rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
-              <div className="flex flex-col">
-                <div className="flex-1 p-6 lg:p-8">
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+              <div className="bg-slate-50/50 rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
+                <div className="p-6 lg:p-8">
                   <BotPortfolioCard bot={portfolio} />
                 </div>
+              </div>
 
-                <div className="p-6 lg:p-8 bg-white/50 border-t border-slate-100">
+              <div className="bg-white/60 rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
+                <div className="p-6 lg:p-8">
                   <GuardrailsPanel
                     decision={normalizedDecision}
                     bot={bot}
@@ -928,62 +932,58 @@ export default function BotAgentCard({
               </div>
             </div>
 
-            {/* Module 2: Market Intelligence (THE BRAIN) */}
+            {/* Module 2: Execution Summary */}
             {hasLinkedStrategy ? (
               <div className="bg-card rounded-[2rem] border border-slate-200 p-6 lg:p-8 shadow-sm">
-                {loadingMarketIntelligence ? (
-                  <div className="flex items-center gap-3 text-xs font-black text-secondary uppercase tracking-widest p-10 justify-center">
-                    <div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-[var(--primary)] animate-spin" />
-                    {copy.syncingBrain}
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                      {copy.executionSummaryLabel || "Execution summary"}
+                    </div>
+                    <h3 className="mt-2 text-xl font-black text-slate-900">
+                      {bot?.strategy?.name || copy.noStrategy}
+                    </h3>
+                    <p className="mt-2 max-w-3xl text-sm font-semibold leading-relaxed text-slate-600">
+                      {executionSummary.reason}
+                    </p>
                   </div>
-                ) : (
-                  <MarketDecisionCard data={marketIntelligence} />
-                )}
-              </div>
-            ) : (
-              <div className="bg-card rounded-[2rem] border border-dashed border-slate-300 p-6 lg:p-8 shadow-sm">
-                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                  {copy.diagnosticsPendingLabel || "Diagnostiek wacht"}
-                </div>
-                <p className="mt-2 text-lg font-black text-slate-900">
-                  {copy.noStrategy}
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-600 leading-relaxed">
-                  {copy.diagnosticsPendingBody || "Diepere markt- en uitvoeringsdiagnostiek wordt pas echt zinvol zodra deze bot een gekoppelde strategie heeft."}
-                </p>
-              </div>
-            )}
-
-            {/* Module 3: Execution Engine & Price Ladder */}
-            {hasLinkedStrategy ? (
-              <div className="bg-card rounded-[2rem] border border-slate-200 overflow-hidden shadow-md">
-                <div className="flex flex-col">
-                  <div className="flex-1 p-6 lg:p-8">
-                    <BotDecisionCard
-                      bot={bot}
-                      portfolio={portfolio}
-                      decision={normalizedDecision}
-                      order={safeOrder}
-                      loading={loadingDecision}
-                      isAuto={isAuto}
-                      onGenerate={onGenerate}
-                      onExecute={!isAuto ? onExecute : undefined}
-                      onSkip={!isAuto ? onSkip : undefined}
-                    />
-                  </div>
-
-                  <div className="p-6 lg:p-8 bg-slate-50/30 border-t border-slate-100">
-                    <TradePlanCard
-                      decision={normalizedDecision}
-                      tradePlan={planSource}
-                      loading={loadingDecision}
-                      allowManual={!isAuto}
-                      onSave={canSavePlan ? handleSaveTradePlan : undefined}
-                      saving={savingPlan}
-                      error={saveError}
-                    />
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                    {loadingMarketIntelligence ? (copy.dataUpdating || "Data wordt bijgewerkt") : (copy.diagnosticsReady || "Diagnostiek")}
                   </div>
                 </div>
+
+                <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.marketAction}</div>
+                    <div className="mt-2 text-sm font-black text-slate-900">{executionSummary.actionLabel}</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.logicalConfidence}</div>
+                    <div className="mt-2 text-sm font-black text-slate-900">{executionSummary.confidenceLabel}</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.amountLabel || "Bedrag"}</div>
+                    <div className="mt-2 text-sm font-black text-slate-900">{executionSummary.amountLabel}</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.setupLabel || "Setup"}</div>
+                    <div className="mt-2 text-sm font-black text-slate-900">{executionSummary.setupName}</div>
+                    <div className="mt-1 text-[11px] font-bold text-slate-500">{copy.setupScoreLabel || "Setup score"}: {executionSummary.setupScoreLabel}</div>
+                  </div>
+                </div>
+
+                {executionSummary.hasPlanLevels ? (
+                  <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.stopLossLabel || "Stop loss"}</div>
+                      <div className="mt-2 text-sm font-black text-slate-900">{executionSummary.stopLossLabel}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.targetCountLabel || "Targets"}</div>
+                      <div className="mt-2 text-sm font-black text-slate-900">{executionSummary.targetCount}</div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
