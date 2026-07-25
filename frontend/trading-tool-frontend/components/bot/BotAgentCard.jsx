@@ -86,7 +86,12 @@ export default function BotAgentCard({
     ""
   ).toLowerCase();
   const hasLinkedStrategy = Boolean(bot?.strategy?.id || bot?.strategy_id || bot?.strategy);
-  const chainReady = Boolean(hasLinkedStrategy && bot?.is_active);
+  const hasLinkedSetup = Boolean(
+    bot?.strategy?.setup?.id ||
+    bot?.strategy?.setup_id ||
+    bot?.strategy?.setup
+  );
+  const hasCompleteChain = Boolean(hasLinkedStrategy && hasLinkedSetup);
   const stateLabels = copy.stateLabels || {};
   const actionLabels = copy.actionLabels || {};
   const confidenceLabels = copy.confidenceLabels || {};
@@ -108,7 +113,6 @@ export default function BotAgentCard({
 
     if (directReason) return directReason;
     if (!hasLinkedStrategy) return copy.noStrategy;
-    if (!bot?.is_active) return copy.blockerPausedTitle;
     if (normalizedAction === "hold" || normalizedAction === "observe") {
       return copy.blockerWaitingBody;
     }
@@ -124,12 +128,12 @@ export default function BotAgentCard({
     actionLabels[normalizedActionLabel] ||
     (!hasLinkedStrategy
       ? copy.marketActionNeedsStrategy
-      : !bot?.is_active
-        ? copy.marketActionPaused
-        : normalizedAction === "hold" || normalizedAction === "observe"
-          ? copy.marketActionWaiting
-          : normalizedAction
-            ? normalizedAction.toUpperCase()
+      : normalizedAction === "hold" || normalizedAction === "observe"
+        ? copy.marketActionWaiting
+        : normalizedAction
+          ? normalizedAction.toUpperCase()
+          : !bot?.is_active
+            ? copy.marketActionPaused
             : copy.marketActionNoDecision);
 
   const botState = bot?.is_active
@@ -242,11 +246,11 @@ export default function BotAgentCard({
 
     const decisionReason = deriveDecisionReason(normalizedDecision);
 
-    const summaryReason = !hasLinkedStrategy
+    const summaryReason = !hasCompleteChain
       ? copy.noStrategy
       : decisionReason || copy.dataUpdating;
 
-    const blocker = !hasLinkedStrategy
+    const blocker = !hasCompleteChain
       ? {
         tone: "amber",
         title: copy.noStrategy,
@@ -290,7 +294,7 @@ export default function BotAgentCard({
       blocker,
       blockerToneClasses,
     };
-  }, [bot?.is_active, copy, hasLinkedStrategy, normalizedAction, normalizedActionLabel, safeDecision]);
+  }, [bot?.is_active, copy, hasCompleteChain, hasLinkedStrategy, normalizedAction, normalizedActionLabel, safeDecision]);
 
   const {
     normalizedDecision,
@@ -665,7 +669,7 @@ export default function BotAgentCard({
           {isExpanded ? copy.collapseDiagnostics : copy.viewFullDiagnostics}
         </button>
 
-        {isExpanded && chainReady && (
+        {isExpanded && hasCompleteChain && (
           <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -707,7 +711,7 @@ export default function BotAgentCard({
           </div>
         )}
 
-        {isExpanded && !chainReady ? (
+        {isExpanded && !hasCompleteChain ? (
           <div className="rounded-[1.35rem] border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4">
             <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
               {copy.incompleteDiagnosticsLabel}
@@ -720,7 +724,7 @@ export default function BotAgentCard({
 
         {/* 📊 BACKTEST RESULTS SECTION */}
         {/* ⏳ LOADING STATE */}
-        {isExpanded && chainReady && (backtestLoading || scenariosLoading) && (
+        {isExpanded && hasCompleteChain && (backtestLoading || scenariosLoading) && (
           <div className="mt-4 p-6 bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl flex items-center justify-center gap-4 animate-pulse">
             <div className="w-5 h-5 border-2 border-slate-300 border-t-[var(--primary)] animate-spin rounded-full" />
             <div className="text-xs font-black text-secondary uppercase tracking-[0.2em]">
@@ -730,7 +734,7 @@ export default function BotAgentCard({
         )}
 
         {/* 📊 BACKTEST RESULTS SECTION (LIGHT MODE) */}
-        {isExpanded && chainReady && backtestResult && !backtestLoading && (
+        {isExpanded && hasCompleteChain && backtestResult && !backtestLoading && (
           <div className="mt-4 space-y-4 animate-fade-in">
             <div className="bg-card rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden relative group">
               <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/50 blur-3xl rounded-full translate-x-1/2 -translate-y-1/2 opacity-50" />
@@ -877,7 +881,7 @@ export default function BotAgentCard({
         )}
 
         {/* 🚀 SCENARIO COMPARISON TABLE (LIGHT MODE) */}
-        {isExpanded && chainReady && Object.keys(scenarios).length > 0 && !scenariosLoading && (
+        {isExpanded && hasCompleteChain && Object.keys(scenarios).length > 0 && !scenariosLoading && (
           <div className="mt-4 p-6 bg-[var(--color-border-subtle)] rounded-3xl border border-slate-200 shadow-sm animate-fade-in relative overflow-hidden">
              <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -933,7 +937,7 @@ export default function BotAgentCard({
       </div>
 
       {/* 🚀 MAIN COCKPIT MODULES */}
-      {isExpanded && chainReady && (
+      {isExpanded && hasCompleteChain && (
         <>
           <div className="p-8 pt-4 space-y-10 border-t border-slate-100 dark:border-slate-800/50 mt-4 animate-fade-in">
             
