@@ -1864,15 +1864,6 @@ RENDER
         </div>
       </header>
 
-      {/* 📊 OVERVIEW HUD */}
-      <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
-        <ReportTerminalHUD report={report} type={reportType} loading={loading} />
-      </DashboardErrorBoundary>
-
-      <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
-        <FinnReportsPanel />
-      </DashboardErrorBoundary>
-
       {/* 🕹️ CONTROLS */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-8">
           <ReportTabs selected={reportType} onChange={setReportType} />
@@ -1935,9 +1926,16 @@ RENDER
         report && (
           <div className="animate-fade-slide pb-24">
             <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
+              <ReportTerminalHUD report={report} type={reportType} loading={loading} />
+            </DashboardErrorBoundary>
+            <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
               <ReportContainer>
                 <ReportLayout report={report} />
               </ReportContainer>
+            </DashboardErrorBoundary>
+
+            <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
+              <FinnReportsPanel />
             </DashboardErrorBoundary>
           </div>
         )
