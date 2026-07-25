@@ -97,15 +97,19 @@ export default function BotAgentCard({
     (portfolio?.budget?.daily_limit_eur ?? 0) > 0 ||
     (portfolio?.budget?.max_order_eur ?? 0) > 0
   );
+  const linkedSetupName =
+    bot?.strategy?.setup?.name ||
+    bot?.setup_name ||
+    safeDecision?.setup_match?.name ||
+    copy.linkedSetupPending;
   const linkedPlanName =
+    bot?.strategy?.display_name ||
     bot?.strategy?.name ||
     bot?.plan_name ||
     bot?.linked_plan_name ||
-    (bot?.strategy_id ? `${copy.linkedPlanFallback} #${bot.strategy_id}` : copy.noStrategy);
-  const linkedSetupName =
-    bot?.strategy?.setup?.name ||
-    safeDecision?.setup_match?.name ||
-    copy.linkedSetupFallback;
+    (linkedSetupName && linkedSetupName !== copy.linkedSetupPending
+      ? linkedSetupName
+      : copy.linkedPlanPending);
   const stateLabels = copy.stateLabels || {};
   const actionLabels = copy.actionLabels || {};
   const confidenceLabels = copy.confidenceLabels || {};
@@ -539,12 +543,13 @@ export default function BotAgentCard({
             <div className={compact ? "space-y-1" : "space-y-2"}>
               {compact ? (
                 <div>
-                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">{copy.selectedBotDetails}</p>
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
+                    {copy.linkedPlanLabel}
+                  </p>
                   <p className="mt-1 text-sm font-black text-foreground">{linkedPlanName}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                    <span className="rounded-lg bg-slate-100 px-2 py-1">{copy.linkedPlanLabel}: {linkedPlanName}</span>
-                    <span className="rounded-lg bg-slate-100 px-2 py-1">{copy.setupLabel}: {linkedSetupName}</span>
-                  </div>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    {copy.setupLabel}: {linkedSetupName}
+                  </p>
                 </div>
               ) : (
                 <div className="flex items-center gap-3">
