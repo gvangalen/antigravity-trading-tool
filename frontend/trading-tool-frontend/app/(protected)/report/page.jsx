@@ -220,6 +220,7 @@ function getFinnDigestCopy(locale = 'nl') {
   const normalized = String(locale || 'nl').toLowerCase();
   if (normalized.startsWith('en')) {
     return {
+      reportTitle: 'Daily reflection with Finn',
       headlineDefault: 'Finn found no clear plan violations in this period.',
       headlineOpen: (count) => `Finn saw no clear plan violations, but ${count} open decision${count === 1 ? '' : 's'} still need follow-up.`,
       headlineBlocked: (count) => `Finn flagged ${count} moment${count === 1 ? '' : 's'} that need review before you continue.`,
@@ -230,19 +231,23 @@ function getFinnDigestCopy(locale = 'nl') {
       attention: 'What needs attention',
       next: 'Next step',
       details: 'Activity and evidence',
-      detailsHint: 'Open the full Finn explanation only when you want the underlying audit trail.',
-      detailButton: 'Open full explanation',
-      detailButtonClose: 'Hide explanation',
+      detailsHint: 'Open the underlying activity only when you want the evidence behind this reflection.',
+      detailButton: 'View activity and evidence',
+      detailButtonClose: 'Hide activity and evidence',
+      primaryActionDefault: 'View reflection details',
+      primaryActionOpen: (count) => `View ${count} open decision${count === 1 ? '' : 's'}`,
+      primaryActionBlocked: (count) => `Review ${count} blocked moment${count === 1 ? '' : 's'}`,
       goodDefault: 'No clear plan deviations or impulsive execution signals were found.',
       attentionDefault: 'There is not enough strong evidence yet to make a heavier coaching claim.',
       nextDefault: 'Review open items first before starting a new decision flow.',
       openAttention: (count) => `${count} open item${count === 1 ? '' : 's'} still need to be rounded off first.`,
       blockedAttention: (count) => `${count} guarded moment${count === 1 ? '' : 's'} need follow-up before you continue.`,
-      metricsHint: 'Fast scan',
+      metricsHint: 'Today',
     };
   }
   if (normalized.startsWith('de')) {
     return {
+      reportTitle: 'Tagesreflexion mit Finn',
       headlineDefault: 'Finn sieht in dieser Periode keine klaren Planabweichungen.',
       headlineOpen: (count) => `Finn sieht keine klaren Planabweichungen, aber ${count} offene Entscheidung${count === 1 ? '' : 'en'} brauchen noch Nacharbeit.`,
       headlineBlocked: (count) => `Finn markiert ${count} Moment${count === 1 ? '' : 'e'}, die du vor dem Weitergehen prüfen solltest.`,
@@ -253,18 +258,22 @@ function getFinnDigestCopy(locale = 'nl') {
       attention: 'Worauf achten',
       next: 'Nächster Schritt',
       details: 'Aktivität und Belege',
-      detailsHint: 'Öffne die vollständige Finn-Erklärung nur, wenn du die Audit-Spur dahinter sehen willst.',
-      detailButton: 'Vollständige Erklärung öffnen',
-      detailButtonClose: 'Erklärung ausblenden',
+      detailsHint: 'Öffne die zugrunde liegende Aktivität nur, wenn du die Belege hinter dieser Reflexion sehen willst.',
+      detailButton: 'Aktivität und Belege ansehen',
+      detailButtonClose: 'Aktivität und Belege ausblenden',
+      primaryActionDefault: 'Reflexionsdetails ansehen',
+      primaryActionOpen: (count) => `${count} offene Entscheidung${count === 1 ? '' : 'en'} ansehen`,
+      primaryActionBlocked: (count) => `${count} gebremste Moment${count === 1 ? '' : 'e'} prüfen`,
       goodDefault: 'Es wurden keine klaren Planabweichungen oder impulsiven Ausführungssignale gefunden.',
       attentionDefault: 'Es gibt noch nicht genug belastbare Belege für eine schwerere Coaching-Aussage.',
       nextDefault: 'Arbeite offene Punkte zuerst ab, bevor du einen neuen Entscheidungsfluss startest.',
       openAttention: (count) => `${count} offene Punkte sollten zuerst sauber abgeschlossen werden.`,
       blockedAttention: (count) => `${count} gebremste Momente brauchen Nacharbeit, bevor du weitermachst.`,
-      metricsHint: 'Schnellscan',
+      metricsHint: 'Heute',
     };
   }
   return {
+    reportTitle: 'Dagreflectie met Finn',
     headlineDefault: 'Finn ziet in deze periode geen duidelijke planafwijkingen.',
     headlineOpen: (count) => `Finn ziet geen duidelijke planafwijkingen, maar ${count} open beslissing${count === 1 ? '' : 'en'} vragen nog afronding.`,
     headlineBlocked: (count) => `Finn markeert ${count} moment${count === 1 ? '' : 'en'} die je eerst moet nalopen voordat je verdergaat.`,
@@ -275,15 +284,18 @@ function getFinnDigestCopy(locale = 'nl') {
     attention: 'Waar moet je op letten',
     next: 'Volgende stap',
     details: 'Activiteit en onderbouwing',
-    detailsHint: 'Open de volledige Finn-toelichting alleen als je de auditlaag erachter wilt zien.',
-    detailButton: 'Open volledige toelichting',
-    detailButtonClose: 'Verberg toelichting',
+    detailsHint: 'Open de onderliggende activiteit alleen als je de onderbouwing achter deze reflectie wilt zien.',
+    detailButton: 'Bekijk activiteit en onderbouwing',
+    detailButtonClose: 'Verberg activiteit en onderbouwing',
+    primaryActionDefault: 'Bekijk reflectiedetails',
+    primaryActionOpen: (count) => `Bekijk ${count} open beslissing${count === 1 ? '' : 'en'}`,
+    primaryActionBlocked: (count) => `Bekijk ${count} geblokkeerd moment${count === 1 ? '' : 'en'}`,
     goodDefault: 'Er zijn geen duidelijke planafwijkingen of impulsieve uitvoersignalen gevonden.',
     attentionDefault: 'Er is nog te weinig hard bewijs om hier een zwaardere coachingconclusie aan te hangen.',
     nextDefault: 'Rond eerst open items af voordat je een nieuwe beslisflow start.',
     openAttention: (count) => `${count} open item${count === 1 ? '' : 's'} moeten eerst netjes worden afgerond.`,
     blockedAttention: (count) => `${count} afgeremde moment${count === 1 ? '' : 'en'} vragen eerst opvolging voordat je verdergaat.`,
-    metricsHint: 'Snelle scan',
+    metricsHint: 'Vandaag',
   };
 }
 
@@ -308,6 +320,29 @@ function countMatchingEntries(entries = [], patterns = []) {
 
 function getFirstNonEmptyText(...values) {
   return values.find((value) => typeof value === 'string' && value.trim()) || '';
+}
+
+function normalizeFinnEntryKey(entry = {}) {
+  return [
+    entry?.label,
+    entry?.type,
+    entry?.status,
+    entry?.resolve_state,
+    entry?.asset,
+  ]
+    .filter(Boolean)
+    .join('|')
+    .toLowerCase();
+}
+
+function dedupeFinnEntries(entries = []) {
+  const seen = new Set();
+  return (Array.isArray(entries) ? entries : []).filter((entry) => {
+    const key = normalizeFinnEntryKey(entry);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function finnAgentVerdictTone(verdict = {}) {
@@ -572,7 +607,7 @@ function FinnReflectionSectionCard({ icon: Icon, title, summary, entries = [], a
   );
 }
 
-function FinnReflectionBlocks({ analysis }) {
+function FinnReflectionBlocks({ analysis, showActivityEntries = false }) {
   const { t } = useTranslation();
   const reflectionT = t.pages.report.finn.reflection;
   const sections = analysis?.sections || {};
@@ -581,85 +616,102 @@ function FinnReflectionBlocks({ analysis }) {
   const whatIDid = dayClose?.what_i_did_today || sections?.activity_journal || null;
   const whatFinnBlocked = dayClose?.what_finn_blocked || sections?.blocked_summary || null;
   const whereIDeviated = dayClose?.where_i_deviated || sections?.plan_adherence || null;
+  const activityEntries = dedupeFinnEntries(whatIDid?.entries || []);
+  const blockedEntries = dedupeFinnEntries(whatFinnBlocked?.entries || []);
+  const deviationEntries = dedupeFinnEntries(whereIDeviated?.entries || []);
+  const cards = [
+    whatIDid && {
+      key: 'activity',
+      icon: ClipboardList,
+      title: whatIDid?.title || reflectionT.todayTitle,
+      summary: whatIDid?.summary,
+      entries: showActivityEntries ? activityEntries : [],
+      accent: 'slate',
+      renderEntry: (entry) => (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[10px] font-black uppercase tracking-[0.14em]">
+              {entry.label || entry.type || reflectionT.actionFallback}
+            </span>
+            {entry.asset && (
+              <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+                {entry.asset}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-[0.12em] opacity-75">
+            {entry.status && <span>{entry.status}</span>}
+            {entry.resolve_state && <span>{entry.resolve_state}</span>}
+          </div>
+        </>
+      ),
+    },
+    whatFinnBlocked && {
+      key: 'blocked',
+      icon: ShieldAlert,
+      title: whatFinnBlocked?.title || reflectionT.blockedTitle,
+      summary: whatFinnBlocked?.summary,
+      entries: blockedEntries,
+      accent: 'rose',
+      renderEntry: (entry) => (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[10px] font-black uppercase tracking-[0.14em]">
+              {entry.label || entry.type || reflectionT.guardrailFallback}
+            </span>
+            <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+              {entry.asset || entry.severity || 'review'}
+            </span>
+          </div>
+          <p className="mt-2 text-xs font-semibold leading-relaxed">
+            {entry.outcome || reflectionT.noExtraDetails}
+          </p>
+        </>
+      ),
+    },
+    whereIDeviated && {
+      key: 'deviation',
+      icon: Activity,
+      title: whereIDeviated?.title || reflectionT.deviationTitle,
+      summary: whereIDeviated?.summary,
+      entries: deviationEntries,
+      accent: whereIDeviated?.status === 'steady' ? 'emerald' : whereIDeviated?.status === 'disciplined' ? 'amber' : 'amber',
+      renderEntry: (entry) => (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[10px] font-black uppercase tracking-[0.14em]">
+              {entry.label || entry.type || reflectionT.deviationFallback}
+            </span>
+            <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
+              {entry.asset || entry.severity || 'review'}
+            </span>
+          </div>
+          <p className="mt-2 text-xs font-semibold leading-relaxed">
+            {entry.message || reflectionT.noExtraDetails}
+          </p>
+        </>
+      ),
+    },
+  ].filter((card) => card && (card.summary || (Array.isArray(card.entries) && card.entries.length > 0)));
 
-  if (!whatIDid && !whatFinnBlocked && !whereIDeviated) return null;
+  if (cards.length === 0 && !(dayClose?.tomorrow_focus?.length > 0)) return null;
 
   return (
     <div className="mt-5 grid grid-cols-1 xl:grid-cols-3 gap-4">
-      <FinnReflectionSectionCard
-        icon={ClipboardList}
-        title={whatIDid?.title || reflectionT.todayTitle}
-        summary={whatIDid?.summary}
-        entries={whatIDid?.entries || []}
-        accent="slate"
-        renderEntry={(entry) => (
-          <>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[10px] font-black uppercase tracking-[0.14em]">
-                {entry.label || entry.type || reflectionT.actionFallback}
-              </span>
-              {entry.asset && (
-                <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
-                  {entry.asset}
-                </span>
-              )}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-[0.12em] opacity-75">
-              {entry.status && <span>{entry.status}</span>}
-              {entry.resolve_state && <span>{entry.resolve_state}</span>}
-            </div>
-          </>
-        )}
-      />
-
-      <FinnReflectionSectionCard
-        icon={ShieldAlert}
-        title={whatFinnBlocked?.title || reflectionT.blockedTitle}
-        summary={whatFinnBlocked?.summary}
-        entries={whatFinnBlocked?.entries || []}
-        accent="rose"
-        renderEntry={(entry) => (
-          <>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[10px] font-black uppercase tracking-[0.14em]">
-                {entry.label || entry.type || reflectionT.guardrailFallback}
-              </span>
-              <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
-                {entry.asset || entry.severity || 'review'}
-              </span>
-            </div>
-            <p className="mt-2 text-xs font-semibold leading-relaxed">
-                {entry.outcome || reflectionT.noExtraDetails}
-            </p>
-          </>
-        )}
-      />
-
-      <FinnReflectionSectionCard
-        icon={Activity}
-        title={whereIDeviated?.title || reflectionT.deviationTitle}
-        summary={whereIDeviated?.summary}
-        entries={whereIDeviated?.entries || []}
-        accent={whereIDeviated?.status === 'steady' ? 'emerald' : whereIDeviated?.status === 'disciplined' ? 'amber' : 'amber'}
-        renderEntry={(entry) => (
-          <>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[10px] font-black uppercase tracking-[0.14em]">
-                {entry.label || entry.type || reflectionT.deviationFallback}
-              </span>
-              <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
-                {entry.asset || entry.severity || 'review'}
-              </span>
-            </div>
-            <p className="mt-2 text-xs font-semibold leading-relaxed">
-                {entry.message || reflectionT.noExtraDetails}
-            </p>
-          </>
-        )}
-      />
+      {cards.map((card) => (
+        <FinnReflectionSectionCard
+          key={card.key}
+          icon={card.icon}
+          title={card.title}
+          summary={card.summary}
+          entries={card.entries}
+          accent={card.accent}
+          renderEntry={card.renderEntry}
+        />
+      ))}
 
       {dayClose?.tomorrow_focus?.length > 0 && (
-        <div className="xl:col-span-3 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 p-4 text-emerald-700 dark:text-emerald-300">
+        <div className={`rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 p-4 text-emerald-700 dark:text-emerald-300 ${cards.length > 1 ? 'xl:col-span-3' : ''}`}>
           <div className="flex items-center gap-2">
             <CheckCircle2 size={14} />
             <span className="text-[10px] font-black uppercase tracking-[0.16em]">
@@ -1128,6 +1180,7 @@ function FinnReportsPanel() {
   const finnT = reportT.finn || {};
   const digestCopy = useMemo(() => getFinnDigestCopy(locale), [locale]);
   const panelRef = useRef(null);
+  const detailsRef = useRef(null);
   const [activeFinnReport, setActiveFinnReport] = useState('today');
   const [finnReportCache, setFinnReportCache] = useState({});
   const [finnReport, setFinnReport] = useState(null);
@@ -1301,6 +1354,20 @@ function FinnReportsPanel() {
     [digestCopy.blocked, blockedCount],
     [digestCopy.open, openActionCount],
   ];
+  const isTodayView = activeOptionKey === 'today';
+  const primaryActionLabel = blockedCount > 0
+    ? digestCopy.primaryActionBlocked(blockedCount)
+    : openActionCount > 0
+      ? digestCopy.primaryActionOpen(openActionCount)
+      : digestCopy.primaryActionDefault;
+  const openReflectionDetails = () => {
+    setExpanded(true);
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        detailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  };
 
   return (
     <section ref={panelRef} className="my-8 md:my-10">
@@ -1313,27 +1380,9 @@ function FinnReportsPanel() {
 
       <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-lg shadow-slate-900/5 overflow-hidden">
         <div className="p-6 md:p-7 border-b border-slate-100 dark:border-slate-800/80">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
-            <div className="max-w-3xl">
-              <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100">
-                {finnT.title}
-              </h2>
-              <p className="mt-3 text-sm md:text-[15px] leading-relaxed text-slate-500 dark:text-slate-400 max-w-2xl">
-                {finnT.description}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {[finnT?.badges?.readOnly, finnT?.badges?.auditTrail, finnT?.badges?.separate].filter(Boolean).map((label) => (
-                <span
-                  key={label}
-                  className="px-3 py-1.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400"
-                >
-                  {label}
-                </span>
-              ))}
-            </div>
-          </div>
+          <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100">
+            {digestCopy.reportTitle}
+          </h2>
         </div>
 
         <div className="p-6 md:p-7">
@@ -1393,105 +1442,95 @@ function FinnReportsPanel() {
             <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-5 md:p-6">
               <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2 mb-3">
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                      {finnT.latest}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
-                      <ClipboardList size={13} />
-                      {activeOption?.eyebrow || finnT.latest}
-                    </span>
-                    <span className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                      {finnT.activity}
-                    </span>
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">
-                      {finnT.auditData}
-                    </span>
-                  </div>
+                  {!isTodayView && (
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                        {finnT.latest}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
+                        <ClipboardList size={13} />
+                        {activeOption?.eyebrow || finnT.latest}
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                        {finnT.activity}
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">
+                        {finnT.auditData}
+                      </span>
+                    </div>
+                  )}
 
-                  <div className="grid grid-cols-1 gap-5 md:grid-cols-[minmax(0,1fr)_220px] md:items-start">
-                    <div className="min-w-0">
-                      <div className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/20 p-5">
-                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">
-                          {digestCopy.metricsHint}
-                        </div>
-                        <p className="mt-3 text-lg md:text-xl font-black tracking-tight text-slate-950 dark:text-slate-100 max-w-3xl">
-                          {topHeadline}
-                        </p>
-                        <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300 max-w-3xl">
-                          {summary || activeOption?.empty || finnT.summaryFallback}
-                        </p>
+                  <div className="min-w-0">
+                    <div className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/20 p-5">
+                      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">
+                        {digestCopy.metricsHint}
                       </div>
-
-                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        {compactMetricItems.map(([label, value]) => (
-                          <div
-                            key={label}
-                            className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3"
-                          >
-                            <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                              {label}
-                            </div>
-                            <div className="mt-1 text-2xl font-black text-slate-900 dark:text-slate-100">
-                              {value}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-3">
-                        {[
-                          [digestCopy.good, goodSummary, 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200'],
-                          [digestCopy.attention, attentionSummary, 'border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200'],
-                          [digestCopy.next, nextStepSummary, 'border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 text-blue-800 dark:text-blue-200'],
-                        ].map(([label, value, tone]) => (
-                          <div key={label} className={`rounded-2xl border p-4 ${tone}`}>
-                            <div className="text-[10px] font-black uppercase tracking-[0.16em]">
-                              {label}
-                            </div>
-                            <p className="mt-3 text-sm font-semibold leading-relaxed">
-                              {value}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
+                      <p className="mt-3 text-lg md:text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100 max-w-3xl">
+                        {topHeadline}
+                      </p>
                     </div>
 
-                    <div className="flex flex-col gap-2 sm:flex-row md:flex-col md:items-stretch md:justify-start">
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {compactMetricItems.map(([label, value]) => (
+                        <div
+                          key={label}
+                          className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3"
+                        >
+                          <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                            {label}
+                          </div>
+                          <div className="mt-1 text-2xl font-black text-slate-900 dark:text-slate-100">
+                            {value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-3">
+                      {[
+                        [digestCopy.good, goodSummary, 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200'],
+                        [digestCopy.attention, attentionSummary, 'border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200'],
+                        [digestCopy.next, nextStepSummary, 'border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 text-blue-800 dark:text-blue-200'],
+                      ].map(([label, value, tone]) => (
+                        <div key={label} className={`rounded-2xl border p-4 ${tone}`}>
+                          <div className="text-[10px] font-black uppercase tracking-[0.16em]">
+                            {label}
+                          </div>
+                          <p className="mt-3 text-sm font-semibold leading-relaxed">
+                            {value}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
                       <button
-                        onClick={() => setExpanded((value) => !value)}
+                        onClick={openReflectionDetails}
                         className={actionButtonStyles({
                           variant: 'primary',
                           className: 'justify-center gap-2 rounded-xl px-5 py-3 text-[11px] tracking-widest active:scale-[0.98]',
                         })}
                       >
-                        {expanded ? digestCopy.detailButtonClose : digestCopy.detailButton}
-                        <ChevronDown
-                          size={14}
-                          className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
-                        />
+                        {primaryActionLabel}
                       </button>
                       <button
-                        onClick={() => loadFinnReport(activeOption, true)}
-                        className={actionButtonStyles({
-                          variant: 'secondary',
-                          className: 'justify-center gap-2 rounded-xl px-5 py-3 text-[11px] tracking-widest active:scale-[0.98]',
-                        })}
+                        onClick={() => setExpanded((value) => !value)}
+                        className="text-sm font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors"
                       >
-                        <RefreshCw size={13} />
-                        {finnT.refresh}
+                        {expanded ? digestCopy.detailButtonClose : digestCopy.detailButton}
                       </button>
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                    </div>
+                    {!isTodayView && (
+                      <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                         {digestCopy.detailsHint}
                       </div>
-                    </div>
+                    )}
                   </div>
-                  <FinnReflectionBlocks analysis={analysis} />
                 </div>
               </div>
 
               {expanded && (
-                <div className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-5">
+                <div ref={detailsRef} className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-5">
                   <div className="flex flex-wrap items-center gap-2 mb-4">
                     <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.14em] border ${
                       isContractValid
@@ -1505,6 +1544,7 @@ function FinnReportsPanel() {
                       {finnT.sourcePrefix}: {source}
                     </span>
                   </div>
+                  <FinnReflectionBlocks analysis={analysis} showActivityEntries={false} />
                   <div className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-4">
                     <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
                       {finnReport?.response || finnT.noReportText}
