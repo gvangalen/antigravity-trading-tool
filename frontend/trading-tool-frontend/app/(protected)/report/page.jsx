@@ -237,6 +237,12 @@ function getFinnDigestCopy(locale = 'nl') {
       primaryActionDefault: 'View reflection details',
       primaryActionOpen: (count) => `View ${count} open decision${count === 1 ? '' : 's'}`,
       primaryActionBlocked: (count) => `Review ${count} blocked moment${count === 1 ? '' : 's'}`,
+      nextOpen: 'Review the open queue and close the highest-priority decision first.',
+      nextBlocked: 'Review the blocked moments first before starting any new decision.',
+      rawReportLabel: 'Original Finn report',
+      rawReportHint: 'This is the original generated report text. It may be longer or in a different source language.',
+      rawReportOpen: 'Show original report text',
+      rawReportClose: 'Hide original report text',
       goodDefault: 'No clear plan deviations or impulsive execution signals were found.',
       attentionDefault: 'There is not enough strong evidence yet to make a heavier coaching claim.',
       nextDefault: 'Review open items first before starting a new decision flow.',
@@ -264,6 +270,12 @@ function getFinnDigestCopy(locale = 'nl') {
       primaryActionDefault: 'Reflexionsdetails ansehen',
       primaryActionOpen: (count) => `${count} offene Entscheidung${count === 1 ? '' : 'en'} ansehen`,
       primaryActionBlocked: (count) => `${count} gebremste Moment${count === 1 ? '' : 'e'} prüfen`,
+      nextOpen: 'Prüfe die offene Liste und schließe zuerst die wichtigste Entscheidung ab.',
+      nextBlocked: 'Prüfe die gebremsten Momente zuerst, bevor du neue Entscheidungen startest.',
+      rawReportLabel: 'Originaler Finn-Bericht',
+      rawReportHint: 'Dies ist der ursprüngliche generierte Berichtstext. Er kann länger sein oder in einer anderen Ausgangssprache stehen.',
+      rawReportOpen: 'Originalen Berichtstext anzeigen',
+      rawReportClose: 'Originalen Berichtstext ausblenden',
       goodDefault: 'Es wurden keine klaren Planabweichungen oder impulsiven Ausführungssignale gefunden.',
       attentionDefault: 'Es gibt noch nicht genug belastbare Belege für eine schwerere Coaching-Aussage.',
       nextDefault: 'Arbeite offene Punkte zuerst ab, bevor du einen neuen Entscheidungsfluss startest.',
@@ -290,6 +302,12 @@ function getFinnDigestCopy(locale = 'nl') {
     primaryActionDefault: 'Bekijk reflectiedetails',
     primaryActionOpen: (count) => `Bekijk ${count} open beslissing${count === 1 ? '' : 'en'}`,
     primaryActionBlocked: (count) => `Bekijk ${count} geblokkeerd moment${count === 1 ? '' : 'en'}`,
+    nextOpen: 'Bekijk de open lijst en rond eerst de belangrijkste beslissing af.',
+    nextBlocked: 'Bekijk eerst de geblokkeerde momenten voordat je nieuwe beslissingen start.',
+    rawReportLabel: 'Origineel Finn-rapport',
+    rawReportHint: 'Dit is de originele gegenereerde rapporttekst. Die kan langer zijn of in een andere brontaal staan.',
+    rawReportOpen: 'Toon originele rapporttekst',
+    rawReportClose: 'Verberg originele rapporttekst',
     goodDefault: 'Er zijn geen duidelijke planafwijkingen of impulsieve uitvoersignalen gevonden.',
     attentionDefault: 'Er is nog te weinig hard bewijs om hier een zwaardere coachingconclusie aan te hangen.',
     nextDefault: 'Rond eerst open items af voordat je een nieuwe beslisflow start.',
@@ -1187,6 +1205,7 @@ function FinnReportsPanel() {
   const [finnLoading, setFinnLoading] = useState(false);
   const [finnError, setFinnError] = useState('');
   const [expanded, setExpanded] = useState(false);
+  const [showRawReport, setShowRawReport] = useState(false);
   const [shouldLoadFinn, setShouldLoadFinn] = useState(false);
 
   const finnReportOptions = useMemo(() => resolveFinnReportOptions(finnT?.options), [finnT?.options]);
@@ -1247,6 +1266,7 @@ function FinnReportsPanel() {
       setFinnReportCache((cache) => ({ ...cache, [option.key]: data || null }));
       setFinnReport(data || null);
       setExpanded(false);
+      setShowRawReport(false);
     } catch (err) {
       console.error('Finn report load failed:', err);
       setFinnError(finnT?.loadError || 'Finn report could not be loaded.');
@@ -1286,7 +1306,6 @@ function FinnReportsPanel() {
   const portfolioRisk = analysis?.portfolio_risk || finnReport?.state?.portfolio_risk || null;
   const metrics = analysis?.metrics || {};
   const source = formatFinnReportSource(finnReport, finnT.auditSourceFallback);
-  const summary = getFinnReportSummary(finnReport, finnT.summaryFallback);
   const latestUpdateLabel = formatFinnReportTimestamp(finnReport, finnT.timestampUnavailable);
   const reportType = finnReport?.state?.report_type || analysis?.report_type || 'finn_reflection_report';
   const separateFrom = finnReport?.state?.separate_from || analysis?.separate_from || 'daily_trading_report';
@@ -1330,25 +1349,19 @@ function FinnReportsPanel() {
       ? digestCopy.headlineOpen(openActionCount)
       : digestCopy.headlineDefault;
   const goodSummary = getFirstNonEmptyText(
-    whereIDeviated?.status === 'steady' || whereIDeviated?.status === 'disciplined'
-      ? whereIDeviated?.summary
-      : '',
-    blockedCount === 0 ? whereIDeviated?.summary : '',
-    blockedCount === 0 ? whatFinnBlocked?.summary : '',
+    blockedCount === 0 ? digestCopy.goodDefault : '',
     digestCopy.goodDefault
   );
   const attentionSummary = blockedCount > 0
-    ? getFirstNonEmptyText(whatFinnBlocked?.summary, digestCopy.blockedAttention(blockedCount))
+    ? digestCopy.blockedAttention(blockedCount)
     : openActionCount > 0
       ? digestCopy.openAttention(openActionCount)
-      : getFirstNonEmptyText(behavioralAnalysis?.risk_flags?.[0]?.summary, digestCopy.attentionDefault);
-  const nextStepSummary = getFirstNonEmptyText(
-    dayClose?.tomorrow_focus?.[0],
-    analysis?.agent_controller?.primary_action?.label,
-    analysis?.agent_controller?.next_action,
-    behavioralAnalysis?.risk_flags?.[0]?.next_step,
-    digestCopy.nextDefault
-  );
+      : digestCopy.attentionDefault;
+  const nextStepSummary = blockedCount > 0
+    ? digestCopy.nextBlocked
+    : openActionCount > 0
+      ? digestCopy.nextOpen
+      : digestCopy.nextDefault;
   const compactMetricItems = [
     [digestCopy.reviewed, reviewedCount],
     [digestCopy.blocked, blockedCount],
@@ -1545,10 +1558,30 @@ function FinnReportsPanel() {
                     </span>
                   </div>
                   <FinnReflectionBlocks analysis={analysis} showActivityEntries={false} />
-                  <div className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-4">
-                    <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
-                      {finnReport?.response || finnT.noReportText}
-                    </p>
+                  <div className="mt-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                          {digestCopy.rawReportLabel}
+                        </div>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 max-w-3xl">
+                          {digestCopy.rawReportHint}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowRawReport((value) => !value)}
+                        className="text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100 transition-colors"
+                      >
+                        {showRawReport ? digestCopy.rawReportClose : digestCopy.rawReportOpen}
+                      </button>
+                    </div>
+                    {showRawReport && (
+                      <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-800 p-4">
+                        <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
+                          {finnReport?.response || finnT.noReportText}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
                     {(metricItems.length
