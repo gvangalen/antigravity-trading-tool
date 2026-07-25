@@ -92,6 +92,11 @@ export default function BotAgentCard({
     bot?.strategy?.setup
   );
   const hasCompleteChain = Boolean(hasLinkedStrategy && hasLinkedSetup);
+  const hasBudget = Boolean(
+    (portfolio?.budget?.total_eur ?? 0) > 0 ||
+    (portfolio?.budget?.daily_limit_eur ?? 0) > 0 ||
+    (portfolio?.budget?.max_order_eur ?? 0) > 0
+  );
   const stateLabels = copy.stateLabels || {};
   const actionLabels = copy.actionLabels || {};
   const confidenceLabels = copy.confidenceLabels || {};
@@ -113,6 +118,7 @@ export default function BotAgentCard({
 
     if (directReason) return directReason;
     if (!hasLinkedStrategy) return copy.noStrategy;
+    if (!hasBudget) return copy.blockerBudgetBody;
     if (normalizedAction === "hold" || normalizedAction === "observe") {
       return copy.blockerWaitingBody;
     }
@@ -248,6 +254,8 @@ export default function BotAgentCard({
 
     const summaryReason = !hasCompleteChain
       ? copy.noStrategy
+      : !hasBudget
+        ? copy.blockerBudgetBody
       : decisionReason || copy.dataUpdating;
 
     const blocker = !hasCompleteChain
@@ -257,6 +265,13 @@ export default function BotAgentCard({
         body: copy.blockerNoStrategyBody,
         nextStep: copy.blockerNoStrategyStep,
       }
+    : !hasBudget
+      ? {
+          tone: "amber",
+          title: copy.blockerBudgetTitle,
+          body: copy.blockerBudgetBody,
+          nextStep: copy.blockerBudgetStep,
+        }
     : !bot?.is_active
       ? {
           tone: "slate",
@@ -294,7 +309,7 @@ export default function BotAgentCard({
       blocker,
       blockerToneClasses,
     };
-  }, [bot?.is_active, copy, hasCompleteChain, hasLinkedStrategy, normalizedAction, normalizedActionLabel, safeDecision]);
+  }, [bot?.is_active, copy, hasBudget, hasCompleteChain, hasLinkedStrategy, normalizedAction, normalizedActionLabel, safeDecision]);
 
   const {
     normalizedDecision,
