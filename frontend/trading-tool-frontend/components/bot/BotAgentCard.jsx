@@ -87,6 +87,33 @@ export default function BotAgentCard({
   ).toLowerCase();
   const hasLinkedStrategy = Boolean(bot?.strategy?.id || bot?.strategy_id || bot?.strategy);
 
+  const deriveDecisionReason = (decisionState) => {
+    const directReason =
+      decisionState?.reason ||
+      decisionState?.guardrail_reason ||
+      decisionState?.guardrails_result?.reason ||
+      decisionState?.guardrails?.reason ||
+      decisionState?.reasons?.[0] ||
+      decisionState?.guardrails_result?.warnings?.[0] ||
+      decisionState?.guardrails?.warnings?.[0] ||
+      decisionState?.setup_match?.summary ||
+      decisionState?.setup_match?.detail ||
+      decisionState?.trade_plan?.summary ||
+      decisionState?.profile_habit_alignment?.primary_alignment?.summary ||
+      "";
+
+    if (directReason) return directReason;
+    if (!hasLinkedStrategy) return copy.noStrategy;
+    if (!bot?.is_active) return copy.blockerPausedTitle || "Bot is gepauzeerd";
+    if (normalizedAction === "hold" || normalizedAction === "observe") {
+      return copy.blockerWaitingBody || "De bot wacht op bevestiging vanuit setup, strategie en marktcontext.";
+    }
+    if (normalizedAction) {
+      return copy.executionReasonFallback || "De bot heeft een beslissing, maar nog geen extra toelichting uit de engine ontvangen.";
+    }
+    return copy.dataUpdating;
+  };
+
   /* ================= BOT STATE ================= */
   const normalizedAction = String(safeDecision?.action || "").toLowerCase();
 
@@ -198,13 +225,7 @@ export default function BotAgentCard({
       normalizedDecision?.id
     );
 
-    const decisionReason =
-      safeDecision?.reason ||
-      normalizedDecision?.reason ||
-      normalizedDecision?.guardrail_reason ||
-      normalizedDecision?.reasons?.[0] ||
-      normalizedDecision?.trade_plan?.summary ||
-      "";
+    const decisionReason = deriveDecisionReason(normalizedDecision);
 
     const summaryReason = !hasLinkedStrategy
       ? copy.noStrategy
@@ -453,11 +474,7 @@ export default function BotAgentCard({
           : copy.notAvailable || "n.v.t.",
       targetCount: targets.length,
       hasPlanLevels: stopLoss != null || targets.length > 0,
-      reason:
-        normalizedDecision?.reason ||
-        normalizedDecision?.guardrail_reason ||
-        normalizedDecision?.reasons?.[0] ||
-        copy.dataUpdating,
+      reason: deriveDecisionReason(normalizedDecision),
     };
   }, [
     actionLabels,
@@ -467,6 +484,7 @@ export default function BotAgentCard({
     copy.insufficientData,
     copy.noStrategy,
     copy.notAvailable,
+    copy.executionReasonFallback,
     locale,
     normalizedDecision,
     planSource,
