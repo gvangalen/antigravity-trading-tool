@@ -87,6 +87,9 @@ export default function BotAgentCard({
   ).toLowerCase();
   const hasLinkedStrategy = Boolean(bot?.strategy?.id || bot?.strategy_id || bot?.strategy);
   const chainReady = Boolean(hasLinkedStrategy && bot?.is_active);
+  const stateLabels = copy.stateLabels || {};
+  const actionLabels = copy.actionLabels || {};
+  const confidenceLabels = copy.confidenceLabels || {};
 
   const deriveDecisionReason = (decisionState) => {
     const directReason =
@@ -374,9 +377,6 @@ export default function BotAgentCard({
     aggressive: copy.scenarioAggressive,
     conservative: copy.scenarioConservative,
   };
-  const stateLabels = copy.stateLabels || {};
-  const actionLabels = copy.actionLabels || {};
-  const confidenceLabels = copy.confidenceLabels || {};
 
   /* =====================================================
      🔁 HANDLE BACKTEST
