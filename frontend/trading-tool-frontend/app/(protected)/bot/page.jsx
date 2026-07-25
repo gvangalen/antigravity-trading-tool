@@ -35,6 +35,28 @@ function persistBotSelection(botId) {
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function resolveBotChain(bot, strategies = [], setups = []) {
+  const resolvedStrategy =
+    bot?.strategy ||
+    strategies.find((strategy) => strategy.id === (bot?.strategy_id || bot?.strategy?.id)) ||
+    null;
+
+  const resolvedSetup =
+    resolvedStrategy?.setup ||
+    setups.find((setup) => setup.id === (resolvedStrategy?.setup_id || bot?.strategy?.setup_id || bot?.strategy?.setup?.id)) ||
+    null;
+
+  return {
+    ...bot,
+    strategy: resolvedStrategy
+      ? {
+          ...resolvedStrategy,
+          setup: resolvedSetup || resolvedStrategy?.setup || null,
+        }
+      : bot?.strategy || null,
+  };
+}
+
 function getBotChainState(bot, strategies = []) {
   const linkedStrategy =
     bot?.strategy ||
@@ -164,11 +186,15 @@ function BotPageInner() {
     loadStrategies();
   }, [loadSetups, loadStrategies]);
 
+  const resolvedBots = useMemo(() => {
+    return bots.map((bot) => resolveBotChain(bot, strategies, setups));
+  }, [bots, strategies, setups]);
+
   const rankedBots = useMemo(() => {
-    return [...bots].sort((left, right) => (
+    return [...resolvedBots].sort((left, right) => (
       compareBotsForAutomation(left, right, strategies, decisionsByBot)
     ));
-  }, [bots, strategies, decisionsByBot]);
+  }, [resolvedBots, strategies, decisionsByBot]);
 
   useEffect(() => {
     trackAssistantEvent({
@@ -205,13 +231,13 @@ function BotPageInner() {
   }, [rankedBots, activeBot, setActiveBot]);
 
   useEffect(() => {
-    if (bots.length > 0 && status && status.has_bot === false) {
+    if (resolvedBots.length > 0 && status && status.has_bot === false) {
       completeStep("bot");
     }
-  }, [bots, status, completeStep]);
+  }, [resolvedBots, status, completeStep]);
 
   useEffect(() => {
-    if (!bots.length) return;
+    if (!resolvedBots.length) return;
 
     const requestedBotId = Number(searchParams.get("bot_id"));
     const requestedSymbol = (searchParams.get("symbol") || "").toUpperCase();
@@ -219,10 +245,10 @@ function BotPageInner() {
 
     const targetBot =
       (Number.isFinite(requestedBotId) && requestedBotId > 0
-        ? bots.find((bot) => bot.id === requestedBotId)
+        ? resolvedBots.find((bot) => bot.id === requestedBotId)
         : null) ||
       (requestedSymbol
-        ? bots.find((bot) => String(bot?.symbol || bot?.strategy?.symbol || "").toUpperCase() === requestedSymbol)
+        ? resolvedBots.find((bot) => String(bot?.symbol || bot?.strategy?.symbol || "").toUpperCase() === requestedSymbol)
         : null);
 
     if (targetBot && activeBot?.id !== targetBot.id) {
@@ -239,7 +265,7 @@ function BotPageInner() {
         });
       });
     }
-  }, [bots, activeBot?.id, searchParams, setActiveBot]);
+  }, [resolvedBots, activeBot?.id, searchParams, setActiveBot]);
 
   useEffect(() => {
     const handleExecutionHandoff = (event) => {
@@ -247,8 +273,8 @@ function BotPageInner() {
       const botId = Number(detail.botId);
       const symbol = String(detail.symbol || "").toUpperCase();
       const targetBot =
-        (Number.isFinite(botId) && botId > 0 ? bots.find((bot) => bot.id === botId) : null) ||
-        (symbol ? bots.find((bot) => String(bot?.symbol || bot?.strategy?.symbol || "").toUpperCase() === symbol) : null);
+        (Number.isFinite(botId) && botId > 0 ? resolvedBots.find((bot) => bot.id === botId) : null) ||
+        (symbol ? resolvedBots.find((bot) => String(bot?.symbol || bot?.strategy?.symbol || "").toUpperCase() === symbol) : null);
 
       if (targetBot) {
         setActiveBot(targetBot);
@@ -267,11 +293,11 @@ function BotPageInner() {
 
     window.addEventListener("execution-guardrail-handoff", handleExecutionHandoff);
     return () => window.removeEventListener("execution-guardrail-handoff", handleExecutionHandoff);
-  }, [bots, setActiveBot]);
+  }, [resolvedBots, setActiveBot]);
 
   const availableAssets = useMemo(() => {
     const assets = new Set(
-      bots
+      resolvedBots
         .map((bot) => {
           const portfolio = portfolios.find((item) => item.bot_id === bot.id);
           return portfolio?.symbol ?? bot?.symbol ?? "—";
@@ -279,7 +305,7 @@ function BotPageInner() {
         .filter((symbol) => symbol && symbol !== "—")
     );
     return Array.from(assets).sort();
-  }, [bots, portfolios]);
+  }, [resolvedBots, portfolios]);
 
   const filteredBots = useMemo(() => {
     return rankedBots.filter((bot) => {
