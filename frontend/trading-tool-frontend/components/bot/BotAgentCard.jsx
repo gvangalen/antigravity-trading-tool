@@ -97,6 +97,15 @@ export default function BotAgentCard({
     (portfolio?.budget?.daily_limit_eur ?? 0) > 0 ||
     (portfolio?.budget?.max_order_eur ?? 0) > 0
   );
+  const linkedPlanName =
+    bot?.strategy?.name ||
+    bot?.plan_name ||
+    bot?.linked_plan_name ||
+    (bot?.strategy_id ? `${copy.linkedPlanFallback} #${bot.strategy_id}` : copy.noStrategy);
+  const linkedSetupName =
+    bot?.strategy?.setup?.name ||
+    safeDecision?.setup_match?.name ||
+    copy.linkedSetupFallback;
   const stateLabels = copy.stateLabels || {};
   const actionLabels = copy.actionLabels || {};
   const confidenceLabels = copy.confidenceLabels || {};
@@ -531,7 +540,11 @@ export default function BotAgentCard({
               {compact ? (
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">{copy.selectedBotDetails}</p>
-                  <p className="mt-1 text-sm font-black text-foreground">{bot?.strategy?.name || copy.noStrategy}</p>
+                  <p className="mt-1 text-sm font-black text-foreground">{linkedPlanName}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                    <span className="rounded-lg bg-slate-100 px-2 py-1">{copy.linkedPlanLabel}: {linkedPlanName}</span>
+                    <span className="rounded-lg bg-slate-100 px-2 py-1">{copy.setupLabel}: {linkedSetupName}</span>
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center gap-3">
@@ -983,7 +996,7 @@ export default function BotAgentCard({
                       {copy.executionSummaryLabel}
                     </div>
                     <h3 className="mt-2 text-xl font-black text-slate-900">
-                      {bot?.strategy?.name || copy.noStrategy}
+                      {linkedPlanName}
                     </h3>
                     <p className="mt-2 max-w-3xl text-sm font-semibold leading-relaxed text-slate-600">
                       {executionSummary.reason}
